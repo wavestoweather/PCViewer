@@ -334,13 +334,20 @@ static void glfw_resize_callback(GLFWwindow*, int w, int h)
 
 int main(int, char**)
 {
+	//Section for variables
+	float pcLinesAlpha = 1.0f;
+	char pcFilePath[100] = {};
+
+	//TODO: create the array with the size of Attributes available
+	bool pcAttributeEnabled[] = { false };
+
 	// Setup GLFW window
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())
 		return 1;
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+Vulkan example", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(1280, 720, "Parallel Coordinates Viewer", NULL, NULL);
 
 	// Setup Vulkan
 	if (!glfwVulkanSupported())
@@ -436,8 +443,6 @@ int main(int, char**)
 		ImGui_ImplVulkan_DestroyFontUploadObjects();
 	}
 
-	bool show_demo_window = true;
-	bool show_another_window = false;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
@@ -463,42 +468,49 @@ int main(int, char**)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-		if (show_demo_window)
-			ImGui::ShowDemoWindow(&show_demo_window);
+		// Labels for the titels of the attributes
 
-		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
+		ImVec2 window_pos = ImVec2(100, 100);
+		ImVec2 window_pos_pivot = ImVec2(0, 0);
+		
+		//TODO: iterate over all ACTIVE Attributes and create a label for each one. Position them correctly!
+
+		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
+		ImGui::SetNextWindowBgAlpha(0.3f); // Transparent background
+
+		if (ImGui::Begin("Attribute", NULL , ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
-			static float f = 0.0f;
-			static int counter = 0;
+			ImGui::Text("This is a new Label");
+		}
+		ImGui::End();
 
-			ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+		//Settings section
+		window_pos = ImVec2(100, 500);
+		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
+		if (ImGui::Begin("Example: Simple overlay", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
+		{
+			ImGui::Text("Settings");
+			ImGui::SliderFloat("Alpha value", &pcLinesAlpha, 0.0f, 1.0f);
 
-			ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-			ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-			ImGui::Checkbox("Another Window", &show_another_window);
+			//TODO: iterate over all Attributes and create a checkbox for each one to enable or disable the corresponding attribute
 
-			ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-			ImGui::ColorEdit3("clear color", (float*)& clear_color); // Edit 3 floats representing a color
+			ImGui::Checkbox("Attribute 1", &pcAttributeEnabled[0]);
 
-			if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-				counter++;
+			ImGui::InputText("Directory Path", pcFilePath, 100);
 			ImGui::SameLine();
-			ImGui::Text("counter = %d", counter);
+			if (ImGui::Button("Open")) {
+				std::ifstream input("filename.ext");
 
-			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-			ImGui::End();
+				for (std::string line; std::getline(input, line); )
+				{
+					//TODO: parse the csv data line by line
+				}
+			}
+			
 		}
+		ImGui::End();
 
-		// 3. Show another simple window.
-		if (show_another_window)
-		{
-			ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-			ImGui::Text("Hello from another window!");
-			if (ImGui::Button("Close Me"))
-				show_another_window = false;
-			ImGui::End();
-		}
+		ImGui::ShowDemoWindow(NULL);
 
 		// Rendering
 		ImGui::Render();
