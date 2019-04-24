@@ -13,6 +13,8 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+#include <vector>
+
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -338,8 +340,17 @@ int main(int, char**)
 	float pcLinesAlpha = 1.0f;
 	char pcFilePath[100] = {};
 
-	//TODO: create the array with the size of Attributes available
-	bool pcAttributeEnabled[] = { false };
+	//Contains whether a specific attribute is enabled
+	bool* pcAttributeEnabled = NULL;
+
+	//Contains all attributes fo the pc
+	std::vector<std::string> pcAttributes = std::vector<std::string>();
+
+	//Contains the ordering of the attributes
+	std::vector<int> pcAttrOrd = std::vector<int>();
+
+	//Contains all data
+	std::vector<float*> pcData = std::vector<float*>();
 
 	// Setup GLFW window
 	glfwSetErrorCallback(glfw_error_callback);
@@ -469,41 +480,126 @@ int main(int, char**)
 		ImGui::NewFrame();
 
 		// Labels for the titels of the attributes
+		// Position calculation for each of the Label
+		size_t amtOfLabels = 0;
+		for (int i = 0; i < pcAttributes.size(); i++)
+			if (pcAttributeEnabled[i])
+				amtOfLabels++;
 
-		ImVec2 window_pos = ImVec2(100, 100);
-		ImVec2 window_pos_pivot = ImVec2(0, 0);
-		
-		//TODO: iterate over all ACTIVE Attributes and create a label for each one. Position them correctly!
+		size_t paddingSide = 50;			//padding from left and right screen border
+		size_t paddingTop = 50;				//padding from the top of the screen
+		size_t gap = (io.DisplaySize.x - 2 * paddingSide) / (amtOfLabels - 1);
 
-		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
-		ImGui::SetNextWindowBgAlpha(0.3f); // Transparent background
+		//creating one Label for each Attribute
+		ImVec2 window_pos = ImVec2(paddingSide, paddingTop);
+		for (auto i:pcAttrOrd) {
+			//not creating a label for unused Attributes
+			if (!pcAttributeEnabled[i])
+				continue;
 
-		if (ImGui::Begin("Attribute", NULL , ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
-		{
-			ImGui::Text("This is a new Label");
+			std::string a = pcAttributes[i];
+
+			ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, ImVec2(.5f,0));
+			ImGui::SetNextWindowBgAlpha(0.3f); // Transparent background
+
+			if (ImGui::Begin(a.c_str(), NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
+			{
+				ImGui::Text(a.c_str());
+			}
+			ImGui::End();
+
+			//setting up the position for the next label
+			window_pos.x += gap;
 		}
-		ImGui::End();
 
 		//Settings section
 		window_pos = ImVec2(100, 500);
-		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
-		if (ImGui::Begin("Example: Simple overlay", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
+		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
+		if (ImGui::Begin("Example: Simple overlay", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
 		{
 			ImGui::Text("Settings");
 			ImGui::SliderFloat("Alpha value", &pcLinesAlpha, 0.0f, 1.0f);
 
-			//TODO: iterate over all Attributes and create a checkbox for each one to enable or disable the corresponding attribute
-
-			ImGui::Checkbox("Attribute 1", &pcAttributeEnabled[0]);
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				ImGui::Checkbox(pcAttributes[i].c_str(), &pcAttributeEnabled[i]);
+			}
 
 			ImGui::InputText("Directory Path", pcFilePath, 100);
 			ImGui::SameLine();
+
+			//Opening a new Dataset into the Viewer
 			if (ImGui::Button("Open")) {
-				std::ifstream input("filename.ext");
+				//resetting all vectors
+				pcAttributes.clear();
+				for (auto& d : pcData)
+					if (d)
+						delete[] d;
+				pcData.clear();
+				if(pcAttributeEnabled)
+					delete[] pcAttributeEnabled;
+				pcAttrOrd.clear();
+
+				std::ifstream input(pcFilePath);
+
+				bool firstLine = true;
 
 				for (std::string line; std::getline(input, line); )
 				{
-					//TODO: parse the csv data line by line
+					std::string delimiter = ",";
+					size_t pos = 0;
+					std::string cur;
+					
+					//parsing the attributes in the first line
+					if (firstLine) {
+						while ((pos = line.find(delimiter)) != std::string::npos) {
+							cur = line.substr(0, pos);
+							line.erase(0, pos + delimiter.length());
+							pcAttributes.push_back(cur);
+						}
+						//adding the last item which wasn't recognized
+						pcAttributes.push_back(line);
+						//setting up the boolarray and setting all the attributes to true
+						pcAttributeEnabled =new bool[pcAttributes.size()];
+						for (int i = 0; i < pcAttributes.size(); i++) {
+							pcAttributeEnabled[i] = true;
+							pcAttrOrd.push_back(i);
+						}
+
+						firstLine = false;
+					}
+
+					//parsing the data which follows the attribute declaration
+					else {
+						pcData.push_back(new float[pcAttributes.size()]);
+						size_t attr = 0;
+						while ((pos = line.find(delimiter)) != std::string::npos) {
+							cur = line.substr(0, pos);
+							line.erase(0, pos + delimiter.length());
+							
+							//checking for an overrunning attribute counter
+							if (attr == pcAttributes.size())
+								__debugbreak();
+
+							pcData.back()[attr++] = std::stof(cur);
+						}
+						if (attr == pcAttributes.size())
+							__debugbreak();
+						//adding the last item which wasn't recognized
+						pcData.back()[attr] = std::stof(line);
+					}
+				}
+
+				//printing out the loaded attributes for debug reasons
+				std::cout << "Attributes: ";
+				for (auto attribute : pcAttributes) {
+					std::cout << attribute << " , ";
+				}
+				std::cout << std::endl << "Data:" << std::endl;
+				for (auto d : pcData) {
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						std::cout << d[i] << " , ";
+					}
+					std::cout << std::endl;
 				}
 			}
 			
@@ -521,6 +617,13 @@ int main(int, char**)
 	}
 
 	// Cleanup
+	if (pcAttributeEnabled)
+		delete[] pcAttributeEnabled;
+	for (auto& d : pcData) {
+		if(d)
+			delete[] d;
+	}
+
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
 	ImGui_ImplVulkan_Shutdown();
