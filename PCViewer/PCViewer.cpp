@@ -45,6 +45,20 @@ static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
 
+static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
+static VkImage					g_PcPlot = VK_NULL_HANDLE;
+static VkImageView				g_PcPlotView = VK_NULL_HANDLE;
+static VkRenderPass				g_PcPlotRenderPass = VK_NULL_HANDLE;		//contains the render pass for the pc
+static VkPipelineLayout			g_PcPlotPipelineLayout = VK_NULL_HANDLE;	//contains the pipeline which is used to assign global shader variables
+static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphics pipeline for the pc
+static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
+static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
+static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
+static uint32_t					g_PcPlotWidth = 100;
+static uint32_t					g_PcPlotHeight = 100;
+static char						g_fragShaderPath[] = "shader/frag.spv";
+static char						g_vertShaderPath[] = "shader/vert.spv";
+
 struct Attribute {
 	std::string name;
 	float min;			//min value of all values
@@ -67,6 +81,379 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugReportFlagsEXT flags, 
 	return VK_FALSE;
 }
 #endif // IMGUI_VULKAN_DEBUG_REPORT
+
+static void createPcPlotImageView() {
+	VkResult err;
+
+	//creating the VkImage for the PcPlot
+	VkImageCreateInfo imageInfo = {};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageInfo.extent.width = static_cast<uint32_t>(g_PcPlotWidth);
+	imageInfo.extent.height = static_cast<uint32_t>(g_PcPlotHeight);
+	imageInfo.extent.depth = 1;
+	imageInfo.mipLevels = 1;
+	imageInfo.arrayLayers = 1;
+	imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+	err = vkCreateImage(g_Device, &imageInfo, nullptr, &g_PcPlot);
+	check_vk_result(err);
+
+	VkMemoryRequirements memRequirements;
+	vkGetImageMemoryRequirements(g_Device, g_PcPlot, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	//finding the memory type
+	VkPhysicalDeviceMemoryProperties memProps;
+	vkGetPhysicalDeviceMemoryProperties(g_PhysicalDevice, &memProps);
+	uint32_t typeIndex = memProps.memoryTypeCount;
+	for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+		if (memRequirements.memoryTypeBits & (1 << i)) {
+			typeIndex = i;
+			break;
+		}
+	}
+	//safety call to see whther a valid type Index was found
+	if (typeIndex == memProps.memoryTypeCount)
+		__debugbreak();
+	allocInfo.memoryTypeIndex = typeIndex;
+
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotMem);
+	check_vk_result(err);
+
+	vkBindImageMemory(g_Device, g_PcPlot, g_PcPlotMem, 0);
+
+	VkImageViewCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	createInfo.image = g_PcPlot;
+	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	createInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	createInfo.subresourceRange.baseMipLevel = 0;
+	createInfo.subresourceRange.levelCount = 1;
+	createInfo.subresourceRange.baseArrayLayer = 0;
+	createInfo.subresourceRange.layerCount = 1;
+
+	err = vkCreateImageView(g_Device, &createInfo, nullptr, &g_PcPlotView);
+	check_vk_result(err);
+	//the image view is now nearly ready set up as render target
+}
+
+static void cleanupPcPlotImageView() {
+	vkDestroyImageView(g_Device, g_PcPlotView, nullptr);
+	vkDestroyImage(g_Device, g_PcPlot, nullptr);
+	vkFreeMemory(g_Device, g_PcPlotMem, nullptr);
+}
+
+static std::vector<char> readFile(const std::string& filename) {
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+	if (!file.is_open()) {
+		throw std::runtime_error("failed to open file!");
+	}
+
+	size_t fileSize = (size_t)file.tellg();
+	std::vector<char> buffer(fileSize);
+
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+
+	file.close();
+
+	return buffer;
+}
+
+static VkShaderModule createShaderModule(const std::vector<char>& code) {
+	VkShaderModuleCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+	VkShaderModule shaderModule;
+	VkResult err = vkCreateShaderModule(g_Device, &createInfo, nullptr, &shaderModule);
+	check_vk_result(err);
+	
+	return shaderModule;
+}
+
+static void createPcPlotPipeline() {
+	VkResult err;
+
+	auto vertShader = readFile(g_vertShaderPath);
+	auto fragShader = readFile(g_fragShaderPath);
+
+	VkShaderModule vertShaderModule = createShaderModule(vertShader);
+	VkShaderModule fragShaderModule = createShaderModule(fragShader);
+
+	VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vertShaderStageInfo.module = vertShaderModule;
+	vertShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShaderStageInfo.module = fragShaderModule;
+	fragShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,fragShaderStageInfo };
+
+	//TODO: create vertex information struct for the vertex input info
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 0;
+	vertexInputInfo.pVertexBindingDescriptions = nullptr;
+	vertexInputInfo.vertexAttributeDescriptionCount = 0;
+	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+	inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+	VkViewport viewport = {};					//description for our viewport for transfomation operation after rasterization
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	viewport.width = (float)g_PcPlotWidth;
+	viewport.height = (float)g_PcPlotHeight;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+
+	VkRect2D scissor = {};						//description for cutting the rendered result if wanted
+	scissor.offset = { 0, 0 };
+	scissor.extent = { g_PcPlotWidth,g_PcPlotHeight };
+
+	VkPipelineViewportStateCreateInfo viewportState= {};
+	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportState.viewportCount = 1;
+	viewportState.pViewports = &viewport;
+	viewportState.scissorCount = 1;
+	viewportState.pScissors = &scissor;
+
+	VkPipelineRasterizationStateCreateInfo rasterizer = {};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.lineWidth = 1.0f;
+	rasterizer.cullMode = VK_CULL_MODE_NONE;
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthBiasClamp = 0.0f;
+	rasterizer.depthBiasConstantFactor = 0.0f;
+	rasterizer.depthBiasSlopeFactor = 0.0f;
+
+	VkPipelineMultisampleStateCreateInfo multisampling = {};
+	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.minSampleShading = 1.0f;
+	multisampling.pSampleMask = nullptr;
+	multisampling.alphaToCoverageEnable = VK_FALSE;
+	multisampling.alphaToOneEnable = VK_FALSE;
+
+	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkPipelineColorBlendStateCreateInfo colorBlending = {};
+	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.logicOpEnable = VK_FALSE;
+	colorBlending.logicOp = VK_LOGIC_OP_COPY;
+	colorBlending.attachmentCount = 1;
+	colorBlending.pAttachments = &colorBlendAttachment;
+	colorBlending.blendConstants[0] = 0.0f;
+	colorBlending.blendConstants[1] = 0.0f;
+	colorBlending.blendConstants[2] = 0.0f;
+	colorBlending.blendConstants[3] = 0.0f;
+
+	VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_LINE_WIDTH };
+
+	VkPipelineDynamicStateCreateInfo dynamicState = {};			//enables change of the linewidth at runtime
+	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicState.dynamicStateCount = 1;
+	dynamicState.pDynamicStates = dynamicStates;
+
+	//TODO: create global shader variables as Layouts
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = 0;
+	pipelineLayoutInfo.pSetLayouts = nullptr;
+	pipelineLayoutInfo.pushConstantRangeCount = 0;
+	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+	err = vkCreatePipelineLayout(g_Device, &pipelineLayoutInfo, nullptr, &g_PcPlotPipelineLayout);
+	check_vk_result(err);
+
+	VkGraphicsPipelineCreateInfo pipelineInfo = {};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	pipelineInfo.stageCount = 2;
+	pipelineInfo.pStages = shaderStages;
+	pipelineInfo.pVertexInputState = &vertexInputInfo;
+	pipelineInfo.pInputAssemblyState = &inputAssembly;
+	pipelineInfo.pViewportState = &viewportState;
+	pipelineInfo.pRasterizationState = &rasterizer;
+	pipelineInfo.pMultisampleState = &multisampling;
+	pipelineInfo.pDepthStencilState = nullptr;
+	pipelineInfo.pColorBlendState = &colorBlending;
+	pipelineInfo.pDynamicState = &dynamicState;
+	pipelineInfo.layout = g_PcPlotPipelineLayout;
+	pipelineInfo.renderPass = g_PcPlotRenderPass;
+	pipelineInfo.subpass = 0;
+
+	err = vkCreateGraphicsPipelines(g_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &g_PcPlotPipeline);
+	check_vk_result(err);
+
+	vkDestroyShaderModule(g_Device, fragShaderModule, nullptr);
+	vkDestroyShaderModule(g_Device, vertShaderModule, nullptr);
+}
+
+static void cleanupPcPlotPipeline() {
+	vkDestroyPipelineLayout(g_Device, g_PcPlotPipelineLayout, nullptr);
+	vkDestroyPipeline(g_Device, g_PcPlotPipeline, nullptr);
+}
+
+static void createPcPlotRenderPass() {
+	VkResult err;
+
+	VkAttachmentDescription colorAttachment = {};
+	colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+	VkAttachmentReference colorAttachmentRef = {};
+	colorAttachmentRef.attachment = 0;
+	colorAttachmentRef.attachment = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	VkSubpassDescription subpass = {};
+	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpass.colorAttachmentCount = 1;
+	subpass.pColorAttachments = &colorAttachmentRef;
+
+	VkRenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	renderPassInfo.attachmentCount = 1;
+	renderPassInfo.pAttachments = &colorAttachment;
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpass;
+
+	err = vkCreateRenderPass(g_Device, &renderPassInfo, nullptr, &g_PcPlotRenderPass);
+	check_vk_result(err);
+}
+
+static void cleanupPcPlotRenderPass() {
+	vkDestroyRenderPass(g_Device, g_PcPlotRenderPass, nullptr);
+}
+
+static void createPcPlotFramebuffer() {
+	VkResult err;
+
+	VkFramebufferCreateInfo framebufferInfo = {};
+	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	framebufferInfo.renderPass = g_PcPlotRenderPass;
+	framebufferInfo.attachmentCount = 1;
+	framebufferInfo.pAttachments = &g_PcPlotView;
+	framebufferInfo.width = g_PcPlotWidth;
+	framebufferInfo.height = g_PcPlotHeight;
+	framebufferInfo.layers = 1;
+	
+	err = vkCreateFramebuffer(g_Device, &framebufferInfo, nullptr, &g_PcPlotFramebuffer);
+	check_vk_result(err);
+
+}
+
+static void cleanupPcPlotFramebuffer() {
+	vkDestroyFramebuffer(g_Device, g_PcPlotFramebuffer, nullptr);
+}
+
+static void createPcPlotCommandPool() {
+	VkResult err;
+
+	VkCommandPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.queueFamilyIndex = g_QueueFamily;
+
+	err = vkCreateCommandPool(g_Device, &poolInfo, nullptr, &g_PcPlotCommandPool);
+	check_vk_result(err);
+}
+
+static void cleanupPcPlotCommandPool() {
+	vkDestroyCommandPool(g_Device, g_PcPlotCommandPool, nullptr);
+}
+
+static void createPcPlotCommandBuffer() {
+	VkResult err;
+
+	VkCommandBufferAllocateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	bufferInfo.commandPool = g_PcPlotCommandPool;
+	bufferInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	bufferInfo.commandBufferCount = 1;
+
+	err = vkAllocateCommandBuffers(g_Device, &bufferInfo, &g_PcPlotCommandBuffer);
+	check_vk_result(err);
+
+	VkCommandBufferBeginInfo beginInfo = {};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+	beginInfo.pInheritanceInfo = nullptr;
+
+	err = vkBeginCommandBuffer(g_PcPlotCommandBuffer, &beginInfo);
+	check_vk_result(err);
+
+	VkRenderPassBeginInfo renderPassInfo = {};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassInfo.renderPass = g_PcPlotRenderPass;
+	renderPassInfo.framebuffer = g_PcPlotFramebuffer;
+	renderPassInfo.renderArea.offset = { 0,0 };
+	renderPassInfo.renderArea.extent = { g_PcPlotWidth,g_PcPlotHeight };
+
+	VkClearValue clearColor = { 0.0f,0.0f,0.0f,1.0f };
+	
+	renderPassInfo.clearValueCount = 1;
+	renderPassInfo.pClearValues = &clearColor;
+
+	vkCmdBeginRenderPass(g_PcPlotCommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
+}
+
+static void cleanupPcPlotCommandBuffer() {
+	VkResult err;
+	vkCmdEndRenderPass(g_PcPlotCommandBuffer);
+	
+	err = vkEndCommandBuffer(g_PcPlotCommandBuffer);
+	check_vk_result(err);
+
+	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
+}
+
+static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const std::vector<float*>& data) {
+	//draw here all the Data with vkCmdDraw
+}
 
 static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 {
@@ -483,6 +870,17 @@ int main(int, char**)
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
+
+		/* TODO: start a window to be able to show image, render image
+		//draw the picture of the plotted pc coordinates
+		ImTextureID my_tex_id = (ImTextureID)(intptr_t)g_PcPlot;
+		float my_tex_w = (float)io.Fonts->TexWidth;
+		float my_tex_h = (float)io.Fonts->TexHeight;
+
+		ImGui::Text("%.0fx%.0f", my_tex_w, my_tex_h);
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		ImGui::Image(my_tex_id, ImVec2(my_tex_w, my_tex_h), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+		*/
 
 		// Labels for the titels of the attributes
 		// Position calculation for each of the Label
