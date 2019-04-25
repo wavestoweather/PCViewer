@@ -14,6 +14,7 @@
 #include <vulkan/vulkan.h>
 
 #include <vector>
+#include <limits>
 
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -43,6 +44,12 @@ static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
+
+struct Attribute {
+	std::string name;
+	float min;			//min value of all values
+	float max;			//max value of all values
+};
 
 static void check_vk_result(VkResult err)
 {
@@ -340,14 +347,12 @@ int main(int, char**)
 	float pcLinesAlpha = 1.0f;
 	char pcFilePath[100] = {};
 
-	//Contains whether a specific attribute is enabled
-	bool* pcAttributeEnabled = NULL;
-
-	//Contains all attributes fo the pc
-	std::vector<std::string> pcAttributes = std::vector<std::string>();
-
-	//Contains the ordering of the attributes
-	std::vector<int> pcAttrOrd = std::vector<int>();
+	
+	bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribute is enabled
+	
+	std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds
+	
+	std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes
 
 	//Contains all data
 	std::vector<float*> pcData = std::vector<float*>();
@@ -497,7 +502,7 @@ int main(int, char**)
 			if (!pcAttributeEnabled[i])
 				continue;
 
-			std::string a = pcAttributes[i];
+			std::string a = pcAttributes[i].name;
 
 			ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, ImVec2(.5f,0));
 			ImGui::SetNextWindowBgAlpha(0.3f); // Transparent background
@@ -521,7 +526,7 @@ int main(int, char**)
 			ImGui::SliderFloat("Alpha value", &pcLinesAlpha, 0.0f, 1.0f);
 
 			for (int i = 0; i < pcAttributes.size(); i++) {
-				ImGui::Checkbox(pcAttributes[i].c_str(), &pcAttributeEnabled[i]);
+				ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
 			}
 
 			ImGui::InputText("Directory Path", pcFilePath, 100);
@@ -554,10 +559,10 @@ int main(int, char**)
 						while ((pos = line.find(delimiter)) != std::string::npos) {
 							cur = line.substr(0, pos);
 							line.erase(0, pos + delimiter.length());
-							pcAttributes.push_back(cur);
+							pcAttributes.push_back({ cur,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
 						}
 						//adding the last item which wasn't recognized
-						pcAttributes.push_back(line);
+						pcAttributes.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
 						//setting up the boolarray and setting all the attributes to true
 						pcAttributeEnabled =new bool[pcAttributes.size()];
 						for (int i = 0; i < pcAttributes.size(); i++) {
@@ -572,6 +577,7 @@ int main(int, char**)
 					else {
 						pcData.push_back(new float[pcAttributes.size()]);
 						size_t attr = 0;
+						float curF = 0;
 						while ((pos = line.find(delimiter)) != std::string::npos) {
 							cur = line.substr(0, pos);
 							line.erase(0, pos + delimiter.length());
@@ -580,19 +586,35 @@ int main(int, char**)
 							if (attr == pcAttributes.size())
 								__debugbreak();
 
-							pcData.back()[attr++] = std::stof(cur);
+							curF = std::stof(cur);
+
+							//updating the bounds if a new highest value was found in the current data.
+							if (curF > pcAttributes[attr].max)
+								pcAttributes[attr].max = curF;
+							if (curF < pcAttributes[attr].min)
+								pcAttributes[attr].min = curF;
+
+							pcData.back()[attr++] = curF;
 						}
 						if (attr == pcAttributes.size())
 							__debugbreak();
+						
 						//adding the last item which wasn't recognized
-						pcData.back()[attr] = std::stof(line);
+						curF = std::stof(line);
+
+						//updating the bounds if a new highest value was found in the current data.
+						if (curF > pcAttributes[attr].max)
+							pcAttributes[attr].max = curF;
+						if (curF < pcAttributes[attr].min)
+							pcAttributes[attr].min = curF;
+						pcData.back()[attr] = curF;
 					}
 				}
 
 				//printing out the loaded attributes for debug reasons
-				std::cout << "Attributes: ";
+				std::cout << "Attributes: " << std::endl;
 				for (auto attribute : pcAttributes) {
-					std::cout << attribute << " , ";
+					std::cout << attribute.name << ", MinVal: " << attribute.min << ", MaxVal: " << attribute.max << std::endl;
 				}
 				std::cout << std::endl << "Data:" << std::endl;
 				for (auto d : pcData) {
