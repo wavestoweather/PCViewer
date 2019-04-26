@@ -54,6 +54,8 @@ static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphic
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
 static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
 static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
+static VkBuffer					g_PcPlotVertexBuffer = VK_NULL_HANDLE;
+static VkDeviceMemory			g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotWidth = 100;
 static uint32_t					g_PcPlotHeight = 100;
 static char						g_fragShaderPath[] = "shader/frag.spv";
@@ -63,6 +65,11 @@ struct Attribute {
 	std::string name;
 	float min;			//min value of all values
 	float max;			//max value of all values
+};
+
+struct Vertex {
+	float x;
+	float y;
 };
 
 static void check_vk_result(VkResult err)
@@ -81,6 +88,19 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugReportFlagsEXT flags, 
 	return VK_FALSE;
 }
 #endif // IMGUI_VULKAN_DEBUG_REPORT
+
+static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+	VkPhysicalDeviceMemoryProperties memProps;
+	vkGetPhysicalDeviceMemoryProperties(g_PhysicalDevice, &memProps);
+	uint32_t typeIndex = memProps.memoryTypeCount;
+	for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+		if ((typeFilter & (1 << i))&&(memProps.memoryTypes[i].propertyFlags&properties)==properties) {
+			return i;
+		}
+	}
+	//safety call to see whther a valid type Index was found
+	__debugbreak();
+}
 
 static void createPcPlotImageView() {
 	VkResult err;
@@ -110,20 +130,7 @@ static void createPcPlotImageView() {
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	//finding the memory type
-	VkPhysicalDeviceMemoryProperties memProps;
-	vkGetPhysicalDeviceMemoryProperties(g_PhysicalDevice, &memProps);
-	uint32_t typeIndex = memProps.memoryTypeCount;
-	for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-		if (memRequirements.memoryTypeBits & (1 << i)) {
-			typeIndex = i;
-			break;
-		}
-	}
-	//safety call to see whther a valid type Index was found
-	if (typeIndex == memProps.memoryTypeCount)
-		__debugbreak();
-	allocInfo.memoryTypeIndex = typeIndex;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
 
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotMem);
 	check_vk_result(err);
@@ -160,7 +167,8 @@ static std::vector<char> readFile(const std::string& filename) {
 	std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
 	if (!file.is_open()) {
-		throw std::runtime_error("failed to open file!");
+		std::cout << "failed to open file!" << std::endl;
+		__debugbreak();
 	}
 
 	size_t fileSize = (size_t)file.tellg();
@@ -209,13 +217,23 @@ static void createPcPlotPipeline() {
 
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,fragShaderStageInfo };
 
-	//TODO: create vertex information struct for the vertex input info
+	VkVertexInputBindingDescription bindingDescripiton = {};		//describes how big the vertex data is and how to read the data
+	bindingDescripiton.binding = 0;
+	bindingDescripiton.stride = sizeof(Vertex);
+	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	VkVertexInputAttributeDescription attributeDescription = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
+	attributeDescription.binding = 0;
+	attributeDescription.location = 0;
+	attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
+	attributeDescription.offset = offsetof(Vertex, x);
+
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 0;
-	vertexInputInfo.pVertexBindingDescriptions = nullptr;
-	vertexInputInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
+	vertexInputInfo.vertexAttributeDescriptionCount = 1;
+	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -404,6 +422,42 @@ static void cleanupPcPlotCommandPool() {
 	vkDestroyCommandPool(g_Device, g_PcPlotCommandPool, nullptr);
 }
 
+static void createPcPlotVertexBuffer(int amtOfVertices) {
+	VkResult err;
+
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = sizeof(Vertex) * amtOfVertices;
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotVertexBuffer);
+	check_vk_result(err);
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(g_Device, g_PcPlotVertexBuffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotVertexBufferMemory);
+	check_vk_result(err);
+	
+	vkBindBufferMemory(g_Device, g_PcPlotVertexBuffer, g_PcPlotVertexBufferMemory, 0);
+
+	VkDeviceSize offsets[] = { 0 };
+	vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
+ }
+
+static void cleanupPcPlotVertexBuffer() {
+	if(g_PcPlotVertexBuffer)
+		vkDestroyBuffer(g_Device, g_PcPlotVertexBuffer, nullptr);
+	if (g_PcPlotVertexBufferMemory)
+		vkFreeMemory(g_Device, g_PcPlotVertexBufferMemory, nullptr);
+}
+
 static void createPcPlotCommandBuffer() {
 	VkResult err;
 
@@ -451,8 +505,45 @@ static void cleanupPcPlotCommandBuffer() {
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
 }
 
-static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const std::vector<float*>& data) {
+static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const std::vector<float*>& data) {
+	//counting how much space is needed for the vertecies
+	uint32_t amtOfAttr = 0;
+	for (int i = 0; i < attributes.size(); i++) {
+		if (attributeEnabled[i])
+			amtOfAttr++;
+	}
+	void* d;
+	Vertex* dataArr = new Vertex[amtOfAttr];
+
+	vkMapMemory(g_Device, g_PcPlotVertexBufferMemory, 0, sizeof(Vertex) * amtOfAttr, 0, &d);
+
+	//calculating all necessary parameter
+	float gap = 2.0f / (amtOfAttr - 1);
+	float x = -1.0;
+	int i = 0;
+
 	//draw here all the Data with vkCmdDraw
+	for (auto& dat : data) {
+		//filling the data array with points
+		for (auto a : attributeOrder) {
+			if (attributeEnabled[a]) {
+				Vertex v = {};
+				v.x = x;
+				v.y = dat[a] - attributes[a].min;
+				v.y /= attributes[a].max - attributes[a].min;	//the y coord is now in range [0,1]
+				v.y *= 2;
+				v.y -= 1;										//the y coord is now in range [-1,1]
+				dataArr[i++] = v;
+				x += gap;
+			}
+		}
+
+		memcpy(d, dataArr, sizeof(Vertex) * amtOfAttr);
+		vkCmdDraw(g_PcPlotCommandBuffer, amtOfAttr, 1, 0, 0);
+		//TODO: i think i have to wait until line is drawn
+	}
+
+	vkUnmapMemory(g_Device, g_PcPlotVertexBufferMemory);
 }
 
 static void SetupVulkan(const char** extensions, uint32_t extensions_count)
@@ -846,6 +937,15 @@ int main(int, char**)
 		ImGui_ImplVulkan_DestroyFontUploadObjects();
 	}
 
+	{//Section to initialize the pcPlot graphics queue
+		createPcPlotImageView();
+		createPcPlotRenderPass();
+		createPcPlotPipeline();
+		createPcPlotFramebuffer();
+		createPcPlotCommandPool();
+		createPcPlotCommandBuffer();
+	}
+
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
@@ -871,7 +971,7 @@ int main(int, char**)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		/* TODO: start a window to be able to show image, render image
+
 		//draw the picture of the plotted pc coordinates
 		ImTextureID my_tex_id = (ImTextureID)(intptr_t)g_PcPlot;
 		float my_tex_w = (float)io.Fonts->TexWidth;
@@ -880,7 +980,9 @@ int main(int, char**)
 		ImGui::Text("%.0fx%.0f", my_tex_w, my_tex_h);
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		ImGui::Image(my_tex_id, ImVec2(my_tex_w, my_tex_h), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
-		*/
+		if (ImGui::Button("Render")) {
+
+		}
 
 		// Labels for the titels of the attributes
 		// Position calculation for each of the Label
@@ -1009,17 +1111,25 @@ int main(int, char**)
 					}
 				}
 
+				//vertexBufferRecreation
+				cleanupPcPlotVertexBuffer();
+				createPcPlotVertexBuffer(pcAttributes.size());
+
 				//printing out the loaded attributes for debug reasons
 				std::cout << "Attributes: " << std::endl;
 				for (auto attribute : pcAttributes) {
 					std::cout << attribute.name << ", MinVal: " << attribute.min << ", MaxVal: " << attribute.max << std::endl;
 				}
+
+				int dc = 0;
 				std::cout << std::endl << "Data:" << std::endl;
 				for (auto d : pcData) {
 					for (int i = 0; i < pcAttributes.size(); i++) {
 						std::cout << d[i] << " , ";
 					}
 					std::cout << std::endl;
+					if (dc++ > 10)
+						break;
 				}
 			}
 			
@@ -1046,6 +1156,17 @@ int main(int, char**)
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
+
+	{//section to cleanup pcPlot
+		cleanupPcPlotCommandBuffer();
+		cleanupPcPlotCommandPool();
+		cleanupPcPlotFramebuffer();
+		cleanupPcPlotPipeline();
+		cleanupPcPlotRenderPass();
+		cleanupPcPlotImageView();
+		cleanupPcPlotVertexBuffer();
+	}
+
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
