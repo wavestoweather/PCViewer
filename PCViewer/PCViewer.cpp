@@ -56,6 +56,8 @@ static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
 static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotVertexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
+static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
+static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotWidth = 100;
 static uint32_t					g_PcPlotHeight = 100;
 static char						g_fragShaderPath[] = "PCViewer/shader/frag.spv";
@@ -449,13 +451,53 @@ static void createPcPlotVertexBuffer(uint32_t amtOfVertices, uint32_t amtOfAttri
 	VkDeviceSize offsets[] = { 0 };
 	vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
 
-	//TODO: Create Index Buffer
- }
+	//creating a 1-D array with all the Attributes
+	float* d = new float[amtOfVertices * amtOfAttributes];
+	uint32_t i = 0;
+	for (float* p : data) {
+		memcpy(&d[i], p, sizeof(float) * amtOfAttributes);
+		i += amtOfAttributes;
+	}
+
+	//filling the Vertex Buffer with all Datapoints
+	void* mem;
+	vkMapMemory(g_Device, g_PcPlotVertexBufferMemory, 0, sizeof(Vertex) * amtOfVertices, 0, &mem);
+	memcpy(d, mem, amtOfVertices * amtOfAttributes);
+	vkUnmapMemory(g_Device, g_PcPlotVertexBufferMemory);
+	
+	//creating the index buffer
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = sizeof(uint16_t) * amtOfAttributes;
+	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotIndexBuffer);
+	check_vk_result(err);
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(g_Device, g_PcPlotIndexBuffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotIndexBufferMemory);
+	check_vk_result(err);
+
+	vkBindBufferMemory(g_Device, g_PcPlotVertexBuffer, g_PcPlotVertexBufferMemory, 0);
+	vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+}
 
 static void cleanupPcPlotVertexBuffer() {
 	if(g_PcPlotVertexBuffer)
 		vkDestroyBuffer(g_Device, g_PcPlotVertexBuffer, nullptr);
 	if (g_PcPlotVertexBufferMemory)
+		vkFreeMemory(g_Device, g_PcPlotVertexBufferMemory, nullptr);
+	if (g_PcPlotIndexBuffer)
+		vkDestroyBuffer(g_Device, g_PcPlotVertexBuffer, nullptr);
+	if (g_PcPlotIndexBufferMemory)
 		vkFreeMemory(g_Device, g_PcPlotVertexBufferMemory, nullptr);
 }
 
@@ -507,44 +549,53 @@ static void cleanupPcPlotCommandBuffer() {
 }
 
 static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const std::vector<float*>& data) {
-	//counting how much space is needed for the vertecies
-	uint32_t amtOfAttr = 0;
+	VkResult err;
+
+	//drawing via copying the indeces into the index buffer
+	//the indeces have to have just the right ordering for the vertices
+	int amtOfIndeces = 0;
 	for (int i = 0; i < attributes.size(); i++) {
 		if (attributeEnabled[i])
-			amtOfAttr++;
+			amtOfIndeces++;
 	}
+
 	void* d;
-	Vertex* dataArr = new Vertex[amtOfAttr];
+	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t), 0, &d);
 
-	vkMapMemory(g_Device, g_PcPlotVertexBufferMemory, 0, sizeof(Vertex) * amtOfAttr, 0, &d);
-
-	//calculating all necessary parameter
-	float gap = 2.0f / (amtOfAttr - 1);
-	float x = -1.0;
-	int i = 0;
-
-	//draw here all the Data with vkCmdDraw
-	for (auto& dat : data) {
-		//filling the data array with points
-		for (auto a : attributeOrder) {
-			if (attributeEnabled[a]) {
-				Vertex v = {};
-				v.y = x;
-				v.y = dat[a] - attributes[a].min;
-				v.y /= attributes[a].max - attributes[a].min;	//the y coord is now in range [0,1]
-				v.y *= 2;
-				v.y -= 1;										//the y coord is now in range [-1,1]
-				dataArr[i++] = v;
-				x += gap;
-			}
+	//filling the indexbuffer with the used indeces
+	uint16_t* ind = new uint16_t[amtOfIndeces];			//contains all indeces to copy
+	int j = 0;											//current index in the ind array
+	for (int i = 0; i < attributes.size(); i++) {
+		if (attributeEnabled[i]) {
+			ind[j++] = attributeOrder[i];
 		}
-
-		memcpy(d, dataArr, sizeof(Vertex) * amtOfAttr);
-		vkCmdDraw(g_PcPlotCommandBuffer, amtOfAttr, 1, 0, 0);
-		//TODO: i think i have to wait until line is drawn
 	}
 
-	vkUnmapMemory(g_Device, g_PcPlotVertexBufferMemory);
+	//TODO: delete this debug call
+	if (j != amtOfIndeces)
+		__debugbreak;
+
+	//copying the indexbuffer
+	memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
+	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+
+	//ready to draw with draw indexed
+	uint32_t vertOffset = 0;
+
+	for (int i = 0; i < data.size(); i++) {
+		vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, vertOffset, 0);
+		vertOffset += attributes.size();
+	}
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.signalSemaphoreCount = 0;
+	submitInfo.waitSemaphoreCount = 0;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &g_PcPlotCommandBuffer;
+
+	err = vkQueueSubmit(g_Queue, 1, &submitInfo, VK_NULL_HANDLE);
+	check_vk_result(err);
 }
 
 static void SetupVulkan(const char** extensions, uint32_t extensions_count)
