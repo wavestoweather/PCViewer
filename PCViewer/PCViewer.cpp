@@ -58,8 +58,8 @@ static VkBuffer					g_PcPlotVertexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotWidth = 100;
 static uint32_t					g_PcPlotHeight = 100;
-static char						g_fragShaderPath[] = "shader/frag.spv";
-static char						g_vertShaderPath[] = "shader/vert.spv";
+static char						g_fragShaderPath[] = "PCViewer/shader/frag.spv";
+static char						g_vertShaderPath[] = "PCViewer/shader/vert.spv";
 
 struct Attribute {
 	std::string name;
@@ -67,8 +67,7 @@ struct Attribute {
 	float max;			//max value of all values
 };
 
-struct Vertex {
-	float x;
+struct Vertex {			//currently holds just the y coordinate. The x computed in the vertex shader via the index
 	float y;
 };
 
@@ -226,7 +225,7 @@ static void createPcPlotPipeline() {
 	attributeDescription.binding = 0;
 	attributeDescription.location = 0;
 	attributeDescription.format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescription.offset = offsetof(Vertex, x);
+	attributeDescription.offset = offsetof(Vertex, y);
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -364,7 +363,7 @@ static void createPcPlotRenderPass() {
 
 	VkAttachmentReference colorAttachmentRef = {};
 	colorAttachmentRef.attachment = 0;
-	colorAttachmentRef.attachment = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 	VkSubpassDescription subpass = {};
 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -422,7 +421,7 @@ static void cleanupPcPlotCommandPool() {
 	vkDestroyCommandPool(g_Device, g_PcPlotCommandPool, nullptr);
 }
 
-static void createPcPlotVertexBuffer(int amtOfVertices) {
+static void createPcPlotVertexBuffer(uint32_t amtOfVertices, uint32_t amtOfAttributes, const std::vector<float*>& data) {
 	VkResult err;
 
 	VkBufferCreateInfo bufferInfo = {};
@@ -449,6 +448,8 @@ static void createPcPlotVertexBuffer(int amtOfVertices) {
 
 	VkDeviceSize offsets[] = { 0 };
 	vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
+
+	//TODO: Create Index Buffer
  }
 
 static void cleanupPcPlotVertexBuffer() {
@@ -528,7 +529,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (auto a : attributeOrder) {
 			if (attributeEnabled[a]) {
 				Vertex v = {};
-				v.x = x;
+				v.y = x;
 				v.y = dat[a] - attributes[a].min;
 				v.y /= attributes[a].max - attributes[a].min;	//the y coord is now in range [0,1]
 				v.y *= 2;
@@ -1113,7 +1114,7 @@ int main(int, char**)
 
 				//vertexBufferRecreation
 				cleanupPcPlotVertexBuffer();
-				createPcPlotVertexBuffer(pcAttributes.size());
+				createPcPlotVertexBuffer(pcAttributes.size()*pcData.size(),pcAttributes.size(),pcData);
 
 				//printing out the loaded attributes for debug reasons
 				std::cout << "Attributes: " << std::endl;
