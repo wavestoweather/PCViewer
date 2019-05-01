@@ -48,6 +48,8 @@ static int                      g_SwapChainResizeHeight = 0;
 static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
 static VkImage					g_PcPlot = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotView = VK_NULL_HANDLE;
+static VkSampler				g_PcPlotSampler = VK_NULL_HANDLE;
+static VkDescriptorSet			g_PcPlotImageDescriptorSet = VK_NULL_HANDLE;
 static VkRenderPass				g_PcPlotRenderPass = VK_NULL_HANDLE;		//contains the render pass for the pc
 static VkDescriptorSetLayout	g_PcPlotDescriptorLayout = VK_NULL_HANDLE;
 static VkDescriptorPool			g_PcPlotDescriptorPool = VK_NULL_HANDLE;
@@ -196,6 +198,7 @@ static VkShaderModule createShaderModule(const std::vector<char>& code) {
 	VkShaderModuleCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+	createInfo.codeSize = code.size();
 
 	VkShaderModule shaderModule;
 	VkResult err = vkCreateShaderModule(g_Device, &createInfo, nullptr, &shaderModule);
@@ -406,7 +409,7 @@ static void createPcPlotRenderPass() {
 	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 	VkAttachmentReference colorAttachmentRef = {};
 	colorAttachmentRef.attachment = 0;
@@ -1058,7 +1061,7 @@ int main(int, char**)
 		err = vkBeginCommandBuffer(command_buffer, &begin_info);
 		check_vk_result(err);
 
-		ImGui_ImplVulkan_CreateFontsTexture(command_buffer);
+		ImGui_ImplVulkan_CreateFontsTexture(command_buffer, g_Device, g_DescriptorPool);
 
 		VkSubmitInfo end_info = {};
 		end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1081,6 +1084,23 @@ int main(int, char**)
 		createPcPlotFramebuffer();
 		createPcPlotCommandPool();
 		createPcPlotCommandBuffer();
+
+		//before being able to add the image to imgui the sampler has to be created
+		VkSamplerCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		info.magFilter = VK_FILTER_LINEAR;
+		info.minFilter = VK_FILTER_LINEAR;
+		info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		info.minLod = -1000;
+		info.maxLod = 1000;
+		info.maxAnisotropy = 1.0f;
+		err = vkCreateSampler(g_Device, &info, nullptr, &g_PcPlotSampler);
+		check_vk_result(err);
+
+		g_PcPlotImageDescriptorSet =(VkDescriptorSet) ImGui_ImplVulkan_AddTexture(g_PcPlotSampler, g_PcPlotView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool);
 	}
 
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -1110,16 +1130,20 @@ int main(int, char**)
 
 
 		//draw the picture of the plotted pc coordinates
-		ImTextureID my_tex_id = (ImTextureID)(intptr_t)g_PcPlot;
-		float my_tex_w = (float)io.Fonts->TexWidth;
-		float my_tex_h = (float)io.Fonts->TexHeight;
+		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
+		{
+			ImTextureID my_tex_id = (ImTextureID)g_PcPlotImageDescriptorSet;
+			float my_tex_w = (float)io.Fonts->TexWidth;
+			float my_tex_h = (float)io.Fonts->TexHeight;
 
-		ImGui::Text("%.0fx%.0f", my_tex_w, my_tex_h);
-		ImVec2 pos = ImGui::GetCursorScreenPos();
-		ImGui::Image(my_tex_id, ImVec2(my_tex_w, my_tex_h), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
-		if (ImGui::Button("Render")) {
+			ImVec2 pos = ImGui::GetCursorScreenPos();
 
+			ImGui::Image(my_tex_id, ImVec2(my_tex_w, my_tex_h), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			if (ImGui::Button("Render")) {
+
+			}
 		}
+		ImGui::End();
 
 		// Labels for the titels of the attributes
 		// Position calculation for each of the Label
@@ -1295,6 +1319,7 @@ int main(int, char**)
 	check_vk_result(err);
 
 	{//section to cleanup pcPlot
+		vkDestroySampler(g_Device, g_PcPlotSampler, nullptr);
 		cleanupPcPlotCommandBuffer();
 		cleanupPcPlotCommandPool();
 		cleanupPcPlotFramebuffer();
