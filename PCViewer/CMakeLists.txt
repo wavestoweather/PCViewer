@@ -8,6 +8,10 @@ add_executable (PCViewer "PCViewer.cpp" "PCViewer.h" "imgui/imconfig.h" "imgui/i
 
 find_package(Vulkan REQUIRED)
 
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
 add_subdirectory("imgui/glfw-3.3")
 
 include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR})
