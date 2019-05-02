@@ -63,8 +63,8 @@ static VkBuffer					g_PcPlotVertexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
-static uint32_t					g_PcPlotWidth = 100;
-static uint32_t					g_PcPlotHeight = 100;
+static uint32_t					g_PcPlotWidth = 800;
+static uint32_t					g_PcPlotHeight = 300;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
 
@@ -471,12 +471,14 @@ static void cleanupPcPlotCommandPool() {
 	vkDestroyCommandPool(g_Device, g_PcPlotCommandPool, nullptr);
 }
 
-static void createPcPlotVertexBuffer(uint32_t amtOfVertices, uint32_t amtOfAttributes, const std::vector<float*>& data) {
+static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, const std::vector<float*>& data) {
 	VkResult err;
+
+	uint32_t amtOfVertices = Attributes.size() * data.size();
 
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(Vertex) * amtOfVertices;
+	bufferInfo.size = sizeof(Vertex) * Attributes.size() * data.size();
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -500,23 +502,24 @@ static void createPcPlotVertexBuffer(uint32_t amtOfVertices, uint32_t amtOfAttri
 	vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
 
 	//creating a 1-D array with all the Attributes
-	float* d = new float[amtOfVertices * amtOfAttributes];
+	float* d = new float[data.size() * Attributes.size()];
 	uint32_t i = 0;
 	for (float* p : data) {
-		memcpy(&d[i], p, sizeof(float) * amtOfAttributes);
-		i += amtOfAttributes;
+		for (int j = 0; j < Attributes.size(); j++) {
+			d[i++] = (p[j] - Attributes[j].min) / (Attributes[j].max - Attributes[j].min);
+		}
 	}
 
 	//filling the Vertex Buffer with all Datapoints
 	void* mem;
 	vkMapMemory(g_Device, g_PcPlotVertexBufferMemory, 0, sizeof(Vertex) * amtOfVertices, 0, &mem);
-	memcpy(d, mem, amtOfVertices * amtOfAttributes);
+	memcpy(d, mem, amtOfVertices * sizeof(Vertex));
 	vkUnmapMemory(g_Device, g_PcPlotVertexBufferMemory);
 	
 	//creating the index buffer
 	//index buffer also contains the uniform bufffer memory
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(uint16_t) * amtOfAttributes + sizeof(UniformBufferObject);
+	bufferInfo.size = sizeof(uint16_t) * Attributes.size() + sizeof(UniformBufferObject);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -532,13 +535,13 @@ static void createPcPlotVertexBuffer(uint32_t amtOfVertices, uint32_t amtOfAttri
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotIndexBufferMemory);
 	check_vk_result(err);
 
-	vkBindBufferMemory(g_Device, g_PcPlotVertexBuffer, g_PcPlotVertexBufferMemory, 0);
+	vkBindBufferMemory(g_Device, g_PcPlotIndexBuffer, g_PcPlotIndexBufferMemory, 0);
 	vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
 	//specifying the uniform buffer location
 	VkDescriptorBufferInfo desBufferInfo = {};
 	desBufferInfo.buffer = g_PcPlotIndexBuffer;
-	desBufferInfo.offset = sizeof(uint16_t)*amtOfAttributes;
+	desBufferInfo.offset = sizeof(uint16_t)*Attributes.size();
 	desBufferInfo.range = sizeof(UniformBufferObject);
 
 	VkWriteDescriptorSet descriptorWrite = {};
@@ -611,8 +614,48 @@ static void cleanupPcPlotCommandBuffer() {
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
 }
 
-static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const std::vector<float*>& data, float alpha) {
+static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const std::vector<float*>& data, float alpha, const ImGui_ImplVulkanH_Window* wd) {
 	VkResult err;
+
+	//beginning the command buffer
+	VkCommandPool command_pool = wd->Frames[wd->FrameIndex].CommandPool;
+	VkCommandBuffer command_buffer = wd->Frames[wd->FrameIndex].CommandBuffer;
+
+	err = vkResetCommandPool(g_Device, command_pool, 0);
+	check_vk_result(err);
+	VkCommandBufferBeginInfo begin_info = {};
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	err = vkBeginCommandBuffer(command_buffer, &begin_info);
+	check_vk_result(err);
+
+	//now using the memory barrier to transition image state
+	VkImageMemoryBarrier use_barrier[1] = {};
+	use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	use_barrier[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	use_barrier[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	use_barrier[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].image = g_PcPlot;
+	use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	use_barrier[0].subresourceRange.levelCount = 1;
+	use_barrier[0].subresourceRange.layerCount = 1;
+	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+
+	//ending the command buffer and submitting it
+	VkSubmitInfo end_info = {};
+	end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	end_info.commandBufferCount = 1;
+	end_info.pCommandBuffers = &command_buffer;
+	err = vkEndCommandBuffer(command_buffer);
+	check_vk_result(err);
+	err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
+	check_vk_result(err);
+
+	err = vkDeviceWaitIdle(g_Device);
+	check_vk_result(err);
 
 	//drawing via copying the indeces into the index buffer
 	//the indeces have to have just the right ordering for the vertices
@@ -683,6 +726,47 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	submitInfo.pCommandBuffers = &g_PcPlotCommandBuffer;
 
 	err = vkQueueSubmit(g_Queue, 1, &submitInfo, VK_NULL_HANDLE);
+	check_vk_result(err);
+
+	err = vkDeviceWaitIdle(g_Device);
+	check_vk_result(err);
+
+
+	//setting the image back to a shader readable format
+	//beginning the command buffer
+
+	err = vkResetCommandPool(g_Device, command_pool, 0);
+	check_vk_result(err);
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	err = vkBeginCommandBuffer(command_buffer, &begin_info);
+	check_vk_result(err);
+
+	
+	//now using the memory barrier to transition image state
+	use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	use_barrier[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	use_barrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	use_barrier[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].image = g_PcPlot;
+	use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	use_barrier[0].subresourceRange.levelCount = 1;
+	use_barrier[0].subresourceRange.layerCount = 1;
+	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+
+	//ending the command buffer and submitting it
+	end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	end_info.commandBufferCount = 1;
+	end_info.pCommandBuffers = &command_buffer;
+	err = vkEndCommandBuffer(command_buffer);
+	check_vk_result(err);
+	err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
+	check_vk_result(err);
+
+	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
 }
 
@@ -964,16 +1048,11 @@ int main(int, char**)
 	//Section for variables
 	float pcLinesAlpha = 1.0f;
 	char pcFilePath[100] = {};
-
 	
 	bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribute is enabled
-	
-	std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds
-	
-	std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes
-
-	//Contains all data
-	std::vector<float*> pcData = std::vector<float*>();
+	std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
+	std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
+	std::vector<float*> pcData = std::vector<float*>();						//Contains all data
 
 	// Setup GLFW window
 	glfwSetErrorCallback(glfw_error_callback);
@@ -1101,6 +1180,48 @@ int main(int, char**)
 		check_vk_result(err);
 
 		g_PcPlotImageDescriptorSet =(VkDescriptorSet) ImGui_ImplVulkan_AddTexture(g_PcPlotSampler, g_PcPlotView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool);
+
+		
+
+		//beginning the command buffer
+		VkCommandPool command_pool = wd->Frames[wd->FrameIndex].CommandPool;
+		VkCommandBuffer command_buffer = wd->Frames[wd->FrameIndex].CommandBuffer;
+
+		err = vkResetCommandPool(g_Device, command_pool, 0);
+		check_vk_result(err);
+		VkCommandBufferBeginInfo begin_info = {};
+		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		err = vkBeginCommandBuffer(command_buffer, &begin_info);
+		check_vk_result(err);
+
+		//now using the memory barrier to transition image state
+		VkImageMemoryBarrier use_barrier[1] = {};
+		use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		use_barrier[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		use_barrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		use_barrier[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier[0].image = g_PcPlot;
+		use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		use_barrier[0].subresourceRange.levelCount = 1;
+		use_barrier[0].subresourceRange.layerCount = 1;
+		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+
+		//ending the command buffer and submitting it
+		VkSubmitInfo end_info = {};
+		end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		end_info.commandBufferCount = 1;
+		end_info.pCommandBuffers = &command_buffer;
+		err = vkEndCommandBuffer(command_buffer);
+		check_vk_result(err);
+		err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
+		check_vk_result(err);
+
+		err = vkDeviceWaitIdle(g_Device);
+		check_vk_result(err);
 	}
 
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -1133,14 +1254,14 @@ int main(int, char**)
 		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
 			ImTextureID my_tex_id = (ImTextureID)g_PcPlotImageDescriptorSet;
-			float my_tex_w = (float)io.Fonts->TexWidth;
-			float my_tex_h = (float)io.Fonts->TexHeight;
 
 			ImVec2 pos = ImGui::GetCursorScreenPos();
 
-			ImGui::Image(my_tex_id, ImVec2(my_tex_w, my_tex_h), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			ImGui::Image(my_tex_id, ImVec2(g_PcPlotWidth, g_PcPlotHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 			if (ImGui::Button("Render")) {
-
+				if (pcData.size() > 0) {
+					drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, pcData, pcLinesAlpha, wd);
+				}
 			}
 		}
 		ImGui::End();
@@ -1274,7 +1395,7 @@ int main(int, char**)
 
 				//vertexBufferRecreation
 				cleanupPcPlotVertexBuffer();
-				createPcPlotVertexBuffer(pcAttributes.size()*pcData.size(),pcAttributes.size(),pcData);
+				createPcPlotVertexBuffer(pcAttributes,pcData);
 
 				//printing out the loaded attributes for debug reasons
 				std::cout << "Attributes: " << std::endl;
