@@ -54,6 +54,8 @@ static VkRenderPass				g_PcPlotRenderPass = VK_NULL_HANDLE;		//contains the rend
 static VkDescriptorSetLayout	g_PcPlotDescriptorLayout = VK_NULL_HANDLE;
 static VkDescriptorPool			g_PcPlotDescriptorPool = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotDescriptorSet = VK_NULL_HANDLE;
+static VkBuffer					g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
+static VkDeviceMemory			g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotPipelineLayout = VK_NULL_HANDLE;	//contains the pipeline which is used to assign global shader variables
 static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphics pipeline for the pc
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
@@ -524,10 +526,9 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	vkUnmapMemory(g_Device, g_PcPlotVertexBufferMemory);
 	
 	//creating the index buffer
-	//index buffer also contains the uniform bufffer memory at the front
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(uint16_t) * Attributes.size() + sizeof(UniformBufferObject);
-	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	bufferInfo.size = sizeof(uint16_t) * Attributes.size();
+	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotIndexBuffer);
@@ -543,11 +544,30 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	check_vk_result(err);
 
 	vkBindBufferMemory(g_Device, g_PcPlotIndexBuffer, g_PcPlotIndexBufferMemory, 0);
-	//vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, sizeof(UniformBufferObject), VK_INDEX_TYPE_UINT16);
+
+	//creating the uniform buffer
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = sizeof(UniformBufferObject);
+	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotDescriptorBuffer);
+	check_vk_result(err);
+
+	vkGetBufferMemoryRequirements(g_Device, g_PcPlotDescriptorBuffer, &memRequirements);
+
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotDescriptorBufferMemory);
+	check_vk_result(err);
+
+	vkBindBufferMemory(g_Device, g_PcPlotDescriptorBuffer, g_PcPlotDescriptorBufferMemory, 0);
 
 	//specifying the uniform buffer location
 	VkDescriptorBufferInfo desBufferInfo = {};
-	desBufferInfo.buffer = g_PcPlotIndexBuffer;
+	desBufferInfo.buffer = g_PcPlotDescriptorBuffer;
 	desBufferInfo.offset = 0;
 	desBufferInfo.range = sizeof(UniformBufferObject);
 
@@ -578,6 +598,10 @@ static void cleanupPcPlotVertexBuffer() {
 		vkDestroyBuffer(g_Device, g_PcPlotIndexBuffer, nullptr);
 	if (g_PcPlotIndexBufferMemory)
 		vkFreeMemory(g_Device, g_PcPlotIndexBufferMemory, nullptr);
+	if (g_PcPlotDescriptorBuffer)
+		vkDestroyBuffer(g_Device, g_PcPlotDescriptorBuffer, nullptr);
+	if (g_PcPlotDescriptorBufferMemory)
+		vkFreeMemory(g_Device, g_PcPlotDescriptorBufferMemory, nullptr);
 }
 
 static void createPcPlotCommandBuffer() {
@@ -708,9 +732,6 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			amtOfIndeces++;
 	}
 
-	void* d;
-	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size() + sizeof(UniformBufferObject), 0, &d);
-
 	//filling the indexbuffer with the used indeces
 	uint16_t* ind = new uint16_t[amtOfIndeces];			//contains all indeces to copy
 	int j = 0;											//current index in the ind array
@@ -726,14 +747,18 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 #endif
 
 	//copying the indexbuffer
-	memcpy(((char*)d+sizeof(UniformBufferObject)), ind, amtOfIndeces * sizeof(uint16_t));
+	void* d;
+	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size(), 0, &d);
+	memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
+	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 	
 
 	//filling the uniform buffer and copying it into the end of the indexbuffer
-	UniformBufferObject ubo;
+	UniformBufferObject ubo = {};
 	ubo.alpha = alpha;
 	ubo.amtOfVerts = amtOfIndeces;
 	int c = 0;
+	
 	for (int i : attributeOrder) {
 		ubo.order[i] = c;
 		if (attributeEnabled[i])
@@ -742,20 +767,24 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 #ifdef _DEBUG
 	if (c != amtOfIndeces)
-		__debugbreak();
+		//__debugbreak();
 #endif
 
-	//copying the uniform buffer to front of the indexbuffer
-	memcpy(d, &ubo, sizeof(UniformBufferObject));
+	for (int i = 0; i < 20; i ++) {
+		std::cout << ubo.order[i] << std::endl;
+	}
 
-	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+	//copying the uniform buffer to front of the indexbuffer
+	vkMapMemory(g_Device, g_PcPlotDescriptorBufferMemory, 0, sizeof(UniformBufferObject), 0, &d);
+	memcpy(d, &ubo, sizeof(UniformBufferObject));
+	vkUnmapMemory(g_Device, g_PcPlotDescriptorBufferMemory);
 
 	//starting the pcPlotCommandBuffer
 	createPcPlotCommandBuffer();
 
 	//binding the all needed things
 	vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
-	vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, sizeof(UniformBufferObject), VK_INDEX_TYPE_UINT16);
+	vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 	VkDeviceSize offsets[] = { 0 };
 	vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
 
@@ -765,7 +794,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//ready to draw with draw indexed
 	uint32_t vertOffset = 0 , co = 0;
-	for (int i = 0; i < data.size(); i++) {
+	for (int i = 0; i < 1/*data.size()*/; i++) {
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, vertOffset, 0);
 		vertOffset += attributes.size();
 		co++;
@@ -1055,7 +1084,7 @@ static void glfw_resize_callback(GLFWwindow*, int w, int h)
 
 int main(int, char**)
 {
-	std::cout << (sizeof(Vertex) == sizeof(float)) << std::endl;
+	std::cout << (sizeof(UniformBufferObject)) << std::endl;
 
 	//Section for variables
 	float pcLinesAlpha = 1.0f;
