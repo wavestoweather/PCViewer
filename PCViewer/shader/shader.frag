@@ -4,6 +4,7 @@
 layout(binding = 0) uniform UniformBufferObject{
 	float alpha;
 	uint amtOfVerts;
+	uint amtOfAttributes;
 	uint ordering[20];
 } ubo;
 

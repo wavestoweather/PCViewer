@@ -10,9 +10,10 @@ vec2 positions[6] = vec2[](
 	vec2(0.5,0.5)
 );
 
-layout(binding = 0) buffer UniformBufferObject{
+layout(binding = 0) uniform UniformBufferObject{
 	float alpha;
 	uint amtOfVerts;
+	uint amtOfAttributes;
 	uint ordering[20];
 } ubo;
 
@@ -20,8 +21,7 @@ layout(location = 0) in float inPosition;
 
 void main() {
 	float gap = 2.0f/(ubo.amtOfVerts - 1.0f); //gap is tested, and ist correct
-	float x = -1.0f + ubo.ordering[gl_VertexIndex] * gap;
-	x = (ubo.ordering[gl_VertexIndex])/6.0f;
+	float x = -1.0f + ubo.ordering[gl_VertexIndex % ubo.amtOfAttributes] * gap;
 
-    gl_Position = vec4( x,positions[gl_VertexIndex].y, 0.0, 1.0);
+    gl_Position = vec4( x, inPosition, 0.0, 1.0);
 }

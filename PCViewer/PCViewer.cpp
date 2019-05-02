@@ -83,7 +83,9 @@ struct Vertex {			//currently holds just the y coordinate. The x computed in the
 struct UniformBufferObject {
 	float alpha;
 	uint32_t amtOfVerts;
-	uint32_t order[20];			//IMPORTANT: the length of this array should be the same length it is in the shader
+	uint32_t amtOfAttributes;
+	uint32_t padding;
+	uint32_t order[80];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
 };
 
 static void check_vk_result(VkResult err)
@@ -757,10 +759,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	UniformBufferObject ubo = {};
 	ubo.alpha = alpha;
 	ubo.amtOfVerts = amtOfIndeces;
+	ubo.amtOfAttributes = attributes.size();
 	int c = 0;
 	
 	for (int i : attributeOrder) {
-		ubo.order[i] = c;
+		ubo.order[i*4] = c;
 		if (attributeEnabled[i])
 			c++;
 	}
@@ -794,7 +797,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//ready to draw with draw indexed
 	uint32_t vertOffset = 0 , co = 0;
-	for (int i = 0; i < 1/*data.size()*/; i++) {
+	for (int i = 0; i < data.size(); i++) {
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, vertOffset, 0);
 		vertOffset += attributes.size();
 		co++;
