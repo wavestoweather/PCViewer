@@ -10,5 +10,5 @@ layout(binding = 0) uniform UniformBufferObject{
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    outColor = vec4(1.0, 1.0, 1.0, ubo.alpha);
+    outColor = vec4(1.0, 1.0, 1.0f, ubo.alpha);
 }

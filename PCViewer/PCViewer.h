@@ -7,4 +7,5 @@
 #include <fstream>
 #include <string>
 
-// TODO: Verweisen Sie hier auf zusätzliche Header, die Ihr Programm erfordert.
+static void createPcPlotCommandBuffer();
+static void cleanupPcPlotCommandBuffer();

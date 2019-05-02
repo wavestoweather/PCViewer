@@ -18,4 +18,12 @@ include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR})
 
 target_link_libraries(PCViewer Vulkan::Vulkan glfw)
 
-# TODO: Fügen Sie bei Bedarf Tests hinzu, und installieren Sie Ziele.
+configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader COPYONLY)
+
+configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader COPYONLY)
+
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv
+ #       DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv
+ #       DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
