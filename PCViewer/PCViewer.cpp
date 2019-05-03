@@ -592,18 +592,30 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 }
 
 static void cleanupPcPlotVertexBuffer() {
-	if(g_PcPlotVertexBuffer)
+	if (g_PcPlotVertexBuffer) {
 		vkDestroyBuffer(g_Device, g_PcPlotVertexBuffer, nullptr);
-	if (g_PcPlotVertexBufferMemory)
+		g_PcPlotVertexBuffer = VK_NULL_HANDLE;
+	}
+	if (g_PcPlotVertexBufferMemory) {
 		vkFreeMemory(g_Device, g_PcPlotVertexBufferMemory, nullptr);
-	if (g_PcPlotIndexBuffer)
+		g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
+	}
+	if (g_PcPlotIndexBuffer) {
 		vkDestroyBuffer(g_Device, g_PcPlotIndexBuffer, nullptr);
-	if (g_PcPlotIndexBufferMemory)
+		g_PcPlotIndexBuffer = VK_NULL_HANDLE;
+	}
+	if (g_PcPlotIndexBufferMemory) {
 		vkFreeMemory(g_Device, g_PcPlotIndexBufferMemory, nullptr);
-	if (g_PcPlotDescriptorBuffer)
+		g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
+	}
+	if (g_PcPlotDescriptorBuffer) {
 		vkDestroyBuffer(g_Device, g_PcPlotDescriptorBuffer, nullptr);
-	if (g_PcPlotDescriptorBufferMemory)
+		g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
+	}
+	if (g_PcPlotDescriptorBufferMemory) {
 		vkFreeMemory(g_Device, g_PcPlotDescriptorBufferMemory, nullptr);
+		g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
+	}
 }
 
 static void createPcPlotCommandBuffer() {
@@ -1331,6 +1343,7 @@ int main(int, char**)
 			
 
 			int c = 0;		//describing the position of the element in the AttrOrd vector
+			int c1 = 0;
 			for (auto i : pcAttrOrd) {
 				//not creating button for unused Attributes
 				if (!pcAttributeEnabled[i]) {
@@ -1339,7 +1352,7 @@ int main(int, char**)
 				}
 
 				std::string name = pcAttributes[i].name;
-				ImGui::SameLine(offset-c*(buttonSize.x/amtOfLabels));
+				ImGui::SameLine(offset-c1*(buttonSize.x/amtOfLabels));
 				ImGui::Button(name.c_str(),buttonSize);
 
 				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
@@ -1361,6 +1374,7 @@ int main(int, char**)
 				}
 				
 				c++;
+				c1++;
 				offset += gap;
 
 			}
@@ -1376,8 +1390,10 @@ int main(int, char**)
 
 		//Settings section
 		window_pos = ImVec2(0, 500);
+		ImVec2 window_size = ImVec2(500,200);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		if (ImGui::Begin("Example: Simple overlay", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
+		ImGui::SetNextWindowSize(window_size);
+		if (ImGui::Begin("Settings", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
 		{
 			ImGui::Text("Settings");
 			ImGui::SliderFloat("Alpha value", &pcLinesAlpha, 0.0f, 1.0f);

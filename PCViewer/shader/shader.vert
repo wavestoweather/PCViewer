@@ -23,5 +23,5 @@ void main() {
 	float gap = 2.0f/(ubo.amtOfVerts - 1.0f); //gap is tested, and ist correct
 	float x = -1.0f + ubo.ordering[gl_VertexIndex % ubo.amtOfAttributes] * gap;
 
-    gl_Position = vec4( x, inPosition, 0.0, 1.0);
+    gl_Position = vec4( x, inPosition * -1.0f, 0.0, 1.0);
 }
