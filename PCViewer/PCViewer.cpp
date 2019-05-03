@@ -65,7 +65,7 @@ static VkBuffer					g_PcPlotVertexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
-static uint32_t					g_PcPlotWidth = 800;
+static uint32_t					g_PcPlotWidth = 1280;
 static uint32_t					g_PcPlotHeight = 300;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
@@ -514,8 +514,8 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	for (float* p : data) {
 		for (int j = 0; j < Attributes.size(); j++) {
 			float t = (p[j] - Attributes[j].min) / (Attributes[j].max - Attributes[j].min);
-			t *= 2.0;
-			t -= 1.0f;
+			t *= 1.9;
+			t -= .95f;
 			d[i++] = t;
 
 		}
@@ -1091,12 +1091,15 @@ int main(int, char**)
 
 	//Section for variables
 	float pcLinesAlpha = 1.0f;
+	float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
 	char pcFilePath[100] = {};
 	
 	bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribute is enabled
+	bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
 	std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
 	std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
 	std::vector<float*> pcData = std::vector<float*>();						//Contains all data
+	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
 
 	// Setup GLFW window
 	glfwSetErrorCallback(glfw_error_callback);
@@ -1292,22 +1295,19 @@ int main(int, char**)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-
-		//draw the picture of the plotted pc coordinates
-		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
-		{
-			ImTextureID my_tex_id = (ImTextureID)g_PcPlotImageDescriptorSet;
-
-			ImVec2 pos = ImGui::GetCursorScreenPos();
-
-			ImGui::Image(my_tex_id, ImVec2(g_PcPlotWidth, g_PcPlotHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
-			if (ImGui::Button("Render")) {
-				if (pcData.size() > 0) {
-					drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, pcData, pcLinesAlpha, wd);
-				}
+		//Checking if an Attribute has been switched on or off
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			if (pcAttributeEnabled[i] ^ pcAttributeEnabledCpy[i]) {
+				pcAttributeEnabledCpy[i] = pcAttributeEnabled[i];
+				pcPlotRender = true;
 			}
 		}
-		ImGui::End();
+
+		//Check if alpha value changed
+		if (pcLinesAlpha != pcLinesAlphaCpy) {
+			pcLinesAlphaCpy = pcLinesAlpha;
+			pcPlotRender = true;
+		}
 
 		// Labels for the titels of the attributes
 		// Position calculation for each of the Label
@@ -1316,34 +1316,66 @@ int main(int, char**)
 			if (pcAttributeEnabled[i])
 				amtOfLabels++;
 
-		size_t paddingSide = 50;			//padding from left and right screen border
-		size_t paddingTop = 50;				//padding from the top of the screen
+		size_t paddingSide = 10;			//padding from left and right screen border
 		size_t gap = (io.DisplaySize.x - 2 * paddingSide) / (amtOfLabels - 1);
+		ImVec2 buttonSize = ImVec2(50, 20);
+		size_t offset = 0;
 
-		//creating one Label for each Attribute
-		ImVec2 window_pos = ImVec2(paddingSide, paddingTop);
-		for (auto i:pcAttrOrd) {
-			//not creating a label for unused Attributes
-			if (!pcAttributeEnabled[i])
-				continue;
+		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
+		ImVec2 window_pos = ImVec2(0, 0);
+		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
+		ImGui::SetNextWindowSize({ io.DisplaySize.x,400 });
+		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
+		{
+			//drawing the buttons which can be changed via drag and drop
+			
 
-			std::string a = pcAttributes[i].name;
+			int c = 0;		//describing the position of the element in the AttrOrd vector
+			for (auto i : pcAttrOrd) {
+				//not creating button for unused Attributes
+				if (!pcAttributeEnabled[i]) {
+					c++;
+					continue;
+				}
 
-			ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, ImVec2(.5f,0));
-			ImGui::SetNextWindowBgAlpha(0.3f); // Transparent background
+				std::string name = pcAttributes[i].name;
+				ImGui::SameLine(offset-c*(buttonSize.x/amtOfLabels));
+				ImGui::Button(name.c_str(),buttonSize);
 
-			if (ImGui::Begin(a.c_str(), NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
-			{
-				ImGui::Text(a.c_str());
+				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+					int p[] = { c,i };		//holding the index in the pcAttriOrd array and the value of it
+					ImGui::SetDragDropPayload("ATTRIBUTE", p ,sizeof(p));
+					ImGui::Text("Swap %s", name.c_str());
+					ImGui::EndDragDropSource();
+				}
+				if (ImGui::BeginDragDropTarget()) {
+					if (const ImGuiPayload * payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
+						int* other = (int*)payload->Data;
+
+						//swapping the two ints
+						pcAttrOrd[c] = other[1];
+						pcAttrOrd[other[0]] = i;
+
+						pcPlotRender = true;
+					}
+				}
+				
+				c++;
+				offset += gap;
+
 			}
-			ImGui::End();
 
-			//setting up the position for the next label
-			window_pos.x += gap;
+			//drawing the Texture
+			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, g_PcPlotHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			if (pcData.size() > 0 && pcPlotRender) {
+				pcPlotRender = false;
+				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, pcData, pcLinesAlpha, wd);
+			}
 		}
+		ImGui::End();
 
 		//Settings section
-		window_pos = ImVec2(100, 500);
+		window_pos = ImVec2(0, 500);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
 		if (ImGui::Begin("Example: Simple overlay", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
 		{
@@ -1395,8 +1427,10 @@ int main(int, char**)
 						pcAttributes.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
 						//setting up the boolarray and setting all the attributes to true
 						pcAttributeEnabled =new bool[pcAttributes.size()];
+						pcAttributeEnabledCpy = new bool[pcAttributes.size()];
 						for (int i = 0; i < pcAttributes.size(); i++) {
 							pcAttributeEnabled[i] = true;
+							pcAttributeEnabledCpy[i] = true;
 							pcAttrOrd.push_back(i);
 						}
 
@@ -1443,8 +1477,10 @@ int main(int, char**)
 
 				//vertexBufferRecreation
 				cleanupPcPlotVertexBuffer();
-				if(pcData.size()>0)
-					createPcPlotVertexBuffer(pcAttributes,pcData);
+				if (pcData.size() > 0) {
+					createPcPlotVertexBuffer(pcAttributes, pcData);
+					pcPlotRender = true;
+				}
 
 				//printing out the loaded attributes for debug reasons
 				std::cout << "Attributes: " << std::endl;
@@ -1480,6 +1516,8 @@ int main(int, char**)
 	// Cleanup
 	if (pcAttributeEnabled)
 		delete[] pcAttributeEnabled;
+	if (pcAttributeEnabledCpy)
+		delete[] pcAttributeEnabledCpy;
 	for (auto& d : pcData) {
 		if(d)
 			delete[] d;
