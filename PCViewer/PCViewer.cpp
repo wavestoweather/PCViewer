@@ -46,6 +46,62 @@ static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
 
+
+struct Vertex {			//currently holds just the y coordinate. The x computed in the vertex shader via the index
+	float y;
+};
+
+struct Vec4 {
+	float x;
+	float y;
+	float z;
+	float w;
+};
+
+struct UniformBufferObject {
+	float alpha;
+	uint32_t amtOfVerts;
+	uint32_t amtOfAttributes;
+	uint32_t padding;
+	Vec4 color;
+	Vec4 VertexTransormations[20];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
+};
+
+struct DrawList {
+	std::string name;
+	std::string parentDataSet;
+	Vec4 color;
+	VkBuffer buffer;
+	std::vector<int> indices;
+};
+
+struct TemplateList {
+	std::string name;
+	VkBuffer buffer;
+	std::vector<int> indices;
+};
+
+struct Buffer {
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+
+	bool operator==(const Buffer& other) {
+		return this->buffer == other.buffer && this->memory == other.memory;
+	}
+};
+
+struct DataSet {
+	std::string name;
+	Buffer buffer;
+	std::vector<float*> data;
+	std::list<TemplateList> drawLists;
+
+	bool operator==(const DataSet& other) {
+		return this->name == other.name;
+	}
+};
+
+
 static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
 static VkImage					g_PcPlot = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotView = VK_NULL_HANDLE;
@@ -78,57 +134,12 @@ struct Attribute {
 	float max;			//max value of all values
 };
 
-struct Vertex {			//currently holds just the y coordinate. The x computed in the vertex shader via the index
-	float y;
-};
+bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribute is enabled
+bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
+std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
+std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
 
-struct Vec4 {
-	float x;
-	float y;
-	float z;
-	float w;
-};
 
-struct UniformBufferObject {
-	float alpha;
-	uint32_t amtOfVerts;
-	uint32_t amtOfAttributes;
-	uint32_t padding;
-	Vec4 color;
-	Vec4 VertexTransormations[];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
-};
-
-struct DrawList {
-	std::string parentDataSet;
-	Vec4 color;
-	VkBuffer buffer;
-	std::vector<int> indices;
-};
-
-struct TemplateList {
-	VkBuffer buffer;
-	std::vector<int> indices;
-};
-
-struct Buffer {
-	VkBuffer buffer;
-	VkDeviceMemory memory;
-
-	bool operator==(const Buffer& other) {
-		return this->buffer == other.buffer && this->memory == other.memory;
-	}
-};
-
-struct DataSet {
-	std::string name;
-	Buffer buffer;
-	std::vector<float*> data;
-	std::list<TemplateList> drawLists;
-
-	bool operator==(const DataSet& other) {
-		return this->name == other.name;
-	}
-};
 
 static void check_vk_result(VkResult err)
 {
@@ -637,7 +648,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 }
 
 static void cleanupPcPlotVertexBuffer() {
-	for (Buffer b : g_PcPlotVertexBuffers) {
+	for (Buffer& b : g_PcPlotVertexBuffers) {
 		if (b.buffer) {
 			vkDestroyBuffer(g_Device, b.buffer, nullptr);
 			b.buffer = VK_NULL_HANDLE;
@@ -665,7 +676,7 @@ static void cleanupPcPlotVertexBuffer() {
 	}
 }
 
-static void destroyPcPlotVertexBuffer(Buffer buffer) {
+static void destroyPcPlotVertexBuffer(Buffer& buffer) {
 	auto it = g_PcPlotVertexBuffers.begin();
 	for (; it != g_PcPlotVertexBuffers.end(); ++it) {
 		if (*it == buffer) {
@@ -693,7 +704,7 @@ static void destroyPcPlotVertexBuffer(Buffer buffer) {
 static void removePcPlotDrawLists(DataSet dataSet) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
 		if (it->parentDataSet == dataSet.name) {
-			it->indeces.clear();
+			it->indices.clear();
 			g_PcPlotDrawLists.erase(it++);
 			if (it == g_PcPlotDrawLists.end())
 				break;
@@ -724,6 +735,23 @@ static void destroyPcPlotDataSet(DataSet dataSet) {
 	}
 
 	g_PcPlotDataSets.erase(it);
+
+	//if this was the last data set reset the ofther buffer too
+	//Attributes also have to be deleted
+	if (g_PcPlotDataSets.size() == 0) {
+		cleanupPcPlotVertexBuffer();
+
+		pcAttributes.clear();
+		pcAttrOrd.clear();
+		if (pcAttributeEnabled) {
+			delete[] pcAttributeEnabled;
+			pcAttributeEnabled = nullptr;
+		}
+		if (pcAttributeEnabledCpy) {
+			delete[] pcAttributeEnabledCpy;
+			pcAttributeEnabledCpy = nullptr;
+		}
+	}
 }
 
 //This method automatically also destroys all draw Lists
@@ -1218,6 +1246,158 @@ static void glfw_resize_callback(GLFWwindow*, int w, int h)
 	g_SwapChainResizeHeight = h;
 }
 
+static void openCsv(const char* filename) {
+
+	std::ifstream input(filename);
+
+	if (!input.is_open()) {
+		std::cout << "The given file was not found" << std::endl;
+		return;
+	}
+
+	bool firstLine = true;
+
+	//creating the dataset to be drawable
+	DataSet ds;
+	ds.name = filename;
+
+	for (std::string line; std::getline(input, line); )
+	{
+		std::string delimiter = ",";
+		size_t pos = 0;
+		std::string cur;
+
+		//parsing the attributes in the first line
+		if (firstLine) {
+			//copying the attributes into a temporary vector to check for correct Attributes
+			std::vector<Attribute> tmp;
+
+			while ((pos = line.find(delimiter)) != std::string::npos) {
+				cur = line.substr(0, pos);
+				line.erase(0, pos + delimiter.length());
+				tmp.push_back({ cur,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+			}
+			//adding the last item which wasn't recognized
+			tmp.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+
+			//checking if the Attributes are correct
+			if (pcAttributes.size() != 0) {
+				if (tmp.size() != pcAttributes.size()) {
+					std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
+					input.close();
+					return;
+				}
+				
+				for (int i = 0; i < tmp.size(); i++) {
+					if (tmp[i].name != pcAttributes[i].name) {
+						std::cout << "The Attributes of the .csv file have different order or different names." << std::endl;
+						input.close();
+						return;
+					}
+				}
+			}
+			//if this is the first Dataset to be loaded, fill the pcAttributes vector
+			else {
+				for (Attribute a : tmp) {
+					pcAttributes.push_back(a);
+				}
+
+				//setting up the boolarray and setting all the attributes to true
+				pcAttributeEnabled = new bool[pcAttributes.size()];
+				pcAttributeEnabledCpy = new bool[pcAttributes.size()];
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					pcAttributeEnabled[i] = true;
+					pcAttributeEnabledCpy[i] = true;
+					pcAttrOrd.push_back(i);
+				}
+			}
+
+			firstLine = false;
+		}
+
+		//parsing the data which follows the attribute declaration
+		else {
+			ds.data.push_back(new float[pcAttributes.size()]);
+			size_t attr = 0;
+			float curF = 0;
+			while ((pos = line.find(delimiter)) != std::string::npos) {
+				cur = line.substr(0, pos);
+				line.erase(0, pos + delimiter.length());
+
+				//checking for an overrunning attribute counter
+				if (attr == pcAttributes.size())
+					__debugbreak();
+
+				curF = std::stof(cur);
+
+				//updating the bounds if a new highest value was found in the current data.
+				if (curF > pcAttributes[attr].max)
+					pcAttributes[attr].max = curF;
+				if (curF < pcAttributes[attr].min)
+					pcAttributes[attr].min = curF;
+
+				ds.data.back()[attr++] = curF;
+			}
+			if (attr == pcAttributes.size())
+				__debugbreak();
+
+			//adding the last item which wasn't recognized
+			curF = std::stof(line);
+
+			//updating the bounds if a new highest value was found in the current data.
+			if (curF > pcAttributes[attr].max)
+				pcAttributes[attr].max = curF;
+			if (curF < pcAttributes[attr].min)
+				pcAttributes[attr].min = curF;
+			ds.data.back()[attr] = curF;
+		}
+	}
+	input.close();
+
+	createPcPlotVertexBuffer(pcAttributes, ds.data);
+
+	TemplateList tl = {};
+	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
+	tl.name = "Default Drawlist";
+	for (int i = 0; i < ds.data.size(); i++) {
+		tl.indices.push_back(i);
+	}
+	ds.drawLists.push_back(tl);
+
+	g_PcPlotDataSets.push_back(ds);
+
+	//printing out the loaded attributes for debug reasons
+	std::cout << "Attributes: " << std::endl;
+	for (auto attribute : pcAttributes) {
+		std::cout << attribute.name << ", MinVal: " << attribute.min << ", MaxVal: " << attribute.max << std::endl;
+	}
+
+	int dc = 0;
+	std::cout << std::endl << "Data:" << std::endl;
+	for (auto d : ds.data) {
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			std::cout << d[i] << " , ";
+		}
+		std::cout << std::endl;
+		if (dc++ > 10)
+			break;
+	}
+}
+
+static void openDataset(const char* filename) {
+	//checking the datatype and calling the according method
+	std::string file = filename;
+	if (file.substr(file.find_last_of(".") + 1) == "csv") {
+		openCsv(filename);
+	}
+	else if (file.substr(file.find_last_of(".") + 1) == "csv") {
+		//TODO: write 
+	}
+	else {
+		std::cout << "The given type of the fiyle is not supported by this programm" << std::endl;
+	}
+}
+
 int main(int, char**)
 {
 	std::cout << (sizeof(UniformBufferObject)) << std::endl;
@@ -1227,11 +1407,8 @@ int main(int, char**)
 	float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
 	char pcFilePath[100] = {};
 	
-	bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribute is enabled
-	bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
-	std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
-	std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
-	std::vector<float*> pcData = std::vector<float*>();						//Contains all data
+	
+	//std::vector<float*> pcData = std::vector<float*>();						//Contains all data
 	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
 
 	// Setup GLFW window
@@ -1502,7 +1679,7 @@ int main(int, char**)
 
 			//drawing the Texture
 			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, g_PcPlotHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
-			if (pcData.size() > 0 && pcPlotRender) {
+			if (pcPlotRender) {
 				pcPlotRender = false;
 				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, pcLinesAlpha, wd);
 			}
@@ -1528,117 +1705,77 @@ int main(int, char**)
 
 			//Opening a new Dataset into the Viewer
 			if (ImGui::Button("Open")) {
-				//resetting all vectors
-				pcAttributes.clear();
-				for (auto& d : pcData) {
-					if (d) {
-						delete[] d;
-						d = nullptr;
-					}
-				}
-				pcData.clear();
-				if (pcAttributeEnabled) {
-					delete[] pcAttributeEnabled;
-					pcAttributeEnabled = nullptr;
-				}
-				pcAttrOrd.clear();
-
-				std::ifstream input(pcFilePath);
-
-				bool firstLine = true;
-
-				for (std::string line; std::getline(input, line); )
-				{
-					std::string delimiter = ",";
-					size_t pos = 0;
-					std::string cur;
-
-					//parsing the attributes in the first line
-					if (firstLine) {
-						while ((pos = line.find(delimiter)) != std::string::npos) {
-							cur = line.substr(0, pos);
-							line.erase(0, pos + delimiter.length());
-							pcAttributes.push_back({ cur,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
-						}
-						//adding the last item which wasn't recognized
-						pcAttributes.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
-						//setting up the boolarray and setting all the attributes to true
-						pcAttributeEnabled =new bool[pcAttributes.size()];
-						pcAttributeEnabledCpy = new bool[pcAttributes.size()];
-						for (int i = 0; i < pcAttributes.size(); i++) {
-							pcAttributeEnabled[i] = true;
-							pcAttributeEnabledCpy[i] = true;
-							pcAttrOrd.push_back(i);
-						}
-
-						firstLine = false;
-					}
-
-					//parsing the data which follows the attribute declaration
-					else {
-						pcData.push_back(new float[pcAttributes.size()]);
-						size_t attr = 0;
-						float curF = 0;
-						while ((pos = line.find(delimiter)) != std::string::npos) {
-							cur = line.substr(0, pos);
-							line.erase(0, pos + delimiter.length());
-							
-							//checking for an overrunning attribute counter
-							if (attr == pcAttributes.size())
-								__debugbreak();
-
-							curF = std::stof(cur);
-
-							//updating the bounds if a new highest value was found in the current data.
-							if (curF > pcAttributes[attr].max)
-								pcAttributes[attr].max = curF;
-							if (curF < pcAttributes[attr].min)
-								pcAttributes[attr].min = curF;
-
-							pcData.back()[attr++] = curF;
-						}
-						if (attr == pcAttributes.size())
-							__debugbreak();
-						
-						//adding the last item which wasn't recognized
-						curF = std::stof(line);
-
-						//updating the bounds if a new highest value was found in the current data.
-						if (curF > pcAttributes[attr].max)
-							pcAttributes[attr].max = curF;
-						if (curF < pcAttributes[attr].min)
-							pcAttributes[attr].min = curF;
-						pcData.back()[attr] = curF;
-					}
-				}
-
-				//vertexBufferRecreation
-				cleanupPcPlotVertexBuffer();
-				if (pcData.size() > 0) {
-					createPcPlotVertexBuffer(pcAttributes, pcData);
-					pcPlotRender = true;
-				}
-
-				//printing out the loaded attributes for debug reasons
-				std::cout << "Attributes: " << std::endl;
-				for (auto attribute : pcAttributes) {
-					std::cout << attribute.name << ", MinVal: " << attribute.min << ", MaxVal: " << attribute.max << std::endl;
-				}
-
-				int dc = 0;
-				std::cout << std::endl << "Data:" << std::endl;
-				for (auto d : pcData) {
-					for (int i = 0; i < pcAttributes.size(); i++) {
-						std::cout << d[i] << " , ";
-					}
-					std::cout << std::endl;
-					if (dc++ > 10)
-						break;
-				}
+				openDataset(pcFilePath);
 			}
 			
 		}
 		ImGui::End();
+
+		//DataSets, from which draw lists can be created
+		window_pos = ImVec2(505, 500);
+		window_size = ImVec2(500, 200);
+		DataSet destroySet = {};
+		bool destroy = false;
+		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size);
+		if (ImGui::Begin("Draw Lists", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
+			for (DataSet ds : g_PcPlotDataSets) {
+				if (ImGui::CollapsingHeader(ds.name.c_str())) {
+					for (TemplateList tl : ds.drawLists) {
+						if (ImGui::Button(tl.name.c_str()))
+							ImGui::OpenPopup(tl.name.c_str());
+						if (ImGui::BeginPopupModal(tl.name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
+						{
+							ImGui::Text((std::string("Creating a drawing list from ")+tl.name+"\n\n").c_str());
+							ImGui::Separator();
+
+							char name[100] = {};
+							ImGui::InputText("Drawlist Name", name, sizeof(name));
+
+							if (ImGui::Button("Create", ImVec2(120, 0))) { 
+								ImGui::CloseCurrentPopup(); 
+								DrawList dl = {};
+								dl.name = name;
+								dl.buffer = tl.buffer;
+								dl.color = { 1,1,1,1 };
+								dl.parentDataSet = ds.name;
+								g_PcPlotDrawLists.push_back(dl);
+							}
+							ImGui::SetItemDefaultFocus();
+							ImGui::SameLine();
+							if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+							ImGui::EndPopup();
+						}
+					}
+					
+					//Popup for delete menu
+					if (ImGui::Button("DELETE"))
+						ImGui::OpenPopup("DELETE");
+					if (ImGui::BeginPopupModal("DELETE", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+					{
+						ImGui::Text("Do you really want to delete this data set?");
+						ImGui::Separator();
+
+						if (ImGui::Button("Delete", ImVec2(120, 0))) {
+							ImGui::CloseCurrentPopup();
+							destroySet = ds;
+							destroy = true;
+						}
+						ImGui::SetItemDefaultFocus();
+						ImGui::SameLine();
+						if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+						ImGui::EndPopup();
+					}
+				}
+			}
+		}
+		ImGui::End();
+		//Destroying a dataset if it was selected
+		if(destroy)
+			destroyPcPlotDataSet(destroySet);
+
+		//DrawLists, which are finally drawn
+
 
 		ImGui::ShowDemoWindow(NULL);
 
@@ -1655,10 +1792,6 @@ int main(int, char**)
 		delete[] pcAttributeEnabled;
 	if (pcAttributeEnabledCpy)
 		delete[] pcAttributeEnabledCpy;
-	for (auto& d : pcData) {
-		if(d)
-			delete[] d;
-	}
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);

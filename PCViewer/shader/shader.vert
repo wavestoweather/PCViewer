@@ -1,15 +1,6 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-vec2 positions[6] = vec2[](
-    vec2(-0.5, -0.5),
-    vec2(-0.3, 0.5),
-    vec2(-0.1, -0.5),
-	vec2(0.1,0.5),
-	vec2(0.3,-0.5),
-	vec2(0.5,0.5)
-);
-
 layout(binding = 0) uniform UniformBufferObject{
 	float alpha;
 	uint amtOfVerts;
