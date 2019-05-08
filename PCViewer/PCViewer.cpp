@@ -15,6 +15,7 @@
 
 #include <vector>
 #include <limits>
+#include <list>
 
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -61,8 +62,9 @@ static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphic
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
 static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
 static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
-static VkBuffer					g_PcPlotVertexBuffer = VK_NULL_HANDLE;
-static VkDeviceMemory			g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
+static std::list<Buffer>		g_PcPlotVertexBuffers;
+static std::list<DataSet>		g_PcPlotDataSets;
+static std::list<DrawList>		g_PcPlotDrawLists;
 static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotWidth = 1280;
@@ -80,12 +82,52 @@ struct Vertex {			//currently holds just the y coordinate. The x computed in the
 	float y;
 };
 
+struct Vec4 {
+	float x;
+	float y;
+	float z;
+	float w;
+};
+
 struct UniformBufferObject {
 	float alpha;
 	uint32_t amtOfVerts;
 	uint32_t amtOfAttributes;
 	uint32_t padding;
-	uint32_t order[80];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
+	Vec4 color;
+	Vec4 VertexTransormations[];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
+};
+
+struct DrawList {
+	std::string parentDataSet;
+	Vec4 color;
+	VkBuffer buffer;
+	std::vector<int> indices;
+};
+
+struct TemplateList {
+	VkBuffer buffer;
+	std::vector<int> indices;
+};
+
+struct Buffer {
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+
+	bool operator==(const Buffer& other) {
+		return this->buffer == other.buffer && this->memory == other.memory;
+	}
+};
+
+struct DataSet {
+	std::string name;
+	Buffer buffer;
+	std::vector<float*> data;
+	std::list<TemplateList> drawLists;
+
+	bool operator==(const DataSet& other) {
+		return this->name == other.name;
+	}
 };
 
 static void check_vk_result(VkResult err)
@@ -481,6 +523,8 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	//creating the command buffer as its needed to do all the operations in here
 	createPcPlotCommandBuffer();
 
+	Buffer vertexBuffer;
+
 	uint32_t amtOfVertices = Attributes.size() * data.size();
 
 	VkBufferCreateInfo bufferInfo = {};
@@ -489,21 +533,21 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotVertexBuffer);
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
 	check_vk_result(err);
 
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(g_Device, g_PcPlotVertexBuffer, &memRequirements);
+	vkGetBufferMemoryRequirements(g_Device, vertexBuffer.buffer, &memRequirements);
 
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotVertexBufferMemory);
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &vertexBuffer.memory);
 	check_vk_result(err);
 	
-	vkBindBufferMemory(g_Device, g_PcPlotVertexBuffer, g_PcPlotVertexBufferMemory, 0);
+	vkBindBufferMemory(g_Device, vertexBuffer.buffer, vertexBuffer.memory, 0);
 
 	//VkDeviceSize offsets[] = { 0 };
 	//vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
@@ -513,20 +557,21 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	uint32_t i = 0;
 	for (float* p : data) {
 		for (int j = 0; j < Attributes.size(); j++) {
-			float t = (p[j] - Attributes[j].min) / (Attributes[j].max - Attributes[j].min);
-			t *= 1.9;
-			t -= .95f;
-			d[i++] = t;
-
+			d[i++] = p[j];
 		}
 	}
 
 	//filling the Vertex Buffer with all Datapoints
 	void* mem;
-	vkMapMemory(g_Device, g_PcPlotVertexBufferMemory, 0, sizeof(Vertex) * amtOfVertices, 0, &mem);
+	vkMapMemory(g_Device, vertexBuffer.memory, 0, sizeof(Vertex) * amtOfVertices, 0, &mem);
 	memcpy(mem, d, amtOfVertices * sizeof(Vertex));
-	vkUnmapMemory(g_Device, g_PcPlotVertexBufferMemory);
+	vkUnmapMemory(g_Device, vertexBuffer.memory);
+
+	g_PcPlotVertexBuffers.push_back(vertexBuffer);
 	
+	if (g_PcPlotIndexBuffer)
+		return;
+
 	//creating the index buffer
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = sizeof(uint16_t) * Attributes.size();
@@ -592,13 +637,15 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 }
 
 static void cleanupPcPlotVertexBuffer() {
-	if (g_PcPlotVertexBuffer) {
-		vkDestroyBuffer(g_Device, g_PcPlotVertexBuffer, nullptr);
-		g_PcPlotVertexBuffer = VK_NULL_HANDLE;
-	}
-	if (g_PcPlotVertexBufferMemory) {
-		vkFreeMemory(g_Device, g_PcPlotVertexBufferMemory, nullptr);
-		g_PcPlotVertexBufferMemory = VK_NULL_HANDLE;
+	for (Buffer b : g_PcPlotVertexBuffers) {
+		if (b.buffer) {
+			vkDestroyBuffer(g_Device, b.buffer, nullptr);
+			b.buffer = VK_NULL_HANDLE;
+		}
+		if (b.memory) {
+			vkFreeMemory(g_Device, b.memory, nullptr);
+			b.memory = VK_NULL_HANDLE;
+		}
 	}
 	if (g_PcPlotIndexBuffer) {
 		vkDestroyBuffer(g_Device, g_PcPlotIndexBuffer, nullptr);
@@ -616,6 +663,80 @@ static void cleanupPcPlotVertexBuffer() {
 		vkFreeMemory(g_Device, g_PcPlotDescriptorBufferMemory, nullptr);
 		g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
 	}
+}
+
+static void destroyPcPlotVertexBuffer(Buffer buffer) {
+	auto it = g_PcPlotVertexBuffers.begin();
+	for (; it != g_PcPlotVertexBuffers.end(); ++it) {
+		if (*it == buffer) {
+			break;
+		}
+	}
+	
+	if (it == g_PcPlotVertexBuffers.end()) {
+		std::cout << "Buffer to be destroyed not found" << std::endl;
+		return;
+	}
+
+	if (buffer.buffer) {
+		vkDestroyBuffer(g_Device, buffer.buffer, nullptr);
+		buffer.buffer = VK_NULL_HANDLE;
+	}
+	if (buffer.memory) {
+		vkFreeMemory(g_Device, buffer.memory, nullptr);
+		buffer.memory = VK_NULL_HANDLE;
+	}
+
+	g_PcPlotVertexBuffers.erase(it);
+}
+
+static void removePcPlotDrawLists(DataSet dataSet) {
+	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
+		if (it->parentDataSet == dataSet.name) {
+			it->indeces.clear();
+			g_PcPlotDrawLists.erase(it++);
+			if (it == g_PcPlotDrawLists.end())
+				break;
+		}
+	}
+}
+
+static void destroyPcPlotDataSet(DataSet dataSet) {
+	auto it = g_PcPlotDataSets.begin();
+	for (; it != g_PcPlotDataSets.end(); ++it) {
+		if (*it == dataSet) {
+			break;
+		}
+	}
+
+	if (it == g_PcPlotDataSets.end()) {
+		std::cout << "DataSet to be destroyed not found" << std::endl;
+		return;
+	}
+
+	dataSet.drawLists.clear();
+	destroyPcPlotVertexBuffer(dataSet.buffer);
+
+	removePcPlotDrawLists(dataSet);
+
+	for (int i = 0; i < dataSet.data.size(); i++) {
+		delete[] dataSet.data[i];
+	}
+
+	g_PcPlotDataSets.erase(it);
+}
+
+//This method automatically also destroys all draw Lists
+static void cleanupPcPlotDataSets() {
+	for (DataSet ds : g_PcPlotDataSets) {
+		ds.drawLists.clear();
+		removePcPlotDrawLists(ds);
+
+		for (int i = 0; i < ds.data.size(); i++) {
+			delete[] ds.data[i];
+		}
+	}
+	cleanupPcPlotVertexBuffer();
 }
 
 static void createPcPlotCommandBuffer() {
@@ -692,7 +813,7 @@ static void cleanupPcPlotCommandBuffer() {
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
 }
 
-static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const std::vector<float*>& data, float alpha, const ImGui_ImplVulkanH_Window* wd) {
+static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, float alpha, const ImGui_ImplVulkanH_Window* wd) {
 	VkResult err;
 
 	err = vkDeviceWaitIdle(g_Device);
@@ -767,27 +888,26 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 	
 
-	//filling the uniform buffer and copying it into the end of the indexbuffer
+	//filling the uniform buffer and copying it into the end of the uniformbuffer
 	UniformBufferObject ubo = {};
 	ubo.alpha = alpha;
 	ubo.amtOfVerts = amtOfIndeces;
 	ubo.amtOfAttributes = attributes.size();
+	ubo.color = { 1,1,1,1 };
 	int c = 0;
 	
 	for (int i : attributeOrder) {
-		ubo.order[i*4] = c;
+		ubo.VertexTransormations[i].x = c;
 		if (attributeEnabled[i])
 			c++;
+		ubo.VertexTransormations[i].y = attributes[i].min;
+		ubo.VertexTransormations[i].z = attributes[i].max;
 	}
 
 #ifdef _DEBUG
 	if (c != amtOfIndeces)
 		//__debugbreak();
 #endif
-
-	for (int i = 0; i < 20; i ++) {
-		std::cout << ubo.order[i] << std::endl;
-	}
 
 	//copying the uniform buffer to front of the indexbuffer
 	vkMapMemory(g_Device, g_PcPlotDescriptorBufferMemory, 0, sizeof(UniformBufferObject), 0, &d);
@@ -800,22 +920,23 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	//binding the all needed things
 	vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
 	vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
-	VkDeviceSize offsets[] = { 0 };
-	vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
 
-	//setting the line width
-	//TODO: add a member to this method to be able to change the line width
-	vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
+	//TODO: fill uniformbuffer differentley to be able to draw different colors
+	//now drawing for every draw list in g_pcPlotdrawlists
+	for (DrawList& drawList : g_PcPlotDrawLists) {
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList.buffer, offsets);
 
-	//ready to draw with draw indexed
-	uint32_t vertOffset = 0 , co = 0;
-	for (int i = 0; i < data.size(); i++) {
-		vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, vertOffset, 0);
-		vertOffset += attributes.size();
-		co++;
+		//setting the line width
+		//TODO: add a member to this method to be able to change the line width
+		vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
+
+		//ready to draw with draw indexed
+		uint32_t vertOffset = 0;
+		for (int i :drawList.indices) {
+			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
+		}
 	}
-
-	std::cout << "DrawCalls: " << co << std::endl;
 
 	//when cleaning up the command buffer all data is drawn
 	cleanupPcPlotCommandBuffer();
@@ -1383,7 +1504,7 @@ int main(int, char**)
 			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, g_PcPlotHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 			if (pcData.size() > 0 && pcPlotRender) {
 				pcPlotRender = false;
-				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, pcData, pcLinesAlpha, wd);
+				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, pcLinesAlpha, wd);
 			}
 		}
 		ImGui::End();
@@ -1549,7 +1670,7 @@ int main(int, char**)
 		cleanupPcPlotPipeline();
 		cleanupPcPlotRenderPass();
 		cleanupPcPlotImageView();
-		cleanupPcPlotVertexBuffer();
+		cleanupPcPlotDataSets();
 	}
 
 	ImGui_ImplVulkan_Shutdown();

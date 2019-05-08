@@ -5,11 +5,13 @@ layout(binding = 0) uniform UniformBufferObject{
 	float alpha;
 	uint amtOfVerts;
 	uint amtOfAttributes;
-	uint ordering[20];
+	uint nothing;
+	vec4 color;
+	vec4 ordering[20];
 } ubo;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    outColor = vec4(1.0, 1.0, 1.0f, ubo.alpha);
+    outColor = vec4(ubo.color.xyz, ubo.alpha);
 }
