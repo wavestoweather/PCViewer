@@ -19,7 +19,8 @@ void main() {
 	float x = -1.0f + ubo.vertexTransformations[i].x * gap;
 	
 	float y = inPosition - ubo.vertexTransformations[i].y;
-	y *= 2 * (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);
+	y /= (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);
+	y *= 2;
 	y -= 1;
 
     gl_Position = vec4( x, y * -1.0f, 0.0, 1.0);

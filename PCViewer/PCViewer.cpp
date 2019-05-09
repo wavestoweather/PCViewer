@@ -702,12 +702,23 @@ static void destroyPcPlotVertexBuffer(Buffer& buffer) {
 }
 
 static void removePcPlotDrawLists(DataSet dataSet) {
-	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
+	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ) {
 		if (it->parentDataSet == dataSet.name) {
 			it->indices.clear();
 			g_PcPlotDrawLists.erase(it++);
-			if (it == g_PcPlotDrawLists.end())
-				break;
+		}
+		else{
+			it++;
+		}
+	}
+}
+
+static void removePcPlotDrawList(DrawList drawList) {
+	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
+		if (it->name == drawList.name) {
+			it->indices.clear();
+			g_PcPlotDrawLists.erase(it);
+			break;
 		}
 	}
 }
@@ -842,6 +853,9 @@ static void cleanupPcPlotCommandBuffer() {
 }
 
 static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, float alpha, const ImGui_ImplVulkanH_Window* wd) {
+	if (g_PcPlotDrawLists.empty())
+		return;
+
 	VkResult err;
 
 	err = vkDeviceWaitIdle(g_Device);
@@ -934,11 +948,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 #ifdef _DEBUG
 	if (c != amtOfIndeces)
-		//__debugbreak();
+		__debugbreak();
 #endif
 
-	//copying the uniform buffer to front of the indexbuffer
-	vkMapMemory(g_Device, g_PcPlotDescriptorBufferMemory, 0, sizeof(UniformBufferObject), 0, &d);
+	//copying the uniform buffer
+ 	vkMapMemory(g_Device, g_PcPlotDescriptorBufferMemory, 0, sizeof(UniformBufferObject), 0, &d);
 	memcpy(d, &ubo, sizeof(UniformBufferObject));
 	vkUnmapMemory(g_Device, g_PcPlotDescriptorBufferMemory);
 
@@ -951,9 +965,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//TODO: fill uniformbuffer differentley to be able to draw different colors
 	//now drawing for every draw list in g_pcPlotdrawlists
-	for (DrawList& drawList : g_PcPlotDrawLists) {
+	for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList;++drawList) {
 		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList.buffer, offsets);
+		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
 
 		//setting the line width
 		//TODO: add a member to this method to be able to change the line width
@@ -961,7 +975,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 		//ready to draw with draw indexed
 		uint32_t vertOffset = 0;
-		for (int i :drawList.indices) {
+		for (int i :drawList->indices) {
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
 		}
 	}
@@ -1406,10 +1420,12 @@ int main(int, char**)
 	float pcLinesAlpha = 1.0f;
 	float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
 	char pcFilePath[100] = {};
+	char pcDrawListName[100] = {};
 	
 	
 	//std::vector<float*> pcData = std::vector<float*>();						//Contains all data
 	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
+	int pcPlotSelectedDrawList = -1;										//Contains the index of the drawlist that is currently selected
 
 	// Setup GLFW window
 	glfwSetErrorCallback(glfw_error_callback);
@@ -1713,33 +1729,35 @@ int main(int, char**)
 
 		//DataSets, from which draw lists can be created
 		window_pos = ImVec2(505, 500);
-		window_size = ImVec2(500, 200);
+		window_size = ImVec2(300, 200);
 		DataSet destroySet = {};
 		bool destroy = false;
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size);
-		if (ImGui::Begin("Draw Lists", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
-			for (DataSet ds : g_PcPlotDataSets) {
-				if (ImGui::CollapsingHeader(ds.name.c_str())) {
-					for (TemplateList tl : ds.drawLists) {
+		if (ImGui::Begin("Datasets", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
+			ImGui::Text("Datasets");
+			ImGui::Separator();
+			for (const DataSet& ds : g_PcPlotDataSets) {
+				if (ImGui::TreeNode(ds.name.c_str())) {
+					for (const TemplateList& tl : ds.drawLists) {
 						if (ImGui::Button(tl.name.c_str()))
 							ImGui::OpenPopup(tl.name.c_str());
 						if (ImGui::BeginPopupModal(tl.name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
 						{
 							ImGui::Text((std::string("Creating a drawing list from ")+tl.name+"\n\n").c_str());
 							ImGui::Separator();
-
-							char name[100] = {};
-							ImGui::InputText("Drawlist Name", name, sizeof(name));
+							ImGui::InputText("Drawlist Name", pcDrawListName, 100);
 
 							if (ImGui::Button("Create", ImVec2(120, 0))) { 
 								ImGui::CloseCurrentPopup(); 
 								DrawList dl = {};
-								dl.name = name;
+								dl.name = std::string(pcDrawListName);
 								dl.buffer = tl.buffer;
 								dl.color = { 1,1,1,1 };
 								dl.parentDataSet = ds.name;
+								dl.indices = std::vector<int>(tl.indices);
 								g_PcPlotDrawLists.push_back(dl);
+								pcPlotRender = true;
 							}
 							ImGui::SetItemDefaultFocus();
 							ImGui::SameLine();
@@ -1760,12 +1778,14 @@ int main(int, char**)
 							ImGui::CloseCurrentPopup();
 							destroySet = ds;
 							destroy = true;
+							pcPlotRender = true;
 						}
 						ImGui::SetItemDefaultFocus();
 						ImGui::SameLine();
 						if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
 						ImGui::EndPopup();
 					}
+					ImGui::TreePop();
 				}
 			}
 		}
@@ -1774,8 +1794,71 @@ int main(int, char**)
 		if(destroy)
 			destroyPcPlotDataSet(destroySet);
 
-		//DrawLists, which are finally drawn
+		//Showing the Drawlist
+		window_pos = ImVec2(810, 500);
+		window_size = ImVec2(300, 200);
+		DrawList changeList = {};
+		destroy = false;
+		bool up = false;
+		bool down = false;
+		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size);
+		if (ImGui::Begin("Drawlists", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
+			ImGui::Text("Draw lists");
+			ImGui::Separator();
+			int count = 0;
+			for (DrawList& dl : g_PcPlotDrawLists) {
+				ImGui::PushItemWidth(ImGui::GetWindowWidth()* .65f);
+				ImGui::Text(dl.name.c_str());
+				ImGui::PopItemWidth();
+				float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+				ImGui::SameLine(0, spacing);
+				if (ImGui::ArrowButton("##u", ImGuiDir_Up)) {
+					changeList = dl;
+					up = true;
+				}
+				ImGui::SameLine(0, spacing);
+				if (ImGui::ArrowButton("##d", ImGuiDir_Down)) {
+					changeList = dl;
+					down = true;
+				}
+				ImGui::SameLine(0, spacing);
+				if (ImGui::Button("X")) {
+					changeList = dl;
+					destroy = true;
+					pcPlotRender = true;
+				}
+				ImGui::SameLine(0, spacing);
+				int misc_flags =  ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_AlphaPreview ;
+				ImGui::ColorEdit4("MyColor##3", (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
 
+				count++;
+			}
+		}
+		ImGui::End();
+		if (destroy) {
+			removePcPlotDrawList(changeList);
+		}
+		if (up) {
+			auto it = g_PcPlotDrawLists.begin();
+			while (it!=g_PcPlotDrawLists.end() && it->name != changeList.name)
+				++it;
+			if (it != g_PcPlotDrawLists.begin()) {
+				auto itu = it;
+				itu--;
+				std::swap(it, itu);
+			}
+		}
+		if (down) {
+			auto it = g_PcPlotDrawLists.begin();
+			while (it != g_PcPlotDrawLists.end() && it->name != changeList.name)
+				++it;
+			if (it != g_PcPlotDrawLists.end()) {
+				auto itu = it;
+				itu++;
+				std::swap(it, itu);
+			}
+		}
 
 		ImGui::ShowDemoWindow(NULL);
 
