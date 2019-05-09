@@ -56,6 +56,14 @@ struct Vec4 {
 	float y;
 	float z;
 	float w;
+
+	bool operator==(Vec4& other) {
+		return this->x == other.x && this->y == other.y && this->z == other.z && this->w == other.w;
+	}
+
+	bool operator!=(Vec4& other) {
+		return !(*this == other);
+	}
 };
 
 struct UniformBufferObject {
@@ -71,7 +79,11 @@ struct DrawList {
 	std::string name;
 	std::string parentDataSet;
 	Vec4 color;
+	Vec4 prefColor;
 	VkBuffer buffer;
+	VkBuffer ubo;
+	VkDeviceMemory uboMem;
+	VkDescriptorSet uboDescSet;
 	std::vector<int> indices;
 };
 
@@ -83,6 +95,7 @@ struct TemplateList {
 
 struct Buffer {
 	VkBuffer buffer;
+	VkBuffer uboBuffer;
 	VkDeviceMemory memory;
 
 	bool operator==(const Buffer& other) {
@@ -578,6 +591,8 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	memcpy(mem, d, amtOfVertices * sizeof(Vertex));
 	vkUnmapMemory(g_Device, vertexBuffer.memory);
 
+	delete[] d;
+
 	g_PcPlotVertexBuffers.push_back(vertexBuffer);
 	
 	if (g_PcPlotIndexBuffer)
@@ -705,6 +720,14 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ) {
 		if (it->parentDataSet == dataSet.name) {
 			it->indices.clear();
+			if (it->uboMem) {
+				vkFreeMemory(g_Device, it->uboMem, nullptr);
+				it->uboMem = VK_NULL_HANDLE;
+			}
+			if (it->ubo) {
+				vkDestroyBuffer(g_Device, it->ubo, nullptr);
+				it->ubo = VK_NULL_HANDLE;
+			}
 			g_PcPlotDrawLists.erase(it++);
 		}
 		else{
@@ -713,10 +736,82 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 	}
 }
 
+static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const char* listName) {
+	VkResult err;
+
+	DrawList dl = {};
+	
+	Buffer uboBuffer;
+
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = sizeof(UniformBufferObject);
+	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.ubo);
+	check_vk_result(err);
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(g_Device, dl.ubo, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &dl.uboMem);
+	check_vk_result(err);
+
+	vkBindBufferMemory(g_Device, dl.ubo, dl.uboMem, 0);
+
+	//specifying the uniform buffer location
+	VkDescriptorBufferInfo desBufferInfo = {};
+	desBufferInfo.buffer = dl.ubo;
+	desBufferInfo.offset = 0;
+	desBufferInfo.range = sizeof(UniformBufferObject);
+
+	VkDescriptorSetAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	alloc_info.descriptorPool = g_DescriptorPool;
+	alloc_info.descriptorSetCount = 1;
+	alloc_info.pSetLayouts = &g_PcPlotDescriptorLayout;
+	err = vkAllocateDescriptorSets(g_Device, &alloc_info, &dl.uboDescSet);
+	check_vk_result(err);
+
+	VkWriteDescriptorSet descriptorWrite = {};
+	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstSet = dl.uboDescSet;
+	descriptorWrite.dstBinding = 0;
+	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	descriptorWrite.descriptorCount = 1;
+	descriptorWrite.pBufferInfo = &desBufferInfo;
+
+	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
+	
+
+	dl.name = std::string(listName);
+	dl.buffer = tl.buffer;
+	dl.color = { 1,1,1,1 };
+	dl.prefColor = { 1,1,1,1 };
+	dl.parentDataSet = ds.name;
+	dl.indices = std::vector<int>(tl.indices);
+	g_PcPlotDrawLists.push_back(dl);
+}
+
 static void removePcPlotDrawList(DrawList drawList) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
 		if (it->name == drawList.name) {
 			it->indices.clear();
+			if (it->uboMem) {
+				vkFreeMemory(g_Device, it->uboMem, nullptr);
+				it->uboMem = VK_NULL_HANDLE;
+			}
+			if (it->ubo) {
+				vkDestroyBuffer(g_Device, it->ubo, nullptr);
+				it->ubo = VK_NULL_HANDLE;
+			}
 			g_PcPlotDrawLists.erase(it);
 			break;
 		}
@@ -952,9 +1047,12 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 #endif
 
 	//copying the uniform buffer
- 	vkMapMemory(g_Device, g_PcPlotDescriptorBufferMemory, 0, sizeof(UniformBufferObject), 0, &d);
-	memcpy(d, &ubo, sizeof(UniformBufferObject));
-	vkUnmapMemory(g_Device, g_PcPlotDescriptorBufferMemory);
+	for (DrawList& ds : g_PcPlotDrawLists) {
+		ubo.color = ds.color;
+		vkMapMemory(g_Device, ds.uboMem, 0, sizeof(UniformBufferObject), 0, &d);
+		memcpy(d, &ubo, sizeof(UniformBufferObject));
+		vkUnmapMemory(g_Device, ds.uboMem);
+	}
 
 	//starting the pcPlotCommandBuffer
 	createPcPlotCommandBuffer();
@@ -968,6 +1066,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList;++drawList) {
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
+
+		//binding the right ubo
+		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
 
 		//setting the line width
 		//TODO: add a member to this method to be able to change the line width
@@ -1414,7 +1515,12 @@ static void openDataset(const char* filename) {
 
 int main(int, char**)
 {
-	std::cout << (sizeof(UniformBufferObject)) << std::endl;
+	Vec4 a = { 1,1,1,1 }, b = { 1,1,1,1 };
+	std::cout << (a == b) << std::endl;
+	std::cout << (a != b) << std::endl;
+	a.x = 0;
+	std::cout << (a == b) << std::endl;
+	std::cout << (a != b) << std::endl;
 
 	//Section for variables
 	float pcLinesAlpha = 1.0f;
@@ -1483,21 +1589,6 @@ int main(int, char**)
 	init_info.ImageCount = wd->ImageCount;
 	init_info.CheckVkResultFn = check_vk_result;
 	ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
-
-	// Load Fonts
-	// - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-	// - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-	// - If the file cannot be loaded, the function will return NULL. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-	// - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
-	// - Read 'misc/fonts/README.txt' for more instructions and details.
-	// - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-	//io.Fonts->AddFontDefault();
-	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
-	//ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
-	//IM_ASSERT(font != NULL);
 
 	// Upload Fonts
 	{
@@ -1635,6 +1726,14 @@ int main(int, char**)
 			pcPlotRender = true;
 		}
 
+		//Check if a drawlist color changed
+		for (DrawList& ds : g_PcPlotDrawLists) {
+			if (ds.color != ds.prefColor) {
+				pcPlotRender = true;
+				ds.prefColor = ds.color;
+			}
+		}
+
 		// Labels for the titels of the attributes
 		// Position calculation for each of the Label
 		size_t amtOfLabels = 0;
@@ -1750,13 +1849,9 @@ int main(int, char**)
 
 							if (ImGui::Button("Create", ImVec2(120, 0))) { 
 								ImGui::CloseCurrentPopup(); 
-								DrawList dl = {};
-								dl.name = std::string(pcDrawListName);
-								dl.buffer = tl.buffer;
-								dl.color = { 1,1,1,1 };
-								dl.parentDataSet = ds.name;
-								dl.indices = std::vector<int>(tl.indices);
-								g_PcPlotDrawLists.push_back(dl);
+								
+								createPCPlotDrawList(tl, ds, pcDrawListName);
+
 								pcPlotRender = true;
 							}
 							ImGui::SetItemDefaultFocus();
@@ -1808,29 +1903,43 @@ int main(int, char**)
 			ImGui::Separator();
 			int count = 0;
 			for (DrawList& dl : g_PcPlotDrawLists) {
-				ImGui::PushItemWidth(ImGui::GetWindowWidth()* .65f);
-				ImGui::Text(dl.name.c_str());
-				ImGui::PopItemWidth();
+				ImGui::Columns(5,"5columns",false); // 5-ways, with border
+				ImGui::SetColumnWidth(0, 190);
+				ImGui::SetColumnWidth(1, 25);
+				ImGui::SetColumnWidth(2, 25);
+				ImGui::SetColumnWidth(3, 25);
+				ImGui::SetColumnWidth(4, 25);
+
+				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
+					pcPlotSelectedDrawList = count;
+				}
+				ImGui::NextColumn();
+
 				float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-				ImGui::SameLine(0, spacing);
-				if (ImGui::ArrowButton("##u", ImGuiDir_Up)) {
+				if (ImGui::ArrowButton((std::string("##u")+dl.name).c_str(), ImGuiDir_Up)) {
 					changeList = dl;
 					up = true;
+					pcPlotRender = true;
 				}
-				ImGui::SameLine(0, spacing);
-				if (ImGui::ArrowButton("##d", ImGuiDir_Down)) {
+				ImGui::NextColumn();
+
+				if (ImGui::ArrowButton((std::string("##d") + dl.name).c_str(), ImGuiDir_Down)) {
 					changeList = dl;
 					down = true;
+					pcPlotRender = true;
 				}
-				ImGui::SameLine(0, spacing);
-				if (ImGui::Button("X")) {
+				ImGui::NextColumn();
+
+				if (ImGui::Button((std::string("X##") + dl.name).c_str())) {
 					changeList = dl;
 					destroy = true;
 					pcPlotRender = true;
 				}
-				ImGui::SameLine(0, spacing);
+				ImGui::NextColumn();
+
 				int misc_flags =  ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_AlphaPreview ;
-				ImGui::ColorEdit4("MyColor##3", (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
+				ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
+				ImGui::NextColumn();
 
 				count++;
 			}
@@ -1846,17 +1955,17 @@ int main(int, char**)
 			if (it != g_PcPlotDrawLists.begin()) {
 				auto itu = it;
 				itu--;
-				std::swap(it, itu);
+				std::swap(*it, *itu);
 			}
 		}
 		if (down) {
 			auto it = g_PcPlotDrawLists.begin();
 			while (it != g_PcPlotDrawLists.end() && it->name != changeList.name)
 				++it;
-			if (it != g_PcPlotDrawLists.end()) {
+			if (it->name != g_PcPlotDrawLists.back().name) {
 				auto itu = it;
 				itu++;
-				std::swap(it, itu);
+				std::swap(*it, *itu);
 			}
 		}
 
