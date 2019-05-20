@@ -16,6 +16,7 @@
 #include <vector>
 #include <limits>
 #include <list>
+#include <algorithm>
 
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -108,6 +109,7 @@ struct DataSet {
 	Buffer buffer;
 	std::vector<float*> data;
 	std::list<TemplateList> drawLists;
+	bool oneData = false;			//if is set to true, all data in data is in one continous float* array. -> on deletion only delete[] the float* of data[0]
 
 	bool operator==(const DataSet& other) {
 		return this->name == other.name;
@@ -1499,17 +1501,140 @@ static void openCsv(const char* filename) {
 	}
 }
 
+static void openDlf(const char* filename) {
+	std::ifstream file(filename, std::ifstream::in);
+	if (file.is_open()) {
+		std::string tmp;
+		int amtOfPoints;
+		bool newAttr = false;
+
+		while (!file.eof()) {
+			file >> tmp;
+			if (tmp != std::string("AmtOfPoints:")) {
+				std::cout << "AmtOfPoints is missing in the dlf file." << std::endl;
+				return;
+			}
+			else {
+				file >> amtOfPoints;
+			}
+			file >> tmp;
+			//checking for the variables section
+			if (tmp != std::string("Attributes:")) {
+				std::cout << "Attributes section not found. Got " << tmp << " instead" << std::endl;
+				return;
+			}
+			else {
+				//checking for the same attributes in the currently loaded Attributes
+				if (pcAttributes.size() > 0) {		
+					file >> tmp;
+
+					//current max attribute count is 100
+					for (int i = 0; tmp != std::string("Data:") && i < 100; file >> tmp, i++) {		
+						if (pcAttributes[i].name != tmp) {
+							std::cout << "The Attributes are not in the same order are not the same." << std::endl;
+							return;
+						}
+					}
+					std::cout << "The Attribute check was successful" << std::endl;
+				}
+
+				//reading in new values
+				else {								
+					for (int i = 0; tmp != std::string("Data:") && i < 100; file >> tmp, i++) {
+						pcAttributes.push_back({ tmp,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+					}
+
+					//check for attributes overflow
+					if (pcAttributes.size() == 100) {		
+						std::cout << "Too much attributes found, or Datablock not detected." << std::endl;
+						pcAttributes.clear();
+						return;
+					}
+					newAttr = true;
+				}
+			}
+
+			//after Attribute collection reading in the data
+			DataSet ds;
+			if (tmp != std::string("Data:")) {
+				std::cout << "Data Section not found. Got " << tmp << " instead." << std::endl;
+				pcAttributes.clear();
+				return;
+			}
+			//reading the data
+			else {
+				ds.oneData = true;
+				ds.name = filename;
+
+				file >> tmp;
+
+				float* d = new float[amtOfPoints * pcAttributes.size()];
+				for (int i = 0; i < amtOfPoints * pcAttributes.size() && tmp != std::string("Drawlists:"); file >> tmp, i++) {
+					d[i] = std::stof(tmp);
+				} 
+
+				ds.data = std::vector<float*>(amtOfPoints);
+				for (int i = 0; i < amtOfPoints; i++) {
+					ds.data[i] = &d[i * pcAttributes.size()];
+				}
+			}
+
+			//reading the draw lists
+			if (tmp != std::string("Drawlists:")) {
+				std::cout << "Missing Draw lists section. Got " << tmp << " instead" << std::endl;
+				pcAttributes.clear();
+				delete[] ds.data[0];
+				ds.data.clear();
+				return;
+			}
+			//beginnin to read the drawlists
+			else {
+				file >> tmp;
+				createPcPlotVertexBuffer(pcAttributes, ds.data);
+				while (!file.eof()) {		//Loop for each drawlist
+					TemplateList tl;
+					tl.buffer = g_PcPlotVertexBuffers.back().buffer;
+					tl.name = tmp.substr(0,tmp.size()-1);
+					file >> tmp;
+					while (std::all_of(tmp.begin(), tmp.end(), ::isdigit) && !file.eof()) {
+						tl.indices.push_back(std::stoi(tmp));
+						file >> tmp;
+					}
+					ds.drawLists.push_back(tl);
+				}
+			}
+
+			if (newAttr) {
+				pcAttributeEnabled = new bool[pcAttributes.size()];
+				pcAttributeEnabledCpy = new bool[pcAttributes.size()];
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					pcAttributeEnabled[i] = true;
+					pcAttributeEnabledCpy[i] = true;
+				}
+			}
+
+			//adding the data set finally to the list
+			g_PcPlotDataSets.push_back(ds);
+		}
+
+		file.close();
+	}
+	else {
+		std::cout << "The dlf File could not be opened." << std::endl;
+	}
+}
+
 static void openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
 	if (file.substr(file.find_last_of(".") + 1) == "csv") {
 		openCsv(filename);
 	}
-	else if (file.substr(file.find_last_of(".") + 1) == "csv") {
-		//TODO: write 
+	else if (file.substr(file.find_last_of(".") + 1) == "dlf") {
+		openDlf(filename);
 	}
 	else {
-		std::cout << "The given type of the fiyle is not supported by this programm" << std::endl;
+		std::cout << "The given type of the file is not supported by this programm" << std::endl;
 	}
 }
 
