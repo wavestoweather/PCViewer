@@ -838,8 +838,13 @@ static void destroyPcPlotDataSet(DataSet dataSet) {
 
 	removePcPlotDrawLists(dataSet);
 
-	for (int i = 0; i < dataSet.data.size(); i++) {
-		delete[] dataSet.data[i];
+	if (dataSet.oneData) {
+		delete[] dataSet.data[0];
+	}
+	else {
+		for (int i = 0; i < dataSet.data.size(); i++) {
+			delete[] dataSet.data[i];
+		}
 	}
 
 	g_PcPlotDataSets.erase(it);
@@ -867,11 +872,18 @@ static void cleanupPcPlotDataSets() {
 	for (DataSet ds : g_PcPlotDataSets) {
 		ds.drawLists.clear();
 		removePcPlotDrawLists(ds);
-
-		for (int i = 0; i < ds.data.size(); i++) {
-			delete[] ds.data[i];
+		
+		if (ds.oneData) {
+			delete[] ds.data[0];
+		}
+		else {
+			for (int i = 0; i < ds.data.size(); i++) {
+				delete[] ds.data[i];
+			}
 		}
 	}
+
+	g_PcPlotDataSets.clear();
 	cleanupPcPlotVertexBuffer();
 }
 
@@ -1511,7 +1523,7 @@ static void openDlf(const char* filename) {
 		while (!file.eof()) {
 			file >> tmp;
 			if (tmp != std::string("AmtOfPoints:")) {
-				std::cout << "AmtOfPoints is missing in the dlf file." << std::endl;
+				std::cout << "AmtOfPoints is missing in the dlf file. Got " << tmp << " instead." << std::endl;
 				return;
 			}
 			else {
