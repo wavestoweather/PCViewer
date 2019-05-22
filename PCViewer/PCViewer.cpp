@@ -153,6 +153,8 @@ bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribut
 bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
 std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
 std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
+static char droppedPath[200] = {};
+bool pathDropped = false;
 
 
 
@@ -1535,9 +1537,9 @@ static void openDlf(const char* filename) {
 				return;
 			}
 			else {
+				file >> tmp;
 				//checking for the same attributes in the currently loaded Attributes
 				if (pcAttributes.size() > 0) {		
-					file >> tmp;
 
 					//current max attribute count is 100
 					for (int i = 0; tmp != std::string("Data:") && i < 100; file >> tmp, i++) {		
@@ -1580,8 +1582,16 @@ static void openDlf(const char* filename) {
 				file >> tmp;
 
 				float* d = new float[amtOfPoints * pcAttributes.size()];
+				int a = 0;
 				for (int i = 0; i < amtOfPoints * pcAttributes.size() && tmp != std::string("Drawlists:"); file >> tmp, i++) {
 					d[i] = std::stof(tmp);
+					if (pcAttributes[a].min > d[i]) {
+						pcAttributes[a].min = d[i];
+					}
+					if (pcAttributes[a].max < d[i]) {
+						pcAttributes[a].max = d[i];
+					}
+					a = (a + 1) % pcAttributes.size();
 				} 
 
 				ds.data = std::vector<float*>(amtOfPoints);
@@ -1605,7 +1615,11 @@ static void openDlf(const char* filename) {
 				while (!file.eof()) {		//Loop for each drawlist
 					TemplateList tl;
 					tl.buffer = g_PcPlotVertexBuffers.back().buffer;
-					tl.name = tmp.substr(0,tmp.size()-1);
+					tl.name = tmp;
+					while (tmp.back() != ':') {
+						file >> tmp;
+						tl.name += tmp;
+					}
 					file >> tmp;
 					while (std::all_of(tmp.begin(), tmp.end(), ::isdigit) && !file.eof()) {
 						tl.indices.push_back(std::stoi(tmp));
@@ -1621,6 +1635,7 @@ static void openDlf(const char* filename) {
 				for (int i = 0; i < pcAttributes.size(); i++) {
 					pcAttributeEnabled[i] = true;
 					pcAttributeEnabledCpy[i] = true;
+					pcAttrOrd.push_back(i);
 				}
 			}
 
@@ -1651,7 +1666,8 @@ static void openDataset(const char* filename) {
 
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
 	std::cout << "Amount of files drag and dropped: " << count << std::endl;
-	openDataset(paths[0]);
+	strcpy(droppedPath,paths[0]);
+	pathDropped = true;
 }
 
 int main(int, char**)
@@ -1659,8 +1675,8 @@ int main(int, char**)
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
 	//float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
-	char pcFilePath[100] = {};
-	char pcDrawListName[100] = {};
+	char pcFilePath[200] = {};
+	char pcDrawListName[200] = {};
 	
 	
 	//std::vector<float*> pcData = std::vector<float*>();					//Contains all data
@@ -1862,6 +1878,31 @@ int main(int, char**)
 			if (ds.color != ds.prefColor) {
 				pcPlotRender = true;
 				ds.prefColor = ds.color;
+			}
+		}
+
+		//check if a path was dropped in the application
+		if (pathDropped) {
+
+			ImGui::OpenPopup("OPENDATASET");
+			if (ImGui::BeginPopupModal("OPENDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::Text("Do you really want to open this Dataset:");
+				ImGui::Text(droppedPath);
+				ImGui::Separator();
+
+				if (ImGui::Button("Open", ImVec2(120, 0))) {
+					ImGui::CloseCurrentPopup();
+					openDataset(droppedPath);
+					pathDropped = false;
+				}
+				ImGui::SetItemDefaultFocus();
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel", ImVec2(120, 0))) { 
+					ImGui::CloseCurrentPopup(); 
+					pathDropped = false;
+				}
+				ImGui::EndPopup();
 			}
 		}
 
