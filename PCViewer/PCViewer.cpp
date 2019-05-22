@@ -961,7 +961,7 @@ static void cleanupPcPlotCommandBuffer() {
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
 }
 
-static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, float alpha, const ImGui_ImplVulkanH_Window* wd) {
+static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const ImGui_ImplVulkanH_Window* wd) {
 	if (g_PcPlotDrawLists.empty())
 		return;
 
@@ -1041,7 +1041,6 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//filling the uniform buffer and copying it into the end of the uniformbuffer
 	UniformBufferObject ubo = {};
-	ubo.alpha = alpha;
 	ubo.amtOfVerts = amtOfIndeces;
 	ubo.amtOfAttributes = attributes.size();
 	ubo.color = { 1,1,1,1 };
@@ -1650,23 +1649,21 @@ static void openDataset(const char* filename) {
 	}
 }
 
+void drop_callback(GLFWwindow* window, int count, const char** paths) {
+	std::cout << "Amount of files drag and dropped: " << count << std::endl;
+	openDataset(paths[0]);
+}
+
 int main(int, char**)
 {
-	Vec4 a = { 1,1,1,1 }, b = { 1,1,1,1 };
-	std::cout << (a == b) << std::endl;
-	std::cout << (a != b) << std::endl;
-	a.x = 0;
-	std::cout << (a == b) << std::endl;
-	std::cout << (a != b) << std::endl;
-
 	//Section for variables
-	float pcLinesAlpha = 1.0f;
-	float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
+	//float pcLinesAlpha = 1.0f;
+	//float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
 	char pcFilePath[100] = {};
 	char pcDrawListName[100] = {};
 	
 	
-	//std::vector<float*> pcData = std::vector<float*>();						//Contains all data
+	//std::vector<float*> pcData = std::vector<float*>();					//Contains all data
 	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
 	int pcPlotSelectedDrawList = -1;										//Contains the index of the drawlist that is currently selected
 
@@ -1677,6 +1674,9 @@ int main(int, char**)
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	GLFWwindow* window = glfwCreateWindow(1280, 720, "Parallel Coordinates Viewer", NULL, NULL);
+
+	// Setup Drag and drop callback
+	glfwSetDropCallback(window, drop_callback);
 
 	// Setup Vulkan
 	if (!glfwVulkanSupported())
@@ -1857,12 +1857,6 @@ int main(int, char**)
 			}
 		}
 
-		//Check if alpha value changed
-		if (pcLinesAlpha != pcLinesAlphaCpy) {
-			pcLinesAlphaCpy = pcLinesAlpha;
-			pcPlotRender = true;
-		}
-
 		//Check if a drawlist color changed
 		for (DrawList& ds : g_PcPlotDrawLists) {
 			if (ds.color != ds.prefColor) {
@@ -1926,14 +1920,63 @@ int main(int, char**)
 				c++;
 				c1++;
 				offset += gap;
+			}
 
+			//Adding the drag floats for the max values
+			c = 0;
+			c1 = 0;
+			offset = 0;
+			for (auto i : pcAttrOrd) {
+				if (!pcAttributeEnabled[i]) {
+					c++;
+					continue;
+				}
+
+				std::string name = "max##";
+				name += pcAttributes[i].name;
+				ImGui::PushItemWidth(buttonSize.x);
+				if(c!=0)
+					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .0001f)) {
+					pcPlotRender = true;
+				}
+				ImGui::PopItemWidth();
+
+				c++;
+				c1++;
+				offset += gap;
 			}
 
 			//drawing the Texture
 			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, g_PcPlotHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 			if (pcPlotRender) {
 				pcPlotRender = false;
-				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, pcLinesAlpha, wd);
+				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, wd);
+			}
+
+			//Adding the Drag floats for the min values
+			c = 0;
+			c1 = 0;
+			offset = 0;
+			for (auto i : pcAttrOrd) {
+				if (!pcAttributeEnabled[i]) {
+					c++;
+					continue;
+				}
+
+				std::string name = "min##";
+				name += pcAttributes[i].name;
+				ImGui::PushItemWidth(buttonSize.x);
+				if (c != 0)
+					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .0001f)) {
+					pcPlotRender = true;
+				}
+				ImGui::PopItemWidth();
+
+				c++;
+				c1++;
+				offset += gap;
 			}
 		}
 		ImGui::End();
@@ -1946,20 +1989,20 @@ int main(int, char**)
 		if (ImGui::Begin("Settings", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
 		{
 			ImGui::Text("Settings");
-			ImGui::SliderFloat("Alpha value", &pcLinesAlpha, 0.0f, 1.0f);
+			ImGui::Separator();
 
 			for (int i = 0; i < pcAttributes.size(); i++) {
 				ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
 			}
 
 			ImGui::InputText("Directory Path", pcFilePath, 100);
+
 			ImGui::SameLine();
 
 			//Opening a new Dataset into the Viewer
 			if (ImGui::Button("Open")) {
 				openDataset(pcFilePath);
-			}
-			
+			}	
 		}
 		ImGui::End();
 
