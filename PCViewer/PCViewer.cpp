@@ -1612,6 +1612,7 @@ static void openDlf(const char* filename) {
 			else {
 				file >> tmp;
 				createPcPlotVertexBuffer(pcAttributes, ds.data);
+				ds.buffer = g_PcPlotVertexBuffers.back();
 				while (!file.eof()) {		//Loop for each drawlist
 					TemplateList tl;
 					tl.buffer = g_PcPlotVertexBuffers.back().buffer;
@@ -1620,6 +1621,7 @@ static void openDlf(const char* filename) {
 						file >> tmp;
 						tl.name += tmp;
 					}
+					//erasing
 					file >> tmp;
 					while (std::all_of(tmp.begin(), tmp.end(), ::isdigit) && !file.eof()) {
 						tl.indices.push_back(std::stoi(tmp));
@@ -1664,8 +1666,38 @@ static void openDataset(const char* filename) {
 	}
 }
 
+static void addIndecesToDs(DataSet& ds,const char* filepath) {
+	std::string s(filepath);
+	if (s.substr(s.find_last_of(".") + 1) != "idxf") {
+		std::cout << "There was an idxf file expected." << std::endl;
+		return;
+	}
+	//opening the file
+	std::ifstream file(filepath);
+	
+	if (file.is_open()) {
+		TemplateList tl;
+		tl.buffer = ds.buffer.buffer;
+		tl.name = s.substr(s.find_last_of("\\") + 1);
+
+		//reading the values
+		for (file >> s ; !file.eof(); file >> s) {
+			tl.indices.push_back(std::stof(s));
+		}
+
+		//adding the drawlist to ds
+		ds.drawLists.push_back(tl);
+	}
+	else {
+		std::cout << "The given indexlist was not found." << std::endl;
+		return;
+	}
+}
+
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
+#ifdef _DEBUG
 	std::cout << "Amount of files drag and dropped: " << count << std::endl;
+#endif
 	strcpy(droppedPath,paths[0]);
 	pathDropped = true;
 }
@@ -1682,6 +1714,7 @@ int main(int, char**)
 	//std::vector<float*> pcData = std::vector<float*>();					//Contains all data
 	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
 	int pcPlotSelectedDrawList = -1;										//Contains the index of the drawlist that is currently selected
+	bool addIndeces = false;
 
 	// Setup GLFW window
 	glfwSetErrorCallback(glfw_error_callback);
@@ -1882,8 +1915,7 @@ int main(int, char**)
 		}
 
 		//check if a path was dropped in the application
-		if (pathDropped) {
-
+		if (pathDropped && !addIndeces) {
 			ImGui::OpenPopup("OPENDATASET");
 			if (ImGui::BeginPopupModal("OPENDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 			{
@@ -1904,6 +1936,12 @@ int main(int, char**)
 				}
 				ImGui::EndPopup();
 			}
+		}
+
+		//if a path was dropped and the add indices popup is up, copy the dropped path to the popup and reset path dropped
+		if (pathDropped && addIndeces) {
+			strcpy(pcFilePath, droppedPath);
+			pathDropped = false;
 		}
 
 		// Labels for the titels of the attributes
@@ -2036,7 +2074,7 @@ int main(int, char**)
 				ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
 			}
 
-			ImGui::InputText("Directory Path", pcFilePath, 100);
+			ImGui::InputText("Directory Path", pcFilePath, 200);
 
 			ImGui::SameLine();
 
@@ -2057,7 +2095,7 @@ int main(int, char**)
 		if (ImGui::Begin("Datasets", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
 			ImGui::Text("Datasets");
 			ImGui::Separator();
-			for (const DataSet& ds : g_PcPlotDataSets) {
+			for (DataSet& ds : g_PcPlotDataSets) {
 				if (ImGui::TreeNode(ds.name.c_str())) {
 					for (const TemplateList& tl : ds.drawLists) {
 						if (ImGui::Button(tl.name.c_str()))
@@ -2066,7 +2104,7 @@ int main(int, char**)
 						{
 							ImGui::Text((std::string("Creating a drawing list from ")+tl.name+"\n\n").c_str());
 							ImGui::Separator();
-							ImGui::InputText("Drawlist Name", pcDrawListName, 100);
+							ImGui::InputText("Drawlist Name", pcDrawListName, 200);
 
 							if (ImGui::Button("Create", ImVec2(120, 0))) { 
 								ImGui::CloseCurrentPopup(); 
@@ -2081,7 +2119,33 @@ int main(int, char**)
 							ImGui::EndPopup();
 						}
 					}
-					
+					//Popup for adding a custom index list
+					if (ImGui::Button("ADDINDEXLIST")) {
+						ImGui::OpenPopup("ADDINDEXLIST");
+						addIndeces = true;
+					}
+					if (ImGui::BeginPopupModal("ADDINDEXLIST", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+					{
+						ImGui::Text("Path for the new Indexlist (Alternativley drag and drop here):");
+						ImGui::InputText("Path", pcFilePath, 200);
+						ImGui::Separator();
+
+						if (ImGui::Button("Add Indeces", ImVec2(120, 0))) {
+							ImGui::CloseCurrentPopup();
+							addIndecesToDs(ds,pcFilePath);
+							pathDropped = false;
+							addIndeces = false;
+						}
+						ImGui::SetItemDefaultFocus();
+						ImGui::SameLine();
+						if (ImGui::Button("Cancel", ImVec2(120, 0))) { 
+							ImGui::CloseCurrentPopup();
+							pathDropped = false;
+							addIndeces = false;
+						}
+						ImGui::EndPopup();
+					}
+
 					//Popup for delete menu
 					if (ImGui::Button("DELETE"))
 						ImGui::OpenPopup("DELETE");
