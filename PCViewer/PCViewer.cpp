@@ -375,7 +375,7 @@ static void createPcPlotPipeline() {
 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
 	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 
 	VkPipelineColorBlendStateCreateInfo colorBlending = {};
@@ -2016,7 +2016,7 @@ int main(int, char**)
 				ImGui::PushItemWidth(buttonSize.x);
 				if(c!=0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .0001f)) {
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f)) {
 					pcPlotRender = true;
 				}
 				ImGui::PopItemWidth();
@@ -2048,7 +2048,7 @@ int main(int, char**)
 				ImGui::PushItemWidth(buttonSize.x);
 				if (c != 0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .0001f)) {
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f)) {
 					pcPlotRender = true;
 				}
 				ImGui::PopItemWidth();
