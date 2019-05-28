@@ -1486,6 +1486,8 @@ static void openCsv(const char* filename) {
 
 	createPcPlotVertexBuffer(pcAttributes, ds.data);
 
+	ds.buffer = g_PcPlotVertexBuffers.back();
+
 	TemplateList tl = {};
 	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
 	tl.name = "Default Drawlist";
