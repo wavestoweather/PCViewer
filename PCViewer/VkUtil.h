@@ -19,7 +19,7 @@ public:
 	static void createMipMaps(VkCommandBuffer commandBuffer, VkImage image, uint32_t mipLevels, uint32_t imageWidth, uint32_t imageHeight, VkImageLayout oldLayout, VkAccessFlags oldAccess, VkPipelineStageFlags oldPipelineStage);
 	static void createCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBuffer *commandBuffer);
 	static void commitCommandBuffer(VkDevice device, VkQueue queue, VkCommandBuffer commandBuffer);
-	static void createPipeline(VkDevice device, const std::string& vertexShaderPath, const std::string& fragmentShaderPath,VkPipeline* pipeline);
+	static void createPipeline(VkDevice device, const std::string& vertexShaderPath, const std::string& fragmentShaderPath, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, VkDynamicState* dynamicStates, VkPipeline* pipeline);
 
 private:
 	static VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);

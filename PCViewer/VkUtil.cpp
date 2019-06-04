@@ -93,7 +93,7 @@ void VkUtil::commitCommandBuffer(VkDevice device, VkQueue queue, VkCommandBuffer
 	check_vk_result(err);
 }
 
-void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath, const std::string& fragmentShaderPath, VkPipeline* pipeline)
+void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath, const std::string& fragmentShaderPath, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, VkDynamicState* dynamicStates, VkPipeline* pipeline)
 {
 	VkResult err;
 
@@ -117,24 +117,6 @@ void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath
 
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,fragShaderStageInfo };
 
-	VkVertexInputBindingDescription bindingDescripiton = {};		//describes how big the vertex data is and how to read the data
-	bindingDescripiton.binding = 0;
-	bindingDescripiton.stride = sizeof(Vertex);
-	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-	VkVertexInputAttributeDescription attributeDescription = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
-	attributeDescription.binding = 0;
-	attributeDescription.location = 0;
-	attributeDescription.format = VK_FORMAT_R32_SFLOAT;
-	attributeDescription.offset = offsetof(Vertex, y);
-
-	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
-	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
-	vertexInputInfo.vertexAttributeDescriptionCount = 1;
-	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
-
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
@@ -143,14 +125,14 @@ void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath
 	VkViewport viewport = {};					//description for our viewport for transformation operation after rasterization
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
-	viewport.width = (float)g_PcPlotWidth;
-	viewport.height = (float)g_PcPlotHeight;
+	viewport.width = frameWidth;
+	viewport.height = frameHight;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 
 	VkRect2D scissor = {};						//description for cutting the rendered result if wanted
 	scissor.offset = { 0, 0 };
-	scissor.extent = { g_PcPlotWidth,g_PcPlotHeight };
+	scissor.extent = { frameWidth,frameHight };
 
 	VkPipelineViewportStateCreateInfo viewportState = {};
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -202,8 +184,6 @@ void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath
 	colorBlending.blendConstants[2] = 0.0f;
 	colorBlending.blendConstants[3] = 0.0f;
 
-	VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_LINE_WIDTH };
-
 	VkPipelineDynamicStateCreateInfo dynamicState = {};			//enables change of the linewidth at runtime
 	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 	dynamicState.dynamicStateCount = 1;
@@ -220,7 +200,7 @@ void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath
 	layoutInfo.bindingCount = 1;
 	layoutInfo.pBindings = &uboLayoutBinding;
 
-	err = vkCreateDescriptorSetLayout(g_Device, &layoutInfo, nullptr, &g_PcPlotDescriptorLayout);
+	err = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &g_PcPlotDescriptorLayout);
 	check_vk_result(err);
 
 	VkDescriptorPoolSize poolSize = {};
@@ -233,7 +213,7 @@ void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath
 	poolInfo.pPoolSizes = &poolSize;
 	poolInfo.maxSets = 1;
 
-	err = vkCreateDescriptorPool(g_Device, &poolInfo, nullptr, &g_PcPlotDescriptorPool);
+	err = vkCreateDescriptorPool(device, &poolInfo, nullptr, &g_PcPlotDescriptorPool);
 	check_vk_result(err);
 
 	VkDescriptorSetAllocateInfo allocInfo = {};
@@ -242,7 +222,7 @@ void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath
 	allocInfo.descriptorSetCount = 1;
 	allocInfo.pSetLayouts = &g_PcPlotDescriptorLayout;
 
-	err = vkAllocateDescriptorSets(g_Device, &allocInfo, &g_PcPlotDescriptorSet);
+	err = vkAllocateDescriptorSets(device, &allocInfo, &g_PcPlotDescriptorSet);
 	check_vk_result(err);
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
@@ -252,14 +232,14 @@ void VkUtil::createPipeline(VkDevice device, const std::string& vertexShaderPath
 	pipelineLayoutInfo.pushConstantRangeCount = 0;
 	pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
-	err = vkCreatePipelineLayout(g_Device, &pipelineLayoutInfo, nullptr, &g_PcPlotPipelineLayout);
+	err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &g_PcPlotPipelineLayout);
 	check_vk_result(err);
 
 	VkGraphicsPipelineCreateInfo pipelineInfo = {};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	pipelineInfo.stageCount = 2;
 	pipelineInfo.pStages = shaderStages;
-	pipelineInfo.pVertexInputState = &vertexInputInfo;
+	pipelineInfo.pVertexInputState = vertexInfo;
 	pipelineInfo.pInputAssemblyState = &inputAssembly;
 	pipelineInfo.pViewportState = &viewportState;
 	pipelineInfo.pRasterizationState = &rasterizer;

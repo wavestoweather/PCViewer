@@ -1,5 +1,5 @@
 #ifndef PCUtil_H
-#def PCUtil_H
+#define PCUtil_H
 
 #include <istream>
 #include <vector>
