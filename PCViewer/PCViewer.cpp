@@ -155,7 +155,8 @@ bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribut
 bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
 std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
 std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
-std::vector<std::string> droppedPaths;
+std::vector<std::string> droppedPaths = std::vector<std::string>();
+bool* createDLForDrop = NULL;
 bool pathDropped = false;
 
 
@@ -801,7 +802,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
-	dl.color = { col.r,col.g,col.b,1 };
+	dl.color = { (float)col.r,(float)col.g,(float)col.b,1 };
 	dl.prefColor = dl.color;
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<int>(tl.indices);
@@ -1700,12 +1701,24 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 	}
 }
 
+static void addMultipleIndicesToDs(DataSet& ds) {
+	for (int i = 0; i < droppedPaths.size(); i++) {
+		addIndecesToDs(ds, droppedPaths[i].c_str());
+		if (createDLForDrop[i]) {
+			createPCPlotDrawList(ds.drawLists.back(), ds, droppedPaths[i].substr(droppedPaths[i].find_last_of('\\')+1).c_str());
+		}
+	}
+}
+
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
 #ifdef _DEBUG
 	std::cout << "Amount of files drag and dropped: " << count << std::endl;
 #endif
+	createDLForDrop = new bool[count];
+
 	for (int i = 0; i < count; i++) {
 		droppedPaths.push_back(std::string(paths[i]));
+		createDLForDrop[i] = true;
 	}
 	pathDropped = true;
 }
@@ -1936,12 +1949,18 @@ int main(int, char**)
 				if (ImGui::Button("Open", ImVec2(120, 0))) {
 					ImGui::CloseCurrentPopup();
 					openDataset(droppedPaths.front().c_str());
+					droppedPaths.clear();
+					delete[] createDLForDrop;
+					createDLForDrop = NULL;
 					pathDropped = false;
 				}
 				ImGui::SetItemDefaultFocus();
 				ImGui::SameLine();
 				if (ImGui::Button("Cancel", ImVec2(120, 0))) { 
 					ImGui::CloseCurrentPopup(); 
+					droppedPaths.clear();
+					delete[] createDLForDrop;
+					createDLForDrop = NULL;
 					pathDropped = false;
 				}
 				ImGui::EndPopup();
@@ -1949,10 +1968,10 @@ int main(int, char**)
 		}
 
 		//if a path was dropped and the add indices popup is up, copy the dropped path to the popup and reset path dropped
-		if (pathDropped && addIndeces) {
+		/*if (pathDropped && addIndeces) {
 			strcpy(pcFilePath, droppedPath);
 			pathDropped = false;
-		}
+		}*/
 
 		// Labels for the titels of the attributes
 		// Position calculation for each of the Label
@@ -2140,9 +2159,23 @@ int main(int, char**)
 						ImGui::InputText("Path", pcFilePath, 200);
 						ImGui::Separator();
 
+						for (int i = 0; i < droppedPaths.size();i++) {
+							ImGui::Text(droppedPaths[i].c_str());
+							ImGui::SameLine();
+							ImGui::Checkbox(("##"+droppedPaths[i]).c_str(), &createDLForDrop[i]);
+						}
+
 						if (ImGui::Button("Add Indeces", ImVec2(120, 0))) {
 							ImGui::CloseCurrentPopup();
-							addIndecesToDs(ds,pcFilePath);
+							if (droppedPaths.size() == 0)
+								addIndecesToDs(ds, pcFilePath);
+							else {
+								addMultipleIndicesToDs(ds);
+								pcPlotRender = true;
+							}
+							droppedPaths.clear();
+							delete[] createDLForDrop;
+							createDLForDrop = NULL;
 							pathDropped = false;
 							addIndeces = false;
 						}
@@ -2150,6 +2183,9 @@ int main(int, char**)
 						ImGui::SameLine();
 						if (ImGui::Button("Cancel", ImVec2(120, 0))) { 
 							ImGui::CloseCurrentPopup();
+							droppedPaths.clear();
+							delete[] createDLForDrop;
+							createDLForDrop = NULL;
 							pathDropped = false;
 							addIndeces = false;
 						}
@@ -2279,6 +2315,8 @@ int main(int, char**)
 		delete[] pcAttributeEnabled;
 	if (pcAttributeEnabledCpy)
 		delete[] pcAttributeEnabledCpy;
+	if (createDLForDrop)
+		delete[] createDLForDrop;
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
