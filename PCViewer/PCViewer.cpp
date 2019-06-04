@@ -5,6 +5,7 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
+#include "Color.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -17,6 +18,7 @@
 #include <limits>
 #include <list>
 #include <algorithm>
+#include <time.h>
 
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -153,7 +155,7 @@ bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribut
 bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
 std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
 std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
-static char droppedPath[200] = {};
+std::vector<std::string> droppedPaths;
 bool pathDropped = false;
 
 
@@ -793,12 +795,14 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	descriptorWrite.pBufferInfo = &desBufferInfo;
 
 	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
-	
+
+	hsv randCol = { rand()%360 ,1.0f,.6f };
+	rgb col = hsv2rgb(randCol);
 
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
-	dl.color = { 1,1,1,1 };
-	dl.prefColor = { 1,1,1,1 };
+	dl.color = { col.r,col.g,col.b,1 };
+	dl.prefColor = dl.color;
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<int>(tl.indices);
 	g_PcPlotDrawLists.push_back(dl);
@@ -1700,12 +1704,16 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 #ifdef _DEBUG
 	std::cout << "Amount of files drag and dropped: " << count << std::endl;
 #endif
-	strcpy(droppedPath,paths[0]);
+	for (int i = 0; i < count; i++) {
+		droppedPaths.push_back(std::string(paths[i]));
+	}
 	pathDropped = true;
 }
 
 int main(int, char**)
 {
+	std::srand(time(nullptr));
+
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
 	//float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
@@ -1922,12 +1930,12 @@ int main(int, char**)
 			if (ImGui::BeginPopupModal("OPENDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 			{
 				ImGui::Text("Do you really want to open this Dataset:");
-				ImGui::Text(droppedPath);
+				ImGui::Text(droppedPaths.front().c_str());
 				ImGui::Separator();
 
 				if (ImGui::Button("Open", ImVec2(120, 0))) {
 					ImGui::CloseCurrentPopup();
-					openDataset(droppedPath);
+					openDataset(droppedPaths.front().c_str());
 					pathDropped = false;
 				}
 				ImGui::SetItemDefaultFocus();
@@ -2016,7 +2024,7 @@ int main(int, char**)
 				std::string name = "max##";
 				name += pcAttributes[i].name;
 				ImGui::PushItemWidth(buttonSize.x);
-				if(c!=0)
+				if(c1!=0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
 				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f)) {
 					pcPlotRender = true;
@@ -2048,7 +2056,7 @@ int main(int, char**)
 				std::string name = "min##";
 				name += pcAttributes[i].name;
 				ImGui::PushItemWidth(buttonSize.x);
-				if (c != 0)
+				if (c1 != 0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
 				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f)) {
 					pcPlotRender = true;
