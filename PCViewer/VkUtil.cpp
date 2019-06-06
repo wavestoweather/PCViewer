@@ -216,44 +216,6 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 	dynamicState.dynamicStateCount = dynamicStates.size();
 	dynamicState.pDynamicStates = dynamicStates.data();
 
-
-	//TOREMOVE ----------------------------------------------------------------------
-	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
-	uboLayoutBinding.binding = 0;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	uboLayoutBinding.descriptorCount = 1;
-	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
-
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 1;
-	layoutInfo.pBindings = &uboLayoutBinding;
-
-	err = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &g_PcPlotDescriptorLayout);
-	check_vk_result(err);
-
-	VkDescriptorPoolSize poolSize = {};
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = 1;
-
-	VkDescriptorPoolCreateInfo poolInfo = {};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = &poolSize;
-	poolInfo.maxSets = 1;
-
-	err = vkCreateDescriptorPool(device, &poolInfo, nullptr, &g_PcPlotDescriptorPool);
-	check_vk_result(err);
-
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = g_PcPlotDescriptorPool;
-	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &g_PcPlotDescriptorLayout;
-
-	err = vkAllocateDescriptorSets(device, &allocInfo, &g_PcPlotDescriptorSet);
-	check_vk_result(err);
-
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutInfo.setLayoutCount = descriptorSetLayouts.size();
@@ -295,6 +257,10 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 		vkDestroyShaderModule(device, shaderModules[4], nullptr);
 }
 
+void VkUtil::destroyPipeline(VkDevice device,VkPipeline pipeline) {
+	vkDestroyPipeline(device, pipeline, nullptr);
+}
+
 VkShaderModule VkUtil::createShaderModule(VkDevice device, const std::vector<char>& byteArr)
 {
 	VkShaderModuleCreateInfo createInfo = {};
@@ -309,7 +275,7 @@ VkShaderModule VkUtil::createShaderModule(VkDevice device, const std::vector<cha
 	return shaderModule;
 }
 
-static void createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,VkRenderPass* renderPass) {
+void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,VkRenderPass* renderPass) {
 	VkResult err;
 
 	std::vector<VkAttachmentDescription> colorAttachments;
@@ -380,5 +346,63 @@ static void createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,Vk
 	renderPassInfo.pSubpasses = &subpass;
 
 	err = vkCreateRenderPass(device, &renderPassInfo, nullptr, renderPass);
+	check_vk_result(err);
+}
+
+void VkUtil::fillDescriptorSetLayoutBinding(uint32_t bindingNumber, VkDescriptorType descriptorType, uint32_t amtOfDescriptors, VkShaderStageFlags shaderStages, VkDescriptorSetLayoutBinding* uboLayoutBinding)
+{
+	uboLayoutBinding->binding = bindingNumber;
+	uboLayoutBinding->descriptorType = descriptorType;
+	uboLayoutBinding->descriptorCount = amtOfDescriptors;
+	uboLayoutBinding->stageFlags = shaderStages;
+}
+
+void VkUtil::createDescriptorSetLayout(VkDevice device,const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* descriptorSetLayout) {
+	VkResult err;
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+	layoutInfo.pBindings = bindings.data();
+
+	err = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, descriptorSetLayout);
+	check_vk_result(err);
+}
+
+void VkUtil::destroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout) {
+	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+}
+
+void VkUtil::createDescriptorPool(VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, VkDescriptorPool* descriptorPool) {
+	VkResult err;
+	VkDescriptorPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+	poolInfo.pPoolSizes = poolSizes.data();
+
+	uint32_t maxSets = 0;
+	for (auto pool : poolSizes) {
+		maxSets += pool.descriptorCount;
+	}
+	poolInfo.maxSets = maxSets;
+
+	err = vkCreateDescriptorPool(device, &poolInfo, nullptr, descriptorPool);
+	check_vk_result(err);
+}
+
+void VkUtil::destroyDescriptorPool(VkDevice device, VkDescriptorPool pool) {
+	vkDestroyDescriptorPool(device, pool, nullptr);
+}
+
+void VkUtil::createDescriptorSets(VkDevice device,const std::vector<VkDescriptorSetLayout>& layouts, VkDescriptorPool pool, VkDescriptorSet* descriptorSetArray) {
+	VkResult err;
+
+	VkDescriptorSetAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = pool;
+	allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
+	allocInfo.pSetLayouts = layouts.data();
+
+	err = vkAllocateDescriptorSets(device, &allocInfo, descriptorSetArray);
 	check_vk_result(err);
 }
