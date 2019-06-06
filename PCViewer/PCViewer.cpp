@@ -19,6 +19,7 @@
 #include <list>
 #include <algorithm>
 #include <time.h>
+#include <random>
 
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -83,6 +84,8 @@ struct DrawList {
 	std::string parentDataSet;
 	Vec4 color;
 	Vec4 prefColor;
+	bool show;
+	bool prefShow;
 	VkBuffer buffer;
 	VkBuffer ubo;
 	VkDeviceMemory uboMem;
@@ -141,7 +144,7 @@ static std::list<DrawList>		g_PcPlotDrawLists;
 static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotWidth = 1280;
-static uint32_t					g_PcPlotHeight = 300;
+static uint32_t					g_PcPlotHeight = 400;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
 
@@ -158,6 +161,9 @@ std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of
 std::vector<std::string> droppedPaths = std::vector<std::string>();
 bool* createDLForDrop = NULL;
 bool pathDropped = false;
+std::default_random_engine engine;
+std::uniform_int_distribution<int> distribution(0, 35);
+float alphaDrawLists = .5f;
 
 
 
@@ -797,13 +803,20 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
 
-	hsv randCol = { rand()%360 ,1.0f,.6f };
-	rgb col = hsv2rgb(randCol);
+	int hue = distribution(engine) * 10;
+#ifdef _DEBUG
+	std::cout << "Hue: " << hue << std::endl;
+#endif
+
+	hsl randCol = {  hue,.5f,.6f };
+	rgb col = hsl2rgb(randCol);
 
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
-	dl.color = { (float)col.r,(float)col.g,(float)col.b,1 };
+	dl.color = { (float)col.r,(float)col.g,(float)col.b,alphaDrawLists };
 	dl.prefColor = dl.color;
+	dl.show = true;
+	dl.prefShow = true;
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<int>(tl.indices);
 	g_PcPlotDrawLists.push_back(dl);
@@ -1084,6 +1097,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	//TODO: fill uniformbuffer differentley to be able to draw different colors
 	//now drawing for every draw list in g_pcPlotdrawlists
 	for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList;++drawList) {
+		if (!drawList->show)
+			continue;
+
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
 
@@ -1503,6 +1519,7 @@ static void openCsv(const char* filename) {
 
 	g_PcPlotDataSets.push_back(ds);
 
+#ifdef _DEBUG
 	//printing out the loaded attributes for debug reasons
 	std::cout << "Attributes: " << std::endl;
 	for (auto attribute : pcAttributes) {
@@ -1519,6 +1536,7 @@ static void openCsv(const char* filename) {
 		if (dc++ > 10)
 			break;
 	}
+#endif
 }
 
 static void openDlf(const char* filename) {
@@ -1725,7 +1743,7 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 
 int main(int, char**)
 {
-	std::srand(time(nullptr));
+	engine.seed(12);
 
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
@@ -1935,6 +1953,10 @@ int main(int, char**)
 				pcPlotRender = true;
 				ds.prefColor = ds.color;
 			}
+			if (ds.show != ds.prefShow) {
+				pcPlotRender = true;
+				ds.prefShow = ds.show;
+			}
 		}
 
 		//check if a path was dropped in the application
@@ -1967,12 +1989,6 @@ int main(int, char**)
 			}
 		}
 
-		//if a path was dropped and the add indices popup is up, copy the dropped path to the popup and reset path dropped
-		/*if (pathDropped && addIndeces) {
-			strcpy(pcFilePath, droppedPath);
-			pathDropped = false;
-		}*/
-
 		// Labels for the titels of the attributes
 		// Position calculation for each of the Label
 		size_t amtOfLabels = 0;
@@ -1988,7 +2004,7 @@ int main(int, char**)
 		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
 		ImVec2 window_pos = ImVec2(0, 0);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		ImGui::SetNextWindowSize({ io.DisplaySize.x,400 });
+		ImGui::SetNextWindowSize({ io.DisplaySize.x,0 });
 		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
 			//drawing the buttons which can be changed via drag and drop
@@ -2090,8 +2106,8 @@ int main(int, char**)
 		ImGui::End();
 
 		//Settings section
-		window_pos = ImVec2(0, 500);
-		ImVec2 window_size = ImVec2(500,200);
+		window_pos = ImVec2(0, io.DisplaySize.y-300);
+		ImVec2 window_size = ImVec2(500,300);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size);
 		if (ImGui::Begin("Settings", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
@@ -2115,8 +2131,8 @@ int main(int, char**)
 		ImGui::End();
 
 		//DataSets, from which draw lists can be created
-		window_pos = ImVec2(505, 500);
-		window_size = ImVec2(300, 200);
+		window_pos = ImVec2(500, io.DisplaySize.y-300);
+		window_size = ImVec2((io.DisplaySize.x-500)/2, 300);
 		DataSet destroySet = {};
 		bool destroy = false;
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
@@ -2159,11 +2175,22 @@ int main(int, char**)
 						ImGui::InputText("Path", pcFilePath, 200);
 						ImGui::Separator();
 
+						ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysAutoResize);
+
+						if (droppedPaths.size() == 0) {
+							ImGui::Text("Drag and drop indexlists here to open them.");
+						}
+						else {
+							ImGui::SliderFloat("Default Alpha Value", &alphaDrawLists, .0f, 1.0f);
+						}
+
 						for (int i = 0; i < droppedPaths.size();i++) {
 							ImGui::Text(droppedPaths[i].c_str());
 							ImGui::SameLine();
 							ImGui::Checkbox(("##"+droppedPaths[i]).c_str(), &createDLForDrop[i]);
 						}
+
+						ImGui::EndChild();
 
 						if (ImGui::Button("Add Indeces", ImVec2(120, 0))) {
 							ImGui::CloseCurrentPopup();
@@ -2221,8 +2248,8 @@ int main(int, char**)
 			destroyPcPlotDataSet(destroySet);
 
 		//Showing the Drawlist
-		window_pos = ImVec2(810, 500);
-		window_size = ImVec2(300, 200);
+		window_pos = ImVec2(500+(io.DisplaySize.x-500)/2, io.DisplaySize.y-300);
+		window_size = ImVec2((io.DisplaySize.x-500)/2, 300);
 		DrawList changeList = {};
 		destroy = false;
 		bool up = false;
@@ -2234,16 +2261,20 @@ int main(int, char**)
 			ImGui::Separator();
 			int count = 0;
 			for (DrawList& dl : g_PcPlotDrawLists) {
-				ImGui::Columns(5,"5columns",false); // 5-ways, with border
-				ImGui::SetColumnWidth(0, 190);
+				ImGui::Columns(6,"5columns",false); // 5-ways, with border
+				ImGui::SetColumnWidth(0, 250);
 				ImGui::SetColumnWidth(1, 25);
 				ImGui::SetColumnWidth(2, 25);
 				ImGui::SetColumnWidth(3, 25);
 				ImGui::SetColumnWidth(4, 25);
+				ImGui::SetColumnWidth(5, 25);
 
 				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
 					pcPlotSelectedDrawList = count;
 				}
+				ImGui::NextColumn();
+
+				ImGui::Checkbox(("##" + dl.name).c_str(), &dl.show);
 				ImGui::NextColumn();
 
 				float spacing = ImGui::GetStyle().ItemInnerSpacing.x;

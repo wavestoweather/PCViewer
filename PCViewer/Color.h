@@ -10,8 +10,15 @@ typedef struct {
 	double v;       // a fraction between 0 and 1
 } hsv;
 
+typedef struct {
+	double h;
+	double s;
+	double l;
+} hsl;
+
 static hsv   rgb2hsv(rgb in);
 static rgb   hsv2rgb(hsv in);
+static rgb	 hsl2rgb(hsl in);
 
 rgb hsv2rgb(hsv in)
 {
@@ -60,6 +67,57 @@ rgb hsv2rgb(hsv in)
 		out.r = in.v;
 		out.g = p;
 		out.b = q;
+		break;
+	}
+	return out;
+}
+
+rgb hsl2rgb(hsl in) {
+	double      hh, c, x, m;
+	long        i;
+	rgb         out;
+
+	hh = in.h;
+	if (hh >= 360.0) hh = 0.0;
+	hh /= 60.0;
+	i = (long)hh;
+	
+	c = (1 - abs(2 * in.l - 1)) * in.s;
+	x = c * (1 - abs((long)(in.h / 60) % 2 - 1));
+	m = in.l - c / 2;
+
+	switch (i) {
+	case 0:
+		out.r = c+m;
+		out.g = x+m;
+		out.b = m;
+		break;
+	case 1:
+		out.r = x+m;
+		out.g = c+m;
+		out.b = m;
+		break;
+	case 2:
+		out.r = m;
+		out.g = c+m;
+		out.b = x+m;
+		break;
+
+	case 3:
+		out.r = m;
+		out.g = x+m;
+		out.b = c+m;
+		break;
+	case 4:
+		out.r = x+m;
+		out.g = m;
+		out.b = c+m;
+		break;
+	case 5:
+	default:
+		out.r = c+m;
+		out.g = m;
+		out.b = x+m;
 		break;
 	}
 	return out;

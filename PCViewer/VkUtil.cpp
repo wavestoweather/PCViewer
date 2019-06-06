@@ -159,7 +159,7 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 
 	VkRect2D scissor = {};						//description for cutting the rendered result if wanted
 	scissor.offset = { 0, 0 };
-	scissor.extent = { frameWidth,frameHight };
+	scissor.extent = { (uint32_t)frameWidth,(uint32_t)frameHight };
 
 	VkPipelineViewportStateCreateInfo viewportState = {};
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -282,10 +282,10 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 	VkAttachmentReference colorAttachmentRef = {};
 	VkAttachmentReference depthAttachmentRef = {};
 	VkSubpassDescription subpass = {};
+	VkAttachmentDescription attachment = {};
 
 	switch (passType) {
 	case VkUtil::Color:
-		VkAttachmentDescription attachment = {};
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -304,7 +304,6 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 
 		break;
 	case VkUtil::Depth:
-		VkAttachmentDescription attachment = {};
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
