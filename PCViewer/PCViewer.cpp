@@ -1998,7 +1998,7 @@ int main(int, char**)
 
 		size_t paddingSide = 10;			//padding from left and right screen border
 		size_t gap = (io.DisplaySize.x - 2 * paddingSide) / (amtOfLabels - 1);
-		ImVec2 buttonSize = ImVec2(50, 20);
+		ImVec2 buttonSize = ImVec2(70, 20);
 		size_t offset = 0;
 
 		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
@@ -2061,7 +2061,8 @@ int main(int, char**)
 				ImGui::PushItemWidth(buttonSize.x);
 				if(c1!=0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f)) {
+
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f,0.0f,0.0f,"%.05f")) {
 					pcPlotRender = true;
 				}
 				ImGui::PopItemWidth();
@@ -2093,7 +2094,7 @@ int main(int, char**)
 				ImGui::PushItemWidth(buttonSize.x);
 				if (c1 != 0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f)) {
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f, .0f, .0f, "%.05f")) {
 					pcPlotRender = true;
 				}
 				ImGui::PopItemWidth();
