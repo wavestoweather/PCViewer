@@ -16,6 +16,16 @@ static void check_vk_result(VkResult err)
 
 class VkUtil{
 public:
+	struct BlendInfo {
+		VkPipelineColorBlendAttachmentState blendAttachment;
+		VkPipelineColorBlendStateCreateInfo createInfo;
+	};
+
+	enum PassType {
+		Color,
+		Depth
+	};
+
 	static void createMipMaps(VkCommandBuffer commandBuffer, VkImage image, uint32_t mipLevels, uint32_t imageWidth, uint32_t imageHeight, VkImageLayout oldLayout, VkAccessFlags oldAccess, VkPipelineStageFlags oldPipelineStage);
 	static void createCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBuffer *commandBuffer);
 	static void commitCommandBuffer(VkDevice device, VkQueue queue, VkCommandBuffer commandBuffer);

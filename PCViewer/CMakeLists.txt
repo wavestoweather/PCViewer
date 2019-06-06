@@ -4,7 +4,7 @@
 cmake_minimum_required (VERSION 3.7)
 
 # Fügen Sie der ausführbaren Datei dieses Projekts eine Quelle hinzu.
-add_executable (PCViewer "PCViewer.cpp" "PCViewer.h" "Color.h" "imgui/imconfig.h" "imgui/imgui.cpp" "imgui/imgui.h" "imgui/imgui_draw.cpp" "imgui/imgui_impl_glfw.cpp" "imgui/imgui_impl_glfw.h" "imgui/imgui_impl_vulkan.h" "imgui/imgui_impl_vulkan.cpp" "imgui/imgui_internal.h" "imgui/imgui_widgets.cpp" "imgui/imstb_rectpack.h" "imgui/imstb_textedit.h" "imgui/imstb_truetype.h" "imgui/imgui_demo.cpp")
+add_executable (PCViewer "PCViewer.cpp" "PCViewer.h" "VkUtil.h" "VkUtil.cpp" "Color.h" "imgui/imconfig.h" "imgui/imgui.cpp" "imgui/imgui.h" "imgui/imgui_draw.cpp" "imgui/imgui_impl_glfw.cpp" "imgui/imgui_impl_glfw.h" "imgui/imgui_impl_vulkan.h" "imgui/imgui_impl_vulkan.cpp" "imgui/imgui_internal.h" "imgui/imgui_widgets.cpp" "imgui/imstb_rectpack.h" "imgui/imstb_textedit.h" "imgui/imstb_truetype.h" "imgui/imgui_demo.cpp")
 
 find_package(Vulkan REQUIRED)
 
