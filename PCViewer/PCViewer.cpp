@@ -21,6 +21,17 @@
 #include <time.h>
 #include <random>
 
+//memory leak detection
+#ifdef _DEBUG
+#define DETECTMEMLEAK
+#endif
+
+#ifdef DETECTMEMLEAK
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -1819,6 +1830,10 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 
 int main(int, char**)
 {
+#ifdef DETECTMEMLEAK
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif
+
 	engine.seed(12);
 
 	//Section for variables
