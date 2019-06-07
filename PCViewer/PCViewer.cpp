@@ -580,7 +580,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	VkResult err;
 
 	//creating the command buffer as its needed to do all the operations in here
-	createPcPlotCommandBuffer();
+	//createPcPlotCommandBuffer();
 
 	Buffer vertexBuffer;
 
@@ -653,6 +653,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 
 	vkBindBufferMemory(g_Device, g_PcPlotIndexBuffer, g_PcPlotIndexBufferMemory, 0);
 
+	/*
 	//creating the uniform buffer
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = sizeof(UniformBufferObject);
@@ -695,6 +696,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
+	*/
 }
 
 static void cleanupPcPlotVertexBuffer() {
@@ -782,7 +784,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	VkResult err;
 
 	DrawList dl = {};
-	
+
 	//uniformBuffer for pcPlot Drawing
 	Buffer uboBuffer;
 
@@ -797,6 +799,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 	VkMemoryRequirements memRequirements;
 	vkGetBufferMemoryRequirements(g_Device, dl.ubo, &memRequirements);
+	memRequirements.size = (memRequirements.size % memRequirements.alignment) ? memRequirements.size + (memRequirements.alignment - (memRequirements.size % memRequirements.alignment)) : memRequirements.size; //alining the memory
 
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -811,12 +814,13 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 		check_vk_result(err);
 
 		vkGetBufferMemoryRequirements(g_Device, dl.histogramUbos.back(), &memRequirements);
+		memRequirements.size = (memRequirements.size % memRequirements.alignment) ? memRequirements.size + (memRequirements.alignment - (memRequirements.size % memRequirements.alignment)) : memRequirements.size; //alining the memory
 		allocInfo.allocationSize += memRequirements.size;
 		memTypeBits |= memRequirements.memoryTypeBits;
 	}
 
 	//IndexBuffer for Histogramms
-	bufferInfo.size = 2 * dl.indices.size() * sizeof(uint16_t);
+	bufferInfo.size = 2 * tl.indices.size() * sizeof(uint16_t);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.histogramIndBuffer);
 	check_vk_result(err);
@@ -836,9 +840,11 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 	//Binding histogram uniform buffers
 	uint32_t offset = sizeof(UniformBufferObject);
+	offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
 	for (int i = 0; i < dl.histogramUbos.size(); i++) {
 		vkBindBufferMemory(g_Device, dl.histogramUbos[i], dl.dlMem, offset);
 		offset += sizeof(HistogramUniformBuffer);
+		offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
 	}
 
 	//Binding the histogram index buffer
@@ -853,7 +859,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	void* d;
 	vkMapMemory(g_Device, dl.dlMem, sizeof(UniformBufferObject) + pcAttributes.size() * sizeof(HistogramUniformBuffer), sizeof(uint16_t) * tl.indices.size() * 2, 0, &d);
 	memcpy(d, indBuffer, tl.indices.size() * sizeof(uint16_t) * 2);
-	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+	vkUnmapMemory(g_Device, dl.dlMem);
 	delete[] indBuffer;
 
 	//specifying the uniform buffer location
@@ -1067,8 +1073,8 @@ static void cleanupPcPlotCommandBuffer() {
 }
 
 static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const ImGui_ImplVulkanH_Window* wd) {
-	if (g_PcPlotDrawLists.empty())
-		return;
+	//if (g_PcPlotDrawLists.empty())
+	//	return;
 
 	VkResult err;
 
@@ -1137,11 +1143,13 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		__debugbreak();
 #endif
 
-	//copying the indexbuffer
 	void* d;
-	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size(), 0, &d);
-	memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
-	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+	//copying the indexbuffer
+	if (pcAttributes.size()) {
+		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size(), 0, &d);
+		memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
+		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+	}
 
 	delete[] ind;
 	
@@ -1179,7 +1187,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//binding the all needed things
 	vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
-	vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+	if(pcAttributes.size())
+		vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
 	//TODO: fill uniformbuffer differentley to be able to draw different colors
 	//now drawing for every draw list in g_pcPlotdrawlists
