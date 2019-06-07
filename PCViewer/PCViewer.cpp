@@ -79,6 +79,15 @@ struct UniformBufferObject {
 	Vec4 VertexTransormations[20];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
 };
 
+//uniform Buffer for the histogramms
+struct HistogramUniformBuffer {
+	float x;
+	float width;
+	float maxVal;
+	float minVal;
+	Vec4 color;
+};
+
 struct DrawList {
 	std::string name;
 	std::string parentDataSet;
@@ -88,7 +97,9 @@ struct DrawList {
 	bool prefShow;
 	VkBuffer buffer;
 	VkBuffer ubo;
-	VkDeviceMemory uboMem;
+	VkBuffer histogramIndBuffer;
+	std::vector<VkBuffer> histogramUbos;
+	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
 	std::vector<int> indices;
 };
@@ -733,13 +744,20 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ) {
 		if (it->parentDataSet == dataSet.name) {
 			it->indices.clear();
-			if (it->uboMem) {
-				vkFreeMemory(g_Device, it->uboMem, nullptr);
-				it->uboMem = VK_NULL_HANDLE;
+			if (it->dlMem) {
+				vkFreeMemory(g_Device, it->dlMem, nullptr);
+				it->dlMem = VK_NULL_HANDLE;
 			}
 			if (it->ubo) {
 				vkDestroyBuffer(g_Device, it->ubo, nullptr);
 				it->ubo = VK_NULL_HANDLE;
+			}
+			if (it->histogramIndBuffer) {
+				vkDestroyBuffer(g_Device, it->histogramIndBuffer, nullptr);
+				it->histogramIndBuffer = VK_NULL_HANDLE;
+			}
+			for (int i = 0; i < it->histogramUbos.size(); i++) {
+				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
 			}
 			g_PcPlotDrawLists.erase(it++);
 		}
@@ -754,6 +772,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 	DrawList dl = {};
 	
+	//uniformBuffer for pcPlot Drawing
 	Buffer uboBuffer;
 
 	VkBufferCreateInfo bufferInfo = {};
@@ -771,12 +790,60 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	uint32_t memTypeBits = memRequirements.memoryTypeBits;
+	
+	//uniformBuffer for Histogramms
+	bufferInfo.size = sizeof(HistogramUniformBuffer);
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		dl.histogramUbos.push_back({});
+		err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.histogramUbos.back());
+		check_vk_result(err);
 
-	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &dl.uboMem);
+		vkGetBufferMemoryRequirements(g_Device, dl.histogramUbos.back(), &memRequirements);
+		allocInfo.allocationSize += memRequirements.size;
+		memTypeBits |= memRequirements.memoryTypeBits;
+	}
+
+	//IndexBuffer for Histogramms
+	bufferInfo.size = 2 * dl.indices.size() * sizeof(uint16_t);
+	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.histogramIndBuffer);
 	check_vk_result(err);
 
-	vkBindBufferMemory(g_Device, dl.ubo, dl.uboMem, 0);
+	vkGetBufferMemoryRequirements(g_Device, dl.histogramIndBuffer, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+	memTypeBits |= memRequirements.memoryTypeBits;
+
+	//allocating the Memory for all draw list data
+	allocInfo.memoryTypeIndex = findMemoryType(memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &dl.dlMem);
+	check_vk_result(err);
+
+	//Binding Uniform Buffer
+	vkBindBufferMemory(g_Device, dl.ubo, dl.dlMem, 0);
+
+	//Binding histogram uniform buffers
+	uint32_t offset = sizeof(UniformBufferObject);
+	for (int i = 0; i < dl.histogramUbos.size(); i++) {
+		vkBindBufferMemory(g_Device, dl.histogramUbos[i], dl.dlMem, offset);
+		offset += sizeof(HistogramUniformBuffer);
+	}
+
+	//Binding the histogram index buffer
+	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
+
+	//creating and uploading the indexbuffer data
+	uint16_t* indBuffer = new uint16_t[tl.indices.size()*2];
+	for (int i = 0; i < tl.indices.size(); i++) {
+		indBuffer[2 * i] = (uint16_t)tl.indices[i];
+		indBuffer[2 * i + 1] = tl.indices[i];
+	}
+	void* d;
+	vkMapMemory(g_Device, dl.dlMem, sizeof(UniformBufferObject) + pcAttributes.size() * sizeof(HistogramUniformBuffer), sizeof(uint16_t) * tl.indices.size() * 2, 0, &d);
+	memcpy(d, indBuffer, tl.indices.size() * sizeof(uint16_t) * 2);
+	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+	delete[] indBuffer;
 
 	//specifying the uniform buffer location
 	VkDescriptorBufferInfo desBufferInfo = {};
@@ -826,13 +893,20 @@ static void removePcPlotDrawList(DrawList drawList) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
 		if (it->name == drawList.name) {
 			it->indices.clear();
-			if (it->uboMem) {
-				vkFreeMemory(g_Device, it->uboMem, nullptr);
-				it->uboMem = VK_NULL_HANDLE;
+			if (it->dlMem) {
+				vkFreeMemory(g_Device, it->dlMem, nullptr);
+				it->dlMem = VK_NULL_HANDLE;
 			}
 			if (it->ubo) {
 				vkDestroyBuffer(g_Device, it->ubo, nullptr);
 				it->ubo = VK_NULL_HANDLE;
+			}
+			if (it->histogramIndBuffer) {
+				vkDestroyBuffer(g_Device, it->histogramIndBuffer, nullptr);
+				it->histogramIndBuffer = VK_NULL_HANDLE;
+			}
+			for (int i = 0; i < it->histogramUbos.size(); i++) {
+				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
 			}
 			g_PcPlotDrawLists.erase(it);
 			break;
@@ -1057,6 +1131,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size(), 0, &d);
 	memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+
+	delete[] ind;
 	
 
 	//filling the uniform buffer and copying it into the end of the uniformbuffer
@@ -1082,9 +1158,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	//copying the uniform buffer
 	for (DrawList& ds : g_PcPlotDrawLists) {
 		ubo.color = ds.color;
-		vkMapMemory(g_Device, ds.uboMem, 0, sizeof(UniformBufferObject), 0, &d);
+		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &d);
 		memcpy(d, &ubo, sizeof(UniformBufferObject));
-		vkUnmapMemory(g_Device, ds.uboMem);
+		vkUnmapMemory(g_Device, ds.dlMem);
 	}
 
 	//starting the pcPlotCommandBuffer
