@@ -18,12 +18,23 @@ include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR})
 
 target_link_libraries(PCViewer Vulkan::Vulkan glfw)
 
-configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader COPYONLY)
+message (" Copying shaders")
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shader/vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv ${CMAKE_CURRENT_BINARY_DIR}/shader/
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv)
 
-configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader COPYONLY)
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shader/frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv ${CMAKE_CURRENT_BINARY_DIR}/shader/
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv)
 
-#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv
- #       DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shader/histVert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/shader/histVert.spv ${CMAKE_CURRENT_BINARY_DIR}/shader/
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histVert.spv)
 
-#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv
- #       DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shader/histFrag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/shader/histFrag.spv ${CMAKE_CURRENT_BINARY_DIR}/shader/histFrag.spv
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histFrag.spv)

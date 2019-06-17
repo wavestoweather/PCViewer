@@ -169,6 +169,8 @@ static uint32_t					g_PcPlotWidth = 1280;
 static uint32_t					g_PcPlotHeight = 400;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
+static char						g_histogrammVertShaderPath[] = "shader/histFrag.spv";
+static char						g_histogrammFragmentShaderPath[] = "shader/histVert.spv";
 
 struct Attribute {
 	std::string name;
@@ -853,8 +855,8 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	//creating and uploading the indexbuffer data
 	uint16_t* indBuffer = new uint16_t[tl.indices.size()*2];
 	for (int i = 0; i < tl.indices.size(); i++) {
-		indBuffer[2 * i] = (uint16_t)tl.indices[i];
-		indBuffer[2 * i + 1] = tl.indices[i];
+		indBuffer[2 * i] = tl.indices[i] * pcAttributes.size();
+		indBuffer[2 * i + 1] = tl.indices[i] * pcAttributes.size();
 	}
 	void* d;
 	vkMapMemory(g_Device, dl.dlMem, sizeof(UniformBufferObject) + pcAttributes.size() * sizeof(HistogramUniformBuffer), sizeof(uint16_t) * tl.indices.size() * 2, 0, &d);

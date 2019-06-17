@@ -75,7 +75,7 @@ void VkUtil::createCommandBuffer(VkDevice device, VkCommandPool commandPool, VkC
 	check_vk_result(err);
 }
 
-void VkUtil::commitCommandBuffer(VkDevice device, VkQueue queue, VkCommandBuffer commandBuffer)
+void VkUtil::commitCommandBuffer( VkQueue queue, VkCommandBuffer commandBuffer)
 {
 	VkResult err;
 
