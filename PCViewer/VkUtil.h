@@ -38,8 +38,6 @@ public:
 	static void createDescriptorPool(VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, VkDescriptorPool* descriptorPool);
 	static void destroyDescriptorPool(VkDevice device, VkDescriptorPool pool);
 	static void createDescriptorSets(VkDevice device, const std::vector<VkDescriptorSetLayout>& layouts, VkDescriptorPool pool, VkDescriptorSet* descriptorSetArray);
-
-private:
 	static VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
 };
 

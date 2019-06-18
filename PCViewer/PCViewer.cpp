@@ -6,6 +6,8 @@
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "Color.h"
+#include "VkUtil.h"
+#include "PCUtil.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -157,6 +159,12 @@ static VkBuffer					g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotPipelineLayout = VK_NULL_HANDLE;	//contains the pipeline which is used to assign global shader variables
 static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphics pipeline for the pc
+//variables for the histogramm pipeline
+static VkPipelineLayout			g_PcPlotHistoPipelineLayout = VK_NULL_HANDLE;
+static VkPipeline				g_PcPlotHistoPipeline = VK_NULL_HANDLE;
+static VkRenderPass				g_PcPlotHistoRenderPass = VK_NULL_HANDLE;
+static VkDescriptorSetLayout	g_PcPlotHistoDescriptorSetLayout = VK_NULL_HANDLE;
+
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
 static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
 static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
@@ -207,6 +215,117 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugReportFlagsEXT flags, 
 	return VK_FALSE;
 }
 #endif // IMGUI_VULKAN_DEBUG_REPORT
+
+static void createPcPlotHistoPipeline() {
+
+	VkShaderModule shaderModules[5];
+	//the vertex shader for the pipeline
+	shaderModules[0] = VkUtil::createShaderModule( g_Device, PCUtil::readByteFile(g_histogrammVertShaderPath));
+	//the fragment shader for the pipeline
+	shaderModules[3] = VkUtil::createShaderModule(g_Device, PCUtil::readByteFile(g_histogrammFragmentShaderPath));
+
+
+	//Description for the incoming vertex attributes
+	VkVertexInputBindingDescription bindingDescripiton = {};		//describes how big the vertex data is and how to read the data
+	bindingDescripiton.binding = 0;
+	bindingDescripiton.stride = sizeof(Vertex);
+	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	VkVertexInputAttributeDescription attributeDescription = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
+	attributeDescription.binding = 0;
+	attributeDescription.location = 0;
+	attributeDescription.format = VK_FORMAT_R32_SFLOAT;
+	attributeDescription.offset = offsetof(Vertex, y);
+
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
+	vertexInputInfo.vertexAttributeDescriptionCount = 1;
+	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+
+	//vector with the dynamic states
+	std::vector<VkDynamicState> dynamicStates;
+
+	//Rasterizer Info
+	VkPipelineRasterizationStateCreateInfo rasterizer = {};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.lineWidth = 1.0f;
+	rasterizer.cullMode = VK_CULL_MODE_NONE;
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthBiasClamp = 0.0f;
+	rasterizer.depthBiasConstantFactor = 0.0f;
+	rasterizer.depthBiasSlopeFactor = 0.0f;
+
+	//multisampling info
+	VkPipelineMultisampleStateCreateInfo multisampling = {};
+	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.minSampleShading = 1.0f;
+	multisampling.pSampleMask = nullptr;
+	multisampling.alphaToCoverageEnable = VK_FALSE;
+	multisampling.alphaToOneEnable = VK_FALSE;
+
+	//blendInfo
+	VkUtil::BlendInfo blendInfo;
+	
+	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkPipelineColorBlendStateCreateInfo colorBlending = {};
+	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.logicOpEnable = VK_FALSE;
+	colorBlending.logicOp = VK_LOGIC_OP_COPY;
+	colorBlending.attachmentCount = 1;
+	colorBlending.pAttachments = &colorBlendAttachment;
+	colorBlending.blendConstants[0] = 0.0f;
+	colorBlending.blendConstants[1] = 0.0f;
+	colorBlending.blendConstants[2] = 0.0f;
+	colorBlending.blendConstants[3] = 0.0f;
+	
+	blendInfo.blendAttachment = colorBlendAttachment;
+	blendInfo.createInfo = colorBlending;
+
+	//creating the descriptor set layout
+	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
+	std::vector<VkDescriptorSetLayoutBinding> bindings;
+	bindings.push_back(uboLayoutBinding);
+
+	VkUtil::createDescriptorSetLayout(g_Device, bindings, &g_PcPlotHistoDescriptorSetLayout);
+	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+	descriptorSetLayouts.push_back(g_PcPlotHistoDescriptorSetLayout);
+
+	//create render pass
+	VkUtil::createPcPlotRenderPass(g_Device, VkUtil::Color, &g_PcPlotHistoRenderPass);
+
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotHistoRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
+
+	//destroying the shader modules after creation of the pipeline
+	vkDestroyShaderModule(g_Device, shaderModules[0], nullptr);
+	vkDestroyShaderModule(g_Device, shaderModules[3], nullptr);
+}
+
+static void destroyPcPlotHistoPipeline() {
+	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotHistoDescriptorSetLayout, nullptr);
+	vkDestroyPipelineLayout(g_Device, g_PcPlotHistoPipelineLayout, nullptr);
+	vkDestroyPipeline(g_Device, g_PcPlotHistoPipeline, nullptr);
+}
 
 static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 	VkPhysicalDeviceMemoryProperties memProps;
