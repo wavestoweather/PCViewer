@@ -5,7 +5,7 @@ layout(binding = 0) uniform UniformBufferObject{
 	float alpha;
 	uint amtOfVerts;
 	uint amtOfAttributes;
-	uint nothing;
+	float padding;
 	vec4 color;
 	vec4 vertexTransformations[20];		//x holds the x position, y and z hold the lower and the upper bound respectivley
 } ubo;
@@ -17,6 +17,8 @@ void main() {
 
 	uint i = gl_VertexIndex % ubo.amtOfAttributes;
 	float x = -1.0f + ubo.vertexTransformations[i].x * gap;
+	//addding the padding to x
+	x *= 1-ubo.padding;
 	
 	float y = inPosition - ubo.vertexTransformations[i].y;
 	y /= (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);

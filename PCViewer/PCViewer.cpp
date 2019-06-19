@@ -87,7 +87,7 @@ struct UniformBufferObject {
 	float alpha;
 	uint32_t amtOfVerts;
 	uint32_t amtOfAttributes;
-	uint32_t padding;
+	float padding;
 	Vec4 color;
 	Vec4 VertexTransormations[20];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
 };
@@ -172,6 +172,10 @@ static std::list<Buffer>		g_PcPlotVertexBuffers;
 static std::list<DataSet>		g_PcPlotDataSets;
 static std::list<DrawList>		g_PcPlotDrawLists;
 static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
+static VkBuffer					g_PcPlotHistogrammRect = VK_NULL_HANDLE;
+static VkBuffer					g_PcPlotHistogrammIndex = VK_NULL_HANDLE;
+
+//the indexbuffer memory also contains the Buffer for the histogramm rects
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotWidth = 1280;
 static uint32_t					g_PcPlotHeight = 400;
@@ -197,15 +201,20 @@ std::default_random_engine engine;
 std::uniform_int_distribution<int> distribution(0, 35);
 float alphaDrawLists = .5f;
 
+//variables for the histogramm
+float histogrammWidth = .1f;
+bool drawHistogramm = false;
+Vec4 histogrammBackgroundColor = { 0,0,0,0 };
 
 
-static void check_vk_result(VkResult err)
+
+/*static void check_vk_result(VkResult err)
 {
 	if (err == 0) return;
 	printf("VkResult %d\n", err);
 	if (err < 0)
 		abort();
-}
+}*/
 
 #ifdef IMGUI_VULKAN_DEBUG_REPORT
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
@@ -765,6 +774,14 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 
 	vkGetBufferMemoryRequirements(g_Device, g_PcPlotIndexBuffer, &memRequirements);
 
+	//creating the histogramm rect buffers
+	bufferInfo.size = sizeof(ImDrawVert) * 4 * pcAttributes.size();
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotHistogrammRect);
+	check_vk_result(err);
+
+
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -1280,6 +1297,13 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	ubo.amtOfVerts = amtOfIndeces;
 	ubo.amtOfAttributes = attributes.size();
 	ubo.color = { 1,1,1,1 };
+	if (drawHistogramm) {
+		ubo.padding = histogrammWidth / 2;
+	}
+	else {
+		ubo.padding = 0;
+	}
+	
 	int c = 0;
 	
 	for (int i : attributeOrder) {
@@ -1333,6 +1357,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
 		}
 	}
+
+	//drawing the histogramm
 
 	//when cleaning up the command buffer all data is drawn
 	cleanupPcPlotCommandBuffer();
@@ -2337,6 +2363,18 @@ int main(int, char**)
 			ImGui::Text("Settings");
 			ImGui::Separator();
 
+			ImGui::Text("Histogramm Settings:");
+			if (ImGui::Checkbox("Draw Histogramm", &drawHistogramm)) {
+				pcPlotRender = true;
+			}
+			if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
+				pcPlotRender = true;
+			}
+			if (ImGui::ColorEdit4("Background Color", &histogrammBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+				pcPlotRender = true;
+			}
+			ImGui::Separator();
+
 			for (int i = 0; i < pcAttributes.size(); i++) {
 				ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
 			}
@@ -2348,7 +2386,7 @@ int main(int, char**)
 			//Opening a new Dataset into the Viewer
 			if (ImGui::Button("Open")) {
 				openDataset(pcFilePath);
-			}	
+			}
 		}
 		ImGui::End();
 
