@@ -22,8 +22,8 @@ public:
 	};
 
 	enum PassType {
-		Color,
-		Depth
+		PASS_TYPE_COLOR_OFFLINE,
+		PASS_TYPE_DEPTH_OFFLINE
 	};
 
 	static void createMipMaps(VkCommandBuffer commandBuffer, VkImage image, uint32_t mipLevels, uint32_t imageWidth, uint32_t imageHeight, VkImageLayout oldLayout, VkAccessFlags oldAccess, VkPipelineStageFlags oldPipelineStage);

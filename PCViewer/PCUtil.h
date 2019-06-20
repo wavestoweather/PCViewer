@@ -1,8 +1,10 @@
 #ifndef PCUtil_H
 #define PCUtil_H
 
-#include <istream>
+#include <fstream>
+#include <string>
 #include <vector>
+#include <iostream>
 
 class PCUtil {
 public:

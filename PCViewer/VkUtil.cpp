@@ -285,7 +285,7 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 	VkAttachmentDescription attachment = {};
 
 	switch (passType) {
-	case VkUtil::Color:
+	case VkUtil::PASS_TYPE_COLOR_OFFLINE:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -294,6 +294,7 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttachments.push_back(attachment);
 
 		colorAttachmentRef.attachment = 0;
 		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -303,7 +304,7 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 		subpass.pColorAttachments = &colorAttachmentRef;
 
 		break;
-	case VkUtil::Depth:
+	case VkUtil::PASS_TYPE_DEPTH_OFFLINE:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;

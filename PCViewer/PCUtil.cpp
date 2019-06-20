@@ -1,12 +1,12 @@
 #include "PCUtil.h"
 
-static std::vector<char> PCUtil::readByteFile(const std::string& filename)
+std::vector<char> PCUtil::readByteFile(const std::string& filename)
 {
 	std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
 	if (!file.is_open()) {
-		std::cout << "failed to open file!" << std::endl;
-		return NULL;
+		std::cerr << "failed to open file!" << std::endl;
+		exit(-1);
 	}
 
 	size_t fileSize = (size_t)file.tellg();

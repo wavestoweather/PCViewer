@@ -72,7 +72,7 @@ static VkPipelineCreateFlags    g_PipelineCreateFlags = 0x00;
 static VkDescriptorSetLayout    g_DescriptorSetLayout = VK_NULL_HANDLE;
 static VkPipelineLayout         g_PipelineLayout = VK_NULL_HANDLE;
 static VkDescriptorSet          g_DescriptorSet = VK_NULL_HANDLE;
-static VkPipeline               g_Pipeline = VK_NULL_HANDLE;
+extern VkPipeline               g_Pipeline = VK_NULL_HANDLE;
 
 // Font data
 static VkSampler                g_FontSampler = VK_NULL_HANDLE;
