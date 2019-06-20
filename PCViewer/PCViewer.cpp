@@ -118,6 +118,7 @@ struct DrawList {
 	VkBuffer histogramIndBuffer;
 	std::vector<VkBuffer> histogramUbos;
 	std::vector<uint32_t> histogramUbosOffsets;
+	std::vector<VkDescriptorSet> histogrammDescSets;
 	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
 	std::vector<int> indices;
@@ -193,6 +194,7 @@ static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
 static char						g_histFragPath[] = "shader/histFrag.spv";
 static char						g_histVertPath[] = "shader/histVert.spv";
+static char						g_histGeoPath[] = "shader/histGeo.spv";
 static char						g_rectFragPath[] = "shader/rectFrag.spv";
 static char						g_rectVertPath[] = "shader/rectVert.spv";
 
@@ -243,6 +245,9 @@ static void createPcPlotHistoPipeline() {
 	//the vertex shader for the pipeline
 	std::vector<char> vertexBytes = PCUtil::readByteFile(g_histVertPath);
 	shaderModules[0] = VkUtil::createShaderModule( g_Device, vertexBytes);
+	//the geometry shader for the pipeline
+	std::vector<char> geometryBytes = PCUtil::readByteFile(g_histGeoPath);
+	shaderModules[3] = VkUtil::createShaderModule(g_Device, geometryBytes);
 	//the fragment shader for the pipeline
 	std::vector<char> fragmentBytes = PCUtil::readByteFile(g_histFragPath);
 	shaderModules[4] = VkUtil::createShaderModule( g_Device, fragmentBytes);
@@ -339,6 +344,7 @@ static void createPcPlotHistoPipeline() {
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotHistoRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
 
+	shaderModules[3] = nullptr;
 	//----------------------------------------------------------------------------------------------
 	//creating the pipeline for the rect rendering
 	//----------------------------------------------------------------------------------------------
@@ -465,8 +471,8 @@ static std::vector<char> readFile(const std::string& filename) {
 	std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
 	if (!file.is_open()) {
-		std::cout << "failed to open file!" << std::endl;
-		__debugbreak();
+		std::cerr << "failed to open file!" << std::endl;
+		exit(-1);
 	}
 
 	size_t fileSize = (size_t)file.tellg();
@@ -1051,6 +1057,20 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	}
 	dl.histogramUbosOffsets.pop_back();
 
+	//creating the Descriptor sets for the histogramm uniform buffers
+	std::vector<VkDescriptorSetLayout> layouts(dl.histogramUbos.size());
+	for (auto& l : layouts) {
+		l = g_PcPlotHistoDescriptorSetLayout;
+	}
+
+	dl.histogrammDescSets = std::vector<VkDescriptorSet>(layouts.size());
+	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, dl.histogrammDescSets.data());
+
+	//updating the descriptor sets
+	for (int i = 0; i < layouts.size(); i++) {
+		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), dl.histogrammDescSets[i]);
+	}
+
 	//Binding the histogram index buffer
 	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
 
@@ -1061,7 +1081,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 		indBuffer[2 * i + 1] = tl.indices[i] * pcAttributes.size();
 	}
 	void* d;
-	vkMapMemory(g_Device, dl.dlMem, sizeof(UniformBufferObject) + pcAttributes.size() * sizeof(HistogramUniformBuffer), sizeof(uint16_t) * tl.indices.size() * 2, 0, &d);
+	vkMapMemory(g_Device, dl.dlMem, offset, tl.indices.size() * sizeof(uint16_t) * 2, 0, &d);
 	memcpy(d, indBuffer, tl.indices.size() * sizeof(uint16_t) * 2);
 	vkUnmapMemory(g_Device, dl.dlMem);
 	delete[] indBuffer;
@@ -1494,6 +1514,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 			//iterating through the Attributes to render every histogramm
 			float x = -1.0f;
+			int count = 0;
 			for (int i = 0; i < pcAttributes.size(); i++) {
 				//setting the missing parameters in the hbuo
 				hubo.maxVal = pcAttributes[i].max;
@@ -1501,7 +1522,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				if (!pcAttributeEnabled[i])
 					hubo.x = -2;
 				else
-					hubo.x = -1 + i * gap + xOffset;
+					hubo.x = -1 + count++ * gap + xOffset;
 
 				//uploading the ubo
 				void* d;
@@ -1510,6 +1531,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				vkUnmapMemory(g_Device, drawList->dlMem);
 
 				//binding the descriptor set
+				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
+
+				//making the draw call
+				vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->indices.size() * 2, 1, 0, pcAttrOrd[i], 0);
 			}
 
 			//increasing the xOffset for the next drawlist
@@ -1583,6 +1608,17 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		VkPhysicalDevice* gpus = (VkPhysicalDevice*)malloc(sizeof(VkPhysicalDevice) * gpu_count);
 		err = vkEnumeratePhysicalDevices(g_Instance, &gpu_count, gpus);
 		check_vk_result(err);
+
+#ifdef _DEBUG
+		std::cout << "Amount of Gpus: " << gpu_count << std::endl;
+#endif
+
+		VkPhysicalDeviceFeatures feat;
+		vkGetPhysicalDeviceFeatures(gpus[0], &feat);
+
+#ifdef _DEBUG
+		std::cout << "Gometry shader usable:" << feat.geometryShader << std::endl;
+#endif
 
 		// If a number >1 of GPUs got reported, you should find the best fit GPU for your purpose
 		// e.g. VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU if available, or with the greatest memory available, etc.

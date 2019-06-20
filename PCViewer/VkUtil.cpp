@@ -406,3 +406,22 @@ void VkUtil::createDescriptorSets(VkDevice device,const std::vector<VkDescriptor
 	err = vkAllocateDescriptorSets(device, &allocInfo, descriptorSetArray);
 	check_vk_result(err);
 }
+
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, VkDescriptorSet descriptorSet)
+{
+	VkDescriptorBufferInfo desBufferInfo = {};
+	desBufferInfo.buffer = buffer;
+	desBufferInfo.offset = 0;
+	desBufferInfo.range = size;
+
+	VkWriteDescriptorSet descriptorWrite = {};
+	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstSet = descriptorSet;
+	descriptorWrite.dstBinding = 0;
+	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	descriptorWrite.descriptorCount = 1;
+	descriptorWrite.pBufferInfo = &desBufferInfo;
+
+	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+}
