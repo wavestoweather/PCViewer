@@ -146,7 +146,7 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+	inputAssembly.topology = topology;
 	inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 	VkViewport viewport = {};					//description for our viewport for transformation operation after rasterization

@@ -188,8 +188,8 @@ static uint32_t					g_PcPlotWidth = 1280;
 static uint32_t					g_PcPlotHeight = 400;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
-static char						g_histogrammVertShaderPath[] = "shader/histFrag.spv";
-static char						g_histogrammFragmentShaderPath[] = "shader/histVert.spv";
+static char						g_histFragPath[] = "shader/histFrag.spv";
+static char						g_histVertPath[] = "shader/histVert.spv";
 static char						g_rectFragPath[] = "shader/rectFrag.spv";
 static char						g_rectVertPath[] = "shader/rectVert.spv";
 
@@ -236,11 +236,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugReportFlagsEXT flags, 
 
 static void createPcPlotHistoPipeline() {
 
-	VkShaderModule shaderModules[5];
+	VkShaderModule shaderModules[5] = {};
 	//the vertex shader for the pipeline
-	shaderModules[0] = VkUtil::createShaderModule( g_Device, PCUtil::readByteFile(g_histogrammVertShaderPath));
+	std::vector<char> vertexBytes = PCUtil::readByteFile(g_histVertPath);
+	shaderModules[0] = VkUtil::createShaderModule( g_Device, vertexBytes);
 	//the fragment shader for the pipeline
-	shaderModules[3] = VkUtil::createShaderModule( g_Device, PCUtil::readByteFile(g_histogrammFragmentShaderPath));
+	std::vector<char> fragmentBytes = PCUtil::readByteFile(g_histFragPath);
+	shaderModules[4] = VkUtil::createShaderModule( g_Device, fragmentBytes);
 
 
 	//Description for the incoming vertex attributes
@@ -334,15 +336,13 @@ static void createPcPlotHistoPipeline() {
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotHistoRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
 
-	//destroying the shader modules after creation of the pipeline
-	vkDestroyShaderModule(g_Device, shaderModules[0], nullptr);
-	vkDestroyShaderModule(g_Device, shaderModules[3], nullptr);
-
 	//----------------------------------------------------------------------------------------------
 	//creating the pipeline for the rect rendering
 	//----------------------------------------------------------------------------------------------
-	shaderModules[0] = VkUtil::createShaderModule(g_Device, PCUtil::readByteFile(g_rectVertPath));
-	shaderModules[3] = VkUtil::createShaderModule(g_Device, PCUtil::readByteFile(g_rectFragPath));
+	vertexBytes = PCUtil::readByteFile(g_rectVertPath);
+	shaderModules[0] = VkUtil::createShaderModule(g_Device, vertexBytes);
+	fragmentBytes = PCUtil::readByteFile(g_rectFragPath);
+	shaderModules[4] = VkUtil::createShaderModule(g_Device, fragmentBytes);
 
 	//describes how big the vertex data is and how to read the data
 	bindingDescripiton.binding = 0;
@@ -352,7 +352,7 @@ static void createPcPlotHistoPipeline() {
 	VkVertexInputAttributeDescription attributeDescriptions[2];	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
 	attributeDescriptions[0].binding = 0;
 	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	attributeDescriptions[0].offset = 0;
 
 	attributeDescriptions[1].binding = 0;
@@ -370,10 +370,6 @@ static void createPcPlotHistoPipeline() {
 	descriptorSetLayouts.clear();
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotHistoRenderPass, &g_PcPlotRectPipelineLayout, &g_PcPlotRectPipeline);
-
-	//destroying the shader modules
-	vkDestroyShaderModule(g_Device, shaderModules[0], nullptr);
-	vkDestroyShaderModule(g_Device, shaderModules[3], nullptr);
 }
 
 static void cleanupPcPlotHistoPipeline() {
@@ -871,50 +867,30 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	//binding the histogramm index buffer
 	vkBindBufferMemory(g_Device, g_PcPlotHistogrammIndex, g_PcPlotIndexBufferMemory, offsets[1]);
 
-	/*
-	//creating the uniform buffer
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(UniformBufferObject);
-	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotDescriptorBuffer);
-	check_vk_result(err);
-
-	vkGetBufferMemoryRequirements(g_Device, g_PcPlotDescriptorBuffer, &memRequirements);
-
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotDescriptorBufferMemory);
-	check_vk_result(err);
-
-	vkBindBufferMemory(g_Device, g_PcPlotDescriptorBuffer, g_PcPlotDescriptorBufferMemory, 0);
-
-	//specifying the uniform buffer location
-	VkDescriptorBufferInfo desBufferInfo = {};
-	desBufferInfo.buffer = g_PcPlotDescriptorBuffer;
-	desBufferInfo.offset = 0;
-	desBufferInfo.range = sizeof(UniformBufferObject);
-
-	VkWriteDescriptorSet descriptorWrite = {};
-	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrite.dstSet = g_PcPlotDescriptorSet;
-	descriptorWrite.dstBinding = 0;
-	descriptorWrite.dstArrayElement = 0;
-	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	descriptorWrite.descriptorCount = 1;
-	descriptorWrite.pBufferInfo = &desBufferInfo;
-
-	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
-
-	//ending the command buffer and waiting for it
-	cleanupPcPlotCommandBuffer();
-
-	err = vkDeviceWaitIdle(g_Device);
-	check_vk_result(err);
-	*/
+	//filling the histogramm index buffer
+	//Vertex Arrangment:
+	//0		3
+	//|		|
+	//1-----2
+	uint16_t* indexBuffer = new uint16_t[pcAttributes.size() * 6];
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		indexBuffer[i * 6] = i * 4;
+		indexBuffer[i * 6 + 1] = i * 4 + 2;
+		indexBuffer[i * 6 + 2] = i * 4 + 1;
+		indexBuffer[i * 6 + 3] = i * 4;
+		indexBuffer[i * 6 + 4] = i * 4 + 3;
+		indexBuffer[i * 6 + 5] = i * 4 + 2;
+	}
+#ifdef _DEBUG
+	for (int i = 0; i < 60; i++) {
+		std::cout << indexBuffer[i] << std::endl;
+	}
+#endif
+	int offset = offsets[1];
+	void* ind;
+	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, offsets[1], sizeof(uint16_t) * 6 * pcAttributes.size(), 0, &ind);
+	memcpy(ind, indexBuffer, sizeof(uint16_t) * 6 * pcAttributes.size());
+	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 }
 
 static void cleanupPcPlotVertexBuffer() {
@@ -1449,32 +1425,14 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	}
 
 	if (drawHistogramm) {
-		//ending the old renderpass and creating a new renderpass to be able to render the boxes
-		vkCmdEndRenderPass(g_PcPlotCommandBuffer);
-
-		VkRenderPassBeginInfo renderPassInfo = {};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = g_PcPlotRenderPass;
-		renderPassInfo.framebuffer = g_PcPlotFramebuffer;
-		renderPassInfo.renderArea.offset = { 0,0 };
-		renderPassInfo.renderArea.extent = { g_PcPlotWidth,g_PcPlotHeight };
-
-		VkClearValue clearColor = { 0.0f,0.0f,0.0f,0.0f };
-
-		renderPassInfo.clearValueCount = 1;
-		renderPassInfo.pClearValues = &clearColor;
-
-		vkCmdBeginRenderPass(g_PcPlotCommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
 		//drawing the histogramm background
-		ImDrawVert* rects = new ImDrawVert[pcAttributes.size() * 4];
+		RectVertex* rects = new RectVertex[pcAttributes.size() * 4];
 		float x = -1;
 		for (int i = 0; i < pcAttributes.size(); i++) {
 			if (pcAttributeEnabled[i]) {
-				ImDrawVert vert;
+				RectVertex vert;
 				vert.pos = { x,1 };
-				vert.uv = { 0,0 };
-				vert.col = ImGui::ColorConvertFloat4ToU32({ histogrammBackgroundColor.x,histogrammBackgroundColor.y ,histogrammBackgroundColor.z ,histogrammBackgroundColor.w });
+				vert.col = histogrammBackgroundColor;
 				rects[i * 4] = vert;
 				vert.pos.y = -1;
 				rects[i * 4 + 1] = vert;
@@ -1485,32 +1443,23 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				x += (2 - histogrammWidth) / amtOfIndeces;
 			}
 			else {
-				ImDrawVert vert;
+				RectVertex vert;
 				vert.pos = { -2,-2 };
-				vert.uv = { 0,0 };
-				vert.col = ImGui::ColorConvertFloat4ToU32({ histogrammBackgroundColor.x,histogrammBackgroundColor.y ,histogrammBackgroundColor.z ,histogrammBackgroundColor.w });
+				vert.col = histogrammBackgroundColor;
 				rects[i * 4] = vert;
 				rects[i * 4 + 1] = vert;
 				rects[i * 4 + 2] = vert;
 				rects[i * 4 + 3] = vert;
 			}
 		}
+		//uploading the vertexbuffer
+		void* d;
+		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, sizeof(uint16_t)* pcAttributes.size(), sizeof(RectVertex)* pcAttributes.size() * 4, 0, &d);
+		memcpy(d, rects, sizeof(RectVertex)* pcAttributes.size() * 4);
+		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 
-		//setting the dynamic states
-		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_Pipeline);
-		VkRect2D scissor;
-		scissor.extent = { g_PcPlotWidth,g_PcPlotHeight };
-		scissor.offset = { 0,0 };
-		vkCmdSetScissor(g_PcPlotCommandBuffer, 0, 1, &scissor);
-
-		VkViewport viewport;
-		viewport.height = g_PcPlotHeight;
-		viewport.width = g_PcPlotWidth;
-		viewport.maxDepth = 1;
-		viewport.minDepth = 0;
-		viewport.x = 0;
-		viewport.y = 0;
-		vkCmdSetViewport(g_PcPlotCommandBuffer, 0, 1, &viewport);
+		//binding the graphics pipeline
+		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotRectPipeline);
 
 		//binding the buffers and drawing the data
 		vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotHistogrammIndex, 0, VK_INDEX_TYPE_UINT16);
