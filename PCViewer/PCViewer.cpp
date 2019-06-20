@@ -178,11 +178,13 @@ static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
 static std::list<Buffer>		g_PcPlotVertexBuffers;
 static std::list<DataSet>		g_PcPlotDataSets;
 static std::list<DrawList>		g_PcPlotDrawLists;
-static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotHistogrammRect = VK_NULL_HANDLE;
+static uint32_t					g_PcPlotHistogrammRectOffset = 0;
 static VkBuffer					g_PcPlotHistogrammIndex = VK_NULL_HANDLE;
+static uint32_t					g_PcPlotHistogrammIndexOffset = 0;
 
-//the indexbuffer memory also contains the Buffer for the histogramm rects
+//Indexbuffermemory also contaings the histogramm rect buffer and histogramm index buffer
+static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotWidth = 1280;
 static uint32_t					g_PcPlotHeight = 400;
@@ -213,7 +215,7 @@ float alphaDrawLists = .5f;
 //variables for the histogramm
 float histogrammWidth = .1f;
 bool drawHistogramm = false;
-Vec4 histogrammBackgroundColor = { 0,0,0,0 };
+Vec4 histogrammBackgroundColor = { .5f,.5f,.5,.5f };
 
 
 
@@ -823,15 +825,14 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	vkGetBufferMemoryRequirements(g_Device, g_PcPlotIndexBuffer, &memRequirements);
 
 	int memTypeBits = 0;
-	int offsets[2];
 
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
 	memTypeBits = memRequirements.memoryTypeBits;
-	offsets[0] = allocInfo.allocationSize;
+	g_PcPlotHistogrammRectOffset = allocInfo.allocationSize;
 	
 	//creating the histogramm rect buffers
-	bufferInfo.size = sizeof(ImDrawVert) * 4 * pcAttributes.size();
+	bufferInfo.size = sizeof(RectVertex) * 4 * pcAttributes.size();
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotHistogrammRect);
@@ -840,7 +841,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	vkGetBufferMemoryRequirements(g_Device, g_PcPlotHistogrammRect, &memRequirements);
 	allocInfo.allocationSize += memRequirements.size;
 	memTypeBits |= memRequirements.memoryTypeBits;
-	offsets[1] = allocInfo.allocationSize;
+	g_PcPlotHistogrammIndexOffset = allocInfo.allocationSize;
 
 	//creating the histogram index buffer
 	bufferInfo.size = sizeof(uint16_t) * 6 * pcAttributes.size();
@@ -862,10 +863,10 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	vkBindBufferMemory(g_Device, g_PcPlotIndexBuffer, g_PcPlotIndexBufferMemory, 0);
 
 	//binding the histogramm rect buffer
-	vkBindBufferMemory(g_Device, g_PcPlotHistogrammRect, g_PcPlotIndexBufferMemory, offsets[0]);
+	vkBindBufferMemory(g_Device, g_PcPlotHistogrammRect, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammRectOffset);
 
 	//binding the histogramm index buffer
-	vkBindBufferMemory(g_Device, g_PcPlotHistogrammIndex, g_PcPlotIndexBufferMemory, offsets[1]);
+	vkBindBufferMemory(g_Device, g_PcPlotHistogrammIndex, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammIndexOffset);
 
 	//filling the histogramm index buffer
 	//Vertex Arrangment:
@@ -881,14 +882,8 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 		indexBuffer[i * 6 + 4] = i * 4 + 3;
 		indexBuffer[i * 6 + 5] = i * 4 + 2;
 	}
-#ifdef _DEBUG
-	for (int i = 0; i < 60; i++) {
-		std::cout << indexBuffer[i] << std::endl;
-	}
-#endif
-	int offset = offsets[1];
 	void* ind;
-	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, offsets[1], sizeof(uint16_t) * 6 * pcAttributes.size(), 0, &ind);
+	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammIndexOffset, sizeof(uint16_t) * 6 * pcAttributes.size(), 0, &ind);
 	memcpy(ind, indexBuffer, sizeof(uint16_t) * 6 * pcAttributes.size());
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 }
@@ -1431,7 +1426,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (int i = 0; i < pcAttributes.size(); i++) {
 			if (pcAttributeEnabled[i]) {
 				RectVertex vert;
-				vert.pos = { x,1 };
+				vert.pos = { x,1,0,0 };
 				vert.col = histogrammBackgroundColor;
 				rects[i * 4] = vert;
 				vert.pos.y = -1;
@@ -1440,11 +1435,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				rects[i * 4 + 2] = vert;
 				vert.pos.y = 1;
 				rects[i * 4 + 3] = vert;
-				x += (2 - histogrammWidth) / amtOfIndeces;
+				x += (2 - histogrammWidth) / (amtOfIndeces - 1);
 			}
 			else {
 				RectVertex vert;
-				vert.pos = { -2,-2 };
+				vert.pos = { -2,-2,0,0 };
 				vert.col = histogrammBackgroundColor;
 				rects[i * 4] = vert;
 				rects[i * 4 + 1] = vert;
@@ -1454,7 +1449,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 		//uploading the vertexbuffer
 		void* d;
-		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, sizeof(uint16_t)* pcAttributes.size(), sizeof(RectVertex)* pcAttributes.size() * 4, 0, &d);
+		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammRectOffset, sizeof(RectVertex)* pcAttributes.size() * 4, 0, &d);
 		memcpy(d, rects, sizeof(RectVertex)* pcAttributes.size() * 4);
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 

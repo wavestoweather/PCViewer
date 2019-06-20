@@ -19,7 +19,7 @@ public:
 	struct BlendInfo {
 		VkPipelineColorBlendAttachmentState blendAttachment;
 		VkPipelineColorBlendStateCreateInfo createInfo;
-	};
+	}; 
 
 	enum PassType {
 		PASS_TYPE_COLOR_OFFLINE,
