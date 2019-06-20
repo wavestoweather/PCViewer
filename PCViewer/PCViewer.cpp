@@ -117,6 +117,7 @@ struct DrawList {
 	VkBuffer ubo;
 	VkBuffer histogramIndBuffer;
 	std::vector<VkBuffer> histogramUbos;
+	std::vector<uint32_t> histogramUbosOffsets;
 	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
 	std::vector<int> indices;
@@ -1041,11 +1042,14 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	//Binding histogram uniform buffers
 	uint32_t offset = sizeof(UniformBufferObject);
 	offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
+	dl.histogramUbosOffsets.push_back(offset);
 	for (int i = 0; i < dl.histogramUbos.size(); i++) {
 		vkBindBufferMemory(g_Device, dl.histogramUbos[i], dl.dlMem, offset);
 		offset += sizeof(HistogramUniformBuffer);
 		offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
+		dl.histogramUbosOffsets.push_back(offset);
 	}
+	dl.histogramUbosOffsets.pop_back();
 
 	//Binding the histogram index buffer
 	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
@@ -1397,6 +1401,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	if(pcAttributes.size())
 		vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+	//counting the amount of active drawLists for histogramm rendering
+	int activeDrawLists = 0;
+
 	//now drawing for every draw list in g_pcPlotdrawlists
 	for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList;++drawList) {
 		if (!drawList->show)
@@ -1417,6 +1424,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (int i :drawList->indices) {
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
 		}
+		activeDrawLists++;
 	}
 
 	if (drawHistogramm) {
@@ -1461,6 +1469,52 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotHistogrammRect, offsets);
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, pcAttributes.size() * 6, 1, 0, 0, 0);
+
+		//starting to draw the histogramm lines
+		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipeline);
+
+		//the offset which has to be added to draw the histogramms next to one another
+		HistogramUniformBuffer hubo = {};
+		float gap = (1 - histogrammWidth) / (amtOfIndeces - 1);
+		float xOffset = .0f;
+		float width = histogrammWidth / activeDrawLists;
+		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList) {
+			//ignore drawLists which are disabled
+			if (!drawList->show)
+				continue;
+
+			//setting the color in the hubo to copy
+			hubo.color = drawList->color;
+			hubo.width = width;
+
+			//binding the correct vertex and indexbuffer
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
+			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->histogramIndBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+			//iterating through the Attributes to render every histogramm
+			float x = -1.0f;
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				//setting the missing parameters in the hbuo
+				hubo.maxVal = pcAttributes[i].max;
+				hubo.minVal = pcAttributes[i].min;
+				if (!pcAttributeEnabled[i])
+					hubo.x = -2;
+				else
+					hubo.x = -1 + i * gap + xOffset;
+
+				//uploading the ubo
+				void* d;
+				vkMapMemory(g_Device, drawList->dlMem, drawList->histogramUbosOffsets[i], sizeof(HistogramUniformBuffer), 0, &d);
+				memcpy(d, &hubo, sizeof(HistogramUniformBuffer));
+				vkUnmapMemory(g_Device, drawList->dlMem);
+
+				//binding the descriptor set
+			}
+
+			//increasing the xOffset for the next drawlist
+			xOffset += width;
+		}
 	}
 
 	//when cleaning up the command buffer all data is drawn
