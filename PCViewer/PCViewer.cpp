@@ -1027,7 +1027,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	}
 
 	//IndexBuffer for Histogramms
-	bufferInfo.size = 2 * tl.indices.size() * sizeof(uint16_t);
+	bufferInfo.size = 2 * tl.indices.size() * sizeof(uint32_t);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.histogramIndBuffer);
 	check_vk_result(err);
@@ -1075,14 +1075,14 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
 
 	//creating and uploading the indexbuffer data
-	uint16_t* indBuffer = new uint16_t[tl.indices.size()*2];
+	uint32_t* indBuffer = new uint32_t[tl.indices.size()*2];
 	for (int i = 0; i < tl.indices.size(); i++) {
 		indBuffer[2 * i] = tl.indices[i] * pcAttributes.size();
 		indBuffer[2 * i + 1] = tl.indices[i] * pcAttributes.size();
 	}
 	void* d;
-	vkMapMemory(g_Device, dl.dlMem, offset, tl.indices.size() * sizeof(uint16_t) * 2, 0, &d);
-	memcpy(d, indBuffer, tl.indices.size() * sizeof(uint16_t) * 2);
+	vkMapMemory(g_Device, dl.dlMem, offset, tl.indices.size() * sizeof(uint32_t) * 2, 0, &d);
+	memcpy(d, indBuffer, tl.indices.size() * sizeof(uint32_t) * 2);
 	vkUnmapMemory(g_Device, dl.dlMem);
 	delete[] indBuffer;
 
@@ -1495,10 +1495,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 		//the offset which has to be added to draw the histogramms next to one another
 		HistogramUniformBuffer hubo = {};
-		float gap = (1 - histogrammWidth) / (amtOfIndeces - 1);
+		float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
 		float xOffset = .0f;
 		float width = histogrammWidth / activeDrawLists;
-		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList) {
+		for (auto drawList = g_PcPlotDrawLists.begin(); g_PcPlotDrawLists.end() != drawList; ++drawList) {
 			//ignore drawLists which are disabled
 			if (!drawList->show)
 				continue;
@@ -1510,7 +1510,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			//binding the correct vertex and indexbuffer
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
-			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->histogramIndBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->histogramIndBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 			//iterating through the Attributes to render every histogramm
 			float x = -1.0f;
