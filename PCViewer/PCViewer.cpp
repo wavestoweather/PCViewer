@@ -20,7 +20,7 @@
 #include <limits>
 #include <list>
 #include <algorithm>
-#include <time.h>
+#include <chrono>
 #include <random>
 
 //memory leak detection
@@ -43,6 +43,8 @@
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
+//enable this define to print the time needed to render the pc Plot
+#define PRINTRENDERTIME
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -112,7 +114,7 @@ struct DrawList {
 	Vec4 color;
 	Vec4 prefColor;
 	bool show;
-	bool prefShow;
+	bool showHistogramm;
 	VkBuffer buffer;
 	VkBuffer ubo;
 	VkBuffer histogramIndBuffer;
@@ -1124,7 +1126,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	dl.color = { (float)col.r,(float)col.g,(float)col.b,alphaDrawLists };
 	dl.prefColor = dl.color;
 	dl.show = true;
-	dl.prefShow = true;
+	dl.showHistogramm = true;
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<int>(tl.indices);
 	g_PcPlotDrawLists.push_back(dl);
@@ -1297,8 +1299,10 @@ static void cleanupPcPlotCommandBuffer() {
 }
 
 static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const ImGui_ImplVulkanH_Window* wd) {
-	//if (g_PcPlotDrawLists.empty())
-	//	return;
+#ifdef PRINTRENDERTIME
+	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+	uint32_t amtOfLines = 0;
+#endif
 
 	VkResult err;
 
@@ -1363,8 +1367,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	}
 
 #ifdef _DEBUG
-	if (j != amtOfIndeces)
-		__debugbreak();
+	if (j != amtOfIndeces) {
+		std::cerr << "There is a severe problem with the indices!" << std::endl;
+		exit(-1);
+	}
 #endif
 
 	void* d;
@@ -1401,8 +1407,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	}
 
 #ifdef _DEBUG
-	if (c != amtOfIndeces)
-		__debugbreak();
+	if (c != amtOfIndeces) {
+		std::cerr << "There is a severe problem with the indices!" << std::endl;
+		exit(-1);
+	}
 #endif
 
 	//copying the uniform buffer
@@ -1444,7 +1452,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (int i :drawList->indices) {
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
 		}
-		activeDrawLists++;
+#ifdef PRINTRENDERTIME
+		amtOfLines += drawList->indices.size();
+#endif
 	}
 
 	if (drawHistogramm) {
@@ -1477,8 +1487,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 		//uploading the vertexbuffer
 		void* d;
-		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammRectOffset, sizeof(RectVertex)* pcAttributes.size() * 4, 0, &d);
-		memcpy(d, rects, sizeof(RectVertex)* pcAttributes.size() * 4);
+		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammRectOffset, sizeof(RectVertex) * pcAttributes.size() * 4, 0, &d);
+		memcpy(d, rects, sizeof(RectVertex) * pcAttributes.size() * 4);
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 
 		//binding the graphics pipeline
@@ -1494,51 +1504,58 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipeline);
 
 		//the offset which has to be added to draw the histogramms next to one another
-		HistogramUniformBuffer hubo = {};
-		float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
-		float xOffset = .0f;
-		float width = histogrammWidth / activeDrawLists;
-		for (auto drawList = g_PcPlotDrawLists.begin(); g_PcPlotDrawLists.end() != drawList; ++drawList) {
-			//ignore drawLists which are disabled
-			if (!drawList->show)
-				continue;
+		uint32_t amtOfHisto = 0;
+		for (auto dl : g_PcPlotDrawLists) {
+			if (dl.showHistogramm)
+				amtOfHisto++;
+		}
+		if (amtOfHisto != 0) {
+			HistogramUniformBuffer hubo = {};
+			float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
+			float xOffset = .0f;
+			float width = histogrammWidth / amtOfHisto;
+			for (auto drawList = g_PcPlotDrawLists.begin(); g_PcPlotDrawLists.end() != drawList; ++drawList) {
+				//ignore drawLists which are disabled
+				if (!drawList->showHistogramm)
+					continue;
 
-			//setting the color in the hubo to copy
-			hubo.color = drawList->color;
-			hubo.width = width;
+				//setting the color in the hubo to copy
+				hubo.color = drawList->color;
+				hubo.width = width;
 
-			//binding the correct vertex and indexbuffer
-			VkDeviceSize offsets[] = { 0 };
-			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
-			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->histogramIndBuffer, 0, VK_INDEX_TYPE_UINT32);
+				//binding the correct vertex and indexbuffer
+				VkDeviceSize offsets[] = { 0 };
+				vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
+				vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->histogramIndBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-			//iterating through the Attributes to render every histogramm
-			float x = -1.0f;
-			int count = 0;
-			for (int i = 0; i < pcAttributes.size(); i++) {
-				//setting the missing parameters in the hbuo
-				hubo.maxVal = pcAttributes[i].max;
-				hubo.minVal = pcAttributes[i].min;
-				if (!pcAttributeEnabled[i])
-					hubo.x = -2;
-				else
-					hubo.x = -1 + count++ * gap + xOffset;
+				//iterating through the Attributes to render every histogramm
+				float x = -1.0f;
+				int count = 0;
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					//setting the missing parameters in the hbuo
+					hubo.maxVal = pcAttributes[i].max;
+					hubo.minVal = pcAttributes[i].min;
+					if (!pcAttributeEnabled[i])
+						hubo.x = -2;
+					else
+						hubo.x = -1 + count++ * gap + xOffset;
 
-				//uploading the ubo
-				void* d;
-				vkMapMemory(g_Device, drawList->dlMem, drawList->histogramUbosOffsets[i], sizeof(HistogramUniformBuffer), 0, &d);
-				memcpy(d, &hubo, sizeof(HistogramUniformBuffer));
-				vkUnmapMemory(g_Device, drawList->dlMem);
+					//uploading the ubo
+					void* d;
+					vkMapMemory(g_Device, drawList->dlMem, drawList->histogramUbosOffsets[i], sizeof(HistogramUniformBuffer), 0, &d);
+					memcpy(d, &hubo, sizeof(HistogramUniformBuffer));
+					vkUnmapMemory(g_Device, drawList->dlMem);
 
-				//binding the descriptor set
-				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
+					//binding the descriptor set
+					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
 
-				//making the draw call
-				vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->indices.size() * 2, 1, 0, pcAttrOrd[i], 0);
+					//making the draw call
+					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->indices.size() * 2, 1, 0, pcAttrOrd[i], 0);
+				}
+
+				//increasing the xOffset for the next drawlist
+				xOffset += width;
 			}
-
-			//increasing the xOffset for the next drawlist
-			xOffset += width;
 		}
 	}
 
@@ -1547,6 +1564,12 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
+
+#ifdef PRINTRENDERTIME
+	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+	std::cout << "Amount of Lines rendered: " << amtOfLines << std::endl;
+	std::cout << "Time for render: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " milliseconds" << std::endl;
+#endif
 }
 
 static void SetupVulkan(const char** extensions, uint32_t extensions_count)
@@ -1976,6 +1999,38 @@ static void openCsv(const char* filename) {
 #endif
 }
 
+//ind1 is the index to which ind2 should be switched
+static void switchAttributes(int ind1, int ind2, bool ctrPressed) {
+	if (ctrPressed) {
+		std::vector<int> invOrd(pcAttrOrd.size());
+		for (int i = 0; i < pcAttrOrd.size(); i++) {
+			invOrd[pcAttrOrd[i]] = i;
+		}
+
+		int tmp = invOrd[ind2];
+		if (ind2 > ind1) {
+			for (int i = ind2 ; i != ind1; i--) {
+				invOrd[i] = invOrd[i - 1];
+			}
+		}
+		else {
+			for (int i = ind2; i != ind1; i++) {
+				invOrd[i] = invOrd[i + 1];
+			}
+		}
+		invOrd[ind1] = tmp;
+
+		for (int i = 0; i < pcAttrOrd.size(); i++) {
+			pcAttrOrd[invOrd[i]] = i;
+		}
+	}
+	else {
+		int tmp = pcAttrOrd[ind1];
+		pcAttrOrd[ind1] = pcAttrOrd[ind2];
+		pcAttrOrd[ind2] = tmp;
+	}
+}
+
 static void openDlf(const char* filename) {
 	std::ifstream file(filename, std::ifstream::in);
 	if (file.is_open()) {
@@ -2140,7 +2195,8 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 	if (file.is_open()) {
 		TemplateList tl;
 		tl.buffer = ds.buffer.buffer;
-		tl.name = s.substr(s.find_last_of("\\") + 1);
+		int split = (s.find_last_of("\\") > s.find_last_of("/")) ? s.find_last_of("\\") : s.find_last_of("/");
+		tl.name = s.substr(split + 1);
 
 		//reading the values
 		for (file >> s ; !file.eof(); file >> s) {
@@ -2160,7 +2216,8 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 	for (int i = 0; i < droppedPaths.size(); i++) {
 		addIndecesToDs(ds, droppedPaths[i].c_str());
 		if (createDLForDrop[i]) {
-			createPCPlotDrawList(ds.drawLists.back(), ds, droppedPaths[i].substr(droppedPaths[i].find_last_of('\\')+1).c_str());
+			int split = (droppedPaths[i].find_last_of("\\") > droppedPaths[i].find_last_of("/")) ? droppedPaths[i].find_last_of("\\") : droppedPaths[i].find_last_of("/");
+			createPCPlotDrawList(ds.drawLists.back(), ds, droppedPaths[i].substr(split+1).c_str());
 		}
 	}
 }
@@ -2395,10 +2452,6 @@ int main(int, char**)
 				pcPlotRender = true;
 				ds.prefColor = ds.color;
 			}
-			if (ds.show != ds.prefShow) {
-				pcPlotRender = true;
-				ds.prefShow = ds.show;
-			}
 		}
 
 		//check if a path was dropped in the application
@@ -2474,10 +2527,14 @@ int main(int, char**)
 				if (ImGui::BeginDragDropTarget()) {
 					if (const ImGuiPayload * payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
 						int* other = (int*)payload->Data;
+						
+						switchAttributes(c, other[0], io.KeyCtrl);
 
+						/*
 						//swapping the two ints
 						pcAttrOrd[c] = other[1];
 						pcAttrOrd[other[0]] = i;
+						*/
 
 						pcPlotRender = true;
 					}
@@ -2715,21 +2772,40 @@ int main(int, char**)
 			ImGui::Text("Draw lists");
 			ImGui::Separator();
 			int count = 0;
-			for (DrawList& dl : g_PcPlotDrawLists) {
-				ImGui::Columns(6,"5columns",false); // 5-ways, with border
-				ImGui::SetColumnWidth(0, 250);
-				ImGui::SetColumnWidth(1, 25);
-				ImGui::SetColumnWidth(2, 25);
-				ImGui::SetColumnWidth(3, 25);
-				ImGui::SetColumnWidth(4, 25);
-				ImGui::SetColumnWidth(5, 25);
 
+			ImGui::Columns(7, "Columns", false);
+			ImGui::SetColumnWidth(0, 250);
+			ImGui::SetColumnWidth(1, 25);
+			ImGui::SetColumnWidth(2, 25);
+			ImGui::SetColumnWidth(3, 25);
+			ImGui::SetColumnWidth(4, 25);
+			ImGui::SetColumnWidth(5, 25);
+			ImGui::SetColumnWidth(6, 25);
+			
+			//showing texts to describe whats in the corresponding column
+			ImGui::Text("Drawlist Name");
+			ImGui::NextColumn();
+			ImGui::Text("Draw");
+			ImGui::NextColumn();
+			ImGui::Text("");
+			ImGui::NextColumn();
+			ImGui::Text("");
+			ImGui::NextColumn();
+			ImGui::Text("Delete");
+			ImGui::NextColumn();
+			ImGui::Text("Color");
+			ImGui::NextColumn();
+			ImGui::Text("Histo");
+			ImGui::NextColumn();
+			for (DrawList& dl : g_PcPlotDrawLists) {
 				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
 					pcPlotSelectedDrawList = count;
 				}
 				ImGui::NextColumn();
 
-				ImGui::Checkbox(("##" + dl.name).c_str(), &dl.show);
+				if (ImGui::Checkbox(("##" + dl.name).c_str(), &dl.show)) {
+					pcPlotRender = true;
+				}
 				ImGui::NextColumn();
 
 				float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
@@ -2756,6 +2832,11 @@ int main(int, char**)
 
 				int misc_flags =  ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_AlphaPreview ;
 				ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
+				ImGui::NextColumn();
+
+				if (ImGui::Checkbox((std::string("##dh") + dl.name).c_str(), &dl.showHistogramm) && drawHistogramm) {
+					pcPlotRender = true;
+				}
 				ImGui::NextColumn();
 
 				count++;
