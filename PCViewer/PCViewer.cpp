@@ -1870,7 +1870,9 @@ static void openCsv(const char* filename) {
 
 	//creating the dataset to be drawable
 	DataSet ds;
-	ds.name = filename;
+	std::string s(filename);
+	int split = (s.find_last_of("\\") > s.find_last_of("/")) ? s.find_last_of("/") : s.find_last_of("\\");
+	ds.name = s.substr(split + 1);
 
 	for (std::string line; std::getline(input, line); )
 	{
@@ -2002,27 +2004,18 @@ static void openCsv(const char* filename) {
 //ind1 is the index to which ind2 should be switched
 static void switchAttributes(int ind1, int ind2, bool ctrPressed) {
 	if (ctrPressed) {
-		std::vector<int> invOrd(pcAttrOrd.size());
-		for (int i = 0; i < pcAttrOrd.size(); i++) {
-			invOrd[pcAttrOrd[i]] = i;
-		}
-
-		int tmp = invOrd[ind2];
+		int tmp = pcAttrOrd[ind2];
 		if (ind2 > ind1) {
 			for (int i = ind2 ; i != ind1; i--) {
-				invOrd[i] = invOrd[i - 1];
+				pcAttrOrd[i] = pcAttrOrd[i - 1];
 			}
 		}
 		else {
 			for (int i = ind2; i != ind1; i++) {
-				invOrd[i] = invOrd[i + 1];
+				pcAttrOrd[i] = pcAttrOrd[i + 1];
 			}
 		}
-		invOrd[ind1] = tmp;
-
-		for (int i = 0; i < pcAttrOrd.size(); i++) {
-			pcAttrOrd[invOrd[i]] = i;
-		}
+		pcAttrOrd[ind1] = tmp;
 	}
 	else {
 		int tmp = pcAttrOrd[ind1];
@@ -2195,7 +2188,7 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 	if (file.is_open()) {
 		TemplateList tl;
 		tl.buffer = ds.buffer.buffer;
-		int split = (s.find_last_of("\\") > s.find_last_of("/")) ? s.find_last_of("\\") : s.find_last_of("/");
+		int split = (s.find_last_of("\\") > s.find_last_of("/")) ? s.find_last_of("/") : s.find_last_of("\\");
 		tl.name = s.substr(split + 1);
 
 		//reading the values
