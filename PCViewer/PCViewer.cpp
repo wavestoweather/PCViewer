@@ -1298,6 +1298,17 @@ static void cleanupPcPlotCommandBuffer() {
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
 }
 
+static int placeOfInd(int ind) {
+	int place = 0;
+	for (int i : pcAttrOrd) {
+		if (i == ind)
+			break;
+		if (pcAttributeEnabled[i])
+			place++;
+	}
+	return place;
+}
+
 static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const ImGui_ImplVulkanH_Window* wd) {
 #ifdef PRINTRENDERTIME
 	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -1486,7 +1497,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			}
 		}
 		//uploading the vertexbuffer
-		void* d;
+		//void* d;
 		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammRectOffset, sizeof(RectVertex) * pcAttributes.size() * 4, 0, &d);
 		memcpy(d, rects, sizeof(RectVertex) * pcAttributes.size() * 4);
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
@@ -1538,10 +1549,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					if (!pcAttributeEnabled[i])
 						hubo.x = -2;
 					else
-						hubo.x = -1 + count++ * gap + xOffset;
+						hubo.x = -1 + placeOfInd(i) * gap + xOffset;
 
 					//uploading the ubo
-					void* d;
+					//void* d;
 					vkMapMemory(g_Device, drawList->dlMem, drawList->histogramUbosOffsets[i], sizeof(HistogramUniformBuffer), 0, &d);
 					memcpy(d, &hubo, sizeof(HistogramUniformBuffer));
 					vkUnmapMemory(g_Device, drawList->dlMem);
@@ -1550,7 +1561,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
 
 					//making the draw call
-					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->indices.size() * 2, 1, 0, pcAttrOrd[i], 0);
+					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->indices.size() * 2, 1, 0, count++, 0);
 				}
 
 				//increasing the xOffset for the next drawlist
