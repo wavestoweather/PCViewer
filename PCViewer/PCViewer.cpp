@@ -1156,21 +1156,23 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 #endif
 	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
 	//median calulation
-	std::vector<float*> dataCpy(ds.data);
+	std::vector<int> dataCpy(tl.indices);
 
 	for (int i = 0; i < pcAttributes.size(); i++) {
-		std::sort(dataCpy.begin(), dataCpy.end(), [i](float* a, float* b) {return a[i] > b[i]; });
-		medianArr[MEDIAN * pcAttributes.size() + i] = dataCpy[dataCpy.size() >> 1][i];
+		std::sort(dataCpy.begin(), dataCpy.end(), [i,ds](int a, int b) {return ds.data[a][i] > ds.data[b][i]; });
+		medianArr[MEDIAN * pcAttributes.size() + i] = ds.data[dataCpy[dataCpy.size() >> 1]][i];
 	}
 
 	//arithmetic median calculation
-	for (int i = 0; i < ds.data.size(); i++) {
+	for (int i = 0; i < tl.indices.size(); i++) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
-			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[i][j];
+			if (i == 0)
+				medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
+			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[tl.indices[i]][j];
 		}
 	}
 	for (int i = 0; i < pcAttributes.size(); i++) {
-		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= ds.data.size();
+		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= tl.indices.size();
 	}
 	
 	//geometric median
@@ -1583,7 +1585,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 
-			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, drawList->activeMedian* pcAttributes.size(), 0);
+			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, (drawList->activeMedian-1)* pcAttributes.size(), 0);
 		}
 
 #ifdef PRINTRENDERTIME
@@ -1591,7 +1593,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 #endif
 	}
 
-	if (drawHistogramm) {
+	if (drawHistogramm && pcAttributes.size()>0) {
 		//drawing the histogramm background
 		RectVertex* rects = new RectVertex[pcAttributes.size() * 4];
 		float x = -1;
