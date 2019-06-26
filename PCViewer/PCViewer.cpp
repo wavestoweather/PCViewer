@@ -28,6 +28,12 @@
 #define DETECTMEMLEAK
 #endif
 
+//defines for the medians
+#define MEDIANCOUNT 3
+#define MEDIAN 0
+#define ARITHMEDIAN 1
+#define GOEMEDIAN 2
+
 #ifdef DETECTMEMLEAK
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
@@ -119,6 +125,13 @@ struct DrawList {
 	VkBuffer ubo;
 	VkBuffer histogramIndBuffer;
 	std::vector<VkBuffer> histogramUbos;
+	VkBuffer medianBuffer;
+	VkBuffer medianUbo;
+	int medianUboOffset;
+	VkDescriptorSet medianUboDescSet;
+	uint32_t medianBufferOffset;
+	Vec4 medianColor;
+	int activeMedian;
 	std::vector<uint32_t> histogramUbosOffsets;
 	std::vector<VkDescriptorSet> histogrammDescSets;
 	VkDeviceMemory dlMem;
@@ -978,6 +991,14 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 				vkDestroyBuffer(g_Device, it->histogramIndBuffer, nullptr);
 				it->histogramIndBuffer = VK_NULL_HANDLE;
 			}
+			if (it->medianBuffer) {
+				vkDestroyBuffer(g_Device, it->medianBuffer, nullptr);
+				it->medianBuffer = VK_NULL_HANDLE;
+			}
+			if (it->medianUbo) {
+				vkDestroyBuffer(g_Device, it->medianUbo, nullptr);
+				it->medianUbo = VK_NULL_HANDLE;
+			}
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
 			}
@@ -1028,6 +1049,20 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 		memTypeBits |= memRequirements.memoryTypeBits;
 	}
 
+	//Median line uniform buffer
+	bufferInfo.size = sizeof(UniformBufferObject);
+	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.medianUbo);
+	check_vk_result(err);
+
+	dl.medianUboOffset = memRequirements.size;
+
+	vkGetBufferMemoryRequirements(g_Device, dl.medianUbo, &memRequirements);
+	memRequirements.size = (memRequirements.size % memRequirements.alignment) ? memRequirements.size + (memRequirements.alignment - (memRequirements.size % memRequirements.alignment)) : memRequirements.size;
+	allocInfo.allocationSize += memRequirements.size;
+
 	//IndexBuffer for Histogramms
 	bufferInfo.size = 2 * tl.indices.size() * sizeof(uint32_t);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
@@ -1035,6 +1070,18 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	check_vk_result(err);
 
 	vkGetBufferMemoryRequirements(g_Device, dl.histogramIndBuffer, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+	memTypeBits |= memRequirements.memoryTypeBits;
+
+	//Median Buffer for Median Lines
+	bufferInfo.size = MEDIANCOUNT * pcAttributes.size() * sizeof(float);
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.medianBuffer);
+	check_vk_result(err);
+
+	dl.medianBufferOffset = allocInfo.allocationSize;
+
+	vkGetBufferMemoryRequirements(g_Device, dl.medianBuffer, &memRequirements);
 	allocInfo.allocationSize += memRequirements.size;
 	memTypeBits |= memRequirements.memoryTypeBits;
 
@@ -1073,7 +1120,18 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), dl.histogrammDescSets[i]);
 	}
 
+	//Binding the median uniform Buffer
+	vkBindBufferMemory(g_Device, dl.medianUbo, dl.dlMem, dl.medianUboOffset);
+
+	//creating the Descriptor set for the median uniform buffer
+	layouts.clear();
+	layouts.push_back(g_PcPlotDescriptorLayout);
+	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &dl.medianUboDescSet);
+	VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, sizeof(UniformBufferObject), dl.medianUboDescSet);
+
 	//Binding the histogram index buffer
+	offset += sizeof(UniformBufferObject);
+	offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
 	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
 
 	//creating and uploading the indexbuffer data
@@ -1087,6 +1145,48 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	memcpy(d, indBuffer, tl.indices.size() * sizeof(uint32_t) * 2);
 	vkUnmapMemory(g_Device, dl.dlMem);
 	delete[] indBuffer;
+
+
+	//binding the medianBuffer
+	vkBindBufferMemory(g_Device, dl.medianBuffer, dl.dlMem, dl.medianBufferOffset);
+
+	//calculating the medians
+#ifdef _DEBUG
+	std::cout << "Starting to calulate the medians." << std::endl;
+#endif
+	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
+	//median calulation
+	std::vector<float*> dataCpy(ds.data);
+
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		std::sort(dataCpy.begin(), dataCpy.end(), [i](float* a, float* b) {return a[i] > b[i]; });
+		medianArr[MEDIAN * pcAttributes.size() + i] = dataCpy[dataCpy.size() >> 1][i];
+	}
+
+	//arithmetic median calculation
+	for (int i = 0; i < ds.data.size(); i++) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[i][j];
+		}
+	}
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= ds.data.size();
+	}
+	
+	//geometric median
+
+	//copying the median Array
+	vkMapMemory(g_Device, dl.dlMem, dl.medianBufferOffset, MEDIANCOUNT* pcAttributes.size() * sizeof(float), 0, &d);
+	memcpy(d, medianArr, MEDIANCOUNT* pcAttributes.size() * sizeof(float));
+	vkUnmapMemory(g_Device, dl.dlMem);
+	delete[] medianArr;
+
+	dl.activeMedian = 0;
+	dl.medianColor = { 1,1,1,1 };
+#ifdef _DEBUG
+	std::cout << "Finished to calulate the medians." << std::endl;
+#endif
+
 
 	//specifying the uniform buffer location
 	VkDescriptorBufferInfo desBufferInfo = {};
@@ -1147,6 +1247,14 @@ static void removePcPlotDrawList(DrawList drawList) {
 			if (it->histogramIndBuffer) {
 				vkDestroyBuffer(g_Device, it->histogramIndBuffer, nullptr);
 				it->histogramIndBuffer = VK_NULL_HANDLE;
+			}
+			if (it->medianBuffer) {
+				vkDestroyBuffer(g_Device, it->medianBuffer, nullptr);
+				it->medianBuffer = VK_NULL_HANDLE;
+			}
+			if (it->medianUbo) {
+				vkDestroyBuffer(g_Device, it->medianUbo, nullptr);
+				it->medianUbo = VK_NULL_HANDLE;
 			}
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
@@ -1430,6 +1538,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &d);
 		memcpy(d, &ubo, sizeof(UniformBufferObject));
 		vkUnmapMemory(g_Device, ds.dlMem);
+
+		ubo.color = ds.medianColor;
+		vkMapMemory(g_Device, ds.dlMem, ds.medianUboOffset, sizeof(UniformBufferObject), 0, &d);
+		memcpy(d, &ubo, sizeof(UniformBufferObject));
+		vkUnmapMemory(g_Device, ds.dlMem);
 	}
 
 	//starting the pcPlotCommandBuffer
@@ -1463,6 +1576,16 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (int i :drawList->indices) {
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
 		}
+
+		//draw the Median Line
+		if (drawList->activeMedian != 0) {
+			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->medianBuffer, offsets);
+
+			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
+
+			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, drawList->activeMedian* pcAttributes.size(), 0);
+		}
+
 #ifdef PRINTRENDERTIME
 		amtOfLines += drawList->indices.size();
 #endif
@@ -2777,7 +2900,7 @@ int main(int, char**)
 			ImGui::Separator();
 			int count = 0;
 
-			ImGui::Columns(7, "Columns", false);
+			ImGui::Columns(9, "Columns", false);
 			ImGui::SetColumnWidth(0, 250);
 			ImGui::SetColumnWidth(1, 25);
 			ImGui::SetColumnWidth(2, 25);
@@ -2785,6 +2908,8 @@ int main(int, char**)
 			ImGui::SetColumnWidth(4, 25);
 			ImGui::SetColumnWidth(5, 25);
 			ImGui::SetColumnWidth(6, 25);
+			ImGui::SetColumnWidth(7, 100);
+			ImGui::SetColumnWidth(8, 25);
 			
 			//showing texts to describe whats in the corresponding column
 			ImGui::Text("Drawlist Name");
@@ -2800,6 +2925,10 @@ int main(int, char**)
 			ImGui::Text("Color");
 			ImGui::NextColumn();
 			ImGui::Text("Histo");
+			ImGui::NextColumn();
+			ImGui::Text("Median");
+			ImGui::NextColumn();
+			ImGui::Text("MColor");
 			ImGui::NextColumn();
 			for (DrawList& dl : g_PcPlotDrawLists) {
 				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
@@ -2839,6 +2968,17 @@ int main(int, char**)
 				ImGui::NextColumn();
 
 				if (ImGui::Checkbox((std::string("##dh") + dl.name).c_str(), &dl.showHistogramm) && drawHistogramm) {
+					pcPlotRender = true;
+				}
+				ImGui::NextColumn();
+
+				const char* entrys[] = { "No Median","Synthetic","Arithmetic","Geometric" };
+				if (ImGui::Combo((std::string("##c") + dl.name).c_str(), &dl.activeMedian, entrys, sizeof(entrys) / sizeof(*entrys))) {
+					pcPlotRender = true;
+				}
+				ImGui::NextColumn();
+
+				if (ImGui::ColorEdit4((std::string("##CMed") + dl.name).c_str(), (float*)& dl.medianColor, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags)) {
 					pcPlotRender = true;
 				}
 				ImGui::NextColumn();
