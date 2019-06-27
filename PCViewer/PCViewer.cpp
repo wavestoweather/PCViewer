@@ -1057,7 +1057,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.medianUbo);
 	check_vk_result(err);
 
-	dl.medianUboOffset = memRequirements.size;
+	dl.medianUboOffset = allocInfo.allocationSize;
 
 	vkGetBufferMemoryRequirements(g_Device, dl.medianUbo, &memRequirements);
 	memRequirements.size = (memRequirements.size % memRequirements.alignment) ? memRequirements.size + (memRequirements.alignment - (memRequirements.size % memRequirements.alignment)) : memRequirements.size;
@@ -1535,16 +1535,18 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 #endif
 
 	//copying the uniform buffer
+	void* da;
 	for (DrawList& ds : g_PcPlotDrawLists) {
 		ubo.color = ds.color;
-		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &d);
-		memcpy(d, &ubo, sizeof(UniformBufferObject));
+		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &da);
+		memcpy(da, &ubo, sizeof(UniformBufferObject));
 		vkUnmapMemory(g_Device, ds.dlMem);
-
+		
 		ubo.color = ds.medianColor;
-		vkMapMemory(g_Device, ds.dlMem, ds.medianUboOffset, sizeof(UniformBufferObject), 0, &d);
-		memcpy(d, &ubo, sizeof(UniformBufferObject));
+		vkMapMemory(g_Device, ds.dlMem, ds.medianUboOffset, sizeof(UniformBufferObject), 0, &da);
+		memcpy(da, &ubo, sizeof(UniformBufferObject));
 		vkUnmapMemory(g_Device, ds.dlMem);
+		
 	}
 
 	//starting the pcPlotCommandBuffer
