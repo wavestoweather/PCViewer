@@ -5,7 +5,7 @@ std::vector<char> PCUtil::readByteFile(const std::string& filename)
 	std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
 	if (!file.is_open()) {
-		std::cerr << "failed to open file!" << std::endl;
+		std::cerr << "failed to open file " << filename << "!" << std::endl;
 		exit(-1);
 	}
 

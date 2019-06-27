@@ -86,6 +86,11 @@ struct Vec4 {
 	}
 };
 
+struct Vec2 {
+	float u;
+	float v;
+};
+
 struct Vertex {			//currently holds just the y coordinate. The x computed in the vertex shader via the index
 	float y;
 };
@@ -188,6 +193,14 @@ static VkDescriptorSetLayout	g_PcPlotHistoDescriptorSetLayout = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotRectPipelineLayout = VK_NULL_HANDLE;
 static VkPipeline				g_PcPlotRectPipeline = VK_NULL_HANDLE;
 
+//variables for the density pipeline
+static VkPipelineLayout			g_PcPlotDensityPipelineLayout = VK_NULL_HANDLE;
+static VkPipeline				g_PcPlotDensityPipeline = VK_NULL_HANDLE;
+static VkDescriptorSetLayout	g_PcPlotDensityDescriptorSetLayout = VK_NULL_HANDLE;
+static VkImage					g_PcPlotDensityImageCopy = VK_NULL_HANDLE;
+static VkImageView				g_PcPlotDensityImageView = VK_NULL_HANDLE;
+static VkDescriptorSet			g_PcPlotDensityDescriptorSet = VK_NULL_HANDLE;
+
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
 static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
 static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
@@ -211,6 +224,8 @@ static char						g_histVertPath[] = "shader/histVert.spv";
 static char						g_histGeoPath[] = "shader/histGeo.spv";
 static char						g_rectFragPath[] = "shader/rectFrag.spv";
 static char						g_rectVertPath[] = "shader/rectVert.spv";
+static char						g_densFragPath[] = "shader/densFrag.spv";
+static char						g_densVertPath[] = "shader/densVert.spv";
 
 struct Attribute {
 	std::string name;
@@ -353,10 +368,7 @@ static void createPcPlotHistoPipeline() {
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(g_PcPlotHistoDescriptorSetLayout);
 
-	//create render pass
-	VkUtil::createPcPlotRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR_OFFLINE, &g_PcPlotHistoRenderPass);
-
-	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotHistoRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
 
 	shaderModules[3] = nullptr;
 	//----------------------------------------------------------------------------------------------
@@ -392,16 +404,48 @@ static void createPcPlotHistoPipeline() {
 
 	descriptorSetLayouts.clear();
 
-	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotHistoRenderPass, &g_PcPlotRectPipelineLayout, &g_PcPlotRectPipeline);
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotRectPipelineLayout, &g_PcPlotRectPipeline);
+
+	//----------------------------------------------------------------------------------------------
+	//creating the pipeline for the density rendering
+	//----------------------------------------------------------------------------------------------
+	vertexBytes = PCUtil::readByteFile(g_densVertPath);
+	shaderModules[0] = VkUtil::createShaderModule(g_Device, vertexBytes);
+	fragmentBytes = PCUtil::readByteFile(g_densFragPath);
+	shaderModules[4] = VkUtil::createShaderModule(g_Device, fragmentBytes);
+	
+	//describes how big the vertex data is and how to read the data
+	bindingDescripiton.binding = 0;
+	bindingDescripiton.stride = sizeof(Vec4);
+	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	attributeDescription = {};
+	attributeDescription.binding = 0;
+	attributeDescription.location = 0;
+	attributeDescription.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	attributeDescription.offset = 0;
+
+	vertexInputInfo = {};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
+	vertexInputInfo.vertexAttributeDescriptionCount = 1;
+	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+
+	//TODO:set descriptor set Layouts
+
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
 }
 
 static void cleanupPcPlotHistoPipeline() {
 	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotHistoDescriptorSetLayout, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotHistoPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotHistoPipeline, nullptr);
-	vkDestroyRenderPass(g_Device, g_PcPlotHistoRenderPass, nullptr);
+	//vkDestroyRenderPass(g_Device, g_PcPlotHistoRenderPass, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotRectPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotRectPipeline, nullptr);
+	vkDestroyPipelineLayout(g_Device, g_PcPlotDensityPipelineLayout, nullptr);
+	vkDestroyPipeline(g_Device, g_PcPlotDensityPipeline, nullptr);
 }
 
 static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -432,7 +476,7 @@ static void createPcPlotImageView() {
 	imageInfo.extent.depth = 1;
 	imageInfo.mipLevels = 1;
 	imageInfo.arrayLayers = 1;
-	imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	imageInfo.format = VK_FORMAT_R16G16B16A16_SNORM;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -459,7 +503,7 @@ static void createPcPlotImageView() {
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = g_PcPlot;
 	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	createInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	createInfo.format = VK_FORMAT_R16G16B16A16_SNORM;
 	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -708,7 +752,7 @@ static void createPcPlotRenderPass() {
 	VkResult err;
 
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+	colorAttachment.format = VK_FORMAT_R16G16B16A16_SNORM;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
