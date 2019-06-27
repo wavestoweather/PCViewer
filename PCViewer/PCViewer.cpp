@@ -23,23 +23,11 @@
 #include <chrono>
 #include <random>
 
-//memory leak detection
-#ifdef _DEBUG
-#define DETECTMEMLEAK
-#endif
-
 //defines for the medians
 #define MEDIANCOUNT 3
 #define MEDIAN 0
 #define ARITHMEDIAN 1
 #define GOEMEDIAN 2
-
-#ifdef DETECTMEMLEAK
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-#endif
-
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -53,6 +41,17 @@
 #define PRINTRENDERTIME
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
+#endif
+
+//memory leak detection
+#ifdef _DEBUG
+#define DETECTMEMLEAK
+#endif
+
+#ifdef DETECTMEMLEAK
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
 #endif
 
 static VkAllocationCallbacks* g_Allocator = NULL;
@@ -2076,8 +2075,11 @@ static void openCsv(const char* filename) {
 				line.erase(0, pos + delimiter.length());
 
 				//checking for an overrunning attribute counter
-				if (attr == pcAttributes.size())
-					__debugbreak();
+				if (attr == pcAttributes.size()) {
+					std::cerr << "The dataset to open is not consitent!" << std::endl;
+					input.close();
+					return;
+				}
 
 				curF = std::stof(cur);
 
@@ -2089,8 +2091,11 @@ static void openCsv(const char* filename) {
 
 				ds.data.back()[attr++] = curF;
 			}
-			if (attr == pcAttributes.size())
-				__debugbreak();
+			if (attr == pcAttributes.size()) {
+				std::cerr << "The dataset to open is not consitent!" << std::endl;
+				input.close();
+				return;
+			}
 
 			//adding the last item which wasn't recognized
 			curF = std::stof(line);
