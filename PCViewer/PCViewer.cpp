@@ -557,13 +557,13 @@ static void createPcPlotHistoPipeline() {
 	//TODO:set descriptor set Layouts
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
+
 }
 
 static void cleanupPcPlotHistoPipeline() {
 	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotHistoDescriptorSetLayout, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotHistoPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotHistoPipeline, nullptr);
-	//vkDestroyRenderPass(g_Device, g_PcPlotHistoRenderPass, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotRectPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotRectPipeline, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotDensityPipelineLayout, nullptr);
@@ -598,7 +598,7 @@ static void createPcPlotImageView() {
 	imageInfo.extent.depth = 1;
 	imageInfo.mipLevels = 1;
 	imageInfo.arrayLayers = 1;
-	imageInfo.format = VK_FORMAT_R16G16B16A16_SNORM;
+	imageInfo.format = VK_FORMAT_R16G16B16A16_UNORM;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -616,16 +616,26 @@ static void createPcPlotImageView() {
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
 
+	//creating the Image and imageview for the density pipeline
+	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, VK_FORMAT_R16G16B16A16_UNORM, &g_PcPlotDensityImageCopy);
+
+	uint32_t imageOffset = allocInfo.allocationSize;
+	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityImageCopy, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotMem);
 	check_vk_result(err);
 
 	vkBindImageMemory(g_Device, g_PcPlot, g_PcPlotMem, 0);
+	vkBindImageMemory(g_Device, g_PcPlotDensityImageCopy, g_PcPlotMem, imageOffset);
 
+	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, 1, &g_PcPlotDensityImageView);
+	
 	VkImageViewCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = g_PcPlot;
 	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	createInfo.format = VK_FORMAT_R16G16B16A16_SNORM;
+	createInfo.format = VK_FORMAT_R16G16B16A16_UNORM;
 	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -644,6 +654,8 @@ static void createPcPlotImageView() {
 static void cleanupPcPlotImageView() {
 	vkDestroyImageView(g_Device, g_PcPlotView, nullptr);
 	vkDestroyImage(g_Device, g_PcPlot, nullptr);
+	vkDestroyImageView(g_Device, g_PcPlotDensityImageView, nullptr);
+	vkDestroyImage(g_Device, g_PcPlotDensityImageCopy, nullptr);
 	vkFreeMemory(g_Device, g_PcPlotMem, nullptr);
 }
 
@@ -874,7 +886,7 @@ static void createPcPlotRenderPass() {
 	VkResult err;
 
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = VK_FORMAT_R16G16B16A16_SNORM;
+	colorAttachment.format = VK_FORMAT_R16G16B16A16_UNORM;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
