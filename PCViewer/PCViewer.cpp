@@ -1,6 +1,17 @@
 ﻿// PCViewer.cpp: Definiert den Einstiegspunkt für die Anwendung.
 //
 
+//memory leak detection
+#ifdef _DEBUG
+#define DETECTMEMLEAK
+#endif
+
+#ifdef DETECTMEMLEAK
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
 #include "PCViewer.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
@@ -23,6 +34,10 @@
 #include <chrono>
 #include <random>
 
+#ifdef DETECTMEMLEAK
+#define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
+#endif
+
 //defines for the medians
 #define MEDIANCOUNT 3
 #define MEDIAN 0
@@ -41,17 +56,6 @@
 #define PRINTRENDERTIME
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
-#endif
-
-//memory leak detection
-#ifdef _DEBUG
-#define DETECTMEMLEAK
-#endif
-
-#ifdef DETECTMEMLEAK
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
 #endif
 
 static VkAllocationCallbacks* g_Allocator = NULL;
@@ -201,6 +205,8 @@ static VkImage					g_PcPlotDensityImageCopy = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotDensityImageView = VK_NULL_HANDLE;
 static VkSampler				g_PcPlotDensityImageSampler = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotDensityDescriptorSet = VK_NULL_HANDLE;
+static VkBuffer					g_PcPlotDensityRectBuffer = VK_NULL_HANDLE;
+static uint32_t					g_PcPlotDensityRectBufferOffset = 0;
 
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
 static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
@@ -370,6 +376,7 @@ float alphaDrawLists = .5f;
 //variables for the histogramm
 float histogrammWidth = .1f;
 bool drawHistogramm = false;
+bool histogrammDensity = false;
 Vec4 histogrammBackgroundColor = { .5f,.5f,.5,.5f };
 
 
@@ -615,7 +622,7 @@ static void createPcPlotImageView() {
 	imageInfo.format = VK_FORMAT_R16G16B16A16_UNORM;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -631,7 +638,7 @@ static void createPcPlotImageView() {
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
 
 	//creating the Image and imageview for the density pipeline
-	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, VK_FORMAT_R16G16B16A16_UNORM, &g_PcPlotDensityImageCopy);
+	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityImageCopy);
 
 	uint32_t imageOffset = allocInfo.allocationSize;
 	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityImageCopy, &memRequirements);
@@ -1078,8 +1085,18 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	allocInfo.allocationSize += memRequirements.size;
 	memTypeBits |= memRequirements.memoryTypeBits;
 
-	allocInfo.memoryTypeIndex = findMemoryType(memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	//creating the density rect buffer
+	g_PcPlotDensityRectBufferOffset = allocInfo.allocationSize;
+	bufferInfo.size = sizeof(Vec4) * 4 * pcAttributes.size();
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotDensityRectBuffer);
+	check_vk_result(err);
 
+	vkGetBufferMemoryRequirements(g_Device, g_PcPlotDensityRectBuffer, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+
+	//allocating the memory
+	allocInfo.memoryTypeIndex = findMemoryType(memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotIndexBufferMemory);
 	check_vk_result(err);
 
@@ -1091,6 +1108,9 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 
 	//binding the histogramm index buffer
 	vkBindBufferMemory(g_Device, g_PcPlotHistogrammIndex, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammIndexOffset);
+
+	//binding the density vertex buffer
+	vkBindBufferMemory(g_Device, g_PcPlotDensityRectBuffer, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset);
 
 	//filling the histogramm index buffer
 	//Vertex Arrangment:
@@ -1110,6 +1130,8 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammIndexOffset, sizeof(uint16_t) * 6 * pcAttributes.size(), 0, &ind);
 	memcpy(ind, indexBuffer, sizeof(uint16_t) * 6 * pcAttributes.size());
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+
+	delete[] indexBuffer;
 }
 
 static void cleanupPcPlotVertexBuffer() {
@@ -1134,6 +1156,10 @@ static void cleanupPcPlotVertexBuffer() {
 	if (g_PcPlotHistogrammRect) {
 		vkDestroyBuffer(g_Device, g_PcPlotHistogrammRect, nullptr);
 		g_PcPlotHistogrammRect = VK_NULL_HANDLE;
+	}
+	if (g_PcPlotDensityRectBuffer) {
+		vkDestroyBuffer(g_Device, g_PcPlotDensityRectBuffer, nullptr);
+		g_PcPlotDensityRectBuffer = VK_NULL_HANDLE;
 	}
 	if (g_PcPlotIndexBufferMemory) {
 		vkFreeMemory(g_Device, g_PcPlotIndexBufferMemory, nullptr);
@@ -1831,6 +1857,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		memcpy(d, rects, sizeof(RectVertex) * pcAttributes.size() * 4);
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 
+		delete[] rects;
+
 		//binding the graphics pipeline
 		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotRectPipeline);
 
@@ -1896,6 +1924,28 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				//increasing the xOffset for the next drawlist
 				xOffset += width;
 			}
+		}
+
+		if (histogrammDensity) {
+			//ending the pass to blit the image
+			vkCmdEndRenderPass(g_PcPlotCommandBuffer);
+
+			//transition image Layouts
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+			//blitting the image
+			VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+			//transition image Layouts back
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+			//beginning the Renderpass again to make the density
+			std::vector<VkClearValue> clearColors;
+			clearColors.push_back({ 0,0,0,0 });
+			VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearColors, g_PcPlotRenderPass, g_PcPlotFramebuffer, { g_PcPlotWidth,g_PcPlotHeight });
+			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipeline);
 		}
 	}
 
@@ -2742,6 +2792,9 @@ int main(int, char**)
 		use_barrier[0].subresourceRange.layerCount = 1;
 		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 
+		//transition of the densitiy image
+		VkUtil::transitionImageLayout(command_buffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 		//ending the command buffer and submitting it
 		VkSubmitInfo end_info = {};
 		end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -2966,6 +3019,9 @@ int main(int, char**)
 				pcPlotRender = true;
 			}
 			if (ImGui::ColorEdit4("Background Color", &histogrammBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+				pcPlotRender = true;
+			}
+			if (ImGui::Checkbox("Show Density", &histogrammDensity) && drawHistogramm) {
 				pcPlotRender = true;
 			}
 			ImGui::Separator();
