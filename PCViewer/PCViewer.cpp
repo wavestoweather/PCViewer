@@ -207,6 +207,8 @@ static VkSampler				g_PcPlotDensityImageSampler = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotDensityDescriptorSet = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotDensityRectBuffer = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotDensityRectBufferOffset = 0;
+static VkRenderPass				g_PcPlotDensityRenderPass = VK_NULL_HANDLE;
+static VkFramebuffer			g_PcPlotDensityFrameBuffer = VK_NULL_HANDLE;
 
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
 static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
@@ -577,7 +579,9 @@ static void createPcPlotHistoPipeline() {
 	descriptorSetLayouts.clear();
 	descriptorSetLayouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 
-	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
+	VkUtil::createPcPlotRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR, &g_PcPlotDensityRenderPass);
+
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotDensityRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
 }
 
 static void cleanupPcPlotHistoPipeline() {
@@ -588,6 +592,7 @@ static void cleanupPcPlotHistoPipeline() {
 	vkDestroyPipeline(g_Device, g_PcPlotRectPipeline, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotDensityPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotDensityDescriptorSetLayout, nullptr);
+	vkDestroyRenderPass(g_Device, g_PcPlotDensityRenderPass, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotDensityPipeline, nullptr);
 }
 
@@ -966,10 +971,15 @@ static void createPcPlotFramebuffer() {
 	err = vkCreateFramebuffer(g_Device, &framebufferInfo, nullptr, &g_PcPlotFramebuffer);
 	check_vk_result(err);
 
+	//creating the Framebuffer for the density pass
+	std::vector<VkImageView> attachments;
+	attachments.push_back(g_PcPlotView);
+	VkUtil::createFrameBuffer(g_Device, g_PcPlotDensityRenderPass, attachments, g_PcPlotWidth, g_PcPlotHeight, &g_PcPlotDensityFrameBuffer);
 }
 
 static void cleanupPcPlotFramebuffer() {
 	vkDestroyFramebuffer(g_Device, g_PcPlotFramebuffer, nullptr);
+	vkDestroyFramebuffer(g_Device, g_PcPlotDensityFrameBuffer, nullptr);
 }
 
 static void createPcPlotCommandPool() {
@@ -1935,7 +1945,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 			//blitting the image
-			VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 			//transition image Layouts back
 			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1943,8 +1953,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 			//beginning the Renderpass again to make the density
 			std::vector<VkClearValue> clearColors;
-			clearColors.push_back({ 0,0,0,0 });
-			VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearColors, g_PcPlotRenderPass, g_PcPlotFramebuffer, { g_PcPlotWidth,g_PcPlotHeight });
+			VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearColors, g_PcPlotDensityRenderPass, g_PcPlotDensityFrameBuffer, { g_PcPlotWidth,g_PcPlotHeight });
 			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipeline);
 		}
 	}
@@ -2609,7 +2618,7 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 	for (int i = 0; i < droppedPaths.size(); i++) {
 		addIndecesToDs(ds, droppedPaths[i].c_str());
 		if (createDLForDrop[i]) {
-			int split = (droppedPaths[i].find_last_of("\\") > droppedPaths[i].find_last_of("/")) ? droppedPaths[i].find_last_of("\\") : droppedPaths[i].find_last_of("/");
+			int split = (droppedPaths[i].find_last_of("\\") > droppedPaths[i].find_last_of("/")) ? droppedPaths[i].find_last_of("/") : droppedPaths[i].find_last_of("\\");
 			createPCPlotDrawList(ds.drawLists.back(), ds, droppedPaths[i].substr(split+1).c_str());
 		}
 	}

@@ -23,6 +23,9 @@ public:
 
 	enum PassType {
 		PASS_TYPE_COLOR_OFFLINE,
+		PASS_TYPE_COLOR_OFFLINE_NO_CLEAR,
+		PASS_TYPE_COLOR16_OFFLINE,
+		PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR,
 		PASS_TYPE_DEPTH_OFFLINE
 	};
 
@@ -33,6 +36,7 @@ public:
 	static void createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, const std::vector<VkDynamicState>& dynamicStates, VkShaderModule* shaderModules, VkPrimitiveTopology topology, VkPipelineRasterizationStateCreateInfo* rasterizerInfo, VkPipelineMultisampleStateCreateInfo* multisamplingInfo, VkPipelineDepthStencilStateCreateInfo* depthStencilInfo, BlendInfo* blendInfo, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkRenderPass* renderPass, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline);
 	static void destroyPipeline(VkDevice device, VkPipeline pipeline);
 	static void createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType, VkRenderPass* renderPass);
+	static void createFrameBuffer(VkDevice device, VkRenderPass renderPass, const std::vector<VkImageView> attachments, uint32_t width, uint32_t height, VkFramebuffer* frambuffer);
 	static void fillDescriptorSetLayoutBinding(uint32_t bindingNumber, VkDescriptorType descriptorType, uint32_t amtOfDescriptors, VkShaderStageFlags shaderStages, VkDescriptorSetLayoutBinding* uboLayoutBinding);
 	static void createDescriptorSetLayout(VkDevice device, const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* descriptorSetLayout);
 	static void destroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout);
