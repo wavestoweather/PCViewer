@@ -1955,6 +1955,18 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			std::vector<VkClearValue> clearColors;
 			VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearColors, g_PcPlotDensityRenderPass, g_PcPlotDensityFrameBuffer, { g_PcPlotWidth,g_PcPlotHeight });
 			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipeline);
+
+			Vec4* verts = new Vec4[amtOfIndeces * 4];
+			float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
+			for (int i = 0; i < amtOfIndeces; i++) {
+				verts[i * 4] = { gap * i,1,0,0 };
+				verts[i * 4 + 1] = { gap * i,-1,0,0 };
+				verts[i * 4 + 2] = { gap * i + histogrammWidth,-1,0,0 };
+				verts[i * 4 + 3] = { gap * i + histogrammWidth,1,0,0 };
+			}
+			
+
+			delete[] verts;
 		}
 	}
 
@@ -2276,6 +2288,21 @@ static void openCsv(const char* filename) {
 	std::string s(filename);
 	int split = (s.find_last_of("\\") > s.find_last_of("/")) ? s.find_last_of("/") : s.find_last_of("\\");
 	ds.name = s.substr(split + 1);
+	//checking if the filename already exists
+	for (auto it = g_PcPlotDataSets.begin(); it != g_PcPlotDataSets.end();++it) {
+		if (it->name == ds.name) {
+			auto itcop = it;
+			int count = 0;
+			while (1) {
+				if(itcop->name == ds.name + (count==0?"":std::to_string(count)))
+					count++;
+				if (++itcop == g_PcPlotDataSets.end())
+					break;
+			}
+			ds.name += std::to_string(count);
+			break;
+		}
+	}
 
 	for (std::string line; std::getline(input, line); )
 	{
