@@ -6,5 +6,5 @@ layout(location = 1) out vec2 tex;
 
 void main() {
     gl_Position = vec4(inPosition.xy,0,1);
-	tex = inPosition.xy / 2 - .5f;
+	tex = inPosition.xy / 2 + .5f;
 }
