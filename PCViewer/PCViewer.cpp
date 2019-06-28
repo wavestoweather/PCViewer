@@ -665,7 +665,7 @@ static void createPcPlotImageView() {
 	layouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &g_PcPlotDensityDescriptorSet);
 
-	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_GENERAL, g_PcPlotDensityDescriptorSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_PcPlotDensityDescriptorSet);
 
 	VkImageViewCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1951,7 +1951,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-			//beginning the Renderpass again to make the density
+			//beginning the density renderpass
 			std::vector<VkClearValue> clearColors;
 			VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearColors, g_PcPlotDensityRenderPass, g_PcPlotDensityFrameBuffer, { g_PcPlotWidth,g_PcPlotHeight });
 			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipeline);
@@ -1959,14 +1959,24 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			Vec4* verts = new Vec4[amtOfIndeces * 4];
 			float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
 			for (int i = 0; i < amtOfIndeces; i++) {
-				verts[i * 4] = { gap * i,1,0,0 };
-				verts[i * 4 + 1] = { gap * i,-1,0,0 };
-				verts[i * 4 + 2] = { gap * i + histogrammWidth,-1,0,0 };
-				verts[i * 4 + 3] = { gap * i + histogrammWidth,1,0,0 };
+				verts[i * 4] = { gap * i - 1,1,0,0 };
+				verts[i * 4 + 1] = { gap * i - 1,-1,0,0 };
+				verts[i * 4 + 2] = { gap * i + histogrammWidth - 1,-1,0,0 };
+				verts[i * 4 + 3] = { gap * i + histogrammWidth - 1,1,0,0 };
 			}
 			
+			vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset, sizeof(Vec4)* amtOfIndeces * 4, 0, &d);
+			memcpy(d, verts, sizeof(Vec4)* amtOfIndeces * 4);
+			vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 
 			delete[] verts;
+
+			VkDeviceSize offsets[1] = { 0 };
+			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotDensityRectBuffer, offsets);
+			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotHistogrammIndex, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipelineLayout, 0, 1, &g_PcPlotDensityDescriptorSet, 0, nullptr);
+
+			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces * 6, 1, 0, 0, 0);
 		}
 	}
 

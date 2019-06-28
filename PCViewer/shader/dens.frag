@@ -7,5 +7,5 @@ layout(location = 0) out vec4 outColor;
 layout(location = 1) in vec2 tex;
 
 void main() {
-    outColor = vec4(1,1,1,1);
+    outColor = texture(texSampler, tex);
 }
