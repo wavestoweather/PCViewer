@@ -39,9 +39,11 @@ public:
 	static void destroyDescriptorPool(VkDevice device, VkDescriptorPool pool);
 	static void createDescriptorSets(VkDevice device, const std::vector<VkDescriptorSetLayout>& layouts, VkDescriptorPool pool, VkDescriptorSet* descriptorSetArray);
 	static void updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, VkDescriptorSet descriptorSet);
+	static void updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout, VkDescriptorSet descriptorSet);
 	static void copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, int32_t width, int32_t height, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout);
 	static void createImage(VkDevice device, uint32_t width, uint32_t height, VkFormat imageFormat, VkImage* image);
 	static void createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
+	static void createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler);
 	static VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
 };
 

@@ -199,6 +199,7 @@ static VkPipeline				g_PcPlotDensityPipeline = VK_NULL_HANDLE;
 static VkDescriptorSetLayout	g_PcPlotDensityDescriptorSetLayout = VK_NULL_HANDLE;
 static VkImage					g_PcPlotDensityImageCopy = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotDensityImageView = VK_NULL_HANDLE;
+static VkSampler				g_PcPlotDensityImageSampler = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotDensityDescriptorSet = VK_NULL_HANDLE;
 
 static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
@@ -554,10 +555,22 @@ static void createPcPlotHistoPipeline() {
 	vertexInputInfo.vertexAttributeDescriptionCount = 1;
 	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
 
-	//TODO:set descriptor set Layouts
+	//creating the descriptor set layout
+	uboLayoutBinding = {};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	
+	bindings.clear();
+	bindings.push_back(uboLayoutBinding);
+
+	VkUtil::createDescriptorSetLayout(g_Device, bindings, &g_PcPlotDensityDescriptorSetLayout);
+
+	descriptorSetLayouts.clear();
+	descriptorSetLayouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
-
 }
 
 static void cleanupPcPlotHistoPipeline() {
@@ -567,6 +580,7 @@ static void cleanupPcPlotHistoPipeline() {
 	vkDestroyPipelineLayout(g_Device, g_PcPlotRectPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotRectPipeline, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotDensityPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotDensityDescriptorSetLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotDensityPipeline, nullptr);
 }
 
@@ -631,6 +645,16 @@ static void createPcPlotImageView() {
 
 	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, 1, &g_PcPlotDensityImageView);
 	
+	//creating the smapler for the density image
+	VkUtil::createImageSampler(g_Device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, 16, 1, &g_PcPlotDensityImageSampler);
+
+	//creating the descriptorSet and updating the descriptorSetLayout
+	std::vector<VkDescriptorSetLayout> layouts;
+	layouts.push_back(g_PcPlotDensityDescriptorSetLayout);
+	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &g_PcPlotDensityDescriptorSet);
+
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_GENERAL, g_PcPlotDensityDescriptorSet);
+
 	VkImageViewCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = g_PcPlot;
@@ -656,6 +680,7 @@ static void cleanupPcPlotImageView() {
 	vkDestroyImage(g_Device, g_PcPlot, nullptr);
 	vkDestroyImageView(g_Device, g_PcPlotDensityImageView, nullptr);
 	vkDestroyImage(g_Device, g_PcPlotDensityImageCopy, nullptr);
+	vkDestroySampler(g_Device, g_PcPlotDensityImageSampler, nullptr);
 	vkFreeMemory(g_Device, g_PcPlotMem, nullptr);
 }
 
@@ -1985,6 +2010,9 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 	{
 		int device_extension_count = 1;
 		const char* device_extensions[] = { "VK_KHR_swapchain" };
+		VkPhysicalDeviceFeatures deviceFeatures = {};
+		deviceFeatures.geometryShader = VK_TRUE;
+		deviceFeatures.samplerAnisotropy = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
 		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -1997,6 +2025,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		create_info.pQueueCreateInfos = queue_info;
 		create_info.enabledExtensionCount = device_extension_count;
 		create_info.ppEnabledExtensionNames = device_extensions;
+		create_info.pEnabledFeatures = &deviceFeatures;
 		err = vkCreateDevice(g_PhysicalDevice, &create_info, g_Allocator, &g_Device);
 		check_vk_result(err);
 		vkGetDeviceQueue(g_Device, g_QueueFamily, 0, &g_Queue);
@@ -2660,12 +2689,12 @@ int main(int, char**)
 	}
 
 	{//Section to initialize the pcPlot graphics queue
-		createPcPlotImageView();
 		createPcPlotRenderPass();
+		createPcPlotHistoPipeline();
+		createPcPlotImageView();
 		createPcPlotPipeline();
 		createPcPlotFramebuffer();
 		createPcPlotCommandPool();
-		createPcPlotHistoPipeline();
 
 		//before being able to add the image to imgui the sampler has to be created
 		VkSamplerCreateInfo info = {};

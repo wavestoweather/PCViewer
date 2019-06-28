@@ -426,6 +426,21 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
+void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout, VkDescriptorSet descriptorSet)
+{
+	VkDescriptorImageInfo desc_image[1] = {};
+	desc_image[0].sampler = sampler;
+	desc_image[0].imageView = imageView;
+	desc_image[0].imageLayout = imageLayout;
+	VkWriteDescriptorSet write_desc[1] = {};
+	write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write_desc[0].dstSet = descriptorSet;
+	write_desc[0].descriptorCount = 1;
+	write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	write_desc[0].pImageInfo = desc_image;
+	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
+}
+
 void VkUtil::copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, int32_t width, int32_t height, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout)
 {
 	VkImageBlit blit = {};
@@ -489,5 +504,31 @@ void VkUtil::createImageView(VkDevice device, VkImage image, VkFormat imageForma
 	createInfo.subresourceRange.layerCount = 1;
 
 	err = vkCreateImageView(device, &createInfo, nullptr, imageView);
+	check_vk_result(err);
+}
+
+void VkUtil::createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler)
+{
+	VkResult err;
+
+	VkSamplerCreateInfo samplerInfo = {};
+	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerInfo.magFilter = VK_FILTER_LINEAR;
+	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.addressModeU = adressMode;
+	samplerInfo.addressModeV = adressMode;
+	samplerInfo.addressModeW = adressMode;
+	samplerInfo.anisotropyEnable = maxAnisotropy > 0 ? VK_TRUE : VK_FALSE;
+	samplerInfo.maxAnisotropy = maxAnisotropy;
+	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	samplerInfo.unnormalizedCoordinates = VK_FALSE;
+	samplerInfo.compareEnable = VK_FALSE;
+	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	samplerInfo.mipLodBias = 0.0f;
+	samplerInfo.minLod = 0.0f;
+	samplerInfo.maxLod = (float)(mipLevels-1);
+
+	err = vkCreateSampler(device, &samplerInfo, nullptr, sampler);
 	check_vk_result(err);
 }
