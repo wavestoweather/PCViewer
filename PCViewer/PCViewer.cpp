@@ -364,22 +364,24 @@ struct Attribute {
 	float max;			//max value of all values
 };
 
-bool* pcAttributeEnabled = NULL;										//Contains whether a specific attribute is enabled
-bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
-std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
-std::vector<int> pcAttrOrd = std::vector<int>();						//Contains the ordering of the attributes	
-std::vector<std::string> droppedPaths = std::vector<std::string>();
-bool* createDLForDrop = NULL;
-bool pathDropped = false;
-std::default_random_engine engine;
-std::uniform_int_distribution<int> distribution(0, 35);
-float alphaDrawLists = .5f;
-
-//variables for the histogramm
-float histogrammWidth = .1f;
-bool drawHistogramm = false;
-bool histogrammDensity = false;
-Vec4 histogrammBackgroundColor = { .5f,.5f,.5,.5f };
+static bool* pcAttributeEnabled = NULL;											//Contains whether a specific attribute is enabled
+static bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
+static std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
+static std::vector<int> pcAttrOrd = std::vector<int>();							//Contains the ordering of the attributes	
+static std::vector<std::string> droppedPaths = std::vector<std::string>();
+static bool* createDLForDrop = NULL;
+static bool pathDropped = false;
+static std::default_random_engine engine;
+static std::uniform_int_distribution<int> distribution(0, 35);
+static float alphaDrawLists = .5f;
+static Vec4 PcPlotBackCol = { 0,0,0,1 };
+ 
+ //variables for the histogramm
+static float histogrammWidth = .1f;
+static bool drawHistogramm = false;
+static bool histogrammDensity = false;
+static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
+static Vec4 densityBackCol = { 0,0,0,1 };
 
 
 
@@ -1599,7 +1601,7 @@ static void createPcPlotCommandBuffer() {
 	renderPassInfo.renderArea.offset = { 0,0 };
 	renderPassInfo.renderArea.extent = { g_PcPlotWidth,g_PcPlotHeight };
 
-	VkClearValue clearColor = { 0.0f,0.0f,0.0f,1.0f };
+	VkClearValue clearColor = { PcPlotBackCol.x,PcPlotBackCol.y,PcPlotBackCol.z,PcPlotBackCol.w };//{ 0.0f,0.0f,0.0f,1.0f };
 	
 	renderPassInfo.clearValueCount = 1;
 	renderPassInfo.pClearValues = &clearColor;
@@ -1841,7 +1843,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			if (pcAttributeEnabled[i]) {
 				RectVertex vert;
 				vert.pos = { x,1,0,0 };
-				vert.col = histogrammDensity ? Vec4{0, 0, 0, 1} : histogrammBackgroundColor;
+				vert.col = histogrammDensity ? densityBackCol : histogrammBackCol;
 				rects[i * 4] = vert;
 				vert.pos.y = -1;
 				rects[i * 4 + 1] = vert;
@@ -1854,7 +1856,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			else {
 				RectVertex vert;
 				vert.pos = { -2,-2,0,0 };
-				vert.col = histogrammBackgroundColor;
+				vert.col = histogrammBackCol;
 				rects[i * 4] = vert;
 				rects[i * 4 + 1] = vert;
 				rects[i * 4 + 2] = vert;
@@ -3064,13 +3066,22 @@ int main(int, char**)
 			if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
 				pcPlotRender = true;
 			}
-			if (ImGui::ColorEdit4("Background Color", &histogrammBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+			if (ImGui::ColorEdit4("Histogramm Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
 				pcPlotRender = true;
 			}
 			if (ImGui::Checkbox("Show Density", &histogrammDensity) && drawHistogramm) {
 				pcPlotRender = true;
 			}
+			if (ImGui::ColorEdit4("Density Background", &densityBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+				pcPlotRender = true;
+			}
 			ImGui::Separator();
+			
+			ImGui::Text("Parallel Coordinates Settings:");
+
+			if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview)) {
+				pcPlotRender = true;
+			}
 
 			for (int i = 0; i < pcAttributes.size(); i++) {
 				ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
