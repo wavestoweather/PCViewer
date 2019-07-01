@@ -2,9 +2,10 @@
 #define VkUtil_H
 
 #include <vulkan/vulkan.h>
+#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include "PCUtil.h"
+#include <vector>
 
 static void check_vk_result(VkResult err)
 {
