@@ -1841,7 +1841,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			if (pcAttributeEnabled[i]) {
 				RectVertex vert;
 				vert.pos = { x,1,0,0 };
-				vert.col = histogrammBackgroundColor;
+				vert.col = histogrammDensity ? Vec4{0, 0, 0, 1} : histogrammBackgroundColor;
 				rects[i * 4] = vert;
 				vert.pos.y = -1;
 				rects[i * 4 + 1] = vert;
