@@ -122,6 +122,11 @@ struct HistogramUniformBuffer {
 	Vec4 color;
 };
 
+struct DensityUniformBuffer {
+	float gaussRange;
+	uint32_t padding[3];
+};
+
 struct DrawList {
 	std::string name;
 	std::string parentDataSet;
@@ -207,6 +212,8 @@ static VkSampler				g_PcPlotDensityImageSampler = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotDensityDescriptorSet = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotDensityRectBuffer = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotDensityRectBufferOffset = 0;
+static VkBuffer					g_PcPlotDensityUbo = VK_NULL_HANDLE;
+static uint32_t					g_PcPLotDensityUboOffset = 0;
 static VkRenderPass				g_PcPlotDensityRenderPass = VK_NULL_HANDLE;
 static VkFramebuffer			g_PcPlotDensityFrameBuffer = VK_NULL_HANDLE;
 
@@ -383,6 +390,7 @@ static float histogrammWidth = .1f;
 static bool drawHistogramm = false;
 static bool histogrammDensity = false;
 static bool pcPlotDensity = false;
+static float densityRadius = .05f;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
 
@@ -579,6 +587,11 @@ static void createPcPlotHistoPipeline() {
 	bindings.clear();
 	bindings.push_back(uboLayoutBinding);
 
+	uboLayoutBinding.binding = 1;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	
+	bindings.push_back(uboLayoutBinding);
+
 	VkUtil::createDescriptorSetLayout(g_Device, bindings, &g_PcPlotDensityDescriptorSetLayout);
 
 	descriptorSetLayouts.clear();
@@ -670,7 +683,7 @@ static void createPcPlotImageView() {
 	layouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &g_PcPlotDensityDescriptorSet);
 
-	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_PcPlotDensityDescriptorSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0,g_PcPlotDensityDescriptorSet);
 
 	VkImageViewCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1110,6 +1123,16 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	vkGetBufferMemoryRequirements(g_Device, g_PcPlotDensityRectBuffer, &memRequirements);
 	allocInfo.allocationSize += memRequirements.size;
 
+	//creating the density uniform buffer
+	g_PcPLotDensityUboOffset = allocInfo.allocationSize;
+	bufferInfo.size = sizeof(DensityUniformBuffer);
+	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotDensityUbo);
+	check_vk_result(err);
+
+	vkGetBufferMemoryRequirements(g_Device, g_PcPlotDensityUbo, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+
 	//allocating the memory
 	allocInfo.memoryTypeIndex = findMemoryType(memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotIndexBufferMemory);
@@ -1126,6 +1149,10 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 
 	//binding the density vertex buffer
 	vkBindBufferMemory(g_Device, g_PcPlotDensityRectBuffer, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset);
+
+	//binding the uboBuffer and adding the buffer to the density descriptor set
+	vkBindBufferMemory(g_Device, g_PcPlotDensityUbo, g_PcPlotIndexBufferMemory, g_PcPLotDensityUboOffset);
+	VkUtil::updateDescriptorSet(g_Device, g_PcPlotDensityUbo, sizeof(DensityUniformBuffer), 1,g_PcPlotDensityDescriptorSet);
 
 	//filling the histogramm index buffer
 	//Vertex Arrangment:
@@ -1366,7 +1393,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 	//updating the descriptor sets
 	for (int i = 0; i < layouts.size(); i++) {
-		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), dl.histogrammDescSets[i]);
+		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
 	}
 
 	//Binding the median uniform Buffer
@@ -1376,7 +1403,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	layouts.clear();
 	layouts.push_back(g_PcPlotDescriptorLayout);
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &dl.medianUboDescSet);
-	VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, sizeof(UniformBufferObject), dl.medianUboDescSet);
+	VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, sizeof(UniformBufferObject), 0, dl.medianUboDescSet);
 
 	//Binding the histogram index buffer
 	offset += sizeof(UniformBufferObject);
@@ -3115,6 +3142,16 @@ int main(int, char**)
 			ImGui::Separator();
 			
 			ImGui::Text("Parallel Coordinates Settings:");
+
+			if (ImGui::SliderFloat("Blur radius", &densityRadius, .01f, .5f)) {
+				DensityUniformBuffer ubo = {};
+				ubo.gaussRange = densityRadius;
+				void* d;
+				vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPLotDensityUboOffset, sizeof(DensityUniformBuffer), 0, &d);
+				memcpy(d, &ubo, sizeof(DensityUniformBuffer));
+				vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+				pcPlotRender = true;
+			}
 
 			if (ImGui::Checkbox("Show PcPlot Density", &pcPlotDensity)) {
 				pcPlotRender = true;

@@ -496,7 +496,7 @@ void VkUtil::createDescriptorSets(VkDevice device,const std::vector<VkDescriptor
 	check_vk_result(err);
 }
 
-void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, VkDescriptorSet descriptorSet)
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorBufferInfo desBufferInfo = {};
 	desBufferInfo.buffer = buffer;
@@ -506,7 +506,7 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	VkWriteDescriptorSet descriptorWrite = {};
 	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	descriptorWrite.dstSet = descriptorSet;
-	descriptorWrite.dstBinding = 0;
+	descriptorWrite.dstBinding = binding;
 	descriptorWrite.dstArrayElement = 0;
 	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	descriptorWrite.descriptorCount = 1;
@@ -515,7 +515,7 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
-void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout, VkDescriptorSet descriptorSet)
+void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout, uint32_t binding, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorImageInfo desc_image[1] = {};
 	desc_image[0].sampler = sampler;
@@ -527,6 +527,7 @@ void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImag
 	write_desc[0].descriptorCount = 1;
 	write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	write_desc[0].pImageInfo = desc_image;
+	write_desc[0].dstBinding = binding;
 	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
 }
 
