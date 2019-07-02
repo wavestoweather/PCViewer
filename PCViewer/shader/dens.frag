@@ -14,7 +14,7 @@ void main() {
 	float divider = 0;
 	outColor = vec4(0,0,0,0);
 	for(int i = 0;i<21;i++){
-		vec2 curT = tex+vec2(0,yStep*(i-5));
+		vec2 curT = tex+vec2(0,yStep*(i-10));
 		vec4 col = texture(texSampler, curT);
 		outColor += col * gaussianCoeff[i];
 		divider += float(curT.y<1&&curT.y>0) * gaussianCoeff[i];

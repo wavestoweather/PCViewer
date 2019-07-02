@@ -224,8 +224,10 @@ static uint32_t					g_PcPlotHistogrammIndexOffset = 0;
 //Indexbuffermemory also contaings the histogramm rect buffer and histogramm index buffer
 static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
-static uint32_t					g_PcPlotWidth = 1280;
-static uint32_t					g_PcPlotHeight = 400;
+static uint32_t					windowWidth = 1920;
+static uint32_t					windowHeight = 1080;
+static uint32_t					g_PcPlotWidth = 1080;
+static uint32_t					g_PcPlotHeight = 500;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
 static char						g_histFragPath[] = "shader/histFrag.spv";
@@ -380,6 +382,7 @@ static Vec4 PcPlotBackCol = { 0,0,0,1 };
 static float histogrammWidth = .1f;
 static bool drawHistogramm = false;
 static bool histogrammDensity = false;
+static bool pcPlotDensity = false;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
 
@@ -1099,7 +1102,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 
 	//creating the density rect buffer
 	g_PcPlotDensityRectBufferOffset = allocInfo.allocationSize;
-	bufferInfo.size = sizeof(Vec4) * 4 * pcAttributes.size();
+	bufferInfo.size = sizeof(Vec4) * 4 * pcAttributes.size() + 1;
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotDensityRectBuffer);
 	check_vk_result(err);
@@ -1141,6 +1144,12 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	void* ind;
 	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammIndexOffset, sizeof(uint16_t) * 6 * pcAttributes.size(), 0, &ind);
 	memcpy(ind, indexBuffer, sizeof(uint16_t) * 6 * pcAttributes.size());
+	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+
+	//filling the densityRectBuffer with the rect for full screen
+	Vec4 rect[4] = { {-1,1,0,1},{-1,-1,0,1},{1,-1,0,1},{1,1,0,1} };
+	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset, sizeof(Vec4)*4, 0, &ind);
+	memcpy(ind, rect, sizeof(Vec4)*4);
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 
 	delete[] indexBuffer;
@@ -1835,6 +1844,34 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 #endif
 	}
 
+	if (pcPlotDensity && pcAttributes.size() > 0) {
+		//ending the pass to blit the image
+		vkCmdEndRenderPass(g_PcPlotCommandBuffer);
+
+		//transition image Layouts
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		//blitting the image
+		VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		//transition image Layouts back
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		//beginning the density renderpass
+		std::vector<VkClearValue> clearColors;
+		VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearColors, g_PcPlotDensityRenderPass, g_PcPlotDensityFrameBuffer, { g_PcPlotWidth,g_PcPlotHeight });
+		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipeline);
+
+		VkDeviceSize offsets[1] = { 0 };
+		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotDensityRectBuffer, offsets);
+		vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotHistogrammIndex, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipelineLayout, 0, 1, &g_PcPlotDensityDescriptorSet, 0, nullptr);
+
+		vkCmdDrawIndexed(g_PcPlotCommandBuffer, 6, 1, 0, 0, 0);
+	}
+
 	if (drawHistogramm && pcAttributes.size()>0) {
 		//drawing the histogramm background
 		RectVertex* rects = new RectVertex[pcAttributes.size() * 4];
@@ -1967,13 +2004,13 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				verts[i * 4 + 3] = { gap * i + histogrammWidth - 1,1,0,0 };
 			}
 			
-			vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset, sizeof(Vec4)* amtOfIndeces * 4, 0, &d);
+			vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset + sizeof(Vec4) * 4, sizeof(Vec4)* amtOfIndeces * 4, 0, &d);
 			memcpy(d, verts, sizeof(Vec4)* amtOfIndeces * 4);
 			vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 
 			delete[] verts;
 
-			VkDeviceSize offsets[1] = { 0 };
+			VkDeviceSize offsets[1] = { sizeof(Vec4) * 4 };
 			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotDensityRectBuffer, offsets);
 			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotHistogrammIndex, 0, VK_INDEX_TYPE_UINT16);
 			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipelineLayout, 0, 1, &g_PcPlotDensityDescriptorSet, 0, nullptr);
@@ -2702,7 +2739,7 @@ int main(int, char**)
 		return 1;
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	GLFWwindow* window = glfwCreateWindow(1280, 720, "Parallel Coordinates Viewer", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "Parallel Coordinates Viewer", NULL, NULL);
 
 	// Setup Drag and drop callback
 	glfwSetDropCallback(window, drop_callback);
@@ -3079,6 +3116,10 @@ int main(int, char**)
 			
 			ImGui::Text("Parallel Coordinates Settings:");
 
+			if (ImGui::Checkbox("Show PcPlot Density", &pcPlotDensity)) {
+				pcPlotRender = true;
+			}
+			
 			if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview)) {
 				pcPlotRender = true;
 			}
