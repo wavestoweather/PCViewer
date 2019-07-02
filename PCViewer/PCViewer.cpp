@@ -1209,6 +1209,10 @@ static void cleanupPcPlotVertexBuffer() {
 		vkDestroyBuffer(g_Device, g_PcPlotDensityRectBuffer, nullptr);
 		g_PcPlotDensityRectBuffer = VK_NULL_HANDLE;
 	}
+	if (g_PcPlotDensityUbo) {
+		vkDestroyBuffer(g_Device, g_PcPlotDensityUbo, nullptr);
+		g_PcPlotDensityUbo = VK_NULL_HANDLE;
+	}
 	if (g_PcPlotIndexBufferMemory) {
 		vkFreeMemory(g_Device, g_PcPlotIndexBufferMemory, nullptr);
 		g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
