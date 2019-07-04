@@ -75,6 +75,20 @@ void VkUtil::createCommandBuffer(VkDevice device, VkCommandPool commandPool, VkC
 	check_vk_result(err);
 }
 
+void VkUtil::createBuffer(VkDevice device, uint32_t size, VkBufferUsageFlags usage, VkBuffer* buffer)
+{
+	VkResult err;
+
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = size;
+	bufferInfo.usage = usage;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	err = vkCreateBuffer(device, &bufferInfo, nullptr, buffer);
+	check_vk_result(err);
+}
+
 void VkUtil::commitCommandBuffer( VkQueue queue, VkCommandBuffer commandBuffer)
 {
 	VkResult err;
@@ -548,6 +562,28 @@ void VkUtil::copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, int32_t 
 	blit.dstSubresource.layerCount = 1;
 
 	vkCmdBlitImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, 1, &blit, VK_FILTER_LINEAR);
+}
+
+void VkUtil::copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+{
+	VkBufferImageCopy region = {};
+	region.bufferOffset = 0;
+	region.bufferRowLength = 0;
+	region.bufferImageHeight = 0;
+
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.mipLevel = 0;
+	region.imageSubresource.baseArrayLayer = 0;
+	region.imageSubresource.layerCount = 1;
+
+	region.imageOffset = { 0, 0, 0 };
+	region.imageExtent = {
+		width,
+		height,
+		1
+	};
+
+	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
 void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)

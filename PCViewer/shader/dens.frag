@@ -5,6 +5,7 @@ layout(binding = 0) uniform sampler2D texSampler;
 layout(binding = 1) uniform UniformBufferObject{
 	float radius;
 } ubo;
+layout(binding = 2) uniform sampler2D ironMap;
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) in vec2 tex;
@@ -18,10 +19,12 @@ void main() {
 	outColor = vec4(0,0,0,0);
 	for(int i = 0;i<21;i++){
 		vec2 curT = tex+vec2(0,yStep*(i-10));
-		vec4 col = texture(texSampler, curT);
-		outColor += col * gaussianCoeff[i];
+		vec3 col = texture(texSampler, curT).xyz;
+		outColor.xyz += col * gaussianCoeff[i];
 		divider += float(curT.y<1&&curT.y>0) * gaussianCoeff[i];
 	}
 	//normalization
-    outColor /= divider;
+    outColor.xyz /= divider;
+	//mapping a ironMap Texture to it
+	outColor = texture(ironMap, vec2(max(max(outColor.x,outColor.y),outColor.z),.5f));
 }

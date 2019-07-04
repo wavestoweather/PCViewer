@@ -67,7 +67,6 @@ static VkQueue                  g_Queue = VK_NULL_HANDLE;
 static VkDebugReportCallbackEXT g_DebugReport = VK_NULL_HANDLE;
 static VkPipelineCache          g_PipelineCache = VK_NULL_HANDLE;
 static VkDescriptorPool         g_DescriptorPool = VK_NULL_HANDLE;
-extern VkPipeline				g_Pipeline;
 
 static ImGui_ImplVulkanH_Window g_MainWindowData;
 static int                      g_MinImageCount = 2;
@@ -209,6 +208,10 @@ static VkDescriptorSetLayout	g_PcPlotDensityDescriptorSetLayout = VK_NULL_HANDLE
 static VkImage					g_PcPlotDensityImageCopy = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotDensityImageView = VK_NULL_HANDLE;
 static VkSampler				g_PcPlotDensityImageSampler = VK_NULL_HANDLE;
+static VkImage					g_PcPlotDensityIronMap = VK_NULL_HANDLE;
+static uint32_t					g_PcPlotDensityIronMapOffset = 0;
+static VkImageView				g_PcPLotDensityIronMapView = VK_NULL_HANDLE;
+static VkSampler				g_PcPlotDensityIronMapSampler = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotDensityDescriptorSet = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotDensityRectBuffer = VK_NULL_HANDLE;
 static uint32_t					g_PcPlotDensityRectBufferOffset = 0;
@@ -233,8 +236,8 @@ static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 static uint32_t					windowWidth = 1920;
 static uint32_t					windowHeight = 1080;
-static uint32_t					g_PcPlotWidth = 1080;
-static uint32_t					g_PcPlotHeight = 500;
+static uint32_t					g_PcPlotWidth = 2060;
+static uint32_t					g_PcPlotHeight = 1000;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
 static char						g_histFragPath[] = "shader/histFrag.spv";
@@ -246,126 +249,126 @@ static char						g_densFragPath[] = "shader/densFrag.spv";
 static char						g_densVertPath[] = "shader/densVert.spv";
 
 //color palette for density
-static Vec4						colorPalette[] = { {0, 0, 0 , 0 }
-												,{0, 0, 36		,255}
-												,{0, 0, 51		,255}
-												,{0, 0, 66		,255}
-												,{0, 0, 81		,255}
-												,{2, 0, 90		,255}
-												,{4, 0, 99		,255}
-												,{7, 0, 106		,255}
-												,{11, 0, 115	,255}
-												,{14, 0, 119	,255}
-												,{20, 0, 123	,255}
-												,{27, 0, 128	,255}
-												,{33, 0, 133	,255}
-												,{41, 0, 137	,255}
-												,{48, 0, 140	,255}
-												,{55, 0, 143	,255}
-												,{61, 0, 146	,255}
-												,{66, 0, 149	,255}
-												,{72, 0, 150	,255}
-												,{78, 0, 151	,255}
-												,{84, 0, 152	,255}
-												,{91, 0, 153	,255}
-												,{97, 0, 155	,255}
-												,{104, 0, 155	,255}
-												,{110, 0, 156	,255}
-												,{115, 0, 157	,255}
-												,{122, 0, 157	,255}
-												,{128, 0, 157	,255}
-												,{134, 0, 157	,255}
-												,{139, 0, 157	,255}
-												,{146, 0, 156	,255}
-												,{152, 0, 155	,255}
-												,{157, 0, 155	,255}
-												,{162, 0, 155	,255}
-												,{167, 0, 154	,255}
-												,{171, 0, 153	,255}
-												,{175, 1, 152	,255}
-												,{178, 1, 151	,255}
-												,{182, 2, 149	,255}
-												,{185, 4, 149	,255}
-												,{188, 5, 147	,255}
-												,{191, 6, 146	,255}
-												,{193, 8, 144	,255}
-												,{195, 11, 142	,255}
-												,{198, 13, 139	,255}
-												,{201, 17, 135	,255}
-												,{203, 20, 132	,255}
-												,{206, 23, 127	,255}
-												,{208, 26, 121	,255}
-												,{210, 29, 116	,255}
-												,{212, 33, 111	,255}
-												,{214, 37, 103	,255}
-												,{217, 41, 97	,255}
-												,{219, 46, 89	,255}
-												,{221, 49, 78	,255}
-												,{223, 53, 66	,255}
-												,{224, 56, 54	,255}
-												,{226, 60, 42	,255}
-												,{228, 64, 30	,255}
-												,{229, 68, 25	,255}
-												,{231, 72, 20	,255}
-												,{232, 76, 16	,255}
-												,{234, 78, 12	,255}
-												,{235, 82, 10	,255}
-												,{236, 86, 8	,255}
-												,{237, 90, 7	,255}
-												,{238, 93, 5	,255}
-												,{239, 96, 4	,255}
-												,{240, 100, 3	,255}
-												,{241, 103, 3	,255}
-												,{241, 106, 2	,255}
-												,{242, 109, 1	,255}
-												,{243, 113, 1	,255}
-												,{244, 116, 0	,255}
-												,{244, 120, 0	,255}
-												,{245, 125, 0	,255}
-												,{246, 129, 0	,255}
-												,{247, 133, 0	,255}
-												,{248, 136, 0	,255}
-												,{248, 139, 0	,255}
-												,{249, 142, 0	,255}
-												,{249, 145, 0	,255}
-												,{250, 149, 0	,255}
-												,{251, 154, 0	,255}
-												,{252, 159, 0	,255}
-												,{253, 163, 0	,255}
-												,{253, 168, 0	,255}
-												,{253, 172, 0	,255}
-												,{254, 176, 0	,255}
-												,{254, 179, 0	,255}
-												,{254, 184, 0	,255}
-												,{254, 187, 0	,255}
-												,{254, 191, 0	,255}
-												,{254, 195, 0	,255}
-												,{254, 199, 0	,255}
-												,{254, 202, 1	,255}
-												,{254, 205, 2	,255}
-												,{254, 208, 5	,255}
-												,{254, 212, 9	,255}
-												,{254, 216, 12	,255}
-												,{255, 219, 15	,255}
-												,{255, 221, 23	,255}
-												,{255, 224, 32	,255}
-												,{255, 227, 39	,255}
-												,{255, 229, 50	,255}
-												,{255, 232, 63	,255}
-												,{255, 235, 75	,255}
-												,{255, 238, 88	,255}
-												,{255, 239, 102	,255}
-												,{255, 241, 116	,255}
-												,{255, 242, 134	,255}
-												,{255, 244, 149	,255}
-												,{255, 245, 164	,255}
-												,{255, 247, 179	,255}
-												,{255, 248, 192	,255}
-												,{255, 249, 203	,255}
-												,{255, 251, 216	,255}
-												,{255, 253, 228	,255}
-												,{255, 254, 239	,255}
-												,{255, 255, 249 ,255} };
+static char						colorPalette[] = { 0, 0, 0		,255
+												,0, 0, 36		,255
+												,0, 0, 51		,255
+												,0, 0, 66		,255
+												,0, 0, 81		,255
+												,2, 0, 90		,255
+												,4, 0, 99		,255
+												,7, 0, 106		,255
+												,11, 0, 115		,255
+												,14, 0, 119		,255
+												,20, 0, 123		,255
+												,27, 0, 128		,255
+												,33, 0, 133		,255
+												,41, 0, 137		,255
+												,48, 0, 140		,255
+												,55, 0, 143		,255
+												,61, 0, 146		,255
+												,66, 0, 149		,255
+												,72, 0, 150		,255
+												,78, 0, 151		,255
+												,84, 0, 152		,255
+												,91, 0, 153		,255
+												,97, 0, 155		,255
+												,104, 0, 155	,255
+												,110, 0, 156	,255
+												,115, 0, 157	,255
+												,122, 0, 157	,255
+												,128, 0, 157	,255
+												,134, 0, 157	,255
+												,139, 0, 157	,255
+												,146, 0, 156	,255
+												,152, 0, 155	,255
+												,157, 0, 155	,255
+												,162, 0, 155	,255
+												,167, 0, 154	,255
+												,171, 0, 153	,255
+												,175, 1, 152	,255
+												,178, 1, 151	,255
+												,182, 2, 149	,255
+												,185, 4, 149	,255
+												,188, 5, 147	,255
+												,191, 6, 146	,255
+												,193, 8, 144	,255
+												,195, 11, 142	,255
+												,198, 13, 139	,255
+												,201, 17, 135	,255
+												,203, 20, 132	,255
+												,206, 23, 127	,255
+												,208, 26, 121	,255
+												,210, 29, 116	,255
+												,212, 33, 111	,255
+												,214, 37, 103	,255
+												,217, 41, 97	,255
+												,219, 46, 89	,255
+												,221, 49, 78	,255
+												,223, 53, 66	,255
+												,224, 56, 54	,255
+												,226, 60, 42	,255
+												,228, 64, 30	,255
+												,229, 68, 25	,255
+												,231, 72, 20	,255
+												,232, 76, 16	,255
+												,234, 78, 12	,255
+												,235, 82, 10	,255
+												,236, 86, 8		,255
+												,237, 90, 7		,255
+												,238, 93, 5		,255
+												,239, 96, 4		,255
+												,240, 100, 3	,255
+												,241, 103, 3	,255
+												,241, 106, 2	,255
+												,242, 109, 1	,255
+												,243, 113, 1	,255
+												,244, 116, 0	,255
+												,244, 120, 0	,255
+												,245, 125, 0	,255
+												,246, 129, 0	,255
+												,247, 133, 0	,255
+												,248, 136, 0	,255
+												,248, 139, 0	,255
+												,249, 142, 0	,255
+												,249, 145, 0	,255
+												,250, 149, 0	,255
+												,251, 154, 0	,255
+												,252, 159, 0	,255
+												,253, 163, 0	,255
+												,253, 168, 0	,255
+												,253, 172, 0	,255
+												,254, 176, 0	,255
+												,254, 179, 0	,255
+												,254, 184, 0	,255
+												,254, 187, 0	,255
+												,254, 191, 0	,255
+												,254, 195, 0	,255
+												,254, 199, 0	,255
+												,254, 202, 1	,255
+												,254, 205, 2	,255
+												,254, 208, 5	,255
+												,254, 212, 9	,255
+												,254, 216, 12	,255
+												,255, 219, 15	,255
+												,255, 221, 23	,255
+												,255, 224, 32	,255
+												,255, 227, 39	,255
+												,255, 229, 50	,255
+												,255, 232, 63	,255
+												,255, 235, 75	,255
+												,255, 238, 88	,255
+												,255, 239, 102	,255
+												,255, 241, 116	,255
+												,255, 242, 134	,255
+												,255, 244, 149	,255
+												,255, 245, 164	,255
+												,255, 247, 179	,255
+												,255, 248, 192	,255
+												,255, 249, 203	,255
+												,255, 251, 216	,255
+												,255, 253, 228	,255
+												,255, 254, 239	,255
+												,255, 255, 249 ,255};
 
 struct Attribute {
 	std::string name;
@@ -587,6 +590,9 @@ static void createPcPlotHistoPipeline() {
 	bindings.clear();
 	bindings.push_back(uboLayoutBinding);
 
+	uboLayoutBinding.binding = 2;
+	bindings.push_back(uboLayoutBinding);
+
 	uboLayoutBinding.binding = 1;
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	
@@ -617,9 +623,9 @@ static void cleanupPcPlotHistoPipeline() {
 static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 	VkPhysicalDeviceMemoryProperties memProps;
 	vkGetPhysicalDeviceMemoryProperties(g_PhysicalDevice, &memProps);
-	uint32_t typeIndex = memProps.memoryTypeCount;
-	for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-		if ((typeFilter & (1 << i))&&(memProps.memoryTypes[i].propertyFlags&properties)==properties) {
+
+	for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+		if ((typeFilter & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & properties) == properties) {
 			return i;
 		}
 	}
@@ -667,23 +673,69 @@ static void createPcPlotImageView() {
 	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityImageCopy, &memRequirements);
 	allocInfo.allocationSize += memRequirements.size;
 
+	//creating the Image and imageview for the iron map
+	VkUtil::createImage(g_Device, sizeof(colorPalette) / sizeof(*colorPalette) / 4, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityIronMap);
+	g_PcPlotDensityIronMapOffset = allocInfo.allocationSize;
+	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityIronMap, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_PcPlotMem);
 	check_vk_result(err);
 
 	vkBindImageMemory(g_Device, g_PcPlot, g_PcPlotMem, 0);
 	vkBindImageMemory(g_Device, g_PcPlotDensityImageCopy, g_PcPlotMem, imageOffset);
+	vkBindImageMemory(g_Device, g_PcPlotDensityIronMap, g_PcPlotMem, g_PcPlotDensityIronMapOffset);
 
 	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, 1, &g_PcPlotDensityImageView);
+	VkUtil::createImageView(g_Device, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, 1, &g_PcPLotDensityIronMapView);
 	
 	//creating the smapler for the density image
-	VkUtil::createImageSampler(g_Device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, 16, 1, &g_PcPlotDensityImageSampler);
+	VkUtil::createImageSampler(g_Device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, 1, 1, &g_PcPlotDensityImageSampler);
+	VkUtil::createImageSampler(g_Device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, 1, 1, &g_PcPlotDensityIronMapSampler);
 
 	//creating the descriptorSet and updating the descriptorSetLayout
 	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &g_PcPlotDensityDescriptorSet);
 
-	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0,g_PcPlotDensityDescriptorSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, g_PcPlotDensityDescriptorSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, g_PcPlotDensityDescriptorSet);
+
+	//uploading the iron map via a staging buffer
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	VkUtil::createBuffer(g_Device, sizeof(colorPalette), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
+
+	VkMemoryRequirements memReq = {};
+	vkGetBufferMemoryRequirements(g_Device, stagingBuffer, &memReq);
+
+	VkMemoryAllocateInfo memalloc = {};
+	memalloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	memalloc.allocationSize = memReq.size;
+	memalloc.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	
+	err = vkAllocateMemory(g_Device, &memalloc, nullptr, &stagingBufferMemory);
+	check_vk_result(err);
+
+	vkBindBufferMemory(g_Device, stagingBuffer, stagingBufferMemory, 0);
+	void* d;
+	vkMapMemory(g_Device, stagingBufferMemory, 0, sizeof(colorPalette), 0, &d);
+	memcpy(d, colorPalette, sizeof(colorPalette));
+	vkUnmapMemory(g_Device, stagingBufferMemory);
+	
+	VkCommandBuffer stagingCommandBuffer;
+	VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &stagingCommandBuffer);
+	
+	VkUtil::transitionImageLayout(stagingCommandBuffer, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	VkUtil::copyBufferToImage(stagingCommandBuffer, stagingBuffer, g_PcPlotDensityIronMap, sizeof(colorPalette) / sizeof(*colorPalette) / 4, 1);
+	VkUtil::transitionImageLayout(stagingCommandBuffer, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VkUtil::commitCommandBuffer(g_Queue, stagingCommandBuffer);
+	
+	err = vkDeviceWaitIdle(g_Device);
+	check_vk_result(err);
+	vkDestroyBuffer(g_Device, stagingBuffer, nullptr);
+	vkFreeMemory(g_Device, stagingBufferMemory, nullptr);
 
 	VkImageViewCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -711,6 +763,9 @@ static void cleanupPcPlotImageView() {
 	vkDestroyImageView(g_Device, g_PcPlotDensityImageView, nullptr);
 	vkDestroyImage(g_Device, g_PcPlotDensityImageCopy, nullptr);
 	vkDestroySampler(g_Device, g_PcPlotDensityImageSampler, nullptr);
+	vkDestroyImageView(g_Device, g_PcPLotDensityIronMapView, nullptr);
+	vkDestroyImage(g_Device, g_PcPlotDensityIronMap, nullptr);
+	vkDestroySampler(g_Device, g_PcPlotDensityIronMapSampler, nullptr);
 	vkFreeMemory(g_Device, g_PcPlotMem, nullptr);
 }
 
@@ -2855,12 +2910,12 @@ int main(int, char**)
 	}
 
 	{//Section to initialize the pcPlot graphics queue
+		createPcPlotCommandPool();
 		createPcPlotRenderPass();
 		createPcPlotHistoPipeline();
 		createPcPlotImageView();
 		createPcPlotPipeline();
 		createPcPlotFramebuffer();
-		createPcPlotCommandPool();
 
 		//before being able to add the image to imgui the sampler has to be created
 		VkSamplerCreateInfo info = {};
@@ -3084,7 +3139,7 @@ int main(int, char**)
 			}
 
 			//drawing the Texture
-			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, g_PcPlotHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, io.DisplaySize.y * 2/5), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 			if (pcPlotRender) {
 				pcPlotRender = false;
 				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, wd);
