@@ -31,6 +31,7 @@
 #include <limits>
 #include <list>
 #include <algorithm>
+#include <functional>
 #include <chrono>
 #include <random>
 
@@ -73,6 +74,55 @@ static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
+
+template <typename T>
+std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b) {
+	assert(a.size() == b.size());
+	
+	std::vector<T> result(a.size());
+	std::transform(a.begin(), a.end(), b.begin(), std::back_inserter(result), std::plus<T>());
+	return result;
+}
+
+template <typename T>
+std::vector<T> operator-(const std::vector<T>& a, const std::vector<T>& b) {
+	assert(a.size() == b.size());
+
+	std::vector<T> result(a.size());
+	std::transform(a.begin(), a.end(), b.begin(), std::back_inserter(result), std::minus<T>());
+	return result;
+}
+
+template <typename T>
+std::vector<T> operator/(const std::vector<T>& a, const T b) {
+	std::vector<T> result(a);
+	for (int i = 0; i < result.size(); i++) {
+		result[i] /= b;
+	}
+	return result;
+}
+
+template <typename T>
+T squareDist(const std::vector<T>& a, const std::vector<T>& b) {
+	assert(a.size() == b.size());
+
+	float result = 0;
+	float b;
+	for (int i = 0; i < a.size(); i++) {
+		b = a[i] - b[i];
+		result += std::powf(b, 2);
+	}
+	return result;
+}
+
+template <typename T>
+T eucDist(const std::vector<T>& a) {
+	float result = 0;
+	for (int i = 0; i < a.size(); i++) {
+		result += std::powf(a[i], 2);
+	}
+	return std::sqrt(result);
+}
 
 struct Vec4 {
 	float x;
@@ -249,7 +299,7 @@ static char						g_densFragPath[] = "shader/densFrag.spv";
 static char						g_densVertPath[] = "shader/densVert.spv";
 
 //color palette for density
-static char						colorPalette[] = { 0, 0, 0		,255
+static const unsigned char		colorPalette[] = { 0, 0, 0		,255
 												,0, 0, 36		,255
 												,0, 0, 51		,255
 												,0, 0, 66		,255
@@ -394,6 +444,8 @@ static bool drawHistogramm = false;
 static bool histogrammDensity = false;
 static bool pcPlotDensity = false;
 static float densityRadius = .05f;
+static bool calculateMedians = true;
+static bool mapDensity = true;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
 
@@ -1490,28 +1542,64 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	std::cout << "Starting to calulate the medians." << std::endl;
 #endif
 	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
-	//median calulation
-	std::vector<int> dataCpy(tl.indices);
+	//median calulations
+	if (calculateMedians) {
+		std::vector<int> dataCpy(tl.indices);
 
-	for (int i = 0; i < pcAttributes.size(); i++) {
-		std::sort(dataCpy.begin(), dataCpy.end(), [i,ds](int a, int b) {return ds.data[a][i] > ds.data[b][i]; });
-		medianArr[MEDIAN * pcAttributes.size() + i] = ds.data[dataCpy[dataCpy.size() >> 1]][i];
-	}
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			std::sort(dataCpy.begin(), dataCpy.end(), [i,ds](int a, int b) {return ds.data[a][i] > ds.data[b][i]; });
+			medianArr[MEDIAN * pcAttributes.size() + i] = ds.data[dataCpy[dataCpy.size() >> 1]][i];
+		}
 
-	//arithmetic median calculation
-	for (int i = 0; i < tl.indices.size(); i++) {
-		for (int j = 0; j < pcAttributes.size(); j++) {
-			if (i == 0)
-				medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
-			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[tl.indices[i]][j];
+		//arithmetic median calculation
+		for (int i = 0; i < tl.indices.size(); i++) {
+			for (int j = 0; j < pcAttributes.size(); j++) {
+				if (i == 0)
+					medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
+				medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[tl.indices[i]][j];
+			}
+		}
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= tl.indices.size();
+		}
+		
+		//geometric median
+		const float epsilon = .001f, phi = .0000001f;
+		std::vector<float> last(pcAttributes.size());
+		std::vector<float> median(pcAttributes.size());
+		std::vector<float> xj;
+		float denom,denomsum;
+		for (int i = 0; i < median.size(); i++) {
+			last[i] = 0;
+			median[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
+		}
+
+		while (squareDist(last, median) > epsilon) {
+			last = std::vector<float>(median);
+			for (int i = 0; i < median.size(); i++) {
+				median[i] = 0;
+			}
+			denomsum = 0;
+			for (int i = 0; i < tl.indices.size(); i++) {
+				xj = std::vector<float>(ds.data[i], ds.data[i] + pcAttributes.size());
+				denom = eucDist(xj - last);
+				if (denom < phi)
+					continue;
+				median = median + (xj / denom);
+				denomsum += 1/denom;
+			}
+			median = median / denomsum;
+		}
+
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			medianArr[GOEMEDIAN * pcAttributes.size() + i] = median[i];
 		}
 	}
-	for (int i = 0; i < pcAttributes.size(); i++) {
-		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= tl.indices.size();
+	else {
+		for (int i = 0; i < MEDIANCOUNT * pcAttributes.size(); i++) {
+			medianArr[i] = 0;
+		}
 	}
-	
-	//geometric median
-
 	//copying the median Array
 	vkMapMemory(g_Device, dl.dlMem, dl.medianBufferOffset, MEDIANCOUNT* pcAttributes.size() * sizeof(float), 0, &d);
 	memcpy(d, medianArr, MEDIANCOUNT* pcAttributes.size() * sizeof(float));
