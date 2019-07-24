@@ -107,10 +107,10 @@ T squareDist(const std::vector<T>& a, const std::vector<T>& b) {
 	assert(a.size() == b.size());
 
 	float result = 0;
-	float b;
+	float c;
 	for (int i = 0; i < a.size(); i++) {
-		b = a[i] - b[i];
-		result += std::powf(b, 2);
+		c = a[i] - b[i];
+		result += std::powf(c, 2);
 	}
 	return result;
 }
@@ -3303,6 +3303,10 @@ int main(int, char**)
 			if (ImGui::Checkbox("Show PcPlot Density", &pcPlotDensity)) {
 				pcPlotRender = true;
 			}
+
+			if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
+				
+			}
 			
 			if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview)) {
 				pcPlotRender = true;
@@ -3336,8 +3340,10 @@ int main(int, char**)
 			for (DataSet& ds : g_PcPlotDataSets) {
 				if (ImGui::TreeNode(ds.name.c_str())) {
 					for (const TemplateList& tl : ds.drawLists) {
-						if (ImGui::Button(tl.name.c_str()))
+						if (ImGui::Button(tl.name.c_str())) {
 							ImGui::OpenPopup(tl.name.c_str());
+							std::strcpy(pcDrawListName, tl.name.c_str());
+						}
 						if (ImGui::BeginPopupModal(tl.name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
 						{
 							ImGui::Text((std::string("Creating a drawing list from ")+tl.name+"\n\n").c_str());
@@ -3565,7 +3571,9 @@ int main(int, char**)
 			}
 		}
 
+#ifdef _DEBUG
 		ImGui::ShowDemoWindow(NULL);
+#endif
 
 		// Rendering
 		ImGui::Render();
