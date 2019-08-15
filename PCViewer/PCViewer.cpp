@@ -79,7 +79,7 @@ template <typename T>
 std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b) {
 	assert(a.size() == b.size());
 	
-	std::vector<T> result(a.size());
+	std::vector<T> result;
 	std::transform(a.begin(), a.end(), b.begin(), std::back_inserter(result), std::plus<T>());
 	return result;
 }
@@ -88,7 +88,7 @@ template <typename T>
 std::vector<T> operator-(const std::vector<T>& a, const std::vector<T>& b) {
 	assert(a.size() == b.size());
 
-	std::vector<T> result(a.size());
+	std::vector<T> result;
 	std::transform(a.begin(), a.end(), b.begin(), std::back_inserter(result), std::minus<T>());
 	return result;
 }
@@ -448,6 +448,7 @@ static bool calculateMedians = true;
 static bool mapDensity = true;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
+static float medianLineWidth = 1.0f;
 
 
 
@@ -1993,9 +1994,6 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 		//binding the right ubo
 		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
-
-		//setting the line width
-		//TODO: add a member to this method to be able to change the line width
 		vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
 
 		//ready to draw with draw indexed
@@ -2006,6 +2004,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 		//draw the Median Line
 		if (drawList->activeMedian != 0) {
+			vkCmdSetLineWidth(g_PcPlotCommandBuffer, medianLineWidth);
 			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->medianBuffer, offsets);
 
 			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
@@ -2275,6 +2274,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 
 #ifdef _DEBUG
 		std::cout << "Gometry shader usable:" << feat.geometryShader << std::endl;
+		std::cout << "Wide lines usable:" << feat.wideLines << std::endl;
 #endif
 
 		// If a number >1 of GPUs got reported, you should find the best fit GPU for your purpose
@@ -2307,6 +2307,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		VkPhysicalDeviceFeatures deviceFeatures = {};
 		deviceFeatures.geometryShader = VK_TRUE;
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
+		deviceFeatures.wideLines = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
 		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -3306,6 +3307,10 @@ int main(int, char**)
 
 			if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
 				
+			}
+
+			if (ImGui::SliderFloat("Median line width", &medianLineWidth, .5f, 20.0f)) {
+				pcPlotRender = true;
 			}
 			
 			if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview)) {
