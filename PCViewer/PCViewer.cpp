@@ -172,8 +172,10 @@ struct HistogramUniformBuffer {
 };
 
 struct DensityUniformBuffer {
+	bool enableMapping;
 	float gaussRange;
-	uint32_t padding[3];
+	uint32_t imageHeight;
+	uint32_t padding;
 };
 
 struct DrawList {
@@ -444,6 +446,7 @@ static bool drawHistogramm = false;
 static bool histogrammDensity = false;
 static bool pcPlotDensity = false;
 static float densityRadius = .05f;
+static bool enableDensityMapping = false;
 static bool calculateMedians = true;
 static bool mapDensity = true;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
@@ -1261,6 +1264,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	//binding the uboBuffer and adding the buffer to the density descriptor set
 	vkBindBufferMemory(g_Device, g_PcPlotDensityUbo, g_PcPlotIndexBufferMemory, g_PcPLotDensityUboOffset);
 	VkUtil::updateDescriptorSet(g_Device, g_PcPlotDensityUbo, sizeof(DensityUniformBuffer), 1,g_PcPlotDensityDescriptorSet);
+	uploadDensityUiformBuffer();
 
 	//filling the histogramm index buffer
 	//Vertex Arrangment:
@@ -2888,6 +2892,17 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 	pathDropped = true;
 }
 
+static void uploadDensityUiformBuffer() {
+	DensityUniformBuffer ubo = {};
+	ubo.enableMapping = enableDensityMapping;
+	ubo.gaussRange = densityRadius;
+	ubo.imageHeight = g_PcPlotHeight;
+	void* d;
+	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPLotDensityUboOffset, sizeof(DensityUniformBuffer), 0, &d);
+	memcpy(d, &ubo, sizeof(DensityUniformBuffer));
+	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+}
+
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
@@ -3292,17 +3307,19 @@ int main(int, char**)
 			ImGui::Text("Parallel Coordinates Settings:");
 
 			if (ImGui::SliderFloat("Blur radius", &densityRadius, .01f, .5f)) {
-				DensityUniformBuffer ubo = {};
-				ubo.gaussRange = densityRadius;
-				void* d;
-				vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPLotDensityUboOffset, sizeof(DensityUniformBuffer), 0, &d);
-				memcpy(d, &ubo, sizeof(DensityUniformBuffer));
-				vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
+				uploadDensityUiformBuffer();
 				pcPlotRender = true;
 			}
 
 			if (ImGui::Checkbox("Show PcPlot Density", &pcPlotDensity)) {
 				pcPlotRender = true;
+			}
+
+			if (ImGui::Checkbox("Enable density mapping", &enableDensityMapping)) {
+				if (pcAttributes.size()) {
+					uploadDensityUiformBuffer();
+					pcPlotRender = true;
+				}
 			}
 
 			if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {

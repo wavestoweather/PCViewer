@@ -9,3 +9,4 @@
 
 static void createPcPlotCommandBuffer();
 static void cleanupPcPlotCommandBuffer();
+static void uploadDensityUiformBuffer();

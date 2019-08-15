@@ -3,7 +3,9 @@
 
 layout(binding = 0) uniform sampler2D texSampler;
 layout(binding = 1) uniform UniformBufferObject{
+	bool enableMapping;
 	float radius;
+	int imageHeight;
 } ubo;
 layout(binding = 2) uniform sampler2D ironMap;
 
@@ -14,17 +16,24 @@ float gaussianCoeff[21] = float[](0.034250034986995054, 0.037663354261827944, 0.
 
 void main() {
 	//Gaussian blur in y direction
-	float yStep = ubo.radius/21;
+	float sdev = (2*ubo.radius*ubo.imageHeight)/3;
+	float prefac = 1/(sqrt(2*3.141593f*pow(sdev,2)));
+	float yStep = 1.0/ubo.imageHeight;
 	float divider = 0;
 	outColor = vec4(0,0,0,0);
-	for(int i = 0;i<21;i++){
-		vec2 curT = tex+vec2(0,yStep*(i-10));
-		vec3 col = texture(texSampler, curT).xyz;
-		outColor.xyz += col * gaussianCoeff[i];
-		divider += float(curT.y<1&&curT.y>0) * gaussianCoeff[i];
+	for(float i = (tex.y-ubo.radius)*ubo.imageHeight;i<(tex.y+ubo.radius)*ubo.imageHeight;i+=1){
+		if(i>0&&i<ubo.imageHeight){
+			vec2 curT = vec2(tex.x,i/ubo.imageHeight);
+			vec4 col = texture(texSampler, curT);
+			float gaussianFac = prefac*exp(-(pow(i-tex.y*ubo.imageHeight,2)/pow(sdev,2)));
+			outColor += col * gaussianFac;
+			divider += gaussianFac;
+		}
 	}
 	//normalization
-    outColor.xyz /= divider;
+    outColor /= divider;
 	//mapping a ironMap Texture to it
-	outColor = texture(ironMap, vec2(max(max(outColor.x,outColor.y),outColor.z),.5f));
+	if(ubo.enableMapping){
+		outColor = texture(ironMap, vec2(max(max(outColor.x,outColor.y),outColor.z),.5f));
+	}
 }
