@@ -1999,7 +1999,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		//binding the right ubo
 		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
 		vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
-
+		
 		//ready to draw with draw indexed
 		uint32_t vertOffset = 0;
 		for (int i :drawList->indices) {
@@ -2857,7 +2857,10 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 
 		//reading the values
 		for (file >> s ; !file.eof(); file >> s) {
-			tl.indices.push_back(std::stof(s));
+			int index = std::stof(s);
+			if (index < ds.data.size()) {
+				tl.indices.push_back(index);
+			}
 		}
 
 		//adding the drawlist to ds
