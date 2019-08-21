@@ -19,6 +19,7 @@
 #include "Color.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
+#include "View3d.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
