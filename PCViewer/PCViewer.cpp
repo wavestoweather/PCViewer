@@ -1,10 +1,19 @@
-﻿// PCViewer.cpp: Definiert den Einstiegspunkt für die Anwendung.
-//
+﻿/*
+This program is written and maintained by Josef Stumpfegger(josefstumpfegger@outlook.de).
+For everyone who wants to read and understand this code. I'm sorry. 
+This code was written under time pressure and was not intended to be published in the first place.
+Well if you still want to find out how this precious application works, go ahead.
+Should you find errors, problems, speed up ideas or anything else, dont be shy and contact me!
+Other than that, i wish you a beautiful day and a lot of fun with this program.
+*/
 
 //memory leak detection
 #ifdef _DEBUG
 #define DETECTMEMLEAK
 #endif
+
+//uncomment this to build the pcViewer with 3d view
+#define RENDER3D
 
 #ifdef DETECTMEMLEAK
 #define _CRTDBG_MAP_ALLOC
@@ -454,7 +463,8 @@ static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
 static float medianLineWidth = 1.0f;
 
-
+//variables for the 3d view
+static View3d * view3d;
 
 /*static void check_vk_result(VkResult err)
 {
@@ -3088,6 +3098,11 @@ int main(int, char**)
 		check_vk_result(err);
 	}
 
+	{//creating the 3d viewer and its descriptor set
+		view3d = new View3d(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		view3d->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(view3d->getImageSampler(), view3d->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
+	}
+
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
@@ -3170,6 +3185,26 @@ int main(int, char**)
 		size_t gap = (io.DisplaySize.x - 2 * paddingSide) / (amtOfLabels - 1);
 		ImVec2 buttonSize = ImVec2(70, 20);
 		size_t offset = 0;
+
+#ifdef RENDER3D
+		//testwindow for the 3d renderer
+		if (ImGui::Begin("3dview", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+			if ((ImGui::IsMouseDragging()|| io.MouseWheel)&&ImGui::IsWindowHovered()) {
+				float mousemovement[3];
+				mousemovement[0] = -ImGui::GetMouseDragDelta().x;
+				mousemovement[1] = ImGui::GetMouseDragDelta().y;
+				mousemovement[2] = io.MouseWheel;
+				view3d->updateCameraPos(mousemovement);
+				view3d->render();
+				err = vkDeviceWaitIdle(g_Device);
+				check_vk_result(err);
+				ImGui::ResetMouseDragDelta();
+			}
+			
+			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+		}
+		ImGui::End();
+#endif
 
 		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
 		ImVec2 window_pos = ImVec2(0, 0);
@@ -3629,6 +3664,10 @@ int main(int, char**)
 		cleanupPcPlotImageView();
 		cleanupPcPlotDataSets();
 		cleanupPcPlotHistoPipeline();
+	}
+
+	{//cleanup 3d view
+		delete view3d;
 	}
 
 	ImGui_ImplVulkan_Shutdown();

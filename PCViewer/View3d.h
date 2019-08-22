@@ -2,26 +2,86 @@
 #define	View3d_H
 
 #include "VkUtil.h"
+#include "PCUtil.h"
 #include <vulkan/vulkan.h>
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "glm/glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+
+#define VERTICALPANSPEED .01f
+#define HORIZONTALPANSPEED .01f
+#define ZOOMSPEED .03f
 
 class View3d {
 public:
-	View3d();
+	View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool);
 	~View3d();
 
+	void resize(uint32_t width, uint32_t height);
+	void update3dImage(uint32_t width, uint32_t height, uint32_t depth, float* data);
+	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void render();
-	void setDescriptorSet(VkDescriptorSet descriptor);
+	void setImageDescriptorSet(VkDescriptorSet descriptor);
+	VkDescriptorSet getImageDescriptorSet();
+	VkSampler getImageSampler();
+	VkImageView getImageView();
 private:
-	VkDeviceMemory		graphicsMemory;
-	VkImage				iamge;
+	struct UniformBuffer {
+		glm::vec3 camPos;	//cameraPosition in model space
+		alignas(16) glm::mat4 mvp;	//modelViewProjection Matrix
+	};
+	
+	//shaderpaths
+	static char vertPath[];
+	static char fragPath[];
+
+	//general information about the 3d view
+	uint32_t imageHeight;
+	uint32_t imageWidth;
+
+	//information about 3d texture
+	uint32_t image3dHeight;
+	uint32_t image3dWidth;
+	uint32_t image3dDepth;
+
+	//Vulkan member variables
+	VkPhysicalDevice	physicalDevice;
+	VkDevice			device;
+	VkCommandPool		commandPool;
+	VkQueue				queue;
+	VkCommandBuffer		commandBuffer;
+	VkCommandBuffer		prepareImageCommand;
+	VkDeviceMemory		imageMemory;
+	VkImage				image;
 	VkImageView			imageView;
+	VkFramebuffer		frameBuffer;
+	VkSampler			sampler;
+	VkDescriptorSet		imageDescriptorSet;
+	VkDeviceMemory		image3dMemory;
+	VkImage				image3d;
+	VkImageView			image3dView;
+	VkSampler			image3dSampler;			//sampler seems to be not needed
+	VkDescriptorSetLayout descriptorSetLayout;
+	VkDescriptorPool	descriptorPool;
 	VkDescriptorSet		descriptorSet;
 	VkPipeline			pipeline;
 	VkRenderPass		renderPass;
 	VkPipelineLayout	pipelineLayout;
+	VkDeviceMemory		constantMemory;
 	VkBuffer			vertexBuffer;
 	VkBuffer			indexBuffer;
-};
+	VkBuffer			uniformBuffer;
+	uint32_t			uniformBufferOffset;
 
+	//camera variables
+	glm::vec3 camPos;		//camera position
+
+	//methods to instatiate vulkan resources
+	void createPrepareImageCommandBuffer();
+	void createImageResources();
+	void createBuffer();
+	void createPipeline();
+	void createDescriptorSets();
+};
 #endif 

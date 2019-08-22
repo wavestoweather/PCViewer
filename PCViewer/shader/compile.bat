@@ -10,4 +10,7 @@ E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o rectFrag.spv rect.frag
 
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o densVert.spv dens.vert
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o densFrag.spv dens.frag
+
+E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o 3dVert.spv 3d.vert
+E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o 3dFrag.spv 3d.frag
 pause
