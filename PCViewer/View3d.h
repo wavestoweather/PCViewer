@@ -1,3 +1,9 @@
+/*
+This class is the 3d view for the datasets. It is programmed, such that it takes a 3d texture, and renders it via effective raymarching.
+Effective raymarching is accomplished via rendering a cube with its local coordinates as uv-coordinates, and then in the fragment shader only fragmetns which are occupied by
+the backside of the cube are raymarched.
+*/
+
 #ifndef View3d_H
 #define	View3d_H
 
@@ -8,10 +14,13 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "glm/glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include <limits.h>
 
 #define VERTICALPANSPEED .01f
 #define HORIZONTALPANSPEED .01f
 #define ZOOMSPEED .03f
+
+#define IDX3D(x,z,y,width,depth) ((x)+((z)*width)+((y)*width*depth))
 
 class View3d {
 public:
@@ -83,5 +92,6 @@ private:
 	void createBuffer();
 	void createPipeline();
 	void createDescriptorSets();
+	void updateCommandBuffer();
 };
 #endif 

@@ -64,16 +64,16 @@ View3d::~View3d()
 		vkFreeMemory(device, image3dMemory, nullptr);
 	}
 	if (image3d) {
-		vkDestroyImage(device, image, nullptr);
+		vkDestroyImage(device, image3d, nullptr);
 	}
 	if (image3dView) {
-		vkDestroyImageView(device, imageView, nullptr);
+		vkDestroyImageView(device, image3dView, nullptr);
+	}
+	if (image3dSampler) {
+		vkDestroySampler(device, image3dSampler, nullptr);
 	}
 	if (frameBuffer) {
 		vkDestroyFramebuffer(device, frameBuffer, nullptr);
-	}
-	if (image3dSampler) {
-		vkDestroySampler(device, sampler, nullptr);
 	}
 	if (descriptorSetLayout) {
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
@@ -138,49 +138,28 @@ void View3d::resize(uint32_t width, uint32_t height)
 	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
 	check_vk_result(err);
 
-	//udating the command buffer
-	VkUtil::createCommandBuffer(device, commandPool, &commandBuffer);
-	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	std::vector<VkClearValue> clearValues;
-	clearValues.push_back({ 0,0,0,1 });
-	VkUtil::beginRenderPass(commandBuffer, clearValues, renderPass, frameBuffer, { imageWidth,imageHeight });
+	if (!image3d) {
+		glm::vec4 d[27] = {};
+		d[0] = glm::vec4(1,0,0,1);
+		d[8] = glm::vec4(0, 1, 0, .5f);
+		d[26] = glm::vec4(0, 0, 1, .1f);
+		/*for (int i = 1; i < 27; i+=3) {
+			d[4 * i] = i / 27.0f;
+			d[4 * i + 1] = 1 - (i / 27.0f);
+			d[4 * i + 2] = 0;
+			d[4 * i + 3] = .1f;
+		}*/
+		update3dImage( 3, 3, 3, (float*)d);
+		return;
+	}
 
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	VkDeviceSize offsets[] = { 0 };
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
-	vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-	VkViewport viewport = {};					//description for our viewport for transformation operation after rasterization
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = imageWidth;
-	viewport.height = imageHeight;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-	VkRect2D scissor = {};						//description for cutting the rendered result if wanted
-	scissor.offset = { 0, 0 };
-	scissor.extent = { (uint32_t)imageWidth,(uint32_t)imageHeight };
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-	vkCmdDrawIndexed(commandBuffer, 3 * 6 * 2, 1, 0, 0, 0);
-
-	vkCmdEndRenderPass(commandBuffer);
-
-	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	err = vkEndCommandBuffer(commandBuffer);
-	check_vk_result(err);
-
-	err = vkDeviceWaitIdle(device);
-	check_vk_result(err);
-
-	render();
+	updateCommandBuffer();
 }
 
 void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, float* data)
 {
+	VkResult err;
+
 	if ((width != image3dWidth) || (height != image3dHeight) || (depth != image3dDepth)) {
 		image3dWidth = width;
 		image3dHeight = height;
@@ -196,12 +175,11 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 		if (image3dView) {
 			vkDestroyImageView(device, image3dView, nullptr);
 		}
-		if (image3dSampler) {
-			vkDestroySampler(device, image3dSampler, nullptr);
+		if (!image3dSampler) {
+			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,16,1,&image3dSampler);
 		}
 
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d);
-		VkUtil::create3dImageView(device, image3d, VK_FORMAT_R16G16B16A16_UNORM, 1, &image3dView);
+		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d);
 
 		VkMemoryRequirements memRequirements;
 		vkGetImageMemoryRequirements(device, image3d, &memRequirements);
@@ -210,10 +188,82 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memRequirements.memoryTypeBits, 0);
+		err = vkAllocateMemory(device, &allocInfo, nullptr, &image3dMemory);
+		check_vk_result(err);
+		vkBindImageMemory(device, image3d, image3dMemory, 0);
+
+		VkUtil::create3dImageView(device, image3d, VK_FORMAT_R16G16B16A16_UNORM, 1, &image3dView);
+
+		std::vector<VkDescriptorSetLayout> layouts;
+		layouts.push_back(descriptorSetLayout);
+		if (!descriptorSet) {
+			VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+		}
+		VkUtil::updateImageDescriptorSet(device, image3dSampler, image3dView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, descriptorSet);
+	}
+	//converting the data to a short array
+	uint16_t* dat = new uint16_t[width * height * depth * 4];
+
+	for (int h = 0; h < height; h++) {
+		for (int d = 0; d < depth; d++) {
+			for (int w = 0; w < width; w++) {
+				for (int i = 0; i < 4; i++) {//copying the pixels
+					dat[4*IDX3D(w, d, h, width, depth)+i] = data[4*IDX3D(w, d, h, width, depth)+i] * std::numeric_limits<uint16_t>::max();
+				}
+			}
+		}
 	}
 
 	//uploading the data with a staging buffer
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
 
+	VkUtil::createBuffer(device, width * height * depth * 4 * sizeof(uint16_t), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
+	VkMemoryRequirements memReq;
+	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReq);
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	err = vkAllocateMemory(device, &allocInfo, nullptr, &stagingBufferMemory);
+	vkBindBufferMemory(device, stagingBuffer, stagingBufferMemory, 0);
+
+	void* p;
+	vkMapMemory(device, stagingBufferMemory, 0, width * height * depth * 4 * sizeof(uint16_t), 0, &p);
+	memcpy(p, dat, width * height * depth * 4 * sizeof(uint16_t));
+	vkUnmapMemory(device, stagingBufferMemory);
+
+	VkCommandBuffer command;
+	VkUtil::createCommandBuffer(device, commandPool, &command);
+	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	VkUtil::copyBufferTo3dImage(command, stagingBuffer, image3d, width, height, depth);
+	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	err = vkEndCommandBuffer(command);
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.signalSemaphoreCount = 0;
+	submitInfo.waitSemaphoreCount = 0;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &command;
+
+	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+	check_vk_result(err);
+
+	err = vkDeviceWaitIdle(device);
+	check_vk_result(err);
+
+	vkDestroyBuffer(device, stagingBuffer, nullptr);
+	vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+	delete[] dat;
+
+	if (!descriptorSet) {
+		resize(1, 1);
+		return;
+	}
+
+	updateCommandBuffer();
 }
 
 void View3d::updateCameraPos(float* mouseMovement)
@@ -238,7 +288,9 @@ void View3d::render()
 	ubo.mvp = glm::perspective(glm::radians(45.0f), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);;
 	ubo.mvp[1][1] *= -1;
 	glm::mat4 look = glm::lookAt(camPos, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-	ubo.mvp = ubo.mvp * look;
+	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
+	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(image3dWidth/max,image3dHeight/max,image3dDepth/max));
+	ubo.mvp = ubo.mvp * look * scale;
 	ubo.camPos = camPos;
 	void* d;
 	vkMapMemory(device, constantMemory, uniformBufferOffset, sizeof(UniformBuffer), 0, &d);
@@ -459,6 +511,11 @@ void View3d::createPipeline()
 	std::vector<VkDescriptorSetLayoutBinding> bindings;
 	bindings.push_back(uboLayoutBinding);
 
+	uboLayoutBinding.binding = 1;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	bindings.push_back(uboLayoutBinding);
+
 	VkUtil::createDescriptorSetLayout(device, bindings, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
@@ -472,7 +529,51 @@ void View3d::createDescriptorSets()
 {
 	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(descriptorSetLayout);
-	VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+	if (!descriptorSet) {
+		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+	}
 
 	VkUtil::updateDescriptorSet(device, uniformBuffer, sizeof(UniformBuffer), 0, descriptorSet);
+}
+
+void View3d::updateCommandBuffer()
+{
+	VkResult err;
+	VkUtil::createCommandBuffer(device, commandPool, &commandBuffer);
+	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	std::vector<VkClearValue> clearValues;
+	clearValues.push_back({ 0,0,0,1 });
+	VkUtil::beginRenderPass(commandBuffer, clearValues, renderPass, frameBuffer, { imageWidth,imageHeight });
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	VkDeviceSize offsets[] = { 0 };
+	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
+	vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+	VkDescriptorSet sets[1] = { descriptorSet };
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, sets, 0, nullptr);
+
+	VkViewport viewport = {};					//description for our viewport for transformation operation after rasterization
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	viewport.width = imageWidth;
+	viewport.height = imageHeight;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor = {};						//description for cutting the rendered result if wanted
+	scissor.offset = { 0, 0 };
+	scissor.extent = { (uint32_t)imageWidth,(uint32_t)imageHeight };
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+	vkCmdDrawIndexed(commandBuffer, 3 * 6 * 2, 1, 0, 0, 0);
+
+	vkCmdEndRenderPass(commandBuffer);
+
+	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	err = vkEndCommandBuffer(commandBuffer);
+	check_vk_result(err);
+
+	err = vkDeviceWaitIdle(device);
+	check_vk_result(err);
 }

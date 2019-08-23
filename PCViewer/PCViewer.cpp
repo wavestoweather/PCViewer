@@ -2917,6 +2917,32 @@ static void uploadDensityUiformBuffer() {
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 }
 
+static void uploadDrawListTo3dView(DrawList& dl, std::string width, std::string height, std::string depth) {
+	int w = 100;
+	int d = 100;
+	int h = 70;
+
+	DataSet* parent;
+	for (DataSet& ds : g_PcPlotDataSets) {
+		if (ds.name == dl.parentDataSet) {
+			parent = &ds;
+			break;
+		}
+	}
+	
+	float* dat = new float[w * d * h * 4];
+	memset(dat, 0, w * d * h * 4 * sizeof(float));
+	for (int i : dl.indices) {
+		int x = (parent->data[i][0] - pcAttributes[0].min) / (pcAttributes[0].max +1 - pcAttributes[0].min) * w;
+		int y = (parent->data[i][2] - pcAttributes[2].min) / (pcAttributes[2].max +1- pcAttributes[2].min) * h;
+		int z = (parent->data[i][1] - pcAttributes[1].min) / (pcAttributes[1].max +1- pcAttributes[1].min) * d;
+		memcpy(&dat[4 * IDX3D(x, z, y, w, d)], &dl.color.x, sizeof(Vec4));
+	}
+
+	view3d->update3dImage(w, h, d, dat);
+	delete[] dat;
+}
+
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
@@ -3554,6 +3580,17 @@ int main(int, char**)
 			for (DrawList& dl : g_PcPlotDrawLists) {
 				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
 					pcPlotSelectedDrawList = count;
+				}
+				if (ImGui::IsItemHovered && io.MouseClicked[1]) {
+					ImGui::OpenPopup("sendTo3d");
+				}
+				if (ImGui::BeginPopup("sendTo3d")) {
+					ImGui::Text("Render draw List in 3d?");
+					if (ImGui::Button("Render")) {
+						ImGui::CloseCurrentPopup();
+						uploadDrawListTo3dView(dl,"a","b","c");
+					}
+					ImGui::EndPopup();
 				}
 				ImGui::NextColumn();
 
