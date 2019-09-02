@@ -211,6 +211,9 @@ struct DrawList {
 	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
 	std::vector<int> indices;
+	bool brushChanged;
+	std::vector<int> activeInd;
+	uint32_t indexBufferOffset;
 	std::vector<std::pair<float, float>> brushes;		//the pair contains first min and then max for the brush
 };
 
@@ -1538,6 +1541,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	offset += sizeof(UniformBufferObject);
 	offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
 	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
+	dl.indexBufferOffset = offset;
 
 	//creating and uploading the indexbuffer data
 	uint32_t* indBuffer = new uint32_t[tl.indices.size()*2];
@@ -1672,6 +1676,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	dl.showHistogramm = true;
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<int>(tl.indices);
+	dl.activeInd = std::vector<int>(tl.indices);
 
 	//adding a standard brush for every attribute
 	for (Attribute a : pcAttributes) {
@@ -2029,22 +2034,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 		
 		//ready to draw with draw indexed
-		size_t lineCount = 0;
 		uint32_t vertOffset = 0;
-		for (int i :drawList->indices) {
-			if (enableBrushing) {
-				//check if datapoint is in all brushes and skip lines which dont
-				for (int j = 0; j < pcAttributes.size(); j++) {
-					if (!pcAttributeEnabled[j])
-						continue;
-					if ((*data)[i][j]<drawList->brushes[j].first || (*data)[i][j] > drawList->brushes[j].second) {
-						goto end;
-					}
-				}
-			}
-			lineCount++;
+		for (int i :drawList->activeInd) {
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
-			end:;
 		}
 
 		//draw the Median Line
@@ -2055,10 +2047,14 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, (drawList->activeMedian-1)* pcAttributes.size(), 0);
+
+#ifdef PRINTRENDERTIME
+			amtOfLines++;
+#endif
 		}
 
 #ifdef PRINTRENDERTIME
-		amtOfLines += lineCount + 1;
+		amtOfLines += drawList->activeInd.size();
 #endif
 	}
 
@@ -2185,7 +2181,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
 
 					//making the draw call
-					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->indices.size() * 2, 1, 0, count++, 0);
+					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->activeInd.size() * 2, 1, 0, count++, 0);
 				}
 
 				//increasing the xOffset for the next drawlist
@@ -2923,6 +2919,41 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 	}
 }
 
+static void updateActiveIndices(DrawList& dl) {
+	if (!dl.brushChanged)
+		return;
+	std::vector<float*>* data;
+	for (DataSet& ds : g_PcPlotDataSets) {
+		if (ds.name == dl.parentDataSet) {
+			data = &ds.data;
+			break;
+		}
+	}
+	//updating the active indices vector
+	dl.activeInd.clear();
+	for (int i : dl.indices) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			if (!pcAttributeEnabled[j])
+				continue;
+			if ((*data)[i][j]<dl.brushes[j].first || (*data)[i][j]>dl.brushes[j].second)
+				goto end;
+		}
+		dl.activeInd.push_back(i);
+		end:;
+	}
+	//updating the indexbuffer for histogramm
+	uint32_t* indBuffer = new uint32_t[dl.activeInd.size() * 2];
+	for (int i = 0; i < dl.activeInd.size(); i++) {
+		indBuffer[2 * i] = dl.activeInd[i] * pcAttributes.size();
+		indBuffer[2 * i + 1] = dl.activeInd[i] * pcAttributes.size();
+	}
+	void* d;
+	vkMapMemory(g_Device, dl.dlMem, dl.indexBufferOffset, dl.activeInd.size() * sizeof(uint32_t) * 2, 0, &d);
+	memcpy(d, indBuffer, dl.activeInd.size() * sizeof(uint32_t) * 2);
+	vkUnmapMemory(g_Device, dl.dlMem);
+	delete[] indBuffer;
+}
+
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
 #ifdef _DEBUG
 	std::cout << "Amount of files drag and dropped: " << count << std::endl;
@@ -3412,15 +3443,18 @@ int main(int, char**)
 				}
 
 				ImGui::SetNextWindowSizeConstraints(ImVec2(10, 0), ImVec2(10, FLT_MAX));
-				ImGui::SetNextWindowBgAlpha(.05f);
+				ImGui::SetNextWindowBgAlpha(.4f);
 				ImGui::SetNextWindowFocus();
 				if (ImGui::Begin((std::string("brush") + std::to_string(i)).c_str(), NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings)) {
 					//checking for resize of the windows
 					if (std::abs(ImGui::GetWindowHeight() - height)>=.1f && !newPos) {
+						dl->brushChanged = true;
 						dl->brushes[pcAttrOrd[i]].second = (1 - (ImGui::GetWindowPos().y - picPos.y) / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min) + pcAttributes[pcAttrOrd[i]].min;
 						dl->brushes[pcAttrOrd[i]].first = dl->brushes[pcAttrOrd[i]].second - (ImGui::GetWindowHeight() / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min);
-						if(enableBrushing)
+						if (enableBrushing) {
 							pcPlotRender = true;
+							updateActiveIndices(*dl);
+						}
 #ifdef _DEBUG
 						std::cout << "brush changed for item " << pcAttributes[pcAttrOrd[i]].name << ": min[" << dl->brushes[pcAttrOrd[i]].first << "] max[" << dl->brushes[pcAttrOrd[i]].second << "]" << std::endl;
 #endif
@@ -3486,6 +3520,9 @@ int main(int, char**)
 			}
 
 			if (ImGui::Checkbox("Enable brushing", &enableBrushing)) {
+				for (DrawList& dl : g_PcPlotDrawLists) {
+					updateActiveIndices(dl);
+				}
 				pcPlotRender = true;
 			}
 
