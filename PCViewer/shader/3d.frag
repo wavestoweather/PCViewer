@@ -41,7 +41,5 @@ void main() {
 			break;
 		}
 	}
-	outColor.xyz *= outColor.a;
 	outColor.xyz = pow(outColor.xyz,vec3(1/2.2f));
-	outColor.a = 1;
 }

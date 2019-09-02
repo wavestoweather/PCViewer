@@ -56,7 +56,7 @@ namespace VkUtil{
 	void create3dImage(VkDevice device, uint32_t width, uint32_t height, uint32_t depth, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);
 	void createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
 	void create3dImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
-	void createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler);
+	void createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, VkFilter filter, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler);
 	VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
 };
 

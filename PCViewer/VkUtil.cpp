@@ -758,14 +758,14 @@ void VkUtil::create3dImageView(VkDevice device, VkImage image, VkFormat imageFor
 	check_vk_result(err);
 }
 
-void VkUtil::createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler)
+void VkUtil::createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, VkFilter filter, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler)
 {
 	VkResult err;
 
 	VkSamplerCreateInfo samplerInfo = {};
 	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	samplerInfo.magFilter = VK_FILTER_LINEAR;
-	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.magFilter = filter;
+	samplerInfo.minFilter = filter;
 	samplerInfo.addressModeU = adressMode;
 	samplerInfo.addressModeV = adressMode;
 	samplerInfo.addressModeW = adressMode;
