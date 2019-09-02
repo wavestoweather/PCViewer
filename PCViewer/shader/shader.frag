@@ -7,7 +7,7 @@ layout(binding = 0) uniform UniformBufferObject{
 	uint amtOfAttributes;
 	uint nothing;
 	vec4 color;
-	vec4 ordering[20];
+	vec4 ordering[50];
 } ubo;
 
 layout(location = 0) out vec4 outColor;

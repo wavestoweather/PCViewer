@@ -169,7 +169,7 @@ struct UniformBufferObject {
 	uint32_t amtOfAttributes;
 	float padding;
 	Vec4 color;
-	Vec4 VertexTransormations[20];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
+	Vec4 VertexTransormations[50];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
 };
 
 //uniform Buffer for the histogramms
@@ -211,6 +211,7 @@ struct DrawList {
 	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
 	std::vector<int> indices;
+	std::vector<std::pair<float, float>> brushes;		//the pair contains first min and then max for the brush
 };
 
 struct TemplateList {
@@ -457,11 +458,12 @@ static bool histogrammDensity = false;
 static bool pcPlotDensity = false;
 static float densityRadius = .05f;
 static bool enableDensityMapping = false;
-static bool calculateMedians = true;
+static bool calculateMedians = false;
 static bool mapDensity = true;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
 static float medianLineWidth = 1.0f;
+static bool enableBrushing = false;
 
 //variables for the 3d view
 static View3d * view3d;
@@ -1670,6 +1672,12 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	dl.showHistogramm = true;
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<int>(tl.indices);
+
+	//adding a standard brush for every attribute
+	for (Attribute a : pcAttributes) {
+		dl.brushes.push_back(std::pair<float, float>(a.min - ((a.max - a.min) * .01f), a.max + ((a.max - a.min) * .01f)));
+	}
+
 	g_PcPlotDrawLists.push_back(dl);
 }
 
@@ -2010,11 +2018,33 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		//binding the right ubo
 		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
 		vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
+
+		//getting the data vector for brushing
+		std::vector<float*>* data;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (ds.name == drawList->parentDataSet) {
+				data = &ds.data;
+				break;
+			}
+		}
 		
 		//ready to draw with draw indexed
+		size_t lineCount = 0;
 		uint32_t vertOffset = 0;
 		for (int i :drawList->indices) {
+			if (enableBrushing) {
+				//check if datapoint is in all brushes and skip lines which dont
+				for (int j = 0; j < pcAttributes.size(); j++) {
+					if (!pcAttributeEnabled[j])
+						continue;
+					if ((*data)[i][j]<drawList->brushes[j].first || (*data)[i][j] > drawList->brushes[j].second) {
+						goto end;
+					}
+				}
+			}
+			lineCount++;
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
+			end:;
 		}
 
 		//draw the Median Line
@@ -2028,7 +2058,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 
 #ifdef PRINTRENDERTIME
-		amtOfLines += drawList->indices.size();
+		amtOfLines += lineCount + 1;
 #endif
 	}
 
@@ -2961,6 +2991,7 @@ int main(int, char**)
 	//std::vector<float*> pcData = std::vector<float*>();					//Contains all data
 	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
 	int pcPlotSelectedDrawList = -1;										//Contains the index of the drawlist that is currently selected
+	int pcPlotPreviousSlectedDrawList = -1;									//Index of the previously selected drawlist
 	bool addIndeces = false;
 
 	// Setup GLFW window
@@ -3236,6 +3267,7 @@ int main(int, char**)
 		ImVec2 window_pos = ImVec2(0, 0);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
 		ImGui::SetNextWindowSize({ io.DisplaySize.x,0 });
+		ImVec2 picPos;
 		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
 			//drawing the buttons which can be changed via drag and drop
@@ -3266,11 +3298,7 @@ int main(int, char**)
 						
 						switchAttributes(c, other[0], io.KeyCtrl);
 
-						/*
-						//swapping the two ints
-						pcAttrOrd[c] = other[1];
-						pcAttrOrd[other[0]] = i;
-						*/
+						pcPlotPreviousSlectedDrawList = -1;
 
 						pcPlotRender = true;
 					}
@@ -3299,6 +3327,7 @@ int main(int, char**)
 
 				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f,0.0f,0.0f,"%.05f")) {
 					pcPlotRender = true;
+					pcPlotPreviousSlectedDrawList = -1;
 				}
 				ImGui::PopItemWidth();
 
@@ -3308,7 +3337,9 @@ int main(int, char**)
 			}
 
 			//drawing the Texture
-			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, io.DisplaySize.y * 2/5), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			picPos = ImGui::GetCursorScreenPos();
+			picPos.y += 2;
+			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, io.DisplaySize.y * 2/5), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 255));
 			if (pcPlotRender) {
 				pcPlotRender = false;
 				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, wd);
@@ -3331,6 +3362,7 @@ int main(int, char**)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
 				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f, .0f, .0f, "%.05f")) {
 					pcPlotRender = true;
+					pcPlotPreviousSlectedDrawList = -1;
 				}
 				ImGui::PopItemWidth();
 
@@ -3340,6 +3372,68 @@ int main(int, char**)
 			}
 		}
 		ImGui::End();
+
+		//drawing the brush windows
+		ImVec2 picSize(io.DisplaySize.x - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
+		gap = picSize.x / (amtOfLabels - 1);
+		if (pcPlotSelectedDrawList != -1) {
+			//getting the drawlist;
+			DrawList* dl = 0;
+			uint32_t c = 0;
+			for (DrawList& d : g_PcPlotDrawLists) {
+				if (c == pcPlotSelectedDrawList) {
+					dl = &d;
+					break;
+				}
+				c++;
+			}
+
+			bool newPos = false;
+
+			if (pcPlotSelectedDrawList != pcPlotPreviousSlectedDrawList) {
+				pcPlotPreviousSlectedDrawList = pcPlotSelectedDrawList;
+				newPos = true;
+			}
+
+			c = 0;
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				if (!pcAttributeEnabled[pcAttrOrd[i]])
+					continue;
+
+				//changing the size and position of the windows if the selected drawlist changed
+				float height = (dl->brushes[pcAttrOrd[i]].second - dl->brushes[pcAttrOrd[i]].first) / (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min) * picSize.y;
+				if(newPos){
+					//calculating position
+					ImVec2 pos = ImVec2(picPos.x + c * gap, picPos.y + (1-((dl->brushes[pcAttrOrd[i]].second - pcAttributes[pcAttrOrd[i]].min) / (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min)))*picSize.y);
+					ImGui::SetNextWindowPos(pos,ImGuiCond_Always,ImVec2(.5f,0));
+
+					//calculating height
+					ImGui::SetNextWindowSize(ImVec2(10, height));
+				}
+
+				ImGui::SetNextWindowSizeConstraints(ImVec2(10, 0), ImVec2(10, FLT_MAX));
+				ImGui::SetNextWindowBgAlpha(.05f);
+				ImGui::SetNextWindowFocus();
+				if (ImGui::Begin((std::string("brush") + std::to_string(i)).c_str(), NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings)) {
+					//checking for resize of the windows
+					if (std::abs(ImGui::GetWindowHeight() - height)>=.1f && !newPos) {
+						dl->brushes[pcAttrOrd[i]].second = (1 - (ImGui::GetWindowPos().y - picPos.y) / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min) + pcAttributes[pcAttrOrd[i]].min;
+						dl->brushes[pcAttrOrd[i]].first = dl->brushes[pcAttrOrd[i]].second - (ImGui::GetWindowHeight() / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min);
+						if(enableBrushing)
+							pcPlotRender = true;
+#ifdef _DEBUG
+						std::cout << "brush changed for item " << pcAttributes[pcAttrOrd[i]].name << ": min[" << dl->brushes[pcAttrOrd[i]].first << "] max[" << dl->brushes[pcAttrOrd[i]].second << "]" << std::endl;
+#endif
+					}
+					
+					ImGui::End();
+				}
+				c++;
+			}
+		}
+		else {
+			pcPlotPreviousSlectedDrawList = -1;
+		}
 
 		//Settings section
 		window_pos = ImVec2(0, io.DisplaySize.y-300);
@@ -3389,6 +3483,10 @@ int main(int, char**)
 
 			if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
 				
+			}
+
+			if (ImGui::Checkbox("Enable brushing", &enableBrushing)) {
+				pcPlotRender = true;
 			}
 
 			if (ImGui::SliderFloat("Median line width", &medianLineWidth, .5f, 20.0f)) {
@@ -3579,14 +3677,16 @@ int main(int, char**)
 			ImGui::NextColumn();
 			for (DrawList& dl : g_PcPlotDrawLists) {
 				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
-					pcPlotSelectedDrawList = count;
+					if (count == pcPlotSelectedDrawList)
+						pcPlotSelectedDrawList = -1;
+					else
+						pcPlotSelectedDrawList = count;
 				}
 				if (ImGui::IsItemHovered && io.MouseClicked[1]) {
 					ImGui::OpenPopup("sendTo3d");
 				}
 				if (ImGui::BeginPopup("sendTo3d")) {
-					ImGui::Text("Render draw List in 3d?");
-					if (ImGui::Button("Render")) {
+					if (ImGui::MenuItem("Render draw List in 3d")) {
 						ImGui::CloseCurrentPopup();
 						uploadDrawListTo3dView(dl,"a","b","c");
 					}
@@ -3615,6 +3715,12 @@ int main(int, char**)
 				ImGui::NextColumn();
 
 				if (ImGui::Button((std::string("X##") + dl.name).c_str())) {
+					if (count == pcPlotSelectedDrawList) {
+						pcPlotSelectedDrawList = -1;
+					}
+					else if (count < pcPlotSelectedDrawList) {
+						pcPlotSelectedDrawList--;
+					}
 					changeList = dl;
 					destroy = true;
 					pcPlotRender = true;
