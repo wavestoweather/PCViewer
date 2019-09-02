@@ -269,7 +269,8 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 void View3d::updateCameraPos(float* mouseMovement)
 {
 	//rotation matrix for height adjustment
-	glm::mat4 vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALPANSPEED, glm::normalize(glm::cross(camPos, glm::vec3(0, 1, 0))));
+	glm::mat4 vertical;
+	vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALPANSPEED, glm::normalize(glm::cross(camPos, glm::vec3(0, 1, 0))));
 	//rotation matrix for horizontal adjustment
 	glm::mat4 horizontal = glm::rotate(glm::mat4(1.0f), mouseMovement[0] * HORIZONTALPANSPEED, glm::vec3(0, 1, 0));
 	camPos = horizontal * vertical * glm::vec4(camPos,1);
@@ -291,7 +292,11 @@ void View3d::render()
 	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
 	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(image3dWidth/max,image3dHeight/max,image3dDepth/max));
 	ubo.mvp = ubo.mvp * look * scale;
-	ubo.camPos = camPos;
+	ubo.camPos = glm::inverse(scale) * glm::vec4(camPos,1);
+
+	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
+	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;
+	ubo.faces.z = float(ubo.camPos.z > 0) - .5f;
 	void* d;
 	vkMapMemory(device, constantMemory, uniformBufferOffset, sizeof(UniformBuffer), 0, &d);
 	memcpy(d, &ubo, sizeof(UniformBuffer));

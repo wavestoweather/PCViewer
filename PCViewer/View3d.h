@@ -38,6 +38,7 @@ public:
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;	//cameraPosition in model space
+		alignas(16) glm::vec3 faces;//face positions for intersection tests
 		alignas(16) glm::mat4 mvp;	//modelViewProjection Matrix
 	};
 	

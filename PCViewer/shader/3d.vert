@@ -3,6 +3,7 @@
 
 layout(binding = 0) uniform UniformBufferObject{
 	vec3 camPos;
+	vec3 cubeSides;
 	mat4 mvp;
 } ubo;
 
