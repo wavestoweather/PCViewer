@@ -378,6 +378,39 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 		colorAttachmentRef.attachment = 0;
 		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+		attachment.format = VK_FORMAT_D16_UNORM;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		colorAttachments.push_back(attachment);
+
+		depthAttachmentRef.attachment = 1;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+		subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+		break;
+	case VkUtil::PASS_TYPE_DEPTH_STENCIL_OFFLINE:
+		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttachments.push_back(attachment);
+
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
 		attachment.format = VK_FORMAT_D24_UNORM_S8_UINT;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -614,6 +647,15 @@ void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
 		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -712,7 +754,7 @@ void VkUtil::create3dImage(VkDevice device, uint32_t width, uint32_t height, uin
 	check_vk_result(err);
 }
 
-void VkUtil::createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView)
+void VkUtil::createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageAspectFlags aspectMask, VkImageView* imageView)
 {
 	VkResult err;
 
@@ -725,7 +767,7 @@ void VkUtil::createImageView(VkDevice device, VkImage image, VkFormat imageForma
 	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	createInfo.subresourceRange.aspectMask = aspectMask;
 	createInfo.subresourceRange.baseMipLevel = 0;
 	createInfo.subresourceRange.levelCount = mipLevelCount;
 	createInfo.subresourceRange.baseArrayLayer = 0;

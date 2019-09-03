@@ -26,7 +26,8 @@ namespace VkUtil{
 		PASS_TYPE_COLOR_OFFLINE_NO_CLEAR,
 		PASS_TYPE_COLOR16_OFFLINE,
 		PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR,
-		PASS_TYPE_DEPTH_OFFLINE
+		PASS_TYPE_DEPTH_OFFLINE,
+		PASS_TYPE_DEPTH_STENCIL_OFFLINE
 	};
 
 	uint32_t findMemoryType(VkPhysicalDevice physicalDevice ,uint32_t typeFilter, VkMemoryPropertyFlags properties);
@@ -54,7 +55,7 @@ namespace VkUtil{
 	void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 	void createImage(VkDevice device, uint32_t width, uint32_t height, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);
 	void create3dImage(VkDevice device, uint32_t width, uint32_t height, uint32_t depth, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);
-	void createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
+	void createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageAspectFlags aspectMask, VkImageView* imageView);
 	void create3dImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
 	void createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, VkFilter filter, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler);
 	VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);

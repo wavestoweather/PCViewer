@@ -3,16 +3,14 @@ This class is the 3d view for the datasets. It is programmed, such that it takes
 Effective raymarching is accomplished via rendering a cube with its local coordinates as uv-coordinates, and then in the fragment shader only fragmetns which are occupied by
 the backside of the cube are raymarched.
 */
-
+#pragma once
 #ifndef View3d_H
 #define	View3d_H
 
 #include "VkUtil.h"
 #include "PCUtil.h"
 #include <vulkan/vulkan.h>
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#include "glm/glm/glm.hpp"
+#include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include <limits.h>
 

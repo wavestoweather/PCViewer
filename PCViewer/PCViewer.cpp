@@ -14,6 +14,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 
 //uncomment this to build the pcViewer with 3d view
 #define RENDER3D
+//uncomment this to build hte pcViewer with the node viewer
+#define NODEVIEW
 
 #ifdef DETECTMEMLEAK
 #define _CRTDBG_MAP_ALLOC
@@ -21,6 +23,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <crtdbg.h>
 #endif
 
+#pragma once
 #include "PCViewer.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
@@ -28,6 +31,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "Color.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
+#include "NodeViewer.h"
 #include "View3d.h"
 
 #include <stdio.h>          // printf, fprintf
@@ -468,8 +472,9 @@ static Vec4 densityBackCol = { 0,0,0,1 };
 static float medianLineWidth = 1.0f;
 static bool enableBrushing = false;
 
-//variables for the 3d view
+//variables for the 3d views
 static View3d * view3d;
+static NodeViewer* nodeViewer;
 
 /*static void check_vk_result(VkResult err)
 {
@@ -758,8 +763,8 @@ static void createPcPlotImageView() {
 	vkBindImageMemory(g_Device, g_PcPlotDensityImageCopy, g_PcPlotMem, imageOffset);
 	vkBindImageMemory(g_Device, g_PcPlotDensityIronMap, g_PcPlotMem, g_PcPlotDensityIronMapOffset);
 
-	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, 1, &g_PcPlotDensityImageView);
-	VkUtil::createImageView(g_Device, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, 1, &g_PcPLotDensityIronMapView);
+	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT,&g_PcPlotDensityImageView);
+	VkUtil::createImageView(g_Device, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT,&g_PcPLotDensityIronMapView);
 	
 	//creating the smapler for the density image
 	VkUtil::createImageSampler(g_Device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_LINEAR, 1, 1, &g_PcPlotDensityImageSampler);
@@ -2349,6 +2354,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.geometryShader = VK_TRUE;
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
 		deviceFeatures.wideLines = VK_TRUE;
+		deviceFeatures.depthClamp = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
 		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -3007,7 +3013,7 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string width, std::string 
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
-	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
 #endif
 
 	engine.seed(12);
@@ -3191,6 +3197,14 @@ int main(int, char**)
 		view3d->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(view3d->getImageSampler(), view3d->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
 	}
 
+	{//creating the node viewer and its descriptor set
+		nodeViewer = new NodeViewer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		nodeViewer->setImageDescSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(nodeViewer->getImageSampler(), nodeViewer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
+		nodeViewer->addSphere(1.0f, glm::vec4( 1,1,1,1 ), glm::vec3( 0,0,0 ));
+		nodeViewer->render();
+	}
+
+	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
@@ -3276,8 +3290,10 @@ int main(int, char**)
 
 #ifdef RENDER3D
 		//testwindow for the 3d renderer
-		if (ImGui::Begin("3dview", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
-			if ((ImGui::IsMouseDragging()|| io.MouseWheel)&&ImGui::IsWindowHovered()) {
+		if (ImGui::Begin("3dview", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			
+			if ((ImGui::IsMouseDragging()|| io.MouseWheel)&&ImGui::IsItemHovered()) {
 				float mousemovement[3];
 				mousemovement[0] = -ImGui::GetMouseDragDelta().x;
 				mousemovement[1] = ImGui::GetMouseDragDelta().y;
@@ -3288,8 +3304,25 @@ int main(int, char**)
 				check_vk_result(err);
 				ImGui::ResetMouseDragDelta();
 			}
-			
-			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+		}
+		ImGui::End();
+#endif
+
+#ifdef NODEVIEW
+		//testwindow for the node viewer
+		if (ImGui::Begin("NodeViewer", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+			ImGui::Image((ImTextureID)nodeViewer->getImageDescSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			if ((ImGui::IsMouseDragging() || io.MouseWheel) && ImGui::IsItemHovered()) {
+				float mousemovement[3];
+				mousemovement[0] = -ImGui::GetMouseDragDelta().x;
+				mousemovement[1] = ImGui::GetMouseDragDelta().y;
+				mousemovement[2] = io.MouseWheel;
+				nodeViewer->updateCameraPos(mousemovement);
+				nodeViewer->render();
+				err = vkDeviceWaitIdle(g_Device);
+				check_vk_result(err);
+				ImGui::ResetMouseDragDelta();
+			}
 		}
 		ImGui::End();
 #endif
@@ -3848,6 +3881,7 @@ int main(int, char**)
 
 	{//cleanup 3d view
 		delete view3d;
+		delete nodeViewer;
 	}
 
 	ImGui_ImplVulkan_Shutdown();

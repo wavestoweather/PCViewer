@@ -37,9 +37,11 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	frameBuffer = VK_NULL_HANDLE;
 	imageDescriptorSet = VK_NULL_HANDLE;
 
+
 	camPos = glm::vec3(2, 2, 2);
 
 	//setting up graphic resources
+	
 	createBuffer();
 	createPipeline();
 	createDescriptorSets();
@@ -359,7 +361,7 @@ void View3d::createImageResources()
 
 	vkBindImageMemory(device, image, imageMemory, 0);
 
-	VkUtil::createImageView(device, image, VK_FORMAT_R16G16B16A16_UNORM, 1, &imageView);
+	VkUtil::createImageView(device, image, VK_FORMAT_R16G16B16A16_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT, &imageView);
 	std::vector<VkImageView> views;
 	views.push_back(imageView);
 	VkUtil::createFrameBuffer(device, renderPass, views, imageWidth, imageHeight, &frameBuffer);
