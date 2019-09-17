@@ -141,8 +141,11 @@ void View3d::resize(uint32_t width, uint32_t height)
 	check_vk_result(err);
 
 	if (!image3d) {
-		glm::vec4 d[27] = {};
-		d[0] = glm::vec4(1,0,0,1);
+		glm::vec4 d[36] = {};
+		d[0] = glm::vec4(1, 0, 0, 1);
+		d[1] = glm::vec4(1, 0, 0, 1);
+		d[2] = glm::vec4(1, 0, 0, 1);
+		d[3] = glm::vec4(1, 0, 0, 1);
 		d[8] = glm::vec4(0, 1, 0, .5f);
 		d[26] = glm::vec4(0, 0, 1, .1f);
 		/*for (int i = 1; i < 27; i+=3) {
@@ -151,7 +154,7 @@ void View3d::resize(uint32_t width, uint32_t height)
 			d[4 * i + 2] = 0;
 			d[4 * i + 3] = .1f;
 		}*/
-		update3dImage( 3, 3, 3, (float*)d);
+		update3dImage( 3, 3, 4, (float*)d);
 		return;
 	}
 
@@ -204,17 +207,24 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 		VkUtil::updateImageDescriptorSet(device, image3dSampler, image3dView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, descriptorSet);
 	}
 	//converting the data to a short array
+	bool notNull = false;
 	uint16_t* dat = new uint16_t[width * height * depth * 4];
-
-	for (int h = 0; h < height; h++) {
-		for (int d = 0; d < depth; d++) {
-			for (int w = 0; w < width; w++) {
-				for (int i = 0; i < 4; i++) {//copying the pixels
-					dat[4*IDX3D(w, d, h, width, depth)+i] = data[4*IDX3D(w, d, h, width, depth)+i] * std::numeric_limits<uint16_t>::max();
-				}
-			}
-		}
+	for (int i = 0; i < width * height * depth * 4; i++) {
+		dat[i] = data[i] * std::numeric_limits<uint16_t>::max();
+		if (data[i] > 0)
+			notNull = true;
 	}
+	std::cout << "Not null: " << notNull << std::endl;
+
+	//for (int h = 0; h < height; h++) {
+	//	for (int d = 0; d < depth; d++) {
+	//		for (int w = 0; w < width; w++) {
+	//			for (int i = 0; i < 4; i++) {//copying the pixels
+	//				dat[4*IDX3D(w, h, d, width, height)+i] = data[4*IDX3D(w, h, d, width, height)+i] * std::numeric_limits<uint16_t>::max();
+	//			}
+	//		}
+	//	}
+	//}
 
 	//uploading the data with a staging buffer
 	VkBuffer stagingBuffer;
@@ -266,6 +276,7 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 	}
 
 	updateCommandBuffer();
+	render();
 }
 
 void View3d::updateCameraPos(float* mouseMovement)
@@ -273,6 +284,9 @@ void View3d::updateCameraPos(float* mouseMovement)
 	//rotation matrix for height adjustment
 	glm::mat4 vertical;
 	vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALPANSPEED, glm::normalize(glm::cross(camPos, glm::vec3(0, 1, 0))));
+	glm::vec3 temp = vertical * glm::vec4(camPos, 1);
+	if (dot(temp, glm::vec3(1, 0, 0)) * dot(camPos, glm::vec3(1, 0, 0)) < 0 || dot(temp, glm::vec3(0, 0, 1)) * dot(camPos, glm::vec3(0, 0, 1)) < 0)
+		vertical = glm::mat4(1.0f);
 	//rotation matrix for horizontal adjustment
 	glm::mat4 horizontal = glm::rotate(glm::mat4(1.0f), mouseMovement[0] * HORIZONTALPANSPEED, glm::vec3(0, 1, 0));
 	camPos = horizontal * vertical * glm::vec4(camPos,1);
@@ -292,8 +306,8 @@ void View3d::render()
 	ubo.mvp[1][1] *= -1;
 	glm::mat4 look = glm::lookAt(camPos, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
-	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(image3dWidth/max,image3dHeight/max,image3dDepth/max));
-	ubo.mvp = ubo.mvp * look * scale;
+	glm::mat4 scale = glm::mat4(1.0f);//glm::scale(glm::mat4(1.0f),glm::vec3(image3dWidth/max,image3dHeight/max,image3dDepth/max));
+	ubo.mvp = ubo.mvp * look *scale;
 	ubo.camPos = glm::inverse(scale) * glm::vec4(camPos,1);
 
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;

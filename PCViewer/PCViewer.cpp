@@ -13,9 +13,9 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #endif
 
 //uncomment this to build the pcViewer with 3d view
-#define RENDER3D
+//#define RENDER3D
 //uncomment this to build hte pcViewer with the node viewer
-#define NODEVIEW
+//#define NODEVIEW
 
 #ifdef DETECTMEMLEAK
 #define _CRTDBG_MAP_ALLOC
@@ -33,6 +33,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "PCUtil.h"
 #include "NodeViewer.h"
 #include "View3d.h"
+#include "SpacialData.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -200,6 +201,8 @@ struct DrawList {
 	bool show;
 	bool showHistogramm;
 	VkBuffer buffer;
+	VkBuffer indexBuffer;
+	uint32_t indexBufferOffset;
 	VkBuffer ubo;
 	VkBuffer histogramIndBuffer;
 	std::vector<VkBuffer> histogramUbos;
@@ -217,7 +220,7 @@ struct DrawList {
 	std::vector<int> indices;
 	bool brushChanged;
 	std::vector<int> activeInd;
-	uint32_t indexBufferOffset;
+	uint32_t histIndexBufferOffset;
 	std::vector<std::pair<float, float>> brushes;		//the pair contains first min and then max for the brush
 };
 
@@ -922,7 +925,7 @@ static void createPcPlotPipeline() {
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
+	inputAssembly.primitiveRestartEnable = VK_TRUE;
 
 	VkViewport viewport = {};					//description for our viewport for transformation operation after rasterization
 	viewport.x = 0.0f;
@@ -1412,6 +1415,10 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 				vkDestroyBuffer(g_Device, it->medianUbo, nullptr);
 				it->medianUbo = VK_NULL_HANDLE;
 			}
+			if (it->indexBuffer) {
+				vkDestroyBuffer(g_Device, it->indexBuffer, nullptr);
+				it->indexBuffer = VK_NULL_HANDLE;
+			}
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
 			}
@@ -1498,6 +1505,17 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	allocInfo.allocationSize += memRequirements.size;
 	memTypeBits |= memRequirements.memoryTypeBits;
 
+	//Indexbuffer
+	bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 1) * sizeof(uint32_t);
+	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.indexBuffer);
+	check_vk_result(err);
+
+	dl.indexBufferOffset = allocInfo.allocationSize;
+	vkGetBufferMemoryRequirements(g_Device, dl.indexBuffer, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+	memTypeBits |= memRequirements.memoryTypeBits;
+
 	//allocating the Memory for all draw list data
 	allocInfo.memoryTypeIndex = findMemoryType(memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
@@ -1546,7 +1564,7 @@ static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	offset += sizeof(UniformBufferObject);
 	offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
 	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
-	dl.indexBufferOffset = offset;
+	dl.histIndexBufferOffset = offset;
 
 	//creating and uploading the indexbuffer data
 	uint32_t* indBuffer = new uint32_t[tl.indices.size()*2];
@@ -1714,6 +1732,10 @@ static void removePcPlotDrawList(DrawList drawList) {
 			if (it->medianUbo) {
 				vkDestroyBuffer(g_Device, it->medianUbo, nullptr);
 				it->medianUbo = VK_NULL_HANDLE;
+			}
+			if (it->indexBuffer) {
+				vkDestroyBuffer(g_Device, it->indexBuffer, nullptr);
+				it->indexBuffer = VK_NULL_HANDLE;
 			}
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
@@ -1958,8 +1980,6 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 	}
-
-	delete[] ind;
 	
 
 	//filling the uniform buffer and copying it into the end of the uniformbuffer
@@ -2016,11 +2036,27 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//counting the amount of active drawLists for histogramm rendering
 	int activeDrawLists = 0;
-
+	
 	//now drawing for every draw list in g_pcPlotdrawlists
 	for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList;++drawList) {
 		if (!drawList->show)
 			continue;
+
+		//filling the indexbuffer for drawing
+		uint32_t* in = new uint32_t[drawList->activeInd.size() * (amtOfIndeces+1)];
+		uint32_t c = 0;
+		for (int i : drawList->activeInd) {
+			for (int j = 0; j < amtOfIndeces; j++) {
+				in[c++] = ind[j] + i * pcAttributes.size();
+			}
+			in[c++] = 0xFFFFFFFF;
+		}
+		
+		vkMapMemory(g_Device, drawList->dlMem, drawList->indexBufferOffset, sizeof(uint32_t)* drawList->activeInd.size()* (amtOfIndeces + 1), 0, &d);
+		memcpy(d, in, sizeof(uint32_t)* drawList->activeInd.size()* (amtOfIndeces + 1));
+		vkUnmapMemory(g_Device, drawList->dlMem);
+
+		delete[] in;
 
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
@@ -2028,15 +2064,6 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		//binding the right ubo
 		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
 		vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
-
-		//getting the data vector for brushing
-		std::vector<float*>* data;
-		for (DataSet& ds : g_PcPlotDataSets) {
-			if (ds.name == drawList->parentDataSet) {
-				data = &ds.data;
-				break;
-			}
-		}
 		
 		//ready to draw with draw indexed
 		uint32_t vertOffset = 0;
@@ -2062,6 +2089,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		amtOfLines += drawList->activeInd.size();
 #endif
 	}
+
+	delete[] ind;
 
 	if (pcPlotDensity && pcAttributes.size() > 0) {
 		//ending the pass to blit the image
@@ -2954,7 +2983,7 @@ static void updateActiveIndices(DrawList& dl) {
 		indBuffer[2 * i + 1] = dl.activeInd[i] * pcAttributes.size();
 	}
 	void* d;
-	vkMapMemory(g_Device, dl.dlMem, dl.indexBufferOffset, dl.activeInd.size() * sizeof(uint32_t) * 2, 0, &d);
+	vkMapMemory(g_Device, dl.dlMem, dl.histIndexBufferOffset, dl.activeInd.size() * sizeof(uint32_t) * 2, 0, &d);
 	memcpy(d, indBuffer, dl.activeInd.size() * sizeof(uint32_t) * 2);
 	vkUnmapMemory(g_Device, dl.dlMem);
 	delete[] indBuffer;
@@ -2984,10 +3013,10 @@ static void uploadDensityUiformBuffer() {
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 }
 
-static void uploadDrawListTo3dView(DrawList& dl, std::string width, std::string height, std::string depth) {
-	int w = 100;
-	int d = 100;
-	int h = 70;
+static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::string width, std::string height, std::string depth) {
+	int w = SpacialData::rlatSize;
+	int d = SpacialData::rlonSize;
+	int h = SpacialData::altitudeSize;
 
 	DataSet* parent;
 	for (DataSet& ds : g_PcPlotDataSets) {
@@ -2997,13 +3026,35 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string width, std::string 
 		}
 	}
 	
+	Attribute a;
+	int attributeIndex = 0;
+	for (Attribute& at : pcAttributes) {
+		if (at.name == attribute) {
+			a = at;
+			break;
+		}
+		attributeIndex++;
+	}
 	float* dat = new float[w * d * h * 4];
 	memset(dat, 0, w * d * h * 4 * sizeof(float));
 	for (int i : dl.indices) {
-		int x = (parent->data[i][0] - pcAttributes[0].min) / (pcAttributes[0].max +1 - pcAttributes[0].min) * w;
-		int y = (parent->data[i][2] - pcAttributes[2].min) / (pcAttributes[2].max +1- pcAttributes[2].min) * h;
-		int z = (parent->data[i][1] - pcAttributes[1].min) / (pcAttributes[1].max +1- pcAttributes[1].min) * d;
-		memcpy(&dat[4 * IDX3D(x, z, y, w, d)], &dl.color.x, sizeof(Vec4));
+		int x = SpacialData::getRlatIndex(parent->data[i][0]);//(parent->data[i][0] - pcAttributes[0].min) / (pcAttributes[0].max +1 - pcAttributes[0].min) * w;
+		int y = SpacialData::getAltitudeIndex(parent->data[i][2]);//(parent->data[i][2] - pcAttributes[2].min) / (pcAttributes[2].max +1- pcAttributes[2].min) * h;
+		int z = SpacialData::getRlonIndex(parent->data[i][1]);//(parent->data[i][1] - pcAttributes[1].min) / (pcAttributes[1].max +1- pcAttributes[1].min) * d;
+		assert(x >= 0);
+		assert(y >= 0);
+		assert(z >= 0);
+		Vec4 col = dl.color;
+		//col.w = (parent->data[i][attributeIndex] - a.min) / (a.max - a.min);
+#ifdef _DEBUG
+		//std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
+#endif
+		
+		memcpy(&dat[4 * IDX3D(x, y, z, w, h)], &col.x, sizeof(Vec4));
+	}
+
+	for (int i = 0; i < 100; i++) {
+		((Vec4*)dat)[IDX3D(i, 100, 100, w, h)] = { 1,0,0,1 };
 	}
 
 	view3d->update3dImage(w, h, d, dat);
@@ -3752,14 +3803,19 @@ int main(int, char**)
 					else
 						pcPlotSelectedDrawList = count;
 				}
-				if (ImGui::IsItemHovered && io.MouseClicked[1]) {
-					ImGui::OpenPopup("sendTo3d");
+				if (ImGui::IsItemHovered() && io.MouseClicked[1]) {
+					ImGui::OpenPopup(("sendTo3d"+dl.name).c_str());
 				}
-				if (ImGui::BeginPopup("sendTo3d")) {
-					if (ImGui::MenuItem("Render draw List in 3d")) {
-						ImGui::CloseCurrentPopup();
-						uploadDrawListTo3dView(dl,"a","b","c");
+				if (ImGui::BeginPopup(("sendTo3d" + dl.name).c_str())) {
+					for (int i = 0; i < pcAttributes.size();i++) {
+						if (!pcAttributeEnabled[i])
+							continue;
+						if (ImGui::MenuItem(("Render "+ pcAttributes[i].name).c_str())) {
+							ImGui::CloseCurrentPopup();
+							uploadDrawListTo3dView(dl, pcAttributes[i].name, "a", "b", "c");
+						}
 					}
+					
 					ImGui::EndPopup();
 				}
 				ImGui::NextColumn();

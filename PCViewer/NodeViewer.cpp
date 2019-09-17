@@ -255,6 +255,9 @@ void NodeViewer::updateCameraPos(float* mouseMovement)
 	//rotation matrix for height adjustment
 	glm::mat4 vertical;
 	vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALROTSPEED, glm::normalize(glm::cross(cameraPos, glm::vec3(0, 1, 0))));
+	glm::vec3 temp = vertical * glm::vec4(cameraPos, 1);
+	if (dot(temp, glm::vec3(1, 0, 0)) * dot(cameraPos, glm::vec3(1, 0, 0)) < 0 || dot(temp, glm::vec3(0, 0, 1)) * dot(cameraPos, glm::vec3(0, 0, 1)) < 0)
+		vertical = glm::mat4(1.0f);
 	//rotation matrix for horizontal adjustment
 	glm::mat4 horizontal = glm::rotate(glm::mat4(1.0f), mouseMovement[0] * HORIZONTALROTSPEED, glm::vec3(0, 1, 0));
 	cameraPos = horizontal * vertical * glm::vec4(cameraPos, 1);

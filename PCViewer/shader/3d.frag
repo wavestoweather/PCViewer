@@ -26,7 +26,7 @@ void main() {
 	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1)*d;
 
 	float alphaStop = .98f;
-	float stepsize = .005f;
+	float stepsize = .0001f;
 	
 	//outColor is calculated with gamma correction
 	outColor = vec4(0,0,0,0);
@@ -35,8 +35,8 @@ void main() {
 	d = normalize(d);
 	for(float i = 0; i<len;i+=stepsize){
 		vec4 tex = texture(texSampler,(startPoint+i*d)+.5f);
-		outColor.xyz+=(outColor.a*tex.a)*pow(tex.xyz,vec3(2.2f))*stepsize*20;
-		outColor.a+=(1-outColor.a)*tex.a*stepsize*20;
+		outColor.xyz+=(outColor.a*tex.a)*pow(tex.xyz,vec3(2.2f))*stepsize*100;
+		outColor.a+=(1-outColor.a)*tex.a*stepsize*100;
 		if(outColor.a>alphaStop){
 			break;
 		}

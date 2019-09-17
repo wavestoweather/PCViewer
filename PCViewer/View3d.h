@@ -18,7 +18,7 @@ the backside of the cube are raymarched.
 #define HORIZONTALPANSPEED .01f
 #define ZOOMSPEED .03f
 
-#define IDX3D(x,z,y,width,depth) ((x)+((z)*width)+((y)*width*depth))
+#define IDX3D(x,y,z,width,height) ((x)+((y)*height)+((z)*width*height))
 
 class View3d {
 public:
