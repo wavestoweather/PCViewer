@@ -69,7 +69,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
 //enable this define to print the time needed to render the pc Plot
-#define PRINTRENDERTIME
+//#define PRINTRENDERTIME
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
