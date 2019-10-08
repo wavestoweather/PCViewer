@@ -19,9 +19,7 @@ SettingsManager::~SettingsManager()
 bool SettingsManager::addSetting(Setting s)
 {
 	void* data = new char[s.byteLength];
-	for (int i = 0; i < s.byteLength; i++) {
-		data[i] = s.data[i];
-	}
+	memcpy(data, s.data, s.byteLength);
 
 	s.data = data;
 	settings[s.id] = s;
@@ -38,7 +36,6 @@ bool SettingsManager::deleteSetting(std::string id)
 {
 	Setting s = settings[id];
 	delete[] s.data;
-	settings.erase(id);
 
 	int i = 0;
 	for (; i < settingsType[s.type].size(); i++) {
@@ -49,6 +46,7 @@ bool SettingsManager::deleteSetting(std::string id)
 	settingsType[s.type][i] = settingsType[s.type][settingsType[s.type].size()-1];
 	settingsType[s.type].pop_back();
 
+	settings.erase(id);
 	return true;
 }
 
@@ -66,7 +64,7 @@ void SettingsManager::storeSettings(const char* filename)
 {
 	std::ofstream file(filename);
 	for (auto& s : settings) {
-		file << s.second.id << s.second.type << s.second.byteLength;
+		file << s.second.id << ' ' << s.second.type << ' ' << s.second.byteLength << ' ';
 		for (int i = 0; i < s.second.byteLength; i++) {
 			file << ((char*)s.second.data)[i];
 		}
@@ -88,13 +86,19 @@ void SettingsManager::loadSettings(const char* filename)
 		//getting the id, type and datasize
 		Setting s = {};
 		file >> s.id;
+		if (s.id.size() == 0)
+			break;
+		
 		file >> s.type;
 		file >> s.byteLength;
 		s.data = new char[s.byteLength];
-		for (int i = 0; i < s.byteLength; i++) {
-			file >> ((char*)s.data)[i];
-		}
-		addSetting(s);
+		file.seekg(1, file.cur);
+		file.read((char*)s.data,s.byteLength);
+		file.seekg(1, file.cur);
+		if (s.id.size() != 0)
+			addSetting(s);
+		
+		delete[] s.data;
 	}
 
 	file.close();

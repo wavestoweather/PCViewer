@@ -3414,56 +3414,145 @@ int main(int, char**)
 		ImGui::SetNextWindowSize({ io.DisplaySize.x,0 });
 		ImVec2 picPos;
 		bool picHovered;
-		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
+		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
 			//Menu for saving settings
+			bool openSave = false, openLoad = false, openManager = false;
 			if (ImGui::BeginMenuBar()) {
-				if (ImGui::BeginMenu("Save")) {
-					if (ImGui::MenuItem("Save Attributes", "Ctrl+S")) {
-						ImGui::OpenPopup("Save attribute setting");
-					}
-					if (ImGui::BeginPopup("Save attribute setting")) {
-						ImGui::Text("Enter the name for the new setting");
-						static char settingName[100] = {};
-						ImGui::InputText("setting name", settingName, sizeof(settingName));
-
-						if (ImGui::Button("Save", ImVec2(120, 0))) {
-							ImGui::CloseCurrentPopup();
-							//creating the new setting
-							SettingsManager::Setting s = {};
-							s.id = std::string(settingName);
-							unsigned char* data = new unsigned char[sizeof(int) + pcAttributes.size() * sizeof(Attribute) + pcAttributes.size() * sizeof(int) + pcAttributes.size()];
-							((int*)data)[0] = pcAttributes.size();
-							data += 4;
-							unsigned char* or = data + pcAttributes.size() * sizeof(Attribute);
-							unsigned char* en = or +pcAttributes.size() * sizeof(int);
-							for (int i = 0; i < pcAttributes.size(); i++) {
-								((Attribute*)data)[i] = pcAttributes[i];
-								((int*) or )[i] = pcAttrOrd[i];
-								((bool*)en)[i] = pcAttributeEnabled[i];
-							}
-							settingsManager->addSetting(s);
-
-							delete[] data;
-						}
-						ImGui::SetItemDefaultFocus();
-						ImGui::SameLine();
-						if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-							ImGui::CloseCurrentPopup();
-						}
-						ImGui::EndPopup();
+				if (ImGui::BeginMenu("Attribute")) {
+					if (ImGui::MenuItem("Save Attributes", "Ctrl+S")&&pcAttributes.size()>0) {
+						openSave = true;
 					}
 					if (ImGui::BeginMenu("Load...")) {
 						for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
 							if (ImGui::MenuItem(s->id.c_str())) {
-								
+								if (((int*)s->data)[0] != pcAttributes.size()) {
+									openLoad = true;
+									continue;
+								}
+
+								std::vector<Attribute> savedAttr;
+								char* d = (char*)s->data + sizeof(int);
+								for (int i = 0; i < ((int*)s->data)[0]; i++) {
+									Attribute a = {};
+									a.name = std::string(d);
+									d += a.name.size() + 1;
+									a.min = *(float*)d;
+									d += sizeof(float);
+									a.max = *(float*)d;
+									d += sizeof(float);
+									a.brushInd = *(int*)d;
+									d += sizeof(int);
+									savedAttr.push_back(a);
+									if (pcAttributes[i].name != savedAttr[i].name) {
+										openLoad = true;
+										continue;
+									}
+								}
+								int* o = (int*)d;
+								bool* act = (bool*)(d + pcAttributes.size() * sizeof(int));
+								for (int i = 0; i < pcAttributes.size(); i++) {
+									pcAttributes[i] = savedAttr[i];
+									pcAttrOrd[i] = o[i];
+									pcAttributeEnabled[i] = act[i];
+								}
 							}
 						}
 						ImGui::EndMenu();
 					}
+					if (ImGui::MenuItem("Manage")) {
+						openManager = true;
+					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
+			}
+			//popup for saving a new Attribute Setting
+			if (openSave) {
+				ImGui::OpenPopup("Save attribute setting");
+			}
+			if (openLoad) {
+				ImGui::OpenPopup("Load error");
+			}
+			if (openManager) {
+				ImGui::OpenPopup("Manage attribute settings");
+			}
+			if (ImGui::BeginPopupModal("Manage attribute settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+				std::string del;
+				for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
+					ImGui::Text(s->id.c_str());
+					ImGui::SameLine();
+					if (ImGui::Button(("Delete##" + s->id).c_str())) {
+						del = s->id;
+					}
+				}
+				if (del.size() != 0) {
+					settingsManager->deleteSetting(del);
+				}
+				ImGui::Separator();
+				if (ImGui::Button("Close")) {
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
+			}
+			if (ImGui::BeginPopupModal("Save attribute setting", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+				ImGui::Text("Enter the name for the new setting");
+				static char settingName[100] = {};
+				ImGui::InputText("setting name", settingName, sizeof(settingName));
+
+				if (ImGui::Button("Save", ImVec2(120, 0))) {
+					ImGui::CloseCurrentPopup();
+					//creating the new setting
+					uint32_t attributesSize = 3 * sizeof(float) * pcAttributes.size();
+					for (Attribute& a : pcAttributes) {
+						attributesSize += a.name.size() + 1;
+					}
+					SettingsManager::Setting s = {};
+					s.id = std::string(settingName);
+					unsigned char* d = new unsigned char[sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size()];
+					s.byteLength = sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size();
+					s.data = d;
+					((int*)d)[0] = pcAttributes.size();
+					d += 4;
+					//Adding the attributes to the dataarray
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						memcpy(d, pcAttributes[i].name.data(), pcAttributes[i].name.size());
+						d += pcAttributes[i].name.size();
+						*d = '\0';
+						d++;
+						((float*)d)[0] = pcAttributes[i].min;
+						((float*)d)[1] = pcAttributes[i].max;
+						((int*)d)[2] = pcAttributes[i].brushInd;
+						d += 3 * sizeof(float);
+					}
+					//adding the attributes order
+					for (int i : pcAttrOrd) {
+						((int*)d)[0] = i;
+						d += sizeof(int);
+					}
+					//adding attribute activation
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						*d++ = pcAttributeEnabled[i];
+					}
+					s.type = "AttributeSetting";
+					settingsManager->addSetting(s);
+
+					delete[] s.data;
+				}
+				ImGui::SetItemDefaultFocus();
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
+			}
+			//popup for loading error
+			if (ImGui::BeginPopupModal("Load error")) {
+				ImGui::Text("Error at loading the current setting");
+				if (ImGui::Button("Close", ImVec2(120, 0))) {
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
 			}
 
 			//drawing the buttons which can be changed via drag and drop
@@ -3478,7 +3567,8 @@ int main(int, char**)
 				}
 
 				std::string name = pcAttributes[i].name;
-				ImGui::SameLine(offset-c1*(buttonSize.x/amtOfLabels));
+				if(c1!=0)
+					ImGui::SameLine(offset-c1*(buttonSize.x/amtOfLabels));
 				ImGui::Button(name.c_str(),buttonSize);
 
 				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
