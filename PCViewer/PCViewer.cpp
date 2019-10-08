@@ -487,6 +487,8 @@ static bool enableBrushing = false;
 static View3d * view3d;
 static NodeViewer* nodeViewer;
 
+static SettingsManager* settingsManager;
+
 /*static void check_vk_result(VkResult err)
 {
 	if (err == 0) return;
@@ -3279,6 +3281,10 @@ int main(int, char**)
 	}
 #endif
 
+	{//creating the settngs manager
+		settingsManager = new SettingsManager();
+	}
+
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
@@ -3410,8 +3416,57 @@ int main(int, char**)
 		bool picHovered;
 		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
+			//Menu for saving settings
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Save")) {
+					if (ImGui::MenuItem("Save Attributes", "Ctrl+S")) {
+						ImGui::OpenPopup("Save attribute setting");
+					}
+					if (ImGui::BeginPopup("Save attribute setting")) {
+						ImGui::Text("Enter the name for the new setting");
+						static char settingName[100] = {};
+						ImGui::InputText("setting name", settingName, sizeof(settingName));
+
+						if (ImGui::Button("Save", ImVec2(120, 0))) {
+							ImGui::CloseCurrentPopup();
+							//creating the new setting
+							SettingsManager::Setting s = {};
+							s.id = std::string(settingName);
+							unsigned char* data = new unsigned char[sizeof(int) + pcAttributes.size() * sizeof(Attribute) + pcAttributes.size() * sizeof(int) + pcAttributes.size()];
+							((int*)data)[0] = pcAttributes.size();
+							data += 4;
+							unsigned char* or = data + pcAttributes.size() * sizeof(Attribute);
+							unsigned char* en = or +pcAttributes.size() * sizeof(int);
+							for (int i = 0; i < pcAttributes.size(); i++) {
+								((Attribute*)data)[i] = pcAttributes[i];
+								((int*) or )[i] = pcAttrOrd[i];
+								((bool*)en)[i] = pcAttributeEnabled[i];
+							}
+							settingsManager->addSetting(s);
+
+							delete[] data;
+						}
+						ImGui::SetItemDefaultFocus();
+						ImGui::SameLine();
+						if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::EndPopup();
+					}
+					if (ImGui::BeginMenu("Load...")) {
+						for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
+							if (ImGui::MenuItem(s->id.c_str())) {
+								
+							}
+						}
+						ImGui::EndMenu();
+					}
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenuBar();
+			}
+
 			//drawing the buttons which can be changed via drag and drop
-			
 
 			int c = 0;		//describing the position of the element in the AttrOrd vector
 			int c1 = 0;
@@ -4026,6 +4081,7 @@ int main(int, char**)
 #ifdef NODEVIEW
 		delete nodeViewer;
 #endif
+		delete settingsManager;
 	}
 
 	ImGui_ImplVulkan_Shutdown();

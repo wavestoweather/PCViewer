@@ -1,7 +1,6 @@
 #include "SettingsManager.h"
 
-char SettingsManager::settingsFile[] = "settings/settings.cfg";
-char SettingsManager::filePath[] = "settings";
+char SettingsManager::settingsFile[] = "settings.cfg";
 
 SettingsManager::SettingsManager()
 {
@@ -19,10 +18,16 @@ SettingsManager::~SettingsManager()
 
 bool SettingsManager::addSetting(Setting s)
 {
+	void* data = new char[s.byteLength];
+	for (int i = 0; i < s.byteLength; i++) {
+		data[i] = s.data[i];
+	}
+
+	s.data = data;
 	settings[s.id] = s;
 
 	if (settingsType.find(s.type) == settingsType.end()) {
-		settingsType[s.type] = std::vector<Setting>();
+		settingsType[s.type] = std::vector<Setting*>();
 	}
 	settingsType[s.type].push_back(&settings[s.id]);
 
@@ -37,7 +42,7 @@ bool SettingsManager::deleteSetting(std::string id)
 
 	int i = 0;
 	for (; i < settingsType[s.type].size(); i++) {
-		if (settingsType[s.type][i].id == id)
+		if (settingsType[s.type][i]->id == id)
 			break;
 	}
 
@@ -47,21 +52,18 @@ bool SettingsManager::deleteSetting(std::string id)
 	return true;
 }
 
-Setting SettingsManager::getSetting(std::string id)
+SettingsManager::Setting SettingsManager::getSetting(std::string id)
 {
-	return setting[id];
+	return settings[id];
 }
 
-vector<Setting>* SettingsManager::getSettingsType(std::string type)
+std::vector<SettingsManager::Setting*>* SettingsManager::getSettingsType(std::string type)
 {
 	return &settingsType[type];
 }
 
 void SettingsManager::storeSettings(const char* filename)
 {
-	if (!std::experimental::filesystem::exists(filePath)) {
-		std::experimental::filesystem::create_directory(filePath);
-	}
 	std::ofstream file(filename);
 	for (auto& s : settings) {
 		file << s.second.id << s.second.type << s.second.byteLength;
@@ -78,8 +80,8 @@ void SettingsManager::loadSettings(const char* filename)
 	std::ifstream file(filename);
 
 	if (!file.is_open()) {
-		std::cout << "Settingsfile was not found." << std::endl;
-		return
+		std::cout << "Settingsfile was not found or no settings exist." << std::endl;
+		return;
 	}
 
 	while (!file.eof()) {
@@ -90,8 +92,10 @@ void SettingsManager::loadSettings(const char* filename)
 		file >> s.byteLength;
 		s.data = new char[s.byteLength];
 		for (int i = 0; i < s.byteLength; i++) {
-			file >> s.data[i];
+			file >> ((char*)s.data)[i];
 		}
 		addSetting(s);
 	}
+
+	file.close();
 }

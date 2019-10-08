@@ -6,7 +6,6 @@
 #include <string>
 #include <fstream>
 #include <iostream>
-#include <experimental/filesystem>
 
 class SettingsManager {
 public:
@@ -17,13 +16,13 @@ public:
 		void* data;
 	};
 
-	public SettingsManager();
-	public ~SettingsManager();
+	SettingsManager();
+	~SettingsManager();
 
 	bool addSetting(Setting s);
 	bool deleteSetting(std::string id);
 	Setting getSetting(std::string id);
-	vector<Setting>* getSettingsType(std::string type);
+	std::vector<Setting*>* getSettingsType(std::string type);
 
 private:
 	static char settingsFile[];
