@@ -34,6 +34,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "NodeViewer.h"
 #include "View3d.h"
 #include "SpacialData.h"
+#include "SettingsManager.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort

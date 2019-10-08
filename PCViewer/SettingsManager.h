@@ -6,6 +6,7 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <experimental/filesystem>
 
 class SettingsManager {
 public:
@@ -26,6 +27,7 @@ public:
 
 private:
 	static char settingsFile[];
+	static char filePath[];
 	void storeSettings(const char* filename);
 	void loadSettings(const char* filename);
 

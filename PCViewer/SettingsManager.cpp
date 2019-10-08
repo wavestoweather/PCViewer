@@ -1,6 +1,7 @@
 #include "SettingsManager.h"
 
 char SettingsManager::settingsFile[] = "settings/settings.cfg";
+char SettingsManager::filePath[] = "settings";
 
 SettingsManager::SettingsManager()
 {
@@ -10,6 +11,10 @@ SettingsManager::SettingsManager()
 SettingsManager::~SettingsManager()
 {
 	storeSettings(settingsFile);
+	std::unordered_map<std::string, Setting> c(settings);
+	for (auto& s : c) {
+		deleteSetting(s.second.id);
+	}
 }
 
 bool SettingsManager::addSetting(Setting s)
@@ -54,7 +59,18 @@ vector<Setting>* SettingsManager::getSettingsType(std::string type)
 
 void SettingsManager::storeSettings(const char* filename)
 {
-
+	if (!std::experimental::filesystem::exists(filePath)) {
+		std::experimental::filesystem::create_directory(filePath);
+	}
+	std::ofstream file(filename);
+	for (auto& s : settings) {
+		file << s.second.id << s.second.type << s.second.byteLength;
+		for (int i = 0; i < s.second.byteLength; i++) {
+			file << ((char*)s.second.data)[i];
+		}
+		file << "\n";
+	}
+	file.close();
 }
 
 void SettingsManager::loadSettings(const char* filename)
