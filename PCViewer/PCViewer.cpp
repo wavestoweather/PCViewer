@@ -50,6 +50,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <functional>
 #include <chrono>
 #include <random>
+#include <map>
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -200,6 +201,12 @@ struct Brush {
 	Vec2 valueExtent;
 };
 
+struct GlobalBrush {
+	bool active;										//global brushes can be activated and deactivated
+	std::string name;									//the name of a global brush describes the template list it was created from and more...
+	std::map<int, std::pair<float, float>> brushes;		//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
+};
+
 struct DrawList {
 	std::string name;
 	std::string parentDataSet;
@@ -235,6 +242,7 @@ struct TemplateList {
 	std::string name;
 	VkBuffer buffer;
 	std::vector<int> indices;
+	std::vector<std::pair<float, float>> minMax;
 };
 
 struct Buffer {
@@ -469,7 +477,7 @@ static std::uniform_int_distribution<int> distribution(0, 35);
 static float alphaDrawLists = .5f;
 static Vec4 PcPlotBackCol = { 0,0,0,1 };
  
- //variables for the histogramm
+//variables for the histogramm
 static float histogrammWidth = .1f;
 static bool drawHistogramm = false;
 static bool histogrammDensity = false;
@@ -482,6 +490,16 @@ static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
 static float medianLineWidth = 1.0f;
 static bool enableBrushing = false;
+
+//variables for brush templates
+static bool brushTemplatesEnabled = true;
+static bool* brushTemplateAttrEnabled = NULL;
+static int selectedTemplateBrush = -1;
+static std::vector<std::pair<float,float>> templateBrushes;
+
+//variables for global brushes
+static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
+static std::vector<GlobalBrush> globalBrushes;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -2728,6 +2746,20 @@ static void openCsv(const char* filename) {
 	for (int i = 0; i < ds.data.size(); i++) {
 		tl.indices.push_back(i);
 	}
+
+	//getting the minimum and maximum values for all attributes. This will later be used for brush creation
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		tl.minMax.push_back(std::pair<float, float>(1.0f / 0, -1.0f / 0));
+	}
+	for (int i : tl.indices) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			if (ds.data[i][j] < tl.minMax[j].first)
+				tl.minMax[j].first = ds.data[i][j];
+			if (ds.data[i][j] > tl.minMax[j].second)
+				tl.minMax[j].second = ds.data[i][j];
+		}
+	}
+
 	ds.drawLists.push_back(tl);
 
 	g_PcPlotDataSets.push_back(ds);
@@ -2888,6 +2920,18 @@ static void openDlf(const char* filename) {
 						tl.indices.push_back(std::stoi(tmp));
 						file >> tmp;
 					}
+					//getting the range of the bounds for each attribute
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						tl.minMax.push_back(std::pair<float, float>(1.0f / 0, -1.0f / 0));
+					}
+					for (int i : tl.indices) {
+						for (int j = 0; j < pcAttributes.size(); j++) {
+							if (ds.data[i][j] < tl.minMax[j].first)
+								tl.minMax[j].first = ds.data[i][j];
+							if (ds.data[i][j] > tl.minMax[j].second)
+								tl.minMax[j].second = ds.data[i][j];
+						}
+					}
 					ds.drawLists.push_back(tl);
 				}
 			}
@@ -2947,6 +2991,19 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 			int index = std::stof(s);
 			if (index < ds.data.size()) {
 				tl.indices.push_back(index);
+			}
+		}
+
+		//getting minMax values for each attribute for brush creation
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			tl.minMax.push_back(std::pair<float, float>(1.0f / 0, -1.0f / 0));
+		}
+		for (int i : tl.indices) {
+			for (int j = 0; j < pcAttributes.size(); j++) {
+				if (ds.data[i][j] < tl.minMax[j].first)
+					tl.minMax[j].first = ds.data[i][j];
+				if (ds.data[i][j] > tl.minMax[j].second)
+					tl.minMax[j].second = ds.data[i][j];
 			}
 		}
 
