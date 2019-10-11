@@ -51,6 +51,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <chrono>
 #include <random>
 #include <map>
+#include <set>
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -205,6 +206,11 @@ struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
 	std::map<int, std::pair<float, float>> brushes;		//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
+};
+
+struct TemplateBrush {
+	std::string name;									//identifier for the template brush
+	std::map<int,std::pair<float, float>> brushes;
 };
 
 struct DrawList {
@@ -495,7 +501,7 @@ static bool enableBrushing = false;
 static bool brushTemplatesEnabled = true;
 static bool* brushTemplateAttrEnabled = NULL;
 static int selectedTemplateBrush = -1;
-static std::vector<std::pair<float,float>> templateBrushes;
+static std::vector<TemplateBrush> templateBrushes;
 
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
@@ -1344,6 +1350,12 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 
 	delete[] indexBuffer;
+
+	//creating the bool array for brushtemplates
+	brushTemplateAttrEnabled = new bool[pcAttributes.size()];
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		brushTemplateAttrEnabled[i] = false;
+	}
 }
 
 static void cleanupPcPlotVertexBuffer() {
@@ -1820,6 +1832,10 @@ static void destroyPcPlotDataSet(DataSet dataSet) {
 		if (pcAttributeEnabledCpy) {
 			delete[] pcAttributeEnabledCpy;
 			pcAttributeEnabledCpy = nullptr;
+		}
+		if (brushTemplateAttrEnabled) {
+			delete[] brushTemplateAttrEnabled;
+			brushTemplateAttrEnabled = nullptr;
 		}
 	}
 }
@@ -2749,7 +2765,7 @@ static void openCsv(const char* filename) {
 
 	//getting the minimum and maximum values for all attributes. This will later be used for brush creation
 	for (int i = 0; i < pcAttributes.size(); i++) {
-		tl.minMax.push_back(std::pair<float, float>(1.0f / 0, -1.0f / 0));
+		tl.minMax.push_back(std::pair<float, float>(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()));
 	}
 	for (int i : tl.indices) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
@@ -2922,7 +2938,7 @@ static void openDlf(const char* filename) {
 					}
 					//getting the range of the bounds for each attribute
 					for (int i = 0; i < pcAttributes.size(); i++) {
-						tl.minMax.push_back(std::pair<float, float>(1.0f / 0, -1.0f / 0));
+						tl.minMax.push_back(std::pair<float, float>(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()));
 					}
 					for (int i : tl.indices) {
 						for (int j = 0; j < pcAttributes.size(); j++) {
@@ -2996,7 +3012,7 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 
 		//getting minMax values for each attribute for brush creation
 		for (int i = 0; i < pcAttributes.size(); i++) {
-			tl.minMax.push_back(std::pair<float, float>(1.0f / 0, -1.0f / 0));
+			tl.minMax.push_back(std::pair<float, float>(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()));
 		}
 		for (int i : tl.indices) {
 			for (int j = 0; j < pcAttributes.size(); j++) {
@@ -3713,6 +3729,89 @@ int main(int, char**)
 				c1++;
 				offset += gap;
 			}
+
+			//drawing checkboxes for activating brush templates
+			ImGui::Separator();
+			ImGui::Text("Brush templates (Check attributes to create subspace for which brush templates should be shown)");
+			c = 0;
+			c1 = 0;
+			offset = 0;
+			for (auto i : pcAttrOrd) {
+				if (!pcAttributeEnabled[i]) {
+					c++;
+					continue;
+				}
+
+				std::string name = "##CB";
+				name = pcAttributes[i].name + name;
+				if (c1 != 0)
+					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
+				if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i])) {
+					if (selectedTemplateBrush != -1) {
+						globalBrushes.pop_back();
+						selectedTemplateBrush = -1;
+						pcPlotRender = true;
+					}
+					templateBrushes.clear();
+					//searching all drawlists for template brushes, and adding the template brushes which fit the subspace selected
+					std::set<std::string> subspace;
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						if (pcAttributeEnabled[i] && brushTemplateAttrEnabled[i]) {
+							subspace.insert(pcAttributes[i].name);
+						}
+					}
+					for (const DataSet& ds : g_PcPlotDataSets) {
+						if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
+							for (const TemplateList& tl : ds.drawLists) {
+								//checking if the template list is in the correct subspace and if so adding it to the template Brushes
+								std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']')- tl.name.find_first_of('[') - 1);
+								std::set<std::string> sub;
+								std::size_t current, previous = 0;
+								current = s.find(',');
+								while (current != std::string::npos) {
+									sub.insert(s.substr(previous+1, current - previous-2));
+									previous = current + 1;
+									current = s.find(',', previous);
+								}
+								sub.insert(s.substr(previous + 1, s.size() - previous - 2));
+
+								if (sub == subspace) {
+									TemplateBrush t = {};
+									t.name = tl.name;
+									for (int i = 0; i < pcAttributes.size(); i++) {
+										if (brushTemplateAttrEnabled[i]) {
+											t.brushes[i] = tl.minMax[i];
+										}
+									}
+									templateBrushes.push_back(t);
+								}
+							}
+						}
+					}
+				}
+
+				c++;
+				c1++;
+				offset += gap;
+			}
+
+			//drawing the list for brush templates
+			ImGui::BeginChild("brushTemplates", ImVec2(200, 200), true);
+			ImGui::Text("Brush Templates");
+			for (int i = 0; i < templateBrushes.size();i++) {
+				if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
+					if (selectedTemplateBrush != i)
+						selectedTemplateBrush = i;
+					else
+						selectedTemplateBrush = -1;
+					//TODO: create a temporary global brush to get a brush preview
+				}
+			}
+			ImGui::EndChild();
+			ImGui::SameLine();
+			ImGui::BeginChild("GlobalBrushes", ImVec2(200, 200), true);
+			ImGui::Text("Global Brushes");
+			ImGui::EndChild();
 		}
 		ImGui::End();
 
@@ -4206,6 +4305,8 @@ int main(int, char**)
 		delete[] pcAttributeEnabledCpy;
 	if (createDLForDrop)
 		delete[] createDLForDrop;
+	if (brushTemplateAttrEnabled)
+		delete[] brushTemplateAttrEnabled;
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
