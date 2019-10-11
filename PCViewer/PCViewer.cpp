@@ -63,6 +63,9 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define ARITHMEDIAN 1
 #define GOEMEDIAN 2
 
+#define BRUSHWIDTH 20
+#define EDGEHOVERDIST 5
+
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
 // Your own project should not be affected, as you are likely to link with a newer binary of GLFW that is adequate for your version of Visual Studio.
@@ -205,7 +208,7 @@ struct Brush {
 struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
-	std::map<int, std::pair<float, float>> brushes;		//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
+	std::map<int, std::pair<unsigned int,std::pair<float, float>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
 struct TemplateBrush {
@@ -506,6 +509,8 @@ static std::vector<TemplateBrush> templateBrushes;
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
 static std::vector<GlobalBrush> globalBrushes;
+static  int brushDragId = -1;
+static unsigned int currentBrushId = 0;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -2908,6 +2913,23 @@ static void openDlf(const char* filename) {
 					ds.data[i] = &d[i * pcAttributes.size()];
 				}
 			}
+			//adding a default drawlist for all attributes
+			TemplateList defaultT = {};
+			defaultT.buffer = ds.buffer.buffer;
+			defaultT.name = "Default";
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				defaultT.minMax.push_back(std::pair<float, float>(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()));
+			}
+			for (int i = 0; i < ds.data.size(); i++) {
+				defaultT.indices.push_back(i);
+				for (int j = 0; j < pcAttributes.size(); j++) {
+					if (ds.data[i][j] < defaultT.minMax[j].first)
+						defaultT.minMax[j].first = ds.data[i][j];
+					if (ds.data[i][j] > defaultT.minMax[j].second)
+						defaultT.minMax[j].second = ds.data[i][j];
+				}
+			}
+			ds.drawLists.push_back(defaultT);
 
 			//reading the draw lists
 			if (tmp != std::string("Drawlists:")) {
@@ -3796,28 +3818,100 @@ int main(int, char**)
 			}
 
 			//drawing the list for brush templates
-			ImGui::BeginChild("brushTemplates", ImVec2(200, 200), true);
+			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true);
 			ImGui::Text("Brush Templates");
+			ImGui::Separator();
 			for (int i = 0; i < templateBrushes.size();i++) {
 				if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
-					if (selectedTemplateBrush != i)
+					selectedGlobalBrush = -1;
+					pcPlotSelectedDrawList = -1;
+					if (selectedTemplateBrush != i) {
+						if (selectedTemplateBrush != -1)
+							globalBrushes.pop_back();
 						selectedTemplateBrush = i;
-					else
+						GlobalBrush preview;
+						preview.active = true;
+						preview.name = templateBrushes[i].name;
+						for (const auto& brush : templateBrushes[i].brushes) {
+							preview.brushes[brush.first] = std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second);
+						}
+						globalBrushes.push_back(preview);
+					}
+					else {
 						selectedTemplateBrush = -1;
-					//TODO: create a temporary global brush to get a brush preview
+						globalBrushes.pop_back();
+					}
+				}
+				if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
+					selectedGlobalBrush = globalBrushes.size() - 1;
+					selectedTemplateBrush = -1;
 				}
 			}
 			ImGui::EndChild();
 			ImGui::SameLine();
-			ImGui::BeginChild("GlobalBrushes", ImVec2(200, 200), true);
+			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true);
 			ImGui::Text("Global Brushes");
+			ImGui::Separator();
+			for (int i = 0; i < globalBrushes.size(); i++) {
+				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
+					selectedGlobalBrush = i;
+				}
+			}
 			ImGui::EndChild();
 		}
 		ImGui::End();
 
-		//drawing the brush windows
 		ImVec2 picSize(io.DisplaySize.x - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
 		gap = picSize.x / (amtOfLabels - 1);
+		//drawing the global brush
+		//global brushes currently only support change of brush but no adding of new brushes or deleting of brushes
+		if (selectedGlobalBrush != -1) {
+			for (const auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
+				ImVec2 mousePos = ImGui::GetIO().MousePos;
+				float x = gap * pcAttrOrd[brush.first] + picPos.x;
+				float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
+				float width = BRUSHWIDTH;
+				float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
+				bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
+				//edgeHover = 0 -> No edge is hovered
+				//edgeHover = 1 -> Top edge is hovered
+				//edgeHover = 2 -> Bot edge is hovered
+				int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
+				edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height? 2 : edgeHover;
+				ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+				//set mouse cursor
+				if (edgeHover) {
+					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+				}
+				//activate dragging of edge
+				if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+					brushDragId = brush.second.first;
+				}
+				//drag edge
+				if (brushDragId = brush.second.first && ImGui::GetIO().MouseDown[0]) {
+
+				}
+				//release edge
+				if (brushDragId = brush.second.first && ImGui::GetIO().MouseReleased[0]) {
+					brushDragId = -1;
+				}
+			}
+		}
+
+		//drawing the template brush, these are not changeable
+		if (selectedTemplateBrush != -1) {
+			for (const auto& brush : globalBrushes.back().brushes) {
+
+				float x = gap * pcAttrOrd[brush.first] + picPos.x;
+				float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
+				float width = BRUSHWIDTH;
+				float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
+				ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y+height), IM_COL32(30, 0, 200, 150), 1, ImDrawCornerFlags_All, 5);
+			}
+		}
+
+		//TODO: rewrite this section for cleaner code
+		//drawing the brush windows
 		if (pcPlotSelectedDrawList != -1) {
 			//getting the drawlist;
 			DrawList* dl = 0;
