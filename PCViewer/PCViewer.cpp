@@ -65,6 +65,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 
 #define BRUSHWIDTH 20
 #define EDGEHOVERDIST 5
+#define DRAGTHRESH .02f
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -208,6 +209,7 @@ struct Brush {
 struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
+	float changeRatio;									//ratio of change in the brushes(used to update the drawlist only on significant change of the brush)
 	std::map<int, std::pair<unsigned int,std::pair<float, float>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
@@ -509,7 +511,8 @@ static std::vector<TemplateBrush> templateBrushes;
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
 static std::vector<GlobalBrush> globalBrushes;
-static  int brushDragId = -1;
+static int brushDragId = -1;
+static bool brushDragTop = true;
 static unsigned int currentBrushId = 0;
 
 //variables for the 3d views
@@ -2913,9 +2916,12 @@ static void openDlf(const char* filename) {
 					ds.data[i] = &d[i * pcAttributes.size()];
 				}
 			}
+
+			createPcPlotVertexBuffer(pcAttributes, ds.data);
+
 			//adding a default drawlist for all attributes
 			TemplateList defaultT = {};
-			defaultT.buffer = ds.buffer.buffer;
+			defaultT.buffer = g_PcPlotVertexBuffers.back().buffer;
 			defaultT.name = "Default";
 			for (int i = 0; i < pcAttributes.size(); i++) {
 				defaultT.minMax.push_back(std::pair<float, float>(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()));
@@ -2942,7 +2948,6 @@ static void openDlf(const char* filename) {
 			//beginnin to read the drawlists
 			else {
 				file >> tmp;
-				createPcPlotVertexBuffer(pcAttributes, ds.data);
 				ds.buffer = g_PcPlotVertexBuffers.back();
 				while (!file.eof()) {		//Loop for each drawlist
 					TemplateList tl;
@@ -3104,6 +3109,56 @@ static void updateActiveIndices(DrawList& dl) {
 	memcpy(d, indBuffer, dl.activeInd.size() * sizeof(uint32_t) * 2);
 	vkUnmapMemory(g_Device, dl.dlMem);
 	delete[] indBuffer;
+}
+
+//This method does the same as updataActiveIndices, only for ALL drawlists
+//whenever possible use updataActiveIndices, not updateAllActiveIndicess
+static void updateAllActiveIndices() {
+	for (DrawList& dl : g_PcPlotDrawLists) {
+		//getting the parent dataset data
+		std::vector<float*>* data;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (ds.name == dl.parentDataSet) {
+				data = &ds.data;
+				break;
+			}
+		}
+
+		dl.activeInd.clear();
+		for (int i : dl.indices) {
+			//checking the local brushes
+			bool keep = true;
+			for (int j = 0; j < pcAttributes.size(); j++) {
+				bool good = false;
+				for (Brush& b : dl.brushes[j]) {
+					if ((*data)[i][j]>b.valueExtent.u && (*data)[i][j]<b.valueExtent.v) {
+						good = true;
+						break;
+					}
+				}
+				if (dl.brushes[j].size() == 0) {
+					good = true;
+				}
+				if (!good)
+					keep = false;
+			}
+			if (!keep)
+				goto nextInd;
+
+			//checking gloabl brushes
+			for (GlobalBrush& b : globalBrushes) {
+				for (auto& brush : b.brushes) {
+					if ((*data)[i][brush.first]<brush.second.second.first || (*data)[i][brush.first]>brush.second.second.second) {
+						goto nextInd;
+					}
+				}
+			}
+
+			dl.activeInd.push_back(i);
+
+			nextInd:;
+		}
+	}
 }
 
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
@@ -3855,6 +3910,7 @@ int main(int, char**)
 			for (int i = 0; i < globalBrushes.size(); i++) {
 				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
 					selectedGlobalBrush = i;
+					selectedTemplateBrush = -1;
 				}
 			}
 			ImGui::EndChild();
@@ -3866,9 +3922,9 @@ int main(int, char**)
 		//drawing the global brush
 		//global brushes currently only support change of brush but no adding of new brushes or deleting of brushes
 		if (selectedGlobalBrush != -1) {
-			for (const auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
+			for (auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
 				ImVec2 mousePos = ImGui::GetIO().MousePos;
-				float x = gap * pcAttrOrd[brush.first] + picPos.x;
+				float x = gap * pcAttrOrd[brush.first] + picPos.x - BRUSHWIDTH/2;
 				float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 				float width = BRUSHWIDTH;
 				float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -3880,20 +3936,43 @@ int main(int, char**)
 				edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height? 2 : edgeHover;
 				ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
 				//set mouse cursor
-				if (edgeHover) {
+				if (edgeHover || brushDragId != -1) {
 					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 				}
 				//activate dragging of edge
 				if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
 					brushDragId = brush.second.first;
+					brushDragTop = edgeHover == 1;
 				}
 				//drag edge
-				if (brushDragId = brush.second.first && ImGui::GetIO().MouseDown[0]) {
+				if (brushDragId == brush.second.first && ImGui::GetIO().MouseDown[0]) {
+					if (brushDragTop) {
+						brush.second.second.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+					}
+					else {
+						brush.second.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+					}
 
+					//switching edges if max value of brush is smaller than min value
+					if (brush.second.second.second < brush.second.second.first) {
+						float tmp = brush.second.second.second;
+						brush.second.second.second = brush.second.second.first;
+						brush.second.second.first = tmp;
+						brushDragTop ^= 1;
+					}
+					
+					//updating the active indices if the brushes were changed strong enough
+					globalBrushes[selectedGlobalBrush].changeRatio += std::abs(ImGui::GetIO().MouseDelta.y / picSize.y);
+					if (globalBrushes[selectedGlobalBrush].changeRatio > DRAGTHRESH) {
+						updateAllActiveIndices();
+						pcPlotRender = true;
+					}
 				}
 				//release edge
-				if (brushDragId = brush.second.first && ImGui::GetIO().MouseReleased[0]) {
+				if (brushDragId == brush.second.first && ImGui::GetIO().MouseReleased[0]) {
 					brushDragId = -1;
+					updateAllActiveIndices();
+					pcPlotRender = true;
 				}
 			}
 		}
