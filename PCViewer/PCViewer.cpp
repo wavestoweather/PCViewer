@@ -209,7 +209,6 @@ struct Brush {
 struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
-	float changeRatio;									//ratio of change in the brushes(used to update the drawlist only on significant change of the brush)
 	std::map<int, std::pair<unsigned int,std::pair<float, float>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
@@ -3072,6 +3071,7 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 static void updateActiveIndices(DrawList& dl) {
 	if (!dl.brushChanged)
 		return;
+	//getting the parent dataset data
 	std::vector<float*>* data;
 	for (DataSet& ds : g_PcPlotDataSets) {
 		if (ds.name == dl.parentDataSet) {
@@ -3079,24 +3079,40 @@ static void updateActiveIndices(DrawList& dl) {
 			break;
 		}
 	}
-	//updating the active indices vector
+
 	dl.activeInd.clear();
 	for (int i : dl.indices) {
+		//checking the local brushes
+		bool keep = true;
 		for (int j = 0; j < pcAttributes.size(); j++) {
-			if (!pcAttributeEnabled[j])
-				continue;
-			bool keepLine = false;
+			bool good = false;
 			for (Brush& b : dl.brushes[j]) {
-				if ((*data)[i][j] >= b.valueExtent.u && (*data)[i][j] <= b.valueExtent.v) {
-					keepLine = true;
+				if ((*data)[i][j] > b.valueExtent.u && (*data)[i][j] < b.valueExtent.v) {
+					good = true;
 					break;
 				}
 			}
-			if (!keepLine && !dl.brushes[j].empty())
-				goto end;
+			if (dl.brushes[j].size() == 0) {
+				good = true;
+			}
+			if (!good)
+				keep = false;
 		}
+		if (!keep)
+			goto nextInd;
+
+		//checking gloabl brushes
+		for (GlobalBrush& b : globalBrushes) {
+			for (auto& brush : b.brushes) {
+				if ((*data)[i][brush.first]<brush.second.second.first || (*data)[i][brush.first]>brush.second.second.second) {
+					goto nextInd;
+				}
+			}
+		}
+
 		dl.activeInd.push_back(i);
-		end:;
+
+	nextInd:;
 	}
 	//updating the indexbuffer for histogramm
 	uint32_t* indBuffer = new uint32_t[dl.activeInd.size() * 2];
@@ -3115,49 +3131,7 @@ static void updateActiveIndices(DrawList& dl) {
 //whenever possible use updataActiveIndices, not updateAllActiveIndicess
 static void updateAllActiveIndices() {
 	for (DrawList& dl : g_PcPlotDrawLists) {
-		//getting the parent dataset data
-		std::vector<float*>* data;
-		for (DataSet& ds : g_PcPlotDataSets) {
-			if (ds.name == dl.parentDataSet) {
-				data = &ds.data;
-				break;
-			}
-		}
-
-		dl.activeInd.clear();
-		for (int i : dl.indices) {
-			//checking the local brushes
-			bool keep = true;
-			for (int j = 0; j < pcAttributes.size(); j++) {
-				bool good = false;
-				for (Brush& b : dl.brushes[j]) {
-					if ((*data)[i][j]>b.valueExtent.u && (*data)[i][j]<b.valueExtent.v) {
-						good = true;
-						break;
-					}
-				}
-				if (dl.brushes[j].size() == 0) {
-					good = true;
-				}
-				if (!good)
-					keep = false;
-			}
-			if (!keep)
-				goto nextInd;
-
-			//checking gloabl brushes
-			for (GlobalBrush& b : globalBrushes) {
-				for (auto& brush : b.brushes) {
-					if ((*data)[i][brush.first]<brush.second.second.first || (*data)[i][brush.first]>brush.second.second.second) {
-						goto nextInd;
-					}
-				}
-			}
-
-			dl.activeInd.push_back(i);
-
-			nextInd:;
-		}
+		updateActiveIndices(dl);
 	}
 }
 
@@ -3891,6 +3865,7 @@ int main(int, char**)
 							preview.brushes[brush.first] = std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second);
 						}
 						globalBrushes.push_back(preview);
+						updateAllActiveIndices();
 					}
 					else {
 						selectedTemplateBrush = -1;
@@ -3907,11 +3882,21 @@ int main(int, char**)
 			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true);
 			ImGui::Text("Global Brushes");
 			ImGui::Separator();
+			bool popEnd = false;
 			for (int i = 0; i < globalBrushes.size(); i++) {
 				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
 					selectedGlobalBrush = i;
-					selectedTemplateBrush = -1;
+					if (selectedTemplateBrush != -1) {
+						selectedTemplateBrush = -1;
+						popEnd = true;
+					}
 				}
+			}
+			if (popEnd) {
+				globalBrushes.pop_back();
+				if (selectedGlobalBrush == globalBrushes.size())
+					selectedGlobalBrush = -1;
+				updateAllActiveIndices();
 			}
 			ImGui::EndChild();
 		}
@@ -3961,9 +3946,7 @@ int main(int, char**)
 						brushDragTop ^= 1;
 					}
 					
-					//updating the active indices if the brushes were changed strong enough
-					globalBrushes[selectedGlobalBrush].changeRatio += std::abs(ImGui::GetIO().MouseDelta.y / picSize.y);
-					if (globalBrushes[selectedGlobalBrush].changeRatio > DRAGTHRESH) {
+					if (ImGui::GetIO().MouseDelta.y) {
 						updateAllActiveIndices();
 						pcPlotRender = true;
 					}
