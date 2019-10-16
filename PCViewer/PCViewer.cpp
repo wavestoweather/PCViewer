@@ -513,6 +513,7 @@ static std::vector<GlobalBrush> globalBrushes;
 static int brushDragId = -1;
 static bool brushDragTop = true;
 static unsigned int currentBrushId = 0;
+static bool* activeBrushAttributes = NULL;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -1844,6 +1845,10 @@ static void destroyPcPlotDataSet(DataSet dataSet) {
 			delete[] brushTemplateAttrEnabled;
 			brushTemplateAttrEnabled = nullptr;
 		}
+		if (activeBrushAttributes) {
+			delete[] activeBrushAttributes;
+			activeBrushAttributes = nullptr;
+		}
 	}
 }
 
@@ -2704,9 +2709,11 @@ static void openCsv(const char* filename) {
 				//setting up the boolarray and setting all the attributes to true
 				pcAttributeEnabled = new bool[pcAttributes.size()];
 				pcAttributeEnabledCpy = new bool[pcAttributes.size()];
+				activeBrushAttributes = new bool[pcAttributes.size()];
 				for (int i = 0; i < pcAttributes.size(); i++) {
 					pcAttributeEnabled[i] = true;
 					pcAttributeEnabledCpy[i] = true;
+					activeBrushAttributes = false;
 					pcAttrOrd.push_back(i);
 				}
 			}
@@ -2981,9 +2988,11 @@ static void openDlf(const char* filename) {
 			if (newAttr) {
 				pcAttributeEnabled = new bool[pcAttributes.size()];
 				pcAttributeEnabledCpy = new bool[pcAttributes.size()];
+				activeBrushAttributes = new bool[pcAttributes.size()];
 				for (int i = 0; i < pcAttributes.size(); i++) {
 					pcAttributeEnabled[i] = true;
 					pcAttributeEnabledCpy[i] = true;
+					activeBrushAttributes[i] = false;
 					pcAttrOrd.push_back(i);
 				}
 			}
@@ -3885,10 +3894,36 @@ int main(int, char**)
 			bool popEnd = false;
 			for (int i = 0; i < globalBrushes.size(); i++) {
 				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
-					selectedGlobalBrush = i;
+					pcPlotSelectedDrawList = -1;
+					if (selectedGlobalBrush != i) {
+						selectedGlobalBrush = i;
+					}
+					else {
+						selectedGlobalBrush = -1;
+					}
 					if (selectedTemplateBrush != -1) {
 						selectedTemplateBrush = -1;
 						popEnd = true;
+					}
+				}
+				if (ImGui::IsItemClicked(1)) {
+					if (selectedGlobalBrush == i) {
+						selectedGlobalBrush = -1;
+					}
+					if (popEnd) {
+						if (globalBrushes.size() == 2) {
+							globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+							globalBrushes.pop_back();
+						}
+						else {
+							globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
+							globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
+							globalBrushes.pop_back();
+						}
+					}
+					else {
+						globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+						globalBrushes.pop_back();
 					}
 				}
 			}
@@ -3918,7 +3953,7 @@ int main(int, char**)
 				//edgeHover = 1 -> Top edge is hovered
 				//edgeHover = 2 -> Bot edge is hovered
 				int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
-				edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height? 2 : edgeHover;
+				edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
 				ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
 				//set mouse cursor
 				if (edgeHover || brushDragId != -1) {
@@ -3972,7 +4007,7 @@ int main(int, char**)
 			}
 		}
 
-		//TODO: rewrite this section for cleaner code
+		//TODO: rewrite this section for cleaner code and correct functionality
 		//drawing the brush windows
 		if (pcPlotSelectedDrawList != -1) {
 			//getting the drawlist;
@@ -4186,10 +4221,15 @@ int main(int, char**)
 			ImGui::Separator();
 			for (DataSet& ds : g_PcPlotDataSets) {
 				if (ImGui::TreeNode(ds.name.c_str())) {
+					static const TemplateList* convert = nullptr;
 					for (const TemplateList& tl : ds.drawLists) {
 						if (ImGui::Button(tl.name.c_str())) {
 							ImGui::OpenPopup(tl.name.c_str());
 							std::strcpy(pcDrawListName, tl.name.c_str());
+						}
+						if (ImGui::IsItemClicked(1)) {
+							ImGui::OpenPopup("CONVERTTOBRUSH");
+							convert = &tl;
 						}
 						if (ImGui::BeginPopupModal(tl.name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
 						{
@@ -4210,6 +4250,52 @@ int main(int, char**)
 							ImGui::EndPopup();
 						}
 					}
+					//Popup for converting a template list to brush
+					bool convertToGlobalBrush = false;
+					if (ImGui::BeginPopup("CONVERTTOBRUSH")) {
+						if (ImGui::MenuItem("Convert to global brush")) {
+							convertToGlobalBrush = true;
+							ImGui::CloseCurrentPopup();
+						}
+						//TODO: convert to lokal brush
+						ImGui::EndPopup();
+					}
+
+					//Popup for converting a template list to global brush
+					if (convertToGlobalBrush) {
+						ImGui::OpenPopup("CONVERTTOGLOBALBRUSH");
+					}
+					if (ImGui::BeginPopupModal("CONVERTTOGLOBALBRUSH")) {
+						static char n[200] = {};
+						ImGui::InputText("name", n, 200);
+						ImGui::Text("Please select the axes which should be brushed");
+						for (int i = 0; i < pcAttributes.size(); i++) {
+							ImGui::Checkbox(pcAttributes[i].name.c_str(), &activeBrushAttributes[i]);
+							if (i != pcAttributes.size() - 1) {
+								ImGui::SameLine();
+							}
+						}
+
+						if (ImGui::Button("Create")) {
+							GlobalBrush brush = {};
+							brush.name = std::string(n);
+							brush.active = true;
+							for (int i = 0; i < pcAttributes.size(); i++) {
+								if (activeBrushAttributes[i]) {
+									brush.brushes[i] = std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]);
+								}
+							}
+							globalBrushes.push_back(brush);
+
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::SameLine();
+						if (ImGui::Button("Cancel")) {
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::EndPopup();
+					}
+
 					//Popup for adding a custom index list
 					if (ImGui::Button("ADDINDEXLIST")) {
 						ImGui::OpenPopup("ADDINDEXLIST");
@@ -4463,6 +4549,9 @@ int main(int, char**)
 		delete[] createDLForDrop;
 	if (brushTemplateAttrEnabled)
 		delete[] brushTemplateAttrEnabled;
+	if (activeBrushAttributes) {
+		delete[] activeBrushAttributes;
+	}
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
