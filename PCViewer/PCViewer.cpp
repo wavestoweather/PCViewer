@@ -3543,398 +3543,397 @@ int main(int, char**)
 		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
 		ImVec2 window_pos = ImVec2(0, 0);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		ImGui::SetNextWindowSize({ io.DisplaySize.x,0 });
+		ImGui::SetNextWindowSize({ io.DisplaySize.x,io.DisplaySize.y });
 		ImVec2 picPos;
 		bool picHovered;
-		if (ImGui::Begin("Plot", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
-		{
-			//Menu for saving settings
-			bool openSave = false, openLoad = false, openManager = false;
-			if (ImGui::BeginMenuBar()) {
-				if (ImGui::BeginMenu("Attribute")) {
-					if (ImGui::MenuItem("Save Attributes", "Ctrl+S")&&pcAttributes.size()>0) {
-						openSave = true;
-					}
-					if (ImGui::BeginMenu("Load...")) {
-						for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
-							if (ImGui::MenuItem(s->id.c_str())) {
-								if (((int*)s->data)[0] != pcAttributes.size()) {
+		ImGui::Begin("Plot", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+
+		//Menu for saving settings
+		bool openSave = false, openLoad = false, openManager = false;
+		if (ImGui::BeginMenuBar()) {
+			if (ImGui::BeginMenu("Attribute")) {
+				if (ImGui::MenuItem("Save Attributes", "Ctrl+S")&&pcAttributes.size()>0) {
+					openSave = true;
+				}
+				if (ImGui::BeginMenu("Load...")) {
+					for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
+						if (ImGui::MenuItem(s->id.c_str())) {
+							if (((int*)s->data)[0] != pcAttributes.size()) {
+								openLoad = true;
+								continue;
+							}
+
+							std::vector<Attribute> savedAttr;
+							char* d = (char*)s->data + sizeof(int);
+							for (int i = 0; i < ((int*)s->data)[0]; i++) {
+								Attribute a = {};
+								a.name = std::string(d);
+								d += a.name.size() + 1;
+								a.min = *(float*)d;
+								d += sizeof(float);
+								a.max = *(float*)d;
+								d += sizeof(float);
+								savedAttr.push_back(a);
+								if (pcAttributes[i].name != savedAttr[i].name) {
 									openLoad = true;
 									continue;
 								}
-
-								std::vector<Attribute> savedAttr;
-								char* d = (char*)s->data + sizeof(int);
-								for (int i = 0; i < ((int*)s->data)[0]; i++) {
-									Attribute a = {};
-									a.name = std::string(d);
-									d += a.name.size() + 1;
-									a.min = *(float*)d;
-									d += sizeof(float);
-									a.max = *(float*)d;
-									d += sizeof(float);
-									savedAttr.push_back(a);
-									if (pcAttributes[i].name != savedAttr[i].name) {
-										openLoad = true;
-										continue;
-									}
-								}
-								int* o = (int*)d;
-								bool* act = (bool*)(d + pcAttributes.size() * sizeof(int));
-								for (int i = 0; i < pcAttributes.size(); i++) {
-									pcAttributes[i] = savedAttr[i];
-									pcAttrOrd[i] = o[i];
-									pcAttributeEnabled[i] = act[i];
-								}
 							}
+							int* o = (int*)d;
+							bool* act = (bool*)(d + pcAttributes.size() * sizeof(int));
+							for (int i = 0; i < pcAttributes.size(); i++) {
+								pcAttributes[i] = savedAttr[i];
+								pcAttrOrd[i] = o[i];
+								pcAttributeEnabled[i] = act[i];
+							}
+							pcPlotRender = true;
 						}
-						ImGui::EndMenu();
-					}
-					if (ImGui::MenuItem("Manage")) {
-						openManager = true;
 					}
 					ImGui::EndMenu();
 				}
-				ImGui::EndMenuBar();
-			}
-			//popup for saving a new Attribute Setting
-			if (openSave) {
-				ImGui::OpenPopup("Save attribute setting");
-			}
-			if (openLoad) {
-				ImGui::OpenPopup("Load error");
-			}
-			if (openManager) {
-				ImGui::OpenPopup("Manage attribute settings");
-			}
-			if (ImGui::BeginPopupModal("Manage attribute settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-				std::string del;
-				for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
-					ImGui::Text(s->id.c_str());
-					ImGui::SameLine();
-					if (ImGui::Button(("Delete##" + s->id).c_str())) {
-						del = s->id;
-					}
+				if (ImGui::MenuItem("Manage")) {
+					openManager = true;
 				}
-				if (del.size() != 0) {
-					settingsManager->deleteSetting(del);
-				}
-				ImGui::Separator();
-				if (ImGui::Button("Close")) {
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
+				ImGui::EndMenu();
 			}
-			if (ImGui::BeginPopupModal("Save attribute setting", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-				ImGui::Text("Enter the name for the new setting");
-				static char settingName[100] = {};
-				ImGui::InputText("setting name", settingName, sizeof(settingName));
-
-				if (ImGui::Button("Save", ImVec2(120, 0))) {
-					ImGui::CloseCurrentPopup();
-					//creating the new setting
-					uint32_t attributesSize = 2 * sizeof(float) * pcAttributes.size();
-					for (Attribute& a : pcAttributes) {
-						attributesSize += a.name.size() + 1;
-					}
-					SettingsManager::Setting s = {};
-					s.id = std::string(settingName);
-					unsigned char* d = new unsigned char[sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size()];
-					s.byteLength = sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size();
-					s.data = d;
-					((int*)d)[0] = pcAttributes.size();
-					d += 4;
-					//Adding the attributes to the dataarray
-					for (int i = 0; i < pcAttributes.size(); i++) {
-						memcpy(d, pcAttributes[i].name.data(), pcAttributes[i].name.size());
-						d += pcAttributes[i].name.size();
-						*d = '\0';
-						d++;
-						((float*)d)[0] = pcAttributes[i].min;
-						((float*)d)[1] = pcAttributes[i].max;
-						d += 2 * sizeof(float);
-					}
-					//adding the attributes order
-					for (int i : pcAttrOrd) {
-						((int*)d)[0] = i;
-						d += sizeof(int);
-					}
-					//adding attribute activation
-					for (int i = 0; i < pcAttributes.size(); i++) {
-						*d++ = pcAttributeEnabled[i];
-					}
-					s.type = "AttributeSetting";
-					settingsManager->addSetting(s);
-
-					delete[] s.data;
-				}
-				ImGui::SetItemDefaultFocus();
+			ImGui::EndMenuBar();
+		}
+		//popup for saving a new Attribute Setting
+		if (openSave) {
+			ImGui::OpenPopup("Save attribute setting");
+		}
+		if (openLoad) {
+			ImGui::OpenPopup("Load error");
+		}
+		if (openManager) {
+			ImGui::OpenPopup("Manage attribute settings");
+		}
+		if (ImGui::BeginPopupModal("Manage attribute settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			std::string del;
+			for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
+				ImGui::Text(s->id.c_str());
 				ImGui::SameLine();
-				if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-					ImGui::CloseCurrentPopup();
+				if (ImGui::Button(("Delete##" + s->id).c_str())) {
+					del = s->id;
 				}
-				ImGui::EndPopup();
 			}
-			//popup for loading error
-			if (ImGui::BeginPopupModal("Load error")) {
-				ImGui::Text("Error at loading the current setting");
-				if (ImGui::Button("Close", ImVec2(120, 0))) {
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
+			if (del.size() != 0) {
+				settingsManager->deleteSetting(del);
 			}
-
-			//drawing the buttons which can be changed via drag and drop
-
-			int c = 0;		//describing the position of the element in the AttrOrd vector
-			int c1 = 0;
-			for (auto i : pcAttrOrd) {
-				//not creating button for unused Attributes
-				if (!pcAttributeEnabled[i]) {
-					c++;
-					continue;
-				}
-
-				std::string name = pcAttributes[i].name;
-				if(c1!=0)
-					ImGui::SameLine(offset-c1*(buttonSize.x/amtOfLabels));
-				ImGui::Button(name.c_str(),buttonSize);
-
-				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-					int p[] = { c,i };		//holding the index in the pcAttriOrd array and the value of it
-					ImGui::SetDragDropPayload("ATTRIBUTE", p ,sizeof(p));
-					ImGui::Text("Swap %s", name.c_str());
-					ImGui::EndDragDropSource();
-				}
-				if (ImGui::BeginDragDropTarget()) {
-					if (const ImGuiPayload * payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
-						int* other = (int*)payload->Data;
-						
-						switchAttributes(c, other[0], io.KeyCtrl);
-
-						pcPlotPreviousSlectedDrawList = -1;
-
-						pcPlotRender = true;
-					}
-				}
-				
-				c++;
-				c1++;
-				offset += gap;
-			}
-
-			//Adding the drag floats for the max values
-			c = 0;
-			c1 = 0;
-			offset = 0;
-			for (auto i : pcAttrOrd) {
-				if (!pcAttributeEnabled[i]) {
-					c++;
-					continue;
-				}
-
-				std::string name = "max##";
-				name += pcAttributes[i].name;
-				ImGui::PushItemWidth(buttonSize.x);
-				if(c1!=0)
-					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f,0.0f,0.0f,"%.05f")) {
-					pcPlotRender = true;
-					pcPlotPreviousSlectedDrawList = -1;
-				}
-				ImGui::PopItemWidth();
-
-				c++;
-				c1++;
-				offset += gap;
-			}
-
-			//drawing the Texture
-			picPos = ImGui::GetCursorScreenPos();
-			picPos.y += 2;
-			ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, io.DisplaySize.y * 2/5), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 255));
-			picHovered = ImGui::IsItemHovered();
-			if (pcPlotRender) {
-				pcPlotRender = false;
-				drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, wd);
-			}
-
-			//Adding the Drag floats for the min values
-			c = 0;
-			c1 = 0;
-			offset = 0;
-			for (auto i : pcAttrOrd) {
-				if (!pcAttributeEnabled[i]) {
-					c++;
-					continue;
-				}
-
-				std::string name = "min##";
-				name += pcAttributes[i].name;
-				ImGui::PushItemWidth(buttonSize.x);
-				if (c1 != 0)
-					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f, .0f, .0f, "%.05f")) {
-					pcPlotRender = true;
-					pcPlotPreviousSlectedDrawList = -1;
-				}
-				ImGui::PopItemWidth();
-
-				c++;
-				c1++;
-				offset += gap;
-			}
-
-			//drawing checkboxes for activating brush templates
 			ImGui::Separator();
-			ImGui::Text("Brush templates (Check attributes to create subspace for which brush templates should be shown)");
-			c = 0;
-			c1 = 0;
-			offset = 0;
-			for (auto i : pcAttrOrd) {
-				if (!pcAttributeEnabled[i]) {
-					c++;
-					continue;
+			if (ImGui::Button("Close")) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+		if (ImGui::BeginPopupModal("Save attribute setting", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Enter the name for the new setting");
+			static char settingName[100] = {};
+			ImGui::InputText("setting name", settingName, sizeof(settingName));
+
+			if (ImGui::Button("Save", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+				//creating the new setting
+				uint32_t attributesSize = 2 * sizeof(float) * pcAttributes.size();
+				for (Attribute& a : pcAttributes) {
+					attributesSize += a.name.size() + 1;
 				}
+				SettingsManager::Setting s = {};
+				s.id = std::string(settingName);
+				unsigned char* d = new unsigned char[sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size()];
+				s.byteLength = sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size();
+				s.data = d;
+				((int*)d)[0] = pcAttributes.size();
+				d += 4;
+				//Adding the attributes to the dataarray
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					memcpy(d, pcAttributes[i].name.data(), pcAttributes[i].name.size());
+					d += pcAttributes[i].name.size();
+					*d = '\0';
+					d++;
+					((float*)d)[0] = pcAttributes[i].min;
+					((float*)d)[1] = pcAttributes[i].max;
+					d += 2 * sizeof(float);
+				}
+				//adding the attributes order
+				for (int i : pcAttrOrd) {
+					((int*)d)[0] = i;
+					d += sizeof(int);
+				}
+				//adding attribute activation
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					*d++ = pcAttributeEnabled[i];
+				}
+				s.type = "AttributeSetting";
+				settingsManager->addSetting(s);
 
-				std::string name = "##CB";
-				name = pcAttributes[i].name + name;
-				if (c1 != 0)
-					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i])) {
-					if (selectedTemplateBrush != -1) {
-						globalBrushes.pop_back();
-						selectedTemplateBrush = -1;
-						pcPlotRender = true;
-					}
-					templateBrushes.clear();
-					//searching all drawlists for template brushes, and adding the template brushes which fit the subspace selected
-					std::set<std::string> subspace;
-					for (int i = 0; i < pcAttributes.size(); i++) {
-						if (pcAttributeEnabled[i] && brushTemplateAttrEnabled[i]) {
-							subspace.insert(pcAttributes[i].name);
-						}
-					}
-					for (const DataSet& ds : g_PcPlotDataSets) {
-						if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
-							for (const TemplateList& tl : ds.drawLists) {
-								//checking if the template list is in the correct subspace and if so adding it to the template Brushes
-								std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']')- tl.name.find_first_of('[') - 1);
-								std::set<std::string> sub;
-								std::size_t current, previous = 0;
-								current = s.find(',');
-								while (current != std::string::npos) {
-									sub.insert(s.substr(previous+1, current - previous-2));
-									previous = current + 1;
-									current = s.find(',', previous);
-								}
-								sub.insert(s.substr(previous + 1, s.size() - previous - 2));
+				delete[] s.data;
+			}
+			ImGui::SetItemDefaultFocus();
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+		//popup for loading error
+		if (ImGui::BeginPopupModal("Load error")) {
+			ImGui::Text("Error at loading the current setting");
+			if (ImGui::Button("Close", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
 
-								if (sub == subspace) {
-									TemplateBrush t = {};
-									t.name = tl.name;
-									for (int i = 0; i < pcAttributes.size(); i++) {
-										if (brushTemplateAttrEnabled[i]) {
-											t.brushes[i] = tl.minMax[i];
-										}
+		//drawing the buttons which can be changed via drag and drop
+
+		int c = 0;		//describing the position of the element in the AttrOrd vector
+		int c1 = 0;
+		for (auto i : pcAttrOrd) {
+			//not creating button for unused Attributes
+			if (!pcAttributeEnabled[i]) {
+				c++;
+				continue;
+			}
+
+			std::string name = pcAttributes[i].name;
+			if(c1!=0)
+				ImGui::SameLine(offset-c1*(buttonSize.x/amtOfLabels));
+			ImGui::Button(name.c_str(),buttonSize);
+
+			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+				int p[] = { c,i };		//holding the index in the pcAttriOrd array and the value of it
+				ImGui::SetDragDropPayload("ATTRIBUTE", p ,sizeof(p));
+				ImGui::Text("Swap %s", name.c_str());
+				ImGui::EndDragDropSource();
+			}
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload * payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
+					int* other = (int*)payload->Data;
+					
+					switchAttributes(c, other[0], io.KeyCtrl);
+
+					pcPlotPreviousSlectedDrawList = -1;
+
+					pcPlotRender = true;
+				}
+			}
+			
+			c++;
+			c1++;
+			offset += gap;
+		}
+
+		//Adding the drag floats for the max values
+		c = 0;
+		c1 = 0;
+		offset = 0;
+		for (auto i : pcAttrOrd) {
+			if (!pcAttributeEnabled[i]) {
+				c++;
+				continue;
+			}
+
+			std::string name = "max##";
+			name += pcAttributes[i].name;
+			ImGui::PushItemWidth(buttonSize.x);
+			if(c1!=0)
+				ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
+
+			if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f,0.0f,0.0f,"%.05f")) {
+				pcPlotRender = true;
+				pcPlotPreviousSlectedDrawList = -1;
+			}
+			ImGui::PopItemWidth();
+
+			c++;
+			c1++;
+			offset += gap;
+		}
+
+		//drawing the Texture
+		picPos = ImGui::GetCursorScreenPos();
+		picPos.y += 2;
+		ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, io.DisplaySize.y * 2/5), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 255));
+		picHovered = ImGui::IsItemHovered();
+		if (pcPlotRender) {
+			pcPlotRender = false;
+			drawPcPlot(pcAttributes, pcAttrOrd,pcAttributeEnabled, wd);
+		}
+
+		//Adding the Drag floats for the min values
+		c = 0;
+		c1 = 0;
+		offset = 0;
+		for (auto i : pcAttrOrd) {
+			if (!pcAttributeEnabled[i]) {
+				c++;
+				continue;
+			}
+
+			std::string name = "min##";
+			name += pcAttributes[i].name;
+			ImGui::PushItemWidth(buttonSize.x);
+			if (c1 != 0)
+				ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
+			if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f, .0f, .0f, "%.05f")) {
+				pcPlotRender = true;
+				pcPlotPreviousSlectedDrawList = -1;
+			}
+			ImGui::PopItemWidth();
+
+			c++;
+			c1++;
+			offset += gap;
+		}
+
+		//drawing checkboxes for activating brush templates
+		ImGui::Separator();
+		ImGui::Text("Brush templates (Check attributes to create subspace for which brush templates should be shown)");
+		c = 0;
+		c1 = 0;
+		offset = 0;
+		for (auto i : pcAttrOrd) {
+			if (!pcAttributeEnabled[i]) {
+				c++;
+				continue;
+			}
+
+			std::string name = "##CB";
+			name = pcAttributes[i].name + name;
+			if (c1 != 0)
+				ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
+			if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i])) {
+				if (selectedTemplateBrush != -1) {
+					globalBrushes.pop_back();
+					selectedTemplateBrush = -1;
+					pcPlotRender = true;
+				}
+				templateBrushes.clear();
+				//searching all drawlists for template brushes, and adding the template brushes which fit the subspace selected
+				std::set<std::string> subspace;
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					if (pcAttributeEnabled[i] && brushTemplateAttrEnabled[i]) {
+						subspace.insert(pcAttributes[i].name);
+					}
+				}
+				for (const DataSet& ds : g_PcPlotDataSets) {
+					if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
+						for (const TemplateList& tl : ds.drawLists) {
+							//checking if the template list is in the correct subspace and if so adding it to the template Brushes
+							std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']')- tl.name.find_first_of('[') - 1);
+							std::set<std::string> sub;
+							std::size_t current, previous = 0;
+							current = s.find(',');
+							while (current != std::string::npos) {
+								sub.insert(s.substr(previous+1, current - previous-2));
+								previous = current + 1;
+								current = s.find(',', previous);
+							}
+							sub.insert(s.substr(previous + 1, s.size() - previous - 2));
+
+							if (sub == subspace) {
+								TemplateBrush t = {};
+								t.name = tl.name;
+								for (int i = 0; i < pcAttributes.size(); i++) {
+									if (brushTemplateAttrEnabled[i]) {
+										t.brushes[i] = tl.minMax[i];
 									}
-									templateBrushes.push_back(t);
 								}
+								templateBrushes.push_back(t);
 							}
 						}
 					}
 				}
-
-				c++;
-				c1++;
-				offset += gap;
 			}
 
-			//drawing the list for brush templates
-			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true);
-			ImGui::Text("Brush Templates");
-			ImGui::Separator();
-			for (int i = 0; i < templateBrushes.size();i++) {
-				if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
-					selectedGlobalBrush = -1;
-					pcPlotSelectedDrawList = -1;
-					if (selectedTemplateBrush != i) {
-						if (selectedTemplateBrush != -1)
-							globalBrushes.pop_back();
-						selectedTemplateBrush = i;
-						GlobalBrush preview;
-						preview.active = true;
-						preview.name = templateBrushes[i].name;
-						for (const auto& brush : templateBrushes[i].brushes) {
-							preview.brushes[brush.first] = std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second);
-						}
-						globalBrushes.push_back(preview);
-						updateAllActiveIndices();
-						pcPlotRender = true;
-					}
-					else {
-						selectedTemplateBrush = -1;
+			c++;
+			c1++;
+			offset += gap;
+		}
+
+		//drawing the list for brush templates
+		ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true);
+		ImGui::Text("Brush Templates");
+		ImGui::Separator();
+		for (int i = 0; i < templateBrushes.size();i++) {
+			if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
+				selectedGlobalBrush = -1;
+				pcPlotSelectedDrawList = -1;
+				if (selectedTemplateBrush != i) {
+					if (selectedTemplateBrush != -1)
 						globalBrushes.pop_back();
-						updateAllActiveIndices();
-						pcPlotRender = true;
+					selectedTemplateBrush = i;
+					GlobalBrush preview;
+					preview.active = true;
+					preview.name = templateBrushes[i].name;
+					for (const auto& brush : templateBrushes[i].brushes) {
+						preview.brushes[brush.first] = std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second);
 					}
+					globalBrushes.push_back(preview);
+					updateAllActiveIndices();
+					pcPlotRender = true;
 				}
-				if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
-					selectedGlobalBrush = globalBrushes.size() - 1;
+				else {
 					selectedTemplateBrush = -1;
+					globalBrushes.pop_back();
+					updateAllActiveIndices();
+					pcPlotRender = true;
 				}
 			}
-			ImGui::EndChild();
-			ImGui::SameLine();
-			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true);
-			ImGui::Text("Global Brushes");
-			ImGui::Separator();
-			bool popEnd = false;
-			for (int i = 0; i < globalBrushes.size(); i++) {
-				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
-					pcPlotSelectedDrawList = -1;
-					if (selectedGlobalBrush != i) {
-						selectedGlobalBrush = i;
-					}
-					else {
-						selectedGlobalBrush = -1;
-					}
-					if (selectedTemplateBrush != -1) {
-						selectedTemplateBrush = -1;
-						popEnd = true;
-					}
+			if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
+				selectedGlobalBrush = globalBrushes.size() - 1;
+				selectedTemplateBrush = -1;
+			}
+		}
+		ImGui::EndChild();
+		ImGui::SameLine();
+		ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true);
+		ImGui::Text("Global Brushes");
+		ImGui::Separator();
+		bool popEnd = false;
+		for (int i = 0; i < globalBrushes.size(); i++) {
+			if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
+				pcPlotSelectedDrawList = -1;
+				if (selectedGlobalBrush != i) {
+					selectedGlobalBrush = i;
 				}
-				if (ImGui::IsItemClicked(1)) {
-					if (selectedGlobalBrush == i) {
-						selectedGlobalBrush = -1;
-					}
-					if (popEnd) {
-						if (globalBrushes.size() == 2) {
-							globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
-							globalBrushes.pop_back();
-						}
-						else {
-							globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
-							globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
-							globalBrushes.pop_back();
-						}
-					}
-					else {
+				else {
+					selectedGlobalBrush = -1;
+				}
+				if (selectedTemplateBrush != -1) {
+					selectedTemplateBrush = -1;
+					popEnd = true;
+				}
+			}
+			if (ImGui::IsItemClicked(1)) {
+				if (selectedGlobalBrush == i) {
+					selectedGlobalBrush = -1;
+				}
+				if (popEnd) {
+					if (globalBrushes.size() == 2) {
 						globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
 						globalBrushes.pop_back();
 					}
+					else {
+						globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
+						globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
+						globalBrushes.pop_back();
+					}
+				}
+				else {
+					globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+					globalBrushes.pop_back();
 				}
 			}
-			if (popEnd) {
-				globalBrushes.pop_back();
-				if (selectedGlobalBrush == globalBrushes.size())
-					selectedGlobalBrush = -1;
-				updateAllActiveIndices();
-			}
-			ImGui::EndChild();
 		}
-		ImGui::End();
+		if (popEnd) {
+			globalBrushes.pop_back();
+			if (selectedGlobalBrush == globalBrushes.size())
+				selectedGlobalBrush = -1;
+			updateAllActiveIndices();
+		}
+		ImGui::EndChild();
 
 		ImVec2 picSize(io.DisplaySize.x - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
 		gap = picSize.x / (amtOfLabels - 1);
@@ -4122,282 +4121,111 @@ int main(int, char**)
 		}
 
 		//Settings section
-		window_pos = ImVec2(0, io.DisplaySize.y-300);
-		ImVec2 window_size = ImVec2(500,300);
-		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		ImGui::SetNextWindowSize(window_size);
-		if (ImGui::Begin("Settings", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
-		{
-			ImGui::Text("Settings");
-			ImGui::Separator();
+		ImGui::BeginChild("Settings", ImVec2(500, -1), true);
+		ImGui::Text("Settings");
+		ImGui::Separator();
 
-			ImGui::Text("Histogramm Settings:");
-			if (ImGui::Checkbox("Draw Histogramm", &drawHistogramm)) {
-				pcPlotRender = true;
-			}
-			if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
-				pcPlotRender = true;
-			}
-			if (ImGui::ColorEdit4("Histogramm Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
-				pcPlotRender = true;
-			}
-			if (ImGui::Checkbox("Show Density", &histogrammDensity) && drawHistogramm) {
-				pcPlotRender = true;
-			}
-			if (ImGui::ColorEdit4("Density Background", &densityBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
-				pcPlotRender = true;
-			}
-			ImGui::Separator();
-			
-			ImGui::Text("Parallel Coordinates Settings:");
+		ImGui::Text("Histogramm Settings:");
+		if (ImGui::Checkbox("Draw Histogramm", &drawHistogramm)) {
+			pcPlotRender = true;
+		}
+		if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
+			pcPlotRender = true;
+		}
+		if (ImGui::ColorEdit4("Histogramm Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+			pcPlotRender = true;
+		}
+		if (ImGui::Checkbox("Show Density", &histogrammDensity) && drawHistogramm) {
+			pcPlotRender = true;
+		}
+		if (ImGui::ColorEdit4("Density Background", &densityBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+			pcPlotRender = true;
+		}
+		ImGui::Separator();
+		
+		ImGui::Text("Parallel Coordinates Settings:");
 
-			if (ImGui::SliderFloat("Blur radius", &densityRadius, .01f, .5f)) {
+		if (ImGui::SliderFloat("Blur radius", &densityRadius, .01f, .5f)) {
+			uploadDensityUiformBuffer();
+			pcPlotRender = true;
+		}
+
+		if (ImGui::Checkbox("Show PcPlot Density", &pcPlotDensity)) {
+			pcPlotRender = true;
+		}
+
+		if (ImGui::Checkbox("Enable density mapping", &enableDensityMapping)) {
+			if (pcAttributes.size()) {
 				uploadDensityUiformBuffer();
 				pcPlotRender = true;
 			}
-
-			if (ImGui::Checkbox("Show PcPlot Density", &pcPlotDensity)) {
-				pcPlotRender = true;
-			}
-
-			if (ImGui::Checkbox("Enable density mapping", &enableDensityMapping)) {
-				if (pcAttributes.size()) {
-					uploadDensityUiformBuffer();
-					pcPlotRender = true;
-				}
-			}
-
-			if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
-				
-			}
-
-			if (ImGui::Checkbox("Enable brushing", &enableBrushing)) {
-				for (DrawList& dl : g_PcPlotDrawLists) {
-					updateActiveIndices(dl);
-				}
-				pcPlotRender = true;
-			}
-
-			if (ImGui::SliderFloat("Median line width", &medianLineWidth, .5f, 20.0f)) {
-				pcPlotRender = true;
-			}
-			
-			if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview)) {
-				pcPlotRender = true;
-			}
-
-			for (int i = 0; i < pcAttributes.size(); i++) {
-				ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
-			}
-
-			ImGui::InputText("Directory Path", pcFilePath, 200);
-
-			ImGui::SameLine();
-
-			//Opening a new Dataset into the Viewer
-			if (ImGui::Button("Open")) {
-				openDataset(pcFilePath);
-			}
 		}
-		ImGui::End();
+
+		if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
+			
+		}
+
+		if (ImGui::Checkbox("Enable brushing", &enableBrushing)) {
+			for (DrawList& dl : g_PcPlotDrawLists) {
+				updateActiveIndices(dl);
+			}
+			pcPlotRender = true;
+		}
+
+		if (ImGui::SliderFloat("Median line width", &medianLineWidth, .5f, 20.0f)) {
+			pcPlotRender = true;
+		}
+		
+		if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview)) {
+			pcPlotRender = true;
+		}
+
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
+		}
+
+		ImGui::InputText("Directory Path", pcFilePath, 200);
+
+		ImGui::SameLine();
+
+		//Opening a new Dataset into the Viewer
+		if (ImGui::Button("Open")) {
+			openDataset(pcFilePath);
+		}
+		ImGui::EndChild();
 
 		//DataSets, from which draw lists can be created
-		window_pos = ImVec2(500, io.DisplaySize.y-300);
-		window_size = ImVec2((io.DisplaySize.x-500)/2, 300);
-		DataSet destroySet = {};
+		ImGui::SameLine();
+		ImGui::BeginChild("DataSets", ImVec2((io.DisplaySize.x - 500) / 2, -1), true);
+
+		DataSet* destroySet = NULL;
 		bool destroy = false;
-		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		ImGui::SetNextWindowSize(window_size);
-		if (ImGui::Begin("Datasets", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
-			ImGui::Text("Datasets");
-			ImGui::Separator();
-			for (DataSet& ds : g_PcPlotDataSets) {
-				if (ImGui::TreeNode(ds.name.c_str())) {
-					static const TemplateList* convert = nullptr;
-					for (const TemplateList& tl : ds.drawLists) {
-						if (ImGui::Button(tl.name.c_str())) {
-							ImGui::OpenPopup(tl.name.c_str());
-							std::strcpy(pcDrawListName, tl.name.c_str());
-						}
-						if (ImGui::IsItemClicked(1)) {
-							ImGui::OpenPopup("CONVERTTOBRUSH");
-							convert = &tl;
-						}
-						if (ImGui::BeginPopupModal(tl.name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
-						{
-							ImGui::Text((std::string("Creating a drawing list from ")+tl.name+"\n\n").c_str());
-							ImGui::Separator();
-							ImGui::InputText("Drawlist Name", pcDrawListName, 200);
 
-							if (ImGui::Button("Create", ImVec2(120, 0))) { 
-								ImGui::CloseCurrentPopup(); 
-								
-								createPcPlotDrawList(tl, ds, pcDrawListName);
-
-								pcPlotRender = true;
-							}
-							ImGui::SetItemDefaultFocus();
-							ImGui::SameLine();
-							if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
-							ImGui::EndPopup();
-						}
+		ImGui::Text("Datasets");
+		ImGui::Separator();
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (ImGui::TreeNode(ds.name.c_str())) {
+				static const TemplateList* convert = nullptr;
+				for (const TemplateList& tl : ds.drawLists) {
+					if (ImGui::Button(tl.name.c_str())) {
+						ImGui::OpenPopup(tl.name.c_str());
+						std::strcpy(pcDrawListName, tl.name.c_str());
 					}
-					//Popup for converting a template list to brush
-					bool convertToGlobalBrush = false;
-					bool convertToLokalBrush = false;
-					if (ImGui::BeginPopup("CONVERTTOBRUSH")) {
-						if (ImGui::MenuItem("Convert to global brush")) {
-							convertToGlobalBrush = true;
-							ImGui::CloseCurrentPopup();
-						}
-						if (ImGui::MenuItem("Convert to lokal brush")) {
-							convertToLokalBrush = true;
-							ImGui::CloseCurrentPopup();
-						}
-						ImGui::EndPopup();
+					if (ImGui::IsItemClicked(1)) {
+						ImGui::OpenPopup("CONVERTTOBRUSH");
+						convert = &tl;
 					}
-
-					//Popup for converting a template list to global brush
-					if (convertToGlobalBrush) {
-						ImGui::OpenPopup("CONVERTTOGLOBALBRUSH");
-					}
-					if (ImGui::BeginPopupModal("CONVERTTOGLOBALBRUSH")) {
-						static char n[200] = {};
-						ImGui::InputText("name of global brush", n, 200);
-						ImGui::Text("Please select the axes which should be brushed");
-						for (int i = 0; i < pcAttributes.size(); i++) {
-							ImGui::Checkbox(pcAttributes[i].name.c_str(), &activeBrushAttributes[i]);
-							if (i != pcAttributes.size() - 1) {
-								ImGui::SameLine();
-							}
-						}
-
-						ImGui::Separator();
-						if (ImGui::Button("Create")) {
-							GlobalBrush brush = {};
-							brush.name = std::string(n);
-							brush.active = true;
-							for (int i = 0; i < pcAttributes.size(); i++) {
-								if (activeBrushAttributes[i]) {
-									brush.brushes[i] = std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]);
-								}
-							}
-							globalBrushes.push_back(brush);
-
-							ImGui::CloseCurrentPopup();
-						}
-						ImGui::SameLine();
-						if (ImGui::Button("Cancel")) {
-							ImGui::CloseCurrentPopup();
-						}
-						ImGui::EndPopup();
-					}
-
-					//Popup for converting a template list to a lokal brush
-					if (convertToLokalBrush) {
-						ImGui::OpenPopup("CONVERTTOLOKALBRUSH");
-					}
-					if (ImGui::BeginPopupModal("CONVERTTOLOKALBRUSH")) {
-						static char n[200] = {};
-						ImGui::InputText("name of resulting drawlist", n, 200);
-						ImGui::Text("Please select the axis to which the brushes shall be applied");
-						for (int i = 0; i < pcAttributes.size(); i++) {
-							ImGui::Checkbox(pcAttributes[i].name.c_str(), &activeBrushAttributes[i]);
-							if (i != pcAttributes.size() - 1) {
-								ImGui::SameLine();
-							}
-						}
-
-						ImGui::Separator();
-						if (ImGui::Button("Create")) {
-							createPcPlotDrawList(ds.drawLists.front(), ds, n);
-							DrawList& dl = g_PcPlotDrawLists.back();
-							for (int i = 0; i < pcAttributes.size(); i++) {
-								if (activeBrushAttributes[i]) {
-									Brush b = {};
-									b.id = currentBrushId++;
-									b.minMax = convert->minMax[i];
-									dl.brushes[i].push_back(b);
-								}
-							}
-							updateActiveIndices(dl);
-							ImGui::CloseCurrentPopup();
-						}
-						ImGui::SameLine();
-						if (ImGui::Button("Cancel")) {
-							ImGui::CloseCurrentPopup();
-						}
-
-						ImGui::EndPopup();
-					}
-
-					//Popup for adding a custom index list
-					if (ImGui::Button("ADDINDEXLIST")) {
-						ImGui::OpenPopup("ADDINDEXLIST");
-						addIndeces = true;
-					}
-					if (ImGui::BeginPopupModal("ADDINDEXLIST", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+					if (ImGui::BeginPopupModal(tl.name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
 					{
-						ImGui::Text("Path for the new Indexlist (Alternativley drag and drop here):");
-						ImGui::InputText("Path", pcFilePath, 200);
+						ImGui::Text((std::string("Creating a drawing list from ")+tl.name+"\n\n").c_str());
 						ImGui::Separator();
+						ImGui::InputText("Drawlist Name", pcDrawListName, 200);
 
-						ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysAutoResize);
+						if (ImGui::Button("Create", ImVec2(120, 0))) { 
+							ImGui::CloseCurrentPopup(); 
+							
+							createPcPlotDrawList(tl, ds, pcDrawListName);
 
-						if (droppedPaths.size() == 0) {
-							ImGui::Text("Drag and drop indexlists here to open them.");
-						}
-						else {
-							ImGui::SliderFloat("Default Alpha Value", &alphaDrawLists, .0f, 1.0f);
-						}
-
-						for (int i = 0; i < droppedPaths.size();i++) {
-							ImGui::Text(droppedPaths[i].c_str());
-							ImGui::SameLine();
-							ImGui::Checkbox(("##"+droppedPaths[i]).c_str(), &createDLForDrop[i]);
-						}
-
-						ImGui::EndChild();
-
-						if (ImGui::Button("Add Indeces", ImVec2(120, 0))) {
-							ImGui::CloseCurrentPopup();
-							if (droppedPaths.size() == 0)
-								addIndecesToDs(ds, pcFilePath);
-							else {
-								addMultipleIndicesToDs(ds);
-								pcPlotRender = true;
-							}
-							droppedPaths.clear();
-							delete[] createDLForDrop;
-							createDLForDrop = NULL;
-							pathDropped = false;
-							addIndeces = false;
-						}
-						ImGui::SetItemDefaultFocus();
-						ImGui::SameLine();
-						if (ImGui::Button("Cancel", ImVec2(120, 0))) { 
-							ImGui::CloseCurrentPopup();
-							droppedPaths.clear();
-							delete[] createDLForDrop;
-							createDLForDrop = NULL;
-							pathDropped = false;
-							addIndeces = false;
-						}
-						ImGui::EndPopup();
-					}
-
-					//Popup for delete menu
-					if (ImGui::Button("DELETE"))
-						ImGui::OpenPopup("DELETE");
-					if (ImGui::BeginPopupModal("DELETE", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-					{
-						ImGui::Text("Do you really want to delete this data set?");
-						ImGui::Separator();
-
-						if (ImGui::Button("Delete", ImVec2(120, 0))) {
-							ImGui::CloseCurrentPopup();
-							destroySet = ds;
-							destroy = true;
 							pcPlotRender = true;
 						}
 						ImGui::SetItemDefaultFocus();
@@ -4405,140 +4233,304 @@ int main(int, char**)
 						if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
 						ImGui::EndPopup();
 					}
-					ImGui::TreePop();
 				}
+				//Popup for converting a template list to brush
+				bool convertToGlobalBrush = false;
+				bool convertToLokalBrush = false;
+				if (ImGui::BeginPopup("CONVERTTOBRUSH")) {
+					if (ImGui::MenuItem("Convert to global brush")) {
+						convertToGlobalBrush = true;
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Convert to lokal brush")) {
+						convertToLokalBrush = true;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndPopup();
+				}
+
+				//Popup for converting a template list to global brush
+				if (convertToGlobalBrush) {
+					ImGui::OpenPopup("CONVERTTOGLOBALBRUSH");
+				}
+				if (ImGui::BeginPopupModal("CONVERTTOGLOBALBRUSH")) {
+					static char n[200] = {};
+					ImGui::InputText("name of global brush", n, 200);
+					ImGui::Text("Please select the axes which should be brushed");
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						ImGui::Checkbox(pcAttributes[i].name.c_str(), &activeBrushAttributes[i]);
+						if (i != pcAttributes.size() - 1) {
+							ImGui::SameLine();
+						}
+					}
+
+					ImGui::Separator();
+					if (ImGui::Button("Create")) {
+						GlobalBrush brush = {};
+						brush.name = std::string(n);
+						brush.active = true;
+						for (int i = 0; i < pcAttributes.size(); i++) {
+							if (activeBrushAttributes[i]) {
+								brush.brushes[i] = std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]);
+							}
+						}
+						globalBrushes.push_back(brush);
+
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel")) {
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndPopup();
+				}
+
+				//Popup for converting a template list to a lokal brush
+				if (convertToLokalBrush) {
+					ImGui::OpenPopup("CONVERTTOLOKALBRUSH");
+				}
+				if (ImGui::BeginPopupModal("CONVERTTOLOKALBRUSH")) {
+					static char n[200] = {};
+					ImGui::InputText("name of resulting drawlist", n, 200);
+					ImGui::Text("Please select the axis to which the brushes shall be applied");
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						ImGui::Checkbox(pcAttributes[i].name.c_str(), &activeBrushAttributes[i]);
+						if (i != pcAttributes.size() - 1) {
+							ImGui::SameLine();
+						}
+					}
+
+					ImGui::Separator();
+					if (ImGui::Button("Create")) {
+						createPcPlotDrawList(ds.drawLists.front(), ds, n);
+						DrawList& dl = g_PcPlotDrawLists.back();
+						for (int i = 0; i < pcAttributes.size(); i++) {
+							if (activeBrushAttributes[i]) {
+								Brush b = {};
+								b.id = currentBrushId++;
+								b.minMax = convert->minMax[i];
+								dl.brushes[i].push_back(b);
+							}
+						}
+						updateActiveIndices(dl);
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel")) {
+						ImGui::CloseCurrentPopup();
+					}
+
+					ImGui::EndPopup();
+				}
+
+				//Popup for adding a custom index list
+				if (ImGui::Button("ADDINDEXLIST")) {
+					ImGui::OpenPopup("ADDINDEXLIST");
+					addIndeces = true;
+				}
+				if (ImGui::BeginPopupModal("ADDINDEXLIST", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+				{
+					ImGui::Text("Path for the new Indexlist (Alternativley drag and drop here):");
+					ImGui::InputText("Path", pcFilePath, 200);
+					ImGui::Separator();
+
+					ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysAutoResize);
+
+					if (droppedPaths.size() == 0) {
+						ImGui::Text("Drag and drop indexlists here to open them.");
+					}
+					else {
+						ImGui::SliderFloat("Default Alpha Value", &alphaDrawLists, .0f, 1.0f);
+					}
+
+					for (int i = 0; i < droppedPaths.size();i++) {
+						ImGui::Text(droppedPaths[i].c_str());
+						ImGui::SameLine();
+						ImGui::Checkbox(("##"+droppedPaths[i]).c_str(), &createDLForDrop[i]);
+					}
+
+					ImGui::EndChild();
+
+					if (ImGui::Button("Add Indeces", ImVec2(120, 0))) {
+						ImGui::CloseCurrentPopup();
+						if (droppedPaths.size() == 0)
+							addIndecesToDs(ds, pcFilePath);
+						else {
+							addMultipleIndicesToDs(ds);
+							pcPlotRender = true;
+						}
+						droppedPaths.clear();
+						delete[] createDLForDrop;
+						createDLForDrop = NULL;
+						pathDropped = false;
+						addIndeces = false;
+					}
+					ImGui::SetItemDefaultFocus();
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel", ImVec2(120, 0))) { 
+						ImGui::CloseCurrentPopup();
+						droppedPaths.clear();
+						delete[] createDLForDrop;
+						createDLForDrop = NULL;
+						pathDropped = false;
+						addIndeces = false;
+					}
+					ImGui::EndPopup();
+				}
+
+				//Popup for delete menu
+				if (ImGui::Button("DELETE"))
+					ImGui::OpenPopup("DELETE");
+				if (ImGui::BeginPopupModal("DELETE", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+				{
+					ImGui::Text("Do you really want to delete this data set?");
+					ImGui::Separator();
+
+					if (ImGui::Button("Delete", ImVec2(120, 0))) {
+						ImGui::CloseCurrentPopup();
+						destroySet = &ds;
+						destroy = true;
+						pcPlotRender = true;
+					}
+					ImGui::SetItemDefaultFocus();
+					ImGui::SameLine();
+					if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+					ImGui::EndPopup();
+				}
+				ImGui::TreePop();
 			}
 		}
-		ImGui::End();
+		ImGui::EndChild();
 		//Destroying a dataset if it was selected
 		if(destroy)
-			destroyPcPlotDataSet(destroySet);
+			destroyPcPlotDataSet(*destroySet);
 
-		//Showing the Drawlist
-		window_pos = ImVec2(500+(io.DisplaySize.x-500)/2, io.DisplaySize.y-300);
-		window_size = ImVec2((io.DisplaySize.x-500)/2, 300);
+		//Showing the Drawlists
 		DrawList changeList = {};
 		destroy = false;
 		bool up = false;
 		bool down = false;
-		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		ImGui::SetNextWindowSize(window_size);
-		if (ImGui::Begin("Drawlists", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
-			ImGui::Text("Draw lists");
-			ImGui::Separator();
-			int count = 0;
 
-			ImGui::Columns(9, "Columns", false);
-			ImGui::SetColumnWidth(0, 250);
-			ImGui::SetColumnWidth(1, 25);
-			ImGui::SetColumnWidth(2, 25);
-			ImGui::SetColumnWidth(3, 25);
-			ImGui::SetColumnWidth(4, 25);
-			ImGui::SetColumnWidth(5, 25);
-			ImGui::SetColumnWidth(6, 25);
-			ImGui::SetColumnWidth(7, 100);
-			ImGui::SetColumnWidth(8, 25);
-			
-			//showing texts to describe whats in the corresponding column
-			ImGui::Text("Drawlist Name");
-			ImGui::NextColumn();
-			ImGui::Text("Draw");
-			ImGui::NextColumn();
-			ImGui::Text("");
-			ImGui::NextColumn();
-			ImGui::Text("");
-			ImGui::NextColumn();
-			ImGui::Text("Delete");
-			ImGui::NextColumn();
-			ImGui::Text("Color");
-			ImGui::NextColumn();
-			ImGui::Text("Histo");
-			ImGui::NextColumn();
-			ImGui::Text("Median");
-			ImGui::NextColumn();
-			ImGui::Text("MColor");
-			ImGui::NextColumn();
-			for (DrawList& dl : g_PcPlotDrawLists) {
-				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
-					if (count == pcPlotSelectedDrawList)
-						pcPlotSelectedDrawList = -1;
-					else
-						pcPlotSelectedDrawList = count;
-				}
-				if (ImGui::IsItemHovered() && io.MouseClicked[1]) {
-					ImGui::OpenPopup(("sendTo3d"+dl.name).c_str());
-				}
-				if (ImGui::BeginPopup(("sendTo3d" + dl.name).c_str())) {
-					for (int i = 0; i < pcAttributes.size();i++) {
-						if (!pcAttributeEnabled[i])
-							continue;
-						if (ImGui::MenuItem(("Render "+ pcAttributes[i].name).c_str())) {
-							ImGui::CloseCurrentPopup();
-							uploadDrawListTo3dView(dl, pcAttributes[i].name, "a", "b", "c");
-						}
-					}
-					
-					ImGui::EndPopup();
-				}
-				ImGui::NextColumn();
+		ImGui::SameLine();
+		ImGui::BeginChild("DrawLists", ImVec2((io.DisplaySize.x - 500) / 2, -1), true);
 
-				if (ImGui::Checkbox(("##" + dl.name).c_str(), &dl.show)) {
-					pcPlotRender = true;
-				}
-				ImGui::NextColumn();
+		ImGui::Text("Draw lists");
+		ImGui::Separator();
+		int count = 0;
 
-				float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-				if (ImGui::ArrowButton((std::string("##u")+dl.name).c_str(), ImGuiDir_Up)) {
-					changeList = dl;
-					up = true;
-					pcPlotRender = true;
-				}
-				ImGui::NextColumn();
-
-				if (ImGui::ArrowButton((std::string("##d") + dl.name).c_str(), ImGuiDir_Down)) {
-					changeList = dl;
-					down = true;
-					pcPlotRender = true;
-				}
-				ImGui::NextColumn();
-
-				if (ImGui::Button((std::string("X##") + dl.name).c_str())) {
-					if (count == pcPlotSelectedDrawList) {
-						pcPlotSelectedDrawList = -1;
-					}
-					else if (count < pcPlotSelectedDrawList) {
-						pcPlotSelectedDrawList--;
-					}
-					changeList = dl;
-					destroy = true;
-					pcPlotRender = true;
-				}
-				ImGui::NextColumn();
-
-				int misc_flags =  ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_AlphaPreview ;
-				ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
-				ImGui::NextColumn();
-
-				if (ImGui::Checkbox((std::string("##dh") + dl.name).c_str(), &dl.showHistogramm) && drawHistogramm) {
-					pcPlotRender = true;
-				}
-				ImGui::NextColumn();
-
-				const char* entrys[] = { "No Median","Synthetic","Arithmetic","Geometric" };
-				if (ImGui::Combo((std::string("##c") + dl.name).c_str(), &dl.activeMedian, entrys, sizeof(entrys) / sizeof(*entrys))) {
-					pcPlotRender = true;
-				}
-				ImGui::NextColumn();
-
-				if (ImGui::ColorEdit4((std::string("##CMed") + dl.name).c_str(), (float*)& dl.medianColor, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags)) {
-					pcPlotRender = true;
-				}
-				ImGui::NextColumn();
-
-				count++;
+		ImGui::Columns(9, "Columns", false);
+		ImGui::SetColumnWidth(0, 250);
+		ImGui::SetColumnWidth(1, 25);
+		ImGui::SetColumnWidth(2, 25);
+		ImGui::SetColumnWidth(3, 25);
+		ImGui::SetColumnWidth(4, 25);
+		ImGui::SetColumnWidth(5, 25);
+		ImGui::SetColumnWidth(6, 25);
+		ImGui::SetColumnWidth(7, 100);
+		ImGui::SetColumnWidth(8, 25);
+		
+		//showing texts to describe whats in the corresponding column
+		ImGui::Text("Drawlist Name");
+		ImGui::NextColumn();
+		ImGui::Text("Draw");
+		ImGui::NextColumn();
+		ImGui::Text("");
+		ImGui::NextColumn();
+		ImGui::Text("");
+		ImGui::NextColumn();
+		ImGui::Text("Delete");
+		ImGui::NextColumn();
+		ImGui::Text("Color");
+		ImGui::NextColumn();
+		ImGui::Text("Histo");
+		ImGui::NextColumn();
+		ImGui::Text("Median");
+		ImGui::NextColumn();
+		ImGui::Text("MColor");
+		ImGui::NextColumn();
+		for (DrawList& dl : g_PcPlotDrawLists) {
+			if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
+				if (count == pcPlotSelectedDrawList)
+					pcPlotSelectedDrawList = -1;
+				else
+					pcPlotSelectedDrawList = count;
 			}
+			if (ImGui::IsItemHovered() && io.MouseClicked[1]) {
+				ImGui::OpenPopup(("sendTo3d"+dl.name).c_str());
+			}
+			if (ImGui::BeginPopup(("sendTo3d" + dl.name).c_str())) {
+				for (int i = 0; i < pcAttributes.size();i++) {
+					if (!pcAttributeEnabled[i])
+						continue;
+					if (ImGui::MenuItem(("Render "+ pcAttributes[i].name).c_str())) {
+						ImGui::CloseCurrentPopup();
+						uploadDrawListTo3dView(dl, pcAttributes[i].name, "a", "b", "c");
+					}
+				}
+				
+				ImGui::EndPopup();
+			}
+			ImGui::NextColumn();
+
+			if (ImGui::Checkbox(("##" + dl.name).c_str(), &dl.show)) {
+				pcPlotRender = true;
+			}
+			ImGui::NextColumn();
+
+			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			if (ImGui::ArrowButton((std::string("##u")+dl.name).c_str(), ImGuiDir_Up)) {
+				changeList = dl;
+				up = true;
+				pcPlotRender = true;
+			}
+			ImGui::NextColumn();
+
+			if (ImGui::ArrowButton((std::string("##d") + dl.name).c_str(), ImGuiDir_Down)) {
+				changeList = dl;
+				down = true;
+				pcPlotRender = true;
+			}
+			ImGui::NextColumn();
+
+			if (ImGui::Button((std::string("X##") + dl.name).c_str())) {
+				if (count == pcPlotSelectedDrawList) {
+					pcPlotSelectedDrawList = -1;
+				}
+				else if (count < pcPlotSelectedDrawList) {
+					pcPlotSelectedDrawList--;
+				}
+				changeList = dl;
+				destroy = true;
+				pcPlotRender = true;
+			}
+			ImGui::NextColumn();
+
+			int misc_flags =  ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_AlphaPreview ;
+			ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
+			ImGui::NextColumn();
+
+			if (ImGui::Checkbox((std::string("##dh") + dl.name).c_str(), &dl.showHistogramm) && drawHistogramm) {
+				pcPlotRender = true;
+			}
+			ImGui::NextColumn();
+
+			const char* entrys[] = { "No Median","Synthetic","Arithmetic","Geometric" };
+			if (ImGui::Combo((std::string("##c") + dl.name).c_str(), &dl.activeMedian, entrys, sizeof(entrys) / sizeof(*entrys))) {
+				pcPlotRender = true;
+			}
+			ImGui::NextColumn();
+
+			if (ImGui::ColorEdit4((std::string("##CMed") + dl.name).c_str(), (float*)& dl.medianColor, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags)) {
+				pcPlotRender = true;
+			}
+			ImGui::NextColumn();
+
+			count++;
 		}
+		ImGui::EndChild();
 		ImGui::End();
+		//main window now closed
+
 		if (destroy) {
 			removePcPlotDrawList(changeList);
 		}
