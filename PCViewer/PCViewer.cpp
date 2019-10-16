@@ -201,9 +201,8 @@ struct DensityUniformBuffer {
 };
 
 struct Brush {
-	Vec2 pos;
-	Vec2 extent;
-	Vec2 valueExtent;
+	int id;
+	std::pair<float, float> minMax;
 };
 
 struct GlobalBrush {
@@ -242,7 +241,6 @@ struct DrawList {
 	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
 	std::vector<int> indices;
-	bool brushChanged;
 	std::vector<int> activeInd;
 	uint32_t histIndexBufferOffset;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
@@ -472,7 +470,6 @@ struct Attribute {
 	std::string name;
 	float min;			//min value of all values
 	float max;			//max value of all values
-	int brushInd;		//index for currently changed brush
 };
 
 static bool* pcAttributeEnabled = NULL;											//Contains whether a specific attribute is enabled
@@ -513,7 +510,7 @@ static std::vector<GlobalBrush> globalBrushes;
 static int brushDragId = -1;
 static bool brushDragTop = true;
 static unsigned int currentBrushId = 0;
-static bool* activeBrushAttributes = NULL;
+static bool* activeBrushAttributes = nullptr;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -1478,7 +1475,7 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 	}
 }
 
-static void createPCPlotDrawList(const TemplateList& tl,const DataSet& ds,const char* listName) {
+static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const char* listName) {
 	VkResult err;
 
 	DrawList dl = {};
@@ -2111,9 +2108,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			in[c++] = 0xFFFFFFFF;
 		}
 		
-		vkMapMemory(g_Device, drawList->dlMem, drawList->indexBufferOffset, sizeof(uint32_t)* drawList->activeInd.size()* (amtOfIndeces + 1), 0, &d);
-		memcpy(d, in, sizeof(uint32_t)* drawList->activeInd.size()* (amtOfIndeces + 1));
-		vkUnmapMemory(g_Device, drawList->dlMem);
+		if (drawList->activeInd.size()) {
+			vkMapMemory(g_Device, drawList->dlMem, drawList->indexBufferOffset, sizeof(uint32_t) * drawList->activeInd.size() * (amtOfIndeces + 1), 0, &d);
+			memcpy(d, in, sizeof(uint32_t) * drawList->activeInd.size() * (amtOfIndeces + 1));
+			vkUnmapMemory(g_Device, drawList->dlMem);
+		}
 
 		delete[] in;
 
@@ -2679,10 +2678,10 @@ static void openCsv(const char* filename) {
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
-				tmp.push_back({ cur,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() ,-1});
+				tmp.push_back({ cur,std::numeric_limits<float>::max(),std::numeric_limits<float>::min()});
 			}
 			//adding the last item which wasn't recognized
-			tmp.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() ,-1});
+			tmp.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min()});
 
 			//checking if the Attributes are correct
 			if (pcAttributes.size() != 0) {
@@ -2713,7 +2712,7 @@ static void openCsv(const char* filename) {
 				for (int i = 0; i < pcAttributes.size(); i++) {
 					pcAttributeEnabled[i] = true;
 					pcAttributeEnabledCpy[i] = true;
-					activeBrushAttributes = false;
+					activeBrushAttributes[i] = false;
 					pcAttrOrd.push_back(i);
 				}
 			}
@@ -3072,14 +3071,12 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 		addIndecesToDs(ds, droppedPaths[i].c_str());
 		if (createDLForDrop[i]) {
 			int split = (droppedPaths[i].find_last_of("\\") > droppedPaths[i].find_last_of("/")) ? droppedPaths[i].find_last_of("/") : droppedPaths[i].find_last_of("\\");
-			createPCPlotDrawList(ds.drawLists.back(), ds, droppedPaths[i].substr(split+1).c_str());
+			createPcPlotDrawList(ds.drawLists.back(), ds, droppedPaths[i].substr(split+1).c_str());
 		}
 	}
 }
 
 static void updateActiveIndices(DrawList& dl) {
-	if (!dl.brushChanged)
-		return;
 	//getting the parent dataset data
 	std::vector<float*>* data;
 	for (DataSet& ds : g_PcPlotDataSets) {
@@ -3096,7 +3093,7 @@ static void updateActiveIndices(DrawList& dl) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
 			bool good = false;
 			for (Brush& b : dl.brushes[j]) {
-				if ((*data)[i][j] > b.valueExtent.u && (*data)[i][j] < b.valueExtent.v) {
+				if ((*data)[i][j] >= b.minMax.first && (*data)[i][j] <= b.minMax.second) {
 					good = true;
 					break;
 				}
@@ -3113,7 +3110,7 @@ static void updateActiveIndices(DrawList& dl) {
 		//checking gloabl brushes
 		for (GlobalBrush& b : globalBrushes) {
 			for (auto& brush : b.brushes) {
-				if ((*data)[i][brush.first]<brush.second.second.first || (*data)[i][brush.first]>brush.second.second.second) {
+				if ((*data)[i][brush.first]<=brush.second.second.first || (*data)[i][brush.first]>=brush.second.second.second) {
 					goto nextInd;
 				}
 			}
@@ -3121,9 +3118,11 @@ static void updateActiveIndices(DrawList& dl) {
 
 		dl.activeInd.push_back(i);
 
-	nextInd:;
+		nextInd:;
 	}
 	//updating the indexbuffer for histogramm
+	if (dl.activeInd.size() == 0)
+		return;
 	uint32_t* indBuffer = new uint32_t[dl.activeInd.size() * 2];
 	for (int i = 0; i < dl.activeInd.size(); i++) {
 		indBuffer[2 * i] = dl.activeInd[i] * pcAttributes.size();
@@ -3574,8 +3573,6 @@ int main(int, char**)
 									d += sizeof(float);
 									a.max = *(float*)d;
 									d += sizeof(float);
-									a.brushInd = *(int*)d;
-									d += sizeof(int);
 									savedAttr.push_back(a);
 									if (pcAttributes[i].name != savedAttr[i].name) {
 										openLoad = true;
@@ -3636,7 +3633,7 @@ int main(int, char**)
 				if (ImGui::Button("Save", ImVec2(120, 0))) {
 					ImGui::CloseCurrentPopup();
 					//creating the new setting
-					uint32_t attributesSize = 3 * sizeof(float) * pcAttributes.size();
+					uint32_t attributesSize = 2 * sizeof(float) * pcAttributes.size();
 					for (Attribute& a : pcAttributes) {
 						attributesSize += a.name.size() + 1;
 					}
@@ -3655,8 +3652,7 @@ int main(int, char**)
 						d++;
 						((float*)d)[0] = pcAttributes[i].min;
 						((float*)d)[1] = pcAttributes[i].max;
-						((int*)d)[2] = pcAttributes[i].brushInd;
-						d += 3 * sizeof(float);
+						d += 2 * sizeof(float);
 					}
 					//adding the attributes order
 					for (int i : pcAttrOrd) {
@@ -3875,10 +3871,13 @@ int main(int, char**)
 						}
 						globalBrushes.push_back(preview);
 						updateAllActiveIndices();
+						pcPlotRender = true;
 					}
 					else {
 						selectedTemplateBrush = -1;
 						globalBrushes.pop_back();
+						updateAllActiveIndices();
+						pcPlotRender = true;
 					}
 				}
 				if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
@@ -3940,11 +3939,14 @@ int main(int, char**)
 		ImVec2 picSize(io.DisplaySize.x - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
 		gap = picSize.x / (amtOfLabels - 1);
 		//drawing the global brush
-		//global brushes currently only support change of brush but no adding of new brushes or deleting of brushes
+		//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
 		if (selectedGlobalBrush != -1) {
 			for (auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
+				if (!pcAttributeEnabled[brush.first])
+					continue;
+
 				ImVec2 mousePos = ImGui::GetIO().MousePos;
-				float x = gap * pcAttrOrd[brush.first] + picPos.x - BRUSHWIDTH/2;
+				float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH/2;
 				float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 				float width = BRUSHWIDTH;
 				float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -3998,8 +4000,10 @@ int main(int, char**)
 		//drawing the template brush, these are not changeable
 		if (selectedTemplateBrush != -1) {
 			for (const auto& brush : globalBrushes.back().brushes) {
+				if (!pcAttributeEnabled[brush.first])
+					continue;
 
-				float x = gap * pcAttrOrd[brush.first] + picPos.x;
+				float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2;
 				float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 				float width = BRUSHWIDTH;
 				float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -4007,7 +4011,6 @@ int main(int, char**)
 			}
 		}
 
-		//TODO: rewrite this section for cleaner code and correct functionality
 		//drawing the brush windows
 		if (pcPlotSelectedDrawList != -1) {
 			//getting the drawlist;
@@ -4021,77 +4024,71 @@ int main(int, char**)
 				c++;
 			}
 
-			bool newPos = false;
-
-			if (pcPlotSelectedDrawList != pcPlotPreviousSlectedDrawList) {
-				pcPlotPreviousSlectedDrawList = pcPlotSelectedDrawList;
-				newPos = true;
-			}
-
-			c = 0;
-			static float brushWidth = 20;
 			for (int i = 0; i < pcAttributes.size(); i++) {
-				if (!pcAttributeEnabled[pcAttrOrd[i]])
+				if (!pcAttributeEnabled[i])
 					continue;
 				
-				ImVec2 mousePos = ImGui::GetIO().MousePos;
-				bool brushHover = false;
-				int ind = 0;
 				int del = -1;
+				int ind = 0;
+				bool brushHover = false;
+				
+				ImVec2 mousePos = ImGui::GetIO().MousePos;
+				float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2;
 				//drawing the brushes as foreground objects
-				for (Brush& b : dl->brushes[pcAttrOrd[i]]) {
-					float x = picPos.x + c * gap - brushWidth / 2;
-					ImGui::GetForegroundDrawList()->AddRect(ImVec2(x,b.pos.v), ImVec2(x + b.extent.u, b.pos.v + b.extent.v), IM_COL32(200, 30, 0, 255), 1, ImDrawCornerFlags_All, 5);
-					//check whether mouse is hovering over an edge
-					bool edgeHover = (mousePos.x > x && mousePos.x < x + b.extent.u) && (abs(mousePos.y - b.pos.v) < 5 || abs(mousePos.y - (b.pos.v + b.extent.v)) < 5);
-					static bool topEdge = true;
-					brushHover |= (mousePos.x > picPos.x + c * gap - brushWidth / 2 && mousePos.x < picPos.x + c * gap + brushWidth / 2) && (mousePos.y > b.pos.v && mousePos.y < b.pos.v + b.extent.v) | edgeHover;
-					if (edgeHover) {
-						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-						if (ImGui::GetIO().MouseClicked[0]) {
-							pcAttributes[pcAttrOrd[i]].brushInd = ind;
-							topEdge = abs(mousePos.y - b.pos.v) < 5;
-						}
-					}
+				for (Brush& b : dl->brushes[i]) {
+					float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
+					float width = BRUSHWIDTH;
+					float height = (b.minMax.second - b.minMax.first) / (pcAttributes[i].max - pcAttributes[i].min) * picSize.y;
+					ImGui::GetForegroundDrawList()->AddRect(ImVec2(x,y), ImVec2(x + width, y + height), IM_COL32(200, 30, 0, 255), 1, ImDrawCornerFlags_All, 5);
+					
+					bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
+					//edgeHover = 0 -> No edge is hovered
+					//edgeHover = 1 -> Top edge is hovered
+					//edgeHover = 2 -> Bot edge is hovered
+					int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
+					edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
+					brushHover |= hover || edgeHover;
 
-					//changing the size of the brush
-					if (pcAttributes[pcAttrOrd[i]].brushInd!=-1 && pcAttributes[pcAttrOrd[i]].brushInd == ind) {
-						
-						if (ImGui::GetIO().MouseDown[0]) {
-							//case top edge is dragged
-							if (topEdge) {
-								b.pos.v += ImGui::GetIO().MouseDelta.y;
-								b.extent.v -= ImGui::GetIO().MouseDelta.y;
-							}
-							//case bottom edge is dragged
-							else {
-								b.extent.v += ImGui::GetIO().MouseDelta.y;
-							}
-							//changing top and bottom edge in case of an overdrag
-							if (b.extent.v < 0) {
-								b.pos.v -= b.extent.v;
-								b.extent.v *= -1;
-								topEdge = !topEdge;
-							}
-							b.valueExtent.v = (1 - (b.pos.v - picPos.y) / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min) + pcAttributes[pcAttrOrd[i]].min;	//maxValue
-							b.valueExtent.u = b.valueExtent.v - (b.extent.v / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min);								//minValue
-							dl->brushChanged = true;
-							if (enableBrushing && ImGui::GetIO().MouseDelta.y) {
-								pcPlotRender = true;
-								updateActiveIndices(*dl);
-#ifdef _DEBUG
-								std::cout << "brush changed for item " << pcAttributes[pcAttrOrd[i]].name << ": min[" << b.valueExtent.u << "] max[" << b.valueExtent.v << "]" << std::endl;
-#endif
-							}
+					//set mouse cursor
+					if (edgeHover || brushDragId != -1) {
+						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+					}
+					//activate dragging of edge
+					if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+						brushDragId = b.id;
+						brushDragTop = edgeHover == 1;
+					}
+					//drag edge
+					if (brushDragId == b.id && ImGui::GetIO().MouseDown[0]) {
+						if (brushDragTop) {
+							b.minMax.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
 						}
 						else {
-							pcAttributes[pcAttrOrd[i]].brushInd = -1;
-							ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
+							b.minMax.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
 						}
+
+						//switching edges if max value of brush is smaller than min value
+						if (b.minMax.second < b.minMax.first) {
+							float tmp = b.minMax.second;
+							b.minMax.second = b.minMax.first;
+							b.minMax.first = tmp;
+							brushDragTop ^= 1;
+						}
+
+						if (ImGui::GetIO().MouseDelta.y) {
+							updateActiveIndices(*dl);
+							pcPlotRender = true;
+						}
+					}
+					//release edge
+					if (brushDragId == b.id && ImGui::GetIO().MouseReleased[0]) {
+						brushDragId = -1;
+						updateActiveIndices(*dl);
+						pcPlotRender = true;
 					}
 
 					//check for deletion of brush
-					if (ImGui::GetIO().MouseClicked[1] && ((mousePos.x > picPos.x + c * gap - brushWidth / 2 && mousePos.x < picPos.x + c * gap + brushWidth / 2) && (mousePos.y > b.pos.v && mousePos.y < b.pos.v + b.extent.v) | edgeHover))
+					if (ImGui::GetIO().MouseClicked[1] && hover)
 						del = ind;
 
 					ind++;
@@ -4102,31 +4099,26 @@ int main(int, char**)
 					dl->brushes[pcAttrOrd[i]][del] = dl->brushes[pcAttrOrd[i]][dl->brushes[pcAttrOrd[i]].size() - 1];
 					dl->brushes[pcAttrOrd[i]].pop_back();
 					del = -1;
-					dl->brushChanged = true;
 					updateActiveIndices(*dl);
 					pcPlotRender = true;
 				}
 
 				//create a new brush
-				if (!brushHover && (mousePos.x - (picPos.x + c * gap) > - brushWidth / 2 && mousePos.x - (picPos.x + c * gap) < brushWidth / 2) && picHovered) {
-					
+				bool axisHover = mousePos.x > x&& mousePos.x < x + BRUSHWIDTH && mousePos.y > picPos.y && mousePos.y < picPos.y + picSize.y;
+				if (!brushHover && axisHover && brushDragId == -1) {
+					ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
 					if (ImGui::GetIO().MouseClicked[0]) {
 						Brush temp = {};
-						temp.pos.u = picPos.x + c * gap - brushWidth / 2;
-						temp.pos.v = mousePos.y;
-						temp.extent.u = brushWidth;
-						temp.extent.v = 1;
-						temp.valueExtent.v = (1 - (ImGui::GetWindowPos().y - picPos.y) / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min) + pcAttributes[pcAttrOrd[i]].min;
-						temp.valueExtent.u = temp.valueExtent.v - (ImGui::GetWindowHeight() / picSize.y) * (pcAttributes[pcAttrOrd[i]].max - pcAttributes[pcAttrOrd[i]].min);
+						temp.id = currentBrushId++;
+						temp.minMax.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
+						temp.minMax.second = temp.minMax.first;
+						brushDragId = temp.id;
+						brushDragTop = false;
 						dl->brushes[pcAttrOrd[i]].push_back(temp);
-						pcAttributes[pcAttrOrd[i]].brushInd = dl->brushes[pcAttrOrd[i]].size() - 1;
 					}
 				}
-				c++;
 			}
-		}
-		else {
-			pcPlotPreviousSlectedDrawList = -1;
 		}
 
 		//Settings section
@@ -4240,7 +4232,7 @@ int main(int, char**)
 							if (ImGui::Button("Create", ImVec2(120, 0))) { 
 								ImGui::CloseCurrentPopup(); 
 								
-								createPCPlotDrawList(tl, ds, pcDrawListName);
+								createPcPlotDrawList(tl, ds, pcDrawListName);
 
 								pcPlotRender = true;
 							}
@@ -4252,12 +4244,16 @@ int main(int, char**)
 					}
 					//Popup for converting a template list to brush
 					bool convertToGlobalBrush = false;
+					bool convertToLokalBrush = false;
 					if (ImGui::BeginPopup("CONVERTTOBRUSH")) {
 						if (ImGui::MenuItem("Convert to global brush")) {
 							convertToGlobalBrush = true;
 							ImGui::CloseCurrentPopup();
 						}
-						//TODO: convert to lokal brush
+						if (ImGui::MenuItem("Convert to lokal brush")) {
+							convertToLokalBrush = true;
+							ImGui::CloseCurrentPopup();
+						}
 						ImGui::EndPopup();
 					}
 
@@ -4267,7 +4263,7 @@ int main(int, char**)
 					}
 					if (ImGui::BeginPopupModal("CONVERTTOGLOBALBRUSH")) {
 						static char n[200] = {};
-						ImGui::InputText("name", n, 200);
+						ImGui::InputText("name of global brush", n, 200);
 						ImGui::Text("Please select the axes which should be brushed");
 						for (int i = 0; i < pcAttributes.size(); i++) {
 							ImGui::Checkbox(pcAttributes[i].name.c_str(), &activeBrushAttributes[i]);
@@ -4276,6 +4272,7 @@ int main(int, char**)
 							}
 						}
 
+						ImGui::Separator();
 						if (ImGui::Button("Create")) {
 							GlobalBrush brush = {};
 							brush.name = std::string(n);
@@ -4293,6 +4290,44 @@ int main(int, char**)
 						if (ImGui::Button("Cancel")) {
 							ImGui::CloseCurrentPopup();
 						}
+						ImGui::EndPopup();
+					}
+
+					//Popup for converting a template list to a lokal brush
+					if (convertToLokalBrush) {
+						ImGui::OpenPopup("CONVERTTOLOKALBRUSH");
+					}
+					if (ImGui::BeginPopupModal("CONVERTTOLOKALBRUSH")) {
+						static char n[200] = {};
+						ImGui::InputText("name of resulting drawlist", n, 200);
+						ImGui::Text("Please select the axis to which the brushes shall be applied");
+						for (int i = 0; i < pcAttributes.size(); i++) {
+							ImGui::Checkbox(pcAttributes[i].name.c_str(), &activeBrushAttributes[i]);
+							if (i != pcAttributes.size() - 1) {
+								ImGui::SameLine();
+							}
+						}
+
+						ImGui::Separator();
+						if (ImGui::Button("Create")) {
+							createPcPlotDrawList(ds.drawLists.front(), ds, n);
+							DrawList& dl = g_PcPlotDrawLists.back();
+							for (int i = 0; i < pcAttributes.size(); i++) {
+								if (activeBrushAttributes[i]) {
+									Brush b = {};
+									b.id = currentBrushId++;
+									b.minMax = convert->minMax[i];
+									dl.brushes[i].push_back(b);
+								}
+							}
+							updateActiveIndices(dl);
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::SameLine();
+						if (ImGui::Button("Cancel")) {
+							ImGui::CloseCurrentPopup();
+						}
+
 						ImGui::EndPopup();
 					}
 
@@ -4549,9 +4584,9 @@ int main(int, char**)
 		delete[] createDLForDrop;
 	if (brushTemplateAttrEnabled)
 		delete[] brushTemplateAttrEnabled;
-	if (activeBrushAttributes) {
+	if (activeBrushAttributes)
 		delete[] activeBrushAttributes;
-	}
+	
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
