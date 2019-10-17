@@ -511,6 +511,7 @@ static int brushDragId = -1;
 static bool brushDragTop = true;
 static unsigned int currentBrushId = 0;
 static bool* activeBrushAttributes = nullptr;
+static bool toggleGlobalBrushes = true;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -3549,7 +3550,8 @@ int main(int, char**)
 		ImGui::Begin("Plot", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
 
 		//Menu for saving settings
-		bool openSave = false, openLoad = false, openManager = false;
+		bool openSave = false, openLoad = false, openManager = false, saveColor = false;
+		float color[4];
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("Attribute")) {
 				if (ImGui::MenuItem("Save Attributes", "Ctrl+S")&&pcAttributes.size()>0) {
@@ -3596,6 +3598,26 @@ int main(int, char**)
 				}
 				ImGui::EndMenu();
 			}
+			if (ImGui::BeginMenu("Colors")) {
+				for (auto& s : *settingsManager->getSettingsType("COLOR")) {
+					ImGui::ColorEdit4(s->id.c_str(), (float*)s->data, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs);
+				}
+
+				ImGui::EndMenu();
+			}
+			//If a color was dropped open saving popup.
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("_COL4F")) {
+					saveColor = true;
+					memcpy(color, payload->Data, payload->DataSize);
+				}
+			}
+
+			if (ImGui::BeginMenu("Global Brushes")) {
+				ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes);
+
+				ImGui::EndMenu();
+			}
 			ImGui::EndMenuBar();
 		}
 		//popup for saving a new Attribute Setting
@@ -3607,6 +3629,9 @@ int main(int, char**)
 		}
 		if (openManager) {
 			ImGui::OpenPopup("Manage attribute settings");
+		}
+		if (saveColor) {
+			ImGui::OpenPopup("Save color");
 		}
 		if (ImGui::BeginPopupModal("Manage attribute settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			std::string del;
@@ -3684,9 +3709,30 @@ int main(int, char**)
 			}
 			ImGui::EndPopup();
 		}
+		//popup for saving a color
+		if (ImGui::BeginPopupModal("Save color")) {
+			static char colorName[200];
+			ImGui::InputText("color name", colorName, 200);
+			ImGui::Separator();
+			if (ImGui::Button("Save", ImVec2(120, 0))) {
+				SettingsManager::Setting s = {};
+				s.id = colorName;
+				s.type = "COLOR";
+				s.byteLength = 16;
+				s.data = color;
+				settingsManager->addSetting(s);
+
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
 
 		//drawing the buttons which can be changed via drag and drop
-
 		int c = 0;		//describing the position of the element in the AttrOrd vector
 		int c1 = 0;
 		for (auto i : pcAttrOrd) {
@@ -3787,226 +3833,228 @@ int main(int, char**)
 			offset += gap;
 		}
 
-		//drawing checkboxes for activating brush templates
-		ImGui::Separator();
-		ImGui::Text("Brush templates (Check attributes to create subspace for which brush templates should be shown)");
-		c = 0;
-		c1 = 0;
-		offset = 0;
-		for (auto i : pcAttrOrd) {
-			if (!pcAttributeEnabled[i]) {
-				c++;
-				continue;
-			}
-
-			std::string name = "##CB";
-			name = pcAttributes[i].name + name;
-			if (c1 != 0)
-				ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-			if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i])) {
-				if (selectedTemplateBrush != -1) {
-					globalBrushes.pop_back();
-					selectedTemplateBrush = -1;
-					pcPlotRender = true;
+		ImVec2 picSize(io.DisplaySize.x - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
+		if (toggleGlobalBrushes) {
+			//drawing checkboxes for activating brush templates
+			ImGui::Separator();
+			ImGui::Text("Brush templates (Check attributes to create subspace for which brush templates should be shown)");
+			c = 0;
+			c1 = 0;
+			offset = 0;
+			for (auto i : pcAttrOrd) {
+				if (!pcAttributeEnabled[i]) {
+					c++;
+					continue;
 				}
-				templateBrushes.clear();
-				//searching all drawlists for template brushes, and adding the template brushes which fit the subspace selected
-				std::set<std::string> subspace;
-				for (int i = 0; i < pcAttributes.size(); i++) {
-					if (pcAttributeEnabled[i] && brushTemplateAttrEnabled[i]) {
-						subspace.insert(pcAttributes[i].name);
+
+				std::string name = "##CB";
+				name = pcAttributes[i].name + name;
+				if (c1 != 0)
+					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
+				if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i])) {
+					if (selectedTemplateBrush != -1) {
+						globalBrushes.pop_back();
+						selectedTemplateBrush = -1;
+						pcPlotRender = true;
 					}
-				}
-				for (const DataSet& ds : g_PcPlotDataSets) {
-					if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
-						for (const TemplateList& tl : ds.drawLists) {
-							//checking if the template list is in the correct subspace and if so adding it to the template Brushes
-							std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']')- tl.name.find_first_of('[') - 1);
-							std::set<std::string> sub;
-							std::size_t current, previous = 0;
-							current = s.find(',');
-							while (current != std::string::npos) {
-								sub.insert(s.substr(previous+1, current - previous-2));
-								previous = current + 1;
-								current = s.find(',', previous);
-							}
-							sub.insert(s.substr(previous + 1, s.size() - previous - 2));
-
-							if (sub == subspace) {
-								TemplateBrush t = {};
-								t.name = tl.name;
-								for (int i = 0; i < pcAttributes.size(); i++) {
-									if (brushTemplateAttrEnabled[i]) {
-										t.brushes[i] = tl.minMax[i];
-									}
+					templateBrushes.clear();
+					//searching all drawlists for template brushes, and adding the template brushes which fit the subspace selected
+					std::set<std::string> subspace;
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						if (pcAttributeEnabled[i] && brushTemplateAttrEnabled[i]) {
+							subspace.insert(pcAttributes[i].name);
+						}
+					}
+					for (const DataSet& ds : g_PcPlotDataSets) {
+						if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
+							for (const TemplateList& tl : ds.drawLists) {
+								//checking if the template list is in the correct subspace and if so adding it to the template Brushes
+								std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']') - tl.name.find_first_of('[') - 1);
+								std::set<std::string> sub;
+								std::size_t current, previous = 0;
+								current = s.find(',');
+								while (current != std::string::npos) {
+									sub.insert(s.substr(previous + 1, current - previous - 2));
+									previous = current + 1;
+									current = s.find(',', previous);
 								}
-								templateBrushes.push_back(t);
+								sub.insert(s.substr(previous + 1, s.size() - previous - 2));
+
+								if (sub == subspace) {
+									TemplateBrush t = {};
+									t.name = tl.name;
+									for (int i = 0; i < pcAttributes.size(); i++) {
+										if (brushTemplateAttrEnabled[i]) {
+											t.brushes[i] = tl.minMax[i];
+										}
+									}
+									templateBrushes.push_back(t);
+								}
 							}
 						}
 					}
 				}
+
+				c++;
+				c1++;
+				offset += gap;
 			}
 
-			c++;
-			c1++;
-			offset += gap;
-		}
-
-		//drawing the list for brush templates
-		ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true);
-		ImGui::Text("Brush Templates");
-		ImGui::Separator();
-		for (int i = 0; i < templateBrushes.size();i++) {
-			if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
-				selectedGlobalBrush = -1;
-				pcPlotSelectedDrawList = -1;
-				if (selectedTemplateBrush != i) {
-					if (selectedTemplateBrush != -1)
-						globalBrushes.pop_back();
-					selectedTemplateBrush = i;
-					GlobalBrush preview;
-					preview.active = true;
-					preview.name = templateBrushes[i].name;
-					for (const auto& brush : templateBrushes[i].brushes) {
-						preview.brushes[brush.first] = std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second);
-					}
-					globalBrushes.push_back(preview);
-					updateAllActiveIndices();
-					pcPlotRender = true;
-				}
-				else {
-					selectedTemplateBrush = -1;
-					globalBrushes.pop_back();
-					updateAllActiveIndices();
-					pcPlotRender = true;
-				}
-			}
-			if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
-				selectedGlobalBrush = globalBrushes.size() - 1;
-				selectedTemplateBrush = -1;
-			}
-		}
-		ImGui::EndChild();
-		ImGui::SameLine();
-		ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true);
-		ImGui::Text("Global Brushes");
-		ImGui::Separator();
-		bool popEnd = false;
-		for (int i = 0; i < globalBrushes.size(); i++) {
-			if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
-				pcPlotSelectedDrawList = -1;
-				if (selectedGlobalBrush != i) {
-					selectedGlobalBrush = i;
-				}
-				else {
+			//drawing the list for brush templates
+			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true);
+			ImGui::Text("Brush Templates");
+			ImGui::Separator();
+			for (int i = 0; i < templateBrushes.size(); i++) {
+				if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
 					selectedGlobalBrush = -1;
-				}
-				if (selectedTemplateBrush != -1) {
-					selectedTemplateBrush = -1;
-					popEnd = true;
-				}
-			}
-			if (ImGui::IsItemClicked(1)) {
-				if (selectedGlobalBrush == i) {
-					selectedGlobalBrush = -1;
-				}
-				if (popEnd) {
-					if (globalBrushes.size() == 2) {
-						globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
-						globalBrushes.pop_back();
+					pcPlotSelectedDrawList = -1;
+					if (selectedTemplateBrush != i) {
+						if (selectedTemplateBrush != -1)
+							globalBrushes.pop_back();
+						selectedTemplateBrush = i;
+						GlobalBrush preview;
+						preview.active = true;
+						preview.name = templateBrushes[i].name;
+						for (const auto& brush : templateBrushes[i].brushes) {
+							preview.brushes[brush.first] = std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second);
+						}
+						globalBrushes.push_back(preview);
+						updateAllActiveIndices();
+						pcPlotRender = true;
 					}
 					else {
-						globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
-						globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
+						selectedTemplateBrush = -1;
 						globalBrushes.pop_back();
-					}
-				}
-				else {
-					globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
-					globalBrushes.pop_back();
-				}
-			}
-		}
-		if (popEnd) {
-			globalBrushes.pop_back();
-			if (selectedGlobalBrush == globalBrushes.size())
-				selectedGlobalBrush = -1;
-			updateAllActiveIndices();
-		}
-		ImGui::EndChild();
-
-		ImVec2 picSize(io.DisplaySize.x - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
-		gap = picSize.x / (amtOfLabels - 1);
-		//drawing the global brush
-		//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
-		if (selectedGlobalBrush != -1) {
-			for (auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
-				if (!pcAttributeEnabled[brush.first])
-					continue;
-
-				ImVec2 mousePos = ImGui::GetIO().MousePos;
-				float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH/2;
-				float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
-				float width = BRUSHWIDTH;
-				float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
-				bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
-				//edgeHover = 0 -> No edge is hovered
-				//edgeHover = 1 -> Top edge is hovered
-				//edgeHover = 2 -> Bot edge is hovered
-				int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
-				edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
-				ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
-				//set mouse cursor
-				if (edgeHover || brushDragId != -1) {
-					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-				}
-				//activate dragging of edge
-				if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
-					brushDragId = brush.second.first;
-					brushDragTop = edgeHover == 1;
-				}
-				//drag edge
-				if (brushDragId == brush.second.first && ImGui::GetIO().MouseDown[0]) {
-					if (brushDragTop) {
-						brush.second.second.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
-					}
-					else {
-						brush.second.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
-					}
-
-					//switching edges if max value of brush is smaller than min value
-					if (brush.second.second.second < brush.second.second.first) {
-						float tmp = brush.second.second.second;
-						brush.second.second.second = brush.second.second.first;
-						brush.second.second.first = tmp;
-						brushDragTop ^= 1;
-					}
-					
-					if (ImGui::GetIO().MouseDelta.y) {
 						updateAllActiveIndices();
 						pcPlotRender = true;
 					}
 				}
-				//release edge
-				if (brushDragId == brush.second.first && ImGui::GetIO().MouseReleased[0]) {
-					brushDragId = -1;
-					updateAllActiveIndices();
-					pcPlotRender = true;
+				if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
+					selectedGlobalBrush = globalBrushes.size() - 1;
+					selectedTemplateBrush = -1;
 				}
 			}
-		}
+			ImGui::EndChild();
+			ImGui::SameLine();
+			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true);
+			ImGui::Text("Global Brushes");
+			ImGui::Separator();
+			bool popEnd = false;
+			for (int i = 0; i < globalBrushes.size(); i++) {
+				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
+					pcPlotSelectedDrawList = -1;
+					if (selectedGlobalBrush != i) {
+						selectedGlobalBrush = i;
+					}
+					else {
+						selectedGlobalBrush = -1;
+					}
+					if (selectedTemplateBrush != -1) {
+						selectedTemplateBrush = -1;
+						popEnd = true;
+					}
+				}
+				if (ImGui::IsItemClicked(1)) {
+					if (selectedGlobalBrush == i) {
+						selectedGlobalBrush = -1;
+					}
+					if (popEnd) {
+						if (globalBrushes.size() == 2) {
+							globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+							globalBrushes.pop_back();
+						}
+						else {
+							globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
+							globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
+							globalBrushes.pop_back();
+						}
+					}
+					else {
+						globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+						globalBrushes.pop_back();
+					}
+				}
+			}
+			if (popEnd) {
+				globalBrushes.pop_back();
+				if (selectedGlobalBrush == globalBrushes.size())
+					selectedGlobalBrush = -1;
+				updateAllActiveIndices();
+			}
+			ImGui::EndChild();
+			
+			gap = picSize.x / (amtOfLabels - 1);
+			//drawing the global brush
+			//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
+			if (selectedGlobalBrush != -1) {
+				for (auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
+					if (!pcAttributeEnabled[brush.first])
+						continue;
 
-		//drawing the template brush, these are not changeable
-		if (selectedTemplateBrush != -1) {
-			for (const auto& brush : globalBrushes.back().brushes) {
-				if (!pcAttributeEnabled[brush.first])
-					continue;
+					ImVec2 mousePos = ImGui::GetIO().MousePos;
+					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2;
+					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
+					float width = BRUSHWIDTH;
+					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
+					bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
+					//edgeHover = 0 -> No edge is hovered
+					//edgeHover = 1 -> Top edge is hovered
+					//edgeHover = 2 -> Bot edge is hovered
+					int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
+					edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
+					ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+					//set mouse cursor
+					if (edgeHover || brushDragId != -1) {
+						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+					}
+					//activate dragging of edge
+					if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+						brushDragId = brush.second.first;
+						brushDragTop = edgeHover == 1;
+					}
+					//drag edge
+					if (brushDragId == brush.second.first && ImGui::GetIO().MouseDown[0]) {
+						if (brushDragTop) {
+							brush.second.second.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+						}
+						else {
+							brush.second.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+						}
 
-				float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2;
-				float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
-				float width = BRUSHWIDTH;
-				float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
-				ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y+height), IM_COL32(30, 0, 200, 150), 1, ImDrawCornerFlags_All, 5);
+						//switching edges if max value of brush is smaller than min value
+						if (brush.second.second.second < brush.second.second.first) {
+							float tmp = brush.second.second.second;
+							brush.second.second.second = brush.second.second.first;
+							brush.second.second.first = tmp;
+							brushDragTop ^= 1;
+						}
+
+						if (ImGui::GetIO().MouseDelta.y) {
+							updateAllActiveIndices();
+							pcPlotRender = true;
+						}
+					}
+					//release edge
+					if (brushDragId == brush.second.first && ImGui::GetIO().MouseReleased[0]) {
+						brushDragId = -1;
+						updateAllActiveIndices();
+						pcPlotRender = true;
+					}
+				}
+			}
+
+			//drawing the template brush, these are not changeable
+			if (selectedTemplateBrush != -1) {
+				for (const auto& brush : globalBrushes.back().brushes) {
+					if (!pcAttributeEnabled[brush.first])
+						continue;
+
+					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2;
+					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
+					float width = BRUSHWIDTH;
+					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
+					ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 150), 1, ImDrawCornerFlags_All, 5);
+				}
 			}
 		}
 
@@ -4095,8 +4143,8 @@ int main(int, char**)
 
 				//deleting a brush
 				if (del != -1) {
-					dl->brushes[pcAttrOrd[i]][del] = dl->brushes[pcAttrOrd[i]][dl->brushes[pcAttrOrd[i]].size() - 1];
-					dl->brushes[pcAttrOrd[i]].pop_back();
+					dl->brushes[i][del] = dl->brushes[i][dl->brushes[i].size() - 1];
+					dl->brushes[i].pop_back();
 					del = -1;
 					updateActiveIndices(*dl);
 					pcPlotRender = true;
@@ -4114,7 +4162,7 @@ int main(int, char**)
 						temp.minMax.second = temp.minMax.first;
 						brushDragId = temp.id;
 						brushDragTop = false;
-						dl->brushes[pcAttrOrd[i]].push_back(temp);
+						dl->brushes[i].push_back(temp);
 					}
 				}
 			}
@@ -4505,7 +4553,7 @@ int main(int, char**)
 			}
 			ImGui::NextColumn();
 
-			int misc_flags =  ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_AlphaPreview ;
+			int misc_flags = ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar;
 			ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
 			ImGui::NextColumn();
 
