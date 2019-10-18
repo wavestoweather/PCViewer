@@ -1469,6 +1469,9 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
 			}
+			for (GlobalBrush& brush : globalBrushes) {
+				brush.lineRatios.erase(it->name);
+			}
 			g_PcPlotDrawLists.erase(it++);
 		}
 		else{
@@ -1759,7 +1762,7 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	g_PcPlotDrawLists.push_back(dl);
 }
 
-static void removePcPlotDrawList(DrawList drawList) {
+static void removePcPlotDrawList(DrawList& drawList) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
 		if (it->name == drawList.name) {
 			it->indices.clear();
@@ -1793,6 +1796,9 @@ static void removePcPlotDrawList(DrawList drawList) {
 			g_PcPlotDrawLists.erase(it);
 			break;
 		}
+	}
+	for (GlobalBrush& brush : globalBrushes) {
+		brush.lineRatios.erase(drawList.name);
 	}
 }
 
@@ -3089,6 +3095,9 @@ static void updateActiveIndices(DrawList& dl) {
 	}
 
 	dl.activeInd.clear();
+	for (GlobalBrush& b : globalBrushes) {
+		b.lineRatios[dl.name] = 0;
+	}
 	for (int i : dl.indices) {
 		//checking the local brushes
 		bool keep = true;
@@ -3110,11 +3119,14 @@ static void updateActiveIndices(DrawList& dl) {
 			goto nextInd;
 
 		//checking gloabl brushes
-		for (GlobalBrush& b : globalBrushes) {
-			for (auto& brush : b.brushes) {
-				if ((*data)[i][brush.first]<=brush.second.second.first || (*data)[i][brush.first]>=brush.second.second.second) {
-					goto nextInd;
+		if (toggleGlobalBrushes) {
+			for (GlobalBrush& b : globalBrushes) {
+				for (auto& brush : b.brushes) {
+					if ((*data)[i][brush.first]<brush.second.second.first || (*data)[i][brush.first]>brush.second.second.second) {
+						goto nextInd;
+					}
 				}
+				b.lineRatios[dl.name] += 1.0f;
 			}
 		}
 
@@ -3122,6 +3134,10 @@ static void updateActiveIndices(DrawList& dl) {
 
 		nextInd:;
 	}
+	for (GlobalBrush& b : globalBrushes) {
+		b.lineRatios[dl.name] /= dl.indices.size();
+	}
+
 	//updating the indexbuffer for histogramm
 	if (dl.activeInd.size() == 0)
 		return;
@@ -3618,7 +3634,9 @@ int main(int, char**)
 			}
 
 			if (ImGui::BeginMenu("Global Brushes")) {
-				ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes);
+				if (ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes) && !toggleGlobalBrushes) {
+					updateAllActiveIndices();
+				}
 
 				ImGui::EndMenu();
 			}
@@ -4022,22 +4040,27 @@ int main(int, char**)
 			const float histogrammdata[10] = { 0,.1f,.2f,.3f,.4f,.5f,.6f,.7f,.8f,.9f };
 			//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 			for (auto& brush : globalBrushes) {
-				ImGui::BeginChild(("##brushStat" + brush.name).c_str(),ImVec2(150,0),true);
-				ImGui::Text((brush.name + ":##title").c_str());
+				ImGui::BeginChild(("##brushStat" + brush.name).c_str(),ImVec2(200,0),true);
+				ImGui::Text(brush.name.c_str());
 				float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 				static std::vector<float> ratios;
 				ImVec2 defaultCursorPos = ImGui::GetCursorPos();
 				ImVec2 cursorPos = defaultCursorPos;
-				cursorPos.x += 75;
+				cursorPos.x += 75 + ImGui::GetStyle().ItemInnerSpacing.x;
 				ratios.clear();
 				for (auto& ratio : brush.lineRatios) {
 					ratios.push_back(ratio.second);
 					ImGui::SetCursorPos(cursorPos);
-					ImGui::Text((ratio.first + "##" + brush.name).c_str());
+					ImGui::Text(ratio.first.c_str());
 					cursorPos.y += lineHeight;
 				}
 				ImGui::SetCursorPos(defaultCursorPos);
-				ImGui::PlotHistogramVertical(("##histo"+brush.name).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight*ratios.size()));
+				int hover = ImGui::PlotHistogramVertical(("##histo"+brush.name).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight*ratios.size()));
+				if (hover != -1) {
+					ImGui::BeginTooltip();
+					ImGui::Text("%.2f%%", ratios[hover]);
+					ImGui::EndTooltip();
+				}
 
 
 				ImGui::EndChild();
@@ -4336,7 +4359,7 @@ int main(int, char**)
 							ImGui::CloseCurrentPopup(); 
 							
 							createPcPlotDrawList(tl, ds, pcDrawListName);
-
+							updateActiveIndices(g_PcPlotDrawLists.back());
 							pcPlotRender = true;
 						}
 						ImGui::SetItemDefaultFocus();
@@ -4517,7 +4540,7 @@ int main(int, char**)
 			destroyPcPlotDataSet(*destroySet);
 
 		//Showing the Drawlists
-		DrawList changeList = {};
+		DrawList* changeList;
 		destroy = false;
 		bool up = false;
 		bool down = false;
@@ -4590,14 +4613,14 @@ int main(int, char**)
 
 			float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 			if (ImGui::ArrowButton((std::string("##u")+dl.name).c_str(), ImGuiDir_Up)) {
-				changeList = dl;
+				changeList = &dl;
 				up = true;
 				pcPlotRender = true;
 			}
 			ImGui::NextColumn();
 
 			if (ImGui::ArrowButton((std::string("##d") + dl.name).c_str(), ImGuiDir_Down)) {
-				changeList = dl;
+				changeList = &dl;
 				down = true;
 				pcPlotRender = true;
 			}
@@ -4610,7 +4633,7 @@ int main(int, char**)
 				else if (count < pcPlotSelectedDrawList) {
 					pcPlotSelectedDrawList--;
 				}
-				changeList = dl;
+				changeList = &dl;
 				destroy = true;
 				pcPlotRender = true;
 			}
@@ -4643,11 +4666,11 @@ int main(int, char**)
 		//main window now closed
 
 		if (destroy) {
-			removePcPlotDrawList(changeList);
+			removePcPlotDrawList(*changeList);
 		}
 		if (up) {
 			auto it = g_PcPlotDrawLists.begin();
-			while (it!=g_PcPlotDrawLists.end() && it->name != changeList.name)
+			while (it!=g_PcPlotDrawLists.end() && it->name != changeList->name)
 				++it;
 			if (it != g_PcPlotDrawLists.begin()) {
 				auto itu = it;
@@ -4657,7 +4680,7 @@ int main(int, char**)
 		}
 		if (down) {
 			auto it = g_PcPlotDrawLists.begin();
-			while (it != g_PcPlotDrawLists.end() && it->name != changeList.name)
+			while (it != g_PcPlotDrawLists.end() && it->name != changeList->name)
 				++it;
 			if (it->name != g_PcPlotDrawLists.back().name) {
 				auto itu = it;
