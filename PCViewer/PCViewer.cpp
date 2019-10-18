@@ -208,6 +208,7 @@ struct Brush {
 struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
+	std::map<std::string, float> lineRatios;			//contains the ratio of still active lines per drawlist
 	std::map<int, std::pair<unsigned int,std::pair<float, float>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
@@ -3550,7 +3551,7 @@ int main(int, char**)
 		ImGui::Begin("Plot", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
 
 		//Menu for saving settings
-		bool openSave = false, openLoad = false, openManager = false, saveColor = false;
+		bool openSave = false, openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("Attribute")) {
@@ -3594,13 +3595,16 @@ int main(int, char**)
 					ImGui::EndMenu();
 				}
 				if (ImGui::MenuItem("Manage")) {
-					openManager = true;
+					openAttributesManager = true;
 				}
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Colors")) {
 				for (auto& s : *settingsManager->getSettingsType("COLOR")) {
-					ImGui::ColorEdit4(s->id.c_str(), (float*)s->data, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs);
+					ImGui::ColorEdit4(s->id.c_str(), (float*)s->data, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+				}
+				if (ImGui::MenuItem("Manage")) {
+					openColorManager = true;
 				}
 
 				ImGui::EndMenu();
@@ -3627,17 +3631,20 @@ int main(int, char**)
 		if (openLoad) {
 			ImGui::OpenPopup("Load error");
 		}
-		if (openManager) {
+		if (openAttributesManager) {
 			ImGui::OpenPopup("Manage attribute settings");
 		}
 		if (saveColor) {
 			ImGui::OpenPopup("Save color");
 		}
+		if (openColorManager) {
+			ImGui::OpenPopup("Color manager");
+		}
 		if (ImGui::BeginPopupModal("Manage attribute settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			std::string del;
 			for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
 				ImGui::Text(s->id.c_str());
-				ImGui::SameLine();
+				ImGui::SameLine(200);
 				if (ImGui::Button(("Delete##" + s->id).c_str())) {
 					del = s->id;
 				}
@@ -3710,8 +3717,10 @@ int main(int, char**)
 			ImGui::EndPopup();
 		}
 		//popup for saving a color
-		if (ImGui::BeginPopupModal("Save color")) {
+		if (ImGui::BeginPopupModal("Save color", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			static char colorName[200];
+			ImGui::ColorEdit4("preview", color, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoLabel);
+			ImGui::SameLine();
 			ImGui::InputText("color name", colorName, 200);
 			ImGui::Separator();
 			if (ImGui::Button("Save", ImVec2(120, 0))) {
@@ -3726,6 +3735,26 @@ int main(int, char**)
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+		//Popup for managing saved colors
+		if (ImGui::BeginPopupModal("Color manager", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			std::string del;
+			for (auto color : *settingsManager->getSettingsType("COLOR")) {
+				ImGui::ColorEdit4(color->id.c_str(), (float*)color->data, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+				ImGui::SameLine(200);
+				if (ImGui::Button(("Delete##" + color->id).c_str())) {
+					del = color->id;
+				}
+			}
+			if (!del.empty()) {
+				settingsManager->deleteSetting(del);
+			}
+			ImGui::Separator();
+			if (ImGui::Button("Close")) {
 				ImGui::CloseCurrentPopup();
 			}
 
@@ -3955,6 +3984,7 @@ int main(int, char**)
 					}
 				}
 				if (ImGui::IsItemClicked(1)) {
+					selectedTemplateBrush = -1;
 					if (selectedGlobalBrush == i) {
 						selectedGlobalBrush = -1;
 					}
@@ -3981,6 +4011,39 @@ int main(int, char**)
 					selectedGlobalBrush = -1;
 				updateAllActiveIndices();
 			}
+			ImGui::EndChild();
+
+			//Statistics for global brushes
+			ImGui::SameLine();
+			ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true);
+			ImGui::Text("Brush statistics: Percentage of lines kept after brushing");
+			ImGui::Separator();
+			//test for vertical Histogramm
+			const float histogrammdata[10] = { 0,.1f,.2f,.3f,.4f,.5f,.6f,.7f,.8f,.9f };
+			//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
+			for (auto& brush : globalBrushes) {
+				ImGui::BeginChild(("##brushStat" + brush.name).c_str(),ImVec2(150,0),true);
+				ImGui::Text((brush.name + ":##title").c_str());
+				float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+				static std::vector<float> ratios;
+				ImVec2 defaultCursorPos = ImGui::GetCursorPos();
+				ImVec2 cursorPos = defaultCursorPos;
+				cursorPos.x += 75;
+				ratios.clear();
+				for (auto& ratio : brush.lineRatios) {
+					ratios.push_back(ratio.second);
+					ImGui::SetCursorPos(cursorPos);
+					ImGui::Text((ratio.first + "##" + brush.name).c_str());
+					cursorPos.y += lineHeight;
+				}
+				ImGui::SetCursorPos(defaultCursorPos);
+				ImGui::PlotHistogramVertical(("##histo"+brush.name).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight*ratios.size()));
+
+
+				ImGui::EndChild();
+				ImGui::SameLine();
+			}
+
 			ImGui::EndChild();
 			
 			gap = picSize.x / (amtOfLabels - 1);
@@ -4180,13 +4243,13 @@ int main(int, char**)
 		if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
 			pcPlotRender = true;
 		}
-		if (ImGui::ColorEdit4("Histogramm Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+		if (ImGui::ColorEdit4("Histogramm Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && drawHistogramm) {
 			pcPlotRender = true;
 		}
 		if (ImGui::Checkbox("Show Density", &histogrammDensity) && drawHistogramm) {
 			pcPlotRender = true;
 		}
-		if (ImGui::ColorEdit4("Density Background", &densityBackCol.x, ImGuiColorEditFlags_AlphaPreview) && drawHistogramm) {
+		if (ImGui::ColorEdit4("Density Background", &densityBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && drawHistogramm) {
 			pcPlotRender = true;
 		}
 		ImGui::Separator();
@@ -4224,7 +4287,7 @@ int main(int, char**)
 			pcPlotRender = true;
 		}
 		
-		if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview)) {
+		if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
 			pcPlotRender = true;
 		}
 

@@ -5489,11 +5489,12 @@ bool ImGui::ListBox(const char* label, int* current_item, bool (*items_getter)(v
 // - PlotHistogram()
 //-------------------------------------------------------------------------
 
-void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_getter)(void* data, int idx), void* data, int values_count, int values_offset, const char* overlay_text, float scale_min, float scale_max, ImVec2 frame_size)
+int ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_getter)(void* data, int idx), void* data, int values_count, int values_offset, const char* overlay_text, float scale_min, float scale_max, ImVec2 frame_size)
 {
     ImGuiWindow* window = GetCurrentWindow();
-    if (window->SkipItems)
-        return;
+	if (window->SkipItems) {
+		return -1;
+	}
 
     ImGuiContext& g = *GImGui;
     const ImGuiStyle& style = g.Style;
@@ -5510,7 +5511,7 @@ void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_ge
     const ImRect total_bb(frame_bb.Min, frame_bb.Max + ImVec2(label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f, 0));
     ItemSize(total_bb, style.FramePadding.y);
     if (!ItemAdd(total_bb, 0, &frame_bb))
-        return;
+        return -1;
     const bool hovered = ItemHoverable(frame_bb, id);
 
     // Determine scale from values if not specified
@@ -5532,18 +5533,29 @@ void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_ge
 
     RenderFrame(frame_bb.Min, frame_bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
 
+	int v_hovered = -1;
     const int values_count_min = (plot_type == ImGuiPlotType_Lines) ? 2 : 1;
     if (values_count >= values_count_min)
     {
         int res_w = ImMin((int)frame_size.x, values_count) + ((plot_type == ImGuiPlotType_Lines) ? -1 : 0);
+		if (plot_type == ImGuiPlotType_Histogram_Vertical) {
+			res_w = ImMin((int)frame_size.y, values_count);
+		}
         int item_count = values_count + ((plot_type == ImGuiPlotType_Lines) ? -1 : 0);
 
         // Tooltip on hover
-        int v_hovered = -1;
         if (hovered && inner_bb.Contains(g.IO.MousePos))
         {
-            const float t = ImClamp((g.IO.MousePos.x - inner_bb.Min.x) / (inner_bb.Max.x - inner_bb.Min.x), 0.0f, 0.9999f);
-            const int v_idx = (int)(t * item_count);
+			float t;
+			int v_idx;
+			if (plot_type == ImGuiPlotType_Histogram_Vertical) {
+				t = ImClamp((g.IO.MousePos.y - inner_bb.Min.y) / (inner_bb.Max.y - inner_bb.Min.y), 0.0f, 0.9999f);
+				v_idx = (int)(t * item_count);
+			}
+			else {
+				t = ImClamp((g.IO.MousePos.x - inner_bb.Min.x) / (inner_bb.Max.x - inner_bb.Min.x), 0.0f, 0.9999f);
+				v_idx = (int)(t * item_count);
+			}
             IM_ASSERT(v_idx >= 0 && v_idx < values_count);
 
             const float v0 = values_getter(data, (v_idx + values_offset) % values_count);
@@ -5552,6 +5564,9 @@ void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_ge
                 SetTooltip("%d: %8.4g\n%d: %8.4g", v_idx, v0, v_idx+1, v1);
             else if (plot_type == ImGuiPlotType_Histogram)
                 SetTooltip("%d: %8.4g", v_idx, v0);
+			else if (plot_type == ImGuiPlotType_Histogram_Vertical) {
+				//SetTooltip("%d: %8.4g", v_idx, v0);
+			}
             v_hovered = v_idx;
         }
 
@@ -5560,8 +5575,17 @@ void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_ge
 
         float v0 = values_getter(data, (0 + values_offset) % values_count);
         float t0 = 0.0f;
-        ImVec2 tp0 = ImVec2( t0, 1.0f - ImSaturate((v0 - scale_min) * inv_scale) );                       // Point in the normalized space of our target rectangle
-        float histogram_zero_line_t = (scale_min * scale_max < 0.0f) ? (-scale_min * inv_scale) : (scale_min < 0.0f ? 0.0f : 1.0f);   // Where does the zero line stands
+		ImVec2 tp0;
+		if (plot_type == ImGuiPlotType_Histogram_Vertical) {
+			tp0 = ImVec2(ImSaturate((v0 - scale_min) * inv_scale), t0);
+		}
+		else {
+			tp0 = ImVec2(t0, 1.0f - ImSaturate((v0 - scale_min) * inv_scale));                       // Point in the normalized space of our target rectangle
+		}
+        float histogram_zero_line_t = (scale_min * scale_max < 0.0f) ? (-scale_min * inv_scale) : (scale_min < 0.0f ? 0.0f : 1.0f);   // Where does the zero line stand
+		if (plot_type == ImGuiPlotType_Histogram_Vertical) {
+			histogram_zero_line_t = (scale_min * scale_max < 0.0f) ? (-scale_min * inv_scale) : (scale_min <= 0.0f ? 0.0f : 1.0f);   // Where does the zero line stand
+		}
 
         const ImU32 col_base = GetColorU32((plot_type == ImGuiPlotType_Lines) ? ImGuiCol_PlotLines : ImGuiCol_PlotHistogram);
         const ImU32 col_hovered = GetColorU32((plot_type == ImGuiPlotType_Lines) ? ImGuiCol_PlotLinesHovered : ImGuiCol_PlotHistogramHovered);
@@ -5572,12 +5596,17 @@ void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_ge
             const int v1_idx = (int)(t0 * item_count + 0.5f);
             IM_ASSERT(v1_idx >= 0 && v1_idx < values_count);
             const float v1 = values_getter(data, (v1_idx + values_offset + 1) % values_count);
-            const ImVec2 tp1 = ImVec2( t1, 1.0f - ImSaturate((v1 - scale_min) * inv_scale) );
-
+			ImVec2 tp1;
+			if (plot_type == ImGuiPlotType_Histogram_Vertical) {
+				tp1 = ImVec2(ImSaturate((v1 - scale_min) * inv_scale), t1);
+			}
+			else {
+				tp1 = ImVec2(t1, 1.0f - ImSaturate((v1 - scale_min) * inv_scale));
+			}
             // NB: Draw calls are merged together by the DrawList system. Still, we should render our batch are lower level to save a bit of CPU.
             ImVec2 pos0 = ImLerp(inner_bb.Min, inner_bb.Max, tp0);
-            ImVec2 pos1 = ImLerp(inner_bb.Min, inner_bb.Max, (plot_type == ImGuiPlotType_Lines) ? tp1 : ImVec2(tp1.x, histogram_zero_line_t));
-            if (plot_type == ImGuiPlotType_Lines)
+			ImVec2 pos1 = ImLerp(inner_bb.Min, inner_bb.Max, (plot_type == ImGuiPlotType_Lines) ? tp1 : (plot_type == ImGuiPlotType_Histogram)?ImVec2(tp1.x, histogram_zero_line_t): ImVec2(histogram_zero_line_t, tp1.y));
+			if (plot_type == ImGuiPlotType_Lines)
             {
                 window->DrawList->AddLine(pos0, pos1, v_hovered == v1_idx ? col_hovered : col_base);
             }
@@ -5587,6 +5616,12 @@ void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_ge
                     pos1.x -= 1.0f;
                 window->DrawList->AddRectFilled(pos0, pos1, v_hovered == v1_idx ? col_hovered : col_base);
             }
+			else if (plot_type == ImGuiPlotType_Histogram_Vertical) {
+				if (pos1.y >= pos0.y + 2.0f)
+					pos1.y -= 1.0f;
+				
+				window->DrawList->AddRectFilled(pos0, pos1, v_hovered == v1_idx ? col_hovered : col_base);
+			}
 
             t0 = t1;
             tp0 = tp1;
@@ -5599,6 +5634,8 @@ void ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_ge
 
     if (label_size.x > 0.0f)
         RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, inner_bb.Min.y), label);
+
+	return v_hovered;
 }
 
 struct ImGuiPlotArrayGetterData
@@ -5636,6 +5673,12 @@ void ImGui::PlotHistogram(const char* label, const float* values, int values_cou
 void ImGui::PlotHistogram(const char* label, float (*values_getter)(void* data, int idx), void* data, int values_count, int values_offset, const char* overlay_text, float scale_min, float scale_max, ImVec2 graph_size)
 {
     PlotEx(ImGuiPlotType_Histogram, label, values_getter, data, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
+}
+
+int ImGui::PlotHistogramVertical(const char* label, const float* values, int values_count, int values_offset, const char* overlay_text, float scale_min, float scale_max, ImVec2 graph_size, int stride) 
+{
+	ImGuiPlotArrayGetterData data(values, stride);
+	return PlotEx(ImGuiPlotType_Histogram_Vertical, label, &Plot_ArrayGetter, (void*)&data, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size);
 }
 
 //-------------------------------------------------------------------------
