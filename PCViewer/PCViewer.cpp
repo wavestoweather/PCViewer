@@ -76,7 +76,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
 //enable this define to print the time needed to render the pc Plot
-//#define PRINTRENDERTIME
+#define PRINTRENDERTIME
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -474,7 +474,6 @@ struct Attribute {
 };
 
 static bool* pcAttributeEnabled = NULL;											//Contains whether a specific attribute is enabled
-static bool* pcAttributeEnabledCpy = NULL;										//Contains the enabled attributes of last frame
 static std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
 static std::vector<int> pcAttrOrd = std::vector<int>();							//Contains the ordering of the attributes	
 static std::vector<std::string> droppedPaths = std::vector<std::string>();
@@ -513,6 +512,7 @@ static bool brushDragTop = true;
 static unsigned int currentBrushId = 0;
 static bool* activeBrushAttributes = nullptr;
 static bool toggleGlobalBrushes = true;
+static int brushCombination = 0;				//How global brushes should be combined. 0->OR, 1->AND
 
 //variables for the 3d views
 static View3d * view3d;
@@ -520,6 +520,9 @@ static NodeViewer* nodeViewer;
 
 static SettingsManager* settingsManager;
 
+//method declarations
+static void updateDrawListIndexBuffer(DrawList& dl);
+static void updateActiveIndices(DrawList& dl);
 /*static void check_vk_result(VkResult err)
 {
 	if (err == 0) return;
@@ -1842,10 +1845,6 @@ static void destroyPcPlotDataSet(DataSet dataSet) {
 			delete[] pcAttributeEnabled;
 			pcAttributeEnabled = nullptr;
 		}
-		if (pcAttributeEnabledCpy) {
-			delete[] pcAttributeEnabledCpy;
-			pcAttributeEnabledCpy = nullptr;
-		}
 		if (brushTemplateAttrEnabled) {
 			delete[] brushTemplateAttrEnabled;
 			brushTemplateAttrEnabled = nullptr;
@@ -2020,30 +2019,6 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		if (attributeEnabled[i])
 			amtOfIndeces++;
 	}
-
-	//filling the indexbuffer with the used indeces
-	uint16_t* ind = new uint16_t[amtOfIndeces];			//contains all indeces to copy
-	int j = 0;											//current index in the ind array
-	for (int i = 0; i < attributes.size(); i++) {
-		if (attributeEnabled[i]) {
-			ind[j++] = attributeOrder[i];
-		}
-	}
-
-#ifdef _DEBUG
-	if (j != amtOfIndeces) {
-		std::cerr << "There is a severe problem with the indices!" << std::endl;
-		exit(-1);
-	}
-#endif
-
-	void* d;
-	//copying the indexbuffer
-	if (pcAttributes.size()) {
-		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size(), 0, &d);
-		memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
-		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
-	}
 	
 
 	//filling the uniform buffer and copying it into the end of the uniformbuffer
@@ -2066,6 +2041,36 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			c++;
 		ubo.VertexTransormations[i].y = attributes[i].min;
 		ubo.VertexTransormations[i].z = attributes[i].max;
+	}
+
+	std::vector<std::pair<int, int>> order;
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		if (pcAttributeEnabled[i]) {
+			order.push_back(std::pair<int, int>(i, placeOfInd(i)));
+		}
+	}
+
+	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
+
+	//filling the indexbuffer with the used indeces
+	uint16_t* ind = new uint16_t[amtOfIndeces];			//contains all indeces to copy
+	for (int i = 0; i < order.size(); i++) {
+		ind[i] = order[i].first;
+	}
+
+#ifdef _DEBUG
+	if (order.size() != amtOfIndeces) {
+		std::cerr << "There is a severe problem with the indices!" << std::endl;
+		exit(-1);
+	}
+#endif
+
+	void* d;
+	//copying the indexbuffer
+	if (pcAttributes.size()) {
+		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size(), 0, &d);
+		memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
+		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 	}
 
 #ifdef _DEBUG
@@ -2105,24 +2110,6 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList;++drawList) {
 		if (!drawList->show)
 			continue;
-
-		//filling the indexbuffer for drawing
-		uint32_t* in = new uint32_t[drawList->activeInd.size() * (amtOfIndeces+1)];
-		uint32_t c = 0;
-		for (int i : drawList->activeInd) {
-			for (int j = 0; j < amtOfIndeces; j++) {
-				in[c++] = ind[j] + i * pcAttributes.size();
-			}
-			in[c++] = 0xFFFFFFFF;
-		}
-		
-		if (drawList->activeInd.size()) {
-			vkMapMemory(g_Device, drawList->dlMem, drawList->indexBufferOffset, sizeof(uint32_t) * drawList->activeInd.size() * (amtOfIndeces + 1), 0, &d);
-			memcpy(d, in, sizeof(uint32_t) * drawList->activeInd.size() * (amtOfIndeces + 1));
-			vkUnmapMemory(g_Device, drawList->dlMem);
-		}
-
-		delete[] in;
 
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
@@ -2715,11 +2702,9 @@ static void openCsv(const char* filename) {
 
 				//setting up the boolarray and setting all the attributes to true
 				pcAttributeEnabled = new bool[pcAttributes.size()];
-				pcAttributeEnabledCpy = new bool[pcAttributes.size()];
 				activeBrushAttributes = new bool[pcAttributes.size()];
 				for (int i = 0; i < pcAttributes.size(); i++) {
 					pcAttributeEnabled[i] = true;
-					pcAttributeEnabledCpy[i] = true;
 					activeBrushAttributes[i] = false;
 					pcAttrOrd.push_back(i);
 				}
@@ -2994,11 +2979,9 @@ static void openDlf(const char* filename) {
 
 			if (newAttr) {
 				pcAttributeEnabled = new bool[pcAttributes.size()];
-				pcAttributeEnabledCpy = new bool[pcAttributes.size()];
 				activeBrushAttributes = new bool[pcAttributes.size()];
 				for (int i = 0; i < pcAttributes.size(); i++) {
 					pcAttributeEnabled[i] = true;
-					pcAttributeEnabledCpy[i] = true;
 					activeBrushAttributes[i] = false;
 					pcAttrOrd.push_back(i);
 				}
@@ -3080,7 +3063,45 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 		if (createDLForDrop[i]) {
 			int split = (droppedPaths[i].find_last_of("\\") > droppedPaths[i].find_last_of("/")) ? droppedPaths[i].find_last_of("/") : droppedPaths[i].find_last_of("\\");
 			createPcPlotDrawList(ds.drawLists.back(), ds, droppedPaths[i].substr(split+1).c_str());
+			updateActiveIndices(g_PcPlotDrawLists.back());
 		}
+	}
+}
+
+static void updateDrawListIndexBuffer(DrawList& dl) {
+
+	std::vector<std::pair<int, int>> order;
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		if (pcAttributeEnabled[i]) {
+			order.push_back(std::pair<int, int>(i, placeOfInd(i)));
+		}
+	}
+
+	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
+
+	//filling the indexbuffer for drawing
+	uint32_t* in = new uint32_t[dl.activeInd.size() * (order.size() + 1)];
+	uint32_t c = 0;
+	for (int i : dl.activeInd) {
+		for (int j = 0; j < order.size(); j++) {
+			in[c++] = order[j].first + i * pcAttributes.size();
+		}
+		in[c++] = 0xFFFFFFFF;
+	}
+
+	if (dl.activeInd.size()) {
+		void* d;
+		vkMapMemory(g_Device, dl.dlMem, dl.indexBufferOffset, sizeof(uint32_t) * dl.activeInd.size() * (order.size() + 1), 0, &d);
+		memcpy(d, in, sizeof(uint32_t) * dl.activeInd.size() * (order.size() + 1));
+		vkUnmapMemory(g_Device, dl.dlMem);
+	}
+
+	delete[] in;
+}
+
+static void updateAllDrawListIndexBuffer() {
+	for (DrawList& dl : g_PcPlotDrawLists) {
+		updateDrawListIndexBuffer(dl);
 	}
 }
 
@@ -3120,13 +3141,26 @@ static void updateActiveIndices(DrawList& dl) {
 
 		//checking gloabl brushes
 		if (toggleGlobalBrushes) {
+			bool or = globalBrushes.size() == 0, and = true;
 			for (GlobalBrush& b : globalBrushes) {
+				bool lineKeep = true;
 				for (auto& brush : b.brushes) {
 					if ((*data)[i][brush.first]<brush.second.second.first || (*data)[i][brush.first]>brush.second.second.second) {
-						goto nextInd;
+						lineKeep = false;
 					}
 				}
-				b.lineRatios[dl.name] += 1.0f;
+					
+				or |= lineKeep;
+				and &= lineKeep;
+
+				if( lineKeep)
+					b.lineRatios[dl.name] += 1.0f;
+			}
+			if (brushCombination == 1 && !and) {
+				goto nextInd;
+			}
+			if (brushCombination == 0 && !or ) {
+				goto nextInd;
 			}
 		}
 
@@ -3151,6 +3185,9 @@ static void updateActiveIndices(DrawList& dl) {
 	memcpy(d, indBuffer, dl.activeInd.size() * sizeof(uint32_t) * 2);
 	vkUnmapMemory(g_Device, dl.dlMem);
 	delete[] indBuffer;
+
+	//updating the standard indexbuffer
+	updateDrawListIndexBuffer(dl);
 }
 
 //This method does the same as updataActiveIndices, only for ALL drawlists
@@ -3461,14 +3498,6 @@ int main(int, char**)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		//Checking if an Attribute has been switched on or off
-		for (int i = 0; i < pcAttributes.size(); i++) {
-			if (pcAttributeEnabled[i] ^ pcAttributeEnabledCpy[i]) {
-				pcAttributeEnabledCpy[i] = pcAttributeEnabled[i];
-				pcPlotRender = true;
-			}
-		}
-
 		//Check if a drawlist color changed
 		for (DrawList& ds : g_PcPlotDrawLists) {
 			if (ds.color != ds.prefColor) {
@@ -3636,6 +3665,17 @@ int main(int, char**)
 			if (ImGui::BeginMenu("Global Brushes")) {
 				if (ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes) && !toggleGlobalBrushes) {
 					updateAllActiveIndices();
+					pcPlotRender = true;
+				}
+
+				if (ImGui::BeginMenu("Brush Combination")) {
+					static char* const combinations[] = { "OR","AND" };
+					if (ImGui::Combo("brushCombination", &brushCombination, combinations, sizeof(combinations) / sizeof(*combinations))) {
+						updateAllActiveIndices();
+						pcPlotRender = true;
+					}
+
+					ImGui::EndMenu();
 				}
 
 				ImGui::EndMenu();
@@ -3805,8 +3845,7 @@ int main(int, char**)
 					int* other = (int*)payload->Data;
 					
 					switchAttributes(c, other[0], io.KeyCtrl);
-
-					pcPlotPreviousSlectedDrawList = -1;
+					updateAllDrawListIndexBuffer();
 
 					pcPlotRender = true;
 				}
@@ -4058,7 +4097,7 @@ int main(int, char**)
 				int hover = ImGui::PlotHistogramVertical(("##histo"+brush.name).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight*ratios.size()));
 				if (hover != -1) {
 					ImGui::BeginTooltip();
-					ImGui::Text("%.2f%%", ratios[hover]);
+					ImGui::Text("%2.1f%%", ratios[hover] * 100);
 					ImGui::EndTooltip();
 				}
 
@@ -4315,7 +4354,10 @@ int main(int, char**)
 		}
 
 		for (int i = 0; i < pcAttributes.size(); i++) {
-			ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i]);
+			if (ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i])) {
+				updateAllDrawListIndexBuffer();
+				pcPlotRender = true;
+			}
 		}
 
 		ImGui::InputText("Directory Path", pcFilePath, 200);
@@ -4704,8 +4746,6 @@ int main(int, char**)
 	// Cleanup
 	if (pcAttributeEnabled)
 		delete[] pcAttributeEnabled;
-	if (pcAttributeEnabledCpy)
-		delete[] pcAttributeEnabledCpy;
 	if (createDLForDrop)
 		delete[] createDLForDrop;
 	if (brushTemplateAttrEnabled)
