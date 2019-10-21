@@ -193,7 +193,7 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	inputAssembly.topology = topology;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
+	inputAssembly.primitiveRestartEnable = (topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP || topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY || topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP || topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY) ? VK_TRUE : VK_FALSE;
 
 	VkViewport viewport = {};					//description for our viewport for transformation operation after rasterization
 	viewport.x = 0.0f;

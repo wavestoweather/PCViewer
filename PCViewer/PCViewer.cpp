@@ -290,6 +290,10 @@ static VkBuffer					g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotPipelineLayout = VK_NULL_HANDLE;	//contains the pipeline which is used to assign global shader variables
 static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphics pipeline for the pc
+//variables for spline pipeline
+static VkPipelineLayout			g_PcPlotSplinePipelineLayout = VK_NULL_HANDLE;
+static VkPipeline				g_PcPlotSplinePipeline = VK_NULL_HANDLE;
+static bool						g_RenderSplines = false;
 //variables for the histogramm pipeline
 static VkPipelineLayout			g_PcPlotHistoPipelineLayout = VK_NULL_HANDLE;
 static VkPipeline				g_PcPlotHistoPipeline = VK_NULL_HANDLE;
@@ -336,6 +340,7 @@ static uint32_t					windowHeight = 1080;
 static uint32_t					g_PcPlotWidth = 2060;
 static uint32_t					g_PcPlotHeight = 450;
 static char						g_fragShaderPath[] = "shader/frag.spv";
+static char						g_geomShaderPath[] = "shader/geom.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
 static char						g_histFragPath[] = "shader/histFrag.spv";
 static char						g_histVertPath[] = "shader/histVert.spv";
@@ -508,7 +513,11 @@ static std::vector<TemplateBrush> templateBrushes;
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
 static std::vector<GlobalBrush> globalBrushes;
 static int brushDragId = -1;
-static bool brushDragTop = true;
+//information about the dragmode
+//0 -> brush dragged
+//1 -> top edge dragged
+//2 -> bottom edge dragged
+static int brushDragMode = 0;
 static unsigned int currentBrushId = 0;
 static bool* activeBrushAttributes = nullptr;
 static bool toggleGlobalBrushes = true;
@@ -1107,6 +1116,54 @@ static void createPcPlotPipeline() {
 
 	vkDestroyShaderModule(g_Device, fragShaderModule, nullptr);
 	vkDestroyShaderModule(g_Device, vertShaderModule, nullptr);
+
+
+	//----------------------------------------------------------------------------------------------
+	//creating the pipeline for spline rendering
+	//----------------------------------------------------------------------------------------------
+	VkShaderModule shaderModules[5] = {};
+	std::vector<char> vertexBytes = PCUtil::readByteFile(g_vertShaderPath);
+	shaderModules[0] = VkUtil::createShaderModule(g_Device, vertexBytes);
+	std::vector<char> geometryBytes = PCUtil::readByteFile(g_geomShaderPath);
+	shaderModules[3] = VkUtil::createShaderModule(g_Device, geometryBytes);
+	std::vector<char> fragmentBytes = PCUtil::readByteFile(g_fragShaderPath);
+	shaderModules[4] = VkUtil::createShaderModule(g_Device, fragmentBytes);
+
+	//describes how big the vertex data is and how to read the data
+	bindingDescripiton.binding = 0;
+	bindingDescripiton.stride = sizeof(float);
+	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	attributeDescription = {};
+	attributeDescription.binding = 0;
+	attributeDescription.location = 0;
+	attributeDescription.format = VK_FORMAT_R32_SFLOAT;
+	attributeDescription.offset = offsetof(Vertex, y);
+
+	vertexInputInfo = {};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
+	vertexInputInfo.vertexAttributeDescriptionCount = 1;
+	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+
+	uboLayoutBinding = {};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
+
+	VkUtil::BlendInfo blendInfo;
+	blendInfo.blendAttachment = colorBlendAttachment;
+	blendInfo.createInfo = colorBlending;
+
+	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+	descriptorSetLayouts.push_back(g_PcPlotDescriptorLayout);
+
+	std::vector<VkDynamicState> dynamicStateVec;
+	dynamicStateVec.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
+
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotSplinePipelineLayout, &g_PcPlotSplinePipeline);
 }
 
 static void cleanupPcPlotPipeline() {
@@ -1114,6 +1171,8 @@ static void cleanupPcPlotPipeline() {
 	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotDescriptorLayout, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotPipeline, nullptr);
+	vkDestroyPipelineLayout(g_Device, g_PcPlotSplinePipelineLayout, nullptr);
+	vkDestroyPipeline(g_Device, g_PcPlotSplinePipeline, nullptr);
 }
 
 static void createPcPlotRenderPass() {
@@ -1559,7 +1618,7 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//Indexbuffer
-	bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 1) * sizeof(uint32_t);
+	bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.indexBuffer);
 	check_vk_result(err);
@@ -1910,7 +1969,10 @@ static void createPcPlotCommandBuffer() {
 
 	vkCmdBeginRenderPass(g_PcPlotCommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-	vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
+	if (g_RenderSplines)
+		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+	else
+		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
 }
 
 static void cleanupPcPlotCommandBuffer() {
@@ -2099,7 +2161,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	createPcPlotCommandBuffer();
 
 	//binding the all needed things
-	vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+	if(g_RenderSplines)
+		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+	else
+		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+
 	if(pcAttributes.size())
 		vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
@@ -2116,22 +2182,26 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 		//binding the right ubo
-		vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
+		if (g_RenderSplines)
+			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
+		else
+			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
+
 		vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
 		
 		//ready to draw with draw indexed
-		vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->activeInd.size()* (amtOfIndeces + 1), 1, 0, 0, 0);
-		//uint32_t vertOffset = 0;
-		//for (int i :drawList->activeInd) {
-		//	vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, i*attributes.size(), 0);
-		//}
+		uint32_t amtOfI = drawList->activeInd.size()* (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
+		vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfI, 1, 0, 0, 0);
 
 		//draw the Median Line
 		if (drawList->activeMedian != 0) {
 			vkCmdSetLineWidth(g_PcPlotCommandBuffer, medianLineWidth);
 			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->medianBuffer, offsets);
 
-			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
+			if (g_RenderSplines)
+				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
+			else
+				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, (drawList->activeMedian-1)* pcAttributes.size(), 0);
 
@@ -3080,19 +3150,27 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
 
 	//filling the indexbuffer for drawing
-	uint32_t* in = new uint32_t[dl.activeInd.size() * (order.size() + 1)];
+	uint32_t amtOfIndices = dl.activeInd.size() * (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
+	uint32_t* in = new uint32_t[amtOfIndices];
 	uint32_t c = 0;
 	for (int i : dl.activeInd) {
+		if (g_RenderSplines)	//repeating first and last index if spline rendering is active to have adjacent lines to the first and last point of the line
+			in[c++] = order[0].first + i * pcAttributes.size();
+
 		for (int j = 0; j < order.size(); j++) {
 			in[c++] = order[j].first + i * pcAttributes.size();
 		}
+
+		if (g_RenderSplines)
+			in[c++] = order[order.size() - 1].first + i * pcAttributes.size();
+
 		in[c++] = 0xFFFFFFFF;
 	}
 
 	if (dl.activeInd.size()) {
 		void* d;
-		vkMapMemory(g_Device, dl.dlMem, dl.indexBufferOffset, sizeof(uint32_t) * dl.activeInd.size() * (order.size() + 1), 0, &d);
-		memcpy(d, in, sizeof(uint32_t) * dl.activeInd.size() * (order.size() + 1));
+		vkMapMemory(g_Device, dl.dlMem, dl.indexBufferOffset, sizeof(uint32_t) * amtOfIndices, 0, &d);
+		memcpy(d, in, sizeof(uint32_t) * amtOfIndices);
 		vkUnmapMemory(g_Device, dl.dlMem);
 	}
 
@@ -4108,7 +4186,7 @@ int main(int, char**)
 
 			ImGui::EndChild();
 			
-			gap = picSize.x / (amtOfLabels - 1);
+			gap = (picSize.x - ((drawHistogramm) ? histogrammWidth : 0)) / (amtOfLabels - 1); 
 			//drawing the global brush
 			//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
 			if (selectedGlobalBrush != -1) {
@@ -4117,7 +4195,7 @@ int main(int, char**)
 						continue;
 
 					ImVec2 mousePos = ImGui::GetIO().MousePos;
-					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2;
+					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? histogrammWidth / 2 : 0);
 					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
 					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -4132,14 +4210,26 @@ int main(int, char**)
 					if (edgeHover || brushDragId != -1) {
 						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 					}
+					if (hover) {
+						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+					}
 					//activate dragging of edge
 					if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
 						brushDragId = brush.second.first;
-						brushDragTop = edgeHover == 1;
+						brushDragMode = edgeHover;
+					}
+					if (hover && ImGui::GetIO().MouseClicked[0]) {
+						brushDragId = brush.second.first;
+						brushDragMode = 0;
 					}
 					//drag edge
 					if (brushDragId == brush.second.first && ImGui::GetIO().MouseDown[0]) {
-						if (brushDragTop) {
+						if (brushDragMode == 0) {
+							float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
+							brush.second.second.second -= delta;
+							brush.second.second.first -= delta;
+						}
+						else if (brushDragMode == 1) {
 							brush.second.second.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
 						}
 						else {
@@ -4151,7 +4241,7 @@ int main(int, char**)
 							float tmp = brush.second.second.second;
 							brush.second.second.second = brush.second.second.first;
 							brush.second.second.first = tmp;
-							brushDragTop ^= 1;
+							brushDragMode = (brushDragMode == 1) ? 2 : 1;
 						}
 
 						if (ImGui::GetIO().MouseDelta.y) {
@@ -4174,7 +4264,7 @@ int main(int, char**)
 					if (!pcAttributeEnabled[brush.first])
 						continue;
 
-					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2;
+					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? histogrammWidth / 2 : 0);
 					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
 					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -4205,7 +4295,7 @@ int main(int, char**)
 				bool brushHover = false;
 				
 				ImVec2 mousePos = ImGui::GetIO().MousePos;
-				float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2;
+				float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? histogrammWidth / 2 : 0);
 				//drawing the brushes as foreground objects
 				for (Brush& b : dl->brushes[i]) {
 					float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
@@ -4225,14 +4315,26 @@ int main(int, char**)
 					if (edgeHover || brushDragId != -1) {
 						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 					}
+					if (hover) {
+						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+					}
 					//activate dragging of edge
 					if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
 						brushDragId = b.id;
-						brushDragTop = edgeHover == 1;
+						brushDragMode = edgeHover;
+					}
+					if (hover && ImGui::GetIO().MouseClicked[0]) {
+						brushDragId = b.id;
+						brushDragMode = 0;
 					}
 					//drag edge
 					if (brushDragId == b.id && ImGui::GetIO().MouseDown[0]) {
-						if (brushDragTop) {
+						if (brushDragMode == 0) {
+							float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[i].max - pcAttributes[i].min);
+							b.minMax.second -= delta;
+							b.minMax.first -= delta;
+						}
+						else if (brushDragMode == 1) {
 							b.minMax.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
 						}
 						else {
@@ -4244,7 +4346,7 @@ int main(int, char**)
 							float tmp = b.minMax.second;
 							b.minMax.second = b.minMax.first;
 							b.minMax.first = tmp;
-							brushDragTop ^= 1;
+							brushDragMode = (brushDragMode == 1) ? 2 : 1;
 						}
 
 						if (ImGui::GetIO().MouseDelta.y) {
@@ -4286,7 +4388,7 @@ int main(int, char**)
 						temp.minMax.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
 						temp.minMax.second = temp.minMax.first;
 						brushDragId = temp.id;
-						brushDragTop = false;
+						brushDragMode = 1;
 						dl->brushes[i].push_back(temp);
 					}
 				}
@@ -4352,6 +4454,13 @@ int main(int, char**)
 		if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
 			pcPlotRender = true;
 		}
+
+		if (ImGui::Checkbox("Render Splines", &g_RenderSplines)) {
+			updateAllDrawListIndexBuffer();
+			pcPlotRender = true;
+		}
+
+		ImGui::Separator();
 
 		for (int i = 0; i < pcAttributes.size(); i++) {
 			if (ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i])) {
