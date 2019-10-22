@@ -488,6 +488,7 @@ static std::default_random_engine engine;
 static std::uniform_int_distribution<int> distribution(0, 35);
 static float alphaDrawLists = .5f;
 static Vec4 PcPlotBackCol = { 0,0,0,1 };
+static bool enableAxisLines = true;
  
 //variables for the histogramm
 static float histogrammWidth = .1f;
@@ -4137,6 +4138,8 @@ int main(int, char**)
 					else {
 						globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
 						globalBrushes.pop_back();
+						updateAllActiveIndices();
+						pcPlotRender = true;
 					}
 				}
 			}
@@ -4145,6 +4148,7 @@ int main(int, char**)
 				if (selectedGlobalBrush == globalBrushes.size())
 					selectedGlobalBrush = -1;
 				updateAllActiveIndices();
+				pcPlotRender = true;
 			}
 			ImGui::EndChild();
 
@@ -4186,7 +4190,17 @@ int main(int, char**)
 
 			ImGui::EndChild();
 			
-			gap = (picSize.x - ((drawHistogramm) ? histogrammWidth : 0)) / (amtOfLabels - 1); 
+			gap = (picSize.x - ((drawHistogramm) ? histogrammWidth / 2.0 * (double)picSize.x : 0)) / (amtOfLabels - 1);
+			//drawing axis lines
+			if (enableAxisLines) {
+				for (int i = 0; i < amtOfLabels; i++) {
+					float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+					ImVec2 a(x, picPos.y);
+					ImVec2 b(x, picPos.y + picSize.y);
+					ImGui::GetForegroundDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+				}
+			}
+
 			//drawing the global brush
 			//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
 			if (selectedGlobalBrush != -1) {
@@ -4195,7 +4209,7 @@ int main(int, char**)
 						continue;
 
 					ImVec2 mousePos = ImGui::GetIO().MousePos;
-					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? histogrammWidth / 2 : 0);
+					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
 					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -4264,7 +4278,7 @@ int main(int, char**)
 					if (!pcAttributeEnabled[brush.first])
 						continue;
 
-					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? histogrammWidth / 2 : 0);
+					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
 					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -4295,7 +4309,7 @@ int main(int, char**)
 				bool brushHover = false;
 				
 				ImVec2 mousePos = ImGui::GetIO().MousePos;
-				float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? histogrammWidth / 2 : 0);
+				float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 				//drawing the brushes as foreground objects
 				for (Brush& b : dl->brushes[i]) {
 					float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
@@ -4460,7 +4474,12 @@ int main(int, char**)
 			pcPlotRender = true;
 		}
 
+		if (ImGui::Checkbox("Enable Axis Lines", &enableAxisLines)) {
+		}
+
 		ImGui::Separator();
+
+		ImGui::Text("Data Settings:");
 
 		for (int i = 0; i < pcAttributes.size(); i++) {
 			if (ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i])) {
