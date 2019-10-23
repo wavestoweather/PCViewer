@@ -64,7 +64,7 @@ void SettingsManager::storeSettings(const char* filename)
 {
 	std::ofstream file(filename);
 	for (auto& s : settings) {
-		file << s.second.id << ' ' << s.second.type << ' ' << s.second.byteLength << ' ';
+		file << "\"" << s.second.id << "\"" << ' ' << "\"" << s.second.type << "\"" << ' ' << s.second.byteLength << ' ';
 		for (int i = 0; i < s.second.byteLength; i++) {
 			file << ((char*)s.second.data)[i];
 		}
@@ -88,8 +88,39 @@ void SettingsManager::loadSettings(const char* filename)
 		file >> s.id;
 		if (s.id.size() == 0)
 			break;
+		if (s.id[0] == '\"') {
+			if (!(s.id[s.id.size() - 1] == '\"')) {
+				s.id = s.id.substr(1);
+				std::string nextWord;
+				file >> nextWord;
+				while (nextWord[nextWord.size() - 1] != '\"') {
+					s.id += " " + nextWord;
+					file >> nextWord;
+				}
+				s.id += " " + nextWord.substr(0, nextWord.size() - 1);
+			}
+			else {
+				s.id = s.id.substr(1, s.id.size() - 2);
+			}
+		}
 		
 		file >> s.type;
+		if (s.type[0] == '\"') {
+			if (!(s.type[s.type.length() - 1] == '\"')) {
+				s.type = s.type.substr(1);
+				std::string nextWord;
+				file >> nextWord;
+				while (nextWord[nextWord.size() - 1] != '\"') {
+					s.type += " " + nextWord;
+					file >> nextWord;
+				}
+				s.type += " " + nextWord.substr(0, nextWord.size() - 1);
+			}
+			else {
+				s.type = s.type.substr(1, s.type.size() - 2);
+			}
+		}
+
 		file >> s.byteLength;
 		s.data = new char[s.byteLength];
 		file.seekg(1, file.cur);

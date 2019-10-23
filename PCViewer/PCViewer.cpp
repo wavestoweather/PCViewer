@@ -2963,7 +2963,9 @@ static void openDlf(const char* filename) {
 			//reading the data
 			else {
 				ds.oneData = true;
-				ds.name = filename;
+				std::string fname(filename);
+				int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
+				ds.name = fname.substr(offset + 1);
 
 				file >> tmp;
 
@@ -3554,6 +3556,15 @@ int main(int, char**)
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+	{//Set imgui style
+		ImGuiStyle& style = ImGui::GetStyle();
+		style.ChildRounding = 5;
+		style.FrameRounding = 3;
+		style.GrabRounding = 3;
+		style.WindowRounding = 0;
+		style.PopupRounding = 3;
+	}
+
 	// Main loop
 	while (!glfwWindowShouldClose(window))
 	{
@@ -4047,7 +4058,7 @@ int main(int, char**)
 
 								if (sub == subspace) {
 									TemplateBrush t = {};
-									t.name = tl.name;
+									t.name = ds.name + " | " + tl.name;
 									for (int i = 0; i < pcAttributes.size(); i++) {
 										if (brushTemplateAttrEnabled[i]) {
 											t.brushes[i] = tl.minMax[i];
@@ -4066,7 +4077,7 @@ int main(int, char**)
 			}
 
 			//drawing the list for brush templates
-			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true);
+			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
 			ImGui::Text("Brush Templates");
 			ImGui::Separator();
 			for (int i = 0; i < templateBrushes.size(); i++) {
@@ -4101,9 +4112,11 @@ int main(int, char**)
 			}
 			ImGui::EndChild();
 			ImGui::SameLine();
-			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true);
+			//Drawing the list of global brushes
+			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
 			ImGui::Text("Global Brushes");
 			ImGui::Separator();
+			//child for names and selection
 			bool popEnd = false;
 			for (int i = 0; i < globalBrushes.size(); i++) {
 				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
@@ -4142,6 +4155,8 @@ int main(int, char**)
 						pcPlotRender = true;
 					}
 				}
+				ImGui::SameLine();
+				ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active);
 			}
 			if (popEnd) {
 				globalBrushes.pop_back();
@@ -4154,7 +4169,7 @@ int main(int, char**)
 
 			//Statistics for global brushes
 			ImGui::SameLine();
-			ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true);
+			ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
 			ImGui::Text("Brush statistics: Percentage of lines kept after brushing");
 			ImGui::Separator();
 			//test for vertical Histogramm
@@ -4197,7 +4212,7 @@ int main(int, char**)
 					float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 					ImVec2 a(x, picPos.y);
 					ImVec2 b(x, picPos.y + picSize.y);
-					ImGui::GetForegroundDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+					ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
 				}
 			}
 
@@ -4219,7 +4234,7 @@ int main(int, char**)
 					//edgeHover = 2 -> Bot edge is hovered
 					int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
 					edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
-					ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+					ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
 					//set mouse cursor
 					if (edgeHover || brushDragId != -1) {
 						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
@@ -4282,7 +4297,7 @@ int main(int, char**)
 					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
 					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
-					ImGui::GetForegroundDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 150), 1, ImDrawCornerFlags_All, 5);
+					ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 150), 1, ImDrawCornerFlags_All, 5);
 				}
 			}
 		}
@@ -4315,7 +4330,7 @@ int main(int, char**)
 					float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
 					float height = (b.minMax.second - b.minMax.first) / (pcAttributes[i].max - pcAttributes[i].min) * picSize.y;
-					ImGui::GetForegroundDrawList()->AddRect(ImVec2(x,y), ImVec2(x + width, y + height), IM_COL32(200, 30, 0, 255), 1, ImDrawCornerFlags_All, 5);
+					ImGui::GetWindowDrawList()->AddRect(ImVec2(x,y), ImVec2(x + width, y + height), IM_COL32(200, 30, 0, 255), 1, ImDrawCornerFlags_All, 5);
 					
 					bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
 					//edgeHover = 0 -> No edge is hovered
@@ -4500,7 +4515,7 @@ int main(int, char**)
 
 		//DataSets, from which draw lists can be created
 		ImGui::SameLine();
-		ImGui::BeginChild("DataSets", ImVec2((io.DisplaySize.x - 500) / 2, -1), true);
+		ImGui::BeginChild("DataSets", ImVec2((io.DisplaySize.x - 500) / 2, -1), true, ImGuiWindowFlags_HorizontalScrollbar);
 
 		DataSet* destroySet = NULL;
 		bool destroy = false;
@@ -4579,6 +4594,8 @@ int main(int, char**)
 							}
 						}
 						globalBrushes.push_back(brush);
+						updateAllActiveIndices();
+						pcPlotRender = true;
 
 						ImGui::CloseCurrentPopup();
 					}
@@ -4628,17 +4645,31 @@ int main(int, char**)
 				}
 
 				//Popup for adding a custom index list
+				ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(20, 220, 0, 255));
 				if (ImGui::Button("ADDINDEXLIST")) {
 					ImGui::OpenPopup("ADDINDEXLIST");
 					addIndeces = true;
 				}
+				ImGui::PopStyleColor();
+				
 				if (ImGui::BeginPopupModal("ADDINDEXLIST", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 				{
 					ImGui::Text("Path for the new Indexlist (Alternativley drag and drop here):");
 					ImGui::InputText("Path", pcFilePath, 200);
 					ImGui::Separator();
+					if (ImGui::Button("Select all")) {
+						for (int i = 0; i < droppedPaths.size(); i++) {
+							createDLForDrop[i] = true;
+						}
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Deselect all")) {
+						for (int i = 0; i < droppedPaths.size(); i++) {
+							createDLForDrop[i] = false;
+						}
+					}
 
-					ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), false, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysAutoResize);
+					ImGui::BeginChild("ScrollingRegion", ImVec2(0, 400), false, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_HorizontalScrollbar);
 
 					if (droppedPaths.size() == 0) {
 						ImGui::Text("Drag and drop indexlists here to open them.");
@@ -4683,8 +4714,10 @@ int main(int, char**)
 				}
 
 				//Popup for delete menu
+				ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 255));
 				if (ImGui::Button("DELETE"))
 					ImGui::OpenPopup("DELETE");
+				ImGui::PopStyleColor();
 				if (ImGui::BeginPopupModal("DELETE", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 				{
 					ImGui::Text("Do you really want to delete this data set?");
@@ -4716,7 +4749,7 @@ int main(int, char**)
 		bool down = false;
 
 		ImGui::SameLine();
-		ImGui::BeginChild("DrawLists", ImVec2((io.DisplaySize.x - 500) / 2, -1), true);
+		ImGui::BeginChild("DrawLists", ImVec2((io.DisplaySize.x - 500) / 2, -1), true, ImGuiWindowFlags_HorizontalScrollbar);
 
 		ImGui::Text("Draw lists");
 		ImGui::Separator();
