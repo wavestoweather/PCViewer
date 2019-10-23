@@ -3222,7 +3222,7 @@ static void updateActiveIndices(DrawList& dl) {
 
 		//checking gloabl brushes
 		if (toggleGlobalBrushes) {
-			bool or = globalBrushes.size() == 0, and = true;
+			bool or = globalBrushes.size() == 0, and = true, anyActive = false;
 			for (GlobalBrush& b : globalBrushes) {
 				bool lineKeep = true;
 				for (auto& brush : b.brushes) {
@@ -3231,8 +3231,11 @@ static void updateActiveIndices(DrawList& dl) {
 					}
 				}
 					
-				or |= lineKeep;
-				and &= lineKeep;
+				if (b.active) {
+					or |= lineKeep;
+					and &= lineKeep;
+					anyActive = true;
+				}
 
 				if( lineKeep)
 					b.lineRatios[dl.name] += 1.0f;
@@ -3240,7 +3243,7 @@ static void updateActiveIndices(DrawList& dl) {
 			if (brushCombination == 1 && !and) {
 				goto nextInd;
 			}
-			if (brushCombination == 0 && !or ) {
+			if (brushCombination == 0 && !or && anyActive) {
 				goto nextInd;
 			}
 		}
@@ -3696,7 +3699,7 @@ int main(int, char**)
 				if (ImGui::BeginMenu("Load...")) {
 					for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
 						if (ImGui::MenuItem(s->id.c_str())) {
-							if (((int*)s->data)[0] != pcAttributes.size()) {
+							if (((int*)(s->data))[0] != pcAttributes.size()) {
 								openLoad = true;
 								continue;
 							}
@@ -3714,7 +3717,7 @@ int main(int, char**)
 								savedAttr.push_back(a);
 								if (pcAttributes[i].name != savedAttr[i].name) {
 									openLoad = true;
-									continue;
+									goto end;
 								}
 							}
 							int* o = (int*)d;
@@ -3725,6 +3728,8 @@ int main(int, char**)
 								pcAttributeEnabled[i] = act[i];
 							}
 							pcPlotRender = true;
+
+						end:;
 						}
 					}
 					ImGui::EndMenu();
@@ -4119,7 +4124,7 @@ int main(int, char**)
 			//child for names and selection
 			bool popEnd = false;
 			for (int i = 0; i < globalBrushes.size(); i++) {
-				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) {
+				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i,ImGuiSelectableFlags_None,ImVec2(350,0))) {
 					pcPlotSelectedDrawList = -1;
 					if (selectedGlobalBrush != i) {
 						selectedGlobalBrush = i;
@@ -4156,7 +4161,10 @@ int main(int, char**)
 					}
 				}
 				ImGui::SameLine();
-				ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active);
+				if (ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active)) {
+					updateAllActiveIndices();
+					pcPlotRender = true;
+				}
 			}
 			if (popEnd) {
 				globalBrushes.pop_back();
@@ -4749,7 +4757,7 @@ int main(int, char**)
 		bool down = false;
 
 		ImGui::SameLine();
-		ImGui::BeginChild("DrawLists", ImVec2((io.DisplaySize.x - 500) / 2, -1), true, ImGuiWindowFlags_HorizontalScrollbar);
+		ImGui::BeginChild("DrawLists", ImVec2(0/*(io.DisplaySize.x - 500) / 2*/, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
 
 		ImGui::Text("Draw lists");
 		ImGui::Separator();

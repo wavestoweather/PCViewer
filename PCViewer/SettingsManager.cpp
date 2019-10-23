@@ -122,10 +122,11 @@ void SettingsManager::loadSettings(const char* filename)
 		}
 
 		file >> s.byteLength;
+		std::string shadyshittishit;
 		s.data = new char[s.byteLength];
-		file.seekg(1, file.cur);
+		file.get();
 		file.read((char*)s.data,s.byteLength);
-		file.seekg(1, file.cur);
+		file.get();
 		if (s.id.size() != 0)
 			addSetting(s);
 		
