@@ -138,6 +138,17 @@ T squareDist(const std::vector<T>& a, const std::vector<T>& b) {
 }
 
 template <typename T>
+T squareDist(const std::vector<T>& a, const T* b) {
+	float result = 0;
+	float c;
+	for (int i = 0; i < a.size(); i++) {
+		c = a[i] - b[i];
+		result += std::powf(c, 2);
+	}
+	return result;
+}
+
+template <typename T>
 T eucDist(const std::vector<T>& a) {
 	float result = 0;
 	for (int i = 0; i < a.size(); i++) {
@@ -1721,8 +1732,78 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 			medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= tl.indices.size();
 		}
 		
-		//geometric median
+		//geometric median. Computed via teh technique proposed in The multivariateL1-median and associated data depth(http://www.pnas.org/content/97/4/1423.full.pdf)
 		const float epsilon = .001f, phi = .0000001f;
+		std::vector<float> y(pcAttributes.size());
+		for (int i = 0; i < y.size(); i++) {
+			y[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
+		}
+
+		while (true) {
+			std::vector<float> D;
+			std::vector<float> Dinv;
+			float Dinvs = 0;
+			std::vector<int> nonZeros;
+			std::vector<float> W;
+			for (int i = 0; i < ds.data.size(); i++) {
+				float d = std::sqrt(squareDist(y, ds.data[i]));
+				if (d != 0) {
+					D.push_back(d);
+					Dinv.push_back(1 / d);
+					Dinvs += 1 / d;
+					nonZeros.push_back(i);
+				}
+			}
+
+			for (float& f : Dinv) {
+				W.push_back(f / Dinvs);
+			}
+
+			int c = 0;
+			std::vector<float> T;
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				T.push_back(0);
+			}
+			for (int& i : nonZeros) {
+				for (int j = 0; j < pcAttributes.size(); j++) {
+					T[j] += W[c] * ds.data[i][j];
+				}
+				c++;
+			}
+
+			std::vector<float> y1;
+			int numZeros = ds.data.size() - nonZeros.size();
+			if (numZeros == 0)
+				y1 = T;
+			else if (numZeros == ds.data.size())
+				break;
+			else {
+				std::vector<float> R;
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					R.push_back((T[i] - y[i]) * Dinvs);
+				}
+				float r = eucDist(R);
+				float rinv = (r == 0) ? 0 : numZeros / r;
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					float fac1 = (0 > 1 - rinv) ? 0 : 1 - rinv;
+					float fac2 = (1 < rinv) ? 1 : rinv;
+					y1.push_back(fac1 * T[i] + fac2 * y[i]);
+				}
+			}
+
+			if (eucDist(y - y1) < epsilon) {
+				y = y1;
+				break;
+			}
+
+			y = y1;
+		}
+
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			medianArr[GOEMEDIAN * pcAttributes.size() + i] = y[i];
+		}
+
+		/*
 		std::vector<float> last(pcAttributes.size());
 		std::vector<float> median(pcAttributes.size());
 		std::vector<float> xj;
@@ -1751,13 +1832,14 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 		for (int i = 0; i < pcAttributes.size(); i++) {
 			medianArr[GOEMEDIAN * pcAttributes.size() + i] = median[i];
-		}
+		}*/
 	}
 	else {
 		for (int i = 0; i < MEDIANCOUNT * pcAttributes.size(); i++) {
 			medianArr[i] = 0;
 		}
 	}
+	
 	//copying the median Array
 	vkMapMemory(g_Device, dl.dlMem, dl.medianBufferOffset, MEDIANCOUNT* pcAttributes.size() * sizeof(float), 0, &d);
 	memcpy(d, medianArr, MEDIANCOUNT* pcAttributes.size() * sizeof(float));
