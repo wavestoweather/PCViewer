@@ -76,7 +76,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
 //enable this define to print the time needed to render the pc Plot
-#define PRINTRENDERTIME
+//#define PRINTRENDERTIME
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -1324,7 +1324,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 
 	//creating the index buffer
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(uint16_t) * Attributes.size();
+	bufferInfo.size = sizeof(uint16_t) * (Attributes.size() + 2);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -1733,13 +1733,17 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 		}
 		
 		//geometric median. Computed via teh technique proposed in The multivariateL1-median and associated data depth(http://www.pnas.org/content/97/4/1423.full.pdf)
-		const float epsilon = .001f, phi = .0000001f;
+		const float epsilon = .001f;
 		std::vector<float> y(pcAttributes.size());
 		for (int i = 0; i < y.size(); i++) {
 			y[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
 		}
 
+		int c = 0;
 		while (true) {
+			if (c > 1000)
+				break;
+
 			std::vector<float> D;
 			std::vector<float> Dinv;
 			float Dinvs = 0;
@@ -1791,6 +1795,10 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 				}
 			}
 
+#ifdef _DEBUG
+			float distance = eucDist(y - y1);
+			std::cout << distance << std::endl;
+#endif
 			if (eucDist(y - y1) < epsilon) {
 				y = y1;
 				break;
@@ -2198,9 +2206,13 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
 
 	//filling the indexbuffer with the used indeces
-	uint16_t* ind = new uint16_t[amtOfIndeces];			//contains all indeces to copy
+	uint16_t* ind = new uint16_t[amtOfIndeces + ((g_RenderSplines) ? 2 : 0)];			//contains all indeces to copy
 	for (int i = 0; i < order.size(); i++) {
-		ind[i] = order[i].first;
+		ind[i + ((g_RenderSplines) ? 1 : 0)] = order[i].first;
+	}
+	if (g_RenderSplines) {
+		ind[0] = order[0].first;
+		ind[order.size()] = order[order.size() - 1].first;
 	}
 
 #ifdef _DEBUG
@@ -2213,8 +2225,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	void* d;
 	//copying the indexbuffer
 	if (pcAttributes.size()) {
-		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, sizeof(uint16_t) * attributes.size(), 0, &d);
-		memcpy(d, ind, amtOfIndeces * sizeof(uint16_t));
+		int copyAmount = sizeof(uint16_t) * (attributes.size() + ((g_RenderSplines) ? 2 : 0));
+		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, copyAmount, 0, &d);
+		memcpy(d, ind, copyAmount);
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 	}
 
@@ -2280,13 +2293,14 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		if (drawList->activeMedian != 0) {
 			vkCmdSetLineWidth(g_PcPlotCommandBuffer, medianLineWidth);
 			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->medianBuffer, offsets);
+			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
 			if (g_RenderSplines)
 				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 			else
 				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 
-			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces, 1, 0, (drawList->activeMedian-1)* pcAttributes.size(), 0);
+			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces + ((g_RenderSplines) ? 2 : 0), 1, 0, (drawList->activeMedian-1)* pcAttributes.size(), 0);
 
 #ifdef PRINTRENDERTIME
 			amtOfLines++;
