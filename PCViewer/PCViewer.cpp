@@ -107,6 +107,13 @@ std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b) {
 }
 
 template <typename T>
+std::vector<T> operator+(const std::vector<T>& a, const T * b) {
+	std::vector<T> result;
+	std::transform(a.begin(), a.end(), b, std::back_inserter(result), std::plus<T>());
+	return result;
+}
+
+template <typename T>
 std::vector<T> operator-(const std::vector<T>& a, const std::vector<T>& b) {
 	assert(a.size() == b.size());
 
@@ -138,7 +145,7 @@ T squareDist(const std::vector<T>& a, const std::vector<T>& b) {
 }
 
 template <typename T>
-T squareDist(const std::vector<T>& a, const T* b) {
+T squareDist(const std::vector<T>& a, const float* b) {
 	float result = 0;
 	float c;
 	for (int i = 0; i < a.size(); i++) {
@@ -155,6 +162,14 @@ T eucDist(const std::vector<T>& a) {
 		result += std::powf(a[i], 2);
 	}
 	return std::sqrt(result);
+}
+
+std::vector<double> divide (float* arr, float num, int size) {
+	std::vector<double> result;
+	for (int i = 0; i < size; i++) {
+		result.push_back(arr[i] / num);
+	}
+	return result;
 }
 
 struct Vec4 {
@@ -1733,114 +1748,35 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 		}
 		
 		//geometric median. Computed via teh technique proposed in The multivariateL1-median and associated data depth(http://www.pnas.org/content/97/4/1423.full.pdf)
-		const float epsilon = .001f;
-		std::vector<float> y(pcAttributes.size());
-		for (int i = 0; i < y.size(); i++) {
-			y[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
-		}
-
-		int c = 0;
-		while (true) {
-			if (c > 1000)
-				break;
-
-			std::vector<float> D;
-			std::vector<float> Dinv;
-			float Dinvs = 0;
-			std::vector<int> nonZeros;
-			std::vector<float> W;
-			for (int i = 0; i < ds.data.size(); i++) {
-				float d = std::sqrt(squareDist(y, ds.data[i]));
-				if (d != 0) {
-					D.push_back(d);
-					Dinv.push_back(1 / d);
-					Dinvs += 1 / d;
-					nonZeros.push_back(i);
-				}
-			}
-
-			for (float& f : Dinv) {
-				W.push_back(f / Dinvs);
-			}
-
-			int c = 0;
-			std::vector<float> T;
-			for (int i = 0; i < pcAttributes.size(); i++) {
-				T.push_back(0);
-			}
-			for (int& i : nonZeros) {
-				for (int j = 0; j < pcAttributes.size(); j++) {
-					T[j] += W[c] * ds.data[i][j];
-				}
-				c++;
-			}
-
-			std::vector<float> y1;
-			int numZeros = ds.data.size() - nonZeros.size();
-			if (numZeros == 0)
-				y1 = T;
-			else if (numZeros == ds.data.size())
-				break;
-			else {
-				std::vector<float> R;
-				for (int i = 0; i < pcAttributes.size(); i++) {
-					R.push_back((T[i] - y[i]) * Dinvs);
-				}
-				float r = eucDist(R);
-				float rinv = (r == 0) ? 0 : numZeros / r;
-				for (int i = 0; i < pcAttributes.size(); i++) {
-					float fac1 = (0 > 1 - rinv) ? 0 : 1 - rinv;
-					float fac2 = (1 < rinv) ? 1 : rinv;
-					y1.push_back(fac1 * T[i] + fac2 * y[i]);
-				}
-			}
-
-#ifdef _DEBUG
-			float distance = eucDist(y - y1);
-			std::cout << distance << std::endl;
-#endif
-			if (eucDist(y - y1) < epsilon) {
-				y = y1;
-				break;
-			}
-
-			y = y1;
-		}
-
-		for (int i = 0; i < pcAttributes.size(); i++) {
-			medianArr[GOEMEDIAN * pcAttributes.size() + i] = y[i];
-		}
-
-		/*
-		std::vector<float> last(pcAttributes.size());
-		std::vector<float> median(pcAttributes.size());
-		std::vector<float> xj;
-		float denom,denomsum;
+		const float epsilon = .01f;
+		
+		std::vector<double> last(pcAttributes.size());
+		std::vector<double> median(pcAttributes.size());
 		for (int i = 0; i < median.size(); i++) {
 			last[i] = 0;
 			median[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
 		}
 
 		while (squareDist(last, median) > epsilon) {
-			last = std::vector<float>(median);
+			std::vector<double> numerator(median.size());
+			double denominator = 0;
 			for (int i = 0; i < median.size(); i++) {
-				median[i] = 0;
+				numerator[i] = 0;
 			}
-			denomsum = 0;
 			for (int i = 0; i < tl.indices.size(); i++) {
-				xj = std::vector<float>(ds.data[i], ds.data[i] + pcAttributes.size());
-				denom = eucDist(xj - last);
-				if (denom < phi)
+				double dist = std::sqrt(squareDist(median, ds.data[i]));
+				if (dist == 0)
 					continue;
-				median = median + (xj / denom);
-				denomsum += 1/denom;
+				numerator = numerator + divide(ds.data[i], dist, median.size());
+				denominator += 1 / dist;
 			}
-			median = median / denomsum;
+			last = median;
+			median = numerator / denominator;
 		}
 
 		for (int i = 0; i < pcAttributes.size(); i++) {
 			medianArr[GOEMEDIAN * pcAttributes.size() + i] = median[i];
-		}*/
+		}
 	}
 	else {
 		for (int i = 0; i < MEDIANCOUNT * pcAttributes.size(); i++) {
