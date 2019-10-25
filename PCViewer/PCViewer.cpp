@@ -4193,7 +4193,7 @@ int main(int, char**)
 					}
 				}
 				ImGui::SameLine();
-				if (ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active)) {
+				if (i < globalBrushes.size() && ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active)) {
 					updateAllActiveIndices();
 					pcPlotRender = true;
 				}
@@ -4825,6 +4825,10 @@ int main(int, char**)
 		ImGui::NextColumn();
 		ImGui::Text("MColor");
 		ImGui::NextColumn();
+		bool compareDrawLists = false;
+		static int aPlusB = 0;
+		static int aMinusB = 0;
+		static int bMinusA = 0;
 		for (DrawList& dl : g_PcPlotDrawLists) {
 			if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
 				if (count == pcPlotSelectedDrawList)
@@ -4833,9 +4837,31 @@ int main(int, char**)
 					pcPlotSelectedDrawList = count;
 			}
 			if (ImGui::IsItemHovered() && io.MouseClicked[1]) {
-				ImGui::OpenPopup(("sendTo3d"+dl.name).c_str());
+				ImGui::OpenPopup(("drawListMenu" + dl.name).c_str());
 			}
-			if (ImGui::BeginPopup(("sendTo3d" + dl.name).c_str())) {
+			if (ImGui::BeginPopup(("drawListMenu" + dl.name).c_str())) {
+				if (ImGui::BeginCombo("##combo", "Compare to")) // The second parameter is the label previewed before opening the combo.
+				{
+					auto draw = g_PcPlotDrawLists.begin();
+					for (int n = 0; n< g_PcPlotDrawLists.size();n++)
+					{ 
+						if (draw->name == dl.name) {
+							++draw;
+							continue;
+						}
+
+						if (ImGui::Selectable(draw->name.c_str(), false)) {
+							std::set<int> aAndB(dl.activeInd.begin(),dl.activeInd.end());
+							std::set<int> b(draw->activeInd.begin(), draw->activeInd.end());
+							aAndB.insert(b.begin(), b.end());
+
+							aPlusB = aAndB.size();
+						}
+						++draw;
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::Separator();
 				for (int i = 0; i < pcAttributes.size();i++) {
 					if (!pcAttributeEnabled[i])
 						continue;
