@@ -544,6 +544,8 @@ static bool enableBrushing = false;
 //variables for brush templates
 static bool brushTemplatesEnabled = true;
 static bool* brushTemplateAttrEnabled = NULL;
+static bool showCsvTemplates = false;
+static bool updateBrushTemplates = false;
 static int selectedTemplateBrush = -1;
 static std::vector<TemplateBrush> templateBrushes;
 
@@ -3730,7 +3732,7 @@ int main(int, char**)
 		ImGui::Begin("Plot", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
 
 		//Menu for saving settings
-		bool openSave = false, openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
+		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(83), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("Attribute")) {
@@ -4088,7 +4090,8 @@ int main(int, char**)
 						}
 					}
 					for (const DataSet& ds : g_PcPlotDataSets) {
-						if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
+						if (ds.oneData || updateBrushTemplates) {			//oneData indicates a .dlf data -> template brushes are available
+							updateBrushTemplates = false;
 							for (const TemplateList& tl : ds.drawLists) {
 								//checking if the template list is in the correct subspace and if so adding it to the template Brushes
 								std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']') - tl.name.find_first_of('[') - 1);
@@ -4114,12 +4117,45 @@ int main(int, char**)
 								}
 							}
 						}
+						else if (showCsvTemplates) {
+							auto tl = ++ds.drawLists.begin();
+							for (; tl != ds.drawLists.end(); ++tl) {
+								TemplateBrush t = {};
+								t.name = ds.name + " | " + tl->name;
+								for (int i = 0; i < pcAttributes.size(); i++) {
+									if (brushTemplateAttrEnabled[i]) {
+										t.brushes[i] = tl->minMax[i];
+									}
+								}
+								templateBrushes.push_back(t);
+							}
+						}
 					}
 				}
 
 				c++;
 				c1++;
 				offset += gap;
+			}
+			if (ImGui::Checkbox("Show Csv brushes", &showCsvTemplates)) {
+				if (showCsvTemplates) {
+					for (DataSet& ds : g_PcPlotDataSets) {
+						auto tl = ++ds.drawLists.begin();
+						for (; tl != ds.drawLists.end(); ++tl) {
+							TemplateBrush t = {};
+							t.name = ds.name + " | " + tl->name;
+							for (int i = 0; i < pcAttributes.size(); i++) {
+								if (brushTemplateAttrEnabled[i]) {
+									t.brushes[i] = tl->minMax[i];
+								}
+							}
+							templateBrushes.push_back(t);
+						}
+					}
+				}
+				else {
+					updateBrushTemplates = true;
+				}
 			}
 
 			//drawing the list for brush templates
@@ -4164,6 +4200,7 @@ int main(int, char**)
 			ImGui::Separator();
 			//child for names and selection
 			bool popEnd = false;
+			static int openConvertToLokal = -1;
 			for (int i = 0; i < globalBrushes.size(); i++) {
 				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i,ImGuiSelectableFlags_None,ImVec2(350,0))) {
 					pcPlotSelectedDrawList = -1;
@@ -4179,28 +4216,41 @@ int main(int, char**)
 					}
 				}
 				if (ImGui::IsItemClicked(1)) {
-					selectedTemplateBrush = -1;
-					if (selectedGlobalBrush == i) {
-						selectedGlobalBrush = -1;
+					ImGui::OpenPopup("GlobalBrushPopup");
+				}
+				if (ImGui::BeginPopup("GlobalBrushPopup", ImGuiWindowFlags_AlwaysAutoResize)) {
+					if (ImGui::MenuItem("Convert to lokal brush")) {
+						openConvertToLokal = i;
+						ImGui::CloseCurrentPopup();
 					}
-					if (popEnd) {
-						if (globalBrushes.size() == 2) {
-							globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
-							globalBrushes.pop_back();
+					if (ImGui::MenuItem("Delete")) {
+						selectedTemplateBrush = -1;
+						if (selectedGlobalBrush == i) {
+							selectedGlobalBrush = -1;
+						}
+						if (popEnd) {
+							if (globalBrushes.size() == 2) {
+								globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+								globalBrushes.pop_back();
+							}
+							else {
+								globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
+								globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
+								globalBrushes.pop_back();
+							}
 						}
 						else {
-							globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
-							globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
+							globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
 							globalBrushes.pop_back();
+							updateAllActiveIndices();
+							pcPlotRender = true;
 						}
+						ImGui::CloseCurrentPopup();
 					}
-					else {
-						globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
-						globalBrushes.pop_back();
-						updateAllActiveIndices();
-						pcPlotRender = true;
-					}
+
+					ImGui::EndPopup();
 				}
+
 				ImGui::SameLine();
 				if (i < globalBrushes.size() && ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active)) {
 					updateAllActiveIndices();
@@ -4214,6 +4264,46 @@ int main(int, char**)
 				updateAllActiveIndices();
 				pcPlotRender = true;
 			}
+			if (openConvertToLokal) {
+				ImGui::OpenPopup("Global to lokal brush");
+			}
+			if (ImGui::BeginPopupModal("Global to lokal brush", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+				static char name[200] = {};
+				ImGui::InputText("Name for the new DrawList", name, 200);
+				ImGui::Text("Choose the Dataset with which a lokaly brushed drawlist will be created");
+				ImGui::BeginChild("Datasets",ImVec2(300,150));
+				static int selected = -1;
+				int c = 0;
+				for (DataSet& ds : g_PcPlotDataSets) {
+					if (ImGui::Selectable(ds.name.c_str(), c == selected)) {
+						if (c == selected)
+							selected = -1;
+						else
+							selected = c;
+					}
+				}
+				ImGui::EndChild();
+
+				if (ImGui::Button("Cancel")) {
+					selected = -1;
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Create")) {
+					if (selected != -1) {
+						auto ds = g_PcPlotDataSets.begin();
+						for (int i = 0; i < selected; i++) {
+							++ds;
+						}
+						createPcPlotDrawList(ds->drawLists.front(), *ds, name);
+						selected = -1;
+						ImGui::CloseCurrentPopup();
+					}
+				}
+
+				ImGui::EndPopup();
+			}
+
 			ImGui::EndChild();
 
 			//Statistics for global brushes

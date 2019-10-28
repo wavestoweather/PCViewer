@@ -26,6 +26,7 @@ public:
 	~View3d();
 
 	void resize(uint32_t width, uint32_t height);
+	void resizeBox(float width, float height, float depth);
 	void update3dImage(uint32_t width, uint32_t height, uint32_t depth, float* data);
 	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void render();
@@ -52,6 +53,11 @@ private:
 	uint32_t image3dHeight;
 	uint32_t image3dWidth;
 	uint32_t image3dDepth;
+
+	//information about the rendered 3dBox
+	float boxHeight = 1;
+	float boxWidth = 1;
+	float boxDepth = 1;
 
 	//Vulkan member variables
 	VkPhysicalDevice	physicalDevice;

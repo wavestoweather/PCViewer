@@ -63,7 +63,7 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 		d[4 * i + 3] = .1f;
 	}*/
 	update3dImage(w, h, de, (float*)d);
-	
+	resizeBox(1.5f, 1, 1.5f);
 }
 
 View3d::~View3d()
@@ -161,6 +161,14 @@ void View3d::resize(uint32_t width, uint32_t height)
 	updateCommandBuffer();
 }
 
+void View3d::resizeBox(float width, float height, float depth)
+{
+	boxWidth = width;
+	boxHeight = height;
+	boxDepth = depth;
+	render();
+}
+
 void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, float* data)
 {
 	VkResult err;
@@ -181,7 +189,7 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 			vkDestroyImageView(device, image3dView, nullptr);
 		}
 		if (!image3dSampler) {
-			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_FILTER_NEAREST,16,1,&image3dSampler);
+			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_LINEAR,16,1,&image3dSampler);
 		}
 
 		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d);
@@ -207,25 +215,10 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 		VkUtil::updateImageDescriptorSet(device, image3dSampler, image3dView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, descriptorSet);
 	}
 	//converting the data to a short array
-	bool notNull = false;
 	uint16_t* dat = new uint16_t[width * height * depth * 4];
 	for (int i = 0; i < width * height * depth * 4; i++) {
 		dat[i] = data[i] * std::numeric_limits<uint16_t>::max();
-		if (data[i] > 0)
-			notNull = true;
 	}
-	std::cout << "Not null: " << notNull << std::endl;
-
-	//for (int h = 0; h < height; h++) {
-	//	for (int d = 0; d < depth; d++) {
-	//		for (int w = 0; w < width; w++) {
-	//			for (int i = 0; i < 4; i++) {//copying the pixels
-	//				dat[4*IDX3D(w, h, d, width, height)+i] = data[4*IDX3D(w, h, d, width, height)+i] * std::numeric_limits<uint16_t>::max();
-	//			}
-	//		}
-	//	}
-	//}
-
 	//uploading the data with a staging buffer
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
@@ -306,7 +299,7 @@ void View3d::render()
 	ubo.mvp[1][1] *= -1;
 	glm::mat4 look = glm::lookAt(camPos, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
-	glm::mat4 scale = glm::mat4(1.0f);//glm::scale(glm::mat4(1.0f),glm::vec3(image3dWidth/max,image3dHeight/max,image3dDepth/max));
+	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
 	ubo.mvp = ubo.mvp * look *scale;
 	ubo.camPos = glm::inverse(scale) * glm::vec4(camPos,1);
 
