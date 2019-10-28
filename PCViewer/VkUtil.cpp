@@ -609,7 +609,7 @@ void VkUtil::copyBufferTo3dImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
 	region.imageExtent = {
 		width,
 		height,
-		height
+		depth
 	};
 
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);

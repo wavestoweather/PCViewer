@@ -46,6 +46,24 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	createPipeline();
 	createDescriptorSets();
 	resize(width, height);
+
+	
+	const int w = 100, h = 5, de = 1;
+	glm::vec4 d[w * h * de] = {};
+	d[0] = glm::vec4(1, 0, 0, 1);
+	d[1] = glm::vec4(1, 0, 0, 1);
+	d[2] = glm::vec4(1, 0, 0, 1);
+	d[3] = glm::vec4(1, 0, 0, 1);
+	d[8] = glm::vec4(0, 1, 0, .5f);
+	d[26] = glm::vec4(0, 0, 1, .1f);
+	/*for (int i = 1; i < 27; i+=3) {
+		d[4 * i] = i / 27.0f;
+		d[4 * i + 1] = 1 - (i / 27.0f);
+		d[4 * i + 2] = 0;
+		d[4 * i + 3] = .1f;
+	}*/
+	update3dImage(w, h, de, (float*)d);
+	
 }
 
 View3d::~View3d()
@@ -139,24 +157,6 @@ void View3d::resize(uint32_t width, uint32_t height)
 
 	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
 	check_vk_result(err);
-
-	if (!image3d) {
-		glm::vec4 d[36] = {};
-		d[0] = glm::vec4(1, 0, 0, 1);
-		d[1] = glm::vec4(1, 0, 0, 1);
-		d[2] = glm::vec4(1, 0, 0, 1);
-		d[3] = glm::vec4(1, 0, 0, 1);
-		d[8] = glm::vec4(0, 1, 0, .5f);
-		d[26] = glm::vec4(0, 0, 1, .1f);
-		/*for (int i = 1; i < 27; i+=3) {
-			d[4 * i] = i / 27.0f;
-			d[4 * i + 1] = 1 - (i / 27.0f);
-			d[4 * i + 2] = 0;
-			d[4 * i + 3] = .1f;
-		}*/
-		update3dImage( 3, 3, 4, (float*)d);
-		return;
-	}
 
 	updateCommandBuffer();
 }

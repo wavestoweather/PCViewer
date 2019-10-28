@@ -13,7 +13,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #endif
 
 //uncomment this to build the pcViewer with 3d view
-//#define RENDER3D
+#define RENDER3D
 //uncomment this to build hte pcViewer with the node viewer
 //#define NODEVIEW
 
@@ -224,6 +224,17 @@ struct DensityUniformBuffer {
 	float gaussRange;
 	uint32_t imageHeight;
 	uint32_t padding;
+};
+
+struct DrawListComparator {
+	std::string parentDataset;
+	std::string a;
+	std::string b;
+	std::vector<int>aInd;
+	std::vector<int>bInd;
+	std::vector<int>aOrB;
+	std::vector<int>aMinusB;
+	std::vector<int>bMinusA;
 };
 
 struct Brush {
@@ -3338,7 +3349,7 @@ static void uploadDensityUiformBuffer() {
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 }
 
-static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::string width, std::string height, std::string depth) {
+static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::string width, std::string depth, std::string height) {
 	int w = SpacialData::rlatSize;
 	int d = SpacialData::rlonSize;
 	int h = SpacialData::altitudeSize;
@@ -3362,10 +3373,10 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 	}
 	float* dat = new float[w * d * h * 4];
 	memset(dat, 0, w * d * h * 4 * sizeof(float));
-	for (int i : dl.indices) {
-		int x = SpacialData::getRlatIndex(parent->data[i][0]);//(parent->data[i][0] - pcAttributes[0].min) / (pcAttributes[0].max +1 - pcAttributes[0].min) * w;
-		int y = SpacialData::getAltitudeIndex(parent->data[i][2]);//(parent->data[i][2] - pcAttributes[2].min) / (pcAttributes[2].max +1- pcAttributes[2].min) * h;
-		int z = SpacialData::getRlonIndex(parent->data[i][1]);//(parent->data[i][1] - pcAttributes[1].min) / (pcAttributes[1].max +1- pcAttributes[1].min) * d;
+	for (int i : dl.activeInd) {
+		int x = SpacialData::getRlatIndex(parent->data[i][0]);
+		int y = SpacialData::getAltitudeIndex(parent->data[i][2]);
+		int z = SpacialData::getRlonIndex(parent->data[i][1]);
 		assert(x >= 0);
 		assert(y >= 0);
 		assert(z >= 0);
@@ -3376,10 +3387,6 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 #endif
 		
 		memcpy(&dat[4 * IDX3D(x, y, z, w, h)], &col.x, sizeof(Vec4));
-	}
-
-	for (int i = 0; i < 100; i++) {
-		((Vec4*)dat)[IDX3D(i, 100, 100, w, h)] = { 1,0,0,1 };
 	}
 
 	view3d->update3dImage(w, h, d, dat);
@@ -3675,7 +3682,7 @@ int main(int, char**)
 
 #ifdef RENDER3D
 		//testwindow for the 3d renderer
-		if (ImGui::Begin("3dview", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+		if (ImGui::Begin("3dview", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav)) {
 			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 			
 			if ((ImGui::IsMouseDragging()|| io.MouseWheel)&&ImGui::IsItemHovered()) {
@@ -3691,6 +3698,8 @@ int main(int, char**)
 			}
 		}
 		ImGui::End();
+		if(ImGui::GetIO().KeyAlt)
+			ImGui::SetWindowFocus("3dview");
 #endif
 
 #ifdef NODEVIEW
@@ -4826,9 +4835,7 @@ int main(int, char**)
 		ImGui::Text("MColor");
 		ImGui::NextColumn();
 		bool compareDrawLists = false;
-		static int aPlusB = 0;
-		static int aMinusB = 0;
-		static int bMinusA = 0;
+		static DrawListComparator drawListComparator;
 		for (DrawList& dl : g_PcPlotDrawLists) {
 			if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
 				if (count == pcPlotSelectedDrawList)
@@ -4845,17 +4852,30 @@ int main(int, char**)
 					auto draw = g_PcPlotDrawLists.begin();
 					for (int n = 0; n< g_PcPlotDrawLists.size();n++)
 					{ 
-						if (draw->name == dl.name) {
+						if (draw->name == dl.name || draw->parentDataSet!=dl.parentDataSet) {
 							++draw;
 							continue;
 						}
 
 						if (ImGui::Selectable(draw->name.c_str(), false)) {
-							std::set<int> aAndB(dl.activeInd.begin(),dl.activeInd.end());
+							std::set<int> a(dl.activeInd.begin(),dl.activeInd.end());
 							std::set<int> b(draw->activeInd.begin(), draw->activeInd.end());
-							aAndB.insert(b.begin(), b.end());
+							std::vector<int> aOrB;
+							std::set_union(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aOrB));
+							std::vector<int> aMinusB;
+							std::set_difference(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aMinusB));
+							std::vector<int> bMinusA;
+							std::set_difference(b.begin(), b.end(), a.begin(), a.end(), std::back_inserter(bMinusA));
 
-							aPlusB = aAndB.size();
+							drawListComparator.parentDataset = dl.parentDataSet;
+							drawListComparator.a = dl.name;
+							drawListComparator.b = draw->name;
+							drawListComparator.aInd = dl.activeInd;
+							drawListComparator.bInd = draw->activeInd;
+							drawListComparator.aOrB = aOrB;
+							drawListComparator.aMinusB = aMinusB;
+							drawListComparator.bMinusA = bMinusA;
+							compareDrawLists = true;
 						}
 						++draw;
 					}
@@ -4930,10 +4950,35 @@ int main(int, char**)
 
 			count++;
 		}
+		//open compare popup
+		if (compareDrawLists)
+			ImGui::OpenPopup("Compare Drawlists");
+		if (ImGui::BeginPopupModal("Compare Drawlists",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::BeginChild("A", ImVec2(400,200));
+			ImGui::Text("Statistics for %s", drawListComparator.a.c_str());
+			ImGui::Text("Contains %8d points.", drawListComparator.aInd.size());
+			ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
+			ImGui::Text("Difference has %8d points", drawListComparator.aMinusB.size());
+			ImGui::EndChild();
+			ImGui::SameLine();
+
+			ImGui::BeginChild("B", ImVec2(400, 200));
+			ImGui::Text("Statistics for %s", drawListComparator.b.c_str());
+			ImGui::Text("Contains %8d points.", drawListComparator.bInd.size());
+			ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
+			ImGui::Text("Difference has %8d points", drawListComparator.bMinusA.size());
+			ImGui::EndChild();
+
+			if (ImGui::Button("Close")) {
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+
 		ImGui::EndChild();
 		ImGui::End();
-		//main window now closed
-
+		//main window now closed -----------------------------------------------------------------------
 		if (destroy) {
 			removePcPlotDrawList(*changeList);
 		}

@@ -26,7 +26,7 @@ void main() {
 	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1)*d;
 
 	float alphaStop = .98f;
-	float stepsize = .0001f;
+	float stepsize = .001f;
 	
 	//outColor is calculated with gamma correction
 	outColor = vec4(0,0,0,0);
