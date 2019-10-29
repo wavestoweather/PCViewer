@@ -4264,7 +4264,7 @@ int main(int, char**)
 				updateAllActiveIndices();
 				pcPlotRender = true;
 			}
-			if (openConvertToLokal) {
+			if (openConvertToLokal != -1 && !ImGui::IsPopupOpen("Global to lokal brush")) {
 				ImGui::OpenPopup("Global to lokal brush");
 			}
 			if (ImGui::BeginPopupModal("Global to lokal brush", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -4280,12 +4280,13 @@ int main(int, char**)
 							selected = -1;
 						else
 							selected = c;
+						c++;
 					}
 				}
 				ImGui::EndChild();
 
 				if (ImGui::Button("Cancel")) {
-					selected = -1;
+					openConvertToLokal = -1;
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::SameLine();
@@ -4296,7 +4297,7 @@ int main(int, char**)
 							++ds;
 						}
 						createPcPlotDrawList(ds->drawLists.front(), *ds, name);
-						selected = -1;
+						openConvertToLokal = -1;
 						ImGui::CloseCurrentPopup();
 					}
 				}
