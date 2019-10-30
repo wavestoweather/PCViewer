@@ -192,7 +192,7 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 			vkDestroyImageView(device, image3dView, nullptr);
 		}
 		if (!image3dSampler) {
-			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_LINEAR,16,1,&image3dSampler);
+			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_NEAREST,16,1,&image3dSampler);
 		}
 
 		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d);

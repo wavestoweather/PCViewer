@@ -28,7 +28,7 @@ void main() {
 	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1)*d;
 
 	const float alphaStop = .98f;
-	const float stepsize = .005f;
+	const float stepsize = .001f;
 	const int lightSteps = 10;
 	const float lightStepIncrease = 0;//.5f / lightSteps;
 	const float beerFactor = 10.0f;
@@ -38,7 +38,9 @@ void main() {
 	d = endPos-startPoint;
 	float len = length(d);
 	int iterations = int(len/stepsize);
+
 	startPoint += .5f;
+
 	vec3 step = normalize(d) * stepsize;
 	vec3 lightStep = normalize(-ubo.lightDir) * (.5f/lightSteps);
 	vec3 lightPos = startPoint + lightStep;
@@ -62,7 +64,7 @@ void main() {
 			lightDens = clamp(exp(-beerFactor * lightDens),.1f,1.0f);
 		}
 
-		tex.a *= .5f;
+		tex.a *= stepsize * 100;
 		tex.rgb *= tex.a;// * lightDens;
 		outColor = (1.0f - outColor.a)*tex + outColor;
 

@@ -3354,7 +3354,7 @@ static void uploadDensityUiformBuffer() {
 static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::string width, std::string depth, std::string height) {
 	int w = SpacialData::rlatSize;
 	int d = SpacialData::rlonSize;
-	int h = SpacialData::altitudeSize;
+	int h = SpacialData::altitudeSize + 22;	//the top 22 layer of the dataset are twice the size of the rest
 
 	DataSet* parent;
 	for (DataSet& ds : g_PcPlotDataSets) {
@@ -3378,6 +3378,8 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 	for (int i : dl.activeInd) {
 		int x = SpacialData::getRlatIndex(parent->data[i][0]);
 		int y = SpacialData::getAltitudeIndex(parent->data[i][2]);
+		if (y > h - 44)
+			y = (y - h + 44) * 2 + (h - 44);
 		int z = SpacialData::getRlonIndex(parent->data[i][1]);
 		assert(x >= 0);
 		assert(y >= 0);
@@ -3389,6 +3391,8 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 #endif
 		
 		memcpy(&dat[4 * IDX3D(x, y, z, w, h)], &col.x, sizeof(Vec4));
+		if (y >= h - 44)
+			memcpy(&dat[4 * IDX3D(x, y+1, z, w, h)], &col.x, sizeof(Vec4));
 	}
 
 	view3d->update3dImage(w, h, d, dat);
