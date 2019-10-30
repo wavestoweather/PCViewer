@@ -4,6 +4,7 @@
 layout(binding = 0) uniform UniformBufferObject{
 	vec3 camPos;
 	vec3 cubeSides;
+	vec3 lightPos;
 	mat4 mvp;
 } ubo;
 

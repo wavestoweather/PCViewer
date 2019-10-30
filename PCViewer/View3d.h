@@ -38,6 +38,7 @@ private:
 	struct UniformBuffer {
 		glm::vec3 camPos;	//cameraPosition in model space
 		alignas(16) glm::vec3 faces;//face positions for intersection tests
+		alignas(16) glm::vec3 lightDir;
 		alignas(16) glm::mat4 mvp;	//modelViewProjection Matrix
 	};
 	
@@ -90,6 +91,7 @@ private:
 
 	//camera variables
 	glm::vec3 camPos;		//camera position
+	glm::vec3 lightDir;
 
 	//methods to instatiate vulkan resources
 	void createPrepareImageCommandBuffer();

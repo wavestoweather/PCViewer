@@ -39,6 +39,7 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 
 
 	camPos = glm::vec3(2, 2, 2);
+	lightDir = glm::vec3(-1, -1, -1);
 
 	//setting up graphic resources
 	
@@ -158,7 +159,9 @@ void View3d::resize(uint32_t width, uint32_t height)
 	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
 	check_vk_result(err);
 
-	updateCommandBuffer();
+	if (image3dSampler) {
+		updateCommandBuffer();
+	}
 }
 
 void View3d::resizeBox(float width, float height, float depth)
@@ -306,6 +309,8 @@ void View3d::render()
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
 	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;
 	ubo.faces.z = float(ubo.camPos.z > 0) - .5f;
+
+	ubo.lightDir = lightDir;
 	void* d;
 	vkMapMemory(device, constantMemory, uniformBufferOffset, sizeof(UniformBuffer), 0, &d);
 	memcpy(d, &ubo, sizeof(UniformBuffer));

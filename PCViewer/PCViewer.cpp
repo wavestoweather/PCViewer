@@ -3383,7 +3383,7 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 		assert(y >= 0);
 		assert(z >= 0);
 		Vec4 col = dl.color;
-		//col.w = (parent->data[i][attributeIndex] - a.min) / (a.max - a.min);
+		col.w = (parent->data[i][attributeIndex] - a.min) / (a.max - a.min);
 #ifdef _DEBUG
 		//std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
 #endif
@@ -4889,14 +4889,14 @@ int main(int, char**)
 		bool down = false;
 
 		ImGui::SameLine();
-		ImGui::BeginChild("DrawLists", ImVec2(0/*(io.DisplaySize.x - 500) / 2*/, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
+		ImGui::BeginChild("DrawLists", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
 
 		ImGui::Text("Draw lists");
 		ImGui::Separator();
 		int count = 0;
 
 		ImGui::Columns(9, "Columns", false);
-		ImGui::SetColumnWidth(0, 250);
+		ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth()-275);
 		ImGui::SetColumnWidth(1, 25);
 		ImGui::SetColumnWidth(2, 25);
 		ImGui::SetColumnWidth(3, 25);
