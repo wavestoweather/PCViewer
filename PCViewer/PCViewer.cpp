@@ -3262,8 +3262,6 @@ static void updateActiveIndices(DrawList& dl) {
 			if (!good)
 				keep = false;
 		}
-		if (!keep)
-			goto nextInd;
 
 		//checking gloabl brushes
 		if (toggleGlobalBrushes) {
@@ -3293,7 +3291,8 @@ static void updateActiveIndices(DrawList& dl) {
 			}
 		}
 
-		dl.activeInd.push_back(i);
+		if (keep)
+			dl.activeInd.push_back(i);
 
 		nextInd:;
 	}
@@ -4079,7 +4078,8 @@ int main(int, char**)
 				name = pcAttributes[i].name + name;
 				if (c1 != 0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i])) {
+				if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i]) || updateBrushTemplates) {
+					updateBrushTemplates = false;
 					if (selectedTemplateBrush != -1) {
 						globalBrushes.pop_back();
 						selectedTemplateBrush = -1;
@@ -4094,8 +4094,7 @@ int main(int, char**)
 						}
 					}
 					for (const DataSet& ds : g_PcPlotDataSets) {
-						if (ds.oneData || updateBrushTemplates) {			//oneData indicates a .dlf data -> template brushes are available
-							updateBrushTemplates = false;
+						if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
 							for (const TemplateList& tl : ds.drawLists) {
 								//checking if the template list is in the correct subspace and if so adding it to the template Brushes
 								std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']') - tl.name.find_first_of('[') - 1);
@@ -4121,7 +4120,7 @@ int main(int, char**)
 								}
 							}
 						}
-						else if (showCsvTemplates) {
+						else if (showCsvTemplates && !ds.oneData) {
 							auto tl = ++ds.drawLists.begin();
 							for (; tl != ds.drawLists.end(); ++tl) {
 								TemplateBrush t = {};
@@ -4142,24 +4141,7 @@ int main(int, char**)
 				offset += gap;
 			}
 			if (ImGui::Checkbox("Show Csv brushes", &showCsvTemplates)) {
-				if (showCsvTemplates) {
-					for (DataSet& ds : g_PcPlotDataSets) {
-						auto tl = ++ds.drawLists.begin();
-						for (; tl != ds.drawLists.end(); ++tl) {
-							TemplateBrush t = {};
-							t.name = ds.name + " | " + tl->name;
-							for (int i = 0; i < pcAttributes.size(); i++) {
-								if (brushTemplateAttrEnabled[i]) {
-									t.brushes[i] = tl->minMax[i];
-								}
-							}
-							templateBrushes.push_back(t);
-						}
-					}
-				}
-				else {
-					updateBrushTemplates = true;
-				}
+				updateBrushTemplates = true;
 			}
 
 			//drawing the list for brush templates
