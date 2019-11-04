@@ -1740,7 +1740,8 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 #endif
 	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
 	//median calulations
-	if (calculateMedians) {
+	//if (calculateMedians) {
+	if (false) {
 		std::vector<int> dataCpy(tl.indices);
 
 		for (int i = 0; i < pcAttributes.size(); i++) {
@@ -1760,8 +1761,8 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 			medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= tl.indices.size();
 		}
 		
-		//geometric median. Computed via teh technique proposed in The multivariateL1-median and associated data depth(http://www.pnas.org/content/97/4/1423.full.pdf)
-		const float epsilon = .01f;
+		//geometric median
+		const float epsilon = .05f;
 		
 		std::vector<double> last(pcAttributes.size());
 		std::vector<double> median(pcAttributes.size());
@@ -2979,7 +2980,9 @@ static void openDlf(const char* filename) {
 							return;
 						}
 					}
+#ifdef _DEBUG
 					std::cout << "The Attribute check was successful" << std::endl;
+#endif
 				}
 
 				//reading in new values
@@ -3316,6 +3319,9 @@ static void updateActiveIndices(DrawList& dl) {
 
 	//updating the standard indexbuffer
 	updateDrawListIndexBuffer(dl);
+
+	//setting the median to no median to enforce median recalculation
+	dl.activeMedian = 0;
 }
 
 //This method does the same as updataActiveIndices, only for ALL drawlists
@@ -3396,6 +3402,101 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 
 	view3d->update3dImage(w, h, d, dat);
 	delete[] dat;
+}
+
+//calculates the length of a vector of size pcAttributes.size()
+static double length(double* vec) {
+	double result = 0;
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		result += std::pow(vec[i], 2);
+	}
+	return std::sqrt(result);
+}
+
+//adds up the distance from point a to the data points indices
+static double summedDistance(double* a, std::vector<int>& indices, float** data) {
+	double dist = 0;
+	for (int i : indices) {
+		double d = 0;
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			d += std::pow(data[i][j] - a[j], 2);
+		}
+		dist += std::sqrt(d);
+	}
+	return dist;
+}
+
+static void calculateDrawListMedians(DrawList& dl) {
+	if (!calculateMedians)
+		return;
+
+	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
+
+	DataSet& ds = g_PcPlotDataSets.front();
+	for (DataSet& d : g_PcPlotDataSets) {
+		if (d.name == dl.parentDataSet) {
+			ds = d;
+			break;
+		}
+	}
+
+	std::vector<int> dataCpy(dl.activeInd);
+
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		std::sort(dataCpy.begin(), dataCpy.end(), [i, ds](int a, int b) {return ds.data[a][i] > ds.data[b][i]; });
+		medianArr[MEDIAN * pcAttributes.size() + i] = ds.data[dataCpy[dataCpy.size() >> 1]][i];
+	}
+
+	//arithmetic median calculation
+	for (int i = 0; i < dl.activeInd.size(); i++) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			if (i == 0)
+				medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
+			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[dl.activeInd[i]][j];
+		}
+	}
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= dl.activeInd.size();
+	}
+
+	//geometric median. Computed via gradient descent
+	//geometric median
+	const float epsilon = .05f;
+
+	std::vector<double> last(pcAttributes.size());
+	std::vector<double> median(pcAttributes.size());
+	for (int i = 0; i < median.size(); i++) {
+		last[i] = 0;
+		median[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
+	}
+
+	while (squareDist(last, median) > epsilon) {
+		std::vector<double> numerator(median.size());
+		double denominator = 0;
+		for (int i = 0; i < median.size(); i++) {
+			numerator[i] = 0;
+	}
+		for (int i = 0; i < dl.activeInd.size(); i++) {
+			double dist = std::sqrt(squareDist(median, ds.data[dl.activeInd[i]]));
+			if (dist == 0)
+				continue;
+			numerator = numerator + divide(ds.data[dl.activeInd[i]], dist, median.size());
+			denominator += 1 / dist;
+		}
+		last = median;
+		median = numerator / denominator;
+}
+
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		medianArr[GOEMEDIAN * pcAttributes.size() + i] = median[i];
+	}
+
+	void* d;
+	vkMapMemory(g_Device, dl.dlMem, dl.medianBufferOffset, MEDIANCOUNT * pcAttributes.size() * sizeof(float), 0, &d);
+	memcpy(d, medianArr, MEDIANCOUNT * pcAttributes.size() * sizeof(float));
+	vkUnmapMemory(g_Device, dl.dlMem);
+
+	delete[] medianArr;
 }
 
 int main(int, char**)
@@ -4202,9 +4303,9 @@ int main(int, char**)
 					}
 				}
 				if (ImGui::IsItemClicked(1)) {
-					ImGui::OpenPopup("GlobalBrushPopup");
+					ImGui::OpenPopup(("GlobalBrushPopup##"+globalBrushes[i].name).c_str());
 				}
-				if (ImGui::BeginPopup("GlobalBrushPopup", ImGuiWindowFlags_AlwaysAutoResize)) {
+				if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
 					if (ImGui::MenuItem("Convert to lokal brush")) {
 						openConvertToLokal = i;
 						ImGui::CloseCurrentPopup();
@@ -4592,7 +4693,9 @@ int main(int, char**)
 		}
 
 		if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
-			
+			for (DrawList& dl : g_PcPlotDrawLists) {
+				dl.activeMedian = 0;
+			}
 		}
 
 		if (ImGui::Checkbox("Enable brushing", &enableBrushing)) {
@@ -5015,7 +5118,11 @@ int main(int, char**)
 			ImGui::NextColumn();
 
 			const char* entrys[] = { "No Median","Synthetic","Arithmetic","Geometric" };
+			int prevActive = dl.activeMedian;
 			if (ImGui::Combo((std::string("##c") + dl.name).c_str(), &dl.activeMedian, entrys, sizeof(entrys) / sizeof(*entrys))) {
+				if (prevActive == 0) {
+					calculateDrawListMedians(dl);
+				}
 				pcPlotRender = true;
 			}
 			ImGui::NextColumn();
