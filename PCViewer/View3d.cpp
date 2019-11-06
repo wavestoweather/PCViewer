@@ -561,7 +561,7 @@ void View3d::updateCommandBuffer()
 	VkUtil::createCommandBuffer(device, commandPool, &commandBuffer);
 	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	std::vector<VkClearValue> clearValues;
-	clearValues.push_back({ .8f,.8f,.8f,1 });
+	clearValues.push_back({ .1f,.1f,.1f,1 });
 	VkUtil::beginRenderPass(commandBuffer, clearValues, renderPass, frameBuffer, { imageWidth,imageHeight });
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);

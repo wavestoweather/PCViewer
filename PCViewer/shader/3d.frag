@@ -12,6 +12,10 @@ layout(binding = 1) uniform sampler3D texSampler;
 layout(location = 0) in vec3 endPos;
 layout(location = 0) out vec4 outColor;
 
+float rand(vec3 co)
+{
+    return fract(sin(dot(co ,vec3(12.9898,78.233, 122.3617))) * 43758.5453);
+}
 
 void main() {
 	vec3 d = endPos-ubo.camPos;
@@ -28,10 +32,11 @@ void main() {
 	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1)*d;
 
 	const float alphaStop = .98f;
-	const float stepsize = .001f;
-	const int lightSteps = 10;
-	const float lightStepIncrease = 0;//.5f / lightSteps;
-	const float beerFactor = 10.0f;
+	const float stepsize = .0013f;
+	const int lightSteps = 5;
+	const float lightStepIncrease = 0.001f;
+	const float beerFactor = 1.0f;
+	const float densityMultiplier = 100.0f;
 	
 	//outColor is calculated with gamma correction
 	outColor = vec4(0,0,0,0);
@@ -42,69 +47,45 @@ void main() {
 	startPoint += .5f;
 
 	vec3 step = normalize(d) * stepsize;
-	vec3 lightStep = normalize(-ubo.lightDir) * (.5f/lightSteps);
-	vec3 lightPos = startPoint + lightStep;
+	//insert random displacement to startpositon
+	startPoint += step * rand(startPoint);
+	vec3 lightStep = normalize(-ubo.lightDir) * .002f;
+	float transmittance = 1;
 	for(int i = 0; i < iterations; i++){
 
 		vec4 tex = texture(texSampler,startPoint);
-
-		//computing lighting
-		float lightDens = 0;
-		if(false){
+		if(tex.a > 0.0001f) {
+			//computing lighting
+			float lightDens = 0;
+			vec3 lightPos = startPoint + lightStep;
 			for(int j = 0;j<lightSteps;j++){
 				if(lightPos.x>1.0f||lightPos.y>1.0f||lightPos.z>1.0f||lightPos.x<0.0f||lightPos.y<0.0f||lightPos.z<0.0f){
 					break;
 				}
-				lightDens += texture(texSampler,lightPos).a * (1.0f/lightSteps) * 100;
+				lightDens += texture(texSampler,lightPos).a * length(lightStep) * densityMultiplier;
 				lightStep += lightStepIncrease;
 				lightPos += lightStep;
 			}
 
 			//lightDens is now the light intensity
 			lightDens = clamp(exp(-beerFactor * lightDens),.1f,1.0f);
-		}
 
-		tex.a *= stepsize * 100;
-		tex.rgb *= tex.a;// * lightDens;
-		outColor = (1.0f - outColor.a)*tex + outColor;
+			//adding the opacity as density
+			float curDensity = tex.a * stepsize * densityMultiplier;
 
-		if(outColor.a>alphaStop){
-			break;
+			//tex.a *= stepsize * 100;
+			//tex.rgb *= tex.a * lightDens;
+			//outColor = (1.0f - outColor.a)*tex + outColor;
+			outColor.xyz += transmittance * lightDens * curDensity * tex.xyz;
+
+			//transmittance
+			transmittance *= 1 - curDensity;
+			
+			if(transmittance <= 1 - alphaStop){
+				break;
+			}
 		}
 		startPoint += step;
 	}
+	outColor.a = 1 - transmittance;
 }
-
-/*
-void main() {
-	vec3 d = endPos-ubo.camPos;
-	vec3 dinv = 1/d;
-
-	//calculating the starting position
-	vec3 t;
-	t = (ubo.cubeSides-ubo.camPos)*dinv;
-	t.x = (t.x>.999999)?-1.0/0:t.x;
-	t.y = (t.y>.999999)?-1.0/0:t.y;
-	t.z = (t.z>.999999)?-1.0/0:t.z;
-	
-	float tmax = max(t.x,max(t.y,t.z));
-	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1)*d;
-
-	float alphaStop = .98f;
-	float stepsize = .001f;
-	
-	//outColor is calculated with gamma correction
-	outColor = vec4(0,0,0,0);
-	d = endPos-startPoint;
-	float len = length(d);
-	d = normalize(d);
-	for(float i = 0; i<len;i+=stepsize){
-		vec4 tex = texture(texSampler,(startPoint+i*d)+.5f);
-		outColor.xyz+=(outColor.a*tex.a)*pow(tex.xyz,vec3(2.2f))*stepsize*100;
-		outColor.a+=(1-outColor.a)*tex.a*stepsize*100;
-		if(outColor.a>alphaStop){
-			break;
-		}
-	}
-	outColor.xyz = pow(outColor.xyz,vec3(1/2.2f));
-}*/
