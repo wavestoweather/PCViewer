@@ -195,7 +195,7 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_NEAREST,16,1,&image3dSampler);
 		}
 
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d);
+		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d);
 
 		VkMemoryRequirements memRequirements;
 		vkGetImageMemoryRequirements(device, image3d, &memRequirements);
@@ -208,7 +208,7 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 		check_vk_result(err);
 		vkBindImageMemory(device, image3d, image3dMemory, 0);
 
-		VkUtil::create3dImageView(device, image3d, VK_FORMAT_R16G16B16A16_UNORM, 1, &image3dView);
+		VkUtil::create3dImageView(device, image3d, VK_FORMAT_R8G8B8A8_UNORM, 1, &image3dView);
 
 		std::vector<VkDescriptorSetLayout> layouts;
 		layouts.push_back(descriptorSetLayout);
@@ -218,15 +218,15 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 		VkUtil::updateImageDescriptorSet(device, image3dSampler, image3dView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, descriptorSet);
 	}
 	//converting the data to a short array
-	uint16_t* dat = new uint16_t[width * height * depth * 4];
+	uint8_t* dat = new uint8_t[width * height * depth * 4];
 	for (int i = 0; i < width * height * depth * 4; i++) {
-		dat[i] = data[i] * std::numeric_limits<uint16_t>::max();
+		dat[i] = data[i] * std::numeric_limits<uint8_t>::max();
 	}
 	//uploading the data with a staging buffer
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 
-	VkUtil::createBuffer(device, width * height * depth * 4 * sizeof(uint16_t), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
+	VkUtil::createBuffer(device, width * height * depth * 4 * sizeof(uint8_t), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
 	VkMemoryRequirements memReq;
 	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReq);
 	VkMemoryAllocateInfo allocInfo = {};
@@ -237,15 +237,15 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 	vkBindBufferMemory(device, stagingBuffer, stagingBufferMemory, 0);
 
 	void* p;
-	vkMapMemory(device, stagingBufferMemory, 0, width * height * depth * 4 * sizeof(uint16_t), 0, &p);
-	memcpy(p, dat, width * height * depth * 4 * sizeof(uint16_t));
+	vkMapMemory(device, stagingBufferMemory, 0, width * height * depth * 4 * sizeof(uint8_t), 0, &p);
+	memcpy(p, dat, width * height * depth * 4 * sizeof(uint8_t));
 	vkUnmapMemory(device, stagingBufferMemory);
 
 	VkCommandBuffer command;
 	VkUtil::createCommandBuffer(device, commandPool, &command);
-	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	VkUtil::copyBufferTo3dImage(command, stagingBuffer, image3d, width, height, depth);
-	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	err = vkEndCommandBuffer(command);
 
 	VkSubmitInfo submitInfo = {};
@@ -352,7 +352,7 @@ VkImageView View3d::getImageView()
 void View3d::createPrepareImageCommandBuffer()
 {
 	VkUtil::createCommandBuffer(device, commandPool, &prepareImageCommand);
-	VkUtil::transitionImageLayout(prepareImageCommand, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::transitionImageLayout(prepareImageCommand, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	vkEndCommandBuffer(prepareImageCommand);
 }
 
@@ -360,7 +360,7 @@ void View3d::createImageResources()
 {
 	VkResult err;
 	
-	VkUtil::createImage(device, imageWidth, imageHeight, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT, &image);
+	VkUtil::createImage(device, imageWidth, imageHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT, &image);
 
 	VkMemoryRequirements memReq = {};
 	vkGetImageMemoryRequirements(device, image, &memReq);
@@ -373,7 +373,7 @@ void View3d::createImageResources()
 
 	vkBindImageMemory(device, image, imageMemory, 0);
 
-	VkUtil::createImageView(device, image, VK_FORMAT_R16G16B16A16_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT, &imageView);
+	VkUtil::createImageView(device, image, VK_FORMAT_R8G8B8A8_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT, &imageView);
 	std::vector<VkImageView> views;
 	views.push_back(imageView);
 	VkUtil::createFrameBuffer(device, renderPass, views, imageWidth, imageHeight, &frameBuffer);
@@ -539,7 +539,7 @@ void View3d::createPipeline()
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
 
-	VkUtil::createPcPlotRenderPass(device, VkUtil::PASS_TYPE_COLOR16_OFFLINE, &renderPass);
+	VkUtil::createPcPlotRenderPass(device, VkUtil::PASS_TYPE_COLOR_OFFLINE, &renderPass);
 
 	VkUtil::createPipeline(device, &vertexInputInfo, imageWidth, imageHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &renderPass, &pipelineLayout, &pipeline);
 }
@@ -559,7 +559,7 @@ void View3d::updateCommandBuffer()
 {
 	VkResult err;
 	VkUtil::createCommandBuffer(device, commandPool, &commandBuffer);
-	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	std::vector<VkClearValue> clearValues;
 	clearValues.push_back({ .1f,.1f,.1f,1 });
 	VkUtil::beginRenderPass(commandBuffer, clearValues, renderPass, frameBuffer, { imageWidth,imageHeight });
@@ -589,7 +589,7 @@ void View3d::updateCommandBuffer()
 
 	vkCmdEndRenderPass(commandBuffer);
 
-	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	err = vkEndCommandBuffer(commandBuffer);
 	check_vk_result(err);
 

@@ -327,7 +327,7 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 
 		break;
 	case VkUtil::PASS_TYPE_COLOR16_OFFLINE:
-		attachment.format = VK_FORMAT_R16G16B16A16_UNORM;
+		attachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -346,7 +346,7 @@ void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,V
 
 		break;
 	case VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR:
-		attachment.format = VK_FORMAT_R16G16B16A16_UNORM;
+		attachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;

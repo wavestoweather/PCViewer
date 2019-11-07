@@ -52,6 +52,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <random>
 #include <map>
 #include <set>
+#include <math.h>
+#include <string.h>
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -139,7 +141,7 @@ T squareDist(const std::vector<T>& a, const std::vector<T>& b) {
 	float c;
 	for (int i = 0; i < a.size(); i++) {
 		c = a[i] - b[i];
-		result += std::powf(c, 2);
+		result += powf(c, 2);
 	}
 	return result;
 }
@@ -150,7 +152,7 @@ T squareDist(const std::vector<T>& a, const float* b) {
 	float c;
 	for (int i = 0; i < a.size(); i++) {
 		c = a[i] - b[i];
-		result += std::powf(c, 2);
+		result += powf(c, 2);
 	}
 	return result;
 }
@@ -159,9 +161,9 @@ template <typename T>
 T eucDist(const std::vector<T>& a) {
 	float result = 0;
 	for (int i = 0; i < a.size(); i++) {
-		result += std::powf(a[i], 2);
+		result += powf(a[i], 2);
 	}
-	return std::sqrt(result);
+	return sqrt(result);
 }
 
 std::vector<double> divide (float* arr, float num, int size) {
@@ -220,7 +222,7 @@ struct HistogramUniformBuffer {
 };
 
 struct DensityUniformBuffer {
-	bool enableMapping;
+	uint32_t enableMapping;
 	float gaussRange;
 	uint32_t imageHeight;
 	uint32_t padding;
@@ -246,7 +248,7 @@ struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
 	std::map<std::string, float> lineRatios;			//contains the ratio of still active lines per drawlist
-	std::map<int, std::pair<unsigned int,std::pair<float, float>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
+	std::map<int, std::vector<std::pair<unsigned int,std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
 struct TemplateBrush {
@@ -333,7 +335,9 @@ static VkPipeline				g_PcPlotSplinePipeline = VK_NULL_HANDLE;
 static bool						g_RenderSplines = false;
 //variables for the histogramm pipeline
 static VkPipelineLayout			g_PcPlotHistoPipelineLayout = VK_NULL_HANDLE;
+static VkPipelineLayout			g_PcPlotHistoPipelineAdditiveLayout = VK_NULL_HANDLE;
 static VkPipeline				g_PcPlotHistoPipeline = VK_NULL_HANDLE;
+static VkPipeline				g_PcPlotHistoAdditivePipeline = VK_NULL_HANDLE;
 static VkRenderPass				g_PcPlotHistoRenderPass = VK_NULL_HANDLE;
 static VkDescriptorSetLayout	g_PcPlotHistoDescriptorSetLayout = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotRectPipelineLayout = VK_NULL_HANDLE;
@@ -532,6 +536,7 @@ static float histogrammWidth = .1f;
 static bool drawHistogramm = false;
 static bool histogrammDensity = false;
 static bool pcPlotDensity = false;
+static bool pcPlotLinDensity = false;
 static float densityRadius = .05f;
 static bool enableDensityMapping = false;
 static bool calculateMedians = false;
@@ -552,6 +557,7 @@ static std::vector<TemplateBrush> templateBrushes;
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
 static std::vector<GlobalBrush> globalBrushes;
+static std::map<std::string, float> activeBrushRatios;	//The ratio from lines active after all active brushes have been applied
 static int brushDragId = -1;
 //information about the dragmode
 //0 -> brush dragged
@@ -565,6 +571,7 @@ static int brushCombination = 0;				//How global brushes should be combined. 0->
 
 //variables for the 3d views
 static View3d * view3d;
+std::string active3dAttribute;
 static NodeViewer* nodeViewer;
 
 static SettingsManager* settingsManager;
@@ -692,6 +699,38 @@ static void createPcPlotHistoPipeline() {
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
 
 	shaderModules[3] = nullptr;
+
+	//----------------------------------------------------------------------------------------------
+	//pipeline for additive histogramm density
+	//----------------------------------------------------------------------------------------------
+	//the vertex shader for the pipeline
+	vertexBytes = PCUtil::readByteFile(g_histVertPath);
+	shaderModules[0] = VkUtil::createShaderModule(g_Device, vertexBytes);
+	//the geometry shader for the pipeline
+	geometryBytes = PCUtil::readByteFile(g_histGeoPath);
+	shaderModules[3] = VkUtil::createShaderModule(g_Device, geometryBytes);
+	//the fragment shader for the pipeline
+	fragmentBytes = PCUtil::readByteFile(g_histFragPath);
+	shaderModules[4] = VkUtil::createShaderModule(g_Device, fragmentBytes);
+
+	//blendInfo
+	colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	blendInfo.blendAttachment = colorBlendAttachment;
+	blendInfo.createInfo = colorBlending;
+
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineAdditiveLayout, &g_PcPlotHistoAdditivePipeline);
+
+	shaderModules[3] = nullptr;
+
 	//----------------------------------------------------------------------------------------------
 	//creating the pipeline for the rect rendering
 	//----------------------------------------------------------------------------------------------
@@ -704,6 +743,19 @@ static void createPcPlotHistoPipeline() {
 	bindingDescripiton.binding = 0;
 	bindingDescripiton.stride = sizeof(RectVertex);
 	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	blendInfo.blendAttachment = colorBlendAttachment;
+	blendInfo.createInfo = colorBlending;
 
 	VkVertexInputAttributeDescription attributeDescriptions[2];	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
 	attributeDescriptions[0].binding = 0;
@@ -788,6 +840,8 @@ static void cleanupPcPlotHistoPipeline() {
 	vkDestroyPipelineLayout(g_Device, g_PcPlotRectPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotRectPipeline, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotDensityPipelineLayout, nullptr);
+	vkDestroyPipeline(g_Device, g_PcPlotHistoAdditivePipeline, nullptr);
+	vkDestroyPipelineLayout(g_Device, g_PcPlotHistoPipelineAdditiveLayout, nullptr);
 	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotDensityDescriptorSetLayout, nullptr);
 	vkDestroyRenderPass(g_Device, g_PcPlotDensityRenderPass, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotDensityPipeline, nullptr);
@@ -821,7 +875,7 @@ static void createPcPlotImageView() {
 	imageInfo.extent.depth = 1;
 	imageInfo.mipLevels = 1;
 	imageInfo.arrayLayers = 1;
-	imageInfo.format = VK_FORMAT_R16G16B16A16_UNORM;
+	imageInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -840,7 +894,7 @@ static void createPcPlotImageView() {
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
 
 	//creating the Image and imageview for the density pipeline
-	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityImageCopy);
+	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityImageCopy);
 
 	uint32_t imageOffset = allocInfo.allocationSize;
 	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityImageCopy, &memRequirements);
@@ -859,7 +913,7 @@ static void createPcPlotImageView() {
 	vkBindImageMemory(g_Device, g_PcPlotDensityImageCopy, g_PcPlotMem, imageOffset);
 	vkBindImageMemory(g_Device, g_PcPlotDensityIronMap, g_PcPlotMem, g_PcPlotDensityIronMapOffset);
 
-	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT,&g_PcPlotDensityImageView);
+	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, 1, VK_IMAGE_ASPECT_COLOR_BIT,&g_PcPlotDensityImageView);
 	VkUtil::createImageView(g_Device, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT,&g_PcPLotDensityIronMapView);
 	
 	//creating the smapler for the density image
@@ -914,7 +968,7 @@ static void createPcPlotImageView() {
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = g_PcPlot;
 	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	createInfo.format = VK_FORMAT_R16G16B16A16_UNORM;
+	createInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
 	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -1219,7 +1273,7 @@ static void createPcPlotRenderPass() {
 	VkResult err;
 
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = VK_FORMAT_R16G16B16A16_UNORM;
+	colorAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1866,6 +1920,10 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 }
 
 static void removePcPlotDrawList(DrawList& drawList) {
+	for (GlobalBrush& brush : globalBrushes) {
+		brush.lineRatios.erase(drawList.name);
+	}
+	activeBrushRatios.erase(drawList.name);
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
 		if (it->name == drawList.name) {
 			it->indices.clear();
@@ -1900,12 +1958,9 @@ static void removePcPlotDrawList(DrawList& drawList) {
 			break;
 		}
 	}
-	for (GlobalBrush& brush : globalBrushes) {
-		brush.lineRatios.erase(drawList.name);
-	}
 }
 
-static void destroyPcPlotDataSet(DataSet dataSet) {
+static void destroyPcPlotDataSet(DataSet& dataSet) {
 	auto it = g_PcPlotDataSets.begin();
 	for (; it != g_PcPlotDataSets.end(); ++it) {
 		if (*it == dataSet) {
@@ -1931,6 +1986,8 @@ static void destroyPcPlotDataSet(DataSet dataSet) {
 			delete[] dataSet.data[i];
 		}
 	}
+
+	updateBrushTemplates = true;
 
 	g_PcPlotDataSets.erase(it);
 
@@ -2160,7 +2217,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	for (int i = 0; i < order.size(); i++) {
 		ind[i + ((g_RenderSplines) ? 1 : 0)] = order[i].first;
 	}
-	if (g_RenderSplines) {
+	if (g_RenderSplines && pcAttributes.size()) {
 		ind[0] = order[0].first;
 		ind[order.size()] = order[order.size() - 1].first;
 	}
@@ -2269,15 +2326,15 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 
 		//transition image Layouts
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		//blitting the image
 		VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		//transition image Layouts back
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		//beginning the density renderpass
 		std::vector<VkClearValue> clearColors;
@@ -2338,7 +2395,12 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, pcAttributes.size() * 6, 1, 0, 0, 0);
 
 		//starting to draw the histogramm lines
-		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipeline);
+		if (pcPlotLinDensity) {
+			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoAdditivePipeline);
+		}
+		else {
+			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipeline);
+		}
 
 		//the offset which has to be added to draw the histogramms next to one another
 		uint32_t amtOfHisto = 0;
@@ -2384,7 +2446,13 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					vkUnmapMemory(g_Device, drawList->dlMem);
 
 					//binding the descriptor set
-					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
+					if (pcPlotLinDensity) {
+						vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineAdditiveLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
+					}
+					else {
+						vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
+					}
+
 
 					//making the draw call
 					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->activeInd.size() * 2, 1, 0, count++, 0);
@@ -2400,15 +2468,15 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 
 			//transition image Layouts
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 			//blitting the image
 			VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 			//transition image Layouts back
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 			//beginning the density renderpass
 			std::vector<VkClearValue> clearColors;
@@ -3243,11 +3311,12 @@ static void updateActiveIndices(DrawList& dl) {
 			break;
 		}
 	}
-
+	activeBrushRatios[dl.name] = 0;
 	dl.activeInd.clear();
 	for (GlobalBrush& b : globalBrushes) {
 		b.lineRatios[dl.name] = 0;
 	}
+	
 	for (int i : dl.indices) {
 		//checking the local brushes
 		bool keep = true;
@@ -3271,10 +3340,16 @@ static void updateActiveIndices(DrawList& dl) {
 			bool or = globalBrushes.size() == 0, and = true, anyActive = false;
 			for (GlobalBrush& b : globalBrushes) {
 				bool lineKeep = true;
-				for (auto& brush : b.brushes) {
-					if ((*data)[i][brush.first]<brush.second.second.first || (*data)[i][brush.first]>brush.second.second.second) {
-						lineKeep = false;
+				for (auto& br : b.brushes) {
+					bool good = false;
+					for (auto& brush : br.second) {
+						if ((*data)[i][br.first]>=brush.second.first && (*data)[i][br.first]<=brush.second.second) {
+							good = true;
+							break;
+						}
 					}
+					if(!good)
+						lineKeep = false;
 				}
 					
 				if (b.active) {
@@ -3287,20 +3362,27 @@ static void updateActiveIndices(DrawList& dl) {
 					b.lineRatios[dl.name] += 1.0f;
 			}
 			if (brushCombination == 1 && !and) {
-				goto nextInd;
+				//goto nextInd;
+				keep = false;
 			}
 			if (brushCombination == 0 && !or && anyActive) {
-				goto nextInd;
+				//goto nextInd;
+				keep = false;
 			}
 		}
 
-		if (keep)
+		if (keep) {
 			dl.activeInd.push_back(i);
+			activeBrushRatios[dl.name] += 1;
+		}
 
 		nextInd:;
 	}
 	for (GlobalBrush& b : globalBrushes) {
 		b.lineRatios[dl.name] /= dl.indices.size();
+	}
+	for (auto& it : activeBrushRatios) {
+		it.second /= dl.indices.size();
 	}
 
 	//updating the indexbuffer for histogramm
@@ -3347,7 +3429,7 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 
 static void uploadDensityUiformBuffer() {
 	DensityUniformBuffer ubo = {};
-	ubo.enableMapping = enableDensityMapping;
+	ubo.enableMapping = enableDensityMapping | ((uint8_t)pcPlotLinDensity) * 2;
 	ubo.gaussRange = densityRadius;
 	ubo.imageHeight = g_PcPlotHeight;
 	void* d;
@@ -3665,7 +3747,7 @@ int main(int, char**)
 		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 
 		//transition of the densitiy image
-		VkUtil::transitionImageLayout(command_buffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command_buffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		//ending the command buffer and submitting it
 		VkSubmitInfo end_info = {};
@@ -4245,6 +4327,27 @@ int main(int, char**)
 				updateBrushTemplates = true;
 			}
 
+			ImGui::SameLine(200);
+			if (ImGui::Button("Combine active global brushes")) {
+				GlobalBrush combo;
+				combo.name = "Combined(";
+				for (auto& brush : globalBrushes) {
+					if (!brush.active)
+						continue;
+
+					for (auto& br : brush.brushes) {
+						combo.brushes[br.first].insert(combo.brushes[br.first].end(), br.second.begin(), br.second.end());
+					}
+					brush.active = false;
+					combo.name += brush.name.substr(5) + "|";
+				}
+				combo.active = true;
+				combo.name += ")";
+
+				globalBrushes.push_back(combo);
+				updateAllActiveIndices();
+			}
+
 			//drawing the list for brush templates
 			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
 			ImGui::Text("Brush Templates");
@@ -4261,17 +4364,21 @@ int main(int, char**)
 						preview.active = true;
 						preview.name = templateBrushes[i].name;
 						for (const auto& brush : templateBrushes[i].brushes) {
-							preview.brushes[brush.first] = std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second);
+							preview.brushes[brush.first].push_back(std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second));
 						}
 						globalBrushes.push_back(preview);
 						updateAllActiveIndices();
 						pcPlotRender = true;
+						if(active3dAttribute.size())
+							uploadDrawListTo3dView(g_PcPlotDrawLists.front(), active3dAttribute, "a", "b", "c");
 					}
 					else {
 						selectedTemplateBrush = -1;
 						globalBrushes.pop_back();
 						updateAllActiveIndices();
 						pcPlotRender = true;
+						if (active3dAttribute.size())
+							uploadDrawListTo3dView(g_PcPlotDrawLists.front(), active3dAttribute, "a", "b", "c");
 					}
 				}
 				if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
@@ -4399,8 +4506,6 @@ int main(int, char**)
 			ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
 			ImGui::Text("Brush statistics: Percentage of lines kept after brushing");
 			ImGui::Separator();
-			//test for vertical Histogramm
-			const float histogrammdata[10] = { 0,.1f,.2f,.3f,.4f,.5f,.6f,.7f,.8f,.9f };
 			//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 			for (auto& brush : globalBrushes) {
 				ImGui::BeginChild(("##brushStat" + brush.name).c_str(),ImVec2(200,0),true);
@@ -4429,6 +4534,32 @@ int main(int, char**)
 				ImGui::EndChild();
 				ImGui::SameLine();
 			}
+			if (activeBrushRatios.size()) {
+				ImGui::BeginChild("activeBrushRatios", ImVec2(200, 0), true);
+				ImGui::Text("Active brushes combined");
+				float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+				static std::vector<float> ratios;
+				ImVec2 defaultCursorPos = ImGui::GetCursorPos();
+				ImVec2 cursorPos = defaultCursorPos;
+				cursorPos.x += 75 + ImGui::GetStyle().ItemInnerSpacing.x;
+				ratios.clear();
+				for (auto& ratio : activeBrushRatios) {
+					ratios.push_back(ratio.second);
+					ImGui::SetCursorPos(cursorPos);
+					ImGui::Text(ratio.first.c_str());
+					cursorPos.y += lineHeight;
+				}
+				ImGui::SetCursorPos(defaultCursorPos);
+				int hover = ImGui::PlotHistogramVertical("##activeBrushesRatioHist", ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight * ratios.size()));
+				if (hover != -1) {
+					ImGui::BeginTooltip();
+					ImGui::Text("%2.1f%%", ratios[hover] * 100);
+					ImGui::EndTooltip();
+				}
+
+
+				ImGui::EndChild();
+			}
 
 			ImGui::EndChild();
 			
@@ -4452,64 +4583,66 @@ int main(int, char**)
 
 					ImVec2 mousePos = ImGui::GetIO().MousePos;
 					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
-					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
-					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
-					bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
-					//edgeHover = 0 -> No edge is hovered
-					//edgeHover = 1 -> Top edge is hovered
-					//edgeHover = 2 -> Bot edge is hovered
-					int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
-					edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
-					ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
-					//set mouse cursor
-					if (edgeHover || brushDragId != -1) {
-						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-					}
-					if (hover) {
-						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
-					}
-					//activate dragging of edge
-					if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
-						brushDragId = brush.second.first;
-						brushDragMode = edgeHover;
-					}
-					if (hover && ImGui::GetIO().MouseClicked[0]) {
-						brushDragId = brush.second.first;
-						brushDragMode = 0;
-					}
-					//drag edge
-					if (brushDragId == brush.second.first && ImGui::GetIO().MouseDown[0]) {
-						if (brushDragMode == 0) {
-							float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
-							brush.second.second.second -= delta;
-							brush.second.second.first -= delta;
+					for (auto& br : brush.second) {
+						float y = ((br.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
+						float height = (br.second.second - br.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
+						bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
+						//edgeHover = 0 -> No edge is hovered
+						//edgeHover = 1 -> Top edge is hovered
+						//edgeHover = 2 -> Bot edge is hovered
+						int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
+						edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
+						ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+						//set mouse cursor
+						if (edgeHover || brushDragId != -1) {
+							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 						}
-						else if (brushDragMode == 1) {
-							brush.second.second.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+						if (hover) {
+							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
 						}
-						else {
-							brush.second.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+						//activate dragging of edge
+						if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+							brushDragId = br.first;
+							brushDragMode = edgeHover;
 						}
+						if (hover && ImGui::GetIO().MouseClicked[0]) {
+							brushDragId = br.first;
+							brushDragMode = 0;
+						}
+						//drag edge
+						if (brushDragId == br.first && ImGui::GetIO().MouseDown[0]) {
+							if (brushDragMode == 0) {
+								float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
+								br.second.second -= delta;
+								br.second.first -= delta;
+							}
+							else if (brushDragMode == 1) {
+								br.second.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+							}
+							else {
+								br.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+							}
 
-						//switching edges if max value of brush is smaller than min value
-						if (brush.second.second.second < brush.second.second.first) {
-							float tmp = brush.second.second.second;
-							brush.second.second.second = brush.second.second.first;
-							brush.second.second.first = tmp;
-							brushDragMode = (brushDragMode == 1) ? 2 : 1;
-						}
+							//switching edges if max value of brush is smaller than min value
+							if (br.second.second < br.second.first) {
+								float tmp = br.second.second;
+								br.second.second = br.second.first;
+								br.second.first = tmp;
+								brushDragMode = (brushDragMode == 1) ? 2 : 1;
+							}
 
-						if (ImGui::GetIO().MouseDelta.y) {
+							if (ImGui::GetIO().MouseDelta.y) {
+								updateAllActiveIndices();
+								pcPlotRender = true;
+							}
+						}
+						//release edge
+						if (brushDragId == br.first && ImGui::GetIO().MouseReleased[0]) {
+							brushDragId = -1;
 							updateAllActiveIndices();
 							pcPlotRender = true;
 						}
-					}
-					//release edge
-					if (brushDragId == brush.second.first && ImGui::GetIO().MouseReleased[0]) {
-						brushDragId = -1;
-						updateAllActiveIndices();
-						pcPlotRender = true;
 					}
 				}
 			}
@@ -4521,9 +4654,9 @@ int main(int, char**)
 						continue;
 
 					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
-					float y = ((brush.second.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
+					float y = ((brush.second[0].second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
-					float height = (brush.second.second.second - brush.second.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
+					float height = (brush.second[0].second.second - brush.second[0].second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
 					ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 150), 1, ImDrawCornerFlags_All, 5);
 				}
 			}
@@ -4692,6 +4825,13 @@ int main(int, char**)
 			}
 		}
 
+		if (ImGui::Checkbox("Enable additive density", &pcPlotLinDensity)) {
+			if (pcAttributes.size()) {
+				uploadDensityUiformBuffer();
+				pcPlotRender = true;
+			}
+		}
+
 		if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
 			for (DrawList& dl : g_PcPlotDrawLists) {
 				dl.activeMedian = 0;
@@ -4819,7 +4959,7 @@ int main(int, char**)
 						brush.active = true;
 						for (int i = 0; i < pcAttributes.size(); i++) {
 							if (activeBrushAttributes[i]) {
-								brush.brushes[i] = std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]);
+								brush.brushes[i].push_back(std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]));
 							}
 						}
 						globalBrushes.push_back(brush);
@@ -5068,6 +5208,7 @@ int main(int, char**)
 					if (ImGui::MenuItem(("Render "+ pcAttributes[i].name).c_str())) {
 						ImGui::CloseCurrentPopup();
 						uploadDrawListTo3dView(dl, pcAttributes[i].name, "a", "b", "c");
+						active3dAttribute = pcAttributes[i].name;
 					}
 				}
 				
@@ -5165,6 +5306,10 @@ int main(int, char**)
 		//main window now closed -----------------------------------------------------------------------
 		if (destroy) {
 			removePcPlotDrawList(*changeList);
+			updateBrushTemplates = true;
+			if (!pcAttributes.size()) {
+				globalBrushes.clear();
+			}
 		}
 		if (up) {
 			auto it = g_PcPlotDrawLists.begin();

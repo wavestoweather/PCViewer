@@ -3,7 +3,7 @@
 
 layout(binding = 0) uniform sampler2D texSampler;
 layout(binding = 1) uniform UniformBufferObject{
-	bool enableMapping;
+	int enableMapping;
 	float radius;
 	int imageHeight;
 } ubo;
@@ -11,6 +11,8 @@ layout(binding = 2) uniform sampler2D ironMap;
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) in vec2 tex;
+
+const float a0 = .05f;
 
 void main() {
 	//Gaussian blur in y direction
@@ -30,8 +32,13 @@ void main() {
 	}
 	//normalization
     outColor /= divider;
+	//transforming linear density to exponential density
+	if((ubo.enableMapping & 2) > 0){
+		outColor = vec4(1) - pow(vec4(1-a0),outColor);
+	}
 	//mapping a ironMap Texture to it
-	if(ubo.enableMapping){
+	if((ubo.enableMapping & 1) > 0){
 		outColor = texture(ironMap, vec2(max(max(outColor.x,outColor.y),outColor.z),.5f));
 	}
+	outColor = clamp(outColor,vec4(0),vec4(1));
 }

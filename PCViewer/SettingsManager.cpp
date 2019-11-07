@@ -29,6 +29,8 @@ bool SettingsManager::addSetting(Setting s)
 	}
 	settingsType[s.type].push_back(&settings[s.id]);
 
+	storeSettings(settingsFile);
+
 	return true;
 }
 
