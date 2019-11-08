@@ -54,6 +54,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <set>
 #include <math.h>
 #include <string.h>
+#include <sstream>
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -2814,9 +2815,11 @@ static void glfw_resize_callback(GLFWwindow*, int w, int h)
 
 static void openCsv(const char* filename) {
 
-	std::ifstream input(filename);
+	std::ifstream f(filename, std::ios::in | std::ios::binary);
+	std::stringstream input;
+	input << f.rdbuf();
 
-	if (!input.is_open()) {
+	if (!f.is_open()) {
 		std::cout << "The given file was not found" << std::endl;
 		return;
 	}
@@ -2867,14 +2870,14 @@ static void openCsv(const char* filename) {
 			if (pcAttributes.size() != 0) {
 				if (tmp.size() != pcAttributes.size()) {
 					std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
-					input.close();
+					f.close();
 					return;
 				}
 				
 				for (int i = 0; i < tmp.size(); i++) {
 					if (tmp[i].name != pcAttributes[i].name) {
 						std::cout << "The Attributes of the .csv file have different order or different names." << std::endl;
-						input.close();
+						f.close();
 						return;
 					}
 				}
@@ -2910,7 +2913,7 @@ static void openCsv(const char* filename) {
 				//checking for an overrunning attribute counter
 				if (attr == pcAttributes.size()) {
 					std::cerr << "The dataset to open is not consitent!" << std::endl;
-					input.close();
+					f.close();
 					return;
 				}
 
@@ -2926,7 +2929,7 @@ static void openCsv(const char* filename) {
 			}
 			if (attr == pcAttributes.size()) {
 				std::cerr << "The dataset to open is not consitent!" << std::endl;
-				input.close();
+				f.close();
 				return;
 			}
 
@@ -2941,7 +2944,7 @@ static void openCsv(const char* filename) {
 			ds.data.back()[attr] = curF;
 		}
 	}
-	input.close();
+	f.close();
 
 	createPcPlotVertexBuffer(pcAttributes, ds.data);
 
@@ -3015,8 +3018,10 @@ static void switchAttributes(int ind1, int ind2, bool ctrPressed) {
 }
 
 static void openDlf(const char* filename) {
-	std::ifstream file(filename, std::ifstream::in);
-	if (file.is_open()) {
+	std::ifstream f(filename, std::ios::in | std::ios::binary);
+	std::stringstream file;
+	file << f.rdbuf();
+	if (f.is_open()) {
 		std::string tmp;
 		int amtOfPoints;
 		bool newAttr = false;
@@ -3180,7 +3185,7 @@ static void openDlf(const char* filename) {
 			g_PcPlotDataSets.push_back(ds);
 		}
 
-		file.close();
+		f.close();
 	}
 	else {
 		std::cout << "The dlf File could not be opened." << std::endl;
@@ -3208,9 +3213,11 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 		return;
 	}
 	//opening the file
-	std::ifstream file(filepath);
+	std::ifstream f(filepath , std::ios::in | std::ios::binary);
+	std::stringstream file;
+	file << f.rdbuf();
 	
-	if (file.is_open()) {
+	if (f.is_open()) {
 		TemplateList tl;
 		tl.buffer = ds.buffer.buffer;
 		int split = (s.find_last_of("\\") > s.find_last_of("/")) ? s.find_last_of("/") : s.find_last_of("\\");

@@ -13,6 +13,7 @@ layout(location = 0) out vec4 outColor;
 layout(location = 1) in vec2 tex;
 
 const float a0 = .05f;
+const float densityMultiplier = .2f;
 
 void main() {
 	//Gaussian blur in y direction
@@ -34,7 +35,7 @@ void main() {
     outColor /= divider;
 	//transforming linear density to exponential density
 	if((ubo.enableMapping & 2) > 0){
-		outColor = vec4(1) - pow(vec4(1-a0),outColor);
+		outColor = vec4(1) - pow(vec4(1-a0),outColor / a0 * densityMultiplier);
 	}
 	//mapping a ironMap Texture to it
 	if((ubo.enableMapping & 1) > 0){
