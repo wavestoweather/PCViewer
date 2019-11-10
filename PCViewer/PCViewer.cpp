@@ -1894,7 +1894,7 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 
 	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
 
-	int hue = distribution(engine) * 10;
+	float hue = distribution(engine) * 10;
 #ifdef _DEBUG
 	std::cout << "Hue: " << hue << std::endl;
 #endif
@@ -3344,7 +3344,7 @@ static void updateActiveIndices(DrawList& dl) {
 
 		//checking gloabl brushes
 		if (toggleGlobalBrushes) {
-			bool or = globalBrushes.size() == 0, and = true, anyActive = false;
+			bool orr = globalBrushes.size() == 0, andd = true, anyActive = false;
 			for (GlobalBrush& b : globalBrushes) {
 				bool lineKeep = true;
 				for (auto& br : b.brushes) {
@@ -3360,19 +3360,19 @@ static void updateActiveIndices(DrawList& dl) {
 				}
 					
 				if (b.active) {
-					or |= lineKeep;
-					and &= lineKeep;
+					orr |= lineKeep;
+					andd &= lineKeep;
 					anyActive = true;
 				}
 
 				if( lineKeep)
 					b.lineRatios[dl.name] += 1.0f;
 			}
-			if (brushCombination == 1 && !and) {
+			if (brushCombination == 1 && !andd) {
 				//goto nextInd;
 				keep = false;
 			}
-			if (brushCombination == 0 && !or && anyActive) {
+			if (brushCombination == 0 && !orr && anyActive) {
 				//goto nextInd;
 				keep = false;
 			}
