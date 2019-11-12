@@ -11,6 +11,7 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/glm.hpp"
+#include <string.h>
 
 #define VERTICALROTSPEED .01f
 #define HORIZONTALROTSPEED .01f

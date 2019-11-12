@@ -18,7 +18,7 @@ namespace SpacialData {
 		if (start == end)
 			return -1;
 
-		if (abs(arr[h] - a) < .0000001f)
+		if (fabs(arr[h] - a) < .0000001f)
 			return h;
 
 		if (a < arr[h])

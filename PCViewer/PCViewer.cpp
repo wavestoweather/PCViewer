@@ -3954,6 +3954,7 @@ int main(int, char**)
 
 							std::vector<Attribute> savedAttr;
 							char* d = (char*)s->data + sizeof(int);
+							bool cont = false;
 							for (int i = 0; i < ((int*)s->data)[0]; i++) {
 								Attribute a = {};
 								a.name = std::string(d);
@@ -3965,9 +3966,13 @@ int main(int, char**)
 								savedAttr.push_back(a);
 								if (pcAttributes[i].name != savedAttr[i].name) {
 									openLoad = true;
-									goto end;
+									//goto end;
+									cont = true;
 								}
 							}
+							if (cont)
+								continue;
+
 							int* o = (int*)d;
 							bool* act = (bool*)(d + pcAttributes.size() * sizeof(int));
 							for (int i = 0; i < pcAttributes.size(); i++) {
@@ -4933,7 +4938,7 @@ int main(int, char**)
 				for (const TemplateList& tl : ds.drawLists) {
 					if (ImGui::Button(tl.name.c_str())) {
 						ImGui::OpenPopup(tl.name.c_str());
-						std::strcpy(pcDrawListName, tl.name.c_str());
+						strcpy(pcDrawListName, tl.name.c_str());
 					}
 					if (ImGui::IsItemClicked(1)) {
 						ImGui::OpenPopup("CONVERTTOBRUSH");

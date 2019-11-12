@@ -13,6 +13,7 @@ the backside of the cube are raymarched.
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include <limits.h>
+#include <string.h>
 
 #define VERTICALPANSPEED .01f
 #define HORIZONTALPANSPEED .01f
