@@ -7,9 +7,11 @@ const float alpha = .5f;
 
 // 4 vertices per-primitive -- 2 for the line (1,2) and 2 for adjacency (0,3)
 layout (lines_adjacency) in;
+layout (location = 0)in vec4 col[];
 
 // Standard fare for drawing lines
 layout (line_strip, max_vertices = res + 1) out;
+layout (location = 0)out vec4 color;
 
 float getT(in float t,in vec2 p0,in vec2 p1);
 
@@ -39,6 +41,8 @@ void main (void) {
 	vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
 	
 	gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
+	color = col[0];
+
 	EmitVertex();
   }
 

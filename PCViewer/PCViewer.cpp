@@ -272,6 +272,8 @@ struct DrawList {
 	std::vector<VkBuffer> histogramUbos;
 	VkBuffer medianBuffer;
 	VkBuffer medianUbo;
+	uint32_t priorityColorBufferOffset;
+	VkBuffer priorityColorBuffer;
 	int medianUboOffset;
 	VkDescriptorSet medianUboDescSet;
 	uint32_t medianBufferOffset;
@@ -569,6 +571,9 @@ static unsigned int currentBrushId = 0;
 static bool* activeBrushAttributes = nullptr;
 static bool toggleGlobalBrushes = true;
 static int brushCombination = 0;				//How global brushes should be combined. 0->OR, 1->AND
+
+//variables for priority rendering
+static int priorityAttribute = -1;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -1144,28 +1149,42 @@ static void createPcPlotPipeline() {
 	dynamicState.dynamicStateCount = 1;
 	dynamicState.pDynamicStates = dynamicStates;
 
-	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
-	uboLayoutBinding.binding = 0;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	uboLayoutBinding.descriptorCount = 1;
-	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
+	VkDescriptorSetLayoutBinding uboLayoutBindings[3] = {};
+	uboLayoutBindings[0].binding = 0;
+	uboLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBindings[0].descriptorCount = 1;
+	uboLayoutBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+					
+	uboLayoutBindings[1].binding = 1;
+	uboLayoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	uboLayoutBindings[1].descriptorCount = 1;
+	uboLayoutBindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	uboLayoutBindings[2].binding = 2;
+	uboLayoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	uboLayoutBindings[2].descriptorCount = 1;
+	uboLayoutBindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 1;
-	layoutInfo.pBindings = &uboLayoutBinding;
+	layoutInfo.bindingCount = 3;
+	layoutInfo.pBindings = uboLayoutBindings;
 	
 	err = vkCreateDescriptorSetLayout(g_Device, &layoutInfo, nullptr, &g_PcPlotDescriptorLayout);
 	check_vk_result(err);
 
-	VkDescriptorPoolSize poolSize = {};
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = 1;
+	VkDescriptorPoolSize poolSizes[3] = {};
+	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSizes[0].descriptorCount = 100;
+	poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	poolSizes[1].descriptorCount = 100;
+	poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	poolSizes[2].descriptorCount = 1;
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = &poolSize;
+	poolInfo.poolSizeCount = 3;
+	poolInfo.pPoolSizes = poolSizes;
 	poolInfo.maxSets = 1;
 	
 	err = vkCreateDescriptorPool(g_Device, &poolInfo, nullptr, &g_PcPlotDescriptorPool);
@@ -1242,7 +1261,7 @@ static void createPcPlotPipeline() {
 	vertexInputInfo.vertexAttributeDescriptionCount = 1;
 	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
 
-	uboLayoutBinding = {};
+	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
 	uboLayoutBinding.binding = 0;
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	uboLayoutBinding.descriptorCount = 1;
@@ -1623,6 +1642,10 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 				vkDestroyBuffer(g_Device, it->indexBuffer, nullptr);
 				it->indexBuffer = VK_NULL_HANDLE;
 			}
+			if (it->priorityColorBuffer) {
+				vkDestroyBuffer(g_Device, it->priorityColorBuffer, nullptr);
+				it->priorityColorBuffer = VK_NULL_HANDLE;
+			}
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
 			}
@@ -1721,6 +1744,17 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	dl.indexBufferOffset = allocInfo.allocationSize;
 	vkGetBufferMemoryRequirements(g_Device, dl.indexBuffer, &memRequirements);
 	allocInfo.allocationSize += memRequirements.size;
+
+	//priority rendering color buffer
+	bufferInfo.size = ds.data.size() * sizeof(float);
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.priorityColorBuffer);
+	check_vk_result(err);
+	
+	dl.priorityColorBufferOffset = allocInfo.allocationSize;
+	vkGetBufferMemoryRequirements(g_Device, dl.priorityColorBuffer, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//allocating the Memory for all draw list data
@@ -1789,91 +1823,17 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	//binding the medianBuffer
 	vkBindBufferMemory(g_Device, dl.medianBuffer, dl.dlMem, dl.medianBufferOffset);
 
-	//calculating the medians
-#ifdef _DEBUG
-	std::cout << "Starting to calulate the medians." << std::endl;
-#endif
-	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
-	//median calulations
-	//if (calculateMedians) {
-	if (false) {
-		std::vector<int> dataCpy(tl.indices);
-
-		for (int i = 0; i < pcAttributes.size(); i++) {
-			std::sort(dataCpy.begin(), dataCpy.end(), [i,ds](int a, int b) {return ds.data[a][i] > ds.data[b][i]; });
-			medianArr[MEDIAN * pcAttributes.size() + i] = ds.data[dataCpy[dataCpy.size() >> 1]][i];
-		}
-
-		//arithmetic median calculation
-		for (int i = 0; i < tl.indices.size(); i++) {
-			for (int j = 0; j < pcAttributes.size(); j++) {
-				if (i == 0)
-					medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
-				medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[tl.indices[i]][j];
-			}
-		}
-		for (int i = 0; i < pcAttributes.size(); i++) {
-			medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= tl.indices.size();
-		}
-		
-		//geometric median
-		const float epsilon = .05f;
-		
-		std::vector<double> last(pcAttributes.size());
-		std::vector<double> median(pcAttributes.size());
-		for (int i = 0; i < median.size(); i++) {
-			last[i] = 0;
-			median[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
-		}
-
-		while (squareDist(last, median) > epsilon) {
-			std::vector<double> numerator(median.size());
-			double denominator = 0;
-			for (int i = 0; i < median.size(); i++) {
-				numerator[i] = 0;
-			}
-			for (int i = 0; i < tl.indices.size(); i++) {
-				double dist = std::sqrt(squareDist(median, ds.data[i]));
-				if (dist == 0)
-					continue;
-				numerator = numerator + divide(ds.data[i], dist, median.size());
-				denominator += 1 / dist;
-			}
-			last = median;
-			median = numerator / denominator;
-		}
-
-		for (int i = 0; i < pcAttributes.size(); i++) {
-			medianArr[GOEMEDIAN * pcAttributes.size() + i] = median[i];
-		}
-	}
-	else {
-		for (int i = 0; i < MEDIANCOUNT * pcAttributes.size(); i++) {
-			medianArr[i] = 0;
-		}
-	}
-	
-	//copying the median Array
-	vkMapMemory(g_Device, dl.dlMem, dl.medianBufferOffset, MEDIANCOUNT* pcAttributes.size() * sizeof(float), 0, &d);
-	memcpy(d, medianArr, MEDIANCOUNT* pcAttributes.size() * sizeof(float));
-	vkUnmapMemory(g_Device, dl.dlMem);
-	delete[] medianArr;
-
-	dl.activeMedian = 0;
-	dl.medianColor = { 1,1,1,1 };
-#ifdef _DEBUG
-	std::cout << "Finished to calulate the medians." << std::endl;
-#endif
-
 	//binding the indexBuffer
 	vkBindBufferMemory(g_Device, dl.indexBuffer, dl.dlMem, dl.indexBufferOffset);
 
+	//binding the  priority rendering buffer
+	vkBindBufferMemory(g_Device, dl.priorityColorBuffer, dl.dlMem, dl.priorityColorBufferOffset);
 
 	//specifying the uniform buffer location
-	VkDescriptorBufferInfo desBufferInfo = {};
-	desBufferInfo.buffer = dl.ubo;
-	desBufferInfo.offset = 0;
-	desBufferInfo.range = sizeof(UniformBufferObject);
+	VkDescriptorBufferInfo desBufferInfos[1] = {};
+	desBufferInfos[0].buffer = dl.ubo;
+	desBufferInfos[0].offset = 0;
+	desBufferInfos[0].range = sizeof(UniformBufferObject);
 
 	VkDescriptorSetAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1890,9 +1850,11 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	descriptorWrite.dstArrayElement = 0;
 	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	descriptorWrite.descriptorCount = 1;
-	descriptorWrite.pBufferInfo = &desBufferInfo;
+	descriptorWrite.pBufferInfo = desBufferInfos;
 
 	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
+	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.uboDescSet);
 
 	float hue = distribution(engine) * 10;
 #ifdef _DEBUG
@@ -1954,6 +1916,10 @@ static void removePcPlotDrawList(DrawList& drawList) {
 			}
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
+			}
+			if (it->priorityColorBuffer) {
+				vkDestroyBuffer(g_Device, it->priorityColorBuffer, nullptr);
+				it->priorityColorBuffer = VK_NULL_HANDLE;
 			}
 			g_PcPlotDrawLists.erase(it);
 			break;
@@ -2187,6 +2153,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	ubo.amtOfVerts = amtOfIndeces;
 	ubo.amtOfAttributes = attributes.size();
 	ubo.color = { 1,1,1,1 };
+	ubo.VertexTransormations[0].w = (priorityAttribute != -1) ? 1.f : 0;
 	if (drawHistogramm) {
 		ubo.padding = histogrammWidth / 2;
 	}
@@ -2625,6 +2592,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
 		deviceFeatures.wideLines = VK_TRUE;
 		deviceFeatures.depthClamp = VK_TRUE;
+		deviceFeatures.vertexPipelineStoresAndAtomics = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
 		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -3265,7 +3233,6 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 }
 
 static void updateDrawListIndexBuffer(DrawList& dl) {
-
 	std::vector<std::pair<int, int>> order;
 	for (int i = 0; i < pcAttributes.size(); i++) {
 		if (pcAttributeEnabled[i]) {
@@ -3274,6 +3241,19 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 	}
 
 	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
+
+	//ordering active indices if priority rendering is enabled
+	if (priorityAttribute != -1) {
+		std::vector<float*>* data;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (ds.name == dl.parentDataSet) {
+				data = &ds.data;
+				break;
+			}
+		}
+		int p = priorityAttribute;
+		std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return (*data)[a][p] < (*data)[b][p]; });
+	}
 
 	//filling the indexbuffer for drawing
 	uint32_t amtOfIndices = dl.activeInd.size() * (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
@@ -3307,6 +3287,38 @@ static void updateAllDrawListIndexBuffer() {
 	for (DrawList& dl : g_PcPlotDrawLists) {
 		updateDrawListIndexBuffer(dl);
 	}
+}
+
+static void upatePriorityColorBuffer(DrawList& dl) {
+	std::vector<float*>* data;
+	for (DataSet& ds : g_PcPlotDataSets) {
+		if (ds.name == dl.parentDataSet) {
+			data = &ds.data;
+			break;
+		}
+	}
+
+	float denom = (pcAttributes[priorityAttribute].max - pcAttributes[priorityAttribute].min);
+	//uint8_t* color = new uint8_t[dl.indices.size() * 3];
+	//for (int i : dl.indices) {
+	//	int index = (((*data)[i][priorityAttribute] - pcAttributes[priorityAttribute].min) / denom) * (sizeof(colorPalette)/(4*sizeof(*colorPalette)));
+	//	color[i * 3] = colorPalette[index * 4];
+	//	color[i * 3 + 1] = colorPalette[index * 4 + 1];
+	//	color[i * 3 + 2] = colorPalette[index * 4 + 2];
+	//}
+	float* color = new float[data->size()];
+	for (int i : dl.activeInd) {
+		color[i] = (((*data)[i][priorityAttribute] - pcAttributes[priorityAttribute].min) / denom);
+	}
+
+	void* d;
+	vkMapMemory(g_Device, dl.dlMem, dl.priorityColorBufferOffset, data->size() *sizeof(float), 0, &d);
+	memcpy(d, color, data->size() * sizeof(float));
+	vkUnmapMemory(g_Device,dl.dlMem);
+
+	delete[] color;
+
+	updateDrawListIndexBuffer(dl);
 }
 
 static void updateActiveIndices(DrawList& dl) {
@@ -4866,6 +4878,23 @@ int main(int, char**)
 		}
 
 		if (ImGui::Checkbox("Enable Axis Lines", &enableAxisLines)) {
+		}
+
+		if (ImGui::BeginCombo("Priority rendering",(priorityAttribute == -1)?"Off":pcAttributes[priorityAttribute].name.c_str())) {
+			if (ImGui::MenuItem("Off")) {
+				priorityAttribute = -1;
+			}
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				if (pcAttributeEnabled[i]) {
+					if (ImGui::MenuItem(pcAttributes[i].name.c_str()) && g_PcPlotDrawLists.size()) {
+						priorityAttribute = i;
+						upatePriorityColorBuffer(g_PcPlotDrawLists.front());
+						pcPlotRender = true;
+					}
+				}
+			}
+
+			ImGui::EndCombo();
 		}
 
 		ImGui::Separator();

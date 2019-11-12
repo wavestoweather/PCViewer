@@ -536,6 +536,25 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet)
+{
+	VkDescriptorBufferInfo desBufferInfo = {};
+	desBufferInfo.buffer = buffer;
+	desBufferInfo.offset = 0;
+	desBufferInfo.range = size;
+
+	VkWriteDescriptorSet descriptorWrite = {};
+	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstSet = descriptorSet;
+	descriptorWrite.dstBinding = binding;
+	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.descriptorType = descriptorType;
+	descriptorWrite.descriptorCount = 1;
+	descriptorWrite.pBufferInfo = &desBufferInfo;
+
+	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+}
+
 void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout, uint32_t binding, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorImageInfo desc_image[1] = {};
