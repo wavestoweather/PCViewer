@@ -5470,19 +5470,21 @@ int main(int, char**)
 			ImGui::EndPopup();
 		}
 		//open export popup
-		if (exportDl) {
+		if (exportIdxf) {
 			ImGui::OpenPopup("Export Drawlist");
 		}
-		if (ImGui::BeginPopup("Export Drawlist")) {
+		if (ImGui::BeginPopupModal("Export Drawlist", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 			static char filepath[250];
 			ImGui::InputText("filepath", filepath, 250);
 			if (ImGui::Button("Save")) {
 				exportBrushAsIdxf(*exportDl, filepath);
 				ImGui::CloseCurrentPopup();
 			}
+			ImGui::SameLine();
 			if (ImGui::Button("Cancel")) {
 				ImGui::CloseCurrentPopup();
 			}
+			ImGui::EndPopup();
 		}
 
 		ImGui::EndChild();
