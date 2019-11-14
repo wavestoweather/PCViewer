@@ -54,7 +54,7 @@ void main() {
 	for(int i = 0; i < iterations; i++){
 
 		vec4 tex = texture(texSampler,startPoint);
-		if(tex.a > 0.0001f) {
+		if(false) {
 			//computing lighting
 			float lightDens = 0;
 			vec3 lightPos = startPoint + lightStep;

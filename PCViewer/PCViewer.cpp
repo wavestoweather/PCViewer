@@ -335,7 +335,7 @@ static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphic
 //variables for spline pipeline
 static VkPipelineLayout			g_PcPlotSplinePipelineLayout = VK_NULL_HANDLE;
 static VkPipeline				g_PcPlotSplinePipeline = VK_NULL_HANDLE;
-static bool						g_RenderSplines = false;
+static bool						g_RenderSplines = true;
 //variables for the histogramm pipeline
 static VkPipelineLayout			g_PcPlotHistoPipelineLayout = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotHistoPipelineAdditiveLayout = VK_NULL_HANDLE;
@@ -537,12 +537,11 @@ static bool enableAxisLines = true;
 //variables for the histogramm
 static float histogrammWidth = .1f;
 static bool drawHistogramm = false;
-static bool histogrammDensity = false;
+static bool histogrammDensity = true;
 static bool pcPlotDensity = false;
-static bool pcPlotLinDensity = false;
 static float densityRadius = .05f;
-static bool enableDensityMapping = false;
-static bool calculateMedians = false;
+static bool enableDensityMapping = true;
+static bool calculateMedians = true;
 static bool mapDensity = true;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
@@ -561,7 +560,7 @@ static std::vector<TemplateBrush> templateBrushes;
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
 static std::vector<GlobalBrush> globalBrushes;
 static std::map<std::string, float> activeBrushRatios;	//The ratio from lines active after all active brushes have been applied
-static int brushDragId = -1;
+static std::set<int> brushDragIds;
 //information about the dragmode
 //0 -> brush dragged
 //1 -> top edge dragged
@@ -577,6 +576,7 @@ static int priorityAttribute = -1;
 
 //variables for the 3d views
 static View3d * view3d;
+static bool view3dAlwaysOnTop = false;
 std::string active3dAttribute;
 static NodeViewer* nodeViewer;
 
@@ -2363,7 +2363,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, pcAttributes.size() * 6, 1, 0, 0, 0);
 
 		//starting to draw the histogramm lines
-		if (pcPlotLinDensity) {
+		if (histogrammDensity && enableDensityMapping) {
 			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoAdditivePipeline);
 		}
 		else {
@@ -2414,7 +2414,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					vkUnmapMemory(g_Device, drawList->dlMem);
 
 					//binding the descriptor set
-					if (pcPlotLinDensity) {
+					if (histogrammDensity && enableDensityMapping) {
 						vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineAdditiveLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
 					}
 					else {
@@ -3172,6 +3172,44 @@ static void openDataset(const char* filename) {
 	else {
 		std::cout << "The given type of the file is not supported by this programm" << std::endl;
 	}
+	//standard things which soudld be done on loading of a dataset
+	histogrammWidth = 1 / (pcAttributes.size() * 5);
+	uint32_t attributesSize = 2 * sizeof(float) * pcAttributes.size();
+	for (Attribute& a : pcAttributes) {
+		attributesSize += a.name.size() + 1;
+	}
+	SettingsManager::Setting s = {};
+	std::string file(filename);
+	int split = (file.find_last_of("\\") > file.find_last_of("/")) ? file.find_last_of("/") : file.find_last_of("\\");
+	s.id = file.substr(split + 1);
+	unsigned char* d = new unsigned char[sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size()];
+	s.byteLength = sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size();
+	s.data = d;
+	((int*)d)[0] = pcAttributes.size();
+	d += 4;
+	//Adding the attributes to the dataarray
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		memcpy(d, pcAttributes[i].name.data(), pcAttributes[i].name.size());
+		d += pcAttributes[i].name.size();
+		*d = '\0';
+		d++;
+		((float*)d)[0] = pcAttributes[i].min;
+		((float*)d)[1] = pcAttributes[i].max;
+		d += 2 * sizeof(float);
+	}
+	//adding the attributes order
+	for (int i : pcAttrOrd) {
+		((int*)d)[0] = i;
+		d += sizeof(int);
+	}
+	//adding attribute activation
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		*d++ = pcAttributeEnabled[i];
+	}
+	s.type = "AttributeSetting";
+	settingsManager->addSetting(s);
+
+	delete[] s.data;
 }
 
 static void addIndecesToDs(DataSet& ds,const char* filepath) {
@@ -3448,7 +3486,7 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 
 static void uploadDensityUiformBuffer() {
 	DensityUniformBuffer ubo = {};
-	ubo.enableMapping = enableDensityMapping | ((uint8_t)pcPlotLinDensity) * 2;
+	ubo.enableMapping = enableDensityMapping | ((uint8_t)(histogrammDensity && enableDensityMapping)) * 2;
 	ubo.gaussRange = densityRadius;
 	ubo.imageHeight = g_PcPlotHeight;
 	void* d;
@@ -3505,6 +3543,21 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 	delete[] dat;
 }
 
+static void exportBrushAsIdxf(DrawList& dl,const char* filepath) {
+	std::string path(filepath);
+	if (path.substr(path.find_last_of('.')) != ".idxf") {
+		return;
+#ifdef _DEBUG
+		std::cout << "The filepath with filename given was not a .idxf file. Instead " << path.substr(path.find_last_of('.')) << " was found." << std::endl;
+#endif
+	}
+	std::ofstream file(filepath);
+	for (int i : dl.activeInd) {
+		file << i << std::endl;
+	}
+	file.close();
+}
+
 //calculates the length of a vector of size pcAttributes.size()
 static double length(double* vec) {
 	double result = 0;
@@ -3525,6 +3578,31 @@ static double summedDistance(double* a, std::vector<int>& indices, float** data)
 		dist += std::sqrt(d);
 	}
 	return dist;
+}
+
+static void invertGlobalBrush(GlobalBrush& b) {
+	std::map<int,std::vector<std::pair<float, float>>> reducedAttributeBrush;
+	for (auto& axis : b.brushes) {
+		for (auto& brush : axis.second) {
+			bool addNew = true;
+			for (auto& reducedBrush : reducedAttributeBrush[axis.first]) {
+				if (brush.second.first > reducedBrush.first&& brush.second.first < reducedBrush.second) {
+					reducedBrush.second = (reducedBrush.second > brush.second.second) ? reducedBrush.second : brush.second.second;
+					addNew = false;
+					break;
+				}
+				if (brush.second.second > reducedBrush.first&& brush.second.second < reducedBrush.second)
+				{
+					reducedBrush.first = (reducedBrush.first < brush.second.first) ? reducedBrush.first : brush.second.first;
+					addNew = false;
+					break;
+				}
+			}
+			if (addNew) {
+				reducedAttributeBrush[axis.first].push_back(brush.second);
+			}
+		}
+	}
 }
 
 static void calculateDrawListMedians(DrawList& dl) {
@@ -3562,35 +3640,35 @@ static void calculateDrawListMedians(DrawList& dl) {
 
 	//geometric median. Computed via gradient descent
 	//geometric median
-	const float epsilon = .05f;
-
-	std::vector<double> last(pcAttributes.size());
-	std::vector<double> median(pcAttributes.size());
-	for (int i = 0; i < median.size(); i++) {
-		last[i] = 0;
-		median[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
-	}
-
-	while (squareDist(last, median) > epsilon) {
-		std::vector<double> numerator(median.size());
-		double denominator = 0;
-		for (int i = 0; i < median.size(); i++) {
-			numerator[i] = 0;
-	}
-		for (int i = 0; i < dl.activeInd.size(); i++) {
-			double dist = std::sqrt(squareDist(median, ds.data[dl.activeInd[i]]));
-			if (dist == 0)
-				continue;
-			numerator = numerator + divide(ds.data[dl.activeInd[i]], dist, median.size());
-			denominator += 1 / dist;
-		}
-		last = median;
-		median = numerator / denominator;
-}
-
-	for (int i = 0; i < pcAttributes.size(); i++) {
-		medianArr[GOEMEDIAN * pcAttributes.size() + i] = median[i];
-	}
+	//const float epsilon = .05f;
+	//
+	//std::vector<double> last(pcAttributes.size());
+	//std::vector<double> median(pcAttributes.size());
+	//for (int i = 0; i < median.size(); i++) {
+	//	last[i] = 0;
+	//	median[i] = medianArr[ARITHMEDIAN * pcAttributes.size() + i];
+	//}
+	//
+	//while (squareDist(last, median) > epsilon) {
+	//	std::vector<double> numerator(median.size());
+	//	double denominator = 0;
+	//	for (int i = 0; i < median.size(); i++) {
+	//		numerator[i] = 0;
+	//}
+	//	for (int i = 0; i < dl.activeInd.size(); i++) {
+	//		double dist = std::sqrt(squareDist(median, ds.data[dl.activeInd[i]]));
+	//		if (dist == 0)
+	//			continue;
+	//		numerator = numerator + divide(ds.data[dl.activeInd[i]], dist, median.size());
+	//		denominator += 1 / dist;
+	//	}
+	//	last = median;
+	//	median = numerator / denominator;
+	//}
+	//
+	//for (int i = 0; i < pcAttributes.size(); i++) {
+	//	medianArr[GOEMEDIAN * pcAttributes.size() + i] = median[i];
+	//}
 
 	void* d;
 	vkMapMemory(g_Device, dl.dlMem, dl.medianBufferOffset, MEDIANCOUNT * pcAttributes.size() * sizeof(float), 0, &d);
@@ -3606,7 +3684,7 @@ int main(int, char**)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
 #endif
 
-	engine.seed(12);
+	engine.seed(15);
 
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
@@ -3905,7 +3983,7 @@ int main(int, char**)
 			}
 		}
 		ImGui::End();
-		if(ImGui::GetIO().KeyAlt)
+		if(ImGui::GetIO().KeyAlt || view3dAlwaysOnTop)
 			ImGui::SetWindowFocus("3dview");
 #endif
 
@@ -4437,6 +4515,23 @@ int main(int, char**)
 					ImGui::OpenPopup(("GlobalBrushPopup##"+globalBrushes[i].name).c_str());
 				}
 				if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
+					if (ImGui::MenuItem("Focus axis on brush")) {
+						std::pair<float, float> mm;
+						for (auto& axis : globalBrushes[i].brushes) {
+							mm.first = std::numeric_limits<float>::infinity();
+							mm.second = -std::numeric_limits<float>::infinity();
+							for (auto b : axis.second) {
+								if (b.second.first < mm.first)
+									mm.first = b.second.first;
+								if (b.second.second > mm.second)
+									mm.second = b.second.second;
+							}
+							pcAttributes[axis.first].min = mm.first;
+							pcAttributes[axis.first].max = mm.second;
+						}
+						pcPlotRender = true;
+						ImGui::CloseCurrentPopup();
+					}
 					if (ImGui::MenuItem("Convert to lokal brush")) {
 						openConvertToLokal = i;
 						ImGui::CloseCurrentPopup();
@@ -4464,6 +4559,9 @@ int main(int, char**)
 							pcPlotRender = true;
 						}
 						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Invert Brush")) {
+
 					}
 
 					ImGui::EndPopup();
@@ -4498,8 +4596,8 @@ int main(int, char**)
 							selected = -1;
 						else
 							selected = c;
-						c++;
 					}
+					c++;
 				}
 				ImGui::EndChild();
 
@@ -4598,6 +4696,11 @@ int main(int, char**)
 				}
 			}
 
+			//clearing the dragged brushes if ctrl key is released
+			if (!ImGui::GetIO().MouseDown && !ImGui::GetIO().KeyCtrl) {
+				brushDragIds.clear();
+			}
+
 			//drawing the global brush
 			//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
 			if (selectedGlobalBrush != -1) {
@@ -4617,9 +4720,10 @@ int main(int, char**)
 						//edgeHover = 2 -> Bot edge is hovered
 						int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
 						edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
-						ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(30, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+						int r = (brushDragIds.find(br.first) != brushDragIds.end()) ? 200 : 30;
+						ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(r, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
 						//set mouse cursor
-						if (edgeHover || brushDragId != -1) {
+						if (edgeHover || brushDragIds.size()) {
 							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 						}
 						if (hover) {
@@ -4627,15 +4731,15 @@ int main(int, char**)
 						}
 						//activate dragging of edge
 						if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
-							brushDragId = br.first;
+							brushDragIds.insert(br.first);
 							brushDragMode = edgeHover;
 						}
 						if (hover && ImGui::GetIO().MouseClicked[0]) {
-							brushDragId = br.first;
+							brushDragIds.insert(br.first);
 							brushDragMode = 0;
 						}
 						//drag edge
-						if (brushDragId == br.first && ImGui::GetIO().MouseDown[0]) {
+						if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseDown[0]) {
 							if (brushDragMode == 0) {
 								float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
 								br.second.second -= delta;
@@ -4662,8 +4766,8 @@ int main(int, char**)
 							}
 						}
 						//release edge
-						if (brushDragId == br.first && ImGui::GetIO().MouseReleased[0]) {
-							brushDragId = -1;
+						if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0]) {
+							brushDragIds.clear();
 							updateAllActiveIndices();
 							pcPlotRender = true;
 						}
@@ -4714,7 +4818,8 @@ int main(int, char**)
 					float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
 					float height = (b.minMax.second - b.minMax.first) / (pcAttributes[i].max - pcAttributes[i].min) * picSize.y;
-					ImGui::GetWindowDrawList()->AddRect(ImVec2(x,y), ImVec2(x + width, y + height), IM_COL32(200, 30, 0, 255), 1, ImDrawCornerFlags_All, 5);
+					int g = (brushDragIds.find(b.id) != brushDragIds.end()) ? 200 : 30;
+					ImGui::GetWindowDrawList()->AddRect(ImVec2(x,y), ImVec2(x + width, y + height), IM_COL32(200, g, 0, 255), 1, ImDrawCornerFlags_All, 5);
 					
 					bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
 					//edgeHover = 0 -> No edge is hovered
@@ -4725,7 +4830,7 @@ int main(int, char**)
 					brushHover |= hover || edgeHover;
 
 					//set mouse cursor
-					if (edgeHover || brushDragId != -1) {
+					if (edgeHover || brushDragIds.size()) {
 						ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 					}
 					if (hover) {
@@ -4733,15 +4838,15 @@ int main(int, char**)
 					}
 					//activate dragging of edge
 					if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
-						brushDragId = b.id;
+						brushDragIds.insert(b.id);
 						brushDragMode = edgeHover;
 					}
 					if (hover && ImGui::GetIO().MouseClicked[0]) {
-						brushDragId = b.id;
+						brushDragIds.insert(b.id);
 						brushDragMode = 0;
 					}
 					//drag edge
-					if (brushDragId == b.id && ImGui::GetIO().MouseDown[0]) {
+					if (brushDragIds.find(b.id) != brushDragIds.end() && ImGui::GetIO().MouseDown[0]) {
 						if (brushDragMode == 0) {
 							float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[i].max - pcAttributes[i].min);
 							b.minMax.second -= delta;
@@ -4768,8 +4873,8 @@ int main(int, char**)
 						}
 					}
 					//release edge
-					if (brushDragId == b.id && ImGui::GetIO().MouseReleased[0]) {
-						brushDragId = -1;
+					if (brushDragIds.find(b.id) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
+						brushDragIds.clear();
 						updateActiveIndices(*dl);
 						pcPlotRender = true;
 					}
@@ -4792,7 +4897,7 @@ int main(int, char**)
 
 				//create a new brush
 				bool axisHover = mousePos.x > x&& mousePos.x < x + BRUSHWIDTH && mousePos.y > picPos.y && mousePos.y < picPos.y + picSize.y;
-				if (!brushHover && axisHover && brushDragId == -1) {
+				if (!brushHover && axisHover && brushDragIds.size() == 0) {
 					ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
 					if (ImGui::GetIO().MouseClicked[0]) {
@@ -4800,7 +4905,7 @@ int main(int, char**)
 						temp.id = currentBrushId++;
 						temp.minMax.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
 						temp.minMax.second = temp.minMax.first;
-						brushDragId = temp.id;
+						brushDragIds.insert(temp.id);
 						brushDragMode = 1;
 						dl->brushes[i].push_back(temp);
 					}
@@ -4849,12 +4954,12 @@ int main(int, char**)
 			}
 		}
 
-		if (ImGui::Checkbox("Enable additive density", &pcPlotLinDensity)) {
-			if (pcAttributes.size()) {
-				uploadDensityUiformBuffer();
-				pcPlotRender = true;
-			}
-		}
+		//if (ImGui::Checkbox("Enable additive density", &pcPlotLinDensity)) {
+		//	if (pcAttributes.size()) {
+		//		uploadDensityUiformBuffer();
+		//		pcPlotRender = true;
+		//	}
+		//}
 
 		if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
 			for (DrawList& dl : g_PcPlotDrawLists) {
@@ -4900,6 +5005,10 @@ int main(int, char**)
 			}
 
 			ImGui::EndCombo();
+		}
+
+		if (ImGui::Checkbox("Put 3d view always in focus", &view3dAlwaysOnTop)) {
+			
 		}
 
 		ImGui::Separator();
@@ -5197,6 +5306,8 @@ int main(int, char**)
 		ImGui::NextColumn();
 		bool compareDrawLists = false;
 		static DrawListComparator drawListComparator;
+		bool exportIdxf = false;
+		static DrawList* exportDl;
 		for (DrawList& dl : g_PcPlotDrawLists) {
 			if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
 				if (count == pcPlotSelectedDrawList)
@@ -5241,6 +5352,11 @@ int main(int, char**)
 						++draw;
 					}
 					ImGui::EndCombo();
+				}
+				if (ImGui::MenuItem("Export as .idxf")) {
+					exportIdxf = true;
+					exportDl = &dl;
+					ImGui::CloseCurrentPopup();
 				}
 				ImGui::Separator();
 				for (int i = 0; i < pcAttributes.size();i++) {
@@ -5301,7 +5417,7 @@ int main(int, char**)
 
 			const char* entrys[] = { "No Median","Synthetic","Arithmetic","Geometric" };
 			int prevActive = dl.activeMedian;
-			if (ImGui::Combo((std::string("##c") + dl.name).c_str(), &dl.activeMedian, entrys, sizeof(entrys) / sizeof(*entrys))) {
+			if (ImGui::Combo((std::string("##c") + dl.name).c_str(), &dl.activeMedian, entrys, sizeof(entrys) / sizeof(*entrys) - 1)) {
 				if (prevActive == 0) {
 					calculateDrawListMedians(dl);
 				}
@@ -5340,6 +5456,21 @@ int main(int, char**)
 			}
 
 			ImGui::EndPopup();
+		}
+		//open export popup
+		if (exportDl) {
+			ImGui::OpenPopup("Export Drawlist");
+		}
+		if (ImGui::BeginPopup("Export Drawlist")) {
+			static char filepath[250];
+			ImGui::InputText("filepath", filepath, 250);
+			if (ImGui::Button("Save")) {
+				exportBrushAsIdxf(*exportDl, filepath);
+				ImGui::CloseCurrentPopup();
+			}
+			if (ImGui::Button("Cancel")) {
+				ImGui::CloseCurrentPopup();
+			}
 		}
 
 		ImGui::EndChild();
