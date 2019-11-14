@@ -12,9 +12,9 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define DETECTMEMLEAK
 #endif
 
-//uncomment this to build the pcViewer with 3d view
+// build the pcViewer with 3d view
 #define RENDER3D
-//uncomment this to build hte pcViewer with the node viewer
+//build hte pcViewer with the node viewer
 //#define NODEVIEW
 
 #ifdef DETECTMEMLEAK
@@ -23,7 +23,6 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <crtdbg.h>
 #endif
 
-#pragma once
 #include "PCViewer.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
@@ -3179,7 +3178,6 @@ static void openDataset(const char* filename) {
 		attributesSize += a.name.size() + 1;
 	}
 	SettingsManager::Setting s = {};
-	std::string file(filename);
 	int split = (file.find_last_of("\\") > file.find_last_of("/")) ? file.find_last_of("/") : file.find_last_of("\\");
 	s.id = file.substr(split + 1);
 	unsigned char* d = new unsigned char[sizeof(int) + attributesSize + pcAttributes.size() * sizeof(int) + pcAttributes.size()];
@@ -4613,6 +4611,20 @@ int main(int, char**)
 							++ds;
 						}
 						createPcPlotDrawList(ds->drawLists.front(), *ds, name);
+						DrawList& dl = g_PcPlotDrawLists.back();
+						//copying all brushes to the new drawlsit
+						for (int i = 0; i < pcAttributes.size(); i++) {
+							dl.brushes.push_back(std::vector<Brush>());
+						}
+						for (auto axis : globalBrushes[openConvertToLokal].brushes) {
+							for (auto brush : axis.second) {
+								Brush b = {};
+								b.id = currentBrushId++;
+								b.minMax = brush.second;
+								dl.brushes[axis.first].push_back(b);
+							}
+						}
+						updateActiveIndices(dl);
 						openConvertToLokal = -1;
 						ImGui::CloseCurrentPopup();
 					}
@@ -4746,10 +4758,10 @@ int main(int, char**)
 								br.second.first -= delta;
 							}
 							else if (brushDragMode == 1) {
-								br.second.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+								br.second.second -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
 							}
 							else {
-								br.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+								br.second.first -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
 							}
 
 							//switching edges if max value of brush is smaller than min value
@@ -4766,7 +4778,7 @@ int main(int, char**)
 							}
 						}
 						//release edge
-						if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0]) {
+						if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
 							brushDragIds.clear();
 							updateAllActiveIndices();
 							pcPlotRender = true;
@@ -4853,10 +4865,10 @@ int main(int, char**)
 							b.minMax.first -= delta;
 						}
 						else if (brushDragMode == 1) {
-							b.minMax.second = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
+							b.minMax.second -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[i].max - pcAttributes[i].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
 						}
 						else {
-							b.minMax.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
+							b.minMax.first -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[i].max - pcAttributes[i].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
 						}
 
 						//switching edges if max value of brush is smaller than min value

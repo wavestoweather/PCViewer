@@ -22,6 +22,9 @@ bool SettingsManager::addSetting(Setting s)
 	memcpy(data, s.data, s.byteLength);
 
 	s.data = data;
+	if (settings.find(s.id) != settings.end()) {
+		delete settings[s.id].data;
+	}
 	settings[s.id] = s;
 
 	if (settingsType.find(s.type) == settingsType.end()) {
