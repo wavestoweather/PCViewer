@@ -130,6 +130,8 @@ void View3d::resize(uint32_t width, uint32_t height)
 	imageWidth = width;
 	imageHeight = height;
 	
+	check_vk_result(vkDeviceWaitIdle(device));
+
 	if (image) {
 		vkDestroyImage(device, image, nullptr);
 	}

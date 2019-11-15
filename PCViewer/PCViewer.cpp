@@ -237,6 +237,7 @@ struct DrawListComparator {
 	std::vector<int>aOrB;
 	std::vector<int>aMinusB;
 	std::vector<int>bMinusA;
+	std::vector<int>aAndb;
 };
 
 struct Brush {
@@ -572,6 +573,8 @@ static int brushCombination = 0;				//How global brushes should be combined. 0->
 
 //variables for priority rendering
 static int priorityAttribute = -1;
+static float priorityAttributeCenterValue = 0;
+static bool prioritySelectAttribute = false;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -3288,7 +3291,7 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 			}
 		}
 		int p = priorityAttribute;
-		std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return (*data)[a][p] < (*data)[b][p]; });
+		std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return fabs((*data)[a][p]-priorityAttributeCenterValue) > fabs((*data)[b][p]-priorityAttributeCenterValue); });
 	}
 
 	//filling the indexbuffer for drawing
@@ -3334,7 +3337,9 @@ static void upatePriorityColorBuffer(DrawList& dl) {
 		}
 	}
 
-	float denom = (pcAttributes[priorityAttribute].max - pcAttributes[priorityAttribute].min);
+	//float denom = (pcAttributes[priorityAttribute].max - pcAttributes[priorityAttribute].min);
+	float denom = (fabs(pcAttributes[priorityAttribute].max - priorityAttributeCenterValue) > fabs(pcAttributes[priorityAttribute].min - priorityAttributeCenterValue)) ? fabs(pcAttributes[priorityAttribute].max - priorityAttributeCenterValue) : fabs(pcAttributes[priorityAttribute].min - priorityAttributeCenterValue);
+
 	//uint8_t* color = new uint8_t[dl.indices.size() * 3];
 	//for (int i : dl.indices) {
 	//	int index = (((*data)[i][priorityAttribute] - pcAttributes[priorityAttribute].min) / denom) * (sizeof(colorPalette)/(4*sizeof(*colorPalette)));
@@ -3344,7 +3349,7 @@ static void upatePriorityColorBuffer(DrawList& dl) {
 	//}
 	float* color = new float[data->size()];
 	for (int i : dl.activeInd) {
-		color[i] = (((*data)[i][priorityAttribute] - pcAttributes[priorityAttribute].min) / denom);
+		color[i] = 1 - (fabs((*data)[i][priorityAttribute] - priorityAttributeCenterValue) / denom);
 	}
 
 	void* d;
@@ -3921,6 +3926,11 @@ int main(int, char**)
 			}
 		}
 
+		//Check if button f5 was pressed for rendering
+		if (ImGui::GetIO().KeysDown[294]) {
+			pcPlotRender = true;
+		}
+
 		//check if a path was dropped in the application
 		if (pathDropped && !addIndeces) {
 			ImGui::OpenPopup("OPENDATASET");
@@ -3965,9 +3975,13 @@ int main(int, char**)
 
 #ifdef RENDER3D
 		//testwindow for the 3d renderer
-		if (ImGui::Begin("3dview", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav)) {
-			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+		ImGui::SetNextWindowSize(ImVec2(800, 800));
+		if (ImGui::Begin("3dview", NULL, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav)) {
+			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(ImGui::GetWindowContentRegionWidth(), ImGui::GetWindowContentRegionMax().y), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 			
+			//if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseReleased[0]);
+			//	view3d->resize(ImGui::GetWindowContentRegionWidth(), ImGui::GetWindowHeight());
+
 			if ((ImGui::IsMouseDragging()|| io.MouseWheel)&&ImGui::IsItemHovered()) {
 				float mousemovement[3];
 				mousemovement[0] = -ImGui::GetMouseDragDelta().x;
@@ -4825,7 +4839,7 @@ int main(int, char**)
 				
 				ImVec2 mousePos = ImGui::GetIO().MousePos;
 				float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
-				//drawing the brushes as foreground objects
+				//drawing the brushes
 				for (Brush& b : dl->brushes[i]) {
 					float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
 					float width = BRUSHWIDTH;
@@ -4925,6 +4939,41 @@ int main(int, char**)
 			}
 		}
 
+		//handling priority selection
+		if (prioritySelectAttribute) {
+			pcPlotSelectedDrawList = -1;
+			selectedGlobalBrush = -1;
+			ImGui::GetWindowDrawList()->AddRect(picPos, ImVec2(picPos.x + picSize.x, picPos.y + picSize.y), IM_COL32(255, 255, 0, 255), 0, 15, 5);
+			if ((ImGui::GetIO().MousePos.x<picPos.x || ImGui::GetIO().MousePos.x>picPos.x + picSize.x || ImGui::GetIO().MousePos.y<picPos.y || ImGui::GetIO().MousePos.y>picPos.y + picSize.y)&&ImGui::GetIO().MouseClicked[0]) {
+				prioritySelectAttribute = false;
+			}
+			
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				if (!pcAttributeEnabled[i])
+					continue;
+
+				int del = -1;
+				int ind = 0;
+				bool brushHover = false;
+
+				ImVec2 mousePos = ImGui::GetIO().MousePos;
+				float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+				bool axisHover = mousePos.x > x&& mousePos.x < x + BRUSHWIDTH && mousePos.y > picPos.y&& mousePos.y < picPos.y + picSize.y;
+
+				if (axisHover) {
+					ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+					if (ImGui::GetIO().MouseClicked[0]) {
+						prioritySelectAttribute = false;
+						priorityAttribute = i;
+						priorityAttributeCenterValue = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
+						upatePriorityColorBuffer(g_PcPlotDrawLists.front());
+						pcPlotRender = true;
+					}
+				}
+			}
+		}
+
 		//Settings section
 		ImGui::BeginChild("Settings", ImVec2(500, -1), true);
 		ImGui::Text("Settings");
@@ -5010,6 +5059,7 @@ int main(int, char**)
 				if (pcAttributeEnabled[i]) {
 					if (ImGui::MenuItem(pcAttributes[i].name.c_str()) && g_PcPlotDrawLists.size()) {
 						priorityAttribute = i;
+						priorityAttributeCenterValue = pcAttributes[i].max;
 						upatePriorityColorBuffer(g_PcPlotDrawLists.front());
 						pcPlotRender = true;
 					}
@@ -5017,6 +5067,10 @@ int main(int, char**)
 			}
 
 			ImGui::EndCombo();
+		}
+
+		if (ImGui::Button("Set Priority center")) {
+			prioritySelectAttribute = true;
 		}
 
 		if (ImGui::Checkbox("Put 3d view always in focus", &view3dAlwaysOnTop)) {
@@ -5350,6 +5404,8 @@ int main(int, char**)
 							std::set_difference(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aMinusB));
 							std::vector<int> bMinusA;
 							std::set_difference(b.begin(), b.end(), a.begin(), a.end(), std::back_inserter(bMinusA));
+							std::vector<int> aAndb;
+							std::set_intersection(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aAndb));
 
 							drawListComparator.parentDataset = dl.parentDataSet;
 							drawListComparator.a = dl.name;
@@ -5359,6 +5415,7 @@ int main(int, char**)
 							drawListComparator.aOrB = aOrB;
 							drawListComparator.aMinusB = aMinusB;
 							drawListComparator.bMinusA = bMinusA;
+							drawListComparator.aAndb = aAndb;
 							compareDrawLists = true;
 						}
 						++draw;
@@ -5448,19 +5505,113 @@ int main(int, char**)
 		if (compareDrawLists)
 			ImGui::OpenPopup("Compare Drawlists");
 		if (ImGui::BeginPopupModal("Compare Drawlists",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+			static char name[250];
+			ImGui::InputText("Name for new Drawlist",name,250);
 			ImGui::BeginChild("A", ImVec2(400,200));
 			ImGui::Text("Statistics for %s", drawListComparator.a.c_str());
 			ImGui::Text("Contains %8d points.", drawListComparator.aInd.size());
+			ImGui::Text("The intersection has %d points.", drawListComparator.aAndb.size());
+			if (ImGui::Button("Create intersection##a")) {
+				TemplateList tl = {};
+				DataSet& parent = g_PcPlotDataSets.front();
+				for (DataSet& ds : g_PcPlotDataSets) {
+					if (ds.name == drawListComparator.parentDataset) {
+						parent = ds;
+						break;
+					}
+				}
+				tl.buffer = parent.buffer.buffer;
+				tl.name = name;
+				tl.indices = drawListComparator.aAndb;
+				createPcPlotDrawList(tl, parent, name);
+				pcPlotRender = true;
+			}
 			ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
+			if (ImGui::Button("Create union##a")) {
+				TemplateList tl = {};
+				DataSet& parent = g_PcPlotDataSets.front();
+				for (DataSet& ds : g_PcPlotDataSets) {
+					if (ds.name == drawListComparator.parentDataset) {
+						parent = ds;
+						break;
+					}
+				}
+				tl.buffer = parent.buffer.buffer;
+				tl.name = name;
+				tl.indices = drawListComparator.aOrB;
+				createPcPlotDrawList(tl, parent, name);
+				pcPlotRender = true;
+			}
 			ImGui::Text("Difference has %8d points", drawListComparator.aMinusB.size());
+			if (ImGui::Button("Create difference##a")) {
+				TemplateList tl = {};
+				DataSet& parent = g_PcPlotDataSets.front();
+				for (DataSet& ds : g_PcPlotDataSets) {
+					if (ds.name == drawListComparator.parentDataset) {
+						parent = ds;
+						break;
+					}
+				}
+				tl.buffer = parent.buffer.buffer;
+				tl.name = name;
+				tl.indices = drawListComparator.aMinusB;
+				createPcPlotDrawList(tl, parent, name);
+				pcPlotRender = true;
+			}
 			ImGui::EndChild();
 			ImGui::SameLine();
 
 			ImGui::BeginChild("B", ImVec2(400, 200));
 			ImGui::Text("Statistics for %s", drawListComparator.b.c_str());
 			ImGui::Text("Contains %8d points.", drawListComparator.bInd.size());
+			ImGui::Text("The intersection has %d points.", drawListComparator.aAndb.size());
+			if (ImGui::Button("Create intersection##b")) {
+				TemplateList tl = {};
+				DataSet& parent = g_PcPlotDataSets.front();
+				for (DataSet& ds : g_PcPlotDataSets) {
+					if (ds.name == drawListComparator.parentDataset) {
+						parent = ds;
+						break;
+					}
+				}
+				tl.buffer = parent.buffer.buffer;
+				tl.name = name;
+				tl.indices = drawListComparator.aAndb;
+				createPcPlotDrawList(tl, parent, name);
+				pcPlotRender = true;
+			}
 			ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
+			if (ImGui::Button("Create union##b")) {
+				TemplateList tl = {};
+				DataSet& parent = g_PcPlotDataSets.front();
+				for (DataSet& ds : g_PcPlotDataSets) {
+					if (ds.name == drawListComparator.parentDataset) {
+						parent = ds;
+						break;
+					}
+				}
+				tl.buffer = parent.buffer.buffer;
+				tl.name = name;
+				tl.indices = drawListComparator.aOrB;
+				createPcPlotDrawList(tl, parent, name);
+				pcPlotRender = true;
+			}
 			ImGui::Text("Difference has %8d points", drawListComparator.bMinusA.size());
+			if (ImGui::Button("Create difference##b")) {
+				TemplateList tl = {};
+				DataSet& parent = g_PcPlotDataSets.front();
+				for (DataSet& ds : g_PcPlotDataSets) {
+					if (ds.name == drawListComparator.parentDataset) {
+						parent = ds;
+						break;
+					}
+				}
+				tl.buffer = parent.buffer.buffer;
+				tl.name = name;
+				tl.indices = drawListComparator.bMinusA;
+				createPcPlotDrawList(tl, parent, name);
+				pcPlotRender = true;
+			}
 			ImGui::EndChild();
 
 			if (ImGui::Button("Close")) {
