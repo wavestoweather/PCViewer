@@ -6,6 +6,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include "Shape.h"
+#include <stdint.h>
 
 class Sphere: public Shape {
 public:
