@@ -245,8 +245,17 @@ struct Brush {
 	std::pair<float, float> minMax;
 };
 
+struct TemplateList {
+	std::string name;
+	VkBuffer buffer;
+	std::vector<int> indices;
+	std::vector<std::pair<float, float>> minMax;
+	float pointRatio;		//ratio of points in the datasaet(reduced)
+};
+
 struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
+	TemplateList* parent;
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
 	std::map<std::string, float> lineRatios;			//contains the ratio of still active lines per drawlist
 	std::map<int, std::vector<std::pair<unsigned int,std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
@@ -254,6 +263,7 @@ struct GlobalBrush {
 
 struct TemplateBrush {
 	std::string name;									//identifier for the template brush
+	TemplateList* parent;
 	std::map<int,std::pair<float, float>> brushes;
 };
 
@@ -289,13 +299,6 @@ struct DrawList {
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 };
 
-struct TemplateList {
-	std::string name;
-	VkBuffer buffer;
-	std::vector<int> indices;
-	std::vector<std::pair<float, float>> minMax;
-};
-
 struct Buffer {
 	VkBuffer buffer;
 	VkBuffer uboBuffer;
@@ -312,6 +315,7 @@ struct DataSet {
 	std::vector<float*> data;
 	std::list<TemplateList> drawLists;
 	bool oneData = false;			//if is set to true, all data in data is in one continous float* array. -> on deletion only delete[] the float* of data[0]
+	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
 
 	bool operator==(const DataSet& other) {
 		return this->name == other.name;
@@ -575,6 +579,7 @@ static int brushCombination = 0;				//How global brushes should be combined. 0->
 static int priorityAttribute = -1;
 static float priorityAttributeCenterValue = 0;
 static bool prioritySelectAttribute = false;
+static bool priorityReorder = false;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -1858,6 +1863,9 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
 	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.uboDescSet);
 
+	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.medianUboDescSet);
+
 	float hue = distribution(engine) * 10;
 #ifdef _DEBUG
 	std::cout << "Hue: " << hue << std::endl;
@@ -1880,6 +1888,8 @@ static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const 
 	for (Attribute a : pcAttributes) {
 		dl.brushes.push_back(std::vector<Brush>());
 	}
+
+	dl.medianColor = { 1,1,1,1 };
 
 	g_PcPlotDrawLists.push_back(dl);
 }
@@ -2218,11 +2228,13 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	//copying the uniform buffer
 	void* da;
 	for (DrawList& ds : g_PcPlotDrawLists) {
+		ubo.VertexTransormations[0].w = (priorityAttribute != -1) ? 1.f : 0;
 		ubo.color = ds.color;
 		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &da);
 		memcpy(da, &ubo, sizeof(UniformBufferObject));
 		vkUnmapMemory(g_Device, ds.dlMem);
 		
+		ubo.VertexTransormations[0].w = 0;
 		ubo.color = ds.medianColor;
 		vkMapMemory(g_Device, ds.dlMem, ds.medianUboOffset, sizeof(UniformBufferObject), 0, &da);
 		memcpy(da, &ubo, sizeof(UniformBufferObject));
@@ -2916,6 +2928,8 @@ static void openCsv(const char* filename) {
 	}
 	f.close();
 
+	ds.reducedDataSetSize = ds.data.size();
+
 	createPcPlotVertexBuffer(pcAttributes, ds.data);
 
 	ds.buffer = g_PcPlotVertexBuffers.back();
@@ -2923,6 +2937,7 @@ static void openCsv(const char* filename) {
 	TemplateList tl = {};
 	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
 	tl.name = "Default Drawlist";
+	tl.pointRatio = 1.0f;
 	for (int i = 0; i < ds.data.size(); i++) {
 		tl.indices.push_back(i);
 	}
@@ -3081,6 +3096,8 @@ static void openDlf(const char* filename) {
 
 			createPcPlotVertexBuffer(pcAttributes, ds.data);
 
+			ds.reducedDataSetSize = ds.data.size();
+
 			//adding a default drawlist for all attributes
 			TemplateList defaultT = {};
 			defaultT.buffer = g_PcPlotVertexBuffers.back().buffer;
@@ -3137,6 +3154,7 @@ static void openDlf(const char* filename) {
 								tl.minMax[j].second = ds.data[i][j];
 						}
 					}
+					tl.pointRatio = tl.indices.size()/((float)ds.reducedDataSetSize);
 					ds.drawLists.push_back(tl);
 				}
 			}
@@ -3174,8 +3192,9 @@ static void openDataset(const char* filename) {
 	else {
 		std::cout << "The given type of the file is not supported by this programm" << std::endl;
 	}
-	//standard things which soudld be done on loading of a dataset
-	histogrammWidth = 1 / (pcAttributes.size() * 5);
+	//standard things which should be done on loading of a dataset
+	//adding a standard attributes saving
+	histogrammWidth = 1.0f / (pcAttributes.size() * 5);
 	uint32_t attributesSize = 2 * sizeof(float) * pcAttributes.size();
 	for (Attribute& a : pcAttributes) {
 		attributesSize += a.name.size() + 1;
@@ -3250,6 +3269,7 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 					tl.minMax[j].second = ds.data[i][j];
 			}
 		}
+		tl.pointRatio = ((float)tl.indices.size()) / ds.reducedDataSetSize;
 
 		//adding the drawlist to ds
 		ds.drawLists.push_back(tl);
@@ -3282,7 +3302,8 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
 
 	//ordering active indices if priority rendering is enabled
-	if (priorityAttribute != -1) {
+	if (priorityReorder) {
+		priorityReorder = false;
 		std::vector<float*>* data;
 		for (DataSet& ds : g_PcPlotDataSets) {
 			if (ds.name == dl.parentDataSet) {
@@ -3291,7 +3312,8 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 			}
 		}
 		int p = priorityAttribute;
-		std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return fabs((*data)[a][p]-priorityAttributeCenterValue) > fabs((*data)[b][p]-priorityAttributeCenterValue); });
+		std::sort(dl.indices.begin(), dl.indices.end(), [data, p](int a, int b) {return fabs((*data)[a][p]-priorityAttributeCenterValue) > fabs((*data)[b][p]-priorityAttributeCenterValue); });
+		std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return fabs((*data)[a][p] - priorityAttributeCenterValue) > fabs((*data)[b][p] - priorityAttributeCenterValue); });
 	}
 
 	//filling the indexbuffer for drawing
@@ -3349,7 +3371,7 @@ static void upatePriorityColorBuffer(DrawList& dl) {
 	//}
 	float* color = new float[data->size()];
 	for (int i : dl.activeInd) {
-		color[i] = 1 - (fabs((*data)[i][priorityAttribute] - priorityAttributeCenterValue) / denom);
+		color[i] = 1 - .9f * (fabs((*data)[i][priorityAttribute] - priorityAttributeCenterValue) / denom);
 	}
 
 	void* d;
@@ -3359,6 +3381,7 @@ static void upatePriorityColorBuffer(DrawList& dl) {
 
 	delete[] color;
 
+	priorityReorder = true;
 	updateDrawListIndexBuffer(dl);
 }
 
@@ -3893,6 +3916,8 @@ int main(int, char**)
 		style.GrabRounding = 3;
 		style.WindowRounding = 0;
 		style.PopupRounding = 3;
+
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	}
 
 	// Main loop
@@ -4390,9 +4415,9 @@ int main(int, char**)
 							subspace.insert(pcAttributes[i].name);
 						}
 					}
-					for (const DataSet& ds : g_PcPlotDataSets) {
+					for (DataSet& ds : g_PcPlotDataSets) {
 						if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
-							for (const TemplateList& tl : ds.drawLists) {
+							for (TemplateList& tl : ds.drawLists) {
 								//checking if the template list is in the correct subspace and if so adding it to the template Brushes
 								std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']') - tl.name.find_first_of('[') - 1);
 								std::set<std::string> sub;
@@ -4413,6 +4438,7 @@ int main(int, char**)
 											t.brushes[i] = tl.minMax[i];
 										}
 									}
+									t.parent = &tl;
 									templateBrushes.push_back(t);
 								}
 							}
@@ -4427,6 +4453,7 @@ int main(int, char**)
 										t.brushes[i] = tl->minMax[i];
 									}
 								}
+								t.parent = &(*tl);
 								templateBrushes.push_back(t);
 							}
 						}
@@ -4457,6 +4484,7 @@ int main(int, char**)
 				}
 				combo.active = true;
 				combo.name += ")";
+				combo.parent = nullptr;
 
 				globalBrushes.push_back(combo);
 				updateAllActiveIndices();
@@ -4480,6 +4508,7 @@ int main(int, char**)
 						for (const auto& brush : templateBrushes[i].brushes) {
 							preview.brushes[brush.first].push_back(std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second));
 						}
+						preview.parent = templateBrushes[i].parent;
 						globalBrushes.push_back(preview);
 						updateAllActiveIndices();
 						pcPlotRender = true;
@@ -4656,18 +4685,38 @@ int main(int, char**)
 			ImGui::Separator();
 			//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 			for (auto& brush : globalBrushes) {
-				ImGui::BeginChild(("##brushStat" + brush.name).c_str(),ImVec2(200,0),true);
+				ImGui::BeginChild(("##brushStat" + brush.name).c_str(),ImVec2(400,0),true);
 				ImGui::Text(brush.name.c_str());
 				float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 				static std::vector<float> ratios;
 				ImVec2 defaultCursorPos = ImGui::GetCursorPos();
 				ImVec2 cursorPos = defaultCursorPos;
+				ImVec2 screenCursorPos = ImGui::GetCursorScreenPos();
 				cursorPos.x += 75 + ImGui::GetStyle().ItemInnerSpacing.x;
 				ratios.clear();
 				for (auto& ratio : brush.lineRatios) {
 					ratios.push_back(ratio.second);
 					ImGui::SetCursorPos(cursorPos);
 					ImGui::Text(ratio.first.c_str());
+					//drawing the line ratios
+					ImGui::SetCursorPos(cursorPos);
+					if (brush.parent != nullptr) {
+						static const float width = 180;
+						static const float xOffset = 200;
+						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]),ImGui::GetStyle().FrameRounding);
+						float linepos = width/2;
+						linepos += (ratio.second > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / ratio.second)) * linepos : -(1 - (ratio.second / brush.parent->pointRatio)) * linepos;
+						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y + lineHeight - 1),IM_COL32(255,0,0,255),5);
+						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y + lineHeight - 1), IM_COL32(255, 255, 255, 255));
+						
+						if (ImGui::IsMouseHoveringRect(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1))) {
+							ImGui::BeginTooltip();
+							ImGui::Text("If the red line is left of the white line, the template list corresponding to this global brush has a higher ratio of points/Drawlistdata.size than this global brush to the drawlist.\n Else this global brush has a higher ratio.");
+							ImGui::EndTooltip();
+						}
+					}
+
+					screenCursorPos.y += lineHeight;
 					cursorPos.y += lineHeight;
 				}
 				ImGui::SetCursorPos(defaultCursorPos);
@@ -5110,7 +5159,9 @@ int main(int, char**)
 		for (DataSet& ds : g_PcPlotDataSets) {
 			if (ImGui::TreeNode(ds.name.c_str())) {
 				static const TemplateList* convert = nullptr;
+				int c = 0;		//counter to reduce the amount of template lists being drawn
 				for (const TemplateList& tl : ds.drawLists) {
+					if (c++ > 10000)break;
 					if (ImGui::Button(tl.name.c_str())) {
 						ImGui::OpenPopup(tl.name.c_str());
 						strcpy(pcDrawListName, tl.name.c_str());
@@ -5321,6 +5372,26 @@ int main(int, char**)
 				}
 				ImGui::TreePop();
 			}
+			ImGui::OpenPopupOnItemClick("ReducedAttributesSize",1);
+			if (ImGui::BeginPopupModal("ReducedAttributesSize",NULL,ImGuiWindowFlags_AlwaysAutoResize)) {
+				static float reducedSize = 1.0f;
+				if (ImGui::InputFloat("Input the ratio of the reduced dataset size", &reducedSize, 0.0f, 0.0f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue) ||
+					ImGui::Button("Save")) {
+					for (TemplateList& tl : ds.drawLists) {
+						tl.pointRatio = tl.indices.size() / (ds.data.size() * reducedSize);
+
+					}
+
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel")) {
+					ImGui::CloseCurrentPopup();
+				}
+
+				ImGui::EndPopup();
+			}
+
 		}
 		ImGui::EndChild();
 		//Destroying a dataset if it was selected
