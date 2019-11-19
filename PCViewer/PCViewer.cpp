@@ -3569,6 +3569,43 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 	delete[] dat;
 }
 
+static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
+	std::string path(filepath);
+	if (path.substr(path.find_last_of('.')) != ".csv") {
+		return;
+#ifdef _DEBUG
+		std::cout << "The filepath with filename given was not a .csv file. Instead " << path.substr(path.find_last_of('.')) << " was found." << std::endl;
+#endif
+	}
+
+	//getting the parent dataset for the data
+	DataSet* ds = nullptr;
+	for (DataSet& d : g_PcPlotDataSets) {
+		if (d.name == dl.parentDataSet) {
+			ds = &d;
+			break;
+		}
+	}
+
+	std::ofstream file(filepath);
+	//adding the attributes
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		file << pcAttributes[i].name;
+		if (i != pcAttributes.size() - 1)
+			file << ",";
+	}
+	file << "\n";
+	//adding the data;
+	for (int i : dl.activeInd) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			file << ds->data[i][j];
+			if (j != pcAttributes.size() - 1)
+				file << ",";
+		}
+		file << "\n";
+	}
+}
+
 static void exportBrushAsIdxf(DrawList& dl,const char* filepath) {
 	std::string path(filepath);
 	if (path.substr(path.find_last_of('.')) != ".idxf") {
@@ -3579,7 +3616,7 @@ static void exportBrushAsIdxf(DrawList& dl,const char* filepath) {
 	}
 	std::ofstream file(filepath);
 	for (int i : dl.activeInd) {
-		file << i << std::endl;
+		file << i << "\n";
 	}
 	file.close();
 }
@@ -3637,10 +3674,10 @@ static void calculateDrawListMedians(DrawList& dl) {
 
 	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
 
-	DataSet& ds = g_PcPlotDataSets.front();
+	DataSet* ds = nullptr;
 	for (DataSet& d : g_PcPlotDataSets) {
 		if (d.name == dl.parentDataSet) {
-			ds = d;
+			ds = &d;
 			break;
 		}
 	}
@@ -3648,8 +3685,8 @@ static void calculateDrawListMedians(DrawList& dl) {
 	std::vector<int> dataCpy(dl.activeInd);
 
 	for (int i = 0; i < pcAttributes.size(); i++) {
-		std::sort(dataCpy.begin(), dataCpy.end(), [i, ds](int a, int b) {return ds.data[a][i] > ds.data[b][i]; });
-		medianArr[MEDIAN * pcAttributes.size() + i] = ds.data[dataCpy[dataCpy.size() >> 1]][i];
+		std::sort(dataCpy.begin(), dataCpy.end(), [i, ds](int a, int b) {return ds->data[a][i] > ds->data[b][i]; });
+		medianArr[MEDIAN * pcAttributes.size() + i] = ds->data[dataCpy[dataCpy.size() >> 1]][i];
 	}
 
 	//arithmetic median calculation
@@ -3657,7 +3694,7 @@ static void calculateDrawListMedians(DrawList& dl) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
 			if (i == 0)
 				medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
-			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds.data[dl.activeInd[i]][j];
+			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds->data[dl.activeInd[i]][j];
 		}
 	}
 	for (int i = 0; i < pcAttributes.size(); i++) {
@@ -5444,6 +5481,7 @@ int main(int, char**)
 		bool compareDrawLists = false;
 		static DrawListComparator drawListComparator;
 		bool exportIdxf = false;
+		bool exportCsv = false;
 		static DrawList* exportDl;
 		for (DrawList& dl : g_PcPlotDrawLists) {
 			if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
@@ -5495,6 +5533,11 @@ int main(int, char**)
 				}
 				if (ImGui::MenuItem("Export as .idxf")) {
 					exportIdxf = true;
+					exportDl = &dl;
+					ImGui::CloseCurrentPopup();
+				}
+				if (ImGui::MenuItem("Export as .csv")) {
+					exportCsv = true;
 					exportDl = &dl;
 					ImGui::CloseCurrentPopup();
 				}
@@ -5698,14 +5741,32 @@ int main(int, char**)
 		if (ImGui::BeginPopupModal("Export Drawlist", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 			static char filepath[250];
 			ImGui::InputText("filepath", filepath, 250);
+			if (ImGui::Button("Cancel")) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::SameLine();
 			if (ImGui::Button("Save")) {
 				exportBrushAsIdxf(*exportDl, filepath);
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::SameLine();
+			
+			ImGui::EndPopup();
+		}
+		if (exportCsv) {
+			ImGui::OpenPopup("Export Drawlist to .csv");
+		}
+		if (ImGui::BeginPopupModal("Export Drawlist to .csv", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+			static char filepath[250];
+			ImGui::InputText("filepath (has to include the filename with .csv ending)", filepath, 250);
 			if (ImGui::Button("Cancel")) {
 				ImGui::CloseCurrentPopup();
 			}
+			ImGui::SameLine();
+			if (ImGui::Button("Save")) {
+				exportBrushAsCsv(*exportDl, filepath);
+				ImGui::CloseCurrentPopup();
+			}
+
 			ImGui::EndPopup();
 		}
 
