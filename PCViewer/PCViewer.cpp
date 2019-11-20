@@ -3192,6 +3192,9 @@ static void openDataset(const char* filename) {
 	else {
 		std::cout << "The given type of the file is not supported by this programm" << std::endl;
 	}
+	//printing Amount of data loaded
+	std::cout << "Amount of data loaded: " << g_PcPlotDataSets.back().data.size() << std::endl;
+
 	//standard things which should be done on loading of a dataset
 	//adding a standard attributes saving
 	histogrammWidth = 1.0f / (pcAttributes.size() * 5);
@@ -3273,6 +3276,7 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 
 		//adding the drawlist to ds
 		ds.drawLists.push_back(tl);
+		std::cout << "Amount of indices loaded: " << tl.indices.size() << std::endl;
 	}
 	else {
 		std::cout << "The given indexlist was not found." << std::endl;
