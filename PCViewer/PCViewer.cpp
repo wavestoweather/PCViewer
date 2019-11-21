@@ -270,6 +270,7 @@ struct TemplateBrush {
 struct DrawList {
 	std::string name;
 	std::string parentDataSet;
+	TemplateList* parentTemplateList;
 	Vec4 color;
 	Vec4 prefColor;
 	bool show;
@@ -1667,10 +1668,11 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 	}
 }
 
-static void createPcPlotDrawList(const TemplateList& tl,const DataSet& ds,const char* listName) {
+static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* listName) {
 	VkResult err;
 
 	DrawList dl = {};
+	dl.parentTemplateList = &tl;
 
 	//uniformBuffer for pcPlot Drawing
 	Buffer uboBuffer;
@@ -2795,6 +2797,58 @@ static void glfw_resize_callback(GLFWwindow*, int w, int h)
 	g_SwapChainResizeHeight = h;
 }
 
+//checks if the attributes a are the same as the ones in pcAttributes and are giving back a permutation to order the new data correctly
+//if the attributes arent equal the retuned vector is empty
+//If a value is read at index i in the datum, it should be placed at index permutation[i] in the data array.
+static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
+	if (pcAttributes.size() == 0) {
+		std::vector<int> permutation;
+		for (int i = 0; i < a.size(); i++) {
+			permutation.push_back(i);
+		}
+		return permutation;
+	}
+
+	if (a.size() != pcAttributes.size())
+		return std::vector<int>();
+
+	//creating sets to compare the attributes
+	std::set<std::string> pcAttr, attr;
+	for (Attribute& a : pcAttributes) {
+		std::string s = a.name;
+		std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+		pcAttr.insert(s);
+	}
+	for (std::string s : a) {
+		std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+		attr.insert(s);
+	}
+
+	if (pcAttr == attr) {
+		//getting the right permutation
+		std::vector<std::string> lowerCaseA(a), lowerCaseAttr;
+		for (int i = 0; lowerCaseA.size(); i++) {
+			std::transform(lowerCaseA[i].begin(), lowerCaseA[i].end(), lowerCaseA[i].begin(), [](unsigned char c) { return std::tolower(c); });
+			std::string attribute = pcAttributes[i].name;
+			std::transform(attribute.begin(), attribute.end(), attribute.begin(), [](unsigned char c) { return std::tolower(c); });
+			lowerCaseA.push_back(attribute);
+		}
+
+		std::vector<int> permutation;
+		for (std::string& s : lowerCaseA) {
+			int i = 0;
+			for (; i < lowerCaseAttr.size(); i++) {
+				if (lowerCaseAttr[i] == s) break;
+			}
+			permutation.push_back(i);
+		}
+
+		return permutation;
+	}
+
+	return std::vector<int>();
+}
+
 static void openCsv(const char* filename) {
 
 	std::ifstream f(filename, std::ios::in | std::ios::binary);
@@ -2834,21 +2888,26 @@ static void openCsv(const char* filename) {
 		std::string delimiter = ",";
 		size_t pos = 0;
 		std::string cur;
+		std::vector<int> permutation;
 
 		//parsing the attributes in the first line
 		if (firstLine) {
 			//copying the attributes into a temporary vector to check for correct Attributes
 			std::vector<Attribute> tmp;
+			std::vector<std::string> attributes;
 
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
 				tmp.push_back({ cur,std::numeric_limits<float>::max(),std::numeric_limits<float>::min()});
+				attributes.push_back(tmp.back().name);
 			}
 			//adding the last item which wasn't recognized
 			tmp.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min()});
+			attributes.push_back(tmp.back().name);
 
 			//checking if the Attributes are correct
+			permutation = checkAttriubtes(attributes);
 			if (pcAttributes.size() != 0) {
 				if (tmp.size() != pcAttributes.size()) {
 					std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
@@ -2856,17 +2915,14 @@ static void openCsv(const char* filename) {
 					return;
 				}
 				
-				for (int i = 0; i < tmp.size(); i++) {
-					if (tmp[i].name != pcAttributes[i].name) {
-						std::cout << "The Attributes of the .csv file have different order or different names." << std::endl;
-						f.close();
-						return;
-					}
+				if (!permutation.size()) {
+					std::cout << "The attributes of the .csv data are not the same as the ones already loaded in the program." << std::endl;
+					return;
 				}
 			}
 			//if this is the first Dataset to be loaded, fill the pcAttributes vector
 			else {
-				for (Attribute a : tmp) {
+				for (Attribute& a : tmp) {
 					pcAttributes.push_back(a);
 				}
 
@@ -2902,12 +2958,12 @@ static void openCsv(const char* filename) {
 				curF = std::stof(cur);
 
 				//updating the bounds if a new highest value was found in the current data.
-				if (curF > pcAttributes[attr].max)
-					pcAttributes[attr].max = curF;
-				if (curF < pcAttributes[attr].min)
-					pcAttributes[attr].min = curF;
+				if (curF > pcAttributes[permutation[attr]].max)
+					pcAttributes[permutation[attr]].max = curF;
+				if (curF < pcAttributes[permutation[attr]].min)
+					pcAttributes[permutation[attr]].min = curF;
 
-				ds.data.back()[attr++] = curF;
+				ds.data.back()[permutation[attr++]] = curF;
 			}
 			if (attr == pcAttributes.size()) {
 				std::cerr << "The dataset to open is not consitent!" << std::endl;
@@ -2919,11 +2975,11 @@ static void openCsv(const char* filename) {
 			curF = std::stof(line);
 
 			//updating the bounds if a new highest value was found in the current data.
-			if (curF > pcAttributes[attr].max)
-				pcAttributes[attr].max = curF;
-			if (curF < pcAttributes[attr].min)
-				pcAttributes[attr].min = curF;
-			ds.data.back()[attr] = curF;
+			if (curF > pcAttributes[permutation[attr]].max)
+				pcAttributes[permutation[attr]].max = curF;
+			if (curF < pcAttributes[permutation[attr]].min)
+				pcAttributes[permutation[attr]].min = curF;
+			ds.data.back()[permutation[attr]] = curF;
 		}
 	}
 	f.close();
@@ -3021,6 +3077,7 @@ static void openDlf(const char* filename) {
 				file >> amtOfPoints;
 			}
 			file >> tmp;
+			std::vector<int> permutation;
 			//checking for the variables section
 			if (tmp != std::string("Attributes:")) {
 				std::cout << "Attributes section not found. Got " << tmp << " instead" << std::endl;
@@ -3029,15 +3086,17 @@ static void openDlf(const char* filename) {
 			else {
 				file >> tmp;
 				//checking for the same attributes in the currently loaded Attributes
+				std::vector<std::string> attributes;
+				for (int i = 0; tmp != std::string("Data:") && i < 100; file >> tmp, i++){
+					attributes.push_back(tmp);
+				}
+				permutation = checkAttriubtes(attributes);
 				if (pcAttributes.size() > 0) {		
-
-					//current max attribute count is 100
-					for (int i = 0; tmp != std::string("Data:") && i < 100; file >> tmp, i++) {		
-						if (pcAttributes[i].name != tmp) {
-							std::cout << "The Attributes are not in the same order are not the same." << std::endl;
-							return;
-						}
+					if (!permutation.size()) {
+						std::cout << "The attributes of the dataset to be loaded are not the same as the attributes already used by other datasets" << std::endl;
+						return;
 					}
+
 #ifdef _DEBUG
 					std::cout << "The Attribute check was successful" << std::endl;
 #endif
@@ -3045,8 +3104,8 @@ static void openDlf(const char* filename) {
 
 				//reading in new values
 				else {								
-					for (int i = 0; tmp != std::string("Data:") && i < 100; file >> tmp, i++) {
-						pcAttributes.push_back({ tmp,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() -1});
+					for (int i = 0; i < attributes.size(); i++) {
+						pcAttributes.push_back({ attributes[i],std::numeric_limits<float>::max(),std::numeric_limits<float>::min() -1});
 					}
 
 					//check for attributes overflow
@@ -3078,12 +3137,15 @@ static void openDlf(const char* filename) {
 				float* d = new float[amtOfPoints * pcAttributes.size()];
 				int a = 0;
 				for (int i = 0; i < amtOfPoints * pcAttributes.size() && tmp != std::string("Drawlists:"); file >> tmp, i++) {
-					d[i] = std::stof(tmp);
-					if (pcAttributes[a].min > d[i]) {
-						pcAttributes[a].min = d[i];
+					int datum = i / pcAttributes.size();
+					int index = i % pcAttributes.size();
+					index = datum + permutation[index];
+					d[index] = std::stof(tmp);
+					if (pcAttributes[a].min > d[index]) {
+						pcAttributes[a].min = d[index];
 					}
-					if (pcAttributes[a].max < d[i]) {
-						pcAttributes[a].max = d[i];
+					if (pcAttributes[a].max < d[index]) {
+						pcAttributes[a].max = d[index];
 					}
 					a = (a + 1) % pcAttributes.size();
 				} 
@@ -4739,6 +4801,19 @@ int main(int, char**)
 					ratios.push_back(ratio.second);
 					ImGui::SetCursorPos(cursorPos);
 					ImGui::Text(ratio.first.c_str());
+					DrawList* dl;
+					for (auto it = g_PcPlotDrawLists.begin(); it!=g_PcPlotDrawLists.end(); ++it) {
+						if (it->name == ratio.first) {
+							dl = &(*it);
+							break;
+						}
+					}
+					DataSet* ds;
+					for (auto it = g_PcPlotDataSets.begin(); it != g_PcPlotDataSets.end(); ++it) {
+						if (it->name == dl->parentDataSet) {
+							ds = &(*it);
+						}
+					}
 					//drawing the line ratios
 					ImGui::SetCursorPos(cursorPos);
 					if (brush.parent != nullptr) {
@@ -4746,7 +4821,12 @@ int main(int, char**)
 						static const float xOffset = 200;
 						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]),ImGui::GetStyle().FrameRounding);
 						float linepos = width/2;
-						linepos += (ratio.second > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / ratio.second)) * linepos : -(1 - (ratio.second / brush.parent->pointRatio)) * linepos;
+						if (brush.parent->name == dl->parentTemplateList->name) {	//identity dataset
+							linepos += (ratio.second > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / ratio.second)) * linepos : -(1 - (ratio.second / brush.parent->pointRatio)) * linepos;
+						}
+						else {
+							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+						}
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y + lineHeight - 1),IM_COL32(255,0,0,255),5);
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y + lineHeight - 1), IM_COL32(255, 255, 255, 255));
 						
@@ -5201,7 +5281,7 @@ int main(int, char**)
 			if (ImGui::TreeNode(ds.name.c_str())) {
 				static const TemplateList* convert = nullptr;
 				int c = 0;		//counter to reduce the amount of template lists being drawn
-				for (const TemplateList& tl : ds.drawLists) {
+				for (TemplateList& tl : ds.drawLists) {
 					if (c++ > 10000)break;
 					if (ImGui::Button(tl.name.c_str())) {
 						ImGui::OpenPopup(tl.name.c_str());
