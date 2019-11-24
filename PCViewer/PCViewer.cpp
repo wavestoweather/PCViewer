@@ -2827,11 +2827,11 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 	if (pcAttr == attr) {
 		//getting the right permutation
 		std::vector<std::string> lowerCaseA(a), lowerCaseAttr;
-		for (int i = 0; lowerCaseA.size(); i++) {
+		for (int i = 0; i<lowerCaseA.size(); i++) {
 			std::transform(lowerCaseA[i].begin(), lowerCaseA[i].end(), lowerCaseA[i].begin(), [](unsigned char c) { return std::tolower(c); });
 			std::string attribute = pcAttributes[i].name;
 			std::transform(attribute.begin(), attribute.end(), attribute.begin(), [](unsigned char c) { return std::tolower(c); });
-			lowerCaseA.push_back(attribute);
+			lowerCaseAttr.push_back(attribute);
 		}
 
 		std::vector<int> permutation;
@@ -2883,12 +2883,12 @@ static void openCsv(const char* filename) {
 		}
 	}
 
+	std::vector<int> permutation;
 	for (std::string line; std::getline(input, line); )
 	{
 		std::string delimiter = ",";
 		size_t pos = 0;
 		std::string cur;
-		std::vector<int> permutation;
 
 		//parsing the attributes in the first line
 		if (firstLine) {
@@ -2903,6 +2903,7 @@ static void openCsv(const char* filename) {
 				attributes.push_back(tmp.back().name);
 			}
 			//adding the last item which wasn't recognized
+			line = line.substr(0, line.find("\r"));
 			tmp.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min()});
 			attributes.push_back(tmp.back().name);
 
@@ -3066,6 +3067,7 @@ static void openDlf(const char* filename) {
 		std::string tmp;
 		int amtOfPoints;
 		bool newAttr = false;
+		std::vector<int> permutation;
 
 		while (!file.eof()) {
 			file >> tmp;
@@ -3077,7 +3079,6 @@ static void openDlf(const char* filename) {
 				file >> amtOfPoints;
 			}
 			file >> tmp;
-			std::vector<int> permutation;
 			//checking for the variables section
 			if (tmp != std::string("Attributes:")) {
 				std::cout << "Attributes section not found. Got " << tmp << " instead" << std::endl;
@@ -3139,7 +3140,7 @@ static void openDlf(const char* filename) {
 				for (int i = 0; i < amtOfPoints * pcAttributes.size() && tmp != std::string("Drawlists:"); file >> tmp, i++) {
 					int datum = i / pcAttributes.size();
 					int index = i % pcAttributes.size();
-					index = datum + permutation[index];
+					index = datum * pcAttributes.size() + permutation[index];
 					d[index] = std::stof(tmp);
 					if (pcAttributes[a].min > d[index]) {
 						pcAttributes[a].min = d[index];
