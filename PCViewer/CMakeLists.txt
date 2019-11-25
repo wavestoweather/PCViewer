@@ -16,7 +16,7 @@ add_subdirectory("glm")
 
 include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR})
 
-add_executable (PCViewer "PCViewer.cpp" "SettingsManager.cpp" "SettingsManager.h" "SpacialData.h" "NodeViewer.h" "NodeViewer.cpp" "Shape.h" "Cylinder.h" "Sphere.h" "PCViewer.h" "PCUtil.h" "PCUtil.cpp" "VkUtil.h" "VkUtil.cpp" "View3d.h" "View3d.cpp" "Color.h" "imgui/imconfig.h" "imgui/imgui.cpp" "imgui/imgui.h" "imgui/imgui_draw.cpp" "imgui/imgui_impl_glfw.cpp" "imgui/imgui_impl_glfw.h" "imgui/imgui_impl_vulkan.h" "imgui/imgui_impl_vulkan.cpp" "imgui/imgui_internal.h" "imgui/imgui_widgets.cpp" "imgui/imstb_rectpack.h" "imgui/imstb_textedit.h" "imgui/imstb_truetype.h" "imgui/imgui_demo.cpp")
+add_executable (PCViewer "PCViewer.cpp" "kd_tree.h" "SettingsManager.cpp" "SettingsManager.h" "SpacialData.h" "NodeViewer.h" "NodeViewer.cpp" "Shape.h" "Cylinder.h" "Sphere.h" "PCViewer.h" "PCUtil.h" "PCUtil.cpp" "VkUtil.h" "VkUtil.cpp" "View3d.h" "View3d.cpp" "Color.h" "imgui/imconfig.h" "imgui/imgui.cpp" "imgui/imgui.h" "imgui/imgui_draw.cpp" "imgui/imgui_impl_glfw.cpp" "imgui/imgui_impl_glfw.h" "imgui/imgui_impl_vulkan.h" "imgui/imgui_impl_vulkan.cpp" "imgui/imgui_internal.h" "imgui/imgui_widgets.cpp" "imgui/imstb_rectpack.h" "imgui/imstb_textedit.h" "imgui/imstb_truetype.h" "imgui/imgui_demo.cpp")
 
 target_link_libraries(PCViewer Vulkan::Vulkan glfw glm)
 

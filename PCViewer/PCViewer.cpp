@@ -34,6 +34,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "View3d.h"
 #include "SpacialData.h"
 #include "SettingsManager.h"
+#include "kd_tree.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -68,6 +69,9 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define BRUSHWIDTH 20
 #define EDGEHOVERDIST 5
 #define DRAGTHRESH .02f
+
+//defines the amount of fractures per axis
+#define FRACTUREDEPTH 10
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -253,15 +257,6 @@ struct TemplateList {
 	float pointRatio;		//ratio of points in the datasaet(reduced)
 };
 
-struct GlobalBrush {
-	bool active;										//global brushes can be activated and deactivated
-	TemplateList* parent;
-	std::string name;									//the name of a global brush describes the template list it was created from and more...
-	std::map<std::string, float> lineRatios;			//contains the ratio of still active lines per drawlist
-	std::map<int, std::vector<std::pair<unsigned int,std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
-};
-
-
 struct Buffer {
 	VkBuffer buffer;
 	VkBuffer uboBuffer;
@@ -283,6 +278,18 @@ struct DataSet {
 	bool operator==(const DataSet& other) {
 		return this->name == other.name;
 	}
+};
+
+struct GlobalBrush {
+	bool active;										//global brushes can be activated and deactivated
+	TemplateList* parent;
+	DataSet* parentDataset;
+	std::vector<int> attributes;
+	KdTree* kdTree;										//kdTree for the division of cluster
+	int fractureDepth;
+	std::string name;									//the name of a global brush describes the template list it was created from and more...
+	std::map<std::string, float> lineRatios;			//contains the ratio of still active lines per drawlist
+	std::map<int, std::vector<std::pair<unsigned int,std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
 struct TemplateBrush {
@@ -3492,25 +3499,43 @@ static void updateActiveIndices(DrawList& dl) {
 			bool orr = globalBrushes.size() == 0, andd = true, anyActive = false;
 			for (GlobalBrush& b : globalBrushes) {
 				bool lineKeep = true;
-				for (auto& br : b.brushes) {
-					bool good = false;
-					for (auto& brush : br.second) {
-						if ((*data)[i][br.first]>=brush.second.first && (*data)[i][br.first]<=brush.second.second) {
-							good = true;
-							break;
+				if (b.fractureDepth > 0) { //fractured brush
+					std::vector<std::vector<std::pair<float, float>>> fractures = b.kdTree->getBounds(b.fractureDepth);
+					lineKeep = false;
+					for (auto& frac : fractures) {
+						bool good = true;
+						for (int j; j < frac.size(); j++) {
+							if ((*data)[i][b.attributes[j]] < frac[j].first || (*data)[i][b.attributes[j]] > frac[j].second) {
+								good = false;
+								break;
+							}
 						}
+						if (good)
+							lineKeep = true;
 					}
-					if(!good)
-						lineKeep = false;
 				}
-					
+				else { //standard global brush
+					//bool lineKeep = true;
+					for (auto& br : b.brushes) {
+						bool good = false;
+						for (auto& brush : br.second) {
+							if ((*data)[i][br.first] >= brush.second.first && (*data)[i][br.first] <= brush.second.second) {
+								good = true;
+								break;
+							}
+						}
+						if (!good)
+							lineKeep = false;
+					}
+				}
+
 				if (b.active) {
 					orr |= lineKeep;
 					andd &= lineKeep;
 					anyActive = true;
 				}
 
-				if( lineKeep)
+				if (lineKeep)
 					b.lineRatios[dl.name] += 1.0f;
 			}
 			if (brushCombination == 1 && !andd) {
@@ -4612,6 +4637,7 @@ int main(int, char**)
 								removePcPlotDrawList(g_PcPlotDrawLists.back());
 								drawListForTemplateBrush = false;
 							}
+							if(globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 							globalBrushes.pop_back();
 						}
 						selectedTemplateBrush = i;
@@ -4622,6 +4648,9 @@ int main(int, char**)
 							preview.brushes[brush.first].push_back(std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second));
 						}
 						preview.parent = templateBrushes[i].parent;
+						preview.parentDataset = templateBrushes[i].parentDataSet;
+						preview.kdTree = nullptr;
+						preview.fractureDepth = 0;
 						globalBrushes.push_back(preview);
 						if (std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [preview](DrawList& dl) {return dl.name == preview.parent->name; }) == g_PcPlotDrawLists.end()) {
 							drawListForTemplateBrush = true;
@@ -4638,6 +4667,7 @@ int main(int, char**)
 							removePcPlotDrawList(g_PcPlotDrawLists.back());
 							drawListForTemplateBrush = false;
 						}
+						if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 						globalBrushes.pop_back();
 						updateAllActiveIndices();
 						pcPlotRender = true;
@@ -4677,6 +4707,36 @@ int main(int, char**)
 					ImGui::OpenPopup(("GlobalBrushPopup##"+globalBrushes[i].name).c_str());
 				}
 				if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
+					if (globalBrushes[i].kdTree) {
+						if (ImGui::BeginCombo("Fracture depth",std::to_string(globalBrushes[i].fractureDepth).c_str())) {
+							for (int j = 0; j < FRACTUREDEPTH; j++) {
+								if (ImGui::Selectable(std::to_string(j).c_str())) {
+									globalBrushes[i].fractureDepth = j;
+									updateAllActiveIndices();
+									pcPlotRender = true;
+								}
+							}
+							ImGui::EndCombo();
+						}
+					}
+					else {
+						if (ImGui::MenuItem("Create brush fractures")) {
+							std::vector<std::pair<float, float>> bounds;
+							globalBrushes[i].attributes.clear();
+							//NOTE: only the first brush for each axis is taken
+							for (auto brush : globalBrushes[i].brushes) {
+								globalBrushes[i].attributes.push_back(brush.first);
+								bounds.push_back(brush.second[0].second);
+							}
+#ifdef _DEBUG
+							std::cout << "Starting to build the kd tree fo rfracturing." << std::endl;
+#endif
+							globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, FRACTUREDEPTH, true);
+#ifdef _DEBUG
+							std::cout << "Kd tree done." << std::endl;
+#endif
+						}
+					}
 					if (ImGui::MenuItem("Focus axis on brush")) {
 						std::pair<float, float> mm;
 						for (auto& axis : globalBrushes[i].brushes) {
@@ -4710,6 +4770,7 @@ int main(int, char**)
 									removePcPlotDrawList(g_PcPlotDrawLists.back());
 									drawListForTemplateBrush = false;
 								}
+								if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 								globalBrushes.pop_back();
 							}
 							else {
@@ -4719,6 +4780,7 @@ int main(int, char**)
 									removePcPlotDrawList(g_PcPlotDrawLists.back());
 									drawListForTemplateBrush = false;
 								}
+								if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 								globalBrushes.pop_back();
 							}
 						}
@@ -4728,6 +4790,7 @@ int main(int, char**)
 								removePcPlotDrawList(g_PcPlotDrawLists.back());
 								drawListForTemplateBrush = false;
 							}
+							if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 							globalBrushes.pop_back();
 							updateAllActiveIndices();
 							pcPlotRender = true;
@@ -4748,6 +4811,11 @@ int main(int, char**)
 				}
 			}
 			if (popEnd) {
+				if (drawListForTemplateBrush) {
+					removePcPlotDrawList(g_PcPlotDrawLists.back());
+					drawListForTemplateBrush = false;
+				}
+				if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 				globalBrushes.pop_back();
 				if (selectedGlobalBrush == globalBrushes.size())
 					selectedGlobalBrush = -1;
@@ -5962,6 +6030,10 @@ int main(int, char**)
 		delete nodeViewer;
 #endif
 		delete settingsManager;
+
+		for (GlobalBrush& gb : globalBrushes) {
+			if (gb.kdTree) delete gb.kdTree;
+		}
 	}
 
 	ImGui_ImplVulkan_Shutdown();
