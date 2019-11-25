@@ -261,9 +261,34 @@ struct GlobalBrush {
 	std::map<int, std::vector<std::pair<unsigned int,std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
+
+struct Buffer {
+	VkBuffer buffer;
+	VkBuffer uboBuffer;
+	VkDeviceMemory memory;
+
+	bool operator==(const Buffer& other) {
+		return this->buffer == other.buffer && this->memory == other.memory;
+	}
+};
+
+struct DataSet {
+	std::string name;
+	Buffer buffer;
+	std::vector<float*> data;
+	std::list<TemplateList> drawLists;
+	bool oneData = false;			//if is set to true, all data in data is in one continous float* array. -> on deletion only delete[] the float* of data[0]
+	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
+
+	bool operator==(const DataSet& other) {
+		return this->name == other.name;
+	}
+};
+
 struct TemplateBrush {
 	std::string name;									//identifier for the template brush
 	TemplateList* parent;
+	DataSet* parentDataSet;
 	std::map<int,std::pair<float, float>> brushes;
 };
 
@@ -299,30 +324,6 @@ struct DrawList {
 	uint32_t histIndexBufferOffset;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 };
-
-struct Buffer {
-	VkBuffer buffer;
-	VkBuffer uboBuffer;
-	VkDeviceMemory memory;
-
-	bool operator==(const Buffer& other) {
-		return this->buffer == other.buffer && this->memory == other.memory;
-	}
-};
-
-struct DataSet {
-	std::string name;
-	Buffer buffer;
-	std::vector<float*> data;
-	std::list<TemplateList> drawLists;
-	bool oneData = false;			//if is set to true, all data in data is in one continous float* array. -> on deletion only delete[] the float* of data[0]
-	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
-
-	bool operator==(const DataSet& other) {
-		return this->name == other.name;
-	}
-};
-
 
 static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
 static VkImage					g_PcPlot = VK_NULL_HANDLE;
@@ -559,6 +560,7 @@ static bool* brushTemplateAttrEnabled = NULL;
 static bool showCsvTemplates = false;
 static bool updateBrushTemplates = false;
 static int selectedTemplateBrush = -1;
+static bool drawListForTemplateBrush = false;
 static std::vector<TemplateBrush> templateBrushes;
 
 //variables for global brushes
@@ -4543,6 +4545,7 @@ int main(int, char**)
 										}
 									}
 									t.parent = &tl;
+									t.parentDataSet = &ds;
 									templateBrushes.push_back(t);
 								}
 							}
@@ -4558,6 +4561,7 @@ int main(int, char**)
 									}
 								}
 								t.parent = &(*tl);
+								t.parentDataSet = &ds;
 								templateBrushes.push_back(t);
 							}
 						}
@@ -4568,7 +4572,7 @@ int main(int, char**)
 				c1++;
 				offset += gap;
 			}
-			if (ImGui::Checkbox("Show Csv brushes", &showCsvTemplates)) {
+			if (ImGui::Checkbox("Show .idxf brush templates", &showCsvTemplates)) {
 				updateBrushTemplates = true;
 			}
 
@@ -4603,8 +4607,13 @@ int main(int, char**)
 					selectedGlobalBrush = -1;
 					pcPlotSelectedDrawList = -1;
 					if (selectedTemplateBrush != i) {
-						if (selectedTemplateBrush != -1)
+						if (selectedTemplateBrush != -1) {
+							if (drawListForTemplateBrush) {
+								removePcPlotDrawList(g_PcPlotDrawLists.back());
+								drawListForTemplateBrush = false;
+							}
 							globalBrushes.pop_back();
+						}
 						selectedTemplateBrush = i;
 						GlobalBrush preview;
 						preview.active = true;
@@ -4614,6 +4623,10 @@ int main(int, char**)
 						}
 						preview.parent = templateBrushes[i].parent;
 						globalBrushes.push_back(preview);
+						if (std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [preview](DrawList& dl) {return dl.name == preview.parent->name; }) == g_PcPlotDrawLists.end()) {
+							drawListForTemplateBrush = true;
+							createPcPlotDrawList(*preview.parent, *templateBrushes[i].parentDataSet, preview.parent->name.c_str());
+						}
 						updateAllActiveIndices();
 						pcPlotRender = true;
 						if(active3dAttribute.size())
@@ -4621,6 +4634,10 @@ int main(int, char**)
 					}
 					else {
 						selectedTemplateBrush = -1;
+						if (drawListForTemplateBrush) {
+							removePcPlotDrawList(g_PcPlotDrawLists.back());
+							drawListForTemplateBrush = false;
+						}
 						globalBrushes.pop_back();
 						updateAllActiveIndices();
 						pcPlotRender = true;
@@ -4689,16 +4706,28 @@ int main(int, char**)
 						if (popEnd) {
 							if (globalBrushes.size() == 2) {
 								globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+								if (drawListForTemplateBrush) {
+									removePcPlotDrawList(g_PcPlotDrawLists.back());
+									drawListForTemplateBrush = false;
+								}
 								globalBrushes.pop_back();
 							}
 							else {
 								globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
 								globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
+								if (drawListForTemplateBrush) {
+									removePcPlotDrawList(g_PcPlotDrawLists.back());
+									drawListForTemplateBrush = false;
+								}
 								globalBrushes.pop_back();
 							}
 						}
 						else {
 							globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
+							if (drawListForTemplateBrush) {
+								removePcPlotDrawList(g_PcPlotDrawLists.back());
+								drawListForTemplateBrush = false;
+							}
 							globalBrushes.pop_back();
 							updateAllActiveIndices();
 							pcPlotRender = true;
@@ -4827,7 +4856,8 @@ int main(int, char**)
 						}
 						else {
 							//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
-							linepos += (ratio.second > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / ratio.second)) * linepos : -(1 - (ratio.second / brush.lineRatios[brush.parent->name])) * linepos;
+							//linepos += (ratio.second > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / ratio.second)) * linepos : -(1 - (ratio.second / brush.lineRatios[brush.parent->name])) * linepos;
+							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / dl->activeInd.size() / (float)ds->data.size())) * linepos : -(1 - (dl->activeInd.size() / (float)ds->data.size() / brush.lineRatios[brush.parent->name])) * linepos;
 						}
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y + lineHeight - 1),IM_COL32(255,0,0,255),5);
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y + lineHeight - 1), IM_COL32(255, 255, 255, 255));
