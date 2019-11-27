@@ -2238,8 +2238,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//copying the uniform buffer
 	void* da;
+	c = 0;
 	for (DrawList& ds : g_PcPlotDrawLists) {
-		ubo.VertexTransormations[0].w = (priorityAttribute != -1) ? 1.f : 0;
+		ubo.VertexTransormations[0].w = (priorityAttribute != -1 && c == 0) ? 1.f : 0;
 		ubo.color = ds.color;
 		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &da);
 		memcpy(da, &ubo, sizeof(UniformBufferObject));
@@ -2251,6 +2252,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		memcpy(da, &ubo, sizeof(UniformBufferObject));
 		vkUnmapMemory(g_Device, ds.dlMem);
 		
+		c++;
 	}
 
 	//starting the pcPlotCommandBuffer
@@ -3003,10 +3005,10 @@ static void openCsv(const char* filename) {
 	TemplateList tl = {};
 	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
 	tl.name = "Default Drawlist";
-	tl.pointRatio = 1.0f;
 	for (int i = 0; i < ds.data.size(); i++) {
 		tl.indices.push_back(i);
 	}
+	tl.pointRatio = tl.indices.size() / (float)ds.data.size();
 
 	//getting the minimum and maximum values for all attributes. This will later be used for brush creation
 	for (int i = 0; i < pcAttributes.size(); i++) {
@@ -3226,7 +3228,7 @@ static void openDlf(const char* filename) {
 								tl.minMax[j].second = ds.data[i][j];
 						}
 					}
-					tl.pointRatio = tl.indices.size()/((float)ds.reducedDataSetSize);
+					tl.pointRatio = tl.indices.size()/((float)ds.data.size());
 					ds.drawLists.push_back(tl);
 				}
 			}
@@ -3344,7 +3346,7 @@ static void addIndecesToDs(DataSet& ds,const char* filepath) {
 					tl.minMax[j].second = ds.data[i][j];
 			}
 		}
-		tl.pointRatio = ((float)tl.indices.size()) / ds.reducedDataSetSize;
+		tl.pointRatio = ((float)tl.indices.size()) / ds.data.size();
 
 		//adding the drawlist to ds
 		ds.drawLists.push_back(tl);
@@ -4534,6 +4536,11 @@ int main(int, char**)
 				if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i]) || updateBrushTemplates) {
 					updateBrushTemplates = false;
 					if (selectedTemplateBrush != -1) {
+						if (drawListForTemplateBrush) {
+							removePcPlotDrawList(g_PcPlotDrawLists.back());
+							drawListForTemplateBrush = false;
+						}
+						if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 						globalBrushes.pop_back();
 						selectedTemplateBrush = -1;
 						pcPlotRender = true;
@@ -5599,7 +5606,7 @@ int main(int, char**)
 				if (ImGui::InputFloat("Input the ratio of the reduced dataset size", &reducedSize, 0.0f, 0.0f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue) ||
 					ImGui::Button("Save")) {
 					for (TemplateList& tl : ds.drawLists) {
-						tl.pointRatio = tl.indices.size() / (ds.data.size() * reducedSize);
+						tl.pointRatio = (float)tl.indices.size() / (ds.data.size() * reducedSize);
 
 					}
 
