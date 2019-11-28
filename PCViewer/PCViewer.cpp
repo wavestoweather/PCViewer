@@ -4927,7 +4927,7 @@ int main(int, char**)
 						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]),ImGui::GetStyle().FrameRounding);
 						float linepos = width/2;
 						if (brush.parent->name == dl->parentTemplateList->name) {	//identity dataset
-							linepos += (ratio.second > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / ratio.second)) * linepos : -(1 - (ratio.second / brush.parent->pointRatio)) * linepos;
+							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / dl->activeInd.size() / (float)ds->data.size())) * linepos : -(1 - (dl->activeInd.size() / (float)ds->data.size() / brush.parent->pointRatio)) * linepos;
 						}
 						else {
 							//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
