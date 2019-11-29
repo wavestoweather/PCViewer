@@ -71,7 +71,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define DRAGTHRESH .02f
 
 //defines the amount of fractures per axis
-#define FRACTUREDEPTH 10
+#define FRACTUREDEPTH 20
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -287,6 +287,7 @@ struct GlobalBrush {
 	std::vector<int> attributes;
 	KdTree* kdTree;										//kdTree for the division of cluster
 	int fractureDepth;
+	std::vector<std::vector<std::pair<float, float>>> fractions;
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
 	std::map<std::string, float> lineRatios;			//contains the ratio of still active lines per drawlist
 	std::map<int, std::vector<std::pair<unsigned int,std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
@@ -1636,6 +1637,7 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ) {
 		if (it->parentDataSet == dataSet.name) {
 			it->indices.clear();
+			activeBrushRatios.erase(it->name);
 			if (it->dlMem) {
 				vkFreeMemory(g_Device, it->dlMem, nullptr);
 				it->dlMem = VK_NULL_HANDLE;
@@ -3508,11 +3510,11 @@ static void updateActiveIndices(DrawList& dl) {
 			for (GlobalBrush& b : globalBrushes) {
 				bool lineKeep = true;
 				if (b.fractureDepth > 0) { //fractured brush
-					std::vector<std::vector<std::pair<float, float>>> fractures = b.kdTree->getBounds(b.fractureDepth);
+					std::vector<std::vector<std::pair<float, float>>>& fractures = b.fractions;
 					lineKeep = false;
 					for (auto& frac : fractures) {
 						bool good = true;
-						for (int j; j < frac.size(); j++) {
+						for (int j = 0; j < frac.size(); j++) {
 							if ((*data)[i][b.attributes[j]] < frac[j].first || (*data)[i][b.attributes[j]] > frac[j].second) {
 								good = false;
 								break;
@@ -4744,6 +4746,7 @@ int main(int, char**)
 							for (int j = 0; j < FRACTUREDEPTH; j++) {
 								if (ImGui::Selectable(std::to_string(j).c_str())) {
 									globalBrushes[i].fractureDepth = j;
+									globalBrushes[i].fractions = globalBrushes[i].kdTree->getBounds(j);
 									updateAllActiveIndices();
 									pcPlotRender = true;
 								}
@@ -5035,72 +5038,87 @@ int main(int, char**)
 			//drawing the global brush
 			//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
 			if (selectedGlobalBrush != -1) {
-				for (auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
-					if (!pcAttributeEnabled[brush.first])
-						continue;
+				if (globalBrushes[selectedGlobalBrush].fractureDepth) {
+					GlobalBrush& globalBrush = globalBrushes[selectedGlobalBrush];
+					for (int i = 0; i < globalBrush.fractions.size();i++) {
+						for (int j = 0; j < globalBrush.fractions[i].size(); j++) {
+							int axis = globalBrush.attributes[j];
+							float x = gap * placeOfInd(axis) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+							float width = BRUSHWIDTH;
+							float y = ((globalBrush.fractions[i][j].second - pcAttributes[axis].max) / (pcAttributes[axis].min - pcAttributes[axis].max)) * picSize.y + picPos.y;
+							float height = (globalBrush.fractions[i][j].second - globalBrush.fractions[i][j].first) / (pcAttributes[axis].max - pcAttributes[axis].min) * picSize.y;
+							ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(0, 230, 100, 255), 1, ImDrawCornerFlags_All, 2);
+						}
+					}
+				}
+				else {
+					for (auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
+						if (!pcAttributeEnabled[brush.first])
+							continue;
 
-					ImVec2 mousePos = ImGui::GetIO().MousePos;
-					float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
-					float width = BRUSHWIDTH;
-					for (auto& br : brush.second) {
-						float y = ((br.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
-						float height = (br.second.second - br.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
-						bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
-						//edgeHover = 0 -> No edge is hovered
-						//edgeHover = 1 -> Top edge is hovered
-						//edgeHover = 2 -> Bot edge is hovered
-						int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
-						edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
-						int r = (brushDragIds.find(br.first) != brushDragIds.end()) ? 200 : 30;
-						ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(r, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
-						//set mouse cursor
-						if (edgeHover || brushDragIds.size()) {
-							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-						}
-						if (hover) {
-							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
-						}
-						//activate dragging of edge
-						if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
-							brushDragIds.insert(br.first);
-							brushDragMode = edgeHover;
-						}
-						if (hover && ImGui::GetIO().MouseClicked[0]) {
-							brushDragIds.insert(br.first);
-							brushDragMode = 0;
-						}
-						//drag edge
-						if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseDown[0]) {
-							if (brushDragMode == 0) {
-								float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
-								br.second.second -= delta;
-								br.second.first -= delta;
+						ImVec2 mousePos = ImGui::GetIO().MousePos;
+						float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+						float width = BRUSHWIDTH;
+						for (auto& br : brush.second) {
+							float y = ((br.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
+							float height = (br.second.second - br.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
+							bool hover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y&& mousePos.y < y + height;
+							//edgeHover = 0 -> No edge is hovered
+							//edgeHover = 1 -> Top edge is hovered
+							//edgeHover = 2 -> Bot edge is hovered
+							int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
+							edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
+							int r = (brushDragIds.find(br.first) != brushDragIds.end()) ? 200 : 30;
+							ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(r, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+							//set mouse cursor
+							if (edgeHover || brushDragIds.size()) {
+								ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 							}
-							else if (brushDragMode == 1) {
-								br.second.second -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+							if (hover) {
+								ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
 							}
-							else {
-								br.second.first -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+							//activate dragging of edge
+							if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+								brushDragIds.insert(br.first);
+								brushDragMode = edgeHover;
 							}
+							if (hover && ImGui::GetIO().MouseClicked[0]) {
+								brushDragIds.insert(br.first);
+								brushDragMode = 0;
+							}
+							//drag edge
+							if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseDown[0]) {
+								if (brushDragMode == 0) {
+									float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
+									br.second.second -= delta;
+									br.second.first -= delta;
+								}
+								else if (brushDragMode == 1) {
+									br.second.second -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+								}
+								else {
+									br.second.first -= ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min); //((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+								}
 
-							//switching edges if max value of brush is smaller than min value
-							if (br.second.second < br.second.first) {
-								float tmp = br.second.second;
-								br.second.second = br.second.first;
-								br.second.first = tmp;
-								brushDragMode = (brushDragMode == 1) ? 2 : 1;
-							}
+								//switching edges if max value of brush is smaller than min value
+								if (br.second.second < br.second.first) {
+									float tmp = br.second.second;
+									br.second.second = br.second.first;
+									br.second.first = tmp;
+									brushDragMode = (brushDragMode == 1) ? 2 : 1;
+								}
 
-							if (ImGui::GetIO().MouseDelta.y) {
+								if (ImGui::GetIO().MouseDelta.y) {
+									updateAllActiveIndices();
+									pcPlotRender = true;
+								}
+							}
+							//release edge
+							if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
+								brushDragIds.clear();
 								updateAllActiveIndices();
 								pcPlotRender = true;
 							}
-						}
-						//release edge
-						if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
-							brushDragIds.clear();
-							updateAllActiveIndices();
-							pcPlotRender = true;
 						}
 					}
 				}
