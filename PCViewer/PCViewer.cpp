@@ -4932,10 +4932,18 @@ int main(int, char**)
 				ImVec2 screenCursorPos = ImGui::GetCursorScreenPos();
 				cursorPos.x += 75 + ImGui::GetStyle().ItemInnerSpacing.x;
 				ratios.clear();
+				c = 0;
 				for (auto& ratio : brush.lineRatios) {
+					static const float xOffset = 200; //offset for ratio comp
 					ratios.push_back(ratio.second);
 					ImGui::SetCursorPos(cursorPos);
-					ImGui::Text(ratio.first.c_str());
+					ImVec2 textSize = ImGui::CalcTextSize(ratio.first.c_str());
+					if (textSize.x > xOffset / 2) {
+						ImGui::Text("Drawlist %d", c);
+					}
+					else {
+						ImGui::Text(ratio.first.c_str());
+					}
 					DrawList* dl;
 					for (auto it = g_PcPlotDrawLists.begin(); it!=g_PcPlotDrawLists.end(); ++it) {
 						if (it->name == ratio.first) {
@@ -4953,7 +4961,6 @@ int main(int, char**)
 					ImGui::SetCursorPos(cursorPos);
 					if (brush.parent != nullptr && brush.lineRatios.find(brush.parent->name) != brush.lineRatios.end()) {
 						static const float width = 180;
-						static const float xOffset = 200;
 						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]),ImGui::GetStyle().FrameRounding);
 						float linepos = width/2;
 						if (brush.parent->name == dl->name) {	//identity dataset
@@ -4977,6 +4984,7 @@ int main(int, char**)
 
 					screenCursorPos.y += lineHeight;
 					cursorPos.y += lineHeight;
+					c++;
 				}
 				ImGui::SetCursorPos(defaultCursorPos);
 				int hover = ImGui::PlotHistogramVertical(("##histo"+brush.name).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight*ratios.size()));
