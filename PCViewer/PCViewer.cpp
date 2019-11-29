@@ -3775,12 +3775,13 @@ static void invertGlobalBrush(GlobalBrush& b) {
 		std::sort(axis.second.begin(), axis.second.end(), [](std::pair<float, float>lhs, std::pair<float, float> rhs) {return lhs.first < rhs.first; });
 		float tmp = pcAttributes[axis.first].min;
 		int c = 0;
-		std::vector<std::pair<int, std::pair<float, float>>> newBrushes;
 		while (tmp < pcAttributes[axis.first].max) {
-			if(c<axis.second.size())
-				newBrushes.push_back(std::pair(currentBrushId++, std::pair(tmp, axis.second[c].first)));
+			if (c < axis.second.size()) {
+				if (tmp != axis.second[c].first)
+					b.brushes[axis.first].push_back(std::pair(currentBrushId++, std::pair(tmp, axis.second[c].first)));
+			}
 			else {
-				newBrushes.push_back(std::pair(currentBrushId++, std::pair(tmp, pcAttributes[axis.first].max)));
+				b.brushes[axis.first].push_back(std::pair(currentBrushId++, std::pair(tmp, pcAttributes[axis.first].max)));
 				break;
 			}
 			tmp = axis.second[c++].second;
@@ -4830,6 +4831,8 @@ int main(int, char**)
 					}
 					if (ImGui::MenuItem("Invert Brush")) {
 						invertGlobalBrush(globalBrushes[i]);
+						updateAllActiveIndices();
+						pcPlotRender = true;
 					}
 
 					ImGui::EndPopup();
