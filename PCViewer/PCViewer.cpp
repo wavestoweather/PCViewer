@@ -71,7 +71,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define DRAGTHRESH .02f
 
 //defines the amount of fractures per axis
-#define FRACTUREDEPTH 20
+#define FRACTUREDEPTH 15
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -4932,14 +4932,20 @@ int main(int, char**)
 				ImVec2 screenCursorPos = ImGui::GetCursorScreenPos();
 				cursorPos.x += 75 + ImGui::GetStyle().ItemInnerSpacing.x;
 				ratios.clear();
-				c = 0;
 				for (auto& ratio : brush.lineRatios) {
 					static const float xOffset = 200; //offset for ratio comp
 					ratios.push_back(ratio.second);
 					ImGui::SetCursorPos(cursorPos);
 					ImVec2 textSize = ImGui::CalcTextSize(ratio.first.c_str());
 					if (textSize.x > xOffset / 2) {
+						int c = 0;
+						std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [&c, ratio](DrawList& d) { c++; return d.name == ratio.first; });
 						ImGui::Text("Drawlist %d", c);
+						if (ImGui::IsItemHovered()) {
+							ImGui::BeginTooltip();
+							ImGui::Text(ratio.first.c_str());
+							ImGui::EndTooltip();
+						}
 					}
 					else {
 						ImGui::Text(ratio.first.c_str());
@@ -4977,14 +4983,18 @@ int main(int, char**)
 						
 						if (ImGui::IsMouseHoveringRect(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1))) {
 							ImGui::BeginTooltip();
-							ImGui::Text("If the red line is left of the white line, the template list corresponding to this global brush has a higher ratio of points/Drawlistdata.size than this global brush to the drawlist.\n Else this global brush has a higher ratio.");
+							if (linepos < width / 2) {
+								ImGui::Text("Ratio is  %2.1f%%", ((linepos / (width / 2)))*100);
+							}
+							else {
+								ImGui::Text("Ratio is  %2.1f%%", (1 - ((linepos - width / 2) / width))*100);
+							}
 							ImGui::EndTooltip();
 						}
 					}
 
 					screenCursorPos.y += lineHeight;
 					cursorPos.y += lineHeight;
-					c++;
 				}
 				ImGui::SetCursorPos(defaultCursorPos);
 				int hover = ImGui::PlotHistogramVertical(("##histo"+brush.name).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight*ratios.size()));
