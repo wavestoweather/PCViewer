@@ -590,6 +590,7 @@ static int priorityAttribute = -1;
 static float priorityAttributeCenterValue = 0;
 static bool prioritySelectAttribute = false;
 static bool priorityReorder = false;
+static int priorityListIndex = 0;
 
 //variables for the 3d views
 static View3d * view3d;
@@ -2240,7 +2241,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	void* da;
 	c = 0;
 	for (DrawList& ds : g_PcPlotDrawLists) {
-		ubo.VertexTransormations[0].w = (priorityAttribute != -1 && c == 0) ? 1.f : 0;
+		ubo.VertexTransormations[0].w = (priorityAttribute != -1 && c == priorityListIndex) ? 1.f : 0;
 		ubo.color = ds.color;
 		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &da);
 		memcpy(da, &ubo, sizeof(UniformBufferObject));
@@ -3428,10 +3429,15 @@ static void updateAllDrawListIndexBuffer() {
 	}
 }
 
-static void upatePriorityColorBuffer(DrawList& dl) {
+static void upatePriorityColorBuffer() {
+	priorityListIndex = (priorityListIndex < g_PcPlotDrawLists.size()) ? priorityListIndex : g_PcPlotDrawLists.size() - 1;
+	auto it = g_PcPlotDrawLists.begin();
+	std::advance(it, priorityListIndex);
+	DrawList* dl = &(*it);
+
 	std::vector<float*>* data;
 	for (DataSet& ds : g_PcPlotDataSets) {
-		if (ds.name == dl.parentDataSet) {
+		if (ds.name == dl->parentDataSet) {
 			data = &ds.data;
 			break;
 		}
@@ -3448,19 +3454,19 @@ static void upatePriorityColorBuffer(DrawList& dl) {
 	//	color[i * 3 + 2] = colorPalette[index * 4 + 2];
 	//}
 	float* color = new float[data->size()];
-	for (int i : dl.activeInd) {
+	for (int i : dl->activeInd) {
 		color[i] = 1 - .9f * (fabs((*data)[i][priorityAttribute] - priorityAttributeCenterValue) / denom);
 	}
 
 	void* d;
-	vkMapMemory(g_Device, dl.dlMem, dl.priorityColorBufferOffset, data->size() *sizeof(float), 0, &d);
+	vkMapMemory(g_Device, dl->dlMem, dl->priorityColorBufferOffset, data->size() *sizeof(float), 0, &d);
 	memcpy(d, color, data->size() * sizeof(float));
-	vkUnmapMemory(g_Device,dl.dlMem);
+	vkUnmapMemory(g_Device,dl->dlMem);
 
 	delete[] color;
 
 	priorityReorder = true;
-	updateDrawListIndexBuffer(dl);
+	updateDrawListIndexBuffer(*dl);
 }
 
 static void updateActiveIndices(DrawList& dl) {
@@ -3561,7 +3567,8 @@ static void updateActiveIndices(DrawList& dl) {
 		b.lineRatios[dl.name] /= dl.indices.size();
 	}
 	for (auto& it : activeBrushRatios) {
-		it.second /= dl.indices.size();
+		if(it.first == dl.name)
+			it.second /= dl.indices.size();
 	}
 
 	//updating the indexbuffer for histogramm
@@ -3760,6 +3767,23 @@ static void invertGlobalBrush(GlobalBrush& b) {
 			if (addNew) {
 				reducedAttributeBrush[axis.first].push_back(brush.second);
 			}
+		}
+	}
+	//now inverting the reduced Attribute brushes
+	b.brushes.clear();
+	for (auto& axis : reducedAttributeBrush) {
+		std::sort(axis.second.begin(), axis.second.end(), [](std::pair<float, float>lhs, std::pair<float, float> rhs) {return lhs.first < rhs.first; });
+		float tmp = pcAttributes[axis.first].min;
+		int c = 0;
+		std::vector<std::pair<int, std::pair<float, float>>> newBrushes;
+		while (tmp < pcAttributes[axis.first].max) {
+			if(c<axis.second.size())
+				newBrushes.push_back(std::pair(currentBrushId++, std::pair(tmp, axis.second[c].first)));
+			else {
+				newBrushes.push_back(std::pair(currentBrushId++, std::pair(tmp, pcAttributes[axis.first].max)));
+				break;
+			}
+			tmp = axis.second[c++].second;
 		}
 	}
 }
@@ -4661,7 +4685,7 @@ int main(int, char**)
 						globalBrushes.push_back(preview);
 						if (std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [preview](DrawList& dl) {return dl.name == preview.parent->name; }) == g_PcPlotDrawLists.end()) {
 							drawListForTemplateBrush = true;
-							createPcPlotDrawList(*preview.parent, *templateBrushes[i].parentDataSet, preview.parent->name.c_str());
+							createPcPlotDrawList(preview.parentDataset->drawLists.front(), *templateBrushes[i].parentDataSet, preview.parent->name.c_str());
 						}
 						updateAllActiveIndices();
 						pcPlotRender = true;
@@ -4805,7 +4829,7 @@ int main(int, char**)
 						ImGui::CloseCurrentPopup();
 					}
 					if (ImGui::MenuItem("Invert Brush")) {
-
+						invertGlobalBrush(globalBrushes[i]);
 					}
 
 					ImGui::EndPopup();
@@ -4926,8 +4950,9 @@ int main(int, char**)
 						static const float xOffset = 200;
 						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]),ImGui::GetStyle().FrameRounding);
 						float linepos = width/2;
-						if (brush.parent->name == dl->parentTemplateList->name) {	//identity dataset
-							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / dl->activeInd.size() / (float)ds->data.size())) * linepos : -(1 - (dl->activeInd.size() / (float)ds->data.size() / brush.parent->pointRatio)) * linepos;
+						if (brush.parent->name == dl->name) {	//identity dataset
+							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+							//linepos += (brush.lineRatios[brush.parent->name] > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name]))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name]) / brush.parent->pointRatio)) * linepos;
 						}
 						else {
 							//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
@@ -5244,7 +5269,7 @@ int main(int, char**)
 						prioritySelectAttribute = false;
 						priorityAttribute = i;
 						priorityAttributeCenterValue = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
-						upatePriorityColorBuffer(g_PcPlotDrawLists.front());
+						upatePriorityColorBuffer();
 						pcPlotRender = true;
 					}
 				}
@@ -5328,6 +5353,13 @@ int main(int, char**)
 		if (ImGui::Checkbox("Enable Axis Lines", &enableAxisLines)) {
 		}
 
+		if (ImGui::InputInt("Priority draw list index", &priorityListIndex,1,1) && priorityAttribute != -1) {
+			if (priorityListIndex < 0)priorityListIndex = 0;
+			if (priorityListIndex >= g_PcPlotDrawLists.size())priorityListIndex = g_PcPlotDrawLists.size() - 1;
+			upatePriorityColorBuffer();
+			pcPlotRender = true;
+		}
+
 		if (ImGui::BeginCombo("Priority rendering",(priorityAttribute == -1)?"Off":pcAttributes[priorityAttribute].name.c_str())) {
 			if (ImGui::MenuItem("Off")) {
 				priorityAttribute = -1;
@@ -5337,7 +5369,7 @@ int main(int, char**)
 					if (ImGui::MenuItem(pcAttributes[i].name.c_str()) && g_PcPlotDrawLists.size()) {
 						priorityAttribute = i;
 						priorityAttributeCenterValue = pcAttributes[i].max;
-						upatePriorityColorBuffer(g_PcPlotDrawLists.front());
+						upatePriorityColorBuffer();
 						pcPlotRender = true;
 					}
 				}
