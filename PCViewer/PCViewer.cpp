@@ -4963,7 +4963,7 @@ int main(int, char**)
 						else {
 							//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 							//linepos += (ratio.second > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / ratio.second)) * linepos : -(1 - (ratio.second / brush.lineRatios[brush.parent->name])) * linepos;
-							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / dl->activeInd.size() / (float)ds->data.size())) * linepos : -(1 - (dl->activeInd.size() / (float)ds->data.size() / brush.lineRatios[brush.parent->name])) * linepos;
+							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.lineRatios[brush.parent->name])) * linepos;
 						}
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y + lineHeight - 1),IM_COL32(255,0,0,255),5);
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y + lineHeight - 1), IM_COL32(255, 255, 255, 255));
