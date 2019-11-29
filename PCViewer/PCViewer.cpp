@@ -3778,10 +3778,10 @@ static void invertGlobalBrush(GlobalBrush& b) {
 		while (tmp < pcAttributes[axis.first].max) {
 			if (c < axis.second.size()) {
 				if (tmp != axis.second[c].first)
-					b.brushes[axis.first].push_back(std::pair(currentBrushId++, std::pair(tmp, axis.second[c].first)));
+					b.brushes[axis.first].push_back(std::pair<int,std::pair<float,float>>(currentBrushId++, std::pair<float, float>(tmp, axis.second[c].first)));
 			}
 			else {
-				b.brushes[axis.first].push_back(std::pair(currentBrushId++, std::pair(tmp, pcAttributes[axis.first].max)));
+				b.brushes[axis.first].push_back(std::pair<int, std::pair<float, float>>(currentBrushId++, std::pair<float, float>(tmp, pcAttributes[axis.first].max)));
 				break;
 			}
 			tmp = axis.second[c++].second;
