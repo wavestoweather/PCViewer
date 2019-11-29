@@ -2831,10 +2831,14 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 	for (Attribute& a : pcAttributes) {
 		std::string s = a.name;
 		std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+		if (s == "rlon") s = "longitude";
+		if (s == "rlat") s = "latitude";
 		pcAttr.insert(s);
 	}
 	for (std::string s : a) {
 		std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+		if (s == "rlon") s = "longitude";
+		if (s == "rlat") s = "latitude";
 		attr.insert(s);
 	}
 
@@ -2843,8 +2847,12 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 		std::vector<std::string> lowerCaseA(a), lowerCaseAttr;
 		for (int i = 0; i<lowerCaseA.size(); i++) {
 			std::transform(lowerCaseA[i].begin(), lowerCaseA[i].end(), lowerCaseA[i].begin(), [](unsigned char c) { return std::tolower(c); });
+			if (lowerCaseA[i] == "rlon") lowerCaseA[i] = "longitude";
+			if (lowerCaseA[i] == "rlat") lowerCaseA[i] = "latitude";
 			std::string attribute = pcAttributes[i].name;
 			std::transform(attribute.begin(), attribute.end(), attribute.begin(), [](unsigned char c) { return std::tolower(c); });
+			if (attribute == "rlon") attribute = "longitude";
+			if (attribute == "rlat") attribute = "latitude";
 			lowerCaseAttr.push_back(attribute);
 		}
 
