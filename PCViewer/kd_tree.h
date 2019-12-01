@@ -4,9 +4,14 @@
 
 class KdTree {
 public:
+	enum BoundsBehaviour {
+		KdTree_Bounds_Static,				//no border adjustment
+		KdTree_Bounds_Pull_In_Outer_Border,	//pull in the outer border at splits
+		KdTree_Bounds_Pull_In_Both_Borders	//pull in bot borders
+	};
 
 	KdTree() {};
-	KdTree(std::vector<int>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float, float>> initialBounds, int recursionDepth, bool adjustBounds) {
+	KdTree(std::vector<int>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float, float>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
 		this->attributes = attributes;
@@ -31,7 +36,7 @@ private:
 	std::vector<Node> nodes;
 	std::vector<int> attributes;
 	Node* root;
-	bool adjustBounds;
+	BoundsBehaviour adjustBounds;
 
 	Node* buildRec(int split, std::vector<int>& indices, std::vector<float*>& data, std::vector<int> attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
 		if (!indices.size() || !recDepth) return nullptr;
@@ -41,26 +46,55 @@ private:
 
 		//splitting the bounding box in the middle
 		std::vector<std::pair<float, float>> leftBounds(bounds), rightBounds(bounds);
-		leftBounds[split].second = (leftBounds[split].first + leftBounds[split].second) / 2;
-		rightBounds[split].first = leftBounds[split].second;
+		float mid = (leftBounds[split].first + leftBounds[split].second) / 2;
+		leftBounds[split].second = mid;
+		rightBounds[split].first = mid;
+		switch (adjustBounds) {
+		case KdTree_Bounds_Static: break;
+		case KdTree_Bounds_Pull_In_Outer_Border: 
+			leftBounds[split].first = leftBounds[split].second;
+			rightBounds[split].second = rightBounds[split].first;
+			break;
+		case KdTree_Bounds_Pull_In_Both_Borders:
+			float tmp = leftBounds[split].first;
+			leftBounds[split].first = leftBounds[split].second;
+			leftBounds[split].second = tmp;
+			tmp = rightBounds[split].first;
+			rightBounds[split].first = rightBounds[split].second;
+			rightBounds[split].second = tmp;
+			break;
+		}
 
 		//assining the points to the left and right bounding box. also get the maximum extent of the points in both directions if wanted
-		float left = leftBounds[split].second, right = leftBounds[split].second;
 		std::vector<int> leftPts, rightPts;
 		for (int i : indices) {
 			float val = data[i][attributes[split]];
-			if (val < leftBounds[split].second) {
-				if (val < left) left = val;
+			if (val < mid) {
+				switch (adjustBounds) {
+				case KdTree_Bounds_Static: break;
+				case KdTree_Bounds_Pull_In_Outer_Border:
+					if (val < leftBounds[split].first) leftBounds[split].first = val;
+					break;
+				case KdTree_Bounds_Pull_In_Both_Borders:
+					if (val < leftBounds[split].first) leftBounds[split].first = val;
+					if (val > leftBounds[split].second) leftBounds[split].second = val;
+					break;
+				}
 				leftPts.push_back(i);
 			}
 			else {
-				if (val > right) right = val;
+				switch (adjustBounds) {
+				case KdTree_Bounds_Static: break;
+				case KdTree_Bounds_Pull_In_Outer_Border:
+					if (val > rightBounds[split].second) rightBounds[split].second = val;
+					break;
+				case KdTree_Bounds_Pull_In_Both_Borders:
+					if (val > rightBounds[split].second) rightBounds[split].second = val;
+					if (val < rightBounds[split].first) rightBounds[split].first = val;
+					break;
+				}
 				rightPts.push_back(i);
 			}
-		}
-		if (adjustBounds) {
-			leftBounds[split].first = left;
-			rightBounds[split].second = right;
 		}
 		
 		//creating the childs recursiveley

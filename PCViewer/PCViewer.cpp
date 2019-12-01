@@ -289,7 +289,7 @@ struct GlobalBrush {
 	int fractureDepth;
 	std::vector<std::vector<std::pair<float, float>>> fractions;
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
-	std::map<std::string, float> lineRatios;			//contains the ratio of still active lines per drawlist
+	std::map<std::string, int> lineRatios;			//contains the ratio of still active lines per drawlist
 	std::map<int, std::vector<std::pair<unsigned int,std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
 
@@ -547,6 +547,7 @@ static std::uniform_int_distribution<int> distribution(0, 35);
 static float alphaDrawLists = .5f;
 static Vec4 PcPlotBackCol = { 0,0,0,1 };
 static bool enableAxisLines = true;
+static bool createDefaultOnLoad = false;
  
 //variables for the histogramm
 static float histogrammWidth = .1f;
@@ -600,6 +601,13 @@ std::string active3dAttribute;
 static NodeViewer* nodeViewer;
 
 static SettingsManager* settingsManager;
+
+//variables for fractions
+static int maxFractionDepth = 20;
+static int boundsBehaviour = 1;
+static int maxRenderDepth = 13;
+static float fractionBoxWidth = BRUSHWIDTH;
+static int fractionBoxLineWidth = 1;
 
 //method declarations
 static void updateDrawListIndexBuffer(DrawList& dl);
@@ -3554,7 +3562,7 @@ static void updateActiveIndices(DrawList& dl) {
 				}
 
 				if (lineKeep)
-					b.lineRatios[dl.name] += 1.0f;
+					b.lineRatios[dl.name] ++;
 			}
 			if (brushCombination == 1 && !andd) {
 				//goto nextInd;
@@ -3573,9 +3581,9 @@ static void updateActiveIndices(DrawList& dl) {
 
 		nextInd:;
 	}
-	for (GlobalBrush& b : globalBrushes) {
-		b.lineRatios[dl.name] /= dl.indices.size();
-	}
+	//for (GlobalBrush& b : globalBrushes) {
+		//b.lineRatios[dl.name] /= dl.indices.size();
+	//}
 	for (auto& it : activeBrushRatios) {
 		if(it.first == dl.name)
 			it.second /= dl.indices.size();
@@ -4140,6 +4148,10 @@ int main(int, char**)
 					delete[] createDLForDrop;
 					createDLForDrop = NULL;
 					pathDropped = false;
+					if (createDefaultOnLoad) {
+						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+						pcPlotRender = true;
+					}
 				}
 				ImGui::SetItemDefaultFocus();
 				ImGui::SameLine();
@@ -4307,6 +4319,29 @@ int main(int, char**)
 					}
 
 					ImGui::EndMenu();
+				}
+
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Fractioning")) {
+				if (ImGui::InputInt("Max fraction depth", &maxFractionDepth, 1, 1)) {
+					if (maxFractionDepth < 1) maxFractionDepth = 1;
+					if (maxFractionDepth > 30) maxFractionDepth = 30;
+				}
+
+				static char* boundsTypes[] = { "No adjustment","Pull in outside", "Pull in both sides" };
+				if (ImGui::BeginCombo("Bounds behaviour",boundsTypes[boundsBehaviour])) {
+					for (int i = 0; i < 3; i++) {
+						if (ImGui::MenuItem(boundsTypes[i])) boundsBehaviour = i;
+					}
+					ImGui::EndCombo();
+				}
+
+				ImGui::DragFloat("Fractionbox width", &fractionBoxWidth,1,0,100);
+
+				if (ImGui::InputInt("Fractionbox linewidth", &fractionBoxLineWidth, 1, 1)) {
+					if (fractionBoxLineWidth < 1) maxFractionDepth = 1;
+					if (fractionBoxLineWidth > 30) maxFractionDepth = 30;
 				}
 
 				ImGui::EndMenu();
@@ -4751,7 +4786,7 @@ int main(int, char**)
 				if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
 					if (globalBrushes[i].kdTree) {
 						if (ImGui::BeginCombo("Fracture depth",std::to_string(globalBrushes[i].fractureDepth).c_str())) {
-							for (int j = 0; j < FRACTUREDEPTH; j++) {
+							for (int j = 0; j < maxFractionDepth; j++) {
 								if (ImGui::Selectable(std::to_string(j).c_str())) {
 									globalBrushes[i].fractureDepth = j;
 									globalBrushes[i].fractions = globalBrushes[i].kdTree->getBounds(j);
@@ -4774,7 +4809,7 @@ int main(int, char**)
 #ifdef _DEBUG
 							std::cout << "Starting to build the kd tree fo rfracturing." << std::endl;
 #endif
-							globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, FRACTUREDEPTH, true);
+							globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
 #ifdef _DEBUG
 							std::cout << "Kd tree done." << std::endl;
 #endif
@@ -4926,8 +4961,8 @@ int main(int, char**)
 
 			//Statistics for global brushes
 			ImGui::SameLine();
-			ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
-			ImGui::Text("Brush statistics: Percentage of lines kept after brushing");
+			ImGui::BeginChild("Filter statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::Text("Filter statistics: Percentage of lines kept after brushing");
 			ImGui::Separator();
 			//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 			for (auto& brush : globalBrushes) {
@@ -4971,6 +5006,7 @@ int main(int, char**)
 							ds = &(*it);
 						}
 					}
+					ratios.back() /= ds->data.size();
 					//drawing the line ratios
 					ImGui::SetCursorPos(cursorPos);
 					if (brush.parent != nullptr && brush.lineRatios.find(brush.parent->name) != brush.lineRatios.end()) {
@@ -4978,13 +5014,15 @@ int main(int, char**)
 						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]),ImGui::GetStyle().FrameRounding);
 						float linepos = width/2;
 						if (brush.parent->name == dl->name) {	//identity dataset
-							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+							linepos += (brush.lineRatios[brush.parent->name] / (float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name] / (float)ds->data.size()))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name] / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+							////linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 							//linepos += (brush.lineRatios[brush.parent->name] > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name]))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name]) / brush.parent->pointRatio)) * linepos;
 						}
 						else {
 							//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 							//linepos += (ratio.second > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / ratio.second)) * linepos : -(1 - (ratio.second / brush.lineRatios[brush.parent->name])) * linepos;
-							linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.lineRatios[brush.parent->name])) * linepos;
+							//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.lineRatios[brush.parent->name])) * linepos;
+							linepos += (ratio.second/(float)ds->data.size() > (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size())) ? (1 - ((brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()) / (ratio.second / (float)ds->data.size()))) * linepos : -(1 - ((ratio.second / (float)ds->data.size()) / (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()))) * linepos;
 						}
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y + lineHeight - 1),IM_COL32(255,0,0,255),5);
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width/2, screenCursorPos.y + lineHeight - 1), IM_COL32(255, 255, 255, 255));
@@ -5069,11 +5107,12 @@ int main(int, char**)
 					for (int i = 0; i < globalBrush.fractions.size();i++) {
 						for (int j = 0; j < globalBrush.fractions[i].size(); j++) {
 							int axis = globalBrush.attributes[j];
-							float x = gap * placeOfInd(axis) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
-							float width = BRUSHWIDTH;
+							float x = gap * placeOfInd(axis) + picPos.x - fractionBoxWidth / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+							float width = fractionBoxWidth;
 							float y = ((globalBrush.fractions[i][j].second - pcAttributes[axis].max) / (pcAttributes[axis].min - pcAttributes[axis].max)) * picSize.y + picPos.y;
 							float height = (globalBrush.fractions[i][j].second - globalBrush.fractions[i][j].first) / (pcAttributes[axis].max - pcAttributes[axis].min) * picSize.y;
-							ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(0, 230, 100, 255), 1, ImDrawCornerFlags_All, 2);
+							if(i < pow(2, maxRenderDepth))
+								ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(0, 230, 100, 255), 2, ImDrawCornerFlags_All, fractionBoxLineWidth);
 						}
 					}
 				}
@@ -5433,6 +5472,8 @@ int main(int, char**)
 			
 		}
 
+		ImGui::Checkbox("Create default drawlist on load", &createDefaultOnLoad);
+
 		ImGui::Separator();
 
 		ImGui::Text("Data Settings:");
@@ -5451,6 +5492,10 @@ int main(int, char**)
 		//Opening a new Dataset into the Viewer
 		if (ImGui::Button("Open")) {
 			openDataset(pcFilePath);
+			if (createDefaultOnLoad) {
+				pcPlotRender = true;
+				createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+			}
 		}
 		ImGui::EndChild();
 
