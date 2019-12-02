@@ -2736,7 +2736,11 @@ static void FrameRender(ImGui_ImplVulkanH_Window * wd)
 	VkSemaphore image_acquired_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].ImageAcquiredSemaphore;
 	VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
 	err = vkAcquireNextImageKHR(g_Device, wd->Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
-	check_vk_result(err);
+	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+		return;
+	}
+	else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR)
+		check_vk_result(err);
 
 	ImGui_ImplVulkanH_Frame* fd = &wd->Frames[wd->FrameIndex];
 	{
@@ -2790,6 +2794,22 @@ static void FrameRender(ImGui_ImplVulkanH_Window * wd)
 		err = vkQueueSubmit(g_Queue, 1, &info, fd->Fence);
 		check_vk_result(err);
 	}
+
+	render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
+	VkPresentInfoKHR info = {};
+	info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	info.waitSemaphoreCount = 1;
+	info.pWaitSemaphores = &render_complete_semaphore;
+	info.swapchainCount = 1;
+	info.pSwapchains = &wd->Swapchain;
+	info.pImageIndices = &wd->FrameIndex;
+	err = vkQueuePresentKHR(g_Queue, &info);
+	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+		return;
+	}
+	else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR)
+		check_vk_result(err);
+	wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->ImageCount; // Now we can use the next set of semaphores
 }
 
 static void FramePresent(ImGui_ImplVulkanH_Window * wd)
@@ -2803,7 +2823,11 @@ static void FramePresent(ImGui_ImplVulkanH_Window * wd)
 	info.pSwapchains = &wd->Swapchain;
 	info.pImageIndices = &wd->FrameIndex;
 	VkResult err = vkQueuePresentKHR(g_Queue, &info);
-	check_vk_result(err);
+	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+		return;
+	}
+	else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR)
+		check_vk_result(err);
 	wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->ImageCount; // Now we can use the next set of semaphores
 }
 
@@ -3284,6 +3308,7 @@ static void openDataset(const char* filename) {
 	}
 	else {
 		std::cout << "The given type of the file is not supported by this programm" << std::endl;
+		return;
 	}
 	//printing Amount of data loaded
 	std::cout << "Amount of data loaded: " << g_PcPlotDataSets.back().data.size() << std::endl;
@@ -4150,7 +4175,7 @@ int main(int, char**)
 					pathDropped = false;
 					if (createDefaultOnLoad) {
 						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-						pcPlotRender = true;
+						//pcPlotRender = true;
 					}
 				}
 				ImGui::SetItemDefaultFocus();
@@ -6125,7 +6150,7 @@ int main(int, char**)
 		memcpy(&wd->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
 		FrameRender(wd);
 
-		FramePresent(wd);
+		//FramePresent(wd);
 	}
 
 	// Cleanup
