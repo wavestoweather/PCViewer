@@ -4330,7 +4330,7 @@ int main(int, char**)
 				}
 			}
 
-			if (ImGui::BeginMenu("Global Brushes")) {
+			if (ImGui::BeginMenu("Global Filter")) {
 				if (ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes) && !toggleGlobalBrushes) {
 					updateAllActiveIndices();
 					pcPlotRender = true;
@@ -4704,7 +4704,7 @@ int main(int, char**)
 			}
 
 			ImGui::SameLine(200);
-			if (ImGui::Button("Combine active global brushes")) {
+			if (ImGui::Button("Combine active global filter")) {
 				GlobalBrush combo;
 				combo.name = "Combined(";
 				for (auto& brush : globalBrushes) {
@@ -4726,8 +4726,8 @@ int main(int, char**)
 			}
 
 			//drawing the list for brush templates
-			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
-			ImGui::Text("Brush Templates");
+			ImGui::BeginChild("filterTemplates", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::Text("Filter Templates");
 			ImGui::Separator();
 			for (int i = 0; i < templateBrushes.size(); i++) {
 				if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
@@ -4785,12 +4785,12 @@ int main(int, char**)
 			ImGui::EndChild();
 			ImGui::SameLine();
 			//Drawing the list of global brushes
-			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
-			ImGui::Text("Global Brushes");
+			ImGui::BeginChild("GlobalFilter", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::Text("Global Filter");
 			ImGui::Separator();
 			//child for names and selection
 			bool popEnd = false;
-			static int openConvertToLokal = -1;
+			static int openConvertToLokal = -1, setParent = -1;
 			for (int i = 0; i < globalBrushes.size(); i++) {
 				if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i,ImGuiSelectableFlags_None,ImVec2(350,0))) {
 					pcPlotSelectedDrawList = -1;
@@ -4823,7 +4823,7 @@ int main(int, char**)
 						}
 					}
 					else {
-						if (ImGui::MenuItem("Create brush fractures")) {
+						if (ImGui::MenuItem("Create filter fractures")) {
 							std::vector<std::pair<float, float>> bounds;
 							globalBrushes[i].attributes.clear();
 							//NOTE: only the first brush for each axis is taken
@@ -4859,6 +4859,10 @@ int main(int, char**)
 					}
 					if (ImGui::MenuItem("Convert to lokal brush")) {
 						openConvertToLokal = i;
+						ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::MenuItem("Set parent Dataset")) {
+						setParent = i;
 						ImGui::CloseCurrentPopup();
 					}
 					if (ImGui::MenuItem("Delete")) {
@@ -4977,6 +4981,40 @@ int main(int, char**)
 						openConvertToLokal = -1;
 						ImGui::CloseCurrentPopup();
 					}
+				}
+
+				ImGui::EndPopup();
+			}
+			if (setParent != -1 && !ImGui::IsPopupOpen("Set brush parent")) {
+				ImGui::OpenPopup("Set brush parent");
+			}
+			if (ImGui::BeginPopupModal("Set brush parent", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+				static int selds = 0;
+				auto ds = g_PcPlotDataSets.begin();
+				std::advance(ds, selds);
+				if (ImGui::BeginCombo("Select new parent dataset", ds->name.c_str())) {
+					ds = g_PcPlotDataSets.begin();
+					for (int i = 0; i < g_PcPlotDataSets.size() ; i++) {
+						if (ImGui::MenuItem(ds->name.c_str())) {
+							selds = i;
+						}
+						++ds;
+					}
+					ImGui::EndCombo();
+				}
+				if (ImGui::Button("Cancel")) {
+					setParent = -1;
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Confirm")) {
+					auto gb = globalBrushes.begin();
+					std::advance(gb, setParent);
+					auto ds = g_PcPlotDataSets.begin();
+					std::advance(ds, selds);
+					gb->parentDataset = &(*ds);
+					setParent = -1;
+					ImGui::CloseCurrentPopup();
 				}
 
 				ImGui::EndPopup();
