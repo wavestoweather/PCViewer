@@ -260,6 +260,35 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 		vkDestroyShaderModule(device, shaderModules[4], nullptr);
 }
 
+void VkUtil::createComputePipeline(VkDevice device, VkShaderModule& shaderModule, std::vector<VkDescriptorSetLayout> descriptorLayouts, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline)
+{
+	VkResult err;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = descriptorLayouts.size();
+	pipelineLayoutInfo.pSetLayouts = descriptorLayouts.data();
+	pipelineLayoutInfo.pushConstantRangeCount = 0;
+	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+	err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, pipelineLayout);
+	check_vk_result(err);
+
+	VkPipelineShaderStageCreateInfo shaderInfo = {};
+	shaderInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaderInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	shaderInfo.module = shaderModule;
+	shaderInfo.pName = "main";
+
+	VkComputePipelineCreateInfo pipeInfo = {};
+	pipeInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	pipeInfo.layout = *pipelineLayout;
+	pipeInfo.stage = shaderInfo;
+
+	err = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipeInfo, nullptr, pipeline);
+	check_vk_result(err);
+}
+
 void VkUtil::destroyPipeline(VkDevice device,VkPipeline pipeline) {
 	vkDestroyPipeline(device, pipeline, nullptr);
 }
@@ -278,7 +307,7 @@ VkShaderModule VkUtil::createShaderModule(VkDevice device, const std::vector<cha
 	return shaderModule;
 }
 
-void VkUtil::createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType,VkRenderPass* renderPass) {
+void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType,VkRenderPass* renderPass) {
 	VkResult err;
 
 	std::vector<VkAttachmentDescription> colorAttachments;

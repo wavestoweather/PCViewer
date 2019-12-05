@@ -12,6 +12,13 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define DETECTMEMLEAK
 #endif
 
+//enable this define to print the time needed to render the pc Plot
+//#define PRINTRENDERTIME
+//enable htis define to print the time since the last fram
+#define PRINTFRAMETIME
+//enable to use gpu sorting
+//#define GPUSORT
+
 // build the pcViewer with 3d view
 #define RENDER3D
 //build hte pcViewer with the node viewer
@@ -27,6 +34,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_vulkan.h"
+#include "imgui/imgui_internal.h"
 #include "Color.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
@@ -35,6 +43,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "SpacialData.h"
 #include "SettingsManager.h"
 #include "kd_tree.h"
+#include "PriorityColorUpdater.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -55,6 +64,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <math.h>
 #include <string.h>
 #include <sstream>
+//#include <thrust/sort.h>
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -81,8 +91,6 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-//enable this define to print the time needed to render the pc Plot
-//#define PRINTRENDERTIME
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -609,6 +617,13 @@ static int maxRenderDepth = 13;
 static float fractionBoxWidth = BRUSHWIDTH;
 static int fractionBoxLineWidth = 1;
 
+//variables for animation
+static float animationDuration = 2.0f;		//time for every active brush to show in seconds
+static std::chrono::steady_clock::time_point animationStart(std::chrono::duration<int>(0));
+static bool* animationActiveDatasets = nullptr;
+static bool animationItemsDisabled = false;
+static int animationCurrentDrawList = -1;
+
 //method declarations
 static void updateDrawListIndexBuffer(DrawList& dl);
 static void updateActiveIndices(DrawList& dl);
@@ -861,7 +876,7 @@ static void createPcPlotHistoPipeline() {
 	descriptorSetLayouts.clear();
 	descriptorSetLayouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 
-	VkUtil::createPcPlotRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR, &g_PcPlotDensityRenderPass);
+	VkUtil::createRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR, &g_PcPlotDensityRenderPass);
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotDensityRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
 }
@@ -3434,8 +3449,19 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 			}
 		}
 		int p = priorityAttribute;
+#ifdef GPUSORT
+		//sorting with thrus
+		std::vector<float> keys(dl.activeInd.size());
+		int c = 0;
+		for (int i : dl.activeInd) {
+			keys[c++] = (*data)[i][p] - priorityAttributeCenterValue;
+		}
+		thrust::sort_by_key(keys.begin(), keys.end(), dl.activeInd.begin(), thrust::greater<float>());
+
+#else
 		std::sort(dl.indices.begin(), dl.indices.end(), [data, p](int a, int b) {return fabs((*data)[a][p]-priorityAttributeCenterValue) > fabs((*data)[b][p]-priorityAttributeCenterValue); });
 		std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return fabs((*data)[a][p] - priorityAttributeCenterValue) > fabs((*data)[b][p] - priorityAttributeCenterValue); });
+#endif
 	}
 
 	//filling the indexbuffer for drawing
@@ -4144,13 +4170,84 @@ int main(int, char**)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		//Check if a drawlist color changed
-		for (DrawList& ds : g_PcPlotDrawLists) {
-			if (ds.color != ds.prefColor) {
-				pcPlotRender = true;
-				ds.prefColor = ds.color;
+		if (animationStart != std::chrono::steady_clock::time_point(std::chrono::duration<int>(0))) {
+			//disabling inputs when animating
+			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			animationItemsDisabled = true;
+			//remembering the original show flags for every drawlist
+			if (!animationActiveDatasets) {
+				animationActiveDatasets = new bool[g_PcPlotDrawLists.size()];
+				int i = 0;
+				for (DrawList& dl:g_PcPlotDrawLists){
+					animationActiveDatasets[i++] = dl.show;
+					dl.show = false;
+				}
+			}
+			//rendering a new drawlist if current drawlist to show changed
+			if (animationCurrentDrawList != (int)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count()) {
+				//disabling current drawlist
+				auto it = g_PcPlotDrawLists.begin();
+				int c = -1, i = 0;
+				for (; c < animationCurrentDrawList && it!=g_PcPlotDrawLists.end(); i++) {
+					if (animationActiveDatasets[i]) c++;
+					++it;
+				}
+
+				if (it == g_PcPlotDrawLists.end()) {
+					animationStart = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
+				}
+				else {
+					it->show = false;
+					it++;
+					i++;
+					while (!animationActiveDatasets[i] && it != g_PcPlotDrawLists.end()) {
+						i++;
+						++it;
+					}
+					if (it != g_PcPlotDrawLists.end()) {
+						it->show = true;
+						animationCurrentDrawList = c + 1;
+						pcPlotRender = true;
+					}
+					else {
+						animationStart = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
+					}
+				}
 			}
 		}
+		else {
+			if (animationActiveDatasets) {
+				int i = 0;
+				for (DrawList& dl : g_PcPlotDrawLists) {
+					dl.show = animationActiveDatasets[i++];
+				}
+				delete[] animationActiveDatasets;
+				animationActiveDatasets = nullptr;
+			}
+		}
+
+		//Check if a drawlist color changed
+		//for (DrawList& ds : g_PcPlotDrawLists) {
+		//	if (ds.color != ds.prefColor) {
+		//		pcPlotRender = true;
+		//		ds.prefColor = ds.color;
+		//	}
+		//}
+
+		//if animation is active disable imgui widgets
+
+		//check if mouse was clicked for frametime
+#ifdef PRINTFRAMETIME
+		static std::chrono::steady_clock::time_point begin(std::chrono::duration<int>(0));
+		if(begin != std::chrono::steady_clock::time_point(std::chrono::duration<int>(0))){
+			std::cout << "Time for frame after mouseclick: " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count() << " milliseconds." << std::endl;
+			begin = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
+		}
+		if(ImGui::GetIO().MouseDown[0]){
+			begin = std::chrono::steady_clock::now();
+		}
+#endif
 
 		//Check if button f5 was pressed for rendering
 		if (ImGui::GetIO().KeysDown[294]) {
@@ -4369,6 +4466,13 @@ int main(int, char**)
 					if (fractionBoxLineWidth > 30) maxFractionDepth = 30;
 				}
 
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Animation")) {
+				ImGui::SliderFloat("Animation duration per drawlist", &animationDuration, .1f, 10);
+				if (ImGui::MenuItem("Start drawlist animation")) {
+					animationStart = std::chrono::steady_clock::now();
+				}
 				ImGui::EndMenu();
 			}
 			ImGui::EndMenuBar();
@@ -5968,7 +6072,9 @@ int main(int, char**)
 			ImGui::NextColumn();
 
 			int misc_flags = ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar;
-			ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)& dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags);
+			if (ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)&dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags)) {
+				pcPlotRender = true;
+			}
 			ImGui::NextColumn();
 
 			if (ImGui::Checkbox((std::string("##dh") + dl.name).c_str(), &dl.showHistogramm) && drawHistogramm) {
@@ -6182,6 +6288,11 @@ int main(int, char**)
 #ifdef _DEBUG
 		ImGui::ShowDemoWindow(NULL);
 #endif
+		if (animationItemsDisabled) {
+			ImGui::PopItemFlag();
+			ImGui::PopStyleVar();
+			animationItemsDisabled = false;
+		}
 
 		// Rendering
 		ImGui::Render();

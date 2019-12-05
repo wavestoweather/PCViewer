@@ -38,8 +38,9 @@ namespace VkUtil{
 	void commitCommandBuffer( VkQueue queue, VkCommandBuffer commandBuffer);
 	void beginRenderPass(VkCommandBuffer commandBuffer, std::vector<VkClearValue>& clearValues, VkRenderPass renderPass, VkFramebuffer framebuffer, VkExtent2D extend);
 	void createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, const std::vector<VkDynamicState>& dynamicStates, VkShaderModule* shaderModules, VkPrimitiveTopology topology, VkPipelineRasterizationStateCreateInfo* rasterizerInfo, VkPipelineMultisampleStateCreateInfo* multisamplingInfo, VkPipelineDepthStencilStateCreateInfo* depthStencilInfo, BlendInfo* blendInfo, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkRenderPass* renderPass, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline);
+	void createComputePipeline(VkDevice device, VkShaderModule& shaderModule, std::vector<VkDescriptorSetLayout> descriptorLayouts, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline);
 	void destroyPipeline(VkDevice device, VkPipeline pipeline);
-	void createPcPlotRenderPass(VkDevice device, VkUtil::PassType passType, VkRenderPass* renderPass);
+	void createRenderPass(VkDevice device, VkUtil::PassType passType, VkRenderPass* renderPass);
 	void createFrameBuffer(VkDevice device, VkRenderPass renderPass, const std::vector<VkImageView> attachments, uint32_t width, uint32_t height, VkFramebuffer* frambuffer);
 	void fillDescriptorSetLayoutBinding(uint32_t bindingNumber, VkDescriptorType descriptorType, uint32_t amtOfDescriptors, VkShaderStageFlags shaderStages, VkDescriptorSetLayoutBinding* uboLayoutBinding);
 	void createDescriptorSetLayout(VkDevice device, const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* descriptorSetLayout);

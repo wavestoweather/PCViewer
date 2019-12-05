@@ -400,7 +400,7 @@ void NodeViewer::setupRenderPipeline()
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
 
-	VkUtil::createPcPlotRenderPass(device, VkUtil::PASS_TYPE_DEPTH_OFFLINE, &renderPass);
+	VkUtil::createRenderPass(device, VkUtil::PASS_TYPE_DEPTH_OFFLINE, &renderPass);
 
 	VkUtil::createPipeline(device, &vertexInputInfo, imageWidth, imageHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, &depthStencil, &blendInfo, descriptorSetLayouts, &renderPass, &pipelineLayout, &pipeline);
 }
