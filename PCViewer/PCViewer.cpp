@@ -4173,7 +4173,6 @@ int main(int, char**)
 		if (animationStart != std::chrono::steady_clock::time_point(std::chrono::duration<int>(0))) {
 			//disabling inputs when animating
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 			animationItemsDisabled = true;
 			//remembering the original show flags for every drawlist
 			if (!animationActiveDatasets) {
@@ -4185,22 +4184,25 @@ int main(int, char**)
 				}
 			}
 			//rendering a new drawlist if current drawlist to show changed
-			if (animationCurrentDrawList != (int)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count()) {
+			if (animationCurrentDrawList != (int)(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count()/animationDuration)) {
 				//disabling current drawlist
 				auto it = g_PcPlotDrawLists.begin();
 				int c = -1, i = 0;
 				for (; c < animationCurrentDrawList && it!=g_PcPlotDrawLists.end(); i++) {
 					if (animationActiveDatasets[i]) c++;
-					++it;
+					if (c!=0) ++it;
 				}
 
 				if (it == g_PcPlotDrawLists.end()) {
 					animationStart = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
+					animationCurrentDrawList = -1;
 				}
 				else {
-					it->show = false;
-					it++;
-					i++;
+					if (c != -1) {
+						it->show = false;
+						it++;
+						i++;
+					}
 					while (!animationActiveDatasets[i] && it != g_PcPlotDrawLists.end()) {
 						i++;
 						++it;
@@ -4212,6 +4214,7 @@ int main(int, char**)
 					}
 					else {
 						animationStart = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
+						animationCurrentDrawList = -1;
 					}
 				}
 			}
@@ -4224,6 +4227,7 @@ int main(int, char**)
 				}
 				delete[] animationActiveDatasets;
 				animationActiveDatasets = nullptr;
+				pcPlotRender = true;
 			}
 		}
 
@@ -6290,7 +6294,6 @@ int main(int, char**)
 #endif
 		if (animationItemsDisabled) {
 			ImGui::PopItemFlag();
-			ImGui::PopStyleVar();
 			animationItemsDisabled = false;
 		}
 
