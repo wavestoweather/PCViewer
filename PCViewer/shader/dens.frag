@@ -6,6 +6,8 @@ layout(binding = 1) uniform UniformBufferObject{
 	int enableMapping;
 	float radius;
 	int imageHeight;
+	float gap;
+	float compare;
 } ubo;
 layout(binding = 2) uniform sampler2D ironMap;
 
@@ -16,6 +18,8 @@ const float a0 = .05f;
 const float densityMultiplier = .2f;
 
 void main() {
+	//setting the bool to efficiently subtract in the for loop
+	bool sub = ubo.compare != -1.0f;
 	//Gaussian blur in y direction
 	float sdev = (2*ubo.radius*ubo.imageHeight)/3;
 	float prefac = 1/(sqrt(2*3.141593f*pow(sdev,2)));
@@ -28,10 +32,16 @@ void main() {
 			vec4 col = texture(texSampler, curT);
 			float gaussianFac = prefac*exp(-(pow(i-tex.y*ubo.imageHeight,2)/pow(sdev,2)));
 			outColor += col * gaussianFac;
+			if(sub){
+				outColor -= gaussianFac * texture(texSampler, vec2(int(curT.x/ubo.gap) * ubo.gap + ubo.compare,curT.y));
+			}
 			divider += gaussianFac;
 		}
 	}
 	//normalization
+	if(sub){
+		outColor = abs(outColor);
+	}
     outColor /= divider;
 	//transforming linear density to exponential density
 	if((ubo.enableMapping & 2) > 0){

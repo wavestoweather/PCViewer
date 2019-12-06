@@ -237,7 +237,8 @@ struct DensityUniformBuffer {
 	uint32_t enableMapping;
 	float gaussRange;
 	uint32_t imageHeight;
-	uint32_t padding;
+	float gap;
+	float compare;
 };
 
 struct DrawListComparator {
@@ -566,6 +567,7 @@ static float densityRadius = .05f;
 static bool enableDensityMapping = true;
 static bool calculateMedians = true;
 static bool mapDensity = true;
+static int histogrammDrawListComparison = -1;
 static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
 static Vec4 densityBackCol = { 0,0,0,1 };
 static float medianLineWidth = 1.0f;
@@ -3188,6 +3190,16 @@ static void openDlf(const char* filename) {
 				}
 			}
 
+			if (newAttr) {
+				pcAttributeEnabled = new bool[pcAttributes.size()];
+				activeBrushAttributes = new bool[pcAttributes.size()];
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					pcAttributeEnabled[i] = true;
+					activeBrushAttributes[i] = false;
+					pcAttrOrd.push_back(i);
+				}
+			}
+
 			//after Attribute collection reading in the data
 			DataSet ds;
 			if (tmp != std::string("Data:")) {
@@ -3288,16 +3300,6 @@ static void openDlf(const char* filename) {
 					}
 					tl.pointRatio = tl.indices.size()/((float)ds.data.size());
 					ds.drawLists.push_back(tl);
-				}
-			}
-
-			if (newAttr) {
-				pcAttributeEnabled = new bool[pcAttributes.size()];
-				activeBrushAttributes = new bool[pcAttributes.size()];
-				for (int i = 0; i < pcAttributes.size(); i++) {
-					pcAttributeEnabled[i] = true;
-					activeBrushAttributes[i] = false;
-					pcAttrOrd.push_back(i);
 				}
 			}
 
@@ -3687,6 +3689,31 @@ static void uploadDensityUiformBuffer() {
 	ubo.enableMapping = enableDensityMapping | ((uint8_t)(histogrammDensity && enableDensityMapping)) * 2;
 	ubo.gaussRange = densityRadius;
 	ubo.imageHeight = g_PcPlotHeight;
+	int amtOfIndices = 0;
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		if (pcAttributeEnabled[i]) amtOfIndices++;
+	}
+	ubo.gap = (1 - histogrammWidth/2) / (amtOfIndices - 1);
+	if (histogrammDrawListComparison != -1) {
+		float offset = 0;
+		int activeHists = 0;
+		int c = 0;
+		for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it,c++) {
+			if (it->showHistogramm) {
+				activeHists++;
+				if (c == histogrammDrawListComparison) {
+					offset = activeHists;
+				}
+			}
+			else if (c == histogrammDrawListComparison) {
+				std::cout << "Histogramm to compare to is not active." << std::endl;
+			}
+		}
+		ubo.compare = (offset / activeHists - (1/(2.0f*activeHists))) * histogrammWidth/2;
+	}
+	else {
+		ubo.compare = -1;
+	}
 	void* d;
 	vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPLotDensityUboOffset, sizeof(DensityUniformBuffer), 0, &d);
 	memcpy(d, &ubo, sizeof(DensityUniformBuffer));
@@ -5132,8 +5159,8 @@ int main(int, char**)
 
 			//Statistics for global brushes
 			ImGui::SameLine();
-			ImGui::BeginChild("Filter statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
-			ImGui::Text("Filter statistics: Percentage of lines kept after brushing");
+			ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::Text("Brush statistics: Percentage of lines kept after brushing");
 			ImGui::Separator();
 			//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 			for (auto& brush : globalBrushes) {
@@ -5543,6 +5570,9 @@ int main(int, char**)
 			pcPlotRender = true;
 		}
 		if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
+			if (histogrammDrawListComparison != -1) {
+				uploadDensityUiformBuffer();
+			}
 			pcPlotRender = true;
 		}
 		if (ImGui::ColorEdit4("Histogramm Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && drawHistogramm) {
@@ -5641,6 +5671,30 @@ int main(int, char**)
 
 		if (ImGui::Checkbox("Put 3d view always in focus", &view3dAlwaysOnTop)) {
 			
+		}
+
+		auto histComp = g_PcPlotDrawLists.begin();
+		if (histogrammDrawListComparison != -1) std::advance(histComp, histogrammDrawListComparison);
+		if (ImGui::BeginCombo("Histogramm Comparison", (histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
+			if (ImGui::MenuItem("Off")) {
+				histogrammDrawListComparison = -1;
+				uploadDensityUiformBuffer();
+				if (drawHistogramm) {
+					pcPlotRender = true;
+				}
+			}
+			auto it = g_PcPlotDrawLists.begin();
+			for (int i = 0; i < g_PcPlotDrawLists.size(); i++,++it) {
+				if (ImGui::MenuItem(it->name.c_str())) {
+					histogrammDrawListComparison = i;
+					uploadDensityUiformBuffer();
+					if (drawHistogramm) {
+						pcPlotRender = true;
+					}
+				}
+			}
+
+			ImGui::EndCombo();
 		}
 
 		ImGui::Checkbox("Create default drawlist on load", &createDefaultOnLoad);
