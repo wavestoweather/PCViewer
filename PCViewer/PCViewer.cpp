@@ -44,6 +44,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "SettingsManager.h"
 #include "kd_tree.h"
 #include "PriorityColorUpdater.h"
+#include "GpuBrusher.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
