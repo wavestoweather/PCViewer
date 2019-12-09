@@ -5281,13 +5281,13 @@ int main(int, char**)
 
 			ImGui::EndChild();
 			
-			gap = (picSize.x - ((drawHistogramm) ? histogrammWidth / 2.0 * (double)picSize.x : 0)) / (amtOfLabels - 1);
+			gap = (picSize.x - ((drawHistogramm) ? histogrammWidth / 2.0f * picSize.x : 0)) / (amtOfLabels - 1);
 			//drawing axis lines
 			if (enableAxisLines) {
 				for (int i = 0; i < amtOfLabels; i++) {
 					float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 					ImVec2 a(x, picPos.y);
-					ImVec2 b(x, picPos.y + picSize.y);
+					ImVec2 b(x, picPos.y + picSize.y - 1);
 					ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
 				}
 			}
