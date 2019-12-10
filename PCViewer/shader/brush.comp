@@ -1,0 +1,62 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+layout(std430, binding = 0) buffer Informations{
+	uint amtOfAttributes;
+	uint amtOfBrushAxes;
+	uint padding;
+	uint padding1;
+	uvec3 indicesOffsets[];
+} info;
+
+layout(std430, binding = 1) buffer Brushes{
+	uvec2 minMax[];
+}brushes;
+
+layout(std430, binding = 2) buffer Data{
+	vec4 data[];
+}d;
+
+layout(std430, binding = 3) buffer Ind{
+	uint counter;
+	uint padding;
+	uint padding1;
+	uint padding2;
+	uint ind[];
+}indices;
+
+layout(std430, binding = 4) buffer AppendBuffer{
+	uint counter;
+	uint padding;
+	uint padding1;
+	uint padding2;
+	uint ind[];
+}result;
+
+layout (local_size_x = 64) in;
+
+void main(){
+	if(gl_GlobalInvocationID.x >= indices.counter) return;
+	bool lineKeep = true;
+	for(int axis = 0; axis<info.amtOfBrushAxes;axis++){
+		bool good = false;
+		for(int brush = 0; brush < info.indicesOffsets[axis].z;brush++){
+			vec2 minMax = brushes.minMax[info.indicesOffsets[axis].y + brush];
+			uint datInd = indices.ind[gl_GlobalInvocationID.x] * info.amtOfAttributes + info.indicesOffsets[axis].x;
+			float datum = d.data[datInd >> 2][datInd & 3];
+			if(datum>=minMax.x&&datum<=minMax.y){
+				good = true;
+				break;
+			}
+		}
+		if(!good){
+			lineKeep = false;
+			break;
+		}
+	}
+	if(lineKeep){
+		uint i = atomicAdd(result.counter,1);
+		result.ind[i] = indices.ind[gl_GlobalInvocationID.x];
+	}
+}
