@@ -4,12 +4,13 @@
 #include <string.h>
 #include <vector>
 #include <map>
+#include <set>
 
 #include "VkUtil.h"
 #include "PCUtil.h"
 
-#define LOCALSIZE 64
-#define SHADERPATH "shader/brush.spv"
+#define LOCALSIZE 256
+#define SHADERPATH "shader/brushComp.spv"
 
 class GpuBrusher {
 private:
@@ -68,19 +69,19 @@ public:
 		binding.binding = 0;
 		binding.descriptorCount = 1;		//informations
 		binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-		binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		layoutBindings.push_back(binding);
 
 		binding.binding = 1;				//brush ranges
-		binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		layoutBindings.push_back(binding);
 
 		binding.binding = 2;				//data buffer
-		binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		layoutBindings.push_back(binding);
 
 		binding.binding = 3;				//input indices
-		binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		layoutBindings.push_back(binding);
 
 		binding.binding = 4;				//output indices
@@ -100,7 +101,7 @@ public:
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 	};
 
-	std::vector<int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataByteSize, VkBuffer data, std::vector<int>& indices, uint32_t amtOfAttributes) {
+	std::set<int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataByteSize, VkBuffer data, std::vector<int>& indices, uint32_t amtOfAttributes) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(uint32_t) * 4 + sizeof(uint32_t) * 4 * brushes.size();
 		UBOinfo* informations = (UBOinfo*)malloc(infoBytesSize);
@@ -108,7 +109,7 @@ public:
 		std::vector<BrushInfo> brushInfos;
 		uint32_t off = 0;
 		for (auto axis : brushes) {
-			brushInfos.push_back({ axis.first,off,axis.second.size() });
+			brushInfos.push_back({ (uint32_t)axis.first,off,(uint32_t)axis.second.size() });
 			off += axis.second.size();
 		}
 		uint32_t brushesByteSize = sizeof(uint32_t) * 4 * off;
@@ -118,10 +119,10 @@ public:
 
 		//allocating buffers and memory for ubos
 		uboOffsets[0] = 0;
-		VkUtil::createBuffer(device, infoBytesSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &uboBuffers[0]);
-		VkUtil::createBuffer(device, brushesByteSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &uboBuffers[1]);
-		VkUtil::createBuffer(device, indices.size() * sizeof(uint32_t) * 4 + sizeof(uint32_t) * 4, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &uboBuffers[3]);
-		VkUtil::createBuffer(device, indices.size() * sizeof(uint32_t) * 4 + sizeof(uint32_t) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[4]);
+		VkUtil::createBuffer(device, infoBytesSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[0]);
+		VkUtil::createBuffer(device, brushesByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[1]);
+		VkUtil::createBuffer(device, indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[3]);
+		VkUtil::createBuffer(device, indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[4]);
 
 		VkResult err;
 		VkMemoryRequirements memReq;
@@ -165,11 +166,11 @@ public:
 		layouts.push_back(descriptorSetLayout);
 		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
 
-		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, uboBuffers[1], brushesByteSize, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, data, dataByteSize, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, uboBuffers[3], indices.size() * sizeof(uint32_t) * 4 + sizeof(uint32_t) * 4, 3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, uboBuffers[4], indices.size() * sizeof(uint32_t) * 4 + sizeof(uint32_t) * 4, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, uboBuffers[1], brushesByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, data, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, uboBuffers[3], indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, uboBuffers[4], indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 
 		//uploading data for brushing
 		void* d;
@@ -179,14 +180,14 @@ public:
 		uint32_t offset = 0;
 		for (BrushInfo bi : brushInfos) {
 			memcpy(informations->indicesOffsets + offset, &bi, sizeof(uint32_t) * 4);
-			offset += sizeof(uint32_t) * 4;
+			offset +=  4;
 		}
 		vkMapMemory(device, uboMemory, uboOffsets[0], infoBytesSize, 0, &d);
 		memcpy(d, informations, infoBytesSize);
 		vkUnmapMemory(device, uboMemory);
 
 		offset = 0;
-		int32_t* bru = (int32_t*)gpuBrushes;
+		float* bru = (float*)gpuBrushes;
 		for (auto& axis : brushes) {
 			for (auto& range : axis.second) {
 				bru[offset++] = range.first;
@@ -195,19 +196,19 @@ public:
 			}
 		}
 		vkMapMemory(device, uboMemory, uboOffsets[1], brushesByteSize, 0, &d);
-		memcpy(d, gpuBrushes, brushesByteSize);
+		memcpy(d, bru, brushesByteSize);
 		vkUnmapMemory(device, uboMemory);
 
-		uint32_t* gpuInd = (uint32_t*)malloc(indices.size() * 4 * sizeof(uint32_t) + sizeof(uint32_t) * 4);
+		uint32_t* gpuInd = (uint32_t*)malloc(indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4);
 		offset = 4;
 		gpuInd[0] = indices.size();
 		for (int i : indices) {
-			gpuInd[offset] = i;
-			offset += 4;
+			gpuInd[offset++] = i;
+			//offset += 4;
 		}
 
-		vkMapMemory(device, uboMemory, uboOffsets[3], indices.size() * 4 * sizeof(uint32_t) + sizeof(uint32_t) * 4, 0, &d);
-		memcpy(d, gpuInd, indices.size() * 4 * sizeof(uint32_t));
+		vkMapMemory(device, uboMemory, uboOffsets[3], indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4, 0, &d);
+		memcpy(d, gpuInd, indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4);
 		vkUnmapMemory(device, uboMemory);
 
 		int zero = 0;
@@ -223,21 +224,19 @@ public:
 		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 		int patchAmount = indices.size() / LOCALSIZE;
 		patchAmount += (indices.size() % LOCALSIZE) ? 1 : 0;
-		err = vkEndCommandBuffer(command);
-		check_vk_result(err);
 		vkCmdDispatch(command, patchAmount, 1, 1);
 		VkUtil::commitCommandBuffer(queue, command);
 		err = vkQueueWaitIdle(queue);
 		check_vk_result(err);
 
 		//pulling the result from the gpu and filling the result vector
-		uint32_t* brushInd = (uint32_t*)malloc(indices.size() * 4 * sizeof(uint32_t) + sizeof(uint32_t) * 4);
-		vkMapMemory(device, uboMemory, uboOffsets[4], indices.size() * 4 * sizeof(uint32_t) + sizeof(uint32_t) * 4, 0, &d);
-		memcpy(brushInd, d, indices.size() * 4 * sizeof(uint32_t) + sizeof(uint32_t) * 4);
+		uint32_t* brushInd = (uint32_t*)malloc(indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4);
+		vkMapMemory(device, uboMemory, uboOffsets[4], indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4, 0, &d);
+		memcpy(brushInd, d, indices.size() * sizeof(uint32_t) + sizeof(uint32_t) * 4);
 		vkUnmapMemory(device, uboMemory);
-		std::vector<int> res;
+		std::set<int> res;
 		for (int i = 0; i < brushInd[0]; i++) {
-			res.push_back(brushInd[4 + i*4]);
+			res.insert(brushInd[4 + i]);
 		}
 		
 		vkFreeCommandBuffers(device, commandPool, 1, &command);
@@ -248,10 +247,10 @@ public:
 		vkDestroyBuffer(device, uboBuffers[3], nullptr);
 		vkDestroyBuffer(device, uboBuffers[4], nullptr);
 
-		delete[] informations;
-		delete[] gpuBrushes;
-		delete[] gpuInd;
-		delete[] brushInd;
+		free(informations);
+		free(gpuBrushes);
+		free(gpuInd);
+		free(brushInd);
 
 		return res;
 	};

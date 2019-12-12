@@ -287,6 +287,8 @@ void VkUtil::createComputePipeline(VkDevice device, VkShaderModule& shaderModule
 
 	err = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipeInfo, nullptr, pipeline);
 	check_vk_result(err);
+
+	vkDestroyShaderModule(device, shaderModule, nullptr);
 }
 
 void VkUtil::destroyPipeline(VkDevice device,VkPipeline pipeline) {

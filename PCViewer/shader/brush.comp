@@ -11,11 +11,11 @@ layout(std430, binding = 0) buffer Informations{
 } info;
 
 layout(std430, binding = 1) buffer Brushes{
-	uvec2 minMax[];
+	vec4 minMax[];
 }brushes;
 
 layout(std430, binding = 2) buffer Data{
-	vec4 data[];
+	float data[];
 }d;
 
 layout(std430, binding = 3) buffer Ind{
@@ -31,10 +31,10 @@ layout(std430, binding = 4) buffer AppendBuffer{
 	uint padding;
 	uint padding1;
 	uint padding2;
-	uint ind[];
+	uint  ind[];
 }result;
 
-layout (local_size_x = 64) in;
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
 	if(gl_GlobalInvocationID.x >= indices.counter) return;
@@ -42,9 +42,9 @@ void main(){
 	for(int axis = 0; axis<info.amtOfBrushAxes;axis++){
 		bool good = false;
 		for(int brush = 0; brush < info.indicesOffsets[axis].z;brush++){
-			vec2 minMax = brushes.minMax[info.indicesOffsets[axis].y + brush];
+			vec2 minMax = brushes.minMax[info.indicesOffsets[axis].y + brush].xy;
 			uint datInd = indices.ind[gl_GlobalInvocationID.x] * info.amtOfAttributes + info.indicesOffsets[axis].x;
-			float datum = d.data[datInd >> 2][datInd & 3];
+			float datum = d.data[datInd];//d.data[datInd >> 2][datInd & 3];
 			if(datum>=minMax.x&&datum<=minMax.y){
 				good = true;
 				break;

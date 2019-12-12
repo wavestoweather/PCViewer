@@ -613,6 +613,8 @@ static NodeViewer* nodeViewer;
 
 static SettingsManager* settingsManager;
 
+static GpuBrusher* gpuBrusher;
+
 //variables for fractions
 static int maxFractionDepth = 20;
 static int boundsBehaviour = 1;
@@ -1425,7 +1427,7 @@ static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, 
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = sizeof(Vertex) * Attributes.size() * data.size();
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
@@ -3596,6 +3598,7 @@ static void updateActiveIndices(DrawList& dl) {
 				}
 				else { //standard global brush
 					//bool lineKeep = true;
+					continue;
 					for (auto& br : b.brushes) {
 						bool good = false;
 						for (auto& brush : br.second) {
@@ -3632,9 +3635,20 @@ static void updateActiveIndices(DrawList& dl) {
 			dl.activeInd.push_back(i);
 			activeBrushRatios[dl.name] += 1;
 		}
-
-		nextInd:;
 	}
+	//testing the gpu brusher
+	if (toggleGlobalBrushes) {
+		for (GlobalBrush& gb : globalBrushes) {
+			std::map<int, std::vector<std::pair<float, float>>> brush;
+			for (auto b : gb.brushes) {
+				for (auto br : b.second) {
+					brush[b.first].push_back(br.second);
+				}
+			}
+			std::set<int> gpuIndices = gpuBrusher->brushIndices(brush, data->size() * pcAttributes.size() * sizeof(float), dl.buffer, dl.indices, pcAttributes.size());
+		}
+	}
+
 	//for (GlobalBrush& b : globalBrushes) {
 		//b.lineRatios[dl.name] /= dl.indices.size();
 	//}
@@ -4159,6 +4173,10 @@ int main(int, char**)
 
 	{//creating the settngs manager
 		settingsManager = new SettingsManager();
+	}
+
+	{//brushing gpu
+		gpuBrusher = new GpuBrusher(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
 	}
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -6393,6 +6411,7 @@ int main(int, char**)
 		delete nodeViewer;
 #endif
 		delete settingsManager;
+		delete gpuBrusher;
 
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.kdTree) delete gb.kdTree;
