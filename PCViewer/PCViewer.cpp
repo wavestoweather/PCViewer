@@ -3557,7 +3557,7 @@ static void updateActiveIndices(DrawList& dl) {
 	for (GlobalBrush& b : globalBrushes) {
 		b.lineRatios[dl.name] = 0;
 	}
-	
+	/*
 	for (int i : dl.indices) {
 		//checking the local brushes
 		bool keep = true;
@@ -3635,19 +3635,63 @@ static void updateActiveIndices(DrawList& dl) {
 			dl.activeInd.push_back(i);
 			activeBrushRatios[dl.name] += 1;
 		}
+	}*/
+	//apply local brush
+	std::map<int, std::vector<std::pair<float, float>>> brush;
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		for (Brush& b : dl.brushes[i]) {
+			brush[i].push_back(b.minMax);
+		}
 	}
-	//testing the gpu brusher
+	std::set<int> localIndices;
+	if (brush.size()) {
+		localIndices = gpuBrusher->brushIndices(brush, data->size() * pcAttributes.size() * sizeof(float), dl.buffer, dl.indices, pcAttributes.size());
+	}
+	else {
+		localIndices = std::set<int>(dl.indices.begin(),dl.indices.end());
+	}
+
+	//apply global brushes
+	std::vector<int> globalIndices;
+	bool globalBrushesActive = false;
 	if (toggleGlobalBrushes) {
+		bool firstBrush = true;
 		for (GlobalBrush& gb : globalBrushes) {
-			std::map<int, std::vector<std::pair<float, float>>> brush;
+			globalBrushesActive = true;
+			brush.clear();
 			for (auto b : gb.brushes) {
 				for (auto br : b.second) {
 					brush[b.first].push_back(br.second);
 				}
 			}
 			std::set<int> gpuIndices = gpuBrusher->brushIndices(brush, data->size() * pcAttributes.size() * sizeof(float), dl.buffer, dl.indices, pcAttributes.size());
+			gb.lineRatios[dl.name] = gpuIndices.size();
+
+			std::vector<int> res;
+			if (brushCombination == 0) {//or
+				std::set_union(globalIndices.begin(), globalIndices.end(), gpuIndices.begin(), gpuIndices.end(), std::back_inserter(res));
+			}
+
+			if (brushCombination == 1 && !firstBrush) {//and
+				std::set_intersection(globalIndices.begin(), globalIndices.end(), gpuIndices.begin(), gpuIndices.end(), std::back_inserter(res));
+			}
+			else {
+				res = std::vector(gpuIndices.begin(), gpuIndices.end());
+			}
+
+			globalIndices = res;
+			firstBrush = false;
 		}
 	}
+
+	dl.activeInd.clear();
+	if (globalBrushesActive) {
+		std::set_intersection(localIndices.begin(), localIndices.end(), globalIndices.begin(), globalIndices.end(), std::back_inserter(dl.activeInd));
+	}
+	else {
+		dl.activeInd = std::vector(localIndices.begin(), localIndices.end());
+	}
+	activeBrushRatios[dl.name] = dl.activeInd.size();
 
 	//for (GlobalBrush& b : globalBrushes) {
 		//b.lineRatios[dl.name] /= dl.indices.size();
