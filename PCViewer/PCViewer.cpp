@@ -38,7 +38,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "Color.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
-#include "NodeViewer.h"
+#include "BubblePlotter.h"
 #include "View3d.h"
 #include "SpacialData.h"
 #include "SettingsManager.h"
@@ -609,7 +609,7 @@ static int priorityListIndex = 0;
 static View3d * view3d;
 static bool view3dAlwaysOnTop = false;
 std::string active3dAttribute;
-static NodeViewer* nodeViewer;
+static BubblePlotter* bubblePlotter;
 
 static SettingsManager* settingsManager;
 
@@ -3652,6 +3652,7 @@ static void updateActiveIndices(DrawList& dl) {
 	}
 
 	//apply global brushes
+	//TODO:: do all of this on the gpu
 	std::vector<int> globalIndices;
 	bool globalBrushesActive = false;
 	if (toggleGlobalBrushes) {

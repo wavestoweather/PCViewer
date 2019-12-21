@@ -1,12 +1,15 @@
-#include "NodeViewer.h"
+#include "BubblePlotter.h"
 
-char NodeViewer::vertPath[] = "shader/nodeVert.spv";
-char NodeViewer::fragPath[] = "shader/nodeFrag.spv";
+char BubblePlotter::vertPath[] = "shader/nodeVert.spv";
+char BubblePlotter::fragPath[] = "shader/nodeFrag.spv";
 
-NodeViewer::NodeViewer(uint32_t width, uint32_t height, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool)
+BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool)
 {
 	imageWidth = 0;
 	imageHeight = 0;
+	bubbleInstancesSize = 0;
+	maxPointSize = 30;
+	Fov = 45;
 
 	this->physicalDevice = physicalDevice;
 	this->device = device;
@@ -33,12 +36,15 @@ NodeViewer::NodeViewer(uint32_t width, uint32_t height, VkDevice device, VkPhysi
 	sphereIndexBuffer = VK_NULL_HANDLE;
 	cylinderVertexBuffer = VK_NULL_HANDLE;
 	cylinderIndexBuffer = VK_NULL_HANDLE;
+	bubbleInstancesMemory = VK_NULL_HANDLE;
+	bubbleInstancesBuffer = VK_NULL_HANDLE;
 
 	ubo = VK_NULL_HANDLE;
 	uboMem = VK_NULL_HANDLE;
 	uboSet = VK_NULL_HANDLE;
 
 	cameraPos = glm::vec3(2, 2, 2);
+	cameraRot = glm::vec3(45, 0, 45);
 	setupBuffer();
 	setupRenderPipeline();
 	resizeImage(width, height);
@@ -47,7 +53,7 @@ NodeViewer::NodeViewer(uint32_t width, uint32_t height, VkDevice device, VkPhysi
 	render();
 }
 
-NodeViewer::~NodeViewer()
+BubblePlotter::~BubblePlotter()
 {
 	if (imageMemory) {
 		vkFreeMemory(device, imageMemory, nullptr);
@@ -100,7 +106,12 @@ NodeViewer::~NodeViewer()
 	if (cylinderIndexBuffer) {
 		vkDestroyBuffer(device, cylinderIndexBuffer, nullptr);
 	}
-
+	if (bubbleInstancesBuffer) {
+		vkDestroyBuffer(device, bubbleInstancesBuffer, nullptr);
+	}
+	if (bubbleInstancesMemory) {
+		vkFreeMemory(device, bubbleInstancesMemory, nullptr);
+	}
 	if (ubo) {
 		vkDestroyBuffer(device, ubo, nullptr);
 	}
@@ -109,7 +120,7 @@ NodeViewer::~NodeViewer()
 	}
 }
 
-void NodeViewer::resizeImage(uint32_t width, uint32_t height)
+void BubblePlotter::resizeImage(uint32_t width, uint32_t height)
 {
 	VkResult err;
 
@@ -195,7 +206,7 @@ void NodeViewer::resizeImage(uint32_t width, uint32_t height)
 	}
 }
 
-void NodeViewer::addSphere(float r, glm::vec4 color, glm::vec3 pos)
+void BubblePlotter::addSphere(float r, glm::vec4 color, glm::vec3 pos)
 {
 	gSphere cur;
 	cur.radius = r;
@@ -207,7 +218,7 @@ void NodeViewer::addSphere(float r, glm::vec4 color, glm::vec3 pos)
 	recordRenderCommands();
 }
 
-void NodeViewer::addCylinder(float r, float length, glm::vec4 color, glm::vec3 pos)
+void BubblePlotter::addCylinder(float r, float length, glm::vec4 color, glm::vec3 pos)
 {
 	gCylinder cur;
 	cur.radius = r;
@@ -220,23 +231,91 @@ void NodeViewer::addCylinder(float r, float length, glm::vec4 color, glm::vec3 p
 	recordRenderCommands();
 }
 
-void NodeViewer::render()
+void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, std::vector<glm::vec3>& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData)
+{
+	bool recordCommands = false;
+	if (gData != dataBuffer) {
+		dataBuffer = gData;
+		recordCommands = true;
+	}
+	VkResult err;
+
+	bubbleInstances.reserve(bubbleInstances.size() + pos.size());
+	for (int i = 0; i < attributeIndex.size(); i++) {
+		bubbleInstances.push_back({ attributeIndex[i],pos[i],attributeName[i],id[i],active[i] });
+	}
+	if (bubbleInstancesSize < bubbleInstances.size()*2) {//reallocate gpu memory with the right size
+		if (bubbleInstancesMemory) {
+			vkFreeMemory(device, bubbleInstancesMemory, nullptr);
+		}
+		if (bubbleInstancesBuffer) {
+			vkDestroyBuffer(device, bubbleInstancesBuffer, nullptr);
+		}
+
+		bubbleInstancesSize = bubbleInstances.size();
+		VkUtil::createBuffer(device, bubbleInstances.size() * 2 * sizeof(gBubble), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &bubbleInstancesBuffer);
+		VkMemoryRequirements memReq;
+		vkGetBufferMemoryRequirements(device, bubbleInstancesBuffer, &memReq);
+
+		VkMemoryAllocateInfo memAlloc = {};
+		memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memAlloc.allocationSize = memReq.size;
+		uint32_t memBits = memReq.memoryTypeBits;
+		memAlloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memBits, 0);
+		err = vkAllocateMemory(device, &memAlloc, nullptr, &bubbleInstancesMemory);
+		check_vk_result(err);
+
+		vkBindBufferMemory(device, bubbleInstancesBuffer, bubbleInstancesMemory, 0);
+		recordCommands = true;
+	}
+	std::vector<gBubble> graphicBubbles(bubbleInstances.size() * 2);
+	//sorting the bubble instances for positive render order
+	std::sort(bubbleInstances.begin(), bubbleInstances.end(), [data](Bubble& a, Bubble& b) {float lonA = data[a.id][(int)a.pos.x];
+	float lonB = data[b.id][(int)b.pos.x];
+	float latA = data[a.id][(int)a.pos.y];
+	float latB = data[b.id][(int)b.pos.y];
+	float altA = data[a.id][(int)a.pos.z];
+	float altB = data[b.id][(int)b.pos.z];
+	if (altA > altB) return true;
+	else if (altA < altB) return false;
+	else {
+		if (latA > latB)return true;
+		else if (altA < altB)return false;
+		else return lonA > lonB;
+	}});
+	for (Bubble& b : bubbleInstances) {
+		graphicBubbles.push_back({ b.attributeIndex,b.id,b.pos,b.active });
+	}
+	graphicBubbles.insert(graphicBubbles.end(), graphicBubbles.rbegin(), graphicBubbles.rend());
+	void* d;
+	vkMapMemory(device, bubbleInstancesMemory, 0, graphicBubbles.size() * sizeof(gBubble), 0, &d);
+	memcpy(d, graphicBubbles.data(), graphicBubbles.size() * sizeof(gBubble));
+	vkUnmapMemory(device, bubbleInstancesMemory);
+
+	if(recordCommands) recordRenderCommands();
+}
+
+void BubblePlotter::render()
 {
 	VkResult err;
 
 	Ubo ubo;
-	ubo.cameraPos = cameraPos;
-	ubo.color = glm::vec4(.8f, .1f, .4f, 1);
-	glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);
+	ubo.cameraPos = glm::vec4(cameraPos,maxPointSize);
+	glm::mat4 proj = glm::perspective(glm::radians(Fov), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);
 	proj[1][1] *= -1;
-	glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+	glm::mat4 view = glm::translate(glm::eulerAngleXYZ(cameraRot.x, cameraRot.y, cameraRot.z), cameraPos);
 	ubo.mvp = proj * view;
-	ubo.worldNormals = glm::mat4(1.0f);
 	
 	void* d;
 	vkMapMemory(device, uboMem, 0, sizeof(Ubo), 0, &d);
 	memcpy(d, &ubo, sizeof(Ubo));
 	vkUnmapMemory(device, uboMem);
+
+	//getting the right data ordering for the viewing direction
+	glm::vec4 front = view * glm::vec4(0, 0, 1, 0);
+	float posMax = std::fmax(std::fmax(front.x,front.y),front.z);
+	front *= -1;
+	float negMax = std::fmax(std::fmax(front.x, front.y), front.z);
 
 	//submitting the command buffer
 	VkSubmitInfo submitInfo = {};
@@ -244,13 +323,16 @@ void NodeViewer::render()
 	submitInfo.signalSemaphoreCount = 0;
 	submitInfo.waitSemaphoreCount = 0;
 	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &renderCommands;
+	if (posMax > negMax) submitInfo.pCommandBuffers = &renderCommands;
+	else submitInfo.pCommandBuffers = &inverseRenderCommands;
 
 	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
 	check_vk_result(err);
+	err = vkQueueWaitIdle(queue);
+	check_vk_result(err);
 }
 
-void NodeViewer::updateCameraPos(float* mouseMovement)
+void BubblePlotter::updateCameraPos(float* mouseMovement)
 {
 	//rotation matrix for height adjustment
 	glm::mat4 vertical;
@@ -267,27 +349,27 @@ void NodeViewer::updateCameraPos(float* mouseMovement)
 	cameraPos += ZOOOMSPEED * zoomDir * mouseMovement[2];
 }
 
-VkSampler NodeViewer::getImageSampler()
+VkSampler BubblePlotter::getImageSampler()
 {
 	return imageSampler;
 }
 
-VkImageView NodeViewer::getImageView()
+VkImageView BubblePlotter::getImageView()
 {
 	return imageView;
 }
 
-void NodeViewer::setImageDescSet(VkDescriptorSet desc)
+void BubblePlotter::setImageDescSet(VkDescriptorSet desc)
 {
 	imageDescSet = desc;
 }
 
-VkDescriptorSet NodeViewer::getImageDescSet()
+VkDescriptorSet BubblePlotter::getImageDescSet()
 {
 	return imageDescSet;
 }
 
-void NodeViewer::setupRenderPipeline()
+void BubblePlotter::setupRenderPipeline()
 {
 	VkShaderModule shaderModules[5] = {};
 	//the vertex shader for the pipeline
@@ -301,25 +383,35 @@ void NodeViewer::setupRenderPipeline()
 	//Description for the incoming vertex attributes
 	VkVertexInputBindingDescription bindingDescripiton = {};		//describes how big the vertex data is and how to read the data
 	bindingDescripiton.binding = 0;
-	bindingDescripiton.stride = sizeof(Shape::Vertex);
+	bindingDescripiton.stride = sizeof(gBubble);
 	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	VkVertexInputAttributeDescription attributeDescriptions[2] = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
+	VkVertexInputAttributeDescription attributeDescriptions[4] = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
 	attributeDescriptions[0].binding = 0;
 	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-	attributeDescriptions[0].offset = offsetof(Shape::Vertex, position);
+	attributeDescriptions[0].format = VK_FORMAT_R32_UINT;
+	attributeDescriptions[0].offset = offsetof(gBubble, attributeIndex);
 
 	attributeDescriptions[1].binding = 0;
 	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-	attributeDescriptions[1].offset = offsetof(Shape::Vertex, normal);
+	attributeDescriptions[1].format = VK_FORMAT_R32_UINT;
+	attributeDescriptions[1].offset = offsetof(gBubble, dataIndex);
+
+	attributeDescriptions[2].binding = 0;
+	attributeDescriptions[2].location = 2;
+	attributeDescriptions[2].format = VK_FORMAT_R32G32B32_UINT;
+	attributeDescriptions[2].offset = offsetof(gBubble, posIndices);
+
+	attributeDescriptions[3].binding = 0;
+	attributeDescriptions[3].location = 3;
+	attributeDescriptions[3].format = VK_FORMAT_R8_UINT;
+	attributeDescriptions[3].offset = offsetof(gBubble, active);
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
 	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
-	vertexInputInfo.vertexAttributeDescriptionCount = 2;
+	vertexInputInfo.vertexAttributeDescriptionCount = 4;
 	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
 	//vector with the dynamic states
@@ -380,8 +472,8 @@ void NodeViewer::setupRenderPipeline()
 
 	VkPipelineDepthStencilStateCreateInfo depthStencil = {};
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depthStencil.depthTestEnable = VK_TRUE;
-	depthStencil.depthWriteEnable = VK_TRUE;
+	depthStencil.depthTestEnable = VK_FALSE;
+	depthStencil.depthWriteEnable = VK_FALSE;
 	depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
 	depthStencil.depthBoundsTestEnable = VK_FALSE;
 	depthStencil.minDepthBounds = 0;
@@ -390,22 +482,25 @@ void NodeViewer::setupRenderPipeline()
 	//creating the descriptor set layout
 	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
 	uboLayoutBinding.binding = 0;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	uboLayoutBinding.descriptorCount = 1;
-	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	std::vector<VkDescriptorSetLayoutBinding> bindings;
+	bindings.push_back(uboLayoutBinding);
+
+	uboLayoutBinding.binding = 1;
 	bindings.push_back(uboLayoutBinding);
 
 	VkUtil::createDescriptorSetLayout(device, bindings, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
 
-	VkUtil::createRenderPass(device, VkUtil::PASS_TYPE_DEPTH_OFFLINE, &renderPass);
+	VkUtil::createRenderPass(device, VkUtil::PASS_TYPE_COLOR_OFFLINE, &renderPass);
 
-	VkUtil::createPipeline(device, &vertexInputInfo, imageWidth, imageHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, &depthStencil, &blendInfo, descriptorSetLayouts, &renderPass, &pipelineLayout, &pipeline);
+	VkUtil::createPipeline(device, &vertexInputInfo, imageWidth, imageHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, &depthStencil, &blendInfo, descriptorSetLayouts, &renderPass, &pipelineLayout, &pipeline);
 }
 
-void NodeViewer::setupBuffer()
+void BubblePlotter::setupBuffer()
 {
 	VkResult err;
 
@@ -469,7 +564,7 @@ void NodeViewer::setupBuffer()
 	delete[] data;
 }
 
-void NodeViewer::recordRenderCommands()
+void BubblePlotter::recordRenderCommands()
 {
 	VkResult err;
 	VkUtil::createCommandBuffer(device, commandPool, &renderCommands);
@@ -519,7 +614,7 @@ void NodeViewer::recordRenderCommands()
 	check_vk_result(err);
 }
 
-void NodeViewer::setupUbo()
+void BubblePlotter::setupUbo()
 {
 	VkResult err;
 
