@@ -8,8 +8,31 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	imageWidth = 0;
 	imageHeight = 0;
 	bubbleInstancesSize = 0;
-	maxPointSize = 30;
+	maxPointSize = 35;
 	Fov = 45;
+	flySpeed = 40;
+	fastFlyMultiplier = 2.5f;
+	rotationSpeed = 30;
+	alphaMultiplier = 1;
+	clipping = false;
+	normalization = true;
+	grey[0] = .5f;
+	grey[1] = .5f;
+	grey[2] = .5f;
+	grey[3] = .5f;
+	scale = Scale_Normal;
+	scalePointsOnZoom = true;
+	layerSpacing = 3;
+	boundingRectMin = glm::vec3(0,0,0);
+	boundingRectMax = glm::vec3(1,1,1);
+	clippingRectMin = glm::vec3(-INFINITY,-INFINITY,-INFINITY);
+	clippingRectMax = glm::vec3(INFINITY,INFINITY,INFINITY);
+	attributeActivations = nullptr;
+	attributeColors = nullptr;
+	attributeTopOffsets = nullptr;
+	attributeMinValues = nullptr;
+	attributeMaxValues = nullptr;
+	distribution = std::uniform_int_distribution<int>(0, 35);
 
 	this->physicalDevice = physicalDevice;
 	this->device = device;
@@ -117,6 +140,21 @@ BubblePlotter::~BubblePlotter()
 	}
 	if (uboMem) {
 		vkFreeMemory(device, uboMem, nullptr);
+	}
+	if (attributeActivations) {
+		delete[] attributeActivations;
+	}
+	if (attributeColors) {
+		delete[] attributeColors;
+	}
+	if (attributeMaxValues) {
+		delete[] attributeMaxValues;
+	}
+	if (attributeMinValues) {
+		delete[] attributeMinValues;
+	}
+	if (attributeTopOffsets) {
+		delete[] attributeTopOffsets;
 	}
 }
 
@@ -231,18 +269,53 @@ void BubblePlotter::addCylinder(float r, float length, glm::vec4 color, glm::vec
 	recordRenderCommands();
 }
 
-void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, std::vector<glm::vec3>& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData)
+void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData)
 {
 	bool recordCommands = false;
 	if (gData != dataBuffer) {
 		dataBuffer = gData;
 		recordCommands = true;
 	}
+	if(amtOfAttributes != this->amtOfAttributes){
+		if (attributeActivations) {
+			delete[] attributeActivations;
+		}
+		if (attributeColors) {
+			delete[] attributeColors;
+		}
+		if (attributeMaxValues) {
+			delete[] attributeMaxValues;
+		}
+		if (attributeMinValues) {
+			delete[] attributeMinValues;
+		}
+		if (attributeTopOffsets) {
+			delete[] attributeTopOffsets;
+		}
+		this->amtOfAttributes = amtOfAttributes;
+		this->attributeActivations = new bool[amtOfAttributes];
+		this->attributeColors = new glm::vec4[amtOfAttributes];
+		this->attributeMaxValues = new float[amtOfAttributes];
+		this->attributeMinValues = new float[amtOfAttributes];
+		int offsetCounter = 0;
+		float offsetStep = 1 / (amtOfAttributes - 3 - 1);
+		for (int i = 0; i < amtOfAttributes; ++i) {
+			this->attributeActivations[i] = true;
+			this->attributeMaxValues[i] = -INFINITY;
+			this->attributeMinValues[i] = INFINITY;
+			float hue = distribution(engine) * 10;
+			hsl randCol = { hue,.5f,.6f };
+			rgb col = hsl2rgb(randCol);
+			this->attributeColors[i] = glm::vec4(col.r, col.g, col.b, .8f);
+			this->attributeTopOffsets[i] = offsetCounter * offsetStep;
+			if (i != pos.x && i != pos.y && i != pos.z) ++offsetCounter;
+		}
+	}
 	VkResult err;
 
-	bubbleInstances.reserve(bubbleInstances.size() + pos.size());
+	bubbleInstances.reserve(bubbleInstances.size() + id.size());
 	for (int i = 0; i < attributeIndex.size(); i++) {
-		bubbleInstances.push_back({ attributeIndex[i],pos[i],attributeName[i],id[i],active[i] });
+		bubbleInstances.push_back({ attributeIndex[i],pos,attributeName[i],id[i],active[i] });
 	}
 	if (bubbleInstancesSize < bubbleInstances.size()*2) {//reallocate gpu memory with the right size
 		if (bubbleInstancesMemory) {
@@ -252,7 +325,7 @@ void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, std::vecto
 			vkDestroyBuffer(device, bubbleInstancesBuffer, nullptr);
 		}
 
-		bubbleInstancesSize = bubbleInstances.size();
+		bubbleInstancesSize = bubbleInstances.size()*2;
 		VkUtil::createBuffer(device, bubbleInstances.size() * 2 * sizeof(gBubble), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &bubbleInstancesBuffer);
 		VkMemoryRequirements memReq;
 		vkGetBufferMemoryRequirements(device, bubbleInstancesBuffer, &memReq);
@@ -299,16 +372,39 @@ void BubblePlotter::render()
 {
 	VkResult err;
 
-	Ubo ubo;
-	ubo.cameraPos = glm::vec4(cameraPos,maxPointSize);
+	uint32_t uboByteSize = sizeof(Ubo) + amtOfAttributes * 7 * sizeof(float);
+	unsigned char* uboBytes = new unsigned char[uboByteSize];
+	Ubo& ubo = *((Ubo*)uboBytes);
+	ubo.cameraPos = glm::vec4(cameraPos, maxPointSize);
 	glm::mat4 proj = glm::perspective(glm::radians(Fov), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);
 	proj[1][1] *= -1;
 	glm::mat4 view = glm::translate(glm::eulerAngleXYZ(cameraRot.x, cameraRot.y, cameraRot.z), cameraPos);
 	ubo.mvp = proj * view;
-	
+	ubo.alphaMultiplier = alphaMultiplier;
+	ubo.amtOfAttributes = amtOfAttributes;
+	ubo.FoV = Fov;
+	ubo.clipNormalize = (clipping << 1) | normalization;
+	ubo.grey = glm::vec4(grey[0], grey[1], grey[2], grey[3]);
+	ubo.scale = scale;
+	ubo.relative = scalePointsOnZoom;
+	ubo.offset = layerSpacing;
+	ubo.boundingRectMin = boundingRectMin;
+	ubo.boundingRectMax = boundingRectMax;
+	ubo.clippingRectMin = clippingRectMin;
+	ubo.clippingRectMax = clippingRectMax;
+	float* attributeInfos = (float*)(uboBytes + sizeof(Ubo));
+	for (int i = 0; i < amtOfAttributes; ++i) {
+		attributeInfos[i * 7] = attributeColors[i].x;
+		attributeInfos[i * 7 + 1] = attributeColors[i].y;
+		attributeInfos[i * 7 + 2] = attributeColors[i].z;
+		attributeInfos[i * 7 + 3] = attributeColors[i].w;
+		attributeInfos[i * 7 + 4] = (attributeActivations[i]) ? attributeTopOffsets[i] : -1;
+		attributeInfos[i * 7 + 5] = attributeMinValues[i];
+		attributeInfos[i * 7 + 6] = attributeMinValues[i];
+	}
 	void* d;
-	vkMapMemory(device, uboMem, 0, sizeof(Ubo), 0, &d);
-	memcpy(d, &ubo, sizeof(Ubo));
+	vkMapMemory(device, uboMem, 0, uboByteSize, 0, &d);
+	memcpy(d, &ubo, uboByteSize);
 	vkUnmapMemory(device, uboMem);
 
 	//getting the right data ordering for the viewing direction
@@ -332,21 +428,38 @@ void BubblePlotter::render()
 	check_vk_result(err);
 }
 
-void BubblePlotter::updateCameraPos(float* mouseMovement)
+void BubblePlotter::updateCameraPos(CamNav::NavigationInput input, float deltaT)
 {
-	//rotation matrix for height adjustment
-	glm::mat4 vertical;
-	vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALROTSPEED, glm::normalize(glm::cross(cameraPos, glm::vec3(0, 1, 0))));
-	glm::vec3 temp = vertical * glm::vec4(cameraPos, 1);
-	if (dot(temp, glm::vec3(1, 0, 0)) * dot(cameraPos, glm::vec3(1, 0, 0)) < 0 || dot(temp, glm::vec3(0, 0, 1)) * dot(cameraPos, glm::vec3(0, 0, 1)) < 0)
-		vertical = glm::mat4(1.0f);
-	//rotation matrix for horizontal adjustment
-	glm::mat4 horizontal = glm::rotate(glm::mat4(1.0f), mouseMovement[0] * HORIZONTALROTSPEED, glm::vec3(0, 1, 0));
-	cameraPos = horizontal * vertical * glm::vec4(cameraPos, 1);
+	//first do the rotation, as the user has a more inert feeling when the fly direction matches the view direction instantly
+	if (input.mouseDeltaX) {
+		cameraRot.y += rotationSpeed * input.mouseDeltaX * deltaT;
+	}
+	if (input.mouseDeltaY) {
+		cameraRot.x += rotationSpeed * input.mouseDeltaY * deltaT;
+	}
 
-	//adding zooming
-	glm::vec3 zoomDir = -cameraPos;
-	cameraPos += ZOOOMSPEED * zoomDir * mouseMovement[2];
+	glm::mat4 rot = glm::eulerAngleXY(cameraRot.x, cameraRot.y);
+	if (input.a) {	//fly left
+		glm::vec4 left = rot * glm::vec4(-1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(left.x, left.y, left.z);
+	}
+	if (input.d) {	//fly right
+		glm::vec4 right = rot * glm::vec4(1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(right.x, right.y, right.z);
+	}
+	if (input.s) {	//fly backward
+		glm::vec4 back = rot * glm::vec4(0, 0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(back.x, back.y, back.z);
+	}
+	if (input.w) {	//fly forward
+		glm::vec4 front = rot * glm::vec4(0, 0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(front.x, front.y, front.z);
+	}
+}
+
+void BubblePlotter::setPointScale(Scale scale)
+{
+	maxPointSize = scale;
 }
 
 VkSampler BubblePlotter::getImageSampler()
@@ -566,6 +679,9 @@ void BubblePlotter::setupBuffer()
 
 void BubblePlotter::recordRenderCommands()
 {
+	VkCommandBuffer buffers[2] = { renderCommands,inverseRenderCommands };
+	vkFreeCommandBuffers(device, commandPool, 2, buffers);
+
 	VkResult err;
 	VkUtil::createCommandBuffer(device, commandPool, &renderCommands);
 
@@ -575,13 +691,6 @@ void BubblePlotter::recordRenderCommands()
 	clearValues.push_back({ 0,0,0,1 });
 	clearValues.push_back({ 1.0f });
 	VkUtil::beginRenderPass(renderCommands, clearValues, renderPass, framebuffer, { imageWidth,imageHeight });
-
-	vkCmdBindPipeline(renderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	VkDeviceSize offsets[1] = { 0 };
-	vkCmdBindVertexBuffers(renderCommands, 0, 1, &sphereVertexBuffer, offsets);
-	vkCmdBindIndexBuffer(renderCommands, sphereIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdBindDescriptorSets(renderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &uboSet, 0, nullptr);
-
 	VkViewport viewport = {};					//description for our viewport for transformation operation after rasterization
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
@@ -596,29 +705,53 @@ void BubblePlotter::recordRenderCommands()
 	scissor.extent = { (uint32_t)imageWidth,(uint32_t)imageHeight };
 	vkCmdSetScissor(renderCommands, 0, 1, &scissor);
 
-	//TODO: replace this with more useful code
-	for (gSphere s : spheres) {
-		vkCmdDrawIndexed(renderCommands, amtOfIdxSphere, 1, 0, 0, 0);
-	}
-
-	vkCmdBindVertexBuffers(renderCommands, 0, 1, &cylinderVertexBuffer, offsets);
-	vkCmdBindIndexBuffer(renderCommands, cylinderIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-	for (gCylinder c : cylinders) {
-		vkCmdDrawIndexed(renderCommands, amtOfIdxCylinder, 1, 0, 0, 0);
-	}
+	vkCmdBindPipeline(renderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	VkDeviceSize offsets[1] = { 0 };
+	vkCmdBindVertexBuffers(renderCommands, 0, 1, &sphereVertexBuffer, offsets);
+	vkCmdBindDescriptorSets(renderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &uboSet, 0, nullptr);
+	vkCmdDraw(renderCommands, bubbleInstancesSize >> 1, 1, 0, 0);
 
 	vkCmdEndRenderPass(renderCommands);
 
 	VkUtil::transitionImageLayout(renderCommands, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	err = vkEndCommandBuffer(renderCommands);
 	check_vk_result(err);
+
+	//recording the inverse command buffer
+	VkUtil::createCommandBuffer(device, commandPool, &inverseRenderCommands);
+
+	VkUtil::transitionImageLayout(renderCommands, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+
+	VkUtil::beginRenderPass(inverseRenderCommands, clearValues, renderPass, framebuffer, { imageWidth,imageHeight });
+	vkCmdSetViewport(inverseRenderCommands, 0, 1, &viewport);
+	vkCmdSetScissor(inverseRenderCommands, 0, 1, &scissor);
+
+	vkCmdBindPipeline(inverseRenderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	offsets[0] = { bubbleInstancesSize >> 1 };
+	vkCmdBindVertexBuffers(inverseRenderCommands, 0, 1, &sphereVertexBuffer, offsets);
+	vkCmdBindDescriptorSets(inverseRenderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &uboSet, 0, nullptr);
+	vkCmdDraw(inverseRenderCommands, bubbleInstancesSize >> 1, 1, 0, 0);
+
+	vkCmdEndRenderPass(inverseRenderCommands);
+
+	VkUtil::transitionImageLayout(inverseRenderCommands, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	err = vkEndCommandBuffer(inverseRenderCommands);
+	check_vk_result(err);
 }
 
 void BubblePlotter::setupUbo()
 {
+	if (ubo != VK_NULL_HANDLE) {
+		vkDestroyBuffer(device, ubo, nullptr);
+		vkFreeMemory(device, uboMem, nullptr);
+		vkFreeDescriptorSets(device, descriptorPool, 1, &uboSet);
+	}
+
 	VkResult err;
 
-	VkUtil::createBuffer(device, sizeof(Ubo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &ubo);
+	uint32_t uboByteSize = sizeof(Ubo) + amtOfAttributes * 7 * sizeof(float);
+	VkUtil::createBuffer(device, uboByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubo);
 
 	VkMemoryRequirements memReq;
 	vkGetBufferMemoryRequirements(device, ubo, &memReq);
@@ -627,7 +760,7 @@ void BubblePlotter::setupUbo()
 	allocInfo.allocationSize = memReq.size;
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	err = vkAllocateMemory(device, &allocInfo, nullptr, &uboMem);
-	check_vk_result;
+	check_vk_result(err);
 
 	vkBindBufferMemory(device, ubo, uboMem, 0);
 
@@ -635,5 +768,6 @@ void BubblePlotter::setupUbo()
 	layouts.push_back(descriptorSetLayout);
 	VkUtil::createDescriptorSets(device, layouts, descriptorPool, &uboSet);
 
-	VkUtil::updateDescriptorSet(device, ubo, sizeof(Ubo), 0, uboSet);
+	VkUtil::updateDescriptorSet(device, ubo, uboByteSize, 0, uboSet);
+	VkUtil::updateDescriptorSet(device, ubo, sizeof(float) * amtOfAttributes * amtOfDatapoints, 1, uboSet);
 }

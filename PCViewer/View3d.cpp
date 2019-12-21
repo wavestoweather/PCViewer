@@ -559,6 +559,8 @@ void View3d::createDescriptorSets()
 
 void View3d::updateCommandBuffer()
 {
+	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+
 	VkResult err;
 	VkUtil::createCommandBuffer(device, commandPool, &commandBuffer);
 	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);

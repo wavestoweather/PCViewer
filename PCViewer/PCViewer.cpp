@@ -45,6 +45,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "kd_tree.h"
 #include "PriorityColorUpdater.h"
 #include "GpuBrusher.h"
+#include "CameraNav.hpp"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort

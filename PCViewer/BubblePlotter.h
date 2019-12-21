@@ -12,12 +12,11 @@
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/glm.hpp"
 #include "glm/gtx/euler_angles.hpp"
+#include "CameraNav.hpp"
+#include "Color.h"
 #include <string.h>
 #include <algorithm>
-
-#define VERTICALROTSPEED .01f
-#define HORIZONTALROTSPEED .01f
-#define ZOOOMSPEED .03f
+#include <random>
 
 class BubblePlotter {
 public:
@@ -34,25 +33,58 @@ public:
 	void resizeImage(uint32_t width, uint32_t height);
 	void addSphere(float r, glm::vec4 color, glm::vec3 pos);
 	void addCylinder(float r, float length, glm::vec4 color, glm::vec3 pos);
-	void addBubbles(std::vector<uint32_t>& attributeIndex, std::vector<glm::vec3>& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData);
+
+	//attributeIndex:	vector with N elements describing which attribute in the attributeNames vector an index i belongs to
+	//pos:			a 3 component vector containing the indeces for the 3 dimensions
+	//attributeName:	vector with all attribute names
+	//id:				vector with N elements containing the indices of datapoints to add
+	//active:			vector with N elements describing which of the N datapoints are active(eg. didnt get brushed)
+	//data:			vector with all data
+	//gData:			vulkan buffer with all data
+	//amtOfAttributes: amount of attributes
+	//amtOfData:		amount of data
+	void addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData);
 	void render();
-	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
+	void updateCameraPos(CamNav::NavigationInput input, float deltaT);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void setPointScale(Scale scale);
-	float& pointSize();
 	VkSampler getImageSampler();
 	VkImageView getImageView();
 	void setImageDescSet(VkDescriptorSet desc);
 	VkDescriptorSet getImageDescSet();
+
+	//public Attributes
+	float maxPointSize;
+	float Fov;
+	float flySpeed;
+	float fastFlyMultiplier;
+	float rotationSpeed;
+	float alphaMultiplier;
+	bool clipping;
+	bool normalization;
+	float grey[4];
+	Scale scale;
+	bool scalePointsOnZoom;
+	float layerSpacing;
+	glm::vec3 boundingRectMin;
+	glm::vec3 boundingRectMax;
+	glm::vec3 clippingRectMin;
+	glm::vec3 clippingRectMax;
+	bool* attributeActivations;
+	glm::vec4* attributeColors;
+	float* attributeTopOffsets;				//The offsets for each attribute are given in %. 0 means that the point lies in its original layer, 1 is the last space before the next layer
+	float* attributeMinValues;
+	float* attributeMaxValues;
 
 private:
 	struct Ubo {
 		float alphaMultiplier;
 		uint32_t clipNormalize;					//is interpreted as bool. If 0, then all "unactive" data points will be shown as transparent grey discs, else they are discarded
 		uint32_t amtOfAttributes;
-		float offset;
+		float offset;							//total space between two layers
 		uint32_t scale;							//scale for the points: 0->Normal, 1->logarithmic, 2->squareroot
 		float FoV;
 		uint32_t relative;						//bool to indicate if the points should be scaled on zooming away
+		uint32_t padding;
 		alignas(16) glm::vec4 cameraPos;		//contains the maximum piont size i w
 		alignas(16) glm::vec4 grey;
 		alignas(16) glm::vec3 boundingRectMin;	//used to scale the 3d coordinates
@@ -107,7 +139,7 @@ private:
 	//vulkan resources which have to be deleted
 	VkDeviceMemory		imageMemory;
 	VkImage				image;
-	VkDeviceMemory		depthImageMemory;			//depth image and color image need different memory typesn and thus cannot be stored in the same device memory
+	VkDeviceMemory		depthImageMemory;			//depth image and color image need different memory types and thus cannot be stored in the same device memory
 	VkImage				depthImage;
 	VkImageView			imageView;
 	VkImageView			depthImageView;
@@ -142,8 +174,11 @@ private:
 
 	glm::vec3 cameraPos;
 	glm::vec3 cameraRot;
-	float maxPointSize;
-	float Fov;
+	uint32_t amtOfAttributes;
+	uint32_t amtOfDatapoints;
+
+	std::uniform_int_distribution<int> distribution;
+	static std::default_random_engine engine;
 
 	std::vector<gSphere> spheres;
 	uint32_t amtOfIdxSphere;
