@@ -22,7 +22,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 // build the pcViewer with 3d view
 #define RENDER3D
 //build hte pcViewer with the node viewer
-//#define NODEVIEW
+#define BUBBLEVIEW
 
 #ifdef DETECTMEMLEAK
 #define _CRTDBG_MAP_ALLOC
@@ -4208,12 +4208,12 @@ int main(int, char**)
 	}
 #endif
 
-#ifdef NODEVIEW
+#ifdef BUBBLEVIEW
 	{//creating the node viewer and its descriptor set
-		nodeViewer = new NodeViewer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
-		nodeViewer->setImageDescSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(nodeViewer->getImageSampler(), nodeViewer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
-		nodeViewer->addSphere(1.0f, glm::vec4( 1,1,1,1 ), glm::vec3( 0,0,0 ));
-		nodeViewer->render();
+		bubblePlotter = new BubblePlotter(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		bubblePlotter->setImageDescSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(bubblePlotter->getImageSampler(), bubblePlotter->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
+		bubblePlotter->addSphere(1.0f, glm::vec4( 1,1,1,1 ), glm::vec3( 0,0,0 ));
+		bubblePlotter->render();
 	}
 #endif
 
@@ -4422,17 +4422,17 @@ int main(int, char**)
 			ImGui::SetWindowFocus("3dview");
 #endif
 
-#ifdef NODEVIEW
+#ifdef BUBBLEVIEW
 		//testwindow for the node viewer
 		if (ImGui::Begin("NodeViewer", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
-			ImGui::Image((ImTextureID)nodeViewer->getImageDescSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			ImGui::Image((ImTextureID)bubblePlotter->getImageDescSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 			if ((ImGui::IsMouseDragging() || io.MouseWheel) && ImGui::IsItemHovered()) {
-				float mousemovement[3];
-				mousemovement[0] = -ImGui::GetMouseDragDelta().x;
-				mousemovement[1] = ImGui::GetMouseDragDelta().y;
-				mousemovement[2] = io.MouseWheel;
-				nodeViewer->updateCameraPos(mousemovement);
-				nodeViewer->render();
+				CamNav::NavigationInput nav = {};
+				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
+				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
+				nav.mouseScrollDelta = io.MouseWheel;
+				bubblePlotter->updateCameraPos(nav,io.DeltaTime);
+				bubblePlotter->render();
 				err = vkDeviceWaitIdle(g_Device);
 				check_vk_result(err);
 				ImGui::ResetMouseDragDelta();
@@ -6453,8 +6453,8 @@ int main(int, char**)
 #ifdef RENDER3D
 		delete view3d;
 #endif
-#ifdef NODEVIEW
-		delete nodeViewer;
+#ifdef BUBBLEVIEW
+		delete bubblePlotter;
 #endif
 		delete settingsManager;
 		delete gpuBrusher;

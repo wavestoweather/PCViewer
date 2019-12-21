@@ -35,6 +35,7 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	distribution = std::uniform_int_distribution<int>(0, 35);
 	randomEngine = std::default_random_engine();
 	posIndices = glm::uvec3(0, 1, 2);
+	amtOfAttributes = 0;
 
 	this->physicalDevice = physicalDevice;
 	this->device = device;
@@ -67,6 +68,7 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	ubo = VK_NULL_HANDLE;
 	uboMem = VK_NULL_HANDLE;
 	uboSet = VK_NULL_HANDLE;
+	dataBuffer = VK_NULL_HANDLE;
 
 	cameraPos = glm::vec3(2, 2, 2);
 	cameraRot = glm::vec3(45, 0, 45);
@@ -74,7 +76,7 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	setupRenderPipeline();
 	resizeImage(width, height);
 	setupUbo();
-	recordRenderCommands();
+	//recordRenderCommands();
 	render();
 }
 
@@ -224,7 +226,7 @@ void BubblePlotter::resizeImage(uint32_t width, uint32_t height)
 		VkUtil::createImageView(device, depthImage, VK_FORMAT_D16_UNORM, 1, VK_IMAGE_ASPECT_DEPTH_BIT, &depthImageView);
 		std::vector<VkImageView> views;
 		views.push_back(imageView);
-		views.push_back(depthImageView);
+		//views.push_back(depthImageView);
 		VkUtil::createFrameBuffer(device, renderPass, views, imageWidth, imageHeight, &framebuffer);
 
 		//transforming the imagelayout to be readable
@@ -368,11 +370,16 @@ void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::uvec3
 	memcpy(d, graphicBubbles.data(), graphicBubbles.size() * sizeof(gBubble));
 	vkUnmapMemory(device, bubbleInstancesMemory);
 
-	if(recordCommands) recordRenderCommands();
+	if (recordCommands) {
+		setupUbo();
+		recordRenderCommands();
+	}
 }
 
 void BubblePlotter::render()
 {
+	if (!dataBuffer) return;
+
 	VkResult err;
 
 	uint32_t uboByteSize = sizeof(Ubo) + amtOfAttributes * 7 * sizeof(float);
@@ -408,7 +415,7 @@ void BubblePlotter::render()
 	}
 	void* d;
 	vkMapMemory(device, uboMem, 0, uboByteSize, 0, &d);
-	memcpy(d, &ubo, uboByteSize);
+	memcpy(d, uboBytes, uboByteSize);
 	vkUnmapMemory(device, uboMem);
 
 	//getting the right data ordering for the viewing direction
@@ -515,7 +522,7 @@ void BubblePlotter::setupRenderPipeline()
 	attributeDescriptions[1].offset = offsetof(gBubble, dataIndex);
 
 	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 3;
+	attributeDescriptions[2].location = 2;
 	attributeDescriptions[2].format = VK_FORMAT_R8_UINT;
 	attributeDescriptions[2].offset = offsetof(gBubble, active);
 
@@ -678,8 +685,12 @@ void BubblePlotter::setupBuffer()
 
 void BubblePlotter::recordRenderCommands()
 {
-	VkCommandBuffer buffers[2] = { renderCommands,inverseRenderCommands };
-	vkFreeCommandBuffers(device, commandPool, 2, buffers);
+	if (!dataBuffer) return;
+
+	if (renderCommands) {
+		VkCommandBuffer buffers[2] = { renderCommands,inverseRenderCommands };
+		vkFreeCommandBuffers(device, commandPool, 2, buffers);
+	}
 
 	VkResult err;
 	VkUtil::createCommandBuffer(device, commandPool, &renderCommands);
@@ -767,6 +778,6 @@ void BubblePlotter::setupUbo()
 	layouts.push_back(descriptorSetLayout);
 	VkUtil::createDescriptorSets(device, layouts, descriptorPool, &uboSet);
 
-	VkUtil::updateDescriptorSet(device, ubo, uboByteSize, 0, uboSet);
-	VkUtil::updateDescriptorSet(device, ubo, sizeof(float) * amtOfAttributes * amtOfDatapoints, 1, uboSet);
+	VkUtil::updateDescriptorSet(device, ubo, uboByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, uboSet);
+	if (dataBuffer)VkUtil::updateDescriptorSet(device, dataBuffer, sizeof(float) * amtOfAttributes * amtOfDatapoints, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, uboSet);
 }
