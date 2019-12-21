@@ -1,6 +1,7 @@
 #version 450
 
-layout(location = 0) in col;
+layout(location = 0) in vec4 col;
+layout(location = 0) out vec4 outColor;
 
 void main() {
     outColor = col;
@@ -10,7 +11,7 @@ void main() {
         if(length(coord) > 0.5)                  //outside of circle radius?
             discard;
     }
-};
+}
 
 
 //#version 450

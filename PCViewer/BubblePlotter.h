@@ -43,7 +43,7 @@ public:
 	//gData:			vulkan buffer with all data
 	//amtOfAttributes: amount of attributes
 	//amtOfData:		amount of data
-	void addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData);
+	void addBubbles(std::vector<uint32_t>& attributeIndex, glm::uvec3& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData);
 	void render();
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void setPointScale(Scale scale);
@@ -86,6 +86,7 @@ private:
 		uint32_t relative;						//bool to indicate if the points should be scaled on zooming away
 		uint32_t padding;
 		alignas(16) glm::vec4 cameraPos;		//contains the maximum piont size i w
+		alignas(16) glm::uvec4 posIndices;		//indices of the position attributes
 		alignas(16) glm::vec4 grey;
 		alignas(16) glm::vec3 boundingRectMin;	//used to scale the 3d coordinates
 		alignas(16) glm::vec3 boundingRectMax;
@@ -114,7 +115,6 @@ private:
 
 	struct Bubble {
 		uint32_t attributeIndex;
-		glm::vec3 pos;
 		std::string attributeName;
 		uint32_t id;
 		bool active;
@@ -123,7 +123,6 @@ private:
 	struct gBubble {
 		uint32_t attributeIndex;
 		uint32_t dataIndex;
-		glm::uvec3 posIndices;
 		bool active;		//information if the current bubble is an active datum
 	};
 
@@ -176,9 +175,10 @@ private:
 	glm::vec3 cameraRot;
 	uint32_t amtOfAttributes;
 	uint32_t amtOfDatapoints;
+	glm::uvec3 posIndices;
 
 	std::uniform_int_distribution<int> distribution;
-	static std::default_random_engine engine;
+	std::default_random_engine randomEngine;
 
 	std::vector<gSphere> spheres;
 	uint32_t amtOfIdxSphere;

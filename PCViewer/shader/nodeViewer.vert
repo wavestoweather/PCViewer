@@ -1,5 +1,5 @@
 #version 450
-layout(std430, binding = 0) buffer infos{
+layout(std430, binding = 0) buffer Info{
 	float alphaMultiplier;
 	uint clipNormalize;
 	uint amtOfAttributes;
@@ -8,6 +8,7 @@ layout(std430, binding = 0) buffer infos{
 	float Fov;
 	uint relative;
 	vec4 cameraPos;			//contains in w the max size of points when normalized
+	uvec4 posIndices;		//indices for the position coordinates
 	vec4 grey;
 	vec4 boundingRectMin;
 	vec4 boundingRectMax;
@@ -15,36 +16,37 @@ layout(std430, binding = 0) buffer infos{
 	vec4 clippingRectMax;
 	mat4 mvp;
 	float attributeInfos[];
-}
+} infos;
 
-layout(std430, binding = 1) buffer data{
+layout(std430, binding = 1) buffer Dat{
 	float d[];
 } data;
 
 layout(location = 0) in uint attributeIndex;
 layout(location = 1) in uint dataIndex;
-layout(location = 2) in uvec3 posIndices; //indices for the position coordinates
-layout(location = 3) in bool active;
+layout(location = 2) in uint activ;		//this is a bool, which is simply cast to integer
 layout(location = 0) out vec4 colorV;
 
 void main() {
     colorV = vec4(infos.attributeInfos[attributeIndex*7],infos.attributeInfos[attributeIndex*7 + 1], infos.attributeInfos[attributeIndex*7 + 2], infos.attributeInfos[attributeIndex*7] + 3);
-	vec4 pos = vec4(data.d[dataIndex*infos.amtOfAttributes + posIndices.x], data.d[dataIndex*infos.amtOfAttributes + posIndices.y], data.d[dataIndex*infos.amtOfAttributes + posIndices.z], 1);
+	vec4 pos = vec4(data.d[dataIndex*infos.amtOfAttributes + infos.posIndices.x], data.d[dataIndex*infos.amtOfAttributes + infos.posIndices.y], data.d[dataIndex*infos.amtOfAttributes + infos.posIndices.z], 1);
     pos.y += infos.offset * infos.attributeInfos[attributeIndex*7 + 4];
-    gl_Position = projMatrix * mvPosition;
-    vert = pos.xyz;
+	pos.xyz -= infos.boundingRectMin.xyz;
+	pos.xyz /= infos.boundingRectMax.xyz - infos.boundingRectMin.xyz;
+    gl_Position = infos.mvp * pos;
+    vec3 vert = pos.xyz;
     if (true)
     {
 		bool clipped = true;
 		if(pos.x<=infos.clippingRectMax.x && pos.y<=infos.clippingRectMax.y && pos.z<=infos.clippingRectMax.z
-			&& pos.x>=info.clippingRectMin.x && pos.y>=infos.clippingRectMin.y && pos.z >= inofs.clippingRectMin.z){
+			&& pos.x>=infos.clippingRectMin.x && pos.y>=infos.clippingRectMin.y && pos.z >= infos.clippingRectMin.z){
 			clipped = false;
 		}
-		if (infos.clipNormalize&2 && (clipped || !active)){
+		if (bool(infos.clipNormalize&2) && (clipped || !bool(activ))){
 			colorV = vec4(0,0,0,0);
 		}
-		else if(!(infos.clipNormalize&2) && (clipped || !active)){
-			colorV = infose.grey;
+		else if(!bool(infos.clipNormalize&2) && (clipped || !bool(activ))){
+			colorV = infos.grey;
 		}
 
         float pdistance = distance(vert, infos.cameraPos.xyz);
@@ -53,9 +55,9 @@ void main() {
             colorV.a *= infos.alphaMultiplier/pdistance;
         }
 
-        float radius = data.d[dataIndex*infos.amtOfAttributes + attributeIndex);
+        float radius = data.d[dataIndex*infos.amtOfAttributes + attributeIndex];
 
-		if(infos.clipNormalize&1){
+		if(bool(infos.clipNormalize&1)){
 			float min = infos.attributeInfos[attributeIndex * 7 + 5];
 			float max = infos.attributeInfos[attributeIndex * 7 + 6];
 			radius = (radius - min)/(max - min);
@@ -72,9 +74,9 @@ void main() {
 					break;
 		}
 
-        if(infos.relative) pdistance = 1;
-        radius *= (45.0/infos.FoV) / pdistance;
+        if(bool(infos.relative)) pdistance = 1;
+        radius *= (45.0/infos.Fov) / pdistance;
 
-        gl_PointSize = interValue;
+        gl_PointSize = radius;
     }
-};
+}

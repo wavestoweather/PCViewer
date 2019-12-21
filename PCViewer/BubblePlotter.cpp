@@ -33,6 +33,8 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	attributeMinValues = nullptr;
 	attributeMaxValues = nullptr;
 	distribution = std::uniform_int_distribution<int>(0, 35);
+	randomEngine = std::default_random_engine();
+	posIndices = glm::uvec3(0, 1, 2);
 
 	this->physicalDevice = physicalDevice;
 	this->device = device;
@@ -269,7 +271,7 @@ void BubblePlotter::addCylinder(float r, float length, glm::vec4 color, glm::vec
 	recordRenderCommands();
 }
 
-void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData)
+void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::uvec3& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData)
 {
 	bool recordCommands = false;
 	if (gData != dataBuffer) {
@@ -303,7 +305,7 @@ void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3&
 			this->attributeActivations[i] = true;
 			this->attributeMaxValues[i] = -INFINITY;
 			this->attributeMinValues[i] = INFINITY;
-			float hue = distribution(engine) * 10;
+			float hue = distribution(randomEngine) * 10;
 			hsl randCol = { hue,.5f,.6f };
 			rgb col = hsl2rgb(randCol);
 			this->attributeColors[i] = glm::vec4(col.r, col.g, col.b, .8f);
@@ -311,11 +313,12 @@ void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3&
 			if (i != pos.x && i != pos.y && i != pos.z) ++offsetCounter;
 		}
 	}
+	posIndices = pos;
 	VkResult err;
 
 	bubbleInstances.reserve(bubbleInstances.size() + id.size());
 	for (int i = 0; i < attributeIndex.size(); i++) {
-		bubbleInstances.push_back({ attributeIndex[i],pos,attributeName[i],id[i],active[i] });
+		bubbleInstances.push_back({ attributeIndex[i],attributeName[i],id[i],active[i] });
 	}
 	if (bubbleInstancesSize < bubbleInstances.size()*2) {//reallocate gpu memory with the right size
 		if (bubbleInstancesMemory) {
@@ -343,12 +346,12 @@ void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3&
 	}
 	std::vector<gBubble> graphicBubbles(bubbleInstances.size() * 2);
 	//sorting the bubble instances for positive render order
-	std::sort(bubbleInstances.begin(), bubbleInstances.end(), [data](Bubble& a, Bubble& b) {float lonA = data[a.id][(int)a.pos.x];
-	float lonB = data[b.id][(int)b.pos.x];
-	float latA = data[a.id][(int)a.pos.y];
-	float latB = data[b.id][(int)b.pos.y];
-	float altA = data[a.id][(int)a.pos.z];
-	float altB = data[b.id][(int)b.pos.z];
+	std::sort(bubbleInstances.begin(), bubbleInstances.end(), [data, pos](Bubble& a, Bubble& b) {float lonA = data[a.id][pos.x];
+	float lonB = data[b.id][pos.x];
+	float latA = data[a.id][pos.y];
+	float latB = data[b.id][pos.y];
+	float altA = data[a.id][pos.z];
+	float altB = data[b.id][pos.z];
 	if (altA > altB) return true;
 	else if (altA < altB) return false;
 	else {
@@ -357,7 +360,7 @@ void BubblePlotter::addBubbles(std::vector<uint32_t>& attributeIndex, glm::vec3&
 		else return lonA > lonB;
 	}});
 	for (Bubble& b : bubbleInstances) {
-		graphicBubbles.push_back({ b.attributeIndex,b.id,b.pos,b.active });
+		graphicBubbles.push_back({ b.attributeIndex,b.id,b.active });
 	}
 	graphicBubbles.insert(graphicBubbles.end(), graphicBubbles.rbegin(), graphicBubbles.rend());
 	void* d;
@@ -385,6 +388,7 @@ void BubblePlotter::render()
 	ubo.FoV = Fov;
 	ubo.clipNormalize = (clipping << 1) | normalization;
 	ubo.grey = glm::vec4(grey[0], grey[1], grey[2], grey[3]);
+	ubo.posIndices = glm::vec4(posIndices, 0);
 	ubo.scale = scale;
 	ubo.relative = scalePointsOnZoom;
 	ubo.offset = layerSpacing;
@@ -499,7 +503,7 @@ void BubblePlotter::setupRenderPipeline()
 	bindingDescripiton.stride = sizeof(gBubble);
 	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	VkVertexInputAttributeDescription attributeDescriptions[4] = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
+	VkVertexInputAttributeDescription attributeDescriptions[3] = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
 	attributeDescriptions[0].binding = 0;
 	attributeDescriptions[0].location = 0;
 	attributeDescriptions[0].format = VK_FORMAT_R32_UINT;
@@ -511,20 +515,15 @@ void BubblePlotter::setupRenderPipeline()
 	attributeDescriptions[1].offset = offsetof(gBubble, dataIndex);
 
 	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 2;
-	attributeDescriptions[2].format = VK_FORMAT_R32G32B32_UINT;
-	attributeDescriptions[2].offset = offsetof(gBubble, posIndices);
-
-	attributeDescriptions[3].binding = 0;
-	attributeDescriptions[3].location = 3;
-	attributeDescriptions[3].format = VK_FORMAT_R8_UINT;
-	attributeDescriptions[3].offset = offsetof(gBubble, active);
+	attributeDescriptions[2].location = 3;
+	attributeDescriptions[2].format = VK_FORMAT_R8_UINT;
+	attributeDescriptions[2].offset = offsetof(gBubble, active);
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
 	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
-	vertexInputInfo.vertexAttributeDescriptionCount = 4;
+	vertexInputInfo.vertexAttributeDescriptionCount = 3;
 	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
 	//vector with the dynamic states
