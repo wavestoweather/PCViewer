@@ -15,7 +15,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 //enable this define to print the time needed to render the pc Plot
 //#define PRINTRENDERTIME
 //enable htis define to print the time since the last fram
-#define PRINTFRAMETIME
+//#define PRINTFRAMETIME
 //enable to use gpu sorting
 //#define GPUSORT
 
@@ -71,6 +71,12 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
 #endif
+
+//defines for key ids
+#define KEYW 87
+#define KEYA 65
+#define KEYS 83
+#define KEYD 68
 
 //defines for the medians
 #define MEDIANCOUNT 3
@@ -609,7 +615,8 @@ static int priorityListIndex = 0;
 //variables for the 3d views
 static View3d * view3d;
 static bool view3dAlwaysOnTop = false;
-std::string active3dAttribute;
+static std::string active3dAttribute;
+static bool enableBubbleWindow = false;
 static BubblePlotter* bubblePlotter;
 
 static SettingsManager* settingsManager;
@@ -4384,18 +4391,6 @@ int main(int, char**)
 			}
 		}
 
-		// Labels for the titels of the attributes
-		// Position calculation for each of the Label
-		size_t amtOfLabels = 0;
-		for (int i = 0; i < pcAttributes.size(); i++)
-			if (pcAttributeEnabled[i])
-				amtOfLabels++;
-
-		size_t paddingSide = 10;			//padding from left and right screen border
-		size_t gap = (io.DisplaySize.x - 2 * paddingSide) / (amtOfLabels - 1);
-		ImVec2 buttonSize = ImVec2(70, 20);
-		size_t offset = 0;
-
 #ifdef RENDER3D
 		//testwindow for the 3d renderer
 		ImGui::SetNextWindowSize(ImVec2(800, 800));
@@ -4422,34 +4417,16 @@ int main(int, char**)
 			ImGui::SetWindowFocus("3dview");
 #endif
 
-#ifdef BUBBLEVIEW
-		//testwindow for the node viewer
-		if (ImGui::Begin("NodeViewer", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
-			ImGui::Image((ImTextureID)bubblePlotter->getImageDescSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
-			if ((ImGui::IsMouseDragging() || io.MouseWheel) && ImGui::IsItemHovered()) {
-				CamNav::NavigationInput nav = {};
-				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
-				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
-				nav.mouseScrollDelta = io.MouseWheel;
-				bubblePlotter->updateCameraPos(nav,io.DeltaTime);
-				bubblePlotter->render();
-				err = vkDeviceWaitIdle(g_Device);
-				check_vk_result(err);
-				ImGui::ResetMouseDragDelta();
-			}
-		}
-		ImGui::End();
-#endif
-
 		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
 		ImVec2 window_pos = ImVec2(0, 0);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		ImGui::SetNextWindowSize({ io.DisplaySize.x,io.DisplaySize.y });
+		float windowWidth = (enableBubbleWindow) ? io.DisplaySize.x / 2 : io.DisplaySize.x;
+		ImGui::SetNextWindowSize({ windowWidth,io.DisplaySize.y });
 		ImVec2 picPos;
 		bool picHovered;
-		ImGui::Begin("Plot", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+		ImGui::Begin("PC window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
 
-		//Menu for saving settings
+		//Menu of the main window
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(83), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
@@ -4568,6 +4545,12 @@ int main(int, char**)
 				ImGui::SliderFloat("Animation duration per drawlist", &animationDuration, .1f, 10);
 				if (ImGui::MenuItem("Start drawlist animation")) {
 					animationStart = std::chrono::steady_clock::now();
+				}
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Workbenches")) {
+				if (ImGui::MenuItem("Bubbleplot workbench", "", &enableBubbleWindow)) {
+					//enableBubbleWindow ^= true;
 				}
 				ImGui::EndMenu();
 			}
@@ -4710,6 +4693,18 @@ int main(int, char**)
 			ImGui::EndPopup();
 		}
 
+		// Labels for the titels of the attributes
+		// Position calculation for each of the Label
+		size_t amtOfLabels = 0;
+		for (int i = 0; i < pcAttributes.size(); i++)
+			if (pcAttributeEnabled[i])
+				amtOfLabels++;
+
+		size_t paddingSide = 10;			//padding from left and right screen border
+		size_t gap = (windowWidth - 2 * paddingSide) / (amtOfLabels - 1);
+		ImVec2 buttonSize = ImVec2(70, 20);
+		size_t offset = 0;
+
 		//drawing the buttons which can be changed via drag and drop
 		int c = 0;		//describing the position of the element in the AttrOrd vector
 		int c1 = 0;
@@ -4777,7 +4772,7 @@ int main(int, char**)
 		//drawing the Texture
 		picPos = ImGui::GetCursorScreenPos();
 		picPos.y += 2;
-		ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(io.DisplaySize.x - 2 * paddingSide, io.DisplaySize.y * 2/5), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 255));
+		ImGui::Image((ImTextureID)g_PcPlotImageDescriptorSet, ImVec2(ImGui::GetWindowWidth() - 2 * paddingSide, io.DisplaySize.y * 2/5), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 255));
 		picHovered = ImGui::IsItemHovered();
 		if (pcPlotRender) {
 			pcPlotRender = false;
@@ -4810,7 +4805,7 @@ int main(int, char**)
 			offset += gap;
 		}
 
-		ImVec2 picSize(io.DisplaySize.x - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
+		ImVec2 picSize(ImGui::GetWindowWidth() - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
 		if (toggleGlobalBrushes) {
 			//drawing checkboxes for activating brush templates
 			ImGui::Separator();
@@ -5791,7 +5786,8 @@ int main(int, char**)
 
 		//DataSets, from which draw lists can be created
 		ImGui::SameLine();
-		ImGui::BeginChild("DataSets", ImVec2((io.DisplaySize.x - 500) / 2, -1), true, ImGuiWindowFlags_HorizontalScrollbar);
+		
+		ImGui::BeginChild("DataSets", ImVec2((ImGui::GetWindowWidth() - 500) / 2, -1), true, ImGuiWindowFlags_HorizontalScrollbar);
 
 		DataSet* destroySet = NULL;
 		bool destroy = false;
@@ -6147,6 +6143,37 @@ int main(int, char**)
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::Separator();
+				if (ImGui::MenuItem("Send to Bubble plotter")) {
+					DataSet* parent;
+					for (auto it = g_PcPlotDataSets.begin(); it != g_PcPlotDataSets.end(); ++it) {
+						if (it->name == dl.parentDataSet) {
+							parent = &(*it);
+						}
+					}
+					std::vector<uint32_t> indices;
+					std::vector<uint32_t> ids;
+					std::vector<bool> active;
+					std::vector<std::string> attributeNames;
+					std::vector<std::pair<float, float>> attributeMinMax;
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						attributeNames.push_back(pcAttributes[i].name);
+						attributeMinMax.push_back({ pcAttributes[i].min,pcAttributes[i].max });
+						for (int j = 0; j < parent->data.size(); ++j) {
+							indices.push_back(i);
+							ids.push_back(j);
+							active.push_back(false);
+						}
+					}
+					for (int i : dl.activeInd) {
+						for (int j = 0; j < pcAttributes.size(); ++j) {
+							active[j * parent->data.size() + i] = true;
+						}
+					}
+					glm::uvec3 posIndices(0, 2, 1);
+					bubblePlotter->addBubbles(indices, posIndices, attributeNames, attributeMinMax, ids, active, parent->data, parent->buffer.buffer, pcAttributes.size(), parent->data.size());
+				}
+
+				ImGui::Separator();
 				for (int i = 0; i < pcAttributes.size();i++) {
 					if (!pcAttributeEnabled[i])
 						continue;
@@ -6407,6 +6434,112 @@ int main(int, char**)
 				std::swap(*it, *itu);
 			}
 		}
+
+		//bubble window ----------------------------------------------------------------------------------
+		if (enableBubbleWindow) {
+			ImGui::SetNextWindowPos(ImVec2(windowWidth, 0));
+			ImGui::SetNextWindowSize(ImVec2(windowWidth, io.DisplaySize.y));
+			ImGui::Begin("Bubble window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Navigation")) {
+					ImGui::SliderFloat("fly speed", &bubblePlotter->flySpeed, 0.01, 10);
+					ImGui::SliderFloat("fast fly multiplier", &bubblePlotter->fastFlyMultiplier, 1, 10);
+					ImGui::SliderFloat("rotation speed", &bubblePlotter->rotationSpeed, 0.01, 5);
+					ImGui::SliderFloat("fov speed", &bubblePlotter->fovSpeed, 1, 100);
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Visualization")) {
+					if (
+						ImGui::DragFloat3("Min position Values", &bubblePlotter->boundingRectMin.x)||
+						ImGui::DragFloat3("Max position Values", &bubblePlotter->boundingRectMax.x)||
+						ImGui::SliderFloat("max point size", &bubblePlotter->maxPointSize, .1f, 200)||
+						ImGui::MenuItem("Enable clipping", "", &bubblePlotter->clipping)||
+						ImGui::MenuItem("Enable normalization", "", &bubblePlotter->normalization)
+						) {
+						bubblePlotter->render();
+					}
+					static char* scales[] = { "Normal","Squareroot","Logarithmic" };
+					static int selectedScale = 0;
+					if (ImGui::BeginCombo("Scale", scales[selectedScale])) {
+						for (int i = 0; i < 3; ++i) {
+							if (ImGui::Selectable(scales[i])) {
+								selectedScale = i;
+								bubblePlotter->scale = (BubblePlotter::Scale)selectedScale;
+							}
+						}
+						ImGui::EndCombo();
+					}
+					if (ImGui::DragFloat("Spacing", &bubblePlotter->layerSpacing, bubblePlotter->layerSpacing / 30.0f, 0.00001, 100)) {
+						bubblePlotter->render();
+					}
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenuBar();
+			}
+
+			ImGui::Image((ImTextureID)bubblePlotter->getImageDescSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging() || io.MouseWheel || io.KeysDown[KEYW] || io.KeysDown[KEYA] || io.KeysDown[KEYS] || io.KeysDown[KEYD])) {
+				CamNav::NavigationInput nav = {};
+				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
+				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
+				nav.mouseScrollDelta = io.MouseWheel;
+				nav.w = io.KeysDown[KEYW];
+				nav.a = io.KeysDown[KEYA];
+				nav.s = io.KeysDown[KEYS];
+				nav.d = io.KeysDown[KEYD];
+				nav.shift = io.KeyShift;
+				bubblePlotter->updateCameraPos(nav, io.DeltaTime);
+				bubblePlotter->render();
+				err = vkDeviceWaitIdle(g_Device);
+				check_vk_result(err);
+				ImGui::ResetMouseDragDelta();
+			}
+
+			ImGui::SameLine();
+			ImGui::BeginChild("Attribute Settings",ImVec2(-1,800));
+			ImGui::Columns(3);
+			ImGui::Separator();
+			ImGui::Text("Variable"); ImGui::NextColumn();
+			ImGui::Text("Min/Max"); ImGui::NextColumn();
+			ImGui::Text("Color"); ImGui::NextColumn();
+			ImGui::Separator();
+			for (int i = 0; i < bubblePlotter->attributeNames.size(); ++i) {
+				if (i == bubblePlotter->posIndices.x || i == bubblePlotter->posIndices.y || i == bubblePlotter->posIndices.z)
+					continue;
+				if (ImGui::Checkbox((bubblePlotter->attributeNames[i] + "##cb").c_str(), &bubblePlotter->attributeActivations[i])) {		//redistribute the remaining variales over the free layer space
+					float count = 0;
+					for (int j = 0; j < bubblePlotter->attributeNames.size(); ++j) {
+						if (bubblePlotter->attributeActivations[j] && j!=bubblePlotter->posIndices.x && j!=bubblePlotter->posIndices.y && j!=bubblePlotter->posIndices.z)
+							count += 1;
+					}
+					count = 1 / (count - 1); //converting count to the percentage step
+					float curP = 0;
+					for (int j = 0; j < bubblePlotter->attributeNames.size(); ++j) {
+						if (j == bubblePlotter->posIndices.x || j == bubblePlotter->posIndices.y || j == bubblePlotter->posIndices.z) {
+							continue;
+						}
+						bubblePlotter->attributeTopOffsets[j] = curP;
+						curP += count;
+					}
+					bubblePlotter->render();
+				}
+				ImGui::NextColumn();
+				if (ImGui::DragFloat2(("##minmax" + bubblePlotter->attributeNames[i]).c_str(), &bubblePlotter->attributeMinMaxValues[i].first)) {
+					bubblePlotter->render();
+				}
+				ImGui::NextColumn();
+				if (ImGui::ColorEdit4((std::string("##col") + bubblePlotter->attributeNames[i]).c_str(), (float*)&bubblePlotter->attributeColors[i].x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+					bubblePlotter->render();
+				}
+				ImGui::NextColumn();
+			}
+			ImGui::Separator();
+			ImGui::EndChild();
+
+			ImGui::End();
+		}
+		//end of bubble window ---------------------------------------------------------------------------
 
 #ifdef _DEBUG
 		ImGui::ShowDemoWindow(NULL);

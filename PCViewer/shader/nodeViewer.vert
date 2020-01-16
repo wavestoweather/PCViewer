@@ -28,11 +28,16 @@ layout(location = 2) in uint activ;		//this is a bool, which is simply cast to i
 layout(location = 0) out vec4 colorV;
 
 void main() {
-    colorV = vec4(infos.attributeInfos[attributeIndex*7],infos.attributeInfos[attributeIndex*7 + 1], infos.attributeInfos[attributeIndex*7 + 2], infos.attributeInfos[attributeIndex*7] + 3);
+	float offsetP = infos.attributeInfos[attributeIndex*7 + 4];
+	if(offsetP<0){	//discard deactivated items
+		gl_Position = vec4(-2,-2,-2,1);
+		return;
+	}
+    colorV = vec4(infos.attributeInfos[attributeIndex*7],infos.attributeInfos[attributeIndex*7 + 1], infos.attributeInfos[attributeIndex*7 + 2], infos.attributeInfos[attributeIndex*7+ 3]);
 	vec4 pos = vec4(data.d[dataIndex*infos.amtOfAttributes + infos.posIndices.x], data.d[dataIndex*infos.amtOfAttributes + infos.posIndices.y], data.d[dataIndex*infos.amtOfAttributes + infos.posIndices.z], 1);
-    pos.y += infos.offset * infos.attributeInfos[attributeIndex*7 + 4];
 	pos.xyz -= infos.boundingRectMin.xyz;
 	pos.xyz /= infos.boundingRectMax.xyz - infos.boundingRectMin.xyz;
+	pos.y += infos.offset * offsetP;		//offset is applied after normalization to get a higher effect
     gl_Position = infos.mvp * pos;
     vec3 vert = pos.xyz;
     if (true)
@@ -65,6 +70,8 @@ void main() {
 		else{
 			radius = abs(radius);		//safety normalization to avoid negative numbers(important for log and sqrt)
 		}
+
+		radius *= infos.cameraPos.w;	//apply scaling to radius before other transformations were applied
 
 		switch(infos.scale){
 			case 0: break; //standard case, do nothing

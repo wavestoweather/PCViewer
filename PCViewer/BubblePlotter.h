@@ -43,9 +43,9 @@ public:
 	//gData:			vulkan buffer with all data
 	//amtOfAttributes: amount of attributes
 	//amtOfData:		amount of data
-	void addBubbles(std::vector<uint32_t>& attributeIndex, glm::uvec3& pos, std::vector<std::string>& attributeName, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData);
+	void addBubbles(std::vector<uint32_t>& attributeIndex, glm::uvec3& pos, std::vector<std::string>& attributeName, std::vector<std::pair<float, float>> attributesMinMax, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData);
 	void render();
-	void updateCameraPos(CamNav::NavigationInput input, float deltaT);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
+	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
 	void setPointScale(Scale scale);
 	VkSampler getImageSampler();
 	VkImageView getImageView();
@@ -53,8 +53,10 @@ public:
 	VkDescriptorSet getImageDescSet();
 
 	//public Attributes
+	glm::uvec3 posIndices;
 	float maxPointSize;
 	float Fov;
+	float fovSpeed;
 	float flySpeed;
 	float fastFlyMultiplier;
 	float rotationSpeed;
@@ -72,8 +74,8 @@ public:
 	bool* attributeActivations;
 	glm::vec4* attributeColors;
 	float* attributeTopOffsets;				//The offsets for each attribute are given in %. 0 means that the point lies in its original layer, 1 is the last space before the next layer
-	float* attributeMinValues;
-	float* attributeMaxValues;
+	std::vector<std::pair<float,float>> attributeMinMaxValues;
+	std::vector<std::string> attributeNames;
 
 private:
 	struct Ubo {
@@ -114,8 +116,7 @@ private:
 	};
 
 	struct Bubble {
-		uint32_t attributeIndex;
-		std::string attributeName;
+		uint32_t attributeIndex;	//with this index things like the attribute name ... can be found out
 		uint32_t id;
 		bool active;
 	};
@@ -123,7 +124,7 @@ private:
 	struct gBubble {
 		uint32_t attributeIndex;
 		uint32_t dataIndex;
-		bool active;		//information if the current bubble is an active datum
+		uint32_t active;		//information if the current bubble is an active datum
 	};
 
 	//vulkan resources which do not have to be deleted/released
@@ -175,7 +176,6 @@ private:
 	glm::vec3 cameraRot;
 	uint32_t amtOfAttributes;
 	uint32_t amtOfDatapoints;
-	glm::uvec3 posIndices;
 
 	std::uniform_int_distribution<int> distribution;
 	std::default_random_engine randomEngine;
