@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
+#include <cstring>
 
 static void check_vk_result(VkResult err)
 {
@@ -60,6 +61,8 @@ namespace VkUtil{
 	void createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageAspectFlags aspectMask, VkImageView* imageView);
 	void create3dImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
 	void createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, VkFilter filter, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler);
+	void uploadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize, void* data);
+	void downloadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize, void* data);
 	VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
 };
 

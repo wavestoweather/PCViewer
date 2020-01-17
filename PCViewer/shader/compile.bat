@@ -19,4 +19,6 @@ E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o nodeVert.spv nodeViewer.ver
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o nodeFrag.spv nodeViewer.frag
 
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o brushComp.spv brush.comp
+
+E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o histComp.spv hist.comp
 pause

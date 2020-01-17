@@ -46,6 +46,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "PriorityColorUpdater.h"
 #include "GpuBrusher.h"
 #include "CameraNav.hpp"
+#include "HistogramManager.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -622,6 +623,8 @@ static BubblePlotter* bubblePlotter;
 static SettingsManager* settingsManager;
 
 static GpuBrusher* gpuBrusher;
+
+static HistogramManager* histogramManager;
 
 //variables for fractions
 static int maxFractionDepth = 20;
@@ -4232,6 +4235,10 @@ int main(int, char**)
 		gpuBrusher = new GpuBrusher(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
 	}
 
+	{//histogram manager
+		histogramManager = new HistogramManager(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+	}
+
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
@@ -6591,6 +6598,7 @@ int main(int, char**)
 #endif
 		delete settingsManager;
 		delete gpuBrusher;
+		delete histogramManager;
 
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.kdTree) delete gb.kdTree;
