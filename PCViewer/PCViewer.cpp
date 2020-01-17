@@ -254,12 +254,12 @@ struct DrawListComparator {
 	std::string parentDataset;
 	std::string a;
 	std::string b;
-	std::vector<int>aInd;
-	std::vector<int>bInd;
-	std::vector<int>aOrB;
-	std::vector<int>aMinusB;
-	std::vector<int>bMinusA;
-	std::vector<int>aAndb;
+	std::vector<uint32_t>aInd;
+	std::vector<uint32_t>bInd;
+	std::vector<uint32_t>aOrB;
+	std::vector<uint32_t>aMinusB;
+	std::vector<uint32_t>bMinusA;
+	std::vector<uint32_t>aAndb;
 };
 
 struct Brush {
@@ -270,7 +270,7 @@ struct Brush {
 struct TemplateList {
 	std::string name;
 	VkBuffer buffer;
-	std::vector<int> indices;
+	std::vector<uint32_t> indices;
 	std::vector<std::pair<float, float>> minMax;
 	float pointRatio;		//ratio of points in the datasaet(reduced)
 };
@@ -345,8 +345,8 @@ struct DrawList {
 	std::vector<VkDescriptorSet> histogrammDescSets;
 	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
-	std::vector<int> indices;
-	std::vector<int> activeInd;
+	std::vector<uint32_t> indices;
+	std::vector<uint32_t> activeInd;
 	uint32_t histIndexBufferOffset;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 };
@@ -1934,8 +1934,8 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 	dl.show = true;
 	dl.showHistogramm = true;
 	dl.parentDataSet = ds.name;
-	dl.indices = std::vector<int>(tl.indices);
-	dl.activeInd = std::vector<int>(tl.indices);
+	dl.indices = std::vector<uint32_t>(tl.indices);
+	dl.activeInd = std::vector<uint32_t>(tl.indices);
 
 	//adding a standard brush for every attribute
 	for (Attribute a : pcAttributes) {
@@ -3701,7 +3701,7 @@ static void updateActiveIndices(DrawList& dl) {
 		std::set_intersection(localIndices.begin(), localIndices.end(), globalIndices.begin(), globalIndices.end(), std::back_inserter(dl.activeInd));
 	}
 	else {
-		dl.activeInd = std::vector(localIndices.begin(), localIndices.end());
+		dl.activeInd = std::vector<uint32_t>(localIndices.begin(), localIndices.end());
 	}
 	activeBrushRatios[dl.name] = dl.activeInd.size();
 
@@ -3970,7 +3970,7 @@ static void calculateDrawListMedians(DrawList& dl) {
 		}
 	}
 
-	std::vector<int> dataCpy(dl.activeInd);
+	std::vector<uint32_t> dataCpy(dl.activeInd);
 
 	for (int i = 0; i < pcAttributes.size(); i++) {
 		std::sort(dataCpy.begin(), dataCpy.end(), [i, ds](int a, int b) {return ds->data[a][i] > ds->data[b][i]; });
@@ -6115,13 +6115,13 @@ int main(int, char**)
 						if (ImGui::Selectable(draw->name.c_str(), false)) {
 							std::set<int> a(dl.activeInd.begin(),dl.activeInd.end());
 							std::set<int> b(draw->activeInd.begin(), draw->activeInd.end());
-							std::vector<int> aOrB;
+							std::vector<uint32_t> aOrB;
 							std::set_union(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aOrB));
-							std::vector<int> aMinusB;
+							std::vector<uint32_t> aMinusB;
 							std::set_difference(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aMinusB));
-							std::vector<int> bMinusA;
+							std::vector<uint32_t> bMinusA;
 							std::set_difference(b.begin(), b.end(), a.begin(), a.end(), std::back_inserter(bMinusA));
-							std::vector<int> aAndb;
+							std::vector<uint32_t> aAndb;
 							std::set_intersection(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aAndb));
 
 							drawListComparator.parentDataset = dl.parentDataSet;
@@ -6178,6 +6178,15 @@ int main(int, char**)
 					}
 					glm::uvec3 posIndices(0, 2, 1);
 					bubblePlotter->addBubbles(indices, posIndices, attributeNames, attributeMinMax, ids, active, parent->data, parent->buffer.buffer, pcAttributes.size(), parent->data.size());
+
+					//Debugging of histogramms
+					histogramManager->setNumberOfBins(100);
+					histogramManager->computeHistogramm(dl.name, dl.activeInd, attributeMinMax, parent->buffer.buffer, parent->data.size());
+					for (auto& i : histogramManager->getHistogram(dl.name).bins)
+					{
+						std::for_each(i.begin(), i.end(), [](uint32_t a) {std::cout << a << ","; });
+						std::cout << std::endl;
+					}
 				}
 
 				ImGui::Separator();
@@ -6543,7 +6552,6 @@ int main(int, char**)
 			}
 			ImGui::Separator();
 			ImGui::EndChild();
-
 			ImGui::End();
 		}
 		//end of bubble window ---------------------------------------------------------------------------

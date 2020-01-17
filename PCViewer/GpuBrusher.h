@@ -101,7 +101,7 @@ public:
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 	};
 
-	std::set<int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataByteSize, VkBuffer data, std::vector<int>& indices, uint32_t amtOfAttributes) {
+	std::set<int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataByteSize, VkBuffer data, std::vector<uint32_t>& indices, uint32_t amtOfAttributes) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(uint32_t) * 4 + sizeof(uint32_t) * 4 * brushes.size();
 		UBOinfo* informations = (UBOinfo*)malloc(infoBytesSize);

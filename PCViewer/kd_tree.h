@@ -11,7 +11,7 @@ public:
 	};
 
 	KdTree() {};
-	KdTree(std::vector<int>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float, float>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
+	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float, float>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
 		this->attributes = attributes;
@@ -38,7 +38,7 @@ private:
 	Node* root;
 	BoundsBehaviour adjustBounds;
 
-	Node* buildRec(int split, std::vector<int>& indices, std::vector<float*>& data, std::vector<int> attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
+	Node* buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int> attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
 		if (!indices.size() || !recDepth) return nullptr;
 		Node n = {};
 		n.bounds = bounds;
@@ -66,7 +66,7 @@ private:
 		}
 
 		//assining the points to the left and right bounding box. also get the maximum extent of the points in both directions if wanted
-		std::vector<int> leftPts, rightPts;
+		std::vector<uint32_t> leftPts, rightPts;
 		for (int i : indices) {
 			float val = data[i][attributes[split]];
 			if (val < mid) {

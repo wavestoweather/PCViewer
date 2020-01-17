@@ -44,7 +44,7 @@ HistogramManager::~HistogramManager()
 	}
 }
 
-void HistogramManager::computeHistogramm(std::string name, std::vector<uint32_t> indices, std::vector<std::pair<float, float>> minMax, VkBuffer data, uint32_t amtOfData)
+void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t>& indices, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData)
 {
 	VkResult err;
 
@@ -57,8 +57,8 @@ void HistogramManager::computeHistogramm(std::string name, std::vector<uint32_t>
 	float* infos = (float*)infosBytes;
 	infos += 3;
 	for (int i = 0; i < minMax.size(); ++i) {
-		infos[i] = minMax[i].first;
-		infos[i + 1] = minMax[i].second;
+		infos[2 * i] = minMax[i].first;
+		infos[2 * i + 1] = minMax[i].second;
 	}
 
 	uint32_t binsByteSize = minMax.size() * numOfBins * sizeof(uint32_t);
@@ -85,7 +85,7 @@ void HistogramManager::computeHistogramm(std::string name, std::vector<uint32_t>
 
 	uboOffsets[2] = allocInfo.allocationSize;
 	vkGetBufferMemoryRequirements(device, uboBuffers[2], &memReq);
-	allocInfo.allocationSize = memReq.size;
+	allocInfo.allocationSize += memReq.size;
 	memType |= memReq.memoryTypeBits;
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memType, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	vkAllocateMemory(device, &allocInfo, nullptr, &uboMemory);
@@ -146,6 +146,12 @@ void HistogramManager::computeHistogramm(std::string name, std::vector<uint32_t>
 	vkFreeMemory(device, uboMemory, nullptr);
 	delete[] infosBytes;
 	delete[] binsBytes;
+}
+
+HistogramManager::Histogram& HistogramManager::getHistogram(std::string name)
+{
+	return histograms[name];
+	
 }
 
 void HistogramManager::setNumberOfBins(uint32_t n)
