@@ -10,18 +10,19 @@
 #define LOCALSIZE 256
 
 class HistogramManager {
-private:
+public:
 	struct Histogram {
-		std::vector<uint32_t> maxCount;					//maximum histogramm value for each attribute				
-		std::vector<std::vector<uint32_t>> bins;		//histogramm values for each attribute
+		std::vector<float> maxCount;					//maximum histogramm value for each attribute				
+		std::vector<std::vector<float>> bins;			//histogramm values for each attribute
 	};
 
-public:
+
 	HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool);
 	~HistogramManager();
 
 	void computeHistogramm(std::string& name, std::vector<uint32_t>& indices, std::vector<std::pair<float,float>>& minMax, VkBuffer data, uint32_t amtOfData);
 	Histogram& getHistogram(std::string name);
+	bool containsHistogram(std::string& name);
 	void setNumberOfBins(uint32_t n);
 
 private:

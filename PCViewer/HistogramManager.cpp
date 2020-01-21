@@ -48,14 +48,14 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 {
 	VkResult err;
 
-	uint32_t infosByteSize = (3 + minMax.size() * 2) * sizeof(float);
+	uint32_t infosByteSize = (4 + minMax.size() * 2) * sizeof(float);
 	char* infosBytes = new char[infosByteSize];
 	uint32_t* inf = (uint32_t*)infosBytes;
 	inf[0] = numOfBins;
 	inf[1] = minMax.size();
 	inf[2] = indices.size();
 	float* infos = (float*)infosBytes;
-	infos += 3;
+	infos += 4;
 	for (int i = 0; i < minMax.size(); ++i) {
 		infos[2 * i] = minMax[i].first;
 		infos[2 * i + 1] = minMax[i].second;
@@ -126,10 +126,18 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	uint32_t* bins = (uint32_t*)binsBytes;
 	Histogram histogram;
 	for (int i = 0; i < minMax.size(); ++i) {
-		uint32_t maxVal = 0;
-		histogram.bins.push_back({ }); //push back empty vector
-		for (int j = 0; j < numOfBins; ++j) {
-			uint32_t curVal = bins[i * minMax.size() + j];
+		float maxVal = 0;
+		histogram.bins.push_back({ });			//push back empty vector
+		for (int j = 0; j < numOfBins; ++j) {	//a 1x3 box kernel is applied to smooth out the histogram
+			float curVal = bins[i * minMax.size() + j];
+			int div = 1;
+			for (int k = -1; k < 2; k += 2) {
+				if (j + k >= 0 && j + k < numOfBins) {
+					curVal += bins[i * minMax.size() + j + k];
+					div++;
+				}
+			}
+			curVal /= div;
 			if (curVal > maxVal)maxVal = curVal;
 			histogram.bins.back().push_back(curVal);
 		}
@@ -151,7 +159,11 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 HistogramManager::Histogram& HistogramManager::getHistogram(std::string name)
 {
 	return histograms[name];
-	
+}
+
+bool HistogramManager::containsHistogram(std::string& name)
+{
+	return histograms.find(name) != histograms.end();
 }
 
 void HistogramManager::setNumberOfBins(uint32_t n)

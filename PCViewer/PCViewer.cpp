@@ -351,6 +351,26 @@ struct DrawList {
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 };
 
+enum ViolinPlacement {
+	ViolinLeft,
+	ViolinRight,
+	ViolinMiddle
+};
+
+struct DrawListRef {
+	std::string name;
+	bool activated;
+};
+
+struct ViolinPlot {
+	char plotName[150];
+	std::vector<DrawListRef> drawLists;				//the name of the drawlists which are shown in the violin plot
+	std::vector<ViolinPlacement> violinPlacements;	//the placement of each histogram (defined per histogram)
+	std::set<uint32_t> ignoredAttributes;			//ignored attribute indices
+	bool* activeAttributes;							//bool array containing whether a attribute is active
+	std::vector<float> maxValues;					//max value of all histogramms
+};
+
 static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
 static VkImage					g_PcPlot = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotView = VK_NULL_HANDLE;
@@ -639,6 +659,11 @@ static std::chrono::steady_clock::time_point animationStart(std::chrono::duratio
 static bool* animationActiveDatasets = nullptr;
 static bool animationItemsDisabled = false;
 static int animationCurrentDrawList = -1;
+
+//variables for violin plots
+static int violinPlotHeight = 150;
+static bool enableViolinPlots;
+std::vector<ViolinPlot> violinPlots;
 
 //method declarations
 static void updateDrawListIndexBuffer(DrawList& dl);
@@ -4427,7 +4452,7 @@ int main(int, char**)
 		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
 		ImVec2 window_pos = ImVec2(0, 0);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		float windowWidth = (enableBubbleWindow) ? io.DisplaySize.x / 2 : io.DisplaySize.x;
+		float windowWidth = (enableBubbleWindow || enableViolinPlots) ? io.DisplaySize.x / 2 : io.DisplaySize.x;
 		ImGui::SetNextWindowSize({ windowWidth,io.DisplaySize.y });
 		ImVec2 picPos;
 		bool picHovered;
@@ -4556,9 +4581,8 @@ int main(int, char**)
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Workbenches")) {
-				if (ImGui::MenuItem("Bubbleplot workbench", "", &enableBubbleWindow)) {
-					//enableBubbleWindow ^= true;
-				}
+				ImGui::MenuItem("Bubbleplot workbench", "", &enableBubbleWindow);
+				ImGui::MenuItem("Violinplot workbench", "", &enableViolinPlots);
 				ImGui::EndMenu();
 			}
 			ImGui::EndMenuBar();
@@ -6452,10 +6476,13 @@ int main(int, char**)
 		}
 
 		//bubble window ----------------------------------------------------------------------------------
+		int bubbleWindowSize = 0;
 		if (enableBubbleWindow) {
 			ImGui::SetNextWindowPos(ImVec2(windowWidth, 0));
-			ImGui::SetNextWindowSize(ImVec2(windowWidth, io.DisplaySize.y));
-			ImGui::Begin("Bubble window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+			ImGui::SetNextWindowSize(ImVec2(windowWidth, (enableViolinPlots)?io.DisplaySize.y/2:io.DisplaySize.y));
+			ImGui::Begin("Bubble window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+
+			bubbleWindowSize = ImGui::GetWindowSize().y;
 
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Navigation")) {
@@ -6556,6 +6583,48 @@ int main(int, char**)
 		}
 		//end of bubble window ---------------------------------------------------------------------------
 
+		//begin of violin plots --------------------------------------------------------------------------
+		if (enableViolinPlots) {
+			ImGui::SetNextWindowPos(ImVec2(windowWidth, bubbleWindowSize));
+			ImGui::SetNextWindowSize(ImVec2(windowWidth, io.DisplaySize.y - bubbleWindowSize));
+			ImGui::Begin("Violin window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Settings")) {
+					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 1000);
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenuBar();
+			}
+
+			const static int plusWidth = 100;
+			for (int i = 0; i < violinPlots.size(); ++i) {
+				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
+				ImGui::InputText(("##plotName"+ std::to_string(i)).c_str(), violinPlots[i].plotName,150);
+				for (int j = 0; j < violinPlots[i].drawLists.size(); ++j) {
+					ImGui::Checkbox(violinPlots[i].drawLists[j].name.c_str(), &violinPlots[i].drawLists[j].activated);
+				}
+				for (int j = 0; j < violinPlots[i].maxValues.size(); ++j) {
+					ImGui::Checkbox(pcAttributes[j].name.c_str(), violinPlots[i].activeAttributes + j);
+				}
+				ImGui::EndChild();			
+			}
+
+			//adding new Plots
+			ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - plusWidth / 2);
+			if (ImGui::Button("+",ImVec2(plusWidth,0))) {
+				ViolinPlot vp = {};
+				vp.activeAttributes = new bool[pcAttributes.size()];
+				for (int i = 0; i < pcAttributes.size(); ++i) {
+					vp.activeAttributes[i] = true;
+				}
+				violinPlots.push_back(vp);
+			}
+
+			ImGui::End();
+		}
+		//end of violin plots
+
 #ifdef _DEBUG
 		ImGui::ShowDemoWindow(NULL);
 #endif
@@ -6581,6 +6650,9 @@ int main(int, char**)
 		delete[] brushTemplateAttrEnabled;
 	if (activeBrushAttributes)
 		delete[] activeBrushAttributes;
+	for (ViolinPlot& vp : violinPlots) {
+		delete[] vp.activeAttributes;
+ 	}
 	
 
 	err = vkDeviceWaitIdle(g_Device);
