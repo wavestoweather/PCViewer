@@ -12,7 +12,8 @@
 class HistogramManager {
 public:
 	struct Histogram {
-		std::vector<float> maxCount;					//maximum histogramm value for each attribute				
+		std::vector<float> maxCount;					//maximum histogramm value for each attribute
+		std::vector<std::pair<float, float>> ranges;	//the value ranges for each attribute
 		std::vector<std::vector<float>> bins;			//histogramm values for each attribute
 	};
 

@@ -128,10 +128,11 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	for (int i = 0; i < minMax.size(); ++i) {
 		float maxVal = 0;
 		histogram.bins.push_back({ });			//push back empty vector
-		for (int j = 0; j < numOfBins; ++j) {	//a 1x3 box kernel is applied to smooth out the histogram
-			float curVal = bins[i * minMax.size() + j];
-			int div = 1;
-			for (int k = -1; k < 2; k += 2) {
+		for (int j = 0; j < numOfBins; ++j) {
+			float curVal = 0;
+			int div = 0;
+			int h = .1f * numOfBins;
+			for (int k = h>>1; k <= h>>1; k += 1) {	//applying a box cernel according to chamers et al.
 				if (j + k >= 0 && j + k < numOfBins) {
 					curVal += bins[i * minMax.size() + j + k];
 					div++;
@@ -143,6 +144,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 		}
 		histogram.maxCount.push_back(maxVal);
 	}
+	histogram.ranges = minMax;
 
 	histograms[name] = histogram;
 
