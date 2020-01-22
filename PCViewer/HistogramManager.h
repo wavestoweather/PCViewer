@@ -12,13 +12,14 @@
 class HistogramManager {
 public:
 	struct Histogram {
+		float maxGlobalCount;							//maximung value accross all attributes
 		std::vector<float> maxCount;					//maximum histogramm value for each attribute
 		std::vector<std::pair<float, float>> ranges;	//the value ranges for each attribute
 		std::vector<std::vector<float>> bins;			//histogramm values for each attribute
 	};
 
 
-	HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool);
+	HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t binsAmount);
 	~HistogramManager();
 
 	void computeHistogramm(std::string& name, std::vector<uint32_t>& indices, std::vector<std::pair<float,float>>& minMax, VkBuffer data, uint32_t amtOfData);

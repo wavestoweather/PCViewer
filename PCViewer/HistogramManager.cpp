@@ -1,6 +1,6 @@
 #include "HistogramManager.h"
 
-HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool) : device(device), physicalDevice(physicalDevice), commandPool(commandPool), queue(queue), descriptorPool(descriptorPool)
+HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t binsAmount) : device(device), physicalDevice(physicalDevice), commandPool(commandPool), queue(queue), descriptorPool(descriptorPool), numOfBins(binsAmount)
 {
 	VkShaderModule module = VkUtil::createShaderModule(device, PCUtil::readByteFile(std::string(SHADERPATH)));
 
@@ -54,11 +54,17 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	inf[0] = numOfBins;
 	inf[1] = minMax.size();
 	inf[2] = indices.size();
+#ifdef _DEBUG
+	std::cout << "Bins: " << numOfBins << std::endl << "Amount of attributes: " << minMax.size() << std::endl << "Amount of indices: " << indices.size() << std::endl;
+#endif
 	float* infos = (float*)infosBytes;
 	infos += 4;
 	for (int i = 0; i < minMax.size(); ++i) {
 		infos[2 * i] = minMax[i].first;
 		infos[2 * i + 1] = minMax[i].second;
+#ifdef _DEBUG
+		std::cout << infos[2 * i] << "|" << infos[2 * i + 1] << std::endl;
+#endif
 	}
 
 	uint32_t binsByteSize = minMax.size() * numOfBins * sizeof(uint32_t);
@@ -124,17 +130,17 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	//downloading results, analysing and saving them
 	VkUtil::downloadData(device, uboMemory, uboOffsets[2], binsByteSize, binsBytes);
 	uint32_t* bins = (uint32_t*)binsBytes;
-	Histogram histogram;
+	Histogram histogram = {};
 	for (int i = 0; i < minMax.size(); ++i) {
 		float maxVal = 0;
 		histogram.bins.push_back({ });			//push back empty vector
 		for (int j = 0; j < numOfBins; ++j) {
 			float curVal = 0;
 			int div = 0;
-			int h = .1f * numOfBins;
-			for (int k = h>>1; k <= h>>1; k += 1) {	//applying a box cernel according to chamers et al.
+			int h = .3f * numOfBins;
+			for (int k = -h>>1; k <= h>>1; k += 1) {	//applying a box cernel according to chamers et al.
 				if (j + k >= 0 && j + k < numOfBins) {
-					curVal += bins[i * minMax.size() + j + k];
+					curVal += bins[i * numOfBins + j + k];
 					div++;
 				}
 			}
@@ -143,6 +149,9 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 			histogram.bins.back().push_back(curVal);
 		}
 		histogram.maxCount.push_back(maxVal);
+		if (maxVal > histogram.maxGlobalCount) {
+			histogram.maxGlobalCount = maxVal;
+		}
 	}
 	histogram.ranges = minMax;
 
