@@ -137,7 +137,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 		for (int j = 0; j < numOfBins; ++j) {
 			float curVal = 0;
 			int div = 0;
-			int h = .3f * numOfBins;
+			int h = .2f * numOfBins;
 			for (int k = -h>>1; k <= h>>1; k += 1) {	//applying a box cernel according to chamers et al.
 				if (j + k >= 0 && j + k < numOfBins) {
 					curVal += bins[i * numOfBins + j + k];
