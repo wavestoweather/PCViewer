@@ -106,6 +106,20 @@ void VkUtil::createBuffer(VkDevice device, uint32_t size, VkBufferUsageFlags usa
 	check_vk_result(err);
 }
 
+void VkUtil::createBufferView(VkDevice device, VkBuffer buffer, VkFormat format, uint32_t offset, uint32_t range, VkBufferView* bufferView)
+{
+	VkResult err;
+
+	VkBufferViewCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+	info.buffer = buffer;
+	info.format = format;
+	info.offset = offset;
+	info.range = range;
+	err = vkCreateBufferView(device, &info, nullptr, bufferView);
+	check_vk_result(err);
+}
+
 void VkUtil::commitCommandBuffer( VkQueue queue, VkCommandBuffer commandBuffer)
 {
 	VkResult err;

@@ -331,11 +331,17 @@ struct DrawList {
 	uint32_t indexBufferOffset;
 	VkBuffer ubo;
 	VkBuffer histogramIndBuffer;
+	uint32_t histIndexBufferOffset;
 	std::vector<VkBuffer> histogramUbos;
 	VkBuffer medianBuffer;
 	VkBuffer medianUbo;
 	uint32_t priorityColorBufferOffset;
 	VkBuffer priorityColorBuffer;
+	uint32_t activeIndicesBufferOffset;
+	VkBuffer activeIndicesBuffer;					//bool buffer of length n with n being the amount of data in the parent dataset
+	uint32_t indicesBufferOffset;
+	VkBuffer indicesBuffer;
+	VkBufferView activeIndicesBufferView;			//buffer view to address the active indices buffer bytewise
 	int medianUboOffset;
 	VkDescriptorSet medianUboDescSet;
 	uint32_t medianBufferOffset;
@@ -347,7 +353,6 @@ struct DrawList {
 	VkDescriptorSet uboDescSet;
 	std::vector<uint32_t> indices;
 	std::vector<uint32_t> activeInd;
-	uint32_t histIndexBufferOffset;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 };
 
@@ -373,8 +378,8 @@ struct ViolinPlot {
 	std::vector<DrawListRef> drawLists;				//the name of the drawlists which are shown in the violin plot
 	std::vector<ViolinPlacement> violinPlacements;	//the placement of each histogram (defined per histogram)
 	std::vector<ViolinScale> violinScalesX;			//the scaling of each histogram in x direction
-	std::vector<ImVec4> drawListLineColors;		//line colors for each drawist histogram
-	std::vector<ImVec4> drawListFillColors;		//background colors for each drawlist histogram
+	std::vector<ImVec4> drawListLineColors;			//line colors for each drawist histogram
+	std::vector<ImVec4> drawListFillColors;			//background colors for each drawlist histogram
 	bool* activeAttributes;							//bool array containing whether a attribute is active
 	std::vector<uint32_t> attributeOrder;			//the first index in this vector corresponds to the first attribute to draw
 	float maxGlobalValue;							//max global value accross all histograms
@@ -441,6 +446,13 @@ static uint32_t					g_PcPlotHistogrammIndexOffset = 0;
 //Indexbuffermemory also contaings the histogramm rect buffer and histogramm index buffer
 static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
+
+//variables for the compute pipeline filling the indexbuffers
+static VkPipeline				c_IndexPipeline;
+static VkPipelineLayout			c_IndexPipelineLayout;
+static VkDescriptorSetLayout	c_IndexPipelineDescSetLayout;
+static VkDescriptorSet			c_IndexPipelineDescSet;
+
 static uint32_t					windowWidth = 1920;
 static uint32_t					windowHeight = 1080;
 static uint32_t					g_PcPlotWidth = 2060;
@@ -1375,6 +1387,35 @@ static void createPcPlotPipeline() {
 	dynamicStateVec.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotSplinePipelineLayout, &g_PcPlotSplinePipeline);
+
+	//----------------------------------------------------------------------------------------------
+	// creating the compute shader for indexbuffer filling
+	//----------------------------------------------------------------------------------------------
+	std::vector<char> computeBytes = PCUtil::readByteFile(g_vertShaderPath);
+	VkShaderModule computeShader = VkUtil::createShaderModule(g_Device, computeBytes);
+
+	//active indices
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	std::vector<VkDescriptorSetLayoutBinding> bindings;
+	bindings.push_back(uboLayoutBinding);
+
+	//info buffer
+	uboLayoutBinding.binding = 1;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	bindings.push_back(uboLayoutBinding);
+
+	//index buffer
+	uboLayoutBinding.binding = 2;
+	bindings.push_back(uboLayoutBinding);
+
+	VkUtil::createDescriptorSetLayout(g_Device, bindings, &c_IndexPipelineDescSetLayout);
+
+	descriptorSetLayouts.clear();
+	descriptorSetLayouts.push_back(c_IndexPipelineDescSetLayout);
+	VkUtil::createComputePipeline(g_Device, computeShader, descriptorSetLayouts, &c_IndexPipelineLayout, &c_IndexPipeline);
 }
 
 static void cleanupPcPlotPipeline() {
@@ -1744,6 +1785,18 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 				vkDestroyBuffer(g_Device, it->priorityColorBuffer, nullptr);
 				it->priorityColorBuffer = VK_NULL_HANDLE;
 			}
+			if (it->activeIndicesBuffer) {
+				vkDestroyBuffer(g_Device, it->activeIndicesBuffer, nullptr);
+				it->activeIndicesBuffer = VK_NULL_HANDLE;
+			}
+			if (it->activeIndicesBufferView) {
+				vkDestroyBufferView(g_Device, it->activeIndicesBufferView, nullptr);
+				it->activeIndicesBufferView = VK_NULL_HANDLE;
+			}
+			if (it->indicesBuffer) {
+				vkDestroyBuffer(g_Device, it->indicesBuffer, nullptr);
+				it->indicesBuffer = VK_NULL_HANDLE;
+			}
 			for (int i = 0; i < it->histogramUbos.size(); i++) {
 				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
 			}
@@ -1856,6 +1909,22 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 
 	memTypeBits |= memRequirements.memoryTypeBits;
 
+	//active indices buffer
+	VkUtil::createBuffer(g_Device, ds.data.size() * sizeof(bool), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dl.activeIndicesBuffer);
+
+	dl.activeIndicesBufferOffset = allocInfo.allocationSize;
+	vkGetBufferMemoryRequirements(g_Device, dl.activeIndicesBuffer, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+	memTypeBits |= memRequirements.memoryTypeBits;
+
+	//indices buffer
+	VkUtil::createBuffer(g_Device, tl.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
+
+	dl.indicesBufferOffset = allocInfo.allocationSize;
+	vkGetBufferMemoryRequirements(g_Device, dl.indicesBuffer, &memRequirements);
+	allocInfo.allocationSize += memRequirements.size;
+	memTypeBits |= memRequirements.memoryTypeBits;
+
 	//allocating the Memory for all draw list data
 	allocInfo.memoryTypeIndex = findMemoryType(memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
@@ -1927,6 +1996,19 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 
 	//binding the  priority rendering buffer
 	vkBindBufferMemory(g_Device, dl.priorityColorBuffer, dl.dlMem, dl.priorityColorBufferOffset);
+
+	//binding the active indices buffer, creating the buffer view and uploading the correct indices to the graphicscard
+	vkBindBufferMemory(g_Device, dl.activeIndicesBuffer, dl.dlMem, dl.activeIndicesBufferOffset);
+	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_UINT, 0, ds.data.size() * sizeof(bool), &dl.activeIndicesBufferView);
+	std::vector<uint8_t> actives(ds.data.size(), 0);		//vector with 0 initialized everywhere
+	for (int i : tl.indices) {									//setting all active indices to true
+		actives[i] = 1;
+	}
+	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, 2 * ds.data.size() * sizeof(bool), actives.data());
+
+	//binding indices buffer and uploading the indices
+	vkBindBufferMemory(g_Device, dl.indicesBuffer, dl.dlMem, dl.indicesBufferOffset);
+	VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tl.indices.size() * sizeof(uint32_t), tl.indices.data());
 
 	//specifying the uniform buffer location
 	VkDescriptorBufferInfo desBufferInfos[1] = {};
@@ -2024,6 +2106,18 @@ static void removePcPlotDrawList(DrawList& drawList) {
 			if (it->priorityColorBuffer) {
 				vkDestroyBuffer(g_Device, it->priorityColorBuffer, nullptr);
 				it->priorityColorBuffer = VK_NULL_HANDLE;
+			}
+			if (it->activeIndicesBuffer) {
+				vkDestroyBuffer(g_Device, it->activeIndicesBuffer, nullptr);
+				it->activeIndicesBuffer = VK_NULL_HANDLE;
+			}
+			if (it->activeIndicesBufferView) {
+				vkDestroyBufferView(g_Device, it->activeIndicesBufferView, nullptr);
+				it->activeIndicesBufferView = VK_NULL_HANDLE;
+			}
+			if (it->indicesBuffer) {
+				vkDestroyBuffer(g_Device, it->indicesBuffer, nullptr);
+				it->indicesBuffer = VK_NULL_HANDLE;
 			}
 			g_PcPlotDrawLists.erase(it);
 			break;
