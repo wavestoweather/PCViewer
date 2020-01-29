@@ -467,6 +467,7 @@ static char						g_rectFragPath[] = "shader/rectFrag.spv";
 static char						g_rectVertPath[] = "shader/rectVert.spv";
 static char						g_densFragPath[] = "shader/densFrag.spv";
 static char						g_densVertPath[] = "shader/densVert.spv";
+static char						c_indexShaderPath[] = "shader/indexComp.spv";
 
 //color palette for density
 static const unsigned char		colorPalette[] = { 0, 0, 0		,255
