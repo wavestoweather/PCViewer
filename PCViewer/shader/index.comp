@@ -3,18 +3,19 @@
 #extension GL_EXT_scalar_block_layout : enable
 
 layout(std430, binding = 0) buffer Informations{
-	uint numOfBins;
-	uint numOfAttributes;
-	uint numOfIndices;
+	uint orderSize;
+	uint attributeSize;
+	uint indexSize;
 	uint padding;
-	float minMax[];
+	uint order[];
 } info;
 
-layout(std430, binding = 1) buffer Indices{
-	uint i[];
-}ind;
+//ordering of the indices
+layout(std430, binding = 1) buffer Ordering{
+	uint o[];
+}order;
 
-layout( set = 0, binding = 2, r8u ) uniform imageBuffer active;
+layout( set = 0, binding = 0, r8 ) uniform imageBuffer act;
 
 layout(std430, binding = 3) buffer IndexBuffer{
 	uint i[];
@@ -23,10 +24,22 @@ layout(std430, binding = 3) buffer IndexBuffer{
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
-	if(gl_GlobalInvocationID.x >= info.numOfIndices) return;
-	for(int axis = 0; axis<info.numOfAttributes;++axis){
-		float val = d.data[ind.i[gl_GlobalInvocationID.x]*info.numOfAttributes + axis];
-		int binIndex = int((val-info.minMax[2*axis])/(info.minMax[2*axis+1]-info.minMax[2*axis]) * .999999f * info.numOfBins);		//multiplication with .999999f is done to prevent that a value could be added to bin at index numOfBins
-		atomicAdd(b.bins[axis*info.numOfBins+binIndex],1);
+	if(gl_GlobalInvocationID.x >= info.indexSize) return;
+	uint i = order.o[gl_GlobalInvocationID.x];			//index of the current line
+	uint startOffset = i * (info.orderSize + 3);
+
+	bool a = bool(floatBitsToInt(imageLoad( act, int(i))));
+	if(!a){										//current index is not active, so only linebreaks are being inserted
+		for(int j = 0;j<info.orderSize + 3;++j){
+			buf.i[startOffset + j] = 0xFFFFFFFF;
+		}
+		return;
 	}
+
+	buf.i[startOffset] = info.order[0] + i * info.attributeSize;
+	for(int j = 0;j < info.orderSize;++j){
+		buf.i[startOffset+j+1] = info.order[j] * i * info.attributeSize;
+	}
+	buf.i[startOffset + info.orderSize + 1] = info.order[info.orderSize - 1] + i * info.attributeSize;
+	buf.i[startOffset + info.orderSize + 2] = 0xFFFFFFFF;
 }

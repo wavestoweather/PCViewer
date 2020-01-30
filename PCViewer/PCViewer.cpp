@@ -1395,21 +1395,27 @@ static void createPcPlotPipeline() {
 	std::vector<char> computeBytes = PCUtil::readByteFile(g_vertShaderPath);
 	VkShaderModule computeShader = VkUtil::createShaderModule(g_Device, computeBytes);
 
-	//active indices
+
+	//[in]	info buffer
 	uboLayoutBinding.binding = 0;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 	std::vector<VkDescriptorSetLayoutBinding> bindings;
 	bindings.push_back(uboLayoutBinding);
 
-	//info buffer
+	//[in]	ordered inex buffer
 	uboLayoutBinding.binding = 1;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
-	//index buffer
+	//[in]	active indices
 	uboLayoutBinding.binding = 2;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	bindings.push_back(uboLayoutBinding);
+	
+	//[out]	index buffer
+	uboLayoutBinding.binding = 3;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
 	VkUtil::createDescriptorSetLayout(g_Device, bindings, &c_IndexPipelineDescSetLayout);
