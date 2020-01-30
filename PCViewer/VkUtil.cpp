@@ -616,6 +616,17 @@ void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImag
 	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
 }
 
+void VkUtil::updateTexelBufferDescriptorSet(VkDevice device, VkBufferView bufferView, uint32_t binding, VkDescriptorSet descriptorSet) {
+	VkWriteDescriptorSet write_desc[1] = {};
+	write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write_desc[0].dstSet = descriptorSet;
+	write_desc[0].descriptorCount = 1;
+	write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+	write_desc[0].dstBinding = binding;
+	write_desc[0].pTexelBufferView = &bufferView;
+	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
+}
+
 void VkUtil::copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, int32_t width, int32_t height, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout)
 {
 	VkImageBlit blit = {};
