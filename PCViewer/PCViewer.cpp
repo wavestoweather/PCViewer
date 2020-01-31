@@ -240,6 +240,10 @@ struct HistogramUniformBuffer {
 	float width;
 	float maxVal;
 	float minVal;
+	uint32_t attributeInd;
+	uint32_t amtOfAttributes;
+	uint32_t pad;
+	uint32_t padding;
 	Vec4 color;
 };
 
@@ -331,8 +335,8 @@ struct DrawList {
 	VkBuffer indexBuffer;
 	uint32_t indexBufferOffset;
 	VkBuffer ubo;
-	VkBuffer histogramIndBuffer;
-	uint32_t histIndexBufferOffset;
+	//VkBuffer histogramIndBuffer;
+	//uint32_t histIndexBufferOffset;
 	std::vector<VkBuffer> histogramUbos;
 	VkBuffer medianBuffer;
 	VkBuffer medianUbo;
@@ -739,12 +743,19 @@ static void createPcPlotHistoPipeline() {
 	attributeDescription.format = VK_FORMAT_R32_SFLOAT;
 	attributeDescription.offset = offsetof(Vertex, y);
 
+	//VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
+	//vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	//vertexInputInfo.vertexBindingDescriptionCount = 1;
+	//vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
+	//vertexInputInfo.vertexAttributeDescriptionCount = 1;
+	//vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
-	vertexInputInfo.vertexAttributeDescriptionCount = 1;
-	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+	vertexInputInfo.vertexBindingDescriptionCount = 0;
+	vertexInputInfo.pVertexBindingDescriptions = nullptr;
+	vertexInputInfo.vertexAttributeDescriptionCount = 0;
+	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
 
 	//vector with the dynamic states
 	std::vector<VkDynamicState> dynamicStates;
@@ -807,6 +818,14 @@ static void createPcPlotHistoPipeline() {
 	uboLayoutBinding.descriptorCount = 1;
 	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
 	std::vector<VkDescriptorSetLayoutBinding> bindings;
+	bindings.push_back(uboLayoutBinding);
+
+	uboLayoutBinding.binding = 1;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+	bindings.push_back(uboLayoutBinding);
+
+	uboLayoutBinding.binding = 2;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
 	VkUtil::createDescriptorSetLayout(g_Device, bindings, &g_PcPlotHistoDescriptorSetLayout);
@@ -1776,10 +1795,6 @@ static void removePcPlotDrawLists(DataSet dataSet) {
 				vkDestroyBuffer(g_Device, it->ubo, nullptr);
 				it->ubo = VK_NULL_HANDLE;
 			}
-			if (it->histogramIndBuffer) {
-				vkDestroyBuffer(g_Device, it->histogramIndBuffer, nullptr);
-				it->histogramIndBuffer = VK_NULL_HANDLE;
-			}
 			if (it->medianBuffer) {
 				vkDestroyBuffer(g_Device, it->medianBuffer, nullptr);
 				it->medianBuffer = VK_NULL_HANDLE;
@@ -1876,16 +1891,6 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 	memRequirements.size = (memRequirements.size % memRequirements.alignment) ? memRequirements.size + (memRequirements.alignment - (memRequirements.size % memRequirements.alignment)) : memRequirements.size;
 	allocInfo.allocationSize += memRequirements.size;
 
-	//IndexBuffer for Histogramms
-	bufferInfo.size = 2 * tl.indices.size() * sizeof(uint32_t);
-	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.histogramIndBuffer);
-	check_vk_result(err);
-
-	vkGetBufferMemoryRequirements(g_Device, dl.histogramIndBuffer, &memRequirements);
-	allocInfo.allocationSize += memRequirements.size;
-	memTypeBits |= memRequirements.memoryTypeBits;
-
 	//Median Buffer for Median Lines
 	bufferInfo.size = MEDIANCOUNT * pcAttributes.size() * sizeof(float);
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -1929,7 +1934,7 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//indices buffer
-	VkUtil::createBuffer(g_Device, tl.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
+	VkUtil::createBuffer(g_Device, tl.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
 
 	dl.indicesBufferOffset = allocInfo.allocationSize;
 	vkGetBufferMemoryRequirements(g_Device, dl.indicesBuffer, &memRequirements);
@@ -1957,34 +1962,14 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 	}
 	dl.histogramUbosOffsets.pop_back();
 
-	//creating the Descriptor sets for the histogramm uniform buffers
-	std::vector<VkDescriptorSetLayout> layouts(dl.histogramUbos.size());
-	for (auto& l : layouts) {
-		l = g_PcPlotHistoDescriptorSetLayout;
-	}
-
-	dl.histogrammDescSets = std::vector<VkDescriptorSet>(layouts.size());
-	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, dl.histogrammDescSets.data());
-
-	//updating the descriptor sets
-	for (int i = 0; i < layouts.size(); i++) {
-		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
-	}
-
 	//Binding the median uniform Buffer
 	vkBindBufferMemory(g_Device, dl.medianUbo, dl.dlMem, dl.medianUboOffset);
 
 	//creating the Descriptor set for the median uniform buffer
-	layouts.clear();
+	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(g_PcPlotDescriptorLayout);
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &dl.medianUboDescSet);
 	VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, sizeof(UniformBufferObject), 0, dl.medianUboDescSet);
-
-	//Binding the histogram index buffer
-	offset += sizeof(UniformBufferObject);
-	offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
-	vkBindBufferMemory(g_Device, dl.histogramIndBuffer, dl.dlMem, offset);
-	dl.histIndexBufferOffset = offset;
 
 	//creating and uploading the indexbuffer data
 	uint32_t* indBuffer = new uint32_t[tl.indices.size()*2];
@@ -2020,6 +2005,22 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 	//binding indices buffer and uploading the indices
 	vkBindBufferMemory(g_Device, dl.indicesBuffer, dl.dlMem, dl.indicesBufferOffset);
 	VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tl.indices.size() * sizeof(uint32_t), tl.indices.data());
+
+	//creating the Descriptor sets for the histogramm uniform buffers
+	layouts = std::vector<VkDescriptorSetLayout>(dl.histogramUbos.size());
+	for (auto& l : layouts) {
+		l = g_PcPlotHistoDescriptorSetLayout;
+	}
+
+	dl.histogrammDescSets = std::vector<VkDescriptorSet>(layouts.size());
+	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, dl.histogrammDescSets.data());
+
+	//updating the descriptor sets
+	for (int i = 0; i < layouts.size(); i++) {
+		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
+		VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 1, dl.histogrammDescSets[i]);
+		VkUtil::updateDescriptorSet(g_Device, tl.buffer, ds.data.size() * pcAttributes.size() * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
+	}
 
 	//specifying the uniform buffer location
 	VkDescriptorBufferInfo desBufferInfos[1] = {};
@@ -2094,10 +2095,6 @@ static void removePcPlotDrawList(DrawList& drawList) {
 			if (it->ubo) {
 				vkDestroyBuffer(g_Device, it->ubo, nullptr);
 				it->ubo = VK_NULL_HANDLE;
-			}
-			if (it->histogramIndBuffer) {
-				vkDestroyBuffer(g_Device, it->histogramIndBuffer, nullptr);
-				it->histogramIndBuffer = VK_NULL_HANDLE;
 			}
 			if (it->medianBuffer) {
 				vkDestroyBuffer(g_Device, it->medianBuffer, nullptr);
@@ -2474,7 +2471,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
 		
 		//ready to draw with draw indexed
-		uint32_t amtOfI = drawList->activeInd.size()* (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
+		uint32_t amtOfI = drawList->indices.size()* (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfI, 1, 0, 0, 0);
 
 		//draw the Median Line
@@ -2605,16 +2602,18 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 				//binding the correct vertex and indexbuffer
 				VkDeviceSize offsets[] = { 0 };
-				vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
-				vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->histogramIndBuffer, 0, VK_INDEX_TYPE_UINT32);
+				//vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
+				vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->indicesBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 				//iterating through the Attributes to render every histogramm
 				float x = -1.0f;
 				int count = 0;
 				for (int i = 0; i < pcAttributes.size(); i++) {
-					//setting the missing parameters in the hbuo
+					//setting the missing parameters in the hubo
 					hubo.maxVal = pcAttributes[i].max;
 					hubo.minVal = pcAttributes[i].min;
+					hubo.attributeInd = i;
+					hubo.amtOfAttributes = pcAttributes.size();
 					if (!pcAttributeEnabled[i])
 						hubo.x = -2;
 					else
@@ -2634,9 +2633,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 						vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
 					}
 
-
 					//making the draw call
-					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->activeInd.size() * 2, 1, 0, count++, 0);
+					vkCmdDrawIndexed(g_PcPlotCommandBuffer, drawList->indices.size(), 1, 0, 0, 0);
 				}
 
 				//increasing the xOffset for the next drawlist
@@ -3959,20 +3957,6 @@ static void updateActiveIndices(DrawList& dl) {
 		if(it.first == dl.name)
 			it.second /= dl.indices.size();
 	}
-
-	//updating the indexbuffer for histogramm
-	if (dl.activeInd.size() == 0)
-		return;
-	uint32_t* indBuffer = new uint32_t[dl.activeInd.size() * 2];
-	for (int i = 0; i < dl.activeInd.size(); i++) {
-		indBuffer[2 * i] = dl.activeInd[i] * pcAttributes.size();
-		indBuffer[2 * i + 1] = dl.activeInd[i] * pcAttributes.size();
-	}
-	void* d;
-	vkMapMemory(g_Device, dl.dlMem, dl.histIndexBufferOffset, dl.activeInd.size() * sizeof(uint32_t) * 2, 0, &d);
-	memcpy(d, indBuffer, dl.activeInd.size() * sizeof(uint32_t) * 2);
-	vkUnmapMemory(g_Device, dl.dlMem);
-	delete[] indBuffer;
 
 	//updating the standard indexbuffer
 	updateDrawListIndexBuffer(dl);

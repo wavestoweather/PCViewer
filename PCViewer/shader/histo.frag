@@ -6,6 +6,10 @@ layout(binding = 0) uniform UniformBufferObject{
 	float width;
 	float maxVal;
 	float minVal;
+	uint attributeInd;
+	uint amtOfAttributes;
+	uint pad;
+	uint padding;
 	vec4 color;
 } ubo;
 

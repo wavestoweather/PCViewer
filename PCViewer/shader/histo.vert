@@ -6,13 +6,21 @@ layout(binding = 0) uniform UniformBufferObject{
 	float width;
 	float maxVal;
 	float minVal;
+	uint attributeInd;
+	uint amtOfAttributes;
+	uint pad;
+	uint padding;
 	vec4 color;
 } ubo;
 
-layout(location = 0) in float inPosition;
+layout(std430,binding = 2) buffer DataSet{
+	float d[];
+}data;
 
+layout(location = 0) out uint index;
 void main() {
-	float y = (((inPosition - ubo.minVal) / (ubo.maxVal - ubo.minVal)) - .5f) * 2;
-
+	float val = data.d[int(gl_VertexIndex * ubo.amtOfAttributes + ubo.attributeInd)];
+	float y = (((val - ubo.minVal) / (ubo.maxVal - ubo.minVal)) - .5f) * 2;
+	index = gl_VertexIndex;
     gl_Position = vec4( ubo.x, y * -1.0f, 0.0, 1.0);
 }
