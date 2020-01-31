@@ -5,9 +5,13 @@
 layout(std430, binding = 0) buffer Informations{
 	uint amtOfAttributes;
 	uint amtOfBrushAxes;
+	uint amtOfIndices;
+	uint lineCount;
+	uint first;
+	uint and;
 	uint padding;
-	uint padding1;
-	uvec3 indicesOffsets[];
+	uint pad;
+	uvec4 indicesOffsets[];
 } info;
 
 layout(std430, binding = 1) buffer Brushes{
@@ -19,32 +23,22 @@ layout(std430, binding = 2) buffer Data{
 }d;
 
 layout(std430, binding = 3) buffer Ind{
-	uint counter;
-	uint padding;
-	uint padding1;
-	uint padding2;
 	uint ind[];
 }indices;
 
-layout(std430, binding = 4) buffer AppendBuffer{
-	uint counter;
-	uint padding;
-	uint padding1;
-	uint padding2;
-	uint  ind[];
-}result;
+layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
-	if(gl_GlobalInvocationID.x >= indices.counter) return;
+	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
 	bool lineKeep = true;
 	for(int axis = 0; axis<info.amtOfBrushAxes;axis++){
 		bool good = false;
 		for(int brush = 0; brush < info.indicesOffsets[axis].z;brush++){
 			vec2 minMax = brushes.minMax[info.indicesOffsets[axis].y + brush].xy;
 			uint datInd = indices.ind[gl_GlobalInvocationID.x] * info.amtOfAttributes + info.indicesOffsets[axis].x;
-			float datum = d.data[datInd];//d.data[datInd >> 2][datInd & 3];
+			float datum = d.data[datInd];
 			if(datum>=minMax.x&&datum<=minMax.y){
 				good = true;
 				break;
@@ -55,8 +49,21 @@ void main(){
 			break;
 		}
 	}
+	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
+	if(bool(info.first)){
+		imageStore(act, int(gl_GlobalInvocationID.x),vec4(int(lineKeep)));
+	}
+	else{
+		if(bool(info.and)){
+			a = a && lineKeep;
+		}
+		else{
+			a = a || lineKeep;
+		}
+		imageStore(act, int(gl_GlobalInvocationID.x),vec4(int(a)));
+	}
+	
 	if(lineKeep){
-		uint i = atomicAdd(result.counter,1);
-		result.ind[i] = indices.ind[gl_GlobalInvocationID.x];
+		atomicAdd(info.lineCount,1);
 	}
 }

@@ -3901,7 +3901,7 @@ static void updateActiveIndices(DrawList& dl) {
 	}
 	std::set<int> localIndices;
 	if (brush.size()) {
-		localIndices = gpuBrusher->brushIndices(brush, data->size() * pcAttributes.size() * sizeof(float), dl.buffer, dl.indices, pcAttributes.size());
+		gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), true, brushCombination == 1);
 	}
 	else {
 		localIndices = std::set<int>(dl.indices.begin(),dl.indices.end());
@@ -3921,22 +3921,8 @@ static void updateActiveIndices(DrawList& dl) {
 					brush[b.first].push_back(br.second);
 				}
 			}
-			std::set<int> gpuIndices = gpuBrusher->brushIndices(brush, data->size() * pcAttributes.size() * sizeof(float), dl.buffer, dl.indices, pcAttributes.size());
-			gb.lineRatios[dl.name] = gpuIndices.size();
-
-			std::vector<int> res;
-			if (brushCombination == 0) {//or
-				std::set_union(globalIndices.begin(), globalIndices.end(), gpuIndices.begin(), gpuIndices.end(), std::back_inserter(res));
-			}
-
-			if (brushCombination == 1 && !firstBrush) {//and
-				std::set_intersection(globalIndices.begin(), globalIndices.end(), gpuIndices.begin(), gpuIndices.end(), std::back_inserter(res));
-			}
-			else {
-				res = std::vector(gpuIndices.begin(), gpuIndices.end());
-			}
-
-			globalIndices = res;
+			int remainingLines = gpuBrusher->brushIndices(brush,data->size(),dl.buffer,dl.indicesBuffer,dl.indices.size(),dl.activeIndicesBufferView,pcAttributes.size(),firstBrush,brushCombination == 1);
+			gb.lineRatios[dl.name] = remainingLines;
 			firstBrush = false;
 		}
 	}
