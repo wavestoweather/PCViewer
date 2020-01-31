@@ -38,7 +38,7 @@ void main(){
 
 	buf.i[startOffset] = info.order[0] + i * info.attributeSize;
 	for(int j = 0;j < info.orderSize;++j){
-		buf.i[startOffset+j+1] = info.order[j] * i * info.attributeSize;
+		buf.i[startOffset+j+1] = info.order[j] + i * info.attributeSize;
 	}
 	buf.i[startOffset + info.orderSize + 1] = info.order[info.orderSize - 1] + i * info.attributeSize;
 	buf.i[startOffset + info.orderSize + 2] = 0xFFFFFFFF;

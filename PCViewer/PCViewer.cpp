@@ -449,8 +449,6 @@ static VkBuffer					g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 
 //variables for the compute pipeline filling the indexbuffers
-static VkQueue					c_Queue;
-static VkCommandPool			c_CommandPool;
 static VkPipeline				c_IndexPipeline;
 static VkPipelineLayout			c_IndexPipelineLayout;
 static VkDescriptorSetLayout	c_IndexPipelineDescSetLayout;
@@ -1395,7 +1393,7 @@ static void createPcPlotPipeline() {
 	//----------------------------------------------------------------------------------------------
 	// creating the compute shader for indexbuffer filling
 	//----------------------------------------------------------------------------------------------
-	std::vector<char> computeBytes = PCUtil::readByteFile(g_vertShaderPath);
+	std::vector<char> computeBytes = PCUtil::readByteFile(c_indexShaderPath);
 	VkShaderModule computeShader = VkUtil::createShaderModule(g_Device, computeBytes);
 
 
@@ -1435,6 +1433,9 @@ static void cleanupPcPlotPipeline() {
 	vkDestroyPipeline(g_Device, g_PcPlotPipeline, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotSplinePipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotSplinePipeline, nullptr);
+	vkDestroyPipelineLayout(g_Device, c_IndexPipelineLayout, nullptr);
+	vkDestroyPipeline(g_Device, c_IndexPipeline, nullptr);
+	vkDestroyDescriptorSetLayout(g_Device, c_IndexPipelineDescSetLayout, nullptr);
 }
 
 static void createPcPlotRenderPass() {
@@ -1509,15 +1510,10 @@ static void createPcPlotCommandPool() {
 
 	err = vkCreateCommandPool(g_Device, &poolInfo, nullptr, &g_PcPlotCommandPool);
 	check_vk_result(err);
-
-	poolInfo.queueFamilyIndex = c_QueueFamily;
-	err = vkCreateCommandPool(g_Device, &poolInfo, nullptr, &c_CommandPool);
-	check_vk_result(err);
 }
 
 static void cleanupPcPlotCommandPool() {
 	vkDestroyCommandPool(g_Device, g_PcPlotCommandPool, nullptr);
-	vkDestroyCommandPool(g_Device, c_CommandPool, nullptr);
 }
 
 static void createPcPlotVertexBuffer( const std::vector<Attribute>& Attributes, const std::vector<float*>& data) {
@@ -1904,7 +1900,7 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 
 	//Indexbuffer
 	bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t);
-	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.indexBuffer);
 	check_vk_result(err);
 
@@ -2014,12 +2010,12 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 
 	//binding the active indices buffer, creating the buffer view and uploading the correct indices to the graphicscard
 	vkBindBufferMemory(g_Device, dl.activeIndicesBuffer, dl.dlMem, dl.activeIndicesBufferOffset);
-	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_UINT, 0, ds.data.size() * sizeof(bool), &dl.activeIndicesBufferView);
+	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, ds.data.size() * sizeof(bool), &dl.activeIndicesBufferView);
 	std::vector<uint8_t> actives(ds.data.size(), 0);		//vector with 0 initialized everywhere
 	for (int i : tl.indices) {									//setting all active indices to true
 		actives[i] = 1;
 	}
-	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, 2 * ds.data.size() * sizeof(bool), actives.data());
+	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, ds.data.size() * sizeof(bool), actives.data());
 
 	//binding indices buffer and uploading the indices
 	vkBindBufferMemory(g_Device, dl.indicesBuffer, dl.dlMem, dl.indicesBufferOffset);
@@ -2284,7 +2280,7 @@ static void cleanupPcPlotCommandBuffer() {
 	err = vkQueueSubmit(g_Queue, 1, &submitInfo, VK_NULL_HANDLE);
 	check_vk_result(err);
 
-	err = vkDeviceWaitIdle(g_Device);
+	err = vkQueueWaitIdle(g_Queue);
 	check_vk_result(err);
 
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
@@ -2784,7 +2780,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		free(gpus);
 	}
 
-	// Select graphics queue families for compute and graphic pipelines
+	// Select graphics queue families for graphic pipelines
 	{
 		uint32_t count;
 		vkGetPhysicalDeviceQueueFamilyProperties(g_PhysicalDevice, &count, NULL);
@@ -2797,7 +2793,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 				break;
 			}
 		for (uint32_t i = 0; i < count; ++i) {
-			if (queues[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+			if (queues[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
 				c_QueueFamily = i;
 				break;
 			}
@@ -2805,6 +2801,9 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		free(queues);
 		IM_ASSERT(g_QueueFamily != (uint32_t)-1);
 		IM_ASSERT(c_QueueFamily != (uint32_t)-1);
+#ifdef _DEBUG
+		std::cout << "graphics queue: " << g_QueueFamily << std::endl << "cpompute queue: " << c_QueueFamily << std::endl;
+#endif
 	}
 
 	// Create Logical Device (with 2 queues)
@@ -2817,16 +2816,13 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.wideLines = VK_TRUE;
 		deviceFeatures.depthClamp = VK_TRUE;
 		deviceFeatures.vertexPipelineStoresAndAtomics = VK_TRUE;
+		deviceFeatures.shaderStorageImageExtendedFormats = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
-		VkDeviceQueueCreateInfo queue_info[2] = {};
+		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queue_info[0].queueFamilyIndex = g_QueueFamily;
 		queue_info[0].queueCount = 1;
 		queue_info[0].pQueuePriorities = queue_priority;
-		queue_info[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queue_info[1].queueFamilyIndex = c_QueueFamily;
-		queue_info[1].queueCount = 1;
-		queue_info[1].pQueuePriorities = queue_priority;
 		VkDeviceCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		create_info.queueCreateInfoCount = sizeof(queue_info) / sizeof(queue_info[0]);
@@ -2837,7 +2833,6 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		err = vkCreateDevice(g_PhysicalDevice, &create_info, g_Allocator, &g_Device);
 		check_vk_result(err);
 		vkGetDeviceQueue(g_Device, g_QueueFamily, 0, &g_Queue);
-		vkGetDeviceQueue(g_Device, c_QueueFamily, 0, &c_Queue);
 	}
 
 	// Create Descriptor Pool
@@ -3704,41 +3699,60 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(g_PhysicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	VkResult err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &memory);
 	check_vk_result(err);
+	err = vkBindBufferMemory(g_Device, infos, memory, 0);
+	check_vk_result(err);
 
-	uint32_t* infos = new uint32_t[4 + order.size()];
-	infos[0] = order.size();
-	infos[1] = pcAttributes.size();
-	infos[2] = dl.indices.size();
-	//infos[3] is padding
+	uint32_t* inf = new uint32_t[4 + order.size()];
+	inf[0] = order.size();
+	inf[1] = pcAttributes.size();
+	inf[2] = dl.indices.size();
+	//inf[3] is padding
 	for (int i = 0; i < order.size(); ++i) {
-		infos[4 + i] = order[i].first;
+		inf[4 + i] = order[i].first;
 	}
-	VkUtil::uploadData(g_Device, memory, 0, infosSize, infos);
+	VkUtil::uploadData(g_Device, memory, 0, infosSize, inf);
 
 	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(c_IndexPipelineDescSetLayout);
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &c_IndexPipelineDescSet);
 	VkUtil::updateDescriptorSet(g_Device, infos, infosSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, c_IndexPipelineDescSet);
-	VkUtil::updateDescriptorSet(g_Device, dl.indicesBuffer, dl.indices.size() * sizeof(uint32_t), 1, c_IndexPipelineDescSet);
+	VkUtil::updateDescriptorSet(g_Device, dl.indicesBuffer, dl.indices.size() * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, c_IndexPipelineDescSet);
 	VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 2, c_IndexPipelineDescSet);
-	VkUtil::updateDescriptorSet(g_Device, dl.indexBuffer, dl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t), 3, c_IndexPipelineDescSet);
+	VkUtil::updateDescriptorSet(g_Device, dl.indexBuffer, dl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, c_IndexPipelineDescSet);
 
 	VkCommandBuffer indexCommands;
-	VkUtil::createCommandBuffer(g_Device, c_CommandPool, &indexCommands);
+	VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &indexCommands);
 	vkCmdBindPipeline(indexCommands, VK_PIPELINE_BIND_POINT_COMPUTE, c_IndexPipeline);
 	vkCmdBindDescriptorSets(indexCommands, VK_PIPELINE_BIND_POINT_COMPUTE, c_IndexPipelineLayout, 0, 1, &c_IndexPipelineDescSet, 0, {});
 	int patchAmount = dl.indices.size() / LOCALSIZE;
 	patchAmount += (dl.indices.size() % LOCALSIZE) ? 1 : 0;
 	vkCmdDispatch(indexCommands, patchAmount, 1, 1);
-	VkUtil::commitCommandBuffer(c_Queue, indexCommands);
-	err = vkQueueWaitIdle(c_Queue);
+	VkUtil::commitCommandBuffer(g_Queue, indexCommands);
+	err = vkQueueWaitIdle(g_Queue);
 	check_vk_result(err);
 
-	vkFreeCommandBuffers(g_Device, c_CommandPool, 1, &indexCommands);
+	/*
+	//Debugging code for the creation of the index buffer
+	uint32_t* downloadedInd = new uint32_t[dl.indices.size()];
+	VkUtil::downloadData(g_Device, dl.dlMem, dl.indicesBufferOffset, dl.indices.size() * sizeof(uint32_t), downloadedInd);
+	for (int i = 0; i < 100; ++i) {
+		std::cout << downloadedInd[i] << std::endl;
+	}
+
+	uint32_t* updatedInd = new uint32_t[dl.indices.size() * (pcAttributes.size() + 3)];
+	VkUtil::downloadData(g_Device, dl.dlMem, dl.indexBufferOffset, dl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t), updatedInd);
+	for (int i = 0; i < 1000; ++i) {
+		std::cout << updatedInd[i] << ",";
+		if ((i+1) % ((pcAttributes.size() + 3)) == 0)
+			std::cout << std::endl;
+	}
+	*/
+
+	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &indexCommands);
 	vkFreeDescriptorSets(g_Device, g_DescriptorPool, 1, &c_IndexPipelineDescSet);
 	vkDestroyBuffer(g_Device, infos, nullptr);
 	vkFreeMemory(g_Device, memory, nullptr);
-	delete[] infos;
+	delete[] inf;
 }
 
 static void updateAllDrawListIndexBuffer() {
