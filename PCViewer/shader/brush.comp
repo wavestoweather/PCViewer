@@ -7,10 +7,10 @@ layout(std430, binding = 0) buffer Informations{
 	uint amtOfBrushAxes;
 	uint amtOfIndices;
 	uint lineCount;
+	int globalLineCount;
 	uint first;
 	uint and;
 	uint padding;
-	uint pad;
 	uvec4 indicesOffsets[];
 } info;
 
@@ -51,6 +51,7 @@ void main(){
 	}
 	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
 	if(bool(info.first)){
+		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
 		imageStore(act, int(gl_GlobalInvocationID.x),vec4(int(lineKeep)));
 	}
 	else{
@@ -60,6 +61,7 @@ void main(){
 		else{
 			a = a || lineKeep;
 		}
+		if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
 		imageStore(act, int(gl_GlobalInvocationID.x),vec4(int(a)));
 	}
 	

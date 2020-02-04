@@ -25,11 +25,11 @@ private:
 		uint32_t amtOfAttributes;
 		uint32_t amtOfBrushAxes;
 		uint32_t amtOfIndices;
-		uint32_t lineCount;
+		uint32_t lineCount;					//count for active lines would only one brush be applied
+		int globalLineCount;				//count for actually active lines, if -1 this should not be counted
 		uint32_t first;
 		uint32_t andOr;
 		uint32_t padding;
-		uint32_t pad;
 		uint32_t* indicesOffsets;			//index of brush axis, offset in brushes array and amount of brushes: ind1 offesetBrushes1 amtOfBrushes1 PADDING ind2 offsetBrushes2 amtOfBrushes2... 
 	};
 
@@ -90,8 +90,8 @@ public:
 		binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		layoutBindings.push_back(binding);
 
-		binding.binding = 4;				//output indices
-		binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		binding.binding = 4;				//output active indices
+		binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
 		layoutBindings.push_back(binding);
 
 		VkUtil::createDescriptorSetLayout(device, layoutBindings, &descriptorSetLayout);
@@ -107,9 +107,10 @@ public:
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 	};
 
-	uint32_t brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool and) {
+	//returns a pair containing the number of lines which would be active, would only one brush be applied, and the number of lines that really are still active
+	std::pair<uint32_t,int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
-		uint32_t infoBytesSize = sizeof(uint32_t) * 4 + sizeof(uint32_t) * 4 * brushes.size();
+		uint32_t infoBytesSize = sizeof(UBOinfo) - sizeof(uint32_t) + sizeof(uint32_t) * 4 * brushes.size();
 		UBOinfo* informations = (UBOinfo*)malloc(infoBytesSize);
 		
 		std::vector<BrushInfo> brushInfos;
@@ -161,7 +162,7 @@ public:
 		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, uboBuffers[1], brushesByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, uboBuffers[3], indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 4, descriptorSet);
 
 		//uploading data for brushing
@@ -170,14 +171,27 @@ public:
 		informations->amtOfAttributes = amtOfAttributes;
 		informations->amtOfIndices = indicesSize;
 		informations->lineCount = 0;
+		informations->globalLineCount = (lastBrush) ? 0 : -1;
 		informations->first = first;
-		informations->andOr = and;
-		informations->indicesOffsets = (uint32_t*)informations +(sizeof(UBOinfo)/sizeof(uint32_t)) - 1;
+		informations->andOr = andy;
+		uint32_t* point = (uint32_t*)informations +((sizeof(UBOinfo)-sizeof(uint32_t))/sizeof(uint32_t)) - 1;		//strangeley the size of UBOinfo is too big
 		uint32_t offset = 0;
 		for (BrushInfo bi : brushInfos) {
-			memcpy(informations->indicesOffsets + offset, &bi, sizeof(uint32_t) * 4);
+			memcpy(point + offset, &bi, sizeof(uint32_t) * 4);
 			offset +=  4;
 		}
+//#ifdef _DEBUG
+//		std::cout << "Brush informations:" << std::endl;
+//		std::cout << "amtOfBrushAxes" << informations->amtOfBrushAxes << std::endl;
+//		std::cout << "amtOfAttributes" << informations->amtOfAttributes << std::endl;
+//		std::cout << "amtOfIndices" << informations->amtOfIndices << std::endl;
+//		std::cout << "lineCount" << informations->lineCount << std::endl;
+//		std::cout << "first" << informations->first << std::endl;
+//		std::cout << "andOr" << informations->andOr << std::endl;
+//		for (int i = 0; i < brushInfos.size(); ++i) {
+//			std::cout << point[i * 4] << " " << point[i * 4 + 1] << " " << point[i * 4 + 2] << " " << point[i * 4 + 3] << std::endl;
+//		}
+//#endif
 		vkMapMemory(device, uboMemory, uboOffsets[0], infoBytesSize, 0, &d);
 		memcpy(d, informations, infoBytesSize);
 		vkUnmapMemory(device, uboMemory);
@@ -210,15 +224,13 @@ public:
 
 		//getting the amount of remaining lines(if only this brush would have been applied)
 		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOinfo), informations);
-		uint32_t res = informations->lineCount;
+		std::pair<uint32_t,int> res(informations->lineCount,informations->globalLineCount);
 		
 		vkFreeCommandBuffers(device, commandPool, 1, &command);
 		vkFreeDescriptorSets(device, descriptorPool, 1, &descriptorSet);
 		vkFreeMemory(device, uboMemory, nullptr);
 		vkDestroyBuffer(device, uboBuffers[0], nullptr);
 		vkDestroyBuffer(device, uboBuffers[1], nullptr);
-		vkDestroyBuffer(device, uboBuffers[3], nullptr);
-		vkDestroyBuffer(device, uboBuffers[4], nullptr);
 
 		free(informations);
 		free(gpuBrushes);

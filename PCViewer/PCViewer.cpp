@@ -1996,7 +1996,7 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 	//binding the active indices buffer, creating the buffer view and uploading the correct indices to the graphicscard
 	vkBindBufferMemory(g_Device, dl.activeIndicesBuffer, dl.dlMem, dl.activeIndicesBufferOffset);
 	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, ds.data.size() * sizeof(bool), &dl.activeIndicesBufferView);
-	std::vector<uint8_t> actives(ds.data.size(), 0);		//vector with 0 initialized everywhere
+	std::vector<uint8_t> actives(ds.data.size(), 0);			//vector with 0 initialized everywhere
 	for (int i : tl.indices) {									//setting all active indices to true
 		actives[i] = 1;
 	}
@@ -3892,6 +3892,9 @@ static void updateActiveIndices(DrawList& dl) {
 			activeBrushRatios[dl.name] += 1;
 		}
 	}*/
+	bool firstBrush = true;
+	int globalRemainingLines = dl.indices.size();
+
 	//apply local brush
 	std::map<int, std::vector<std::pair<float, float>>> brush;
 	for (int i = 0; i < pcAttributes.size(); i++) {
@@ -3899,21 +3902,19 @@ static void updateActiveIndices(DrawList& dl) {
 			brush[i].push_back(b.minMax);
 		}
 	}
-	std::set<int> localIndices;
 	if (brush.size()) {
-		gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), true, brushCombination == 1);
-	}
-	else {
-		localIndices = std::set<int>(dl.indices.begin(),dl.indices.end());
+		std::pair<uint32_t,int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), true, brushCombination == 1, globalBrushes.size()==0);
+		globalRemainingLines = res.second;
+		firstBrush = false;
 	}
 
 	//apply global brushes
-	//TODO:: do all of this on the gpu
 	std::vector<int> globalIndices;
 	bool globalBrushesActive = false;
 	if (toggleGlobalBrushes) {
-		bool firstBrush = true;
+		int c = 1;
 		for (GlobalBrush& gb : globalBrushes) {
+			if (!gb.active) continue;
 			globalBrushesActive = true;
 			brush.clear();
 			for (auto b : gb.brushes) {
@@ -3921,20 +3922,31 @@ static void updateActiveIndices(DrawList& dl) {
 					brush[b.first].push_back(br.second);
 				}
 			}
-			int remainingLines = gpuBrusher->brushIndices(brush,data->size(),dl.buffer,dl.indicesBuffer,dl.indices.size(),dl.activeIndicesBufferView,pcAttributes.size(),firstBrush,brushCombination == 1);
-			gb.lineRatios[dl.name] = remainingLines;
+			std::pair<uint32_t,int> res = gpuBrusher->brushIndices(brush,data->size(),dl.buffer,dl.indicesBuffer,dl.indices.size(),dl.activeIndicesBufferView,pcAttributes.size(),firstBrush,brushCombination == 1,c == globalBrushes.size());
+			gb.lineRatios[dl.name] = res.first;
+			globalRemainingLines = res.second;
 			firstBrush = false;
+			++c;
 		}
 	}
 
-	dl.activeInd.clear();
-	if (globalBrushesActive) {
-		std::set_intersection(localIndices.begin(), localIndices.end(), globalIndices.begin(), globalIndices.end(), std::back_inserter(dl.activeInd));
+	//if no brush is active, reset the active indices
+	if (!brush.size() && !globalBrushesActive) {
+		std::vector<float*>* data;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (ds.name == dl.parentDataSet) {
+				data = &ds.data;
+				break;
+			}
+		}
+		std::vector<uint8_t> actives(data->size(), 0);			//vector with 0 initialized everywhere
+		for (int i : dl.indices) {								//setting all active indices to true
+			actives[i] = 1;
+		}
+		VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, data->size() * sizeof(bool), actives.data());
 	}
-	else {
-		dl.activeInd = std::vector<uint32_t>(localIndices.begin(), localIndices.end());
-	}
-	activeBrushRatios[dl.name] = dl.activeInd.size();
+
+	activeBrushRatios[dl.name] = globalRemainingLines;
 
 	//for (GlobalBrush& b : globalBrushes) {
 		//b.lineRatios[dl.name] /= dl.indices.size();
