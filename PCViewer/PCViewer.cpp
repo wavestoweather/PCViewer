@@ -2815,6 +2815,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.depthClamp = VK_TRUE;
 		deviceFeatures.vertexPipelineStoresAndAtomics = VK_TRUE;
 		deviceFeatures.shaderStorageImageExtendedFormats = VK_TRUE;
+		deviceFeatures.shaderTessellationAndGeometryPointSize = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
 		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -6401,36 +6402,24 @@ int main(int, char**)
 							parent = &(*it);
 						}
 					}
-					std::vector<uint32_t> indices;
 					std::vector<uint32_t> ids;
-					std::vector<bool> active;
 					std::vector<std::string> attributeNames;
 					std::vector<std::pair<float, float>> attributeMinMax;
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						attributeNames.push_back(pcAttributes[i].name);
 						attributeMinMax.push_back({ pcAttributes[i].min,pcAttributes[i].max });
-						for (int j = 0; j < parent->data.size(); ++j) {
-							indices.push_back(i);
-							ids.push_back(j);
-							active.push_back(false);
-						}
-					}
-					for (int i : dl.activeInd) {
-						for (int j = 0; j < pcAttributes.size(); ++j) {
-							active[j * parent->data.size() + i] = true;
-						}
 					}
 					glm::uvec3 posIndices(0, 2, 1);
-					bubblePlotter->addBubbles(indices, posIndices, attributeNames, attributeMinMax, ids, active, parent->data, parent->buffer.buffer, pcAttributes.size(), parent->data.size());
+					bubblePlotter->setBubbleData(posIndices, dl.indices, attributeNames, attributeMinMax, parent->data, dl.buffer, dl.activeIndicesBufferView, attributeNames.size(), parent->data.size());
 
 					//Debugging of histogramms
-					histogramManager->setNumberOfBins(100);
-					histogramManager->computeHistogramm(dl.name, dl.activeInd, attributeMinMax, parent->buffer.buffer, parent->data.size());
-					for (auto& i : histogramManager->getHistogram(dl.name).bins)
-					{
-						std::for_each(i.begin(), i.end(), [](uint32_t a) {std::cout << a << ","; });
-						std::cout << std::endl;
-					}
+					//histogramManager->setNumberOfBins(100);
+					//histogramManager->computeHistogramm(dl.name, dl.activeInd, attributeMinMax, parent->buffer.buffer, parent->data.size());
+					//for (auto& i : histogramManager->getHistogram(dl.name).bins)
+					//{
+					//	std::for_each(i.begin(), i.end(), [](uint32_t a) {std::cout << a << ","; });
+					//	std::cout << std::endl;
+					//}
 				}
 
 				ImGui::Separator();

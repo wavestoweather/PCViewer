@@ -34,16 +34,15 @@ public:
 	void addSphere(float r, glm::vec4 color, glm::vec3 pos);
 	void addCylinder(float r, float length, glm::vec4 color, glm::vec3 pos);
 
-	//attributeIndex:	vector with N elements describing which attribute in the attributeNames vector an index i belongs to
-	//pos:			a 3 component vector containing the indeces for the 3 dimensions
-	//attributeName:	vector with all attribute names
-	//id:				vector with N elements containing the indices of datapoints to add
-	//active:			vector with N elements describing which of the N datapoints are active(eg. didnt get brushed)
-	//data:			vector with all data
+	//pos:				a 3 component vector containing the indeces for the 3 dimensions
+	//indices:			Indices of data which should be shown 
+	//attributeNames:	vector with all attribute names
+	//attributesMinMax:	min max values for the attributes
 	//gData:			vulkan buffer with all data
-	//amtOfAttributes: amount of attributes
+	//activeAttributes: Buffer view for the bool buffer with the activations
+	//amtOfAttributes:	amount of attributes
 	//amtOfData:		amount of data
-	void addBubbles(std::vector<uint32_t>& attributeIndex, glm::uvec3& pos, std::vector<std::string>& attributeName, std::vector<std::pair<float, float>> attributesMinMax, std::vector<uint32_t>& id, std::vector<bool>& active, std::vector<float*>& data, VkBuffer gData, uint32_t amtOfAttributes, uint32_t amtOfData);
+	void setBubbleData(glm::uvec3& pos,std::vector<uint32_t> indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, std::vector<float*>& data, VkBuffer gData,VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData);
 	void render();
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
 	void setPointScale(Scale scale);
@@ -75,6 +74,7 @@ public:
 	glm::vec4* attributeColors;
 	float* attributeTopOffsets;				//The offsets for each attribute are given in %. 0 means that the point lies in its original layer, 1 is the last space before the next layer
 	std::vector<std::pair<float,float>> attributeMinMaxValues;
+	std::vector<Scale> attributeScales;
 	std::vector<std::string> attributeNames;
 
 private:
@@ -83,11 +83,11 @@ private:
 		uint32_t clipNormalize;					//is interpreted as bool. If 0, then all "unactive" data points will be shown as transparent grey discs, else they are discarded
 		uint32_t amtOfAttributes;
 		float offset;							//total space between two layers
-		uint32_t scale;							//scale for the points: 0->Normal, 1->logarithmic, 2->squareroot
 		float FoV;
 		uint32_t relative;						//bool to indicate if the points should be scaled on zooming away
+		uint32_t pad;
 		uint32_t padding;
-		alignas(16) glm::vec4 cameraPos;		//contains the maximum piont size i w
+		alignas(16) glm::vec4 cameraPos;		//contains the maximum piont size in w
 		alignas(16) glm::uvec4 posIndices;		//indices of the position attributes
 		alignas(16) glm::vec4 grey;
 		alignas(16) glm::vec3 boundingRectMin;	//used to scale the 3d coordinates
@@ -96,7 +96,7 @@ private:
 		alignas(16) glm::vec3 clippingRectMax;	//clippingRects max values for the 3d coordinates
 		alignas(16) glm::mat4 mvp;
 		//float Array:
-		//Color_0(4 floats), TopOffset_0(in Percent  as float), min_0, max_0, 
+		//Color_0(4 floats), TopOffset_0(in Percent  as float), min_0, max_0, scale_0 (0->Normal, 1->logarithmic, 2->squareroot),
 		//Color_1[4], TopOffset_1[1], Color_2[4], TopOffset_2, ..
 	};
 
@@ -136,6 +136,9 @@ private:
 	VkCommandBuffer		renderCommands;
 	VkCommandBuffer		inverseRenderCommands;
 
+	//vulkan resources which are temporarily saved
+	VkBufferView		dataActivations;
+
 	//vulkan resources which have to be deleted
 	VkDeviceMemory		imageMemory;
 	VkImage				image;
@@ -155,18 +158,19 @@ private:
 	VkBuffer			sphereIndexBuffer;
 	VkBuffer			cylinderVertexBuffer;
 	VkBuffer			cylinderIndexBuffer;
-	VkDeviceMemory		bubbleInstancesMemory;		//instances have an extra memory block, as the size of the instances might change and thus rallocation is necessary
-	VkBuffer			bubbleInstancesBuffer;
-	uint32_t			bubbleInstancesSize;
+	VkDeviceMemory		bubbleIndexMemory;		//instances have an extra memory block, as the size of the instances might change and thus rallocation is necessary
+	VkBuffer			bubbleIndexBuffer;
+	uint32_t			bubbleIndexSize;
 	VkBuffer			dataBuffer;					//data buffer for the bubbles
 
-	//here a few debug resources are
+	//here a few debug resources
 	VkBuffer			ubo;
 	VkDeviceMemory		uboMem;
 	VkDescriptorSet		uboSet;
 
 	//resources
 	static char vertPath[];
+	static char geomPath[];
 	static char fragPath[];
 
 	uint32_t imageWidth;
@@ -184,7 +188,6 @@ private:
 	uint32_t amtOfIdxSphere;
 	std::vector<gCylinder> cylinders;
 	uint32_t amtOfIdxCylinder;
-	std::vector<Bubble> bubbleInstances;
 
 	//mehtods
 	void setupRenderPipeline();
