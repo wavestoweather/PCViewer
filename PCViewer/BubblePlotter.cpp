@@ -453,6 +453,12 @@ void BubblePlotter::updateCameraPos(CamNav::NavigationInput input, float deltaT)
 		glm::vec4 front = rot * glm::vec4(0, 0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
 		cameraPos += glm::vec3(front.x, front.y, front.z);
 	}
+	if (input.q) {	//fly down
+		cameraPos += glm::vec3(0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
+	if (input.e) {	//fly up
+		cameraPos += glm::vec3(0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
 
 	if (input.mouseScrollDelta) {	//mouse wheel input
 		Fov -= fovSpeed * input.mouseScrollDelta * deltaT;
@@ -691,7 +697,6 @@ void BubblePlotter::recordRenderCommands()
 	vkCmdSetScissor(renderCommands, 0, 1, &scissor);
 
 	vkCmdBindPipeline(renderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	VkDeviceSize offsets[1] = { 0 };
 	vkCmdBindIndexBuffer(renderCommands, bubbleIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdBindDescriptorSets(renderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &uboSet, 0, nullptr);
 	vkCmdDraw(renderCommands, bubbleIndexSize >> 1, 1, 0, 0);
@@ -712,8 +717,7 @@ void BubblePlotter::recordRenderCommands()
 	vkCmdSetScissor(inverseRenderCommands, 0, 1, &scissor);
 
 	vkCmdBindPipeline(inverseRenderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	offsets[0] = { (bubbleIndexSize >> 1) * sizeof(gBubble) };
-	vkCmdBindIndexBuffer(inverseRenderCommands, bubbleIndexBuffer, bubbleIndexSize >> 1, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(inverseRenderCommands, bubbleIndexBuffer, (bubbleIndexSize >> 1) * sizeof(uint32_t), VK_INDEX_TYPE_UINT32);
 	vkCmdBindDescriptorSets(inverseRenderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &uboSet, 0, nullptr);
 	vkCmdDraw(inverseRenderCommands, bubbleIndexSize >> 1, 1, 0, 0);
 

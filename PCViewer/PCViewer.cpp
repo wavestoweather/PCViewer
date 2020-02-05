@@ -78,6 +78,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define KEYA 65
 #define KEYS 83
 #define KEYD 68
+#define KEYQ 81
+#define KEYE 69
 
 //defines for the medians
 #define MEDIANCOUNT 3
@@ -666,6 +668,7 @@ static View3d * view3d;
 static bool view3dAlwaysOnTop = false;
 static std::string active3dAttribute;
 static bool enableBubbleWindow = false;
+static bool coupleBubbleWindow = true;
 static BubblePlotter* bubblePlotter;
 
 static SettingsManager* settingsManager;
@@ -3960,6 +3963,11 @@ static void updateActiveIndices(DrawList& dl) {
 	//updating the standard indexbuffer
 	updateDrawListIndexBuffer(dl);
 
+	//rendering the updated active points in the bubble plotter
+	if (coupleBubbleWindow) {
+		bubblePlotter->render();
+	}
+
 	//setting the median to no median to enforce median recalculation
 	dl.activeMedian = 0;
 }
@@ -6694,6 +6702,10 @@ int main(int, char**)
 			bubbleWindowSize = ImGui::GetWindowSize().y;
 
 			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Coupling")) {
+					ImGui::MenuItem("Couple to Parallel Coordinates", "", &coupleBubbleWindow);
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Navigation")) {
 					ImGui::SliderFloat("fly speed", &bubblePlotter->flySpeed, 0.01, 10);
 					ImGui::SliderFloat("fast fly multiplier", &bubblePlotter->fastFlyMultiplier, 1, 10);
@@ -6702,27 +6714,12 @@ int main(int, char**)
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Visualization")) {
-					if (
-						ImGui::DragFloat3("Min position Values", &bubblePlotter->boundingRectMin.x)||
-						ImGui::DragFloat3("Max position Values", &bubblePlotter->boundingRectMax.x)||
-						ImGui::SliderFloat("max point size", &bubblePlotter->maxPointSize, .1f, 200)||
-						ImGui::MenuItem("Enable clipping", "", &bubblePlotter->clipping)||
-						ImGui::MenuItem("Enable normalization", "", &bubblePlotter->normalization)
-						) {
-						bubblePlotter->render();
-					}
-					static char* scales[] = { "Normal","Squareroot","Logarithmic" };
-					static int selectedScale = 0;
-					if (ImGui::BeginCombo("Scale", scales[selectedScale])) {
-						for (int i = 0; i < 3; ++i) {
-							if (ImGui::Selectable(scales[i])) {
-								selectedScale = i;
-								bubblePlotter->scale = (BubblePlotter::Scale)selectedScale;
-							}
-						}
-						ImGui::EndCombo();
-					}
-					if (ImGui::DragFloat("Spacing", &bubblePlotter->layerSpacing, bubblePlotter->layerSpacing / 30.0f, 0.00001, 100)) {
+					if (ImGui::DragFloat3("Min position Values", &bubblePlotter->boundingRectMin.x))bubblePlotter->render();
+					if (ImGui::DragFloat3("Max position Values", &bubblePlotter->boundingRectMax.x))bubblePlotter->render();
+					if (ImGui::SliderFloat("max point size", &bubblePlotter->maxPointSize, .1f, 200))bubblePlotter->render();
+					if (ImGui::MenuItem("Enable clipping", "", &bubblePlotter->clipping))bubblePlotter->render();
+					if (ImGui::MenuItem("Enable normalization", "", &bubblePlotter->normalization))bubblePlotter->render();
+					if (ImGui::DragFloat("Spacing", &bubblePlotter->layerSpacing, bubblePlotter->layerSpacing / 100.0f, 0.0001, 100)) {
 						bubblePlotter->render();
 					}
 					ImGui::EndMenu();
@@ -6740,6 +6737,8 @@ int main(int, char**)
 				nav.a = io.KeysDown[KEYA];
 				nav.s = io.KeysDown[KEYS];
 				nav.d = io.KeysDown[KEYD];
+				nav.q = io.KeysDown[KEYQ];
+				nav.e = io.KeysDown[KEYE];
 				nav.shift = io.KeyShift;
 				bubblePlotter->updateCameraPos(nav, io.DeltaTime);
 				bubblePlotter->render();
@@ -6750,9 +6749,10 @@ int main(int, char**)
 
 			ImGui::SameLine();
 			ImGui::BeginChild("Attribute Settings",ImVec2(-1,800));
-			ImGui::Columns(3);
+			ImGui::Columns(4);
 			ImGui::Separator();
 			ImGui::Text("Variable"); ImGui::NextColumn();
+			ImGui::Text("Scale"); ImGui::NextColumn();
 			ImGui::Text("Min/Max"); ImGui::NextColumn();
 			ImGui::Text("Color"); ImGui::NextColumn();
 			ImGui::Separator();
@@ -6768,13 +6768,26 @@ int main(int, char**)
 					count = 1 / (count - 1); //converting count to the percentage step
 					float curP = 0;
 					for (int j = 0; j < bubblePlotter->attributeNames.size(); ++j) {
-						if (j == bubblePlotter->posIndices.x || j == bubblePlotter->posIndices.y || j == bubblePlotter->posIndices.z) {
+						if (!bubblePlotter->attributeActivations[j] || j == bubblePlotter->posIndices.x || j == bubblePlotter->posIndices.y || j == bubblePlotter->posIndices.z) {
 							continue;
 						}
 						bubblePlotter->attributeTopOffsets[j] = curP;
 						curP += count;
 					}
 					bubblePlotter->render();
+				}
+				ImGui::NextColumn();
+				static char* scales[] = { "Normal","Squareroot","Logarithmic" };
+				static int selectedScale = 0;
+				if (ImGui::BeginCombo(("Scale##"+std::to_string(i)).c_str(), scales[bubblePlotter->attributeScales[i]])) {
+					for (int j = 0; j < 3; ++j) {
+						if (ImGui::Selectable(scales[j])) {
+							selectedScale = j;
+							bubblePlotter->attributeScales[i] = (BubblePlotter::Scale)selectedScale;
+							bubblePlotter->render();
+						}
+					}
+					ImGui::EndCombo();
 				}
 				ImGui::NextColumn();
 				if (ImGui::DragFloat2(("##minmax" + bubblePlotter->attributeNames[i]).c_str(), &bubblePlotter->attributeMinMaxValues[i].first)) {
