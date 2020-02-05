@@ -21,7 +21,7 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	grey[0] = .5f;
 	grey[1] = .5f;
 	grey[2] = .5f;
-	grey[3] = .5f;
+	grey[3] = .2f;
 	scale = Scale_Normal;
 	scalePointsOnZoom = true;
 	layerSpacing = .01f;

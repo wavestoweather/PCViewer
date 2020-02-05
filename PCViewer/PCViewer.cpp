@@ -6717,6 +6717,7 @@ int main(int, char**)
 					if (ImGui::DragFloat3("Min position Values", &bubblePlotter->boundingRectMin.x))bubblePlotter->render();
 					if (ImGui::DragFloat3("Max position Values", &bubblePlotter->boundingRectMax.x))bubblePlotter->render();
 					if (ImGui::SliderFloat("max point size", &bubblePlotter->maxPointSize, .1f, 200))bubblePlotter->render();
+					if (ImGui::ColorEdit4("Clip Color", bubblePlotter->grey, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) bubblePlotter->render();
 					if (ImGui::MenuItem("Enable clipping", "", &bubblePlotter->clipping))bubblePlotter->render();
 					if (ImGui::MenuItem("Enable normalization", "", &bubblePlotter->normalization))bubblePlotter->render();
 					if (ImGui::DragFloat("Spacing", &bubblePlotter->layerSpacing, bubblePlotter->layerSpacing / 100.0f, 0.0001, 100)) {
