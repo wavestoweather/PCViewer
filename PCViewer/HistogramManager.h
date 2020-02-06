@@ -22,7 +22,7 @@ public:
 	HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t binsAmount);
 	~HistogramManager();
 
-	void computeHistogramm(std::string& name, std::vector<uint32_t>& indices, std::vector<std::pair<float,float>>& minMax, VkBuffer data, uint32_t amtOfData);
+	void computeHistogramm(std::string& name, std::vector<std::pair<float,float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations);
 	Histogram& getHistogram(std::string name);
 	bool containsHistogram(std::string& name);
 	void setNumberOfBins(uint32_t n);
@@ -40,12 +40,10 @@ private:
 	// 3 ubo buffers for
 	// informations:
 	// numOfBins numOfAttributes float[min,max]
-	// indices:
-	// simply all indices
 	// bins:
 	// array for all bins
-	VkBuffer uboBuffers[3];
-	uint32_t uboOffsets[3];
+	VkBuffer uboBuffers[2];
+	uint32_t uboOffsets[2];
 	VkDeviceMemory uboMemory;
 
 	uint32_t numOfBins;

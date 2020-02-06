@@ -20,7 +20,11 @@ HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDev
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	layoutBindings.push_back(binding);
 
-	binding.binding = 3;				//bins
+	binding.binding = 3;				//activations
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+	layoutBindings.push_back(binding);
+
+	binding.binding = 4;				//bins
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	layoutBindings.push_back(binding);
 
@@ -44,7 +48,7 @@ HistogramManager::~HistogramManager()
 	}
 }
 
-void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t>& indices, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData)
+void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations)
 {
 	VkResult err;
 
@@ -53,9 +57,9 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	uint32_t* inf = (uint32_t*)infosBytes;
 	inf[0] = numOfBins;
 	inf[1] = minMax.size();
-	inf[2] = indices.size();
+	inf[2] = amtOfIndices;
 #ifdef _DEBUG
-	std::cout << "Bins: " << numOfBins << std::endl << "Amount of attributes: " << minMax.size() << std::endl << "Amount of indices: " << indices.size() << std::endl;
+	std::cout << "Bins: " << numOfBins << std::endl << "Amount of attributes: " << minMax.size() << std::endl << "Amount of indices: " << amtOfIndices << std::endl;
 #endif
 	float* infos = (float*)infosBytes;
 	infos += 4;
@@ -73,8 +77,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 
 	//buffer allocations
 	VkUtil::createBuffer(device, infosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, uboBuffers);
-	VkUtil::createBuffer(device, indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[1]);
-	VkUtil::createBuffer(device, binsByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[2]);
+	VkUtil::createBuffer(device, binsByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[1]);
 	uboOffsets[0] = 0;
 	uint32_t memType = 0;
 	VkMemoryRequirements memReq;
@@ -88,22 +91,15 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	vkGetBufferMemoryRequirements(device, uboBuffers[1], &memReq);
 	allocInfo.allocationSize += memReq.size;
 	memType |= memReq.memoryTypeBits;
-
-	uboOffsets[2] = allocInfo.allocationSize;
-	vkGetBufferMemoryRequirements(device, uboBuffers[2], &memReq);
-	allocInfo.allocationSize += memReq.size;
-	memType |= memReq.memoryTypeBits;
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memType, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	vkAllocateMemory(device, &allocInfo, nullptr, &uboMemory);
 
 	vkBindBufferMemory(device, uboBuffers[0], uboMemory, uboOffsets[0]);
 	vkBindBufferMemory(device, uboBuffers[1], uboMemory, uboOffsets[1]);
-	vkBindBufferMemory(device, uboBuffers[2], uboMemory, uboOffsets[2]);
 
 	//upload of data
 	VkUtil::uploadData(device, uboMemory, 0, infosByteSize, infosBytes);
-	VkUtil::uploadData(device, uboMemory, uboOffsets[1], indices.size() * sizeof(uint32_t), indices.data());
-	VkUtil::uploadData(device, uboMemory, uboOffsets[2], binsByteSize, binsBytes);
+	VkUtil::uploadData(device, uboMemory, uboOffsets[1], binsByteSize, binsBytes);
 
 	//creation of the descriptor set
 	VkDescriptorSet descSet;
@@ -111,24 +107,25 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	layouts.push_back(descriptorSetLayout);
 	VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descSet);
 	VkUtil::updateDescriptorSet(device, uboBuffers[0], infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, uboBuffers[1], indices.size() * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, data, amtOfData * minMax.size() * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, uboBuffers[2], binsByteSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateTexelBufferDescriptorSet(device, indicesActivations, 3, descSet);
+	VkUtil::updateDescriptorSet(device, uboBuffers[1], binsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 
 	//running the compute pipeline
 	VkCommandBuffer commands;
 	VkUtil::createCommandBuffer(device, commandPool, &commands);
 	vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descSet, 0, {});
 	vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-	int patchAmount = indices.size() / LOCALSIZE;
-	patchAmount += (indices.size() % LOCALSIZE) ? 1 : 0;
+	int patchAmount = amtOfIndices / LOCALSIZE;
+	patchAmount += (amtOfIndices % LOCALSIZE) ? 1 : 0;
 	vkCmdDispatch(commands, patchAmount, 1, 1);
 	VkUtil::commitCommandBuffer(queue, commands);
 	err = vkQueueWaitIdle(queue);
 	check_vk_result(err);
 
 	//downloading results, analysing and saving them
-	VkUtil::downloadData(device, uboMemory, uboOffsets[2], binsByteSize, binsBytes);
+	VkUtil::downloadData(device, uboMemory, uboOffsets[1], binsByteSize, binsBytes);
 	uint32_t* bins = (uint32_t*)binsBytes;
 	Histogram histogram = {};
 	for (int i = 0; i < minMax.size(); ++i) {
@@ -161,7 +158,6 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<uint32_t
 	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
 	vkDestroyBuffer(device, uboBuffers[0], nullptr);
 	vkDestroyBuffer(device, uboBuffers[1], nullptr);
-	vkDestroyBuffer(device, uboBuffers[2], nullptr);
 	vkFreeMemory(device, uboMemory, nullptr);
 	delete[] infosBytes;
 	delete[] binsBytes;
