@@ -18,7 +18,9 @@ layout(std430, binding = 2) buffer Data{
 	float data[];
 }d;
 
-layout(std430, binding = 3) buffer Bins{
+layout(binding = 3, r8) uniform imageBuffer act;
+
+layout(std430, binding = 4) buffer Bins{
 	uint bins[];
 }b;
 
@@ -26,6 +28,8 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
 	if(gl_GlobalInvocationID.x >= info.numOfIndices) return;
+	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
+	if(!a) return;
 	for(int axis = 0; axis<info.numOfAttributes;++axis){
 		float val = d.data[ind.i[gl_GlobalInvocationID.x]*info.numOfAttributes + axis];
 		int binIndex = int((val-info.minMax[2*axis])/(info.minMax[2*axis+1]-info.minMax[2*axis]) * .999999f * info.numOfBins);		//multiplication with .999999f is done to prevent that a value could be added to bin at index numOfBins
