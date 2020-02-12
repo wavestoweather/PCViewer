@@ -2710,7 +2710,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	//when cleaning up the command buffer all data is drawn
 	cleanupPcPlotCommandBuffer();
 
-	err = vkDeviceWaitIdle(g_Device);
+	err = vkQueueWaitIdle(g_Queue);
 	check_vk_result(err);
 
 #ifdef PRINTRENDERTIME
@@ -3766,6 +3766,7 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 		if ((i+1) % ((pcAttributes.size() + 3)) == 0)
 			std::cout << std::endl;
 	}
+	delete[] updatedInd;
 	*/
 
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &indexCommands);

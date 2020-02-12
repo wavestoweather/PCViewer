@@ -26,7 +26,7 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 void main(){
 	if(gl_GlobalInvocationID.x >= info.indexSize) return;
 	uint i = order.o[gl_GlobalInvocationID.x];			//index of the current line
-	uint startOffset = i * (info.orderSize + 3);
+	uint startOffset = gl_GlobalInvocationID.x * (info.orderSize + 3);
 
 	bool a = bool(imageLoad( act, int(i)));
 	if(!a){										//current index is not active, so only linebreaks are being inserted
