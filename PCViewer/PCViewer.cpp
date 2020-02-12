@@ -656,6 +656,7 @@ static bool updateBrushTemplates = false;
 static int selectedTemplateBrush = -1;
 static bool drawListForTemplateBrush = false;
 static std::vector<TemplateBrush> templateBrushes;
+static int liveBrushThreshold = 1e5;
 
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
@@ -3674,7 +3675,8 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 
 #else
 		std::sort(dl.indices.begin(), dl.indices.end(), [data, p](int a, int b) {return fabs((*data)[a][p]-priorityAttributeCenterValue) > fabs((*data)[b][p]-priorityAttributeCenterValue); });
-		std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return fabs((*data)[a][p] - priorityAttributeCenterValue) > fabs((*data)[b][p] - priorityAttributeCenterValue); });
+		VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, dl.indices.size() * sizeof(uint32_t), dl.indices.data());
+		//std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return fabs((*data)[a][p] - priorityAttributeCenterValue) > fabs((*data)[b][p] - priorityAttributeCenterValue); });
 #endif
 	}
 
@@ -3808,7 +3810,7 @@ static void upatePriorityColorBuffer() {
 	//	color[i * 3 + 2] = colorPalette[index * 4 + 2];
 	//}
 	float* color = new float[data->size()];
-	for (int i : dl->activeInd) {
+	for (int i : dl->indices) {
 		color[i] = 1 - .9f * (fabs((*data)[i][priorityAttribute] - priorityAttributeCenterValue) / denom);
 	}
 
@@ -3824,6 +3826,11 @@ static void upatePriorityColorBuffer() {
 }
 
 static void updateActiveIndices(DrawList& dl) {
+	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
+	if (dl.indices.size() > liveBrushThreshold) {
+		if (ImGui::GetIO().MouseDown[0]) return;
+	}
+
 	//getting the parent dataset data
 	std::vector<float*>* data;
 	for (DataSet& ds : g_PcPlotDataSets) {
@@ -6032,6 +6039,7 @@ int main(int, char**)
 		if (ImGui::BeginCombo("Priority rendering",(priorityAttribute == -1)?"Off":pcAttributes[priorityAttribute].name.c_str())) {
 			if (ImGui::MenuItem("Off")) {
 				priorityAttribute = -1;
+				pcPlotRender = true;
 			}
 			for (int i = 0; i < pcAttributes.size(); i++) {
 				if (pcAttributeEnabled[i]) {
@@ -6080,6 +6088,8 @@ int main(int, char**)
 		}
 
 		ImGui::Checkbox("Create default drawlist on load", &createDefaultOnLoad);
+
+		ImGui::DragInt("Live brush threshold", &liveBrushThreshold,1000);
 
 		ImGui::Separator();
 
