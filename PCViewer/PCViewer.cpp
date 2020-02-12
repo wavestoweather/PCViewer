@@ -715,6 +715,7 @@ static bool enableDrawlistViolinPlots = false;
 static float violinPlotThickness = 1;
 static float violinPlotBinsSize = 150;
 static ImVec4 violinBackgroundColor = { 1,1,1,1 };
+static bool coupleViolinPlots = true;
 std::vector<ViolinPlot> violinAttributePlots;
 std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 
@@ -3987,6 +3988,41 @@ static void updateActiveIndices(DrawList& dl) {
 		bubblePlotter->render();
 	}
 
+	if (coupleViolinPlots && histogramManager->containsHistogram(dl.name)) {
+		std::vector<std::pair<float, float>> minMax;
+		for (Attribute& a : pcAttributes) {
+			minMax.push_back({ a.min,a.max });
+		}
+		DataSet* ds;
+		for (DataSet& d : g_PcPlotDataSets) {
+			if (d.name == dl.parentDataSet) {
+				ds = &d;
+				break;
+			}
+		}
+		histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
+		for (int i = 0; i < violinDrawlistPlots.size(); ++i) {
+			bool contains = false;
+			for (auto& s : violinDrawlistPlots[i].drawLists) {
+				if (s.name == dl.name) {
+					contains = true;
+					break;
+				}
+			}
+			if (!contains) continue;
+
+			for (int j = 0; j < hist.maxCount.size(); ++j) {
+				if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
+					violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
+				}
+				if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
+					violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
+				}
+			}
+		}
+	}
+
 	//setting the median to no median to enforce median recalculation
 	dl.activeMedian = 0;
 }
@@ -6846,6 +6882,7 @@ int main(int, char**)
 
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
+					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
 					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 1000);
 					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 20);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
@@ -7098,6 +7135,7 @@ int main(int, char**)
 
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
+					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
 					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 1000);
 					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 20);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
