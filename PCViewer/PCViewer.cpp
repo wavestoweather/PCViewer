@@ -631,7 +631,7 @@ static std::uniform_int_distribution<int> distribution(0, 35);
 static float alphaDrawLists = .5f;
 static Vec4 PcPlotBackCol = { 0,0,0,1 };
 static bool enableAxisLines = true;
-static bool createDefaultOnLoad = false;
+static bool createDefaultOnLoad = true;
  
 //variables for the histogramm
 static float histogrammWidth = .1f;
@@ -4691,7 +4691,8 @@ int main(int, char**)
 					pathDropped = false;
 					if (createDefaultOnLoad) {
 						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-						//pcPlotRender = true;
+						updateActiveIndices(g_PcPlotDrawLists.back());
+						pcPlotRender = true;
 					}
 				}
 				ImGui::SetItemDefaultFocus();
@@ -7172,11 +7173,11 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					ImGui::SameLine(580);
+					ImGui::SameLine(680);
 					ImGui::SliderFloat(("##slider" + violinDrawlistPlots[i].attributeNames[j]).c_str(), &violinDrawlistPlots[i].attributeScalings[j], 0, 1);
-					ImGui::SameLine(730);
+					ImGui::SameLine(830);
 					ImGui::ColorEdit4(("Line Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-					ImGui::SameLine(900);
+					ImGui::SameLine(1000);
 					ImGui::ColorEdit4(("Fill Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 				}
 				
