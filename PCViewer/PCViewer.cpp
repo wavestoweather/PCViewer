@@ -4331,7 +4331,7 @@ static void calculateDrawListMedians(DrawList& dl) {
 
 //x is in range [0,1] to indicate the position
 static inline float getBinVal(float x, std::vector<float>& bins) {
-	x *= bins.size();
+	x *= bins.size() - 1;
 	int ind = x;
 	float mul = 1 - x + ind;
 	if (ind < -1)
@@ -7160,12 +7160,21 @@ int main(int, char**)
 			for (int i = 0; i < violinDrawlistPlots.size(); ++i) {
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
 				ImGui::PushItemWidth(150);
+				ImGui::Columns(6);
+				ImGui::Separator();
+				ImGui::Text("Attributes"); ImGui::NextColumn();
+				ImGui::Text("Position"); ImGui::NextColumn();
+				ImGui::Text("Scale"); ImGui::NextColumn();
+				ImGui::Text("Scale Multiplier"); ImGui::NextColumn();
+				ImGui::Text("Line Color"); ImGui::NextColumn();
+				ImGui::Text("Fill Color"); ImGui::NextColumn();
+				ImGui::Separator();
 				//settings for the attributes
 				for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
 					ImGui::Checkbox(violinDrawlistPlots[i].attributeNames[j].c_str(), &violinDrawlistPlots[i].activeAttributes[j]);
 					static char* plotPositions[] = { "Left","Right","Middle" };
-					ImGui::SameLine(200);
-					if (ImGui::BeginCombo(("Position##" + std::to_string(j)).c_str(), plotPositions[violinDrawlistPlots[i].attributePlacements[j]])) {
+					ImGui::NextColumn();
+					if (ImGui::BeginCombo(("##Position" + std::to_string(j)).c_str(), plotPositions[violinDrawlistPlots[i].attributePlacements[j]])) {
 						for (int k = 0; k < 3; ++k) {
 							if (ImGui::MenuItem(plotPositions[k], nullptr)) {
 								violinDrawlistPlots[i].attributePlacements[j] = (ViolinPlacement)k;
@@ -7174,8 +7183,8 @@ int main(int, char**)
 						ImGui::EndCombo();
 					}
 					static char* violinScales[] = { "Self","Local","Global" };
-					ImGui::SameLine(480);
-					if (ImGui::BeginCombo(("Scale##" + std::to_string(j)).c_str(), violinScales[violinDrawlistPlots[i].violinScalesX[j]])) {
+					ImGui::NextColumn();
+					if (ImGui::BeginCombo(("##Scale" + std::to_string(j)).c_str(), violinScales[violinDrawlistPlots[i].violinScalesX[j]])) {
 						for (int k = 0; k < 3; ++k) {
 							if (ImGui::MenuItem(violinScales[k], nullptr)) {
 								violinDrawlistPlots[i].violinScalesX[j] = (ViolinScale)k;
@@ -7183,13 +7192,16 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					ImGui::SameLine(680);
+					ImGui::NextColumn();
 					ImGui::SliderFloat(("##slider" + violinDrawlistPlots[i].attributeNames[j]).c_str(), &violinDrawlistPlots[i].attributeScalings[j], 0, 1);
-					ImGui::SameLine(830);
-					ImGui::ColorEdit4(("Line Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-					ImGui::SameLine(1000);
-					ImGui::ColorEdit4(("Fill Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					ImGui::NextColumn();
+					ImGui::ColorEdit4(("##Line Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					ImGui::NextColumn();
+					ImGui::ColorEdit4(("##Fill Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					ImGui::NextColumn();
 				}
+				ImGui::Columns(1);
+				ImGui::Separator();
 				
 				//drawing the setttings for the drawlists
 				int amtOfDrawlists = 0;
@@ -7269,8 +7281,8 @@ int main(int, char**)
 							}
 							//outline
 							for (int l = 1; l < hist.bins[k].size(); ++l) {
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / hist.bins[k].size() * size.y),
-									ImVec2(leftUpperCorner.x + hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / hist.bins[k].size() * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
+									ImVec2(leftUpperCorner.x + hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 							}
 							break;
 						}
@@ -7286,8 +7298,8 @@ int main(int, char**)
 							}
 							//outline
 							for (int l = 1; l < hist.bins[k].size(); ++l) {
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + size.x - hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / hist.bins[k].size() * size.y),
-									ImVec2(leftUpperCorner.x + size.x - hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / hist.bins[k].size() * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + size.x - hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
+									ImVec2(leftUpperCorner.x + size.x - hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 							}
 							break;
 						}
@@ -7304,11 +7316,11 @@ int main(int, char**)
 							}
 							for (int l = 1; l < hist.bins[k].size(); ++l) {
 								//left Line
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / hist.bins[k].size() * size.y),
-									ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / hist.bins[k].size() * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
+									ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								//right Line
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / hist.bins[k].size() * size.y),
-									ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / hist.bins[k].size() * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, leftUpperCorner.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
+									ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, leftUpperCorner.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 							}
 							break;
 						}
