@@ -28,10 +28,11 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
 	if(gl_GlobalInvocationID.x >= info.numOfIndices) return;
-	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
+	uint index = ind.i[gl_GlobalInvocationID.x];
+	bool a = bool(imageLoad( act, int(index)));
 	if(!a) return;
 	for(int axis = 0; axis<info.numOfAttributes;++axis){
-		float val = d.data[ind.i[gl_GlobalInvocationID.x]*info.numOfAttributes + axis];
+		float val = d.data[index*info.numOfAttributes + axis];
 		int binIndex = int((val-info.minMax[2*axis])/(info.minMax[2*axis+1]-info.minMax[2*axis]) * .999999f * info.numOfBins);		//multiplication with .999999f is done to prevent that a value could be added to bin at index numOfBins
 		atomicAdd(b.bins[axis*info.numOfBins+binIndex],1);
 	}

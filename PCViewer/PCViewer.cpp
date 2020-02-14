@@ -80,6 +80,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define KEYD 68
 #define KEYQ 81
 #define KEYE 69
+#define KEYENTER 257
+#define KEYESC 256
 
 //defines for the medians
 #define MEDIANCOUNT 3
@@ -359,7 +361,7 @@ struct DrawList {
 	VkDeviceMemory dlMem;
 	VkDescriptorSet uboDescSet;
 	std::vector<uint32_t> indices;
-	std::vector<uint32_t> activeInd;
+	//std::vector<uint32_t> activeInd;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 };
 
@@ -660,7 +662,7 @@ static bool updateBrushTemplates = false;
 static int selectedTemplateBrush = -1;
 static bool drawListForTemplateBrush = false;
 static std::vector<TemplateBrush> templateBrushes;
-static int liveBrushThreshold = 1e5;
+static int liveBrushThreshold = 2e5;
 
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
@@ -2095,7 +2097,6 @@ static void createPcPlotDrawList(TemplateList& tl,const DataSet& ds,const char* 
 	dl.showHistogramm = true;
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<uint32_t>(tl.indices);
-	dl.activeInd = std::vector<uint32_t>(tl.indices);
 
 	//adding a standard brush for every attribute
 	for (Attribute a : pcAttributes) {
@@ -3844,7 +3845,6 @@ static void updateActiveIndices(DrawList& dl) {
 		}
 	}
 	activeBrushRatios[dl.name] = 0;
-	dl.activeInd.clear();
 	for (GlobalBrush& b : globalBrushes) {
 		b.lineRatios[dl.name] = 0;
 	}
@@ -4119,7 +4119,7 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 	}
 	float* dat = new float[w * d * h * 4];
 	memset(dat, 0, w * d * h * 4 * sizeof(float));
-	for (int i : dl.activeInd) {
+	for (int i : dl.indices) {
 		int x = SpacialData::getRlatIndex(parent->data[i][0]);
 		int y = SpacialData::getAltitudeIndex(parent->data[i][2]);
 		if (y > h - 44)
@@ -4170,7 +4170,10 @@ static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
 	}
 	file << "\n";
 	//adding the data;
-	for (int i : dl.activeInd) {
+	bool* act = new bool[dl.indices.size()];
+	VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, dl.indices.size() * sizeof(bool), act);
+	for (int i : dl.indices) {
+		if (!act[i]) continue;
 		for (int j = 0; j < pcAttributes.size(); j++) {
 			file << ds->data[i][j];
 			if (j != pcAttributes.size() - 1)
@@ -4178,6 +4181,7 @@ static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
 		}
 		file << "\n";
 	}
+	delete[] act;
 }
 
 static void exportBrushAsIdxf(DrawList& dl,const char* filepath) {
@@ -4188,11 +4192,15 @@ static void exportBrushAsIdxf(DrawList& dl,const char* filepath) {
 		std::cout << "The filepath with filename given was not a .idxf file. Instead " << path.substr(path.find_last_of('.')) << " was found." << std::endl;
 #endif
 	}
+	bool* act = new bool[dl.indices.size()];
+	VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, dl.indices.size() * sizeof(bool), act);
 	std::ofstream file(filepath);
-	for (int i : dl.activeInd) {
+	for (int i : dl.indices) {
+		if (!act[i]) continue;
 		file << i << "\n";
 	}
 	file.close();
+	delete[] act;
 }
 
 //calculates the length of a vector of size pcAttributes.size()
@@ -4274,7 +4282,15 @@ static void calculateDrawListMedians(DrawList& dl) {
 		}
 	}
 
-	std::vector<uint32_t> dataCpy(dl.activeInd);
+	bool* act = new bool[dl.indices.size()];
+	VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, dl.indices.size() * sizeof(bool), act);
+	std::vector<uint32_t> actIndices;
+	for (int i : dl.indices) {
+		if (act[i]) actIndices.push_back(i);
+	}
+	delete[] act;
+
+	std::vector<uint32_t> dataCpy(actIndices);
 
 	for (int i = 0; i < pcAttributes.size(); i++) {
 		std::sort(dataCpy.begin(), dataCpy.end(), [i, ds](int a, int b) {return ds->data[a][i] > ds->data[b][i]; });
@@ -4282,15 +4298,15 @@ static void calculateDrawListMedians(DrawList& dl) {
 	}
 
 	//arithmetic median calculation
-	for (int i = 0; i < dl.activeInd.size(); i++) {
+	for (int i = 0; i < actIndices.size(); i++) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
 			if (i == 0)
 				medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
-			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds->data[dl.activeInd[i]][j];
+			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds->data[actIndices[i]][j];
 		}
 	}
 	for (int i = 0; i < pcAttributes.size(); i++) {
-		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= dl.activeInd.size();
+		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= actIndices.size();
 	}
 
 	//geometric median. Computed via gradient descent
@@ -4689,26 +4705,30 @@ int main(int, char**)
 			ImGui::OpenPopup("OPENDATASET");
 			if (ImGui::BeginPopupModal("OPENDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 			{
-				ImGui::Text("Do you really want to open this Dataset:");
-				ImGui::Text(droppedPaths.front().c_str());
+				ImGui::Text("Do you really want to open these Datasets?");
+				for (std::string& s : droppedPaths) {
+					ImGui::Text(s.c_str());
+				}
 				ImGui::Separator();
 
-				if (ImGui::Button("Open", ImVec2(120, 0))) {
+				if (ImGui::Button("Open", ImVec2(120, 0)) || ImGui::IsKeyPressed(KEYENTER)) {
 					ImGui::CloseCurrentPopup();
-					openDataset(droppedPaths.front().c_str());
+					for (std::string& s : droppedPaths) {
+						openDataset(s.c_str());
+						if (createDefaultOnLoad) {
+							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+							updateActiveIndices(g_PcPlotDrawLists.back());
+							pcPlotRender = true;
+						}
+					}
 					droppedPaths.clear();
 					delete[] createDLForDrop;
 					createDLForDrop = NULL;
 					pathDropped = false;
-					if (createDefaultOnLoad) {
-						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-						updateActiveIndices(g_PcPlotDrawLists.back());
-						pcPlotRender = true;
-					}
 				}
 				ImGui::SetItemDefaultFocus();
 				ImGui::SameLine();
-				if (ImGui::Button("Cancel", ImVec2(120, 0))) { 
+				if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(KEYESC)) { 
 					ImGui::CloseCurrentPopup(); 
 					droppedPaths.clear();
 					delete[] createDLForDrop;
@@ -4748,8 +4768,8 @@ int main(int, char**)
 		//draw the picture of the plotted pc coordinates In the same window the Labels are put as dragable buttons
 		ImVec2 window_pos = ImVec2(0, 0);
 		ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-		float windowWidth = (enableBubbleWindow || enableAttributeViolinPlots || enableDrawlistViolinPlots) ? io.DisplaySize.x / 2 : io.DisplaySize.x;
-		ImGui::SetNextWindowSize({ windowWidth,io.DisplaySize.y });
+		float windowW = (enableBubbleWindow || enableAttributeViolinPlots || enableDrawlistViolinPlots) ? io.DisplaySize.x / 2 : io.DisplaySize.x;
+		ImGui::SetNextWindowSize({ windowW,io.DisplaySize.y });
 		ImVec2 picPos;
 		bool picHovered;
 		ImGui::Begin("PC window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
@@ -4758,6 +4778,14 @@ int main(int, char**)
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(83), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
+			if (ImGui::BeginMenu("Maximize")) {
+				ImGui::DragInt("Max window Width", (int*)&windowWidth, 10, 200, 10000);
+				ImGui::DragInt("Max window Height", (int*)&windowHeight, 10, 200, 10000);
+				if (ImGui::MenuItem("Maximize!")) {
+					glfwSetWindowSize(window, windowWidth, windowHeight);
+				}
+				ImGui::EndMenu();
+			}
 			if (ImGui::BeginMenu("Attribute")) {
 				if (ImGui::MenuItem("Save Attributes", "Ctrl+S")&&pcAttributes.size()>0) {
 					openSave = true;
@@ -4828,7 +4856,7 @@ int main(int, char**)
 				}
 			}
 
-			if (ImGui::BeginMenu("Global Filter")) {
+			if (ImGui::BeginMenu("Global brush")) {
 				if (ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes) && !toggleGlobalBrushes) {
 					updateAllActiveIndices();
 					pcPlotRender = true;
@@ -5034,7 +5062,7 @@ int main(int, char**)
 				amtOfLabels++;
 
 		size_t paddingSide = 10;			//padding from left and right screen border
-		size_t gap = (windowWidth - 2 * paddingSide) / (amtOfLabels - 1);
+		size_t gap = (windowW - 2 * paddingSide) / (amtOfLabels - 1);
 		ImVec2 buttonSize = ImVec2(70, 20);
 		size_t offset = 0;
 
@@ -5232,7 +5260,7 @@ int main(int, char**)
 			}
 
 			ImGui::SameLine(200);
-			if (ImGui::Button("Combine active global filter")) {
+			if (ImGui::Button("Combine active global brushes")) {
 				GlobalBrush combo;
 				combo.name = "Combined(";
 				for (auto& brush : globalBrushes) {
@@ -5254,8 +5282,8 @@ int main(int, char**)
 			}
 
 			//drawing the list for brush templates
-			ImGui::BeginChild("filterTemplates", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
-			ImGui::Text("Filter Templates");
+			ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::Text("Brush Templates");
 			ImGui::Separator();
 			for (int i = 0; i < templateBrushes.size(); i++) {
 				if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
@@ -5313,8 +5341,8 @@ int main(int, char**)
 			ImGui::EndChild();
 			ImGui::SameLine();
 			//Drawing the list of global brushes
-			ImGui::BeginChild("GlobalFilter", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
-			ImGui::Text("Global Filter");
+			ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::Text("Global Brushes");
 			ImGui::Separator();
 			//child for names and selection
 			bool popEnd = false;
@@ -5351,7 +5379,7 @@ int main(int, char**)
 						}
 					}
 					else {
-						if (ImGui::MenuItem("Create filter fractures")) {
+						if (ImGui::MenuItem("Create brush fractures")) {
 							std::vector<std::pair<float, float>> bounds;
 							globalBrushes[i].attributes.clear();
 							//NOTE: only the first brush for each axis is taken
@@ -5360,7 +5388,7 @@ int main(int, char**)
 								bounds.push_back(brush.second[0].second);
 							}
 #ifdef _DEBUG
-							std::cout << "Starting to build the kd tree fo rfracturing." << std::endl;
+							std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
 							globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
 #ifdef _DEBUG
@@ -5549,6 +5577,32 @@ int main(int, char**)
 			}
 
 			ImGui::EndChild();
+
+			//converting a lokal brush to a global one
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+					DrawList* dl = *((DrawList**)payload->Data);
+					
+					GlobalBrush gb = {};
+					gb.active = true;
+					gb.name = dl->name;
+					gb.parent = dl->parentTemplateList;
+					DataSet* ds = &(*std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [dl](auto d) {return d.name == dl->parentDataSet; }));
+					gb.parentDataset = ds;
+					for (int i = 0; i < dl->brushes.size(); ++i) {	//Attribute Index
+						bool first = true;
+						for (Brush& b : dl->brushes[i]) {
+							gb.brushes[i].push_back(std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, b.minMax));
+							if (first) {
+								gb.attributes.push_back(i);
+								first = false;
+							}
+						}
+					}
+					globalBrushes.push_back(gb);
+				}
+				ImGui::EndDragDropTarget();
+			}
 
 			//Statistics for global brushes
 			ImGui::SameLine();
@@ -5885,8 +5939,10 @@ int main(int, char**)
 					}
 
 					//check for deletion of brush
-					if (ImGui::GetIO().MouseClicked[1] && hover)
+					if (ImGui::GetIO().MouseClicked[1] && hover) {
 						del = ind;
+						brushDragIds.clear();
+					}
 
 					ind++;
 				}
@@ -6448,8 +6504,21 @@ int main(int, char**)
 						}
 
 						if (ImGui::Selectable(draw->name.c_str(), false)) {
-							std::set<int> a(dl.activeInd.begin(),dl.activeInd.end());
-							std::set<int> b(draw->activeInd.begin(), draw->activeInd.end());
+							std::vector<uint32_t> activeDraw, activeDl;
+							bool* actDraw = new bool[draw->indices.size()];
+							bool* actDl = new bool[dl.indices.size()];
+							VkUtil::downloadData(g_Device, draw->dlMem, draw->activeIndicesBufferOffset, draw->indices.size() * sizeof(bool), actDraw);
+							VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, dl.indices.size() * sizeof(bool), actDl);
+							for (int i:draw->indices) {
+								if (actDraw[i]) activeDraw.push_back(i);
+							}
+							for (int i : dl.indices) {
+								if (actDl[i]) activeDl.push_back(i);
+							}
+							delete[] actDraw;
+							delete[] actDl;
+							std::set<int> a(activeDl.begin(),activeDl.end());
+							std::set<int> b(activeDraw.begin(), activeDraw.end());
 							std::vector<uint32_t> aOrB;
 							std::set_union(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(aOrB));
 							std::vector<uint32_t> aMinusB;
@@ -6462,8 +6531,8 @@ int main(int, char**)
 							drawListComparator.parentDataset = dl.parentDataSet;
 							drawListComparator.a = dl.name;
 							drawListComparator.b = draw->name;
-							drawListComparator.aInd = dl.activeInd;
-							drawListComparator.bInd = draw->activeInd;
+							drawListComparator.aInd = activeDl;
+							drawListComparator.bInd = activeDraw;
 							drawListComparator.aOrB = aOrB;
 							drawListComparator.aMinusB = aMinusB;
 							drawListComparator.bMinusA = bMinusA;
@@ -6777,8 +6846,8 @@ int main(int, char**)
 		//bubble window ----------------------------------------------------------------------------------
 		int bubbleWindowSize = 0;
 		if (enableBubbleWindow) {
-			ImGui::SetNextWindowPos(ImVec2(windowWidth, 0));
-			ImGui::SetNextWindowSize(ImVec2(windowWidth, (enableAttributeViolinPlots || enableDrawlistViolinPlots)?io.DisplaySize.y/2:io.DisplaySize.y));
+			ImGui::SetNextWindowPos(ImVec2(windowW, 0));
+			ImGui::SetNextWindowSize(ImVec2(windowW, (enableAttributeViolinPlots || enableDrawlistViolinPlots)?io.DisplaySize.y/2:io.DisplaySize.y));
 			ImGui::Begin("Bubble window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
 
 			bubbleWindowSize = ImGui::GetWindowSize().y;
@@ -6891,8 +6960,8 @@ int main(int, char**)
 
 		//begin of violin plots attribute major ----------------------------------------------------------
 		if (enableAttributeViolinPlots) {
-			ImGui::SetNextWindowPos(ImVec2(windowWidth, bubbleWindowSize));
-			ImGui::SetNextWindowSize(ImVec2(windowWidth, io.DisplaySize.y - bubbleWindowSize));
+			ImGui::SetNextWindowPos(ImVec2(windowW, bubbleWindowSize));
+			ImGui::SetNextWindowSize(ImVec2(windowW, io.DisplaySize.y - bubbleWindowSize));
 			ImGui::Begin("Violin attribute window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
 
 			if (ImGui::BeginMenuBar()) {
@@ -6908,7 +6977,7 @@ int main(int, char**)
 			}
 
 			const static int plusWidth = 100;
-			for (int i = 0; i < violinDrawlistPlots.size(); ++i) {
+			for (int i = 0; i < violinAttributePlots.size(); ++i) {
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
 				ImGui::PushItemWidth(150);
 				//listing all histograms available
@@ -7144,8 +7213,8 @@ int main(int, char**)
 
 		//begin of violin plots drawlist major --------------------------------------------------------------------------
 		if (enableDrawlistViolinPlots) {
-			ImGui::SetNextWindowPos(ImVec2(windowWidth, bubbleWindowSize));
-			ImGui::SetNextWindowSize(ImVec2(windowWidth, io.DisplaySize.y - bubbleWindowSize));
+			ImGui::SetNextWindowPos(ImVec2(windowW, bubbleWindowSize));
+			ImGui::SetNextWindowSize(ImVec2(windowW, io.DisplaySize.y - bubbleWindowSize));
 			ImGui::Begin("Violin drawlist window", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
 
 			if (ImGui::BeginMenuBar()) {
@@ -7202,23 +7271,29 @@ int main(int, char**)
 							std::vector<std::pair<uint32_t, float>> area;
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
 							for (int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
-								float div = 0;
+								float a = 0;
 								switch (violinDrawlistPlots[i].violinScalesX[k]) {
 								case ViolinScaleSelf:
-									div = hist.maxCount[k];
+									a = 1/hist.maxCount[k];
 									break;
 								case ViolinScaleLocal:
-									div = hist.maxGlobalCount;
+									a = 1/hist.maxGlobalCount;
 									break;
 								case ViolinScaleGlobal:
-									div = violinDrawlistPlots[i].maxGlobalValue;
+									a = 1/violinDrawlistPlots[i].maxGlobalValue;
 									break;
 								}
 
-								div /= violinDrawlistPlots[i].attributeScalings[j];
-								area.push_back({ k,div });
+								a *= violinDrawlistPlots[i].attributeScalings[k];
+								if (violinDrawlistPlots[i].attributePlacements[k] == ViolinLeftHalf ||
+									violinDrawlistPlots[i].attributePlacements[k] == ViolinRightHalf ||
+									violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleLeft ||
+									violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleRight)
+									a *= .5f;
+
+								area.push_back({ k,a });
 							}
-							std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second < b.second; });
+							std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
 							for (int k = 0; k < pcAttributes.size(); ++k)violinDrawlistPlots[i].attributeOrder[j][k] = (area[k].first);
 						}
 					}
@@ -7426,53 +7501,55 @@ int main(int, char**)
 				if (ImGui::BeginDragDropTarget()) {
 					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
 						DrawList* dl = *((DrawList**)payload->Data);
+						//check if the drawlist was already added to this plot
+						if (std::find(violinDrawlistPlots[i].drawLists.begin(), violinDrawlistPlots[i].drawLists.end(), dl->name) == violinDrawlistPlots[i].drawLists.end()) {
+							if (!violinDrawlistPlots[i].attributeNames.size()) {	//creating all needed resources e.g. attribute components
+								violinDrawlistPlots[i].activeAttributes = new bool[pcAttributes.size()];
+								violinDrawlistPlots[i].maxGlobalValue = 0;
+								int j = 0;
+								for (Attribute& a : pcAttributes) {
+									violinDrawlistPlots[i].attributeNames.push_back(a.name);
+									violinDrawlistPlots[i].activeAttributes[j] = true;
+									violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
+									violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
+									violinDrawlistPlots[i].attributePlacements.push_back(ViolinMiddle);
+									violinDrawlistPlots[i].attributeScalings.push_back(1);
+									violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleSelf);
+									violinDrawlistPlots[i].maxValues.push_back(0);
+									++j;
+								}
+							}
 
-						if (!violinDrawlistPlots[i].attributeNames.size()) {	//creating all needed resources e.g. attribute components
-							violinDrawlistPlots[i].activeAttributes = new bool[pcAttributes.size()];
-							violinDrawlistPlots[i].maxGlobalValue = 0;
-							int j = 0;
+							std::vector<std::pair<float, float>> minMax;
 							for (Attribute& a : pcAttributes) {
-								violinDrawlistPlots[i].attributeNames.push_back(a.name);
-								violinDrawlistPlots[i].activeAttributes[j] = true;
-								violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
-								violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
-								violinDrawlistPlots[i].attributePlacements.push_back(ViolinMiddle);
-								violinDrawlistPlots[i].attributeScalings.push_back(1);
-								violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleSelf);
-								violinDrawlistPlots[i].maxValues.push_back(0);
-								++j;
+								minMax.push_back({ a.min,a.max });
 							}
-						}
+							DataSet* ds;
+							for (DataSet& d : g_PcPlotDataSets) {
+								if (d.name == dl->parentDataSet) {
+									ds = &d;
+									break;
+								}
+							}
+							histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+							HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
+							std::vector<std::pair<uint32_t, float>> area;
+							for (int j = 0; j < hist.maxCount.size(); ++j) {
+								if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
+									violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
+								}
+								if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
+									violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
+								}
+								area.push_back({ j, violinDrawlistPlots[i].attributeScalings[j] / hist.maxCount[j] });
+							}
 
-						std::vector<std::pair<float, float>> minMax;
-						for (Attribute& a : pcAttributes) {
-							minMax.push_back({ a.min,a.max });
+							violinDrawlistPlots[i].drawLists.push_back(dl->name);
+							//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
+							violinDrawlistPlots[i].attributeOrder.push_back({});
+							std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+							for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
 						}
-						DataSet* ds;
-						for (DataSet& d : g_PcPlotDataSets) {
-							if (d.name == dl->parentDataSet) {
-								ds = &d;
-								break;
-							}
-						}
-						histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
-						HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
-						std::vector<std::pair<uint32_t,float>> area;
-						for (int j = 0; j < hist.maxCount.size(); ++j) {
-							if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
-								violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
-							}
-							if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
-								violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
-							}
-							area.push_back({ j,violinDrawlistPlots[i].attributeScalings[j] / violinDrawlistPlots[i].maxValues[j] });
-						}
-
-						violinDrawlistPlots[i].drawLists.push_back(dl->name);
-						//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
-						violinDrawlistPlots[i].attributeOrder.push_back({});
-						std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second < b.second; });
-						for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
 					}
 					ImGui::EndDragDropTarget();
 				}
