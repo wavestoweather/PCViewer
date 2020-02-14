@@ -9,6 +9,7 @@
 class PCUtil {
 public:
 	static std::vector<char> readByteFile(const std::string& filename);
+	static void hexdump(void* ptr, int buflen);
 };
 
 #endif

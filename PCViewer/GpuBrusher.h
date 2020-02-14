@@ -11,6 +11,7 @@
 
 #define LOCALSIZE 256
 #define SHADERPATH "shader/brushComp.spv"
+#define SHADERPATHFRACTURE "shader/brushFractureComp.spv"
 
 class GpuBrusher {
 private:
@@ -31,6 +32,18 @@ private:
 		uint32_t andOr;
 		uint32_t padding;
 		uint32_t* indicesOffsets;			//index of brush axis, offset in brushes array and amount of brushes: ind1 offesetBrushes1 amtOfBrushes1 PADDING ind2 offsetBrushes2 amtOfBrushes2... 
+	};
+
+	struct UBOFractureInfo {				//brush informations for the fractures(nearly the same as the infos for standard brushing)
+		uint32_t amtOfAttributes;
+		uint32_t amtOfFractureAxes;
+		uint32_t amtOfFractures;
+		uint32_t amtOfIndices;
+		uint32_t lineCount;
+		int globalLineCount;
+		uint32_t first;
+		uint32_t andOr;
+		//[i1,i2,i3,...]					Array containing the indices of the fracture axis
 	};
 
 	struct UBObrushes {
@@ -61,6 +74,9 @@ private:
 	VkPipeline pipeline;
 	VkPipelineLayout pipelineLayout;
 	VkDescriptorSetLayout descriptorSetLayout;
+	VkPipeline fracturePipeline;
+	VkPipelineLayout fracturePipelineLayout;
+	VkDescriptorSetLayout fractureDescriptorSetLayout;
 	VkBuffer uboBuffers[2];
 	uint32_t uboOffsets[2];
 	VkDeviceMemory uboMemory;
@@ -99,12 +115,17 @@ public:
 		std::vector<VkDescriptorSetLayout> layouts;
 		layouts.push_back(descriptorSetLayout);
 		VkUtil::createComputePipeline(device, module, layouts, &pipelineLayout, &pipeline);
+
+		module = VkUtil::createShaderModule(device, PCUtil::readByteFile(std::string(SHADERPATHFRACTURE)));
+		VkUtil::createComputePipeline(device, module, layouts, &fracturePipelineLayout, &fracturePipeline);
 	};
 
 	~GpuBrusher() {
 		vkDestroyPipeline(device, pipeline, nullptr);
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+		vkDestroyPipeline(device, fracturePipeline, nullptr);
+		vkDestroyPipelineLayout(device, fracturePipelineLayout, nullptr);
 	};
 
 	//returns a pair containing the number of lines which would be active, would only one brush be applied, and the number of lines that really are still active
@@ -234,6 +255,126 @@ public:
 
 		free(informations);
 		free(gpuBrushes);
+
+		return res;
+	};
+
+	//returns a pair containing the number of lines which would be active, would only these fractures be applied, and the number of lines that really are still active
+	std::pair<uint32_t, int> brushIndices(std::vector<std::vector<std::pair<float, float>>>& fractures, std::vector<int>& attributes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
+		//allocating all ubos and collection iformation about amount of brushes etc.
+		uint32_t infoBytesSize = sizeof(UBOFractureInfo) + attributes.size() * sizeof(uint32_t);
+		UBOFractureInfo* informations = (UBOFractureInfo*)malloc(infoBytesSize);
+
+		uint32_t fracturesByteSize = attributes.size() * fractures.size() * 2 * sizeof(float);
+		UBObrushes* gpuFractures = (UBObrushes*)malloc(fracturesByteSize);
+
+		UBOstorage* result;
+
+		//allocating buffers and memory for ubos
+		uboOffsets[0] = 0;
+		VkUtil::createBuffer(device, infoBytesSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[0]);
+		VkUtil::createBuffer(device, fracturesByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[1]);
+
+		VkResult err;
+		VkMemoryRequirements memReq;
+		uint32_t memTypeBits;
+
+		uboOffsets[0] = 0;
+		vkGetBufferMemoryRequirements(device, uboBuffers[0], &memReq);
+		VkMemoryAllocateInfo memalloc = {};
+		memalloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memalloc.allocationSize = memReq.size;
+		memTypeBits = memReq.memoryTypeBits;
+
+		uboOffsets[1] = memalloc.allocationSize;
+		vkGetBufferMemoryRequirements(device, uboBuffers[1], &memReq);
+		memalloc.allocationSize += memReq.size;
+		memTypeBits |= memReq.memoryTypeBits;
+
+		memalloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		err = vkAllocateMemory(device, &memalloc, nullptr, &uboMemory);
+		check_vk_result(err);
+
+		//binding buffers to memory
+		vkBindBufferMemory(device, uboBuffers[0], uboMemory, uboOffsets[0]);
+		vkBindBufferMemory(device, uboBuffers[1], uboMemory, uboOffsets[1]);
+
+		//creating the descriptor set and binding all buffers to the corrsponding bindings
+		VkDescriptorSet descriptorSet;
+		std::vector<VkDescriptorSetLayout> layouts;
+		layouts.push_back(descriptorSetLayout);
+		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+
+		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, uboBuffers[1], fracturesByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 4, descriptorSet);
+
+		//uploading data for brushing
+		void* d;
+		informations->amtOfFractureAxes = attributes.size();
+		informations->amtOfFractures = fractures.size();
+		informations->amtOfAttributes = amtOfAttributes;
+		informations->amtOfIndices = indicesSize;
+		informations->lineCount = 0;
+		informations->globalLineCount = (lastBrush) ? 0 : -1;
+		informations->first = first;
+		informations->andOr = andy;
+		uint32_t* inf = (uint32_t*)(informations + 1);
+		//#ifdef _DEBUG
+		//		std::cout << "Brush informations:" << std::endl;
+		//		std::cout << "amtOfBrushAxes" << informations->amtOfBrushAxes << std::endl;
+		//		std::cout << "amtOfAttributes" << informations->amtOfAttributes << std::endl;
+		//		std::cout << "amtOfIndices" << informations->amtOfIndices << std::endl;
+		//		std::cout << "lineCount" << informations->lineCount << std::endl;
+		//		std::cout << "first" << informations->first << std::endl;
+		//		std::cout << "andOr" << informations->andOr << std::endl;
+		//		for (int i = 0; i < brushInfos.size(); ++i) {
+		//			std::cout << point[i * 4] << " " << point[i * 4 + 1] << " " << point[i * 4 + 2] << " " << point[i * 4 + 3] << std::endl;
+		//		}
+		//#endif
+		vkMapMemory(device, uboMemory, uboOffsets[0], infoBytesSize, 0, &d);
+		memcpy(d, informations, infoBytesSize);
+		vkUnmapMemory(device, uboMemory);
+
+		int offset = 0;
+		float* bru = (float*)gpuFractures;
+		for (auto& range : fractures) {
+			for (int axis = 0; axis < attributes.size(); ++axis) {
+				bru[offset++] = range[axis].first;
+				bru[offset++] = range[axis].second;
+			}
+		}
+		vkMapMemory(device, uboMemory, uboOffsets[1], fracturesByteSize, 0, &d);
+		memcpy(d, bru, fracturesByteSize);
+		vkUnmapMemory(device, uboMemory);
+
+		//dispatching the command buffer to calculate active indices
+		VkCommandBuffer command;
+		VkUtil::createCommandBuffer(device, commandPool, &command);
+
+		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, fracturePipelineLayout, 0, 1, &descriptorSet, 0, {});
+		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, fracturePipeline);
+		int patchAmount = indicesSize / LOCALSIZE;
+		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+		vkCmdDispatch(command, patchAmount, 1, 1);
+		VkUtil::commitCommandBuffer(queue, command);
+		err = vkQueueWaitIdle(queue);
+		check_vk_result(err);
+
+		//getting the amount of remaining lines(if only this brush would have been applied)
+		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOFractureInfo), informations);
+		std::pair<uint32_t, int> res(informations->lineCount, informations->globalLineCount);
+
+		vkFreeCommandBuffers(device, commandPool, 1, &command);
+		vkFreeDescriptorSets(device, descriptorPool, 1, &descriptorSet);
+		vkFreeMemory(device, uboMemory, nullptr);
+		vkDestroyBuffer(device, uboBuffers[0], nullptr);
+		vkDestroyBuffer(device, uboBuffers[1], nullptr);
+
+		free(informations);
+		free(gpuFractures);
 
 		return res;
 	};

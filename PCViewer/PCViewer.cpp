@@ -638,6 +638,7 @@ static float alphaDrawLists = .5f;
 static Vec4 PcPlotBackCol = { 0,0,0,1 };
 static bool enableAxisLines = true;
 static bool createDefaultOnLoad = true;
+static bool rescaleTableColumns = true;
  
 //variables for the histogramm
 static float histogrammWidth = .1f;
@@ -3054,6 +3055,7 @@ static void glfw_resize_callback(GLFWwindow*, int w, int h)
 	g_SwapChainRebuild = true;
 	g_SwapChainResizeWidth = w;
 	g_SwapChainResizeHeight = h;
+	rescaleTableColumns = true;
 }
 
 //checks if the attributes a are the same as the ones in pcAttributes and are giving back a permutation to order the new data correctly
@@ -3949,19 +3951,28 @@ static void updateActiveIndices(DrawList& dl) {
 	if (toggleGlobalBrushes) {
 		int c = 1;
 		for (GlobalBrush& gb : globalBrushes) {
-			if (!gb.active) continue;
-			globalBrushesActive = true;
-			brush.clear();
-			for (auto b : gb.brushes) {
-				for (auto br : b.second) {
-					brush[b.first].push_back(br.second);
-				}
+			if (gb.fractureDepth > 0) { //fractured brush
+				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(gb.fractions,gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				gb.lineRatios[dl.name] = res.first;
+				globalRemainingLines = res.second;
+				firstBrush = false;
+				++c;
 			}
-			std::pair<uint32_t,int> res = gpuBrusher->brushIndices(brush,data->size(),dl.buffer,dl.indicesBuffer,dl.indices.size(),dl.activeIndicesBufferView,pcAttributes.size(),firstBrush,brushCombination == 1,c == globalBrushes.size());
-			gb.lineRatios[dl.name] = res.first;
-			globalRemainingLines = res.second;
-			firstBrush = false;
-			++c;
+			else {
+				if (!gb.active) continue;
+				globalBrushesActive = true;
+				brush.clear();
+				for (auto b : gb.brushes) {
+					for (auto br : b.second) {
+						brush[b.first].push_back(br.second);
+					}
+				}
+				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				gb.lineRatios[dl.name] = res.first;
+				globalRemainingLines = res.second;
+				firstBrush = false;
+				++c;
+			}
 		}
 	}
 
@@ -6441,16 +6452,18 @@ int main(int, char**)
 		ImGui::Separator();
 		int count = 0;
 
-		ImGui::Columns(9, "Columns", false);
-		ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth()-275);
-		ImGui::SetColumnWidth(1, 25);
-		ImGui::SetColumnWidth(2, 25);
-		ImGui::SetColumnWidth(3, 25);
-		ImGui::SetColumnWidth(4, 25);
-		ImGui::SetColumnWidth(5, 25);
-		ImGui::SetColumnWidth(6, 25);
-		ImGui::SetColumnWidth(7, 100);
-		ImGui::SetColumnWidth(8, 25);
+		ImGui::Columns(9, "Columns", true);
+		if (rescaleTableColumns) {
+			ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth() - 275);
+			ImGui::SetColumnWidth(1, 25);
+			ImGui::SetColumnWidth(2, 25);
+			ImGui::SetColumnWidth(3, 25);
+			ImGui::SetColumnWidth(4, 25);
+			ImGui::SetColumnWidth(5, 25);
+			ImGui::SetColumnWidth(6, 25);
+			ImGui::SetColumnWidth(7, 100);
+			ImGui::SetColumnWidth(8, 25);
+		}
 		
 		//showing texts to describe whats in the corresponding column
 		ImGui::Text("Drawlist Name");
@@ -6471,6 +6484,7 @@ int main(int, char**)
 		ImGui::NextColumn();
 		ImGui::Text("MColor");
 		ImGui::NextColumn();
+		ImGui::Separator();
 		bool compareDrawLists = false;
 		static DrawListComparator drawListComparator;
 		bool exportIdxf = false;
@@ -6657,6 +6671,8 @@ int main(int, char**)
 
 			count++;
 		}
+		ImGui::Columns(1);
+		ImGui::Separator();
 		//open compare popup
 		if (compareDrawLists)
 			ImGui::OpenPopup("Compare Drawlists");
@@ -7302,9 +7318,9 @@ int main(int, char**)
 					ImGui::NextColumn();
 					ImGui::ColorEdit4(("##Fill Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					ImGui::NextColumn();
+					ImGui::Separator();
 				}
 				ImGui::Columns(1);
-				ImGui::Separator();
 				if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
 					violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first* violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
 				}
@@ -7581,6 +7597,7 @@ int main(int, char**)
 		FrameRender(wd);
 
 		//FramePresent(wd);
+		rescaleTableColumns = false;
 	}
 
 	// Cleanup
