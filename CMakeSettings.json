@@ -56,7 +56,23 @@
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "clang_cl_x64" ],
-      "variables": []
+      "variables": [
+        {
+          "name": "GLFW_INSTALL",
+          "value": "False",
+          "type": "BOOL"
+        },
+        {
+          "name": "USE_MSVC_RUNTIME_LIBRARY_DLL",
+          "value": "False",
+          "type": "BOOL"
+        },
+        {
+          "name": "GLM_TEST_ENABLE",
+          "value": "False",
+          "type": "BOOL"
+        }
+      ]
     },
     {
       "name": "x64-Clang-Release",
@@ -68,7 +84,18 @@
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "clang_cl_x64" ],
-      "variables": []
+      "variables": [
+        {
+          "name": "USE_MSVC_RUNTIME_LIBRARY_DLL",
+          "value": "False",
+          "type": "BOOL"
+        },
+        {
+          "name": "GLM_TEST_ENABLE",
+          "value": "False",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

@@ -31,7 +31,7 @@ private:
 		int rightChild;
 	};
 
-	//contains all nodes
+	//contains all nodes. All nodes are identified by their index in this vector.
 	std::vector<Node> nodes;
 	std::vector<int> attributes;
 	int root;								//root index
