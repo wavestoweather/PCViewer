@@ -322,6 +322,9 @@ public:
 		informations->first = first;
 		informations->andOr = andy;
 		uint32_t* inf = (uint32_t*)(informations + 1);
+		for (int i = 0; i < attributes.size(); ++i) {
+			inf[i] = attributes[i];
+		}
 		//#ifdef _DEBUG
 		//		std::cout << "Brush informations:" << std::endl;
 		//		std::cout << "amtOfBrushAxes" << informations->amtOfBrushAxes << std::endl;

@@ -15,31 +15,30 @@ public:
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
 		this->attributes = attributes;
-		nodes.reserve(pow(2,recursionDepth + 1)-1);
 		root = buildRec(0, indices, data, attributes, initialBounds, recursionDepth);
 	};
 	~KdTree() {};
 
 	std::vector<std::vector<std::pair<float, float>>> getBounds(int recursionDepth) {
-		return getBoundsRec(root, recursionDepth);
+		return getBoundsRec(nodes[root], recursionDepth);
 	};
 
 private:
 	struct Node {
 		int split;
 		std::vector<std::pair<float, float>> bounds;
-		Node* leftChild;
-		Node* rightChild;
+		int leftChild;						//index at which the childs are lying
+		int rightChild;
 	};
 
 	//contains all nodes
 	std::vector<Node> nodes;
 	std::vector<int> attributes;
-	Node* root;
+	int root;								//root index
 	BoundsBehaviour adjustBounds;
 
-	Node* buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int> attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
-		if (!indices.size() || !recDepth) return nullptr;
+	int buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int> attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
+		if (!indices.size() || !recDepth) return -1;
 		Node n = {};
 		n.bounds = bounds;
 		n.split = split;
@@ -102,18 +101,19 @@ private:
 		n.leftChild = buildRec(s2, leftPts, data, attributes, leftBounds, recDepth -1);
 		n.rightChild = buildRec(s2, rightPts, data, attributes, rightBounds, recDepth -1);
 		nodes.push_back(n);
-		return &nodes.back();
+		return nodes.size() - 1;
 	};
 
-	std::vector<std::vector<std::pair<float,float>>> getBoundsRec(Node* n, int recDepth) {
+	std::vector<std::vector<std::pair<float,float>>> getBoundsRec(Node& n, int recDepth) {
 		if (!recDepth) {
 			std::vector<std::vector<std::pair<float,float>>> r;
-			r.push_back(n->bounds);
+			r.push_back(n.bounds);
 			return r;
 		}
 
 		//getting the bounds from the left and right child and appending the vectors
-		std::vector<std::vector<std::pair<float, float>>> left = (n->leftChild)?getBoundsRec(n->leftChild, recDepth - 1):std::vector<std::vector<std::pair<float, float>>>(), right = (n->rightChild)?getBoundsRec(n->rightChild, recDepth - 1): std::vector<std::vector<std::pair<float, float>>>();
+		std::vector<std::vector<std::pair<float, float>>> left = (n.leftChild >= 0)?getBoundsRec(nodes[n.leftChild], recDepth - 1):std::vector<std::vector<std::pair<float, float>>>(), 
+			right = (n.rightChild >= 0)?getBoundsRec(nodes[n.rightChild], recDepth - 1): std::vector<std::vector<std::pair<float, float>>>();
 		left.reserve(left.size() + right.size());
 		left.insert(left.end(), right.begin(), right.end());
 		return left;

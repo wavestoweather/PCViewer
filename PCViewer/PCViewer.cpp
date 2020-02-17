@@ -3952,6 +3952,8 @@ static void updateActiveIndices(DrawList& dl) {
 		int c = 1;
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.fractureDepth > 0) { //fractured brush
+				if (!gb.active) continue;
+				globalBrushesActive = true;
 				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(gb.fractions,gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
 				gb.lineRatios[dl.name] = res.first;
 				globalRemainingLines = res.second;
