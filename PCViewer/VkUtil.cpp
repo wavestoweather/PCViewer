@@ -616,6 +616,22 @@ void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImag
 	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
 }
 
+void VkUtil::updateStorageImageDescriptorSet(VkDevice device, VkImageView imageView, VkImageLayout imageLayout, uint32_t binding, VkDescriptorSet descriptorSet)
+{
+	VkDescriptorImageInfo desc_image[1] = {};
+	desc_image[0].sampler = nullptr;
+	desc_image[0].imageView = imageView;
+	desc_image[0].imageLayout = imageLayout;
+	VkWriteDescriptorSet write_desc[1] = {};
+	write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write_desc[0].dstSet = descriptorSet;
+	write_desc[0].descriptorCount = 1;
+	write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	write_desc[0].pImageInfo = desc_image;
+	write_desc[0].dstBinding = binding;
+	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
+}
+
 void VkUtil::updateTexelBufferDescriptorSet(VkDevice device, VkBufferView bufferView, uint32_t binding, VkDescriptorSet descriptorSet) {
 	VkWriteDescriptorSet write_desc[1] = {};
 	write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -820,7 +836,7 @@ void VkUtil::create3dImage(VkDevice device, uint32_t width, uint32_t height, uin
 	imageInfo.arrayLayers = 1;
 	imageInfo.format = imageFormat;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 	imageInfo.usage = usageFlags;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;

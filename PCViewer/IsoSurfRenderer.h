@@ -20,6 +20,7 @@ the backside of the cube are raymarched.
 #define ZOOMSPEED .03f
 
 #define AMTOF3DTEXTURES 7			//amount of textures used for the density values. The total amount of density attributes is AMTOF3DTEXTURES * 4 (4 density channels per image)
+#define LOCALSIZE 256
 
 #define IDX3D(x,y,z,width,height) ((x)+((y)*width)+((z)*width*height))
 
@@ -33,7 +34,7 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float,float>>& densityAttributesMinMax, uint32_t amtOfIndices, VkBuffer indices, VkBuffer data);
+	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data);
 	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void render();
 	void setImageDescriptorSet(VkDescriptorSet descriptor);
@@ -46,6 +47,20 @@ private:
 		alignas(16) glm::vec3 faces;	//face positions for intersection tests
 		alignas(16) glm::vec3 lightDir;
 		alignas(16) glm::mat4 mvp;		//modelViewProjection Matrix
+	};
+
+	struct ComputeInfos {
+		uint32_t amtOfAttributes;		//amount of attributes in the dataset
+		uint32_t amtOfDensityAttributes;//amount of attributes for which the density maps should be created
+		uint32_t amtOfIndices;
+		uint32_t dimX;
+		uint32_t dimY;
+		uint32_t dimZ;
+		uint32_t padding[2];
+		//float array containing attribute infos:
+		//index attr 1, min attr 1, max attr 1,
+		//index attr 2, min attr 2, max attr 2,
+		//...
 	};
 	
 	//shaderpaths
