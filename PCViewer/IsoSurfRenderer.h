@@ -34,7 +34,7 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data);
+	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data);
 	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void render();
 	void setImageDescriptorSet(VkDescriptorSet descriptor);
@@ -56,10 +56,19 @@ private:
 		uint32_t dimX;
 		uint32_t dimY;
 		uint32_t dimZ;
-		uint32_t padding[2];
+		uint32_t xInd;
+		uint32_t yInd;
+		uint32_t zInd;
+		float xMin;
+		float xMax;
+		float yMin;
+		float yMax;
+		float zMin;
+		float zMax;
+		uint32_t padding;
 		//float array containing attribute infos:
-		//index attr 1, min attr 1, max attr 1,
-		//index attr 2, min attr 2, max attr 2,
+		//index attr 1,
+		//index attr 2,
 		//...
 	};
 	

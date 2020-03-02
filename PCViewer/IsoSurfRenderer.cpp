@@ -191,7 +191,7 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 	render();
 }
 
-void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data)
+void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float,float>>& densityAttributesMinMax, glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data)
 {
 	VkResult err;
 	uint32_t required3dImages = amtOfIndices / 4 + ((amtOfIndices & 3) == 0) ? 0 : 1;
@@ -261,7 +261,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	//creating the density images via the compute pipeline ----------------------------------------
 	VkBuffer infos;
 	VkDeviceMemory infosMem;
-	uint32_t infosByteSize = sizeof(ComputeInfos) + densityAttributes.size() * 3 * sizeof(float);
+	uint32_t infosByteSize = sizeof(ComputeInfos) + densityAttributes.size() * sizeof(float);
 	ComputeInfos* infoBytes = (ComputeInfos*)new char[infosByteSize];
 	VkUtil::createBuffer(device, infosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &infos);
 	VkMemoryAllocateInfo allocInfo = {};
@@ -280,11 +280,20 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	infoBytes->dimX = width;
 	infoBytes->dimY = height;
 	infoBytes->dimZ = depth;
+	infoBytes->xInd = positionIndices.x;
+	infoBytes->yInd = positionIndices.y;
+	infoBytes->zInd = positionIndices.z;
+	infoBytes->xMin = densityAttributesMinMax[positionIndices.x].first;
+	infoBytes->xMax = densityAttributesMinMax[positionIndices.x].second;
+	infoBytes->yMin = densityAttributesMinMax[positionIndices.y].first;
+	infoBytes->yMax = densityAttributesMinMax[positionIndices.y].second;
+	infoBytes->zMin = densityAttributesMinMax[positionIndices.z].first;
+	infoBytes->zMax = densityAttributesMinMax[positionIndices.z].second;
 	float* inf = (float*)(infoBytes + 1);
 	for (int i = 0; i < densityAttributes.size(); ++i) {
-		inf[3 * i] = densityAttributes[i];
-		inf[3 * i + 1] = densityAttributesMinMax[i].first;
-		inf[3 * i + 2] = densityAttributesMinMax[i].second;
+		inf[i] = densityAttributes[i];
+		//inf[3 * i + 1] = densityAttributesMinMax[i].first;
+		//inf[3 * i + 2] = densityAttributesMinMax[i].second;
 	}
 	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
 
@@ -303,6 +312,11 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
 	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
+	VkClearColorValue clear = { 0,0,0,0 };
+	VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
+	for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
+		vkCmdClearColorImage(computeCommands, image3d[i], VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
+	}
 	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
 	uint32_t patchAmount = amtOfIndices / LOCALSIZE;
