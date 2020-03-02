@@ -47,6 +47,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "GpuBrusher.h"
 #include "CameraNav.hpp"
 #include "HistogramManager.h"
+#include "IsoSurfRenderer.h"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -415,6 +416,12 @@ struct ViolinDrawlistPlot {
 	std::vector<float> maxValues;
 };
 
+struct Attribute {
+	std::string name;
+	float min;			//min value of all values
+	float max;			//max value of all values
+};
+
 static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
 static VkImage					g_PcPlot = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotView = VK_NULL_HANDLE;
@@ -620,12 +627,6 @@ static const unsigned char		colorPalette[] = { 0, 0, 0		,255
 												,255, 254, 239	,255
 												,255, 255, 249 ,255};
 
-struct Attribute {
-	std::string name;
-	float min;			//min value of all values
-	float max;			//max value of all values
-};
-
 static bool* pcAttributeEnabled = NULL;											//Contains whether a specific attribute is enabled
 static std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
 static std::vector<int> pcAttrOrd = std::vector<int>();							//Contains the ordering of the attributes	
@@ -700,6 +701,8 @@ static SettingsManager* settingsManager;
 static GpuBrusher* gpuBrusher;
 
 static HistogramManager* histogramManager;
+
+static IsoSurfRenderer* isoSurfaceRenderer;
 
 //variables for fractions
 static int maxFractionDepth = 20;
@@ -4576,6 +4579,10 @@ int main(int, char**)
 	}
 #endif
 
+	{//iso surface renderer
+		isoSurfaceRenderer = new IsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+	}
+
 	{//creating the settngs manager
 		settingsManager = new SettingsManager();
 	}
@@ -7351,7 +7358,8 @@ int main(int, char**)
 						framePos.y += ImGui::GetItemsLineHeightWithSpacing();
 						ImGui::RenderFrame(framePos, framePos + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
 						ImGui::SetCursorScreenPos(framePos);
-						ImGui::InvisibleButton(("invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size);
+						if (size.x > 0 && size.y > 0)	//safety check. ImGui crahes when button size is 0
+							ImGui::InvisibleButton(("invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size);
 						if (ImGui::IsItemClicked(1)) {
 							violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = 0xffffffff;
 						}
@@ -7640,6 +7648,7 @@ int main(int, char**)
 #ifdef BUBBLEVIEW
 		delete bubblePlotter;
 #endif
+		delete isoSurfaceRenderer;
 		delete settingsManager;
 		delete gpuBrusher;
 		delete histogramManager;

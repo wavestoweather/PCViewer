@@ -264,7 +264,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	uint32_t infosByteSize = sizeof(ComputeInfos) + densityAttributes.size() * sizeof(float);
 	ComputeInfos* infoBytes = (ComputeInfos*)new char[infosByteSize];
 	VkUtil::createBuffer(device, infosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &infos);
-	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	VkMemoryRequirements memReq = {};
 	vkGetBufferMemoryRequirements(device, infos, &memReq);
@@ -359,6 +359,9 @@ void IsoSurfRenderer::updateCameraPos(float* mouseMovement)
 
 void IsoSurfRenderer::render()
 {
+	if (!image3dWidth || !image3dHeight || !image3dDepth)
+		return;
+
 	VkResult err;
 
 	//uploading the uniformBuffer
