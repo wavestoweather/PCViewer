@@ -1,6 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_nonuniform_qualifier : enable
 
 layout(std430, binding = 0) buffer Informations{
 	uint amtOfAttributes;
@@ -26,19 +27,13 @@ layout(std430, binding = 0) buffer Informations{
 	uint attributes[];
 } info;
 
-layout( set = 0, binding = 1, rgba8 ) uniform image3D density1;
-layout( set = 0, binding = 2, rgba8 ) uniform image3D density2;
-layout( set = 0, binding = 3, rgba8 ) uniform image3D density3;
-layout( set = 0, binding = 4, rgba8 ) uniform image3D density4;
-layout( set = 0, binding = 5, rgba8 ) uniform image3D density5;
-layout( set = 0, binding = 6, rgba8 ) uniform image3D density6;
-layout( set = 0, binding = 7, rgba8 ) uniform image3D density7;
+layout(set = 0, binding = 1, r8 ) uniform image3D densities[];
 
-layout(std430, binding = 8) buffer IndexBuffer{
+layout(std430, binding = 2) buffer IndexBuffer{
 	uint ind[];
 };
 
-layout(std430, binding = 9) buffer DataBuffer{
+layout(std430, binding = 3) buffer DataBuffer{
 	float data[];
 };
 
@@ -47,43 +42,15 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 void main(){
 	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
 	uint i = ind[gl_GlobalInvocationID.x];
-
-	bool writeImage[7] = bool[7](false,false,false,false,false,false,false);
-	vec4 imageValues[7] = vec4[7](vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0));
-
-	//creating the vec4s which should be stored
-	for(int j = 0;j<info.amtOfDensityAttributes;++j){
-		uint attributeIndex = info.attributes[j];
-		float data = data[i*info.amtOfIndices + attributeIndex];
-		writeImage[attributeIndex >> 2] = true;
-		imageValues[attributeIndex >> 2][attributeIndex & 3] = data;
-	}
-
 	ivec3 pos;
 	pos.x = int((data[i*info.amtOfIndices + info.xInd] - info.xMin) / (info.xMax - info.xMin) * info.dimX);
 	pos.y = int((data[i*info.amtOfIndices + info.yInd] - info.yMin) / (info.yMax - info.yMin) * info.dimY);
 	pos.z = int((data[i*info.amtOfIndices + info.zInd] - info.zMin) / (info.zMax - info.zMin) * info.dimZ);
 
-	//storing the density data in the images
-	if(writeImage[0]){
-		imageStore(density1, pos, imageValues[0]);
-	}
-	if(writeImage[1]){
-		imageStore(density2, pos, imageValues[1]);
-	}
-	if(writeImage[2]){
-		imageStore(density3, pos, imageValues[2]);
-	}
-	if(writeImage[3]){
-		imageStore(density4, pos, imageValues[3]);
-	}
-	if(writeImage[4]){
-		imageStore(density5, pos, imageValues[4]);
-	}
-	if(writeImage[5]){
-		imageStore(density6, pos, imageValues[5]);
-	}
-	if(writeImage[6]){
-		imageStore(density7, pos, imageValues[6]);
+	//creating the vec4s which should be stored
+	for(int j = 0;j<info.amtOfDensityAttributes;++j){
+		uint attributeIndex = info.attributes[j];
+		float data = data[i*info.amtOfIndices + attributeIndex];
+		imageStore(densities[j], pos, vec4(data));
 	}
 }

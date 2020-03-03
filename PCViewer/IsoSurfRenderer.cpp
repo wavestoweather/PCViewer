@@ -21,10 +21,6 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	imageView =	VK_NULL_HANDLE;
 	sampler = VK_NULL_HANDLE;
 	image3dMemory = VK_NULL_HANDLE;
-	for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
-		image3d[i] = VK_NULL_HANDLE;
-		image3dView[i] = VK_NULL_HANDLE;
-	}
 	image3dSampler = VK_NULL_HANDLE;
 	descriptorSetLayout = VK_NULL_HANDLE,
 	descriptorSet = VK_NULL_HANDLE;
@@ -90,7 +86,7 @@ IsoSurfRenderer::~IsoSurfRenderer()
 	if (image3dMemory) {
 		vkFreeMemory(device, image3dMemory, nullptr);
 	}
-	for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
+	for (int i = 0; i < image3d.size(); ++i) {
 		if (image3d[i]) {
 			vkDestroyImage(device, image3d[i], nullptr);
 		}
@@ -194,13 +190,8 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float,float>>& densityAttributesMinMax, glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data)
 {
 	VkResult err;
-	uint32_t required3dImages = amtOfIndices / 4 + ((amtOfIndices & 3) == 0) ? 0 : 1;
 
-	//safety check if the amoutn fo indices is supported
-	if (required3dImages <= AMTOF3DTEXTURES) {
-		std::cout << "Too much attributes for Iso surface rendering. The maximum of attributes is " << AMTOF3DTEXTURES * 4 << " Attributes." << std::endl;
-		return;
-	}
+	uint32_t required3dImages = densityAttributes.size();
 
 	image3dWidth = width;
 	image3dHeight = height;
@@ -210,7 +201,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	if (image3dMemory) {
 		vkFreeMemory(device, image3dMemory, nullptr);
 	}
-	for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
+	for (int i = 0; i < image3d.size(); ++i) {
 		if (image3d[i]) {
 			vkDestroyImage(device, image3d[i], nullptr);
 			image3d[i] = VK_NULL_HANDLE;
@@ -220,6 +211,9 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 			image3dView[i] = VK_NULL_HANDLE;
 		}
 	}
+	image3d.clear();
+	image3dView.clear();
+	image3dOffsets.clear();
 	if (!image3dSampler) {
 		VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_NEAREST,16,1,&image3dSampler);
 	}
@@ -230,8 +224,12 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	uint32_t memoryTypeBits = 0;
 	VkMemoryRequirements memRequirements;
 	for (int i = 0; i < required3dImages; ++i) {
+		image3d.push_back({});
+		image3dView.push_back({});
+		image3dOffsets.push_back(0);
+
 		image3dOffsets[i] = allocInfo.allocationSize;
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, &image3d[i]);
+		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, &image3d[i]);
 
 		vkGetImageMemoryRequirements(device, image3d[i], &memRequirements);
 
@@ -303,19 +301,24 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	sets.push_back(computeDescriptorSetLayout);
 	VkUtil::createDescriptorSets(device, sets, descriptorPool, &descSet);
 	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
-		VkUtil::updateStorageImageDescriptorSet(device, image3dView[i], VK_IMAGE_LAYOUT_GENERAL, i + 1, descSet);
+	//for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
+	//	VkUtil::updateStorageImageDescriptorSet(device, image3dView[i], VK_IMAGE_LAYOUT_GENERAL, i + 1, descSet);
+	//}
+	std::vector<VkImageLayout> imageLayouts;
+	for (auto i : image3d) {
+		imageLayouts.push_back(VK_IMAGE_LAYOUT_GENERAL);
 	}
-	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), AMTOF3DTEXTURES + 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, data, amtOfData * sizeof(float), AMTOF3DTEXTURES + 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dView, imageLayouts, 1, descSet);
+	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, amtOfData * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
 	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
 	VkClearColorValue clear = { 0,0,0,0 };
 	VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
-	for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
-		vkCmdClearColorImage(computeCommands, image3d[i], VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
+	for (VkImage& image:image3d) {
+		vkCmdClearColorImage(computeCommands, image, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
 	}
 	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
@@ -623,17 +626,17 @@ void IsoSurfRenderer::createPipeline()
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(binding);
 
+	binding.binding = 1;								//density pictures
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	for (int i = 0; i < AMTOF3DTEXTURES; ++i) {			//density pictures
-		binding.binding = i + 1;
-		bindings.push_back(binding);
-	}
+	binding.descriptorCount = MAXAMTOF3DTEXTURES;
+	bindings.push_back(binding);
 
-	binding.binding = AMTOF3DTEXTURES + 1;				//indices buffer
+	binding.binding = 2;								//indices buffer
+	binding.descriptorCount = 1;
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(binding);
 
-	binding.binding = AMTOF3DTEXTURES + 2;				//data buffer
+	binding.binding = 3;								//data buffer
 	bindings.push_back(binding);
 
 	VkUtil::createDescriptorSetLayout(device, bindings, &computeDescriptorSetLayout);

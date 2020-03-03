@@ -2840,6 +2840,13 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 	{
 		int device_extension_count = 1;
 		const char* device_extensions[] = { "VK_KHR_swapchain" };
+		
+		VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexingFeatures{};
+		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+		indexingFeatures.pNext = nullptr;
+		indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+		indexingFeatures.runtimeDescriptorArray = VK_TRUE;
+
 		VkPhysicalDeviceFeatures deviceFeatures = {};
 		deviceFeatures.geometryShader = VK_TRUE;
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
@@ -2861,6 +2868,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		create_info.enabledExtensionCount = device_extension_count;
 		create_info.ppEnabledExtensionNames = device_extensions;
 		create_info.pEnabledFeatures = &deviceFeatures;
+		create_info.pNext = &indexingFeatures;
 		err = vkCreateDevice(g_PhysicalDevice, &create_info, g_Allocator, &g_Device);
 		check_vk_result(err);
 		vkGetDeviceQueue(g_Device, g_QueueFamily, 0, &g_Queue);

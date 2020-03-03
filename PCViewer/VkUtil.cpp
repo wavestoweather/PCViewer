@@ -487,7 +487,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType,VkRende
 	check_vk_result(err);
 }
 
-void VkUtil::createFrameBuffer(VkDevice device, VkRenderPass renderPass, const std::vector<VkImageView> attachments, uint32_t width, uint32_t height, VkFramebuffer* frambuffer)
+void VkUtil::createFrameBuffer(VkDevice device, VkRenderPass renderPass, const std::vector<VkImageView>& attachments, uint32_t width, uint32_t height, VkFramebuffer* frambuffer)
 {
 	VkResult err;
 
@@ -616,6 +616,26 @@ void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImag
 	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
 }
 
+void VkUtil::updateImageArrayDescriptorSet(VkDevice device, VkSampler sampler, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet)
+{
+	VkDescriptorImageInfo* desc_images = new VkDescriptorImageInfo[imageViews.size()];
+	for (int i = 0; i < imageViews.size(); ++i) {
+		desc_images[i].sampler = sampler;
+		desc_images[i].imageView = imageViews[i];
+		desc_images[i].imageLayout = imageLayouts[i];
+	}
+
+	VkWriteDescriptorSet write_desc[1] = {};
+	write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write_desc[0].dstSet = descriptorSet;
+	write_desc[0].descriptorCount = imageViews.size();
+	write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	write_desc[0].pImageInfo = desc_images;
+	write_desc[0].dstBinding = binding;
+	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
+	delete[] desc_images;
+}
+
 void VkUtil::updateStorageImageDescriptorSet(VkDevice device, VkImageView imageView, VkImageLayout imageLayout, uint32_t binding, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorImageInfo desc_image[1] = {};
@@ -630,6 +650,26 @@ void VkUtil::updateStorageImageDescriptorSet(VkDevice device, VkImageView imageV
 	write_desc[0].pImageInfo = desc_image;
 	write_desc[0].dstBinding = binding;
 	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
+}
+
+void VkUtil::updateStorageImageArrayDescriptorSet(VkDevice device, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet)
+{
+	VkDescriptorImageInfo* desc_images = new VkDescriptorImageInfo[imageViews.size()];
+	for (int i = 0; i < imageViews.size(); ++i) {
+		desc_images[i].sampler = nullptr;
+		desc_images[i].imageView = imageViews[i];
+		desc_images[i].imageLayout = imageLayouts[i];
+	}
+	
+	VkWriteDescriptorSet write_desc[1] = {};
+	write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write_desc[0].dstSet = descriptorSet;
+	write_desc[0].descriptorCount = imageViews.size();
+	write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	write_desc[0].pImageInfo = desc_images;
+	write_desc[0].dstBinding = binding;
+	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
+	delete[] desc_images;
 }
 
 void VkUtil::updateTexelBufferDescriptorSet(VkDevice device, VkBufferView bufferView, uint32_t binding, VkDescriptorSet descriptorSet) {

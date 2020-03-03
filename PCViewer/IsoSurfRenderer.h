@@ -19,7 +19,8 @@ the backside of the cube are raymarched.
 #define HORIZONTALPANSPEED .01f
 #define ZOOMSPEED .03f
 
-#define AMTOF3DTEXTURES 7			//amount of textures used for the density values. The total amount of density attributes is AMTOF3DTEXTURES * 4 (4 density channels per image)
+//#define AMTOF3DTEXTURES 7			//amount of textures used for the density values. The total amount of density attributes is AMTOF3DTEXTURES * 4 (4 density channels per image) NOTE: found out that it is easily possible to write an array of textures to a binding
+#define MAXAMTOF3DTEXTURES 30
 #define LOCALSIZE 256
 
 #define IDX3D(x,y,z,width,height) ((x)+((y)*width)+((z)*width*height))
@@ -107,9 +108,9 @@ private:
 	//vulkan resources for the 3d density images
 	VkDescriptorSet		imageDescriptorSet;
 	VkDeviceMemory		image3dMemory;
-	uint32_t			image3dOffsets[AMTOF3DTEXTURES];
-	VkImage				image3d[AMTOF3DTEXTURES];
-	VkImageView			image3dView[AMTOF3DTEXTURES];
+	std::vector<uint32_t>	image3dOffsets;
+	std::vector<VkImage>	image3d;
+	std::vector<VkImageView>image3dView;
 	VkSampler			image3dSampler;
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkDescriptorPool	descriptorPool;
