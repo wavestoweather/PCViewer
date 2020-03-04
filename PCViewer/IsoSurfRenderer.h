@@ -1,7 +1,6 @@
 /*
-This class is the 3d view for the datasets. It is programmed, such that it takes a 3d texture, and renders it via effective raymarching.
-Effective raymarching is accomplished via rendering a cube with its local coordinates as uv-coordinates, and then in the fragment shader only fragmetns which are occupied by
-the backside of the cube are raymarched.
+IsoSurfRenderer is a class to support iso surface rendering of 3d multivariate grid data.
+The iso surfaces are set by brushes.
 */
 #pragma once
 #ifndef IsoSurfRenderer_H
@@ -71,6 +70,17 @@ private:
 		//index attr 1,
 		//index attr 2,
 		//...
+	};
+
+	struct BrushInfos {
+		uint32_t amtOfBrushes;
+		uint32_t padding[3];
+		//float[] brushes structure (a stands for axis):
+		//offset a1, offset a2, ..., offset an, a1, a2, ..., an
+		//axis structure:
+		//amtOfBrushes, offset b1, offset b2, ..., offset bn, b1, b2, ..., bn
+		//brush structure:
+		//amtOfMinMax, minMax1, minMax2, ..., minMaxN
 	};
 	
 	//shaderpaths
