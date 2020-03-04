@@ -603,7 +603,13 @@ void IsoSurfRenderer::createPipeline()
 
 	uboLayoutBinding.binding = 1;
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	uboLayoutBinding.descriptorCount = MAXAMTOF3DTEXTURES;
 	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	bindings.push_back(uboLayoutBinding);
+
+	uboLayoutBinding.binding = 2;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
 	VkUtil::createDescriptorSetLayout(device, bindings, &descriptorSetLayout);

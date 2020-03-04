@@ -73,14 +73,14 @@ private:
 	};
 
 	struct BrushInfos {
-		uint32_t amtOfBrushes;
+		uint32_t amtOfAxis;
 		uint32_t padding[3];
 		//float[] brushes structure (a stands for axis):
 		//offset a1, offset a2, ..., offset an, a1, a2, ..., an
 		//axis structure:
 		//amtOfBrushes, offset b1, offset b2, ..., offset bn, b1, b2, ..., bn
 		//brush structure:
-		//amtOfMinMax, minMax1, minMax2, ..., minMaxN
+		//amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
 	};
 	
 	//shaderpaths

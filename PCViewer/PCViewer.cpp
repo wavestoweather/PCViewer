@@ -2855,6 +2855,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.vertexPipelineStoresAndAtomics = VK_TRUE;
 		deviceFeatures.shaderStorageImageExtendedFormats = VK_TRUE;
 		deviceFeatures.shaderTessellationAndGeometryPointSize = VK_TRUE;
+		deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
 		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;

@@ -7,7 +7,21 @@ layout(binding = 0) uniform UniformBufferObject{
 	vec3 lightDir;
 	mat4 mvp;
 } ubo;
-layout(binding = 1) uniform sampler3D texSampler;
+
+//currently the maximum amount of density attributes is 30!
+layout(binding = 1) uniform sampler3D texSampler[30];
+
+layout(std430 ,binding = 2) buffer brushInfos{
+	uint amtOfAxis;
+	uint padding[3];
+	float[] brushes;
+	//float[] brushes structure (a stands for axis):
+	//offset a1, offset a2, ..., offset an, a1, a2, ..., an
+	//axis structure:
+	//amtOfBrushes, offset b1, offset b2, ..., offset bn, b1, b2, ..., bn
+	//brush structure:
+	//amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
+}bInfo;
 
 layout(location = 0) in vec3 endPos;
 layout(location = 0) out vec4 outColor;
@@ -29,14 +43,10 @@ void main() {
 	t.z = (t.z>.999999)?-1.0/0:t.z;
 	
 	float tmax = max(t.x,max(t.y,t.z));
-	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1)*d;
+	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1.0)*d;
 
 	const float alphaStop = .98f;
-	const float stepsize = .0013f;
-	const int lightSteps = 5;
-	const float lightStepIncrease = 0.001f;
-	const float beerFactor = 1.0f;
-	const float densityMultiplier = 100.0f;
+	const float stepsize = .0013f;		//might change that to a non constant to be changed at runtime
 	
 	//outColor is calculated with gamma correction
 	outColor = vec4(0,0,0,0);
@@ -47,45 +57,46 @@ void main() {
 	startPoint += .5f;
 
 	vec3 step = normalize(d) * stepsize;
-	//insert random displacement to startpositon
+	//insert random displacement to startpositon (prevents bad visual effects)
 	startPoint += step * rand(startPoint);
-	vec3 lightStep = normalize(-ubo.lightDir) * .002f;
-	float transmittance = 1;
-	for(int i = 0; i < iterations; i++){
 
-		vec4 tex = texture(texSampler,startPoint);
-		if(false) {
-			//computing lighting
-			float lightDens = 0;
-			vec3 lightPos = startPoint + lightStep;
-			for(int j = 0;j<lightSteps;j++){
-				if(lightPos.x>1.0f||lightPos.y>1.0f||lightPos.z>1.0f||lightPos.x<0.0f||lightPos.y<0.0f||lightPos.z<0.0f){
-					break;
+	//for every axis/attribute here the last density is stored
+	float prevDensity[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+
+	bool br = false;		//bool to break early
+	for(int i = 0; i < iterations && !br; i++){
+		//for every axis/attribute
+		for(int axis = 0;axis<bInfo.amtOfAxis && !br;++axis){
+			int axisOffset = int(bInfo.brushes[axis]);
+			//check if there exists a brush on this axis
+			if(bool(bInfo.brushes[axisOffset])){		//amtOfBrushes > 0
+				//as there exist brushes we get the density for this attribute
+				float density = texture(texSampler[axis],startPoint).x;
+				//for every brush
+				for(int brush = 0;brush<bInfo.brushes[axisOffset] && !br;++brush){
+					int brushOffset = int(bInfo.brushes[axisOffset + 1 + brush]);
+					//for every MinMax
+					for(int minMax = 0;minMax<bInfo.brushes[brushOffset] && !br;++minMax){
+						int minMaxOffset = brushOffset + 5 + 2 * minMax;			//+5 as after 1 the color is saved and the color is a vec4
+						float mi = bInfo.brushes[minMaxOffset];
+						float ma = bInfo.brushes[minMaxOffset + 1];
+						bool stepInBot = prevDensity[axis] < mi && density > mi;
+						bool stepOutBot = prevDensity[axis] > mi && density < mi;
+						bool stepInTop = prevDensity[axis] > ma && density < ma;
+						bool stepOutTop = prevDensity[axis] < ma && density > ma;
+
+						if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
+							vec4 surfColor = vec4(bInfo.brushes[brushOffset + 1,brushOffset + 2,brushOffset + 3,brushOffset + 4]);
+							outColor.xyz += (1-outColor.w) * surfColor.w * surfColor.xyz;
+							outColor.w += (1-outColor.w) * surfColor.w;
+							//check for alphaStop
+							if(outColor.w > alphaStop) br = true;
+						}
+					}
 				}
-				lightDens += texture(texSampler,lightPos).a * length(lightStep) * densityMultiplier;
-				lightStep += lightStepIncrease;
-				lightPos += lightStep;
-			}
-
-			//lightDens is now the light intensity
-			lightDens = clamp(exp(-beerFactor * lightDens),.1f,1.0f);
-
-			//adding the opacity as density
-			float curDensity = tex.a * stepsize * densityMultiplier;
-
-			//tex.a *= stepsize * 100;
-			//tex.rgb *= tex.a * lightDens;
-			//outColor = (1.0f - outColor.a)*tex + outColor;
-			outColor.xyz += transmittance * lightDens * curDensity * tex.xyz;
-
-			//transmittance
-			transmittance *= 1 - curDensity;
-			
-			if(transmittance <= 1 - alphaStop){
-				break;
 			}
 		}
+
 		startPoint += step;
 	}
-	outColor.a = 1 - transmittance;
 }
