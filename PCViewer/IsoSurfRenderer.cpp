@@ -38,7 +38,9 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	computePipeline = VK_NULL_HANDLE;
 	computePipelineLayout = VK_NULL_HANDLE;
 	computeDescriptorSetLayout = VK_NULL_HANDLE;
-
+	brushBuffer = VK_NULL_HANDLE;
+	brushMemory = VK_NULL_HANDLE;
+	brushByteSize = 0;
 
 	camPos = glm::vec3(2, 2, 2);
 	lightDir = glm::vec3(-1, -1, -1);
@@ -132,6 +134,12 @@ IsoSurfRenderer::~IsoSurfRenderer()
 	}
 	if (computeDescriptorSetLayout) {
 		vkDestroyDescriptorSetLayout(device, computeDescriptorSetLayout, nullptr);
+	}
+	if (brushBuffer) {
+		vkDestroyBuffer(device, brushBuffer, nullptr);
+	}
+	if (brushMemory) {
+		vkFreeMemory(device, brushMemory, nullptr);
 	}
 }
 
@@ -358,6 +366,39 @@ void IsoSurfRenderer::updateCameraPos(float* mouseMovement)
 	//adding zooming
 	glm::vec3 zoomDir = -camPos;
 	camPos += ZOOMSPEED * zoomDir * mouseMovement[2];
+}
+
+void IsoSurfRenderer::addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
+{
+	brushes[name] = minMax;
+	updateCommandBuffer();
+	render();
+}
+
+bool IsoSurfRenderer::updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
+{
+	if (brushes.find(name) == brushes.end()) return false;
+
+	int size = 0;
+	int sizeNew = 0;
+	for (auto& axis : brushes[name]) {
+		size += axis.size();
+	}
+	for (auto& axis : minMax) {
+		sizeNew += axis.size();
+	}
+
+	brushes[name] = minMax;
+	
+	if (sizeNew > size) updateCommandBuffer();
+	render();
+
+	return true;
+}
+
+bool IsoSurfRenderer::deleteBrush(std::string& name)
+{
+	return brushes.erase(name) > 0;
 }
 
 void IsoSurfRenderer::render()
@@ -661,6 +702,51 @@ void IsoSurfRenderer::createDescriptorSets()
 	}
 
 	VkUtil::updateDescriptorSet(device, uniformBuffer, sizeof(UniformBuffer), 0, descriptorSet);
+}
+
+void IsoSurfRenderer::updateBrushBuffer()
+{
+	if (brushes.empty()) return;
+
+	//converting the map of brushes to the graphics data structure
+	std::vector<std::vector<std::vector<std::pair<float, float>>>> gpuData;
+	for (auto& brush : brushes) {
+		for (int axis = 0; axis < brush.second.size(); ++axis) {
+			if (gpuData.size() <= axis) gpuData.push_back({});
+			if(brush.second[axis].size()) gpuData[axis].push_back({});
+			for (auto& minMax : brush.second[axis]) {
+				gpuData[axis].back().push_back(minMax);
+			}
+		}
+	}
+
+	//get the size for the new buffer
+	uint32_t byteSize = 0;
+	byteSize += gpuData.size() * sizeof(float);		//offsets for the axes(offset a1, offset a2, ..., offset an)
+	for (int axis = 0; axis < gpuData.size(); ++axis) {
+		byteSize += (1 + gpuData[axis].size()) * sizeof(float);		//amtOfBrushes + offsets of the brushes
+		for (int brush = 0; brush < gpuData[axis].size(); ++brush) {
+			byteSize += (6 + 2 * gpuData[axis][brush].size()) * sizeof(float);		//brush index(1) + amtOfMinMax(1) + color(4) + space for minMax
+		}
+	}
+
+	if (brushByteSize >= byteSize) return;		//if the current brush byte size is bigger or equal to the requred byte size simply return. No new allocastion needed
+
+	brushByteSize = byteSize;
+
+	//deallocate too small buffer
+	if (brushBuffer) vkDestroyBuffer(device, brushBuffer, nullptr);
+	if (brushMemory) vkFreeMemory(device, brushMemory, nullptr);
+
+	VkUtil::createBuffer(device, byteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &brushBuffer);
+	VkMemoryRequirements memReq = {};
+	VkMemoryAllocateInfo allocInfo = {};
+	vkGetBufferMemoryRequirements(device, brushBuffer, &memReq);
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &brushMemory);
+	vkBindBufferMemory(device, brushBuffer, brushMemory, 0);
 }
 
 void IsoSurfRenderer::updateCommandBuffer()

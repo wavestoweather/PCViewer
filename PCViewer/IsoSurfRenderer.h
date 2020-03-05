@@ -13,6 +13,7 @@ The iso surfaces are set by brushes.
 #include "glm/gtc/matrix_transform.hpp"
 #include <limits.h>
 #include <string.h>
+#include <map>
 
 #define VERTICALPANSPEED .01f
 #define HORIZONTALPANSPEED .01f
@@ -37,6 +38,9 @@ public:
 	void resizeBox(float width, float height, float depth);
 	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data);
 	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
+	void addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);				//minMax has to be a vector containing for each attribute an array of minMax values
+	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a already added brush. Returns true if the brush was updated, else false
+	bool deleteBrush(std::string& name);
 	void render();
 	void setImageDescriptorSet(VkDescriptorSet descriptor);
 	VkDescriptorSet getImageDescriptorSet();
@@ -134,6 +138,9 @@ private:
 	VkBuffer			indexBuffer;
 	VkBuffer			uniformBuffer;
 	uint32_t			uniformBufferOffset;
+	VkBuffer			brushBuffer;
+	VkDeviceMemory		brushMemory;
+	uint32_t			brushByteSize;
 	//vulkan resources for the compute pipeline
 	VkPipeline			computePipeline;
 	VkPipelineLayout	computePipelineLayout;
@@ -143,12 +150,16 @@ private:
 	glm::vec3 camPos;		//camera position
 	glm::vec3 lightDir;
 
+	//variables for the brushes
+	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
+
 	//methods to instatiate vulkan resources
 	void createPrepareImageCommandBuffer();
 	void createImageResources();
 	void createBuffer();
 	void createPipeline();
 	void createDescriptorSets();
+	void updateBrushBuffer();
 	void updateCommandBuffer();
 };
 #endif 
