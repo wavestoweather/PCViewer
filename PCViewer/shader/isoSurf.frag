@@ -20,7 +20,7 @@ layout(std430 ,binding = 2) buffer brushInfos{
 	//axis structure:
 	//amtOfBrushes, offset b1, offset b2, ..., offset bn, b1, b2, ..., bn
 	//brush structure:
-	//amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
+	//bIndex, amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
 }bInfo;
 
 layout(location = 0) in vec3 endPos;
@@ -46,9 +46,8 @@ void main() {
 	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1.0)*d;
 
 	const float alphaStop = .98f;
-	const float stepsize = .0013f;		//might change that to a non constant to be changed at runtime
+	const float stepsize = .0013f;		//might change this to a non constant to be changed at runtime
 	
-	//outColor is calculated with gamma correction
 	outColor = vec4(0,0,0,0);
 	d = endPos-startPoint;
 	float len = length(d);
@@ -62,6 +61,9 @@ void main() {
 
 	//for every axis/attribute here the last density is stored
 	float prevDensity[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+	uint brushBits[30] = uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
+	bool brushBorder[30] = bool[30](false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
+	vec4 brushColor[30] = vec4[30](vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0));
 
 	bool br = false;		//bool to break early
 	for(int i = 0; i < iterations && !br; i++){
@@ -76,8 +78,9 @@ void main() {
 				for(int brush = 0;brush<bInfo.brushes[axisOffset] && !br;++brush){
 					int brushOffset = int(bInfo.brushes[axisOffset + 1 + brush]);
 					//for every MinMax
-					for(int minMax = 0;minMax<bInfo.brushes[brushOffset] && !br;++minMax){
-						int minMaxOffset = brushOffset + 5 + 2 * minMax;			//+5 as after 1 the color is saved and the color is a vec4
+					for(int minMax = 0;minMax<bInfo.brushes[brushOffset + 1] && !br;++minMax){
+						int minMaxOffset = brushOffset + 6 + 2 * minMax;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
+						int brushIndex = int(bInfo.brushes[brushOffset]);
 						float mi = bInfo.brushes[minMaxOffset];
 						float ma = bInfo.brushes[minMaxOffset + 1];
 						bool stepInBot = prevDensity[axis] < mi && density > mi;
@@ -85,16 +88,35 @@ void main() {
 						bool stepInTop = prevDensity[axis] > ma && density < ma;
 						bool stepOutTop = prevDensity[axis] < ma && density > ma;
 
-						if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
-							vec4 surfColor = vec4(bInfo.brushes[brushOffset + 1,brushOffset + 2,brushOffset + 3,brushOffset + 4]);
-							outColor.xyz += (1-outColor.w) * surfColor.w * surfColor.xyz;
-							outColor.w += (1-outColor.w) * surfColor.w;
-							//check for alphaStop
-							if(outColor.w > alphaStop) br = true;
-						}
+						//this are all the things i have to set to test if a surface has to be drawn
+						brushBits[brushIndex] &= (uint(density<mi||density>ma) << axis) ^ 0xffffffff;
+						brushBorder[brushIndex] = brushBorder[brushIndex] || stepInBot || stepOutBot || stepInTop || stepOutTop;
+						brushBits[brushIndex] |= uint(brushBorder[brushIndex]) << axis;
+						brushColor[brushIndex] = vec4(bInfo.brushes[brushOffset + 2,brushOffset + 3,brushOffset + 4,brushOffset + 5]);
+
+						//the surface calculation is moved to the end of the for loop, as we have to check for every attribute of the brush if it is inside it
+						//if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
+						//	vec4 surfColor = vec4(bInfo.brushes[brushOffset + 1,brushOffset + 2,brushOffset + 3,brushOffset + 4]);
+						//	outColor.xyz += (1-outColor.w) * surfColor.w * surfColor.xyz;
+						//	outColor.w += (1-outColor.w) * surfColor.w;
+						//	//check for alphaStop
+						//	if(outColor.w > alphaStop) br = true;
+						//}
 					}
 				}
 			}
+		}
+
+		//surface rendering
+		for(int i = 0;i<30;++i){
+			if(brushBorder[i] && brushBits[i] == 0xffffffff){		//surface has to be drawn TODO: shading
+				outColor.xyz += (1-outColor.w) * brushColor[i].w * brushColor[i].xyz;
+				outColor.w += (1-outColor.w) * brushColor[i].w;
+				if(outColor.w>alphaStop) br = true;
+			}
+			//resetting all brush things
+			brushBorder[i] = false;
+			brushBits[i] = 0xffffffff;
 		}
 
 		startPoint += step;

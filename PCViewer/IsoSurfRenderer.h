@@ -20,6 +20,7 @@ The iso surfaces are set by brushes.
 
 //#define AMTOF3DTEXTURES 7			//amount of textures used for the density values. The total amount of density attributes is AMTOF3DTEXTURES * 4 (4 density channels per image) NOTE: found out that it is easily possible to write an array of textures to a binding
 #define MAXAMTOF3DTEXTURES 30
+#define MAXAMTOFBRUSHES 30			//there is a max amount of brushes, as for every brush a integer in the gpu register has to be created
 #define LOCALSIZE 256
 
 #define IDX3D(x,y,z,width,height) ((x)+((y)*width)+((z)*width*height))
@@ -72,7 +73,7 @@ private:
 		//...
 	};
 
-	struct BrushInfos {
+	struct BrushInfos {		//Note, currently a maximum of 30 brushes is available. For more shader + define in this header have to be changed
 		uint32_t amtOfAxis;
 		uint32_t padding[3];
 		//float[] brushes structure (a stands for axis):
@@ -80,7 +81,7 @@ private:
 		//axis structure:
 		//amtOfBrushes, offset b1, offset b2, ..., offset bn, b1, b2, ..., bn
 		//brush structure:
-		//amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
+		//bIndex, amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
 	};
 	
 	//shaderpaths
