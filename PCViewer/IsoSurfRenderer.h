@@ -87,6 +87,11 @@ private:
 		//brush structure:
 		//bIndex, amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
 	};
+
+	struct Brush {		//this corresponds to the brush structure above
+		uint32_t bIndex;
+		std::vector<std::pair<float, float>> minMax;
+	};
 	
 	//shaderpaths
 	static char vertPath[];
@@ -152,6 +157,8 @@ private:
 
 	//variables for the brushes
 	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
+	std::map<std::string, float*> brushColors;											//each brush has its own colors
+	std::vector<float*> attributeColors;													//if only one brush is active every attribute can be assigned a different color
 
 	//methods to instatiate vulkan resources
 	void createPrepareImageCommandBuffer();
@@ -159,6 +166,7 @@ private:
 	void createBuffer();
 	void createPipeline();
 	void createDescriptorSets();
+	void updateDescriptorSet();
 	void updateBrushBuffer();
 	void updateCommandBuffer();
 };

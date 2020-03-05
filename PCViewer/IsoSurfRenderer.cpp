@@ -314,7 +314,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	//}
 	std::vector<VkImageLayout> imageLayouts;
 	for (auto i : image3d) {
-		imageLayouts.push_back(VK_IMAGE_LAYOUT_GENERAL);
+		imageLayouts.push_back(VK_IMAGE_LAYOUT_UNDEFINED);
 	}
 	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dView, imageLayouts, 1, descSet);
 	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
@@ -371,7 +371,8 @@ void IsoSurfRenderer::updateCameraPos(float* mouseMovement)
 void IsoSurfRenderer::addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
 {
 	brushes[name] = minMax;
-	updateCommandBuffer();
+	updateBrushBuffer();
+	updateDescriptorSet();
 	render();
 }
 
@@ -379,18 +380,10 @@ bool IsoSurfRenderer::updateBrush(std::string& name, std::vector<std::vector<std
 {
 	if (brushes.find(name) == brushes.end()) return false;
 
-	int size = 0;
-	int sizeNew = 0;
-	for (auto& axis : brushes[name]) {
-		size += axis.size();
-	}
-	for (auto& axis : minMax) {
-		sizeNew += axis.size();
-	}
-
 	brushes[name] = minMax;
 	
-	if (sizeNew > size) updateCommandBuffer();
+	updateBrushBuffer();
+	updateDescriptorSet();
 	render();
 
 	return true;
@@ -428,6 +421,52 @@ void IsoSurfRenderer::render()
 	memcpy(d, &ubo, sizeof(UniformBuffer));
 	vkUnmapMemory(device, constantMemory);
 
+	//uploading the storage buffer with bruhs infos -----------------------------------
+	//converting the map of brushes to the graphics data structure
+	std::vector<std::vector<Brush>> gpuData;
+	uint32_t bId = 0;
+	for (auto& brush : brushes) {
+		for (int axis = 0; axis < brush.second.size(); ++axis) {
+			if (gpuData.size() <= axis) gpuData.push_back({});
+			if (brush.second[axis].size()) gpuData[axis].push_back({bId});
+			for (auto& minMax : brush.second[axis]) {
+				gpuData[axis].back().minMax.push_back(minMax);
+			}
+		}
+		++bId;
+	}
+	std::vector<float*> colors;
+	for (auto& col : brushColors) {
+		colors.push_back(col.second);
+	}
+
+	BrushInfos* brushInfos = (BrushInfos*)new char[brushByteSize];
+	brushInfos->amtOfAxis = gpuData.size();
+	float* brushI = (float*)(brushInfos + 1);
+	uint32_t curOffset = gpuData.size();		//the first offset is for axis 1, which is the size of the axis
+	for (int axis = 0; axis < gpuData.size(); ++axis) {
+		brushI[axis] = curOffset;
+		brushI[curOffset++] = gpuData[axis].size();
+		int brushOffset = curOffset;
+		curOffset += gpuData[axis].size();
+		for (int brush = 0; brush < gpuData[axis].size(); ++brush) {
+			brushI[brushOffset + brush] = curOffset;
+			brushI[curOffset++] = gpuData[axis][brush].bIndex;
+			brushI[curOffset++] = gpuData[axis][brush].minMax.size();
+			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][0];
+			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][1];
+			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][2];
+			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][3];
+			for (int minMax = 0; minMax < gpuData[axis][brush].minMax.size(); ++minMax) {
+				brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].first;
+				brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].second;
+			}
+		}
+	}
+
+	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
+
+	delete[] brushInfos;
 
 	//submitting the command buffer
 	VkSubmitInfo submitInfo = {};
@@ -700,8 +739,17 @@ void IsoSurfRenderer::createDescriptorSets()
 	if (!descriptorSet) {
 		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
 	}
+}
 
+void IsoSurfRenderer::updateDescriptorSet()
+{
 	VkUtil::updateDescriptorSet(device, uniformBuffer, sizeof(UniformBuffer), 0, descriptorSet);
+	std::vector<VkImageLayout> layouts;
+	for (int i = 0; i < image3d.size(); ++i) {
+		layouts.push_back(VK_IMAGE_LAYOUT_UNDEFINED);
+	}
+	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, image3dView, layouts, 1, descriptorSet);
+	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 }
 
 void IsoSurfRenderer::updateBrushBuffer()
@@ -721,7 +769,7 @@ void IsoSurfRenderer::updateBrushBuffer()
 	}
 
 	//get the size for the new buffer
-	uint32_t byteSize = 0;
+	uint32_t byteSize = 4;		//Standard information + padding
 	byteSize += gpuData.size() * sizeof(float);		//offsets for the axes(offset a1, offset a2, ..., offset an)
 	for (int axis = 0; axis < gpuData.size(); ++axis) {
 		byteSize += (1 + gpuData[axis].size()) * sizeof(float);		//amtOfBrushes + offsets of the brushes
