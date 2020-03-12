@@ -1,7 +1,10 @@
 // dear imgui: Renderer for Vulkan
 // This needs to be used along with a Platform Binding (e.g. GLFW, SDL, Win32, custom..)
 
+// Implemented features:
+//  [X] Renderer: Support for large meshes (64k+ vertices) with 16-bit indices.
 // Missing features:
+//  [ ] Platform: Multi-viewport / platform windows.
 //  [ ] Renderer: User texture binding. Changes of ImTextureID aren't supported by this binding! See https://github.com/ocornut/imgui/pull/914
 
 // You can copy and use unmodified imgui_impl_* files in your project. See main.cpp for an example of using this.
@@ -14,7 +17,7 @@
 // Important note to the reader who wish to integrate imgui_impl_vulkan.cpp/.h in their own engine/app.
 // - Common ImGui_ImplVulkan_XXX functions and structures are used to interface with imgui_impl_vulkan.cpp/.h.
 //   You will use those if you want to use this rendering back-end in your engine/app.
-// - Helper ImGui_ImplVulkanH_XXX functions and structures are only used by this example (main.cpp) and by 
+// - Helper ImGui_ImplVulkanH_XXX functions and structures are only used by this example (main.cpp) and by
 //   the back-end itself (imgui_impl_vulkan.cpp), but should PROBABLY NOT be used by your own engine/app code.
 // Read comments in imgui_impl_vulkan.h.
 
@@ -35,6 +38,7 @@ struct ImGui_ImplVulkan_InitInfo
     VkDescriptorPool    DescriptorPool;
     uint32_t            MinImageCount;          // >= 2
     uint32_t            ImageCount;             // >= MinImageCount
+    VkSampleCountFlagBits        MSAASamples;   // >= VK_SAMPLE_COUNT_1_BIT
     const VkAllocationCallbacks* Allocator;
     void                (*CheckVkResultFn)(VkResult err);
 };
@@ -44,10 +48,9 @@ IMGUI_IMPL_API bool     ImGui_ImplVulkan_Init(ImGui_ImplVulkan_InitInfo* info, V
 IMGUI_IMPL_API void     ImGui_ImplVulkan_Shutdown();
 IMGUI_IMPL_API void     ImGui_ImplVulkan_NewFrame();
 IMGUI_IMPL_API void     ImGui_ImplVulkan_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer command_buffer);
-IMGUI_IMPL_API bool     ImGui_ImplVulkan_CreateFontsTexture(VkCommandBuffer command_buffer, VkDevice g_Device, VkDescriptorPool g_DescriptorPool);
+IMGUI_IMPL_API bool     ImGui_ImplVulkan_CreateFontsTexture(VkCommandBuffer command_buffer);
 IMGUI_IMPL_API void     ImGui_ImplVulkan_DestroyFontUploadObjects();
 IMGUI_IMPL_API void     ImGui_ImplVulkan_SetMinImageCount(uint32_t min_image_count); // To override MinImageCount after initialization (e.g. if swap chain is recreated)
-IMGUI_IMPL_API ImTextureID    ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image_view, VkImageLayout image_layout, VkDevice g_Device, VkDescriptorPool g_DescriptorPool);
 
 
 //-------------------------------------------------------------------------
@@ -57,7 +60,7 @@ IMGUI_IMPL_API ImTextureID    ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkI
 // You probably do NOT need to use or care about those functions.
 // Those functions only exist because:
 //   1) they facilitate the readability and maintenance of the multiple main.cpp examples files.
-//   2) the upcoming multi-viewport feature will need them internally.
+//   2) the multi-viewport / platform window implementation needs them internally.
 // Generally we avoid exposing any kind of superfluous high-level helpers in the bindings,
 // but it is too much code to duplicate everywhere so we exceptionally expose them.
 //
@@ -114,9 +117,9 @@ struct ImGui_ImplVulkanH_Window
     ImGui_ImplVulkanH_Frame*            Frames;
     ImGui_ImplVulkanH_FrameSemaphores*  FrameSemaphores;
 
-    ImGui_ImplVulkanH_Window() 
-    { 
-        memset(this, 0, sizeof(*this)); 
+    ImGui_ImplVulkanH_Window()
+    {
+        memset(this, 0, sizeof(*this));
         PresentMode = VK_PRESENT_MODE_MAX_ENUM_KHR;
         ClearEnable = true;
     }
