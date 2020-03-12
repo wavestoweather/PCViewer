@@ -1447,3 +1447,36 @@ void ImGui_ImplVulkan_ShutdownPlatformInterface()
 {
     ImGui::DestroyPlatformWindows();
 }
+
+ImTextureID ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image_view, VkImageLayout image_layout, VkDevice g_Device, VkDescriptorPool g_DescriptorPool) {
+	VkResult err;
+
+	VkDescriptorSet descriptor_set;
+	// Create Descriptor Set:
+	{
+		VkDescriptorSetAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc_info.descriptorPool = g_DescriptorPool;
+		alloc_info.descriptorSetCount = 1;
+		alloc_info.pSetLayouts = &g_DescriptorSetLayout;
+		err = vkAllocateDescriptorSets(g_Device, &alloc_info, &descriptor_set);
+		check_vk_result(err);
+	}
+
+	// Update the Descriptor Set:
+	{
+		VkDescriptorImageInfo desc_image[1] = {};
+		desc_image[0].sampler = sampler;
+		desc_image[0].imageView = image_view;
+		desc_image[0].imageLayout = image_layout;
+		VkWriteDescriptorSet write_desc[1] = {};
+		write_desc[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write_desc[0].dstSet = descriptor_set;
+		write_desc[0].descriptorCount = 1;
+		write_desc[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		write_desc[0].pImageInfo = desc_image;
+		vkUpdateDescriptorSets(g_Device, 1, write_desc, 0, NULL);
+	}
+
+	return (ImTextureID)descriptor_set;
+}
