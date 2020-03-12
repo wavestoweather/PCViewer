@@ -7400,13 +7400,13 @@ int main(int, char**)
 				// Drawing the violin plots
 				ImVec2 leftUpperCorner = ImGui::GetCursorScreenPos();
 				ImVec2 leftUpperCornerStart = leftUpperCorner;
-				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (violinDrawlistPlots[i].matrixSize.second - 1) * violinPlotXSpacing) / violinDrawlistPlots[i].matrixSize.second, (ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - violinDrawlistPlots[i].matrixSize.first * ImGui::GetItemsLineHeightWithSpacing()) / (float)violinDrawlistPlots[i].matrixSize.first);
+				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (violinDrawlistPlots[i].matrixSize.second - 1) * violinPlotXSpacing) / violinDrawlistPlots[i].matrixSize.second, (ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - violinDrawlistPlots[i].matrixSize.first * ImGui::GetFrameHeightWithSpacing()) / (float)violinDrawlistPlots[i].matrixSize.first);
 				for (int x = 0; x < violinDrawlistPlots[i].matrixSize.first; ++x) {	//Drawing the plots per matrix entry
 					for (int y = 0; y < violinDrawlistPlots[i].matrixSize.second; ++y) {
 						int j = violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y];
 
 						ImVec2 framePos = leftUpperCorner;
-						framePos.y += ImGui::GetItemsLineHeightWithSpacing();
+						framePos.y += ImGui::GetFrameHeightWithSpacing();
 						ImGui::RenderFrame(framePos, framePos + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
 						ImGui::SetCursorScreenPos(framePos);
 						if (size.x > 0 && size.y > 0)	//safety check. ImGui crahes when button size is 0
@@ -7626,7 +7626,7 @@ int main(int, char**)
 						leftUpperCorner.x += size.x + violinPlotXSpacing;
 					}
 					leftUpperCorner.x = leftUpperCornerStart.x;
-					leftUpperCorner.y += size.y + ImGui::GetItemsLineHeightWithSpacing();
+					leftUpperCorner.y += size.y + ImGui::GetFrameHeightWithSpacing();
 				}
 
 				ImGui::PopItemWidth();
