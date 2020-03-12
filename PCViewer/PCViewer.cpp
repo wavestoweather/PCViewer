@@ -6956,7 +6956,7 @@ int main(int, char**)
 			}
 
 			ImGui::Image((ImTextureID)bubblePlotter->getImageDescSet(), ImVec2(800, 800), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
-			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging() || io.MouseWheel || io.KeysDown[KEYW] || io.KeysDown[KEYA] || io.KeysDown[KEYS] || io.KeysDown[KEYD])) {
+			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel || io.KeysDown[KEYW] || io.KeysDown[KEYA] || io.KeysDown[KEYS] || io.KeysDown[KEYD])) {
 				CamNav::NavigationInput nav = {};
 				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
 				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
