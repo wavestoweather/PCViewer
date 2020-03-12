@@ -694,6 +694,7 @@ static bool view3dAlwaysOnTop = false;
 static bool enable3dView = false;
 static std::string active3dAttribute;
 static bool enableBubbleWindow = false;
+static bool enableIsoSurfaceWindow = false;
 static bool coupleBubbleWindow = true;
 static BubblePlotter* bubblePlotter;
 
@@ -7052,9 +7053,57 @@ int main(int, char**)
 			ImGui::Separator();
 			ImGui::EndChild();
 			ImGui::End();
+
+			//set bubble plot data via drag and drop
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+					DrawList* dl = *((DrawList**)payload->Data);
+					DataSet* parent;
+					for (auto it = g_PcPlotDataSets.begin(); it != g_PcPlotDataSets.end(); ++it) {
+						if (it->name == dl->parentDataSet) {
+							parent = &(*it);
+						}
+					}
+					std::vector<uint32_t> ids;
+					std::vector<std::string> attributeNames;
+					std::vector<std::pair<float, float>> attributeMinMax;
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						attributeNames.push_back(pcAttributes[i].name);
+						attributeMinMax.push_back({ pcAttributes[i].min,pcAttributes[i].max });
+					}
+					glm::uvec3 posIndices(0, 2, 1);
+					bubblePlotter->setBubbleData(posIndices, dl->indices, attributeNames, attributeMinMax, parent->data, dl->buffer, dl->activeIndicesBufferView, attributeNames.size(), parent->data.size());
+				}
+				ImGui::EndDragDropTarget();
+			}
 		}
 			
 		//end of bubble window ---------------------------------------------------------------------------
+
+		//begin of iso surface window --------------------------------------------------------------------
+		if (enableIsoSurfaceWindow) {
+			ImGui::Begin("Isosurface Renderer",&enableIsoSurfaceWindow);
+
+			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), { 800,800 });
+			if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+				//TODO: navigation with mouse
+			}
+			if (ImGui::IsItemHovered() && (ImGui::IsKeyDown(KEYA) || ImGui::IsKeyDown(KEYS) || ImGui::IsKeyDown(KEYD) || ImGui::IsKeyDown(KEYQ) || ImGui::IsKeyDown(KEYW) || ImGui::IsKeyDown(KEYE))) {
+				//TODO: fly navigation
+			}
+
+			//set drawlist data via drag and drop
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+					DrawList* dl = *((DrawList**)payload->Data);
+					
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			ImGui::End();
+		}
+		//end of so surface window -----------------------------------------------------------------------
 		
 		//begin of violin plots attribute major ----------------------------------------------------------
 		if (enableAttributeViolinPlots) {
