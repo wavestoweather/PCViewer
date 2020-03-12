@@ -5409,12 +5409,17 @@ int main(int, char**)
 					}
 					else {
 						if (ImGui::MenuItem("Create brush fractures")) {
-							std::vector<std::pair<float, float>> bounds;
+							std::vector<std::vector<std::pair<float, float>>> bounds;
 							globalBrushes[i].attributes.clear();
 							//NOTE: only the first brush for each axis is taken
+							int index = 0;
 							for (auto brush : globalBrushes[i].brushes) {
 								globalBrushes[i].attributes.push_back(brush.first);
-								bounds.push_back(brush.second[0].second);
+								bounds.push_back({});
+								for (auto& minMax : brush.second) {
+									bounds[index].push_back(minMax.second);
+								}
+								index++;
 							}
 #ifdef _DEBUG
 							std::cout << "Starting to build the kd tree for fracturing." << std::endl;
@@ -5798,6 +5803,10 @@ int main(int, char**)
 						ImVec2 mousePos = ImGui::GetIO().MousePos;
 						float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 						float width = BRUSHWIDTH;
+
+						int del = -1;
+						int ind = 0;
+						bool brushHover = false;
 						for (auto& br : brush.second) {
 							float y = ((br.second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 							float height = (br.second.second - br.second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -5809,6 +5818,7 @@ int main(int, char**)
 							edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
 							int r = (brushDragIds.find(br.first) != brushDragIds.end()) ? 200 : 30;
 							ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(r, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+							brushHover |= hover || edgeHover;
 							//set mouse cursor
 							if (edgeHover || brushDragIds.size()) {
 								ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
@@ -5857,6 +5867,38 @@ int main(int, char**)
 								brushDragIds.clear();
 								updateAllActiveIndices();
 								pcPlotRender = true;
+							}
+
+							//check for deletion of brush
+							if (ImGui::GetIO().MouseClicked[1] && hover) {
+								del = ind;
+								brushDragIds.clear();
+							}
+
+							ind++;
+						}
+						//deleting a brush
+						if (del != -1) {
+							brush.second[del] = brush.second[brush.second.size() - 1];
+							brush.second.pop_back();
+							del = -1;
+							updateAllActiveIndices();
+							pcPlotRender = true;
+						}
+
+						//create a new brush
+						bool axisHover = mousePos.x > x&& mousePos.x < x + BRUSHWIDTH && mousePos.y > picPos.y&& mousePos.y < picPos.y + picSize.y;
+						if (!brushHover && axisHover && brushDragIds.size() == 0) {
+							ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+							if (ImGui::GetIO().MouseClicked[0]) {
+								std::pair<unsigned int, std::pair<float,float>> temp = {};
+								temp.first = currentBrushId++;
+								temp.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
+								temp.second.second = temp.second.first;
+								brushDragIds.insert(temp.first);
+								brushDragMode = 1;
+								brush.second.push_back(temp);
 							}
 						}
 					}
@@ -7388,6 +7430,63 @@ int main(int, char**)
 									violinDrawlistPlots[i].drawListOrder[other[0]] = j;
 									violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = other[1];
 								}
+							}
+							ImGui::EndDragDropTarget();
+						}
+						// we also support to drop a drawlist directly into a gridspace
+						if (ImGui::BeginDragDropTarget()) {
+							if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+								DrawList* dl = *((DrawList**)payload->Data);
+								//check if the drawlist was already added to this plot
+								if (std::find(violinDrawlistPlots[i].drawLists.begin(), violinDrawlistPlots[i].drawLists.end(), dl->name) == violinDrawlistPlots[i].drawLists.end()) {
+									if (!violinDrawlistPlots[i].attributeNames.size()) {	//creating all needed resources e.g. attribute components
+										violinDrawlistPlots[i].activeAttributes = new bool[pcAttributes.size()];
+										violinDrawlistPlots[i].maxGlobalValue = 0;
+										int j = 0;
+										for (Attribute& a : pcAttributes) {
+											violinDrawlistPlots[i].attributeNames.push_back(a.name);
+											violinDrawlistPlots[i].activeAttributes[j] = true;
+											violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
+											violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
+											violinDrawlistPlots[i].attributePlacements.push_back(ViolinMiddle);
+											violinDrawlistPlots[i].attributeScalings.push_back(1);
+											violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleSelf);
+											violinDrawlistPlots[i].maxValues.push_back(0);
+											++j;
+										}
+									}
+
+									std::vector<std::pair<float, float>> minMax;
+									for (Attribute& a : pcAttributes) {
+										minMax.push_back({ a.min,a.max });
+									}
+									DataSet* ds;
+									for (DataSet& d : g_PcPlotDataSets) {
+										if (d.name == dl->parentDataSet) {
+											ds = &d;
+											break;
+										}
+									}
+									histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+									HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
+									std::vector<std::pair<uint32_t, float>> area;
+									for (int j = 0; j < hist.maxCount.size(); ++j) {
+										if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
+											violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
+										}
+										if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
+											violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
+										}
+										area.push_back({ j, violinDrawlistPlots[i].attributeScalings[j] / hist.maxCount[j] });
+									}
+
+									violinDrawlistPlots[i].drawLists.push_back(dl->name);
+									//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
+									violinDrawlistPlots[i].attributeOrder.push_back({});
+									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+									for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
+								}
+								violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = violinDrawlistPlots[i].drawLists.size() - 1;
 							}
 							ImGui::EndDragDropTarget();
 						}

@@ -11,11 +11,18 @@ public:
 	};
 
 	KdTree() {};
-	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float, float>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
+	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::vector<std::pair<float, float>>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
 		this->attributes = attributes;
-		root = buildRec(0, indices, data, attributes, initialBounds, recursionDepth);
+
+		bool done = false;
+		std::vector<int> curIndices(indices.size(),0);
+		int curIndex = 0;
+		while (!done) {
+
+		}
+		//root = buildRec(0, indices, data, attributes, initialBounds, recursionDepth);
 	};
 	~KdTree() {};
 
