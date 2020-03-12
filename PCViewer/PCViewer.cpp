@@ -4485,7 +4485,7 @@ int main(int, char**)
 		err = vkBeginCommandBuffer(command_buffer, &begin_info);
 		check_vk_result(err);
 
-		ImGui_ImplVulkan_CreateFontsTexture(command_buffer, g_Device, g_DescriptorPool);
+		ImGui_ImplVulkan_CreateFontsTexture(command_buffer);// , g_Device, g_DescriptorPool);
 
 		VkSubmitInfo end_info = {};
 		end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -4777,7 +4777,7 @@ int main(int, char**)
 			//if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseReleased[0]);
 			//	view3d->resize(ImGui::GetWindowContentRegionWidth(), ImGui::GetWindowHeight());
 
-			if ((ImGui::IsMouseDragging()|| io.MouseWheel)&&ImGui::IsItemHovered()) {
+			if ((ImGui::IsMouseDragging(ImGuiMouseButton_Left)|| io.MouseWheel)&&ImGui::IsItemHovered()) {
 				float mousemovement[3];
 				mousemovement[0] = -ImGui::GetMouseDragDelta().x;
 				mousemovement[1] = ImGui::GetMouseDragDelta().y;
