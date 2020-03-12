@@ -4593,6 +4593,7 @@ int main(int, char**)
 
 	{//iso surface renderer
 		isoSurfaceRenderer = new IsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		isoSurfaceRenderer->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(isoSurfaceRenderer->getImageSampler(), isoSurfaceRenderer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
 	}
 
 	{//creating the settngs manager
@@ -4917,6 +4918,7 @@ int main(int, char**)
 			if (ImGui::BeginMenu("Workbenches")) {
 				ImGui::MenuItem("Bubbleplot workbench", "", &enableBubbleWindow);
 				ImGui::MenuItem("3d View", "", &enable3dView);
+				ImGui::MenuItem("Iso surface workbench", "", &enableIsoSurfaceWindow);
 				if (ImGui::BeginMenu("Violinplot workbenches")) {
 					ImGui::MenuItem("Violin attribute major", "", &enableAttributeViolinPlots);
 					ImGui::MenuItem("Violin drawlist major", "", &enableDrawlistViolinPlots);
@@ -5411,6 +5413,12 @@ int main(int, char**)
 							selectedTemplateBrush = -1;
 							popEnd = true;
 						}
+					}
+					if (ImGui::BeginDragDropSource()) {
+						GlobalBrush* brush = &globalBrushes[i];
+						ImGui::SetDragDropPayload("GlobalBrush", &brush, sizeof(GlobalBrush*));
+						ImGui::Text("%s", brush->name.c_str());
+						ImGui::EndDragDropSource();
 					}
 					if (ImGui::IsItemClicked(1)) {
 						ImGui::OpenPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str());
@@ -7052,9 +7060,10 @@ int main(int, char**)
 			ImGui::Columns(1);
 			ImGui::Separator();
 			ImGui::EndChild();
-			ImGui::End();
-
+			
 			//set bubble plot data via drag and drop
+			ImGui::SetCursorPos(ImGui::GetWindowContentRegionMin());
+			ImGui::Dummy(ImGui::GetWindowContentRegionMax() - ImGui::GetWindowContentRegionMin());
 			if (ImGui::BeginDragDropTarget()) {
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
 					DrawList* dl = *((DrawList**)payload->Data);
@@ -7076,6 +7085,8 @@ int main(int, char**)
 				}
 				ImGui::EndDragDropTarget();
 			}
+
+			ImGui::End();
 		}
 			
 		//end of bubble window ---------------------------------------------------------------------------
@@ -7084,7 +7095,8 @@ int main(int, char**)
 		if (enableIsoSurfaceWindow) {
 			ImGui::Begin("Isosurface Renderer",&enableIsoSurfaceWindow);
 
-			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), { 800,800 });
+			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });
+			ImGui::Text("Where the heck is this shitty thing");
 			if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
 				//TODO: navigation with mouse
 			}
@@ -7092,15 +7104,45 @@ int main(int, char**)
 				//TODO: fly navigation
 			}
 
+			ImGui::SetCursorPos(ImGui::GetWindowContentRegionMin() + ImVec2(ImGui::GetScrollX(), 2 * ImGui::GetScrollY()));
+			ImGui::Dummy(ImGui::GetWindowContentRegionMax() - ImGui::GetWindowContentRegionMin());
 			//set drawlist data via drag and drop
 			if (ImGui::BeginDragDropTarget()) {
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
 					DrawList* dl = *((DrawList**)payload->Data);
+					std::vector<float*>* data = nullptr;
+					for (DataSet& ds : g_PcPlotDataSets) {
+						if (dl->parentDataSet == ds.name) {
+							data = &ds.data;
+						}
+					}
 					
+					std::vector<unsigned int> attr;
+					std::vector<std::pair<float, float>> minMax;
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						attr.push_back(i);
+						minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
+					}
+					isoSurfaceRenderer->update3dDensities(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, dl->indices.size(), dl->indicesBuffer, data->size() * pcAttributes.size() , dl->buffer);
 				}
 				ImGui::EndDragDropTarget();
 			}
 
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GlobalBrush")) {
+					GlobalBrush* brush = *((GlobalBrush**)payload->Data);
+
+					std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
+					for (auto& axis : brush->brushes) {
+						for (auto& m : axis.second) {
+							minMax[axis.first].push_back(m.second);
+						}
+					}
+					isoSurfaceRenderer->addBrush(brush->name, minMax);
+				}
+
+				ImGui::EndDragDropTarget();
+			}
 			ImGui::End();
 		}
 		//end of so surface window -----------------------------------------------------------------------

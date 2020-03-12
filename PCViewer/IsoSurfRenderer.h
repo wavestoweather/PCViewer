@@ -36,7 +36,7 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data);
+	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data);
 	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);				//minMax has to be a vector containing for each attribute an array of minMax values
 	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a already added brush. Returns true if the brush was updated, else false

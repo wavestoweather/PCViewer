@@ -195,7 +195,7 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 	render();
 }
 
-void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float,float>>& densityAttributesMinMax, glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data)
+void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float,float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data)
 {
 	VkResult err;
 
@@ -237,31 +237,39 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 		image3dOffsets.push_back(0);
 
 		image3dOffsets[i] = allocInfo.allocationSize;
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, &image3d[i]);
+		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d[i]);
 
 		vkGetImageMemoryRequirements(device, image3d[i], &memRequirements);
 
 		allocInfo.allocationSize += memRequirements.size;
 		memoryTypeBits |= memRequirements.memoryTypeBits;
-		
-		VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R8G8B8A8_UNORM, 1, &image3dView[i]);
 	}
 
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memRequirements.memoryTypeBits, 0);
 	err = vkAllocateMemory(device, &allocInfo, nullptr, &image3dMemory);
 	check_vk_result(err);
+	VkCommandBuffer imageCommands;
+	VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
+	VkClearColorValue clear = { 0,0,0,0 };
+	VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
 	for (int i = 0; i < required3dImages; ++i) {
 		vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);
+
+		VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R8_UNORM, 1, &image3dView[i]);
+
+		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	}
-	
+	VkUtil::commitCommandBuffer(queue, imageCommands);
+	err = vkQueueWaitIdle(queue);
+	check_vk_result(err);
+	vkFreeCommandBuffers(device, commandPool, 1, &imageCommands);
+
 	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(descriptorSetLayout);
 	if (!descriptorSet) {
 		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
-	}
-
-	for (int i = 0; i < required3dImages; ++i) {
-		VkUtil::updateImageDescriptorSet(device, image3dSampler, image3dView[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, i + 1, descriptorSet);
 	}
 	
 	//creating the density images via the compute pipeline ----------------------------------------
@@ -309,13 +317,8 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	sets.push_back(computeDescriptorSetLayout);
 	VkUtil::createDescriptorSets(device, sets, descriptorPool, &descSet);
 	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	//for (int i = 0; i < AMTOF3DTEXTURES; ++i) {
-	//	VkUtil::updateStorageImageDescriptorSet(device, image3dView[i], VK_IMAGE_LAYOUT_GENERAL, i + 1, descSet);
-	//}
-	std::vector<VkImageLayout> imageLayouts;
-	for (auto i : image3d) {
-		imageLayouts.push_back(VK_IMAGE_LAYOUT_UNDEFINED);
-	}
+	
+	std::vector<VkImageLayout> imageLayouts(required3dImages, VK_IMAGE_LAYOUT_GENERAL);
 	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dView, imageLayouts, 1, descSet);
 	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, data, amtOfData * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
@@ -323,11 +326,6 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
 	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
-	VkClearColorValue clear = { 0,0,0,0 };
-	VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
-	for (VkImage& image:image3d) {
-		vkCmdClearColorImage(computeCommands, image, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
-	}
 	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
 	uint32_t patchAmount = amtOfIndices / LOCALSIZE;
