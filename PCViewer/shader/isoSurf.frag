@@ -54,6 +54,8 @@ void main() {
 	int iterations = int(len/stepsize);
 
 	startPoint += .5f;
+	outColor = vec4(startPoint,1);
+	return;
 
 	vec3 step = normalize(d) * stepsize;
 	//insert random displacement to startpositon (prevents bad visual effects)

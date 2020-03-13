@@ -20,7 +20,7 @@ std::vector<char> PCUtil::readByteFile(const std::string& filename)
 	return buffer;
 }
 
-void PCUtil::hexdump(void* ptr, int buflen) {
+void PCUtil::hexdump(const void* ptr, int buflen) {
 	unsigned char* buf = (unsigned char*)ptr;
 	int i, j;
 	for (i = 0; i < buflen; i += 16) {
@@ -35,5 +35,19 @@ void PCUtil::hexdump(void* ptr, int buflen) {
 			if (i + j < buflen)
 				printf("%c", isprint(buf[i + j]) ? buf[i + j] : '.');
 		printf("\n");
+	}
+}
+
+void PCUtil::numdump(const float* ptr, int len)
+{
+	for (int i = 0; i < len; ++i) {
+		std::cout << ptr[i] << std::endl;
+	}
+}
+
+void PCUtil::numdump(const int* ptr, int len)
+{
+	for (int i = 0; i < len; ++i) {
+		std::cout << ptr[i] << std::endl;
 	}
 }

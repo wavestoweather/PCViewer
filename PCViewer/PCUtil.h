@@ -9,7 +9,9 @@
 class PCUtil {
 public:
 	static std::vector<char> readByteFile(const std::string& filename);
-	static void hexdump(void* ptr, int buflen);
+	static void hexdump(const void* ptr, int buflen);
+	static void numdump(const float* ptr, int len);
+	static void numdump(const int* ptr, int len);
 };
 
 #endif

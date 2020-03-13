@@ -312,6 +312,8 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 		//inf[3 * i + 1] = densityAttributesMinMax[i].first;
 		//inf[3 * i + 2] = densityAttributesMinMax[i].second;
 	}
+	PCUtil::hexdump(infoBytes, infosByteSize);
+	PCUtil::numdump((float*)(infoBytes), densityAttributes.size() + 16);
 	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
 
 	//create descriptor set and update all need things

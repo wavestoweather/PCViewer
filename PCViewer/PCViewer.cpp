@@ -7096,9 +7096,8 @@ int main(int, char**)
 			ImGui::Begin("Isosurface Renderer",&enableIsoSurfaceWindow);
 
 			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });
-			ImGui::Text("Where the heck is this shitty thing");
-			if (ImGui::IsItemHovered() && (ImGui::IsMouseDown(0) || ImGui::IsMouseDown(2))) {
-				float movement[] = { ImGui::GetMouseDragDelta().x, ImGui::GetMouseDragDelta().y, io.MouseWheel };
+			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel)) {
+				float movement[] = { -ImGui::GetMouseDragDelta().x, ImGui::GetMouseDragDelta().y, io.MouseWheel };
 				isoSurfaceRenderer->updateCameraPos(movement);
 				isoSurfaceRenderer->render();
 				err = vkDeviceWaitIdle(g_Device);
