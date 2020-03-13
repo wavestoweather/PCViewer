@@ -524,6 +524,28 @@ void VkUtil::createDescriptorSetLayout(VkDevice device,const std::vector<VkDescr
 	check_vk_result(err);
 }
 
+void VkUtil::createDescriptorSetLayoutPartiallyBound(VkDevice device, const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* descriptorSetLayout)
+{
+	VkResult err;
+
+	std::vector<VkDescriptorBindingFlagsEXT> bindFlag( bindings.size(), VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT);
+
+	VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extendedInfo = {};
+	extendedInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+	extendedInfo.pNext = nullptr;
+	extendedInfo.bindingCount = bindings.size();
+	extendedInfo.pBindingFlags = bindFlag.data();
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+	layoutInfo.pBindings = bindings.data();
+	layoutInfo.pNext = &extendedInfo;
+
+	err = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, descriptorSetLayout);
+	check_vk_result(err);
+}
+
 void VkUtil::destroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout) {
 	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 }
