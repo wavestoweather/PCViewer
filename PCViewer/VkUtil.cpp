@@ -524,11 +524,14 @@ void VkUtil::createDescriptorSetLayout(VkDevice device,const std::vector<VkDescr
 	check_vk_result(err);
 }
 
-void VkUtil::createDescriptorSetLayoutPartiallyBound(VkDevice device, const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* descriptorSetLayout)
+void VkUtil::createDescriptorSetLayoutPartiallyBound(VkDevice device, const std::vector<VkDescriptorSetLayoutBinding>& bindings, const std::vector<bool>& enableValidation, VkDescriptorSetLayout* descriptorSetLayout)
 {
 	VkResult err;
 
 	std::vector<VkDescriptorBindingFlagsEXT> bindFlag( bindings.size(), VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT);
+	for (int i = 0; i < enableValidation.size(); ++i) {
+		bindFlag[i] = (enableValidation[i]) ? 0 : VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+	}
 
 	VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extendedInfo = {};
 	extendedInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;

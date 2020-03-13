@@ -141,6 +141,9 @@ IsoSurfRenderer::~IsoSurfRenderer()
 	if (brushMemory) {
 		vkFreeMemory(device, brushMemory, nullptr);
 	}
+	for (auto& col : brushColors) {
+		delete[] col.second;
+	}
 }
 
 void IsoSurfRenderer::resize(uint32_t width, uint32_t height)
@@ -338,6 +341,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	vkFreeCommandBuffers(device, commandPool, 1, &computeCommands);
 	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
 	vkFreeMemory(device, infosMem, nullptr);
+	vkDestroyBuffer(device, infos, nullptr);
 	delete[] infoBytes;
 
 	if (!descriptorSet) {
@@ -376,6 +380,7 @@ void IsoSurfRenderer::addBrush(std::string& name, std::vector<std::vector<std::p
 	brushColors[name][3] = 1;
 	updateBrushBuffer();
 	updateDescriptorSet();
+	updateCommandBuffer();
 	render();
 }
 
@@ -695,7 +700,8 @@ void IsoSurfRenderer::createPipeline()
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
-	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, &descriptorSetLayout);
+	std::vector<bool> valid{ true,false,true };
+	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, valid, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
 
@@ -728,7 +734,8 @@ void IsoSurfRenderer::createPipeline()
 	binding.binding = 3;								//data buffer
 	bindings.push_back(binding);
 
-	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, &computeDescriptorSetLayout);
+	std::vector<bool> validd{ true,false,true,true };
+	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, validd, &computeDescriptorSetLayout);
 	std::vector<VkDescriptorSetLayout>layouts;
 	layouts.push_back(computeDescriptorSetLayout);
 

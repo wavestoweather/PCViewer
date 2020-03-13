@@ -5724,7 +5724,7 @@ int main(int, char**)
 							float linepos = width / 2;
 							if (brush.parent->name == dl->name) {	//identity dataset
 								linepos += (brush.lineRatios[brush.parent->name] / (float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name] / (float)ds->data.size()))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name] / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
-								//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+								//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.par ent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 								//linepos += (brush.lineRatios[brush.parent->name] > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name]))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name]) / brush.parent->pointRatio)) * linepos;
 							}
 							else {
@@ -7097,8 +7097,13 @@ int main(int, char**)
 
 			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });
 			ImGui::Text("Where the heck is this shitty thing");
-			if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-				//TODO: navigation with mouse
+			if (ImGui::IsItemHovered() && (ImGui::IsMouseDown(0) || ImGui::IsMouseDown(2))) {
+				float movement[] = { ImGui::GetMouseDragDelta().x, ImGui::GetMouseDragDelta().y, io.MouseWheel };
+				isoSurfaceRenderer->updateCameraPos(movement);
+				isoSurfaceRenderer->render();
+				err = vkDeviceWaitIdle(g_Device);
+				check_vk_result(err);
+				ImGui::ResetMouseDragDelta();
 			}
 			if (ImGui::IsItemHovered() && (ImGui::IsKeyDown(KEYA) || ImGui::IsKeyDown(KEYS) || ImGui::IsKeyDown(KEYD) || ImGui::IsKeyDown(KEYQ) || ImGui::IsKeyDown(KEYW) || ImGui::IsKeyDown(KEYE))) {
 				//TODO: fly navigation
