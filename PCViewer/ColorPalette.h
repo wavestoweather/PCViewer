@@ -9,6 +9,7 @@ struct CPalette{
         std::string cName;
         int maxcolors;
         std::string category;
+        bool colorblind;
         };
 
 class ColorPalette{
@@ -18,9 +19,19 @@ public:
 
     std::vector<CPalette> palettes;
 
+    std::vector<CPalette> palettesDiv;
+    std::vector<CPalette> palettesQual;
+    std::vector<CPalette> palettesSeq;
+
     std::vector<std::string> colorCategories;
 
-    std::map<std::string, std::vector<std::string>> colorCatMap;
+//    std::map<std::string, std::vector<std::string>> colorCatMap;
+
+    std::vector<std::string> divNameList;
+    std::vector<std::string> qualNameList;
+    std::vector<std::string> seqNameList;
+
+
 
 
 protected:
