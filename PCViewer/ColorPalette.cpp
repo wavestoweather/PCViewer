@@ -1,5 +1,11 @@
 #include "ColorPalette.h"
 
+#include <string.h>
+#include <algorithm>
+#include <memory>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
 
 ColorPalette::ColorPalette()
 {
@@ -54,9 +60,12 @@ ColorPalette::ColorPalette()
     colorCategories.push_back("qual");
     colorCategories.push_back("seq");
 
+//    colorCategoriesC = {"div","qual","seq"};
+
     // fill Lists for seq qual etc...
     for(unsigned int i = 0; i < palettes.size(); ++i)
     {
+        palettes[i].categoryC = &palettes[i].category[0];
         if (palettes.at(i).category == colorCategories.at(0))
         {
             palettesDiv.push_back((palettes.at(i)));
@@ -74,6 +83,10 @@ ColorPalette::ColorPalette()
         }
 
     }
+    paletteNamesVec.push_back(divNameList);
+    paletteNamesVec.push_back(qualNameList);
+    paletteNamesVec.push_back(seqNameList);
+
 }
 
 
@@ -82,3 +95,70 @@ ColorPalette::~ColorPalette()
 
 }
 
+// ToDo: This causes memory leaks...
+std::vector<char*> ColorPalette::convVecStrToChar(const std::vector<std::string> strVec)
+{
+    std::vector<char*>  vc;
+    std::transform(strVec.begin(), strVec.end(), std::back_inserter(vc), ColorPalette::convStrToChar);
+    return vc;
+
+}
+
+char* ColorPalette::convStrToChar(const std::string & s)
+{
+    std::unique_ptr<char[]> pc(new char[s.size()+1]); // = new char[s.size()+1];
+    strcpy(pc.get(), s.c_str());
+    return pc.get();
+}
+
+
+CPalette* ColorPalette::getPalletteWithName(std::string str)
+{
+    for (unsigned int i = 0; i < this->palettes.size(); ++i)
+    {
+        if (this->palettes.at(i).cName == str)
+        {
+            return &(this->palettes[i]);
+        }
+    }
+}
+
+
+std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,unsigned int paletteNr, unsigned int nrColors, float alpha)
+{
+    const std::string paletteStr = paletteNamesVec.at(categoryNr).at(paletteNr);
+//    const std::string paletteStr = "Dark2";
+    unsigned int minVal = 3;
+    int numberOfColors = std::max(minVal,nrColors);
+
+    std::vector<std::string> choosenColors = (brew<std::string>(paletteStr, numberOfColors));
+    std::vector<ImVec4> choosenColorsImVec;
+    for (unsigned int i = 0; i < nrColors; ++i){
+        int r, g, b;
+        r = std::strtol(choosenColors[i].substr(1,2).c_str(), NULL,16);
+        g = std::strtol(choosenColors[i].substr(3,2).c_str(), NULL,16);
+        b = std::strtol(choosenColors[i].substr(5,2).c_str(), NULL,16);
+//        std::sscanf(choosenColors[i].substr(1,6).c_str(), "%02x%02x%02x", &r, &g, &b);
+        choosenColorsImVec.push_back(ImVec4(r/255.,g/255.,b/255.,alpha));
+    }
+
+
+
+    return choosenColorsImVec;
+}
+
+// ##############################
+
+ColorPaletteManager::ColorPaletteManager():
+    useColorPalette(true),
+    chosenCategoryNr(0),
+    chosenPaletteNr(0),
+    chosenNrColorNr(0)
+{
+
+}
+
+ColorPaletteManager::~ColorPaletteManager()
+{
+
+}

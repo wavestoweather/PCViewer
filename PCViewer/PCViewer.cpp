@@ -49,6 +49,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "HistogramManager.h"
 #include "IsoSurfRenderer.h"
 
+#include "ColorPalette.h"
+
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
 #define GLFW_INCLUDE_NONE
@@ -68,6 +70,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <math.h>
 #include <string.h>
 #include <sstream>
+#include <memory>
 //#include <thrust/sort.h>
 
 #ifdef DETECTMEMLEAK
@@ -414,6 +417,10 @@ struct ViolinDrawlistPlot {
 	std::vector<std::vector<uint32_t>> attributeOrder;
 	float maxGlobalValue;
 	std::vector<float> maxValues;
+
+    ColorPaletteManager colorPaletteManager;
+//    std::unique_ptr<ColorPaletteManager> colorPaletteManager
+//        = ColorPaletteManager();
 };
 
 struct Attribute {
@@ -7499,6 +7506,7 @@ int main(int, char**)
 					ImGui::NextColumn();
 					ImGui::Separator();
 				}
+
 				ImGui::Columns(1);
 				if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
 					violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first * violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
@@ -7506,9 +7514,81 @@ int main(int, char**)
 
                 // Draw everything to load Colorbrewer Colorpalettes
                 ImGui::Separator();
-                //ImGui::Columns(5);
-                 static bool bApplyPalette = true;
-                ImGui::Checkbox("Apply Palette", &bApplyPalette);
+                ImGui::Columns(4);
+                ImGui::Checkbox("Apply Palette", &violinDrawlistPlots[i].colorPaletteManager.useColorPalette);
+                ImGui::NextColumn();
+
+                const char*  categoryDefault[] = { "div", "qual", "seq" };
+                unsigned int currCategory = violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr;
+                if(ImGui::BeginCombo("Category",  categoryDefault[currCategory]))
+                {
+                    for (unsigned int ik = 0; ik < 3; ++ik) {
+                        if (ImGui::MenuItem(categoryDefault[ik], nullptr)) {
+                            violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr = ik;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+
+                const std::vector<std::string> pNames = violinDrawlistPlots[i].colorPaletteManager.colorPalette.paletteNamesVec.at(currCategory);
+                unsigned int currPaletteNr = violinDrawlistPlots[i].colorPaletteManager.chosenPaletteNr;
+                char const * pName = pNames[currPaletteNr].c_str();
+                ImGui::NextColumn();
+
+
+                if(ImGui::BeginCombo("Palette",  &pName[0])){
+                    for (unsigned int ij = 0; ij < pNames.size(); ++ij){
+                        if (ImGui::MenuItem(pNames[ij].c_str(), nullptr)){
+                            violinDrawlistPlots[i].colorPaletteManager.chosenPaletteNr = ij;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::NextColumn();
+
+                const char*  numbers[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" };
+                unsigned int currColorNr = violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr;
+                CPalette* currPalette =  violinDrawlistPlots[i].colorPaletteManager.colorPalette.getPalletteWithName(pNames[currPaletteNr]);
+
+                if(ImGui::BeginCombo("Nr colors",  numbers[currColorNr])){
+
+                    for (unsigned int il =0; il < currPalette->maxcolors ;++il)
+                    {
+                        if (ImGui::MenuItem(numbers[il], nullptr)){
+                            violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr = il;
+
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                // Now exchange as many colors as selected.
+                if (violinDrawlistPlots[i].colorPaletteManager.useColorPalette){
+                    std::vector<ImVec4> retrievedColors = violinDrawlistPlots[i].colorPaletteManager.colorPalette.getPallettAsImVec4(violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr, violinDrawlistPlots[i].colorPaletteManager.chosenPaletteNr, violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr + 1);
+                    for (unsigned int iColor = 0; iColor < violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr + 1; ++iColor)
+                    {
+                        if ((iColor < violinDrawlistPlots[i].attributeFillColors.size())
+                            && (iColor < retrievedColors.size()))
+                        {
+                           violinDrawlistPlots[i].attributeFillColors[iColor] = retrievedColors[iColor];
+                        }
+                    }
+
+                }
+
+
+
+                ImGui::Separator();
+
+
+
+
+
+				
+                ImGui::Columns(1);
+                if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
+                    violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first* violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
+                }
 
 				//drawing the setttings for the drawlists
 				for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
