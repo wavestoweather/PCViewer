@@ -7504,6 +7504,12 @@ int main(int, char**)
 					violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first * violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
 				}
 
+                // Draw everything to load Colorbrewer Colorpalettes
+                ImGui::Separator();
+                //ImGui::Columns(5);
+                 static bool bApplyPalette = true;
+                ImGui::Checkbox("Apply Palette", &bApplyPalette);
+
 				//drawing the setttings for the drawlists
 				for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
 					if (j != 0)ImGui::SameLine();
