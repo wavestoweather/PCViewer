@@ -7432,7 +7432,7 @@ int main(int, char**)
 			}
 
 			const static int plusWidth = 100;
-			for (int i = 0; i < violinDrawlistPlots.size(); ++i) {
+            for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
 				ImGui::PushItemWidth(150);
 				ImGui::Columns(6);
@@ -7445,7 +7445,7 @@ int main(int, char**)
 				ImGui::Text("Fill Color"); ImGui::NextColumn();
 				ImGui::Separator();
 				//settings for the attributes
-				for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+                for (unsigned int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
 					ImGui::Checkbox(violinDrawlistPlots[i].attributeNames[j].c_str(), &violinDrawlistPlots[i].activeAttributes[j]);
 					static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
 					ImGui::NextColumn();
@@ -7472,7 +7472,7 @@ int main(int, char**)
 						for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
 							std::vector<std::pair<uint32_t, float>> area;
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
-							for (int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
+                            for (unsigned int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
 								float a = 0;
 								switch (violinDrawlistPlots[i].violinScalesX[k]) {
 								case ViolinScaleSelf:
@@ -7518,29 +7518,42 @@ int main(int, char**)
                 ImGui::Checkbox("Apply Palette", &violinDrawlistPlots[i].colorPaletteManager.useColorPalette);
                 ImGui::NextColumn();
 
-                const char*  categoryDefault[] = { "div", "qual", "seq" };
+                const char*  categoryDefault[] = { "div", "qual", "seq", "cust" };
                 unsigned int currCategory = violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr;
                 if(ImGui::BeginCombo("Category",  categoryDefault[currCategory]))
                 {
-                    for (unsigned int ik = 0; ik < 3; ++ik) {
+                    for (unsigned int ik = 0; ik < 4; ++ik) {
                         if (ImGui::MenuItem(categoryDefault[ik], nullptr)) {
-                            violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr = ik;
+                            violinDrawlistPlots[i].colorPaletteManager.setChosenCategoryNr(ik);
+                            currCategory = ik;
                         }
                     }
                     ImGui::EndCombo();
                 }
 
 
-                const std::vector<std::string> pNames = violinDrawlistPlots[i].colorPaletteManager.colorPalette.paletteNamesVec.at(currCategory);
+                const std::vector<std::string> pNames = violinDrawlistPlots[i].colorPaletteManager.colorPalette.paletteNamesVec.at(violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr);
                 unsigned int currPaletteNr = violinDrawlistPlots[i].colorPaletteManager.chosenPaletteNr;
-                char const * pName = pNames[currPaletteNr].c_str();
+                char const * pName;
+                if (currPaletteNr > pNames.size())
+                {
+                    currPaletteNr = 0;
+                    violinDrawlistPlots[i].colorPaletteManager.setChosenPaletteNr(currPaletteNr);
+                    pName = pNames[currPaletteNr].c_str();
+                }
+                else
+                {
+                    pName = pNames[currPaletteNr].c_str();
+                }
+
+
                 ImGui::NextColumn();
 
 
                 if(ImGui::BeginCombo("Palette",  &pName[0])){
                     for (unsigned int ij = 0; ij < pNames.size(); ++ij){
                         if (ImGui::MenuItem(pNames[ij].c_str(), nullptr)){
-                            violinDrawlistPlots[i].colorPaletteManager.chosenPaletteNr = ij;
+                            violinDrawlistPlots[i].colorPaletteManager.setChosenPaletteNr(ij);
                         }
                     }
                     ImGui::EndCombo();
@@ -7556,29 +7569,69 @@ int main(int, char**)
                     for (unsigned int il =0; il < currPalette->maxcolors ;++il)
                     {
                         if (ImGui::MenuItem(numbers[il], nullptr)){
-                            violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr = il;
+                            violinDrawlistPlots[i].colorPaletteManager.setChosenNrColorNr(il);
 
                         }
                     }
                     ImGui::EndCombo();
                 }
-                // Now exchange as many colors as selected.
-                if (violinDrawlistPlots[i].colorPaletteManager.useColorPalette){
-                    std::vector<ImVec4> retrievedColors = violinDrawlistPlots[i].colorPaletteManager.colorPalette.getPallettAsImVec4(violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr, violinDrawlistPlots[i].colorPaletteManager.chosenPaletteNr, violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr + 1);
+
+
+
+                ImGui::Separator();
+                ImGui::Columns(6);
+                ImGui::Checkbox("Adjust Line Color", &violinDrawlistPlots[i].colorPaletteManager.applyToLineColor);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Adjust Fill Color", &violinDrawlistPlots[i].colorPaletteManager.applyToFillColor);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Backup Line Color", &violinDrawlistPlots[i].colorPaletteManager.backupLineColor);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Backup Fill Color", &violinDrawlistPlots[i].colorPaletteManager.backupFillColor);
+                ImGui::NextColumn();
+                // TODO: Change to int boxes
+                if(ImGui::SliderInt("Alpha value lines", &violinDrawlistPlots[i].colorPaletteManager.alphaLines, 0, 255))
+                {
+                    violinDrawlistPlots[i].colorPaletteManager.bvaluesChanged = true;
+                }
+                ImGui::NextColumn();
+                if (ImGui::SliderInt("Alpha value fill", &violinDrawlistPlots[i].colorPaletteManager.alphaFill, 0, 255))
+                {
+                    violinDrawlistPlots[i].colorPaletteManager.bvaluesChanged = true;
+                }
+
+                ImGui::Separator();
+
+
+                // Now exchange as many colors as selected if something was changed.
+                if ((violinDrawlistPlots[i].colorPaletteManager.useColorPalette) &&
+                        (violinDrawlistPlots[i].colorPaletteManager.getBValuesChanged())){
+                    // Backup existing colors.
+                    violinDrawlistPlots[i].colorPaletteManager.backupColors(violinDrawlistPlots[i].attributeLineColors,
+                                                                             violinDrawlistPlots[i].attributeFillColors);
+
+                    std::vector<ImVec4> retrievedColors = violinDrawlistPlots[i].colorPaletteManager.colorPalette.getPallettAsImVec4(
+                                violinDrawlistPlots[i].colorPaletteManager.chosenCategoryNr,
+                                violinDrawlistPlots[i].colorPaletteManager.chosenPaletteNr,
+                                violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr + 1);
                     for (unsigned int iColor = 0; iColor < violinDrawlistPlots[i].colorPaletteManager.chosenNrColorNr + 1; ++iColor)
                     {
                         if ((iColor < violinDrawlistPlots[i].attributeFillColors.size())
                             && (iColor < retrievedColors.size()))
                         {
-                           violinDrawlistPlots[i].attributeFillColors[iColor] = retrievedColors[iColor];
+                            if (violinDrawlistPlots[i].colorPaletteManager.applyToLineColor){
+                                violinDrawlistPlots[i].attributeLineColors[iColor] = retrievedColors[iColor];
+                                violinDrawlistPlots[i].attributeLineColors[iColor].w = violinDrawlistPlots[i].colorPaletteManager.alphaLines / 255.;
+                            }
+                            if (violinDrawlistPlots[i].colorPaletteManager.applyToFillColor){
+                                violinDrawlistPlots[i].attributeFillColors[iColor] = retrievedColors[iColor];
+                                violinDrawlistPlots[i].attributeFillColors[iColor].w = violinDrawlistPlots[i].colorPaletteManager.alphaFill / 255.;
+                            }
+
                         }
                     }
 
                 }
 
-
-
-                ImGui::Separator();
 
 
 

@@ -55,10 +55,14 @@ ColorPalette::ColorPalette()
     palettes.push_back(CPalette{std::string("YlOrRd"), 9, std::string("seq"), true});
 
 //    palettes.push_back(CPalette{std::string("Accent"), 9, std::string("seq"), true});
+    std::vector<ImVec4> defaultColorVec;
+    defaultColorVec.push_back(ImVec4(.4,.4,.4,.4));
+    palettes.push_back(CPalette{std::string("Default"), 1, std::string("cust"), false, nullptr, defaultColorVec});
 
     colorCategories.push_back("div");
     colorCategories.push_back("qual");
     colorCategories.push_back("seq");
+    colorCategories.push_back("cust");
 
 //    colorCategoriesC = {"div","qual","seq"};
 
@@ -68,24 +72,38 @@ ColorPalette::ColorPalette()
         palettes[i].categoryC = &palettes[i].category[0];
         if (palettes.at(i).category == colorCategories.at(0))
         {
-            palettesDiv.push_back((palettes.at(i)));
+            palettesDiv.push_back((palettes[i]));
             divNameList.push_back(palettes.at(i).cName);
         }
         else if (palettes.at(i).category == colorCategories.at(1))
         {
-            palettesQual.push_back((palettes.at(i)));
+            palettesQual.push_back((palettes[i]));
             qualNameList.push_back(palettes.at(i).cName);
         }
         else if (palettes.at(i).category == colorCategories.at(2))
         {
-            palettesSeq.push_back((palettes.at(i)));
+            palettesSeq.push_back((palettes[i]));
             seqNameList.push_back(palettes.at(i).cName);
+        }
+        else if (palettes.at(i).category == colorCategories.at(3))
+        {
+            palettesCust.push_back((palettes[i]));
+            custNameList.push_back(palettes.at(i).cName);
         }
 
     }
+
+
     paletteNamesVec.push_back(divNameList);
     paletteNamesVec.push_back(qualNameList);
     paletteNamesVec.push_back(seqNameList);
+    paletteNamesVec.push_back(custNameList);
+
+    // Does not work once the object is copied...
+//    palettesMatrix.push_back(&palettesDiv);
+//    palettesMatrix.push_back(&palettesQual);
+//    palettesMatrix.push_back(&palettesSeq);
+//    palettesMatrix.push_back(&palettesCust);
 
 }
 
@@ -124,25 +142,57 @@ CPalette* ColorPalette::getPalletteWithName(std::string str)
 }
 
 
+CPalette *ColorPalette::getPalletteWithNrs(unsigned int cat, unsigned int ipal)
+{
+    std::vector<CPalette> *ptrCPallList = nullptr;
+    switch (cat){
+        case 0:
+            ptrCPallList = &palettesDiv;
+            break;
+        case 1:
+            ptrCPallList = &palettesQual;
+            break;
+        case 2:
+            ptrCPallList = &palettesSeq;
+            break;
+        case 3:
+            ptrCPallList = &palettesCust;
+            break;
+    }
+    return &ptrCPallList->at(ipal);
+}
+
+
 std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,unsigned int paletteNr, unsigned int nrColors, float alpha)
 {
-    const std::string paletteStr = paletteNamesVec.at(categoryNr).at(paletteNr);
-//    const std::string paletteStr = "Dark2";
-    unsigned int minVal = 3;
-    int numberOfColors = std::max(minVal,nrColors);
-
-    std::vector<std::string> choosenColors = (brew<std::string>(paletteStr, numberOfColors));
     std::vector<ImVec4> choosenColorsImVec;
-    for (unsigned int i = 0; i < nrColors; ++i){
-        int r, g, b;
-        r = std::strtol(choosenColors[i].substr(1,2).c_str(), NULL,16);
-        g = std::strtol(choosenColors[i].substr(3,2).c_str(), NULL,16);
-        b = std::strtol(choosenColors[i].substr(5,2).c_str(), NULL,16);
-//        std::sscanf(choosenColors[i].substr(1,6).c_str(), "%02x%02x%02x", &r, &g, &b);
-        choosenColorsImVec.push_back(ImVec4(r/255.,g/255.,b/255.,alpha));
+
+    const std::string paletteStr = paletteNamesVec.at(categoryNr).at(paletteNr);
+    if (categoryNr == 3) // Custom colors
+    {
+        // retrieve the palette
+        CPalette *currPalette = &palettesCust[paletteNr];
+        for (unsigned int i = 0; i < nrColors; ++i){
+            choosenColorsImVec.push_back(currPalette->custColors[i]);
+        }
     }
+    else
+    {
+        unsigned int minVal = 3;
 
+        int numberOfColors = std::min(std::max(minVal,nrColors), getPalletteWithNrs(categoryNr, paletteNr)->maxcolors);
 
+        std::vector<std::string> choosenColors = (brew<std::string>(paletteStr, numberOfColors));
+
+        for (unsigned int i = 0; i < std::min(nrColors,(unsigned int)numberOfColors); ++i){
+            int r, g, b;
+            r = std::strtol(choosenColors[i].substr(1,2).c_str(), NULL,16);
+            g = std::strtol(choosenColors[i].substr(3,2).c_str(), NULL,16);
+            b = std::strtol(choosenColors[i].substr(5,2).c_str(), NULL,16);
+
+            choosenColorsImVec.push_back(ImVec4(r/255.,g/255.,b/255.,alpha));
+        }
+    }
 
     return choosenColorsImVec;
 }
@@ -153,7 +203,14 @@ ColorPaletteManager::ColorPaletteManager():
     useColorPalette(true),
     chosenCategoryNr(0),
     chosenPaletteNr(0),
-    chosenNrColorNr(0)
+    chosenNrColorNr(0),
+    alphaLines(255),
+    alphaFill(127),
+    applyToFillColor(true),
+    applyToLineColor(true),
+    backupLineColor(false),
+    backupFillColor(false),
+    bvaluesChanged(false)
 {
 
 }
@@ -162,3 +219,98 @@ ColorPaletteManager::~ColorPaletteManager()
 {
 
 }
+
+
+void ColorPaletteManager::setChosenCategoryNr(unsigned int i)
+{
+    chosenCategoryNr = i;
+    bvaluesChanged = true;
+
+}
+
+
+void ColorPaletteManager::setChosenPaletteNr(unsigned int i)
+{
+    chosenPaletteNr = i;
+    bvaluesChanged = true;
+}
+
+
+void ColorPaletteManager::setChosenNrColorNr(unsigned int i)
+{
+    chosenNrColorNr = i;
+    bvaluesChanged = true;
+}
+
+
+void ColorPaletteManager::setApplyToFillColor(bool b)
+{
+    applyToFillColor = b;
+    bvaluesChanged = true;
+}
+
+
+void ColorPaletteManager::setApplyToLineColor(bool b)
+{
+    applyToLineColor = b;
+    bvaluesChanged = true;
+}
+
+
+
+
+
+bool ColorPaletteManager::getBValuesChanged()
+{
+    bool b = bvaluesChanged;
+    bvaluesChanged = false;
+    return b;
+
+}
+
+
+void ColorPaletteManager::backupColors(std::vector<ImVec4> lineColors, std::vector<ImVec4> fillColors)
+{
+    if (backupLineColor)
+    {
+        backupLineColor = false;
+        std::string currColorPaletteName = "line_" + std::to_string(colorPalette.palettesCust.size());
+        CPalette currPalette;
+        currPalette.cName = currColorPaletteName;
+        currPalette.category = "cust";
+        currPalette.maxcolors = lineColors.size();
+        currPalette.categoryC = &currPalette.category[0];
+        currPalette.colorblind = false;
+        currPalette.custColors = lineColors;
+
+        this->colorPalette.palettes.push_back(currPalette);
+        this->colorPalette.palettesCust.push_back(currPalette);
+        this->colorPalette.custNameList.push_back(currPalette.cName);
+
+//        std::vector<std::string> existingNames = this->colorPalette.custNameList;
+//        existingNames.push_back(currColorPaletteName);
+        this->colorPalette.paletteNamesVec[3].push_back(currColorPaletteName);
+
+    }
+    if (backupFillColor)
+    {
+        backupFillColor = false;
+        std::string currColorPaletteName = "fill_" + std::to_string(colorPalette.palettesCust.size());
+        CPalette currPalette;
+        currPalette.cName = currColorPaletteName;
+        currPalette.category = "cust";
+        currPalette.maxcolors = fillColors.size();
+        currPalette.categoryC = &currPalette.category[0];
+        currPalette.colorblind = false;
+        currPalette.custColors = fillColors;
+
+        this->colorPalette.palettes.push_back(currPalette);
+        this->colorPalette.palettesCust.push_back(currPalette);
+        this->colorPalette.custNameList.push_back(currPalette.cName);
+
+        this->colorPalette.paletteNamesVec[3].push_back(currColorPaletteName);
+    }
+
+}
+
+

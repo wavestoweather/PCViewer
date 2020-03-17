@@ -6,13 +6,14 @@
 #include <map>
 #include "imgui/imgui.h"
 
-struct CPalette{
-        std::string cName;
-        int maxcolors;
-        std::string category;
-        bool colorblind;
-        char* categoryC;
-        };
+typedef struct {
+        std::string cName = std::string("");
+        unsigned int maxcolors = 0;
+        std::string category = std::string("");
+        bool colorblind = false;
+        char* categoryC = nullptr;
+        std::vector<ImVec4> custColors = std::vector<ImVec4>();
+        } CPalette;
 
 
 
@@ -28,6 +29,9 @@ public:
     std::vector<CPalette> palettesDiv;
     std::vector<CPalette> palettesQual;
     std::vector<CPalette> palettesSeq;
+    std::vector<CPalette> palettesCust;
+
+//    std::vector<std::vector<CPalette>*> palettesMatrix;
 
     std::vector<std::string> colorCategories;
 
@@ -38,6 +42,7 @@ public:
     std::vector<std::string> divNameList;
     std::vector<std::string> qualNameList;
     std::vector<std::string> seqNameList;
+    std::vector<std::string> custNameList;
 
     std::vector<std::vector<std::string>> paletteNamesVec;
 
@@ -46,6 +51,8 @@ public:
     static char* convStrToChar(const std::string & s);
 
     CPalette* getPalletteWithName(std::string str);
+
+    CPalette *getPalletteWithNrs(unsigned int cat, unsigned int ipal);
 
     std::vector<ImVec4> getPallettAsImVec4(unsigned int categoryNr, unsigned int paletteNr, unsigned int nrColors, float alpha = 0.4);
 
@@ -71,6 +78,28 @@ public:
     unsigned int chosenCategoryNr;
     unsigned int chosenPaletteNr;
     unsigned int chosenNrColorNr;
+
+    int alphaLines;
+    int alphaFill;
+
+    bool applyToFillColor;
+    bool applyToLineColor;
+
+    bool backupLineColor;
+    bool backupFillColor;
+
+    bool bvaluesChanged;
+
+    void backupColors(std::vector<ImVec4> lineColors, std::vector<ImVec4> fillColors);
+
+    // The set methods set valuesChanged to true.
+    void setChosenCategoryNr(unsigned int i);
+    void setChosenPaletteNr(unsigned int i);
+    void setChosenNrColorNr(unsigned int i);
+    void setApplyToFillColor(bool b);
+    void setApplyToLineColor(bool b);
+
+    bool getBValuesChanged();
 
 
 };
