@@ -4784,6 +4784,18 @@ int main(int, char**)
 
 		ImGui::PopStyleVar(3);
 		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+		if (ImGui::DockBuilderGetNode(dockspace_id) == NULL) {
+			ImGui::DockBuilderRemoveNode(dockspace_id);
+			ImGuiDockNodeFlags dockSpaceFlags = 0;
+			dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
+			ImGui::DockBuilderAddNode(dockspace_id, dockSpaceFlags);
+
+#ifdef _DEBUG
+			ImGui::DockBuilderDockWindow("Dear ImGui Demo", dockspace_id);
+#endif
+			ImGui::DockBuilderDockWindow("Parallel coordinates", dockspace_id);
+		}
+		auto id = ImGui::DockBuilderGetNode(dockspace_id)->SelectedTabId;
 		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(83), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
@@ -5092,17 +5104,11 @@ int main(int, char**)
 		}
 #endif
 
+#ifdef _DEBUG
+		ImGui::ShowDemoWindow(NULL);
+#endif
+
 		//Parallel coordinates plot ----------------------------------------------------------------------------------------
-		if (ImGui::DockBuilderGetNode(dockspace_id) == NULL) {
-			ImGui::DockBuilderRemoveNode(dockspace_id);
-			ImGuiDockNodeFlags dockSpaceFlags = 0;
-			dockSpaceFlags |= ImGuiDockNodeFlags_PassthruCentralNode;
-			ImGui::DockBuilderAddNode(dockspace_id, dockSpaceFlags);
-
-			ImGuiID dockMain = dockspace_id;
-			ImGui::DockBuilderDockWindow("Parallel coordinates", dockspace_id);
-		}
-
 		ImVec2 picPos;
 		bool picHovered;
 		if (ImGui::Begin("Parallel coordinates", NULL)) {
@@ -7127,6 +7133,9 @@ int main(int, char**)
 						attr.push_back(i);
 						minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
 					}
+					minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
+					minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
+					minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
 					isoSurfaceRenderer->update3dDensities(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, dl->indices.size(), dl->indicesBuffer, data->size() * pcAttributes.size() , dl->buffer);
 				}
 				ImGui::EndDragDropTarget();
@@ -7809,9 +7818,6 @@ int main(int, char**)
 			ImGui::End();
 		}
 
-#ifdef _DEBUG
-		ImGui::ShowDemoWindow(NULL);
-#endif
 		if (animationItemsDisabled) {
 			ImGui::PopItemFlag();
 			animationItemsDisabled = false;

@@ -21,7 +21,6 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	imageView =	VK_NULL_HANDLE;
 	sampler = VK_NULL_HANDLE;
 	image3dMemory = VK_NULL_HANDLE;
-	image3dSampler = VK_NULL_HANDLE;
 	descriptorSetLayout = VK_NULL_HANDLE,
 	descriptorSet = VK_NULL_HANDLE;
 	pipeline = VK_NULL_HANDLE;
@@ -95,9 +94,9 @@ IsoSurfRenderer::~IsoSurfRenderer()
 		if (image3dView[i]) {
 			vkDestroyImageView(device, image3dView[i], nullptr);
 		}
-	}
-	if (image3dSampler) {
-		vkDestroySampler(device, image3dSampler, nullptr);
+		if (image3dSampler[i]) {
+			vkDestroySampler(device, image3dSampler[i], nullptr);
+		}
 	}
 	if (frameBuffer) {
 		vkDestroyFramebuffer(device, frameBuffer, nullptr);
@@ -185,7 +184,7 @@ void IsoSurfRenderer::resize(uint32_t width, uint32_t height)
 	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
 	check_vk_result(err);
 
-	if (image3dSampler) {
+	if (image3dSampler.size()) {
 		updateCommandBuffer();
 	}
 }
@@ -225,8 +224,9 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	image3d.clear();
 	image3dView.clear();
 	image3dOffsets.clear();
-	if (!image3dSampler) {
-		VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_NEAREST,16,1,&image3dSampler);
+	for (int i = image3dSampler.size(); i < required3dImages; ++i) {
+		image3dSampler.push_back({});
+		VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_NEAREST,1,1,&image3dSampler.back());
 	}
 
 	//creating new resources
@@ -240,7 +240,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 		image3dOffsets.push_back(0);
 
 		image3dOffsets[i] = allocInfo.allocationSize;
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d[i]);
+		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
 
 		vkGetImageMemoryRequirements(device, image3d[i], &memRequirements);
 
@@ -258,16 +258,25 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	for (int i = 0; i < required3dImages; ++i) {
 		vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);
 
-		VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R8_UNORM, 1, &image3dView[i]);
+		VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R32_SFLOAT, 1, &image3dView[i]);
 
-		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
-		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	}
 	VkUtil::commitCommandBuffer(queue, imageCommands);
 	err = vkQueueWaitIdle(queue);
 	check_vk_result(err);
 	vkFreeCommandBuffers(device, commandPool, 1, &imageCommands);
+
+	//checking values in the first 3d image
+	float* im = new float[width * depth * height];
+	//This was checked and is working!!!!!!!
+	//VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d[4], width, height, depth, im, width * depth * height * sizeof(float));
+	//uint32_t zeroCount = 0;
+	//for (int i = 0; i < width * depth * height; ++i) {
+	//	if (im[i] != 0) zeroCount++;
+	//}
 
 	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(descriptorSetLayout);
@@ -306,14 +315,13 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	infoBytes->yMax = densityAttributesMinMax[positionIndices.y].second;
 	infoBytes->zMin = densityAttributesMinMax[positionIndices.z].first;
 	infoBytes->zMax = densityAttributesMinMax[positionIndices.z].second;
-	float* inf = (float*)(infoBytes + 1);
+	int* inf = (int*)(infoBytes + 1);
 	for (int i = 0; i < densityAttributes.size(); ++i) {
 		inf[i] = densityAttributes[i];
 		//inf[3 * i + 1] = densityAttributesMinMax[i].first;
 		//inf[3 * i + 2] = densityAttributesMinMax[i].second;
 	}
-	PCUtil::hexdump(infoBytes, infosByteSize);
-	PCUtil::numdump((float*)(infoBytes), densityAttributes.size() + 16);
+	PCUtil::numdump((int*)(infoBytes), densityAttributes.size() + 16);
 	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
 
 	//create descriptor set and update all need things
@@ -324,13 +332,14 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	
 	std::vector<VkImageLayout> imageLayouts(required3dImages, VK_IMAGE_LAYOUT_GENERAL);
-	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dView, imageLayouts, 1, descSet);
+	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 1, descSet);
 	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, data, amtOfData * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
 	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
+
 	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
 	uint32_t patchAmount = amtOfIndices / LOCALSIZE;
@@ -345,6 +354,18 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	vkFreeMemory(device, infosMem, nullptr);
 	vkDestroyBuffer(device, infos, nullptr);
 	delete[] infoBytes;
+
+	//checking change
+	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d[0], width, height, depth, im, width * depth * height * sizeof(float));
+	uint32_t zeroCount2 = 0;
+	for (int i = 0; i < width * depth * height; ++i) {
+		if (im[i] != 0) {
+			float ok = im[i];
+			zeroCount2++;
+		}
+	}
+	std::cout << "Difference in zeros: " << zeroCount2<< std::endl;
+	delete[] im;
 
 	if (!descriptorSet) {
 		resize(1, 1);
@@ -475,6 +496,47 @@ void IsoSurfRenderer::render()
 	}
 
 	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
+
+	//checking the brush infos
+	//for (int axis = 0; axis < brushInfos->amtOfAxis; ++axis) {
+	//	int axisOffset = int(brushI[axis]);
+	//	//check if there exists a brush on this axis
+	//	if (bool(brushI[axisOffset])) {		//amtOfBrushes > 0
+	//		//as there exist brushes we get the density for this attribute
+	//		//float density = texture(texSampler[axis], startPoint).x;
+	//		//for every brush
+	//		for (int brush = 0; brush < brushI[axisOffset]; ++brush) {
+	//			int brushOffset = int(brushI[axisOffset + 1 + brush]);
+	//			//for every MinMax
+	//			for (int minMax = 0; minMax < brushI[brushOffset + 1]; ++minMax) {
+	//				int minMaxOffset = brushOffset + 6 + 2 * minMax;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
+	//				int brushIndex = int(brushI[brushOffset]);
+	//				float mi = brushI[minMaxOffset];
+	//				float ma = brushI[minMaxOffset + 1];
+	//				std::cout << "Axis: " << axis << ", brush index: " << brushIndex << ", Min: " << mi << ", Max: " << ma << "Color: " << brushI[brushOffset + 2]<< " " << brushI[brushOffset + 3] << " " << brushI[brushOffset + 4] << " " << brushI[brushOffset + 5] << std::endl;
+	//				//bool stepInOut = prevDensity[axis] < mi && density >= mi ||
+	//				//	prevDensity[axis] > mi&& density <= mi ||
+	//				//	prevDensity[axis] > ma&& density <= ma ||
+	//				//	prevDensity[axis] < ma && density >= ma;
+	//				//
+	//				////this are all the things i have to set to test if a surface has to be drawn
+	//				//brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
+	//				//brushBits[brushIndex] &= (uint((density<mi || density>ma) && !brushBorder[brushIndex]) << axis) ^ 0xffffffff;
+	//				//brushColor[brushIndex] = vec4(bInfo.brushes[brushOffset + 2, brushOffset + 3, brushOffset + 4, brushOffset + 5]);
+	//
+	//				//the surface calculation is moved to the end of the for loop, as we have to check for every attribute of the brush if it is inside it
+	//				//if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
+	//				//	vec4 surfColor = vec4(bInfo.brushes[brushOffset + 1,brushOffset + 2,brushOffset + 3,brushOffset + 4]);
+	//				//	outColor.xyz += (1-outColor.w) * surfColor.w * surfColor.xyz;
+	//				//	outColor.w += (1-outColor.w) * surfColor.w;
+	//				//	//check for alphaStop
+	//				//	if(outColor.w > alphaStop) br = true;
+	//				//}
+	//			}
+	//		}
+	//		//prevDensity[axis] = density;
+	//	}
+	//}
 
 	delete[] brushInfos;
 

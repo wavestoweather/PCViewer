@@ -54,8 +54,6 @@ void main() {
 	int iterations = int(len/stepsize);
 
 	startPoint += .5f;
-	outColor = vec4(startPoint,1);
-	return;
 
 	vec3 step = normalize(d) * stepsize;
 	//insert random displacement to startpositon (prevents bad visual effects)
@@ -85,16 +83,15 @@ void main() {
 						int brushIndex = int(bInfo.brushes[brushOffset]);
 						float mi = bInfo.brushes[minMaxOffset];
 						float ma = bInfo.brushes[minMaxOffset + 1];
-						bool stepInBot = prevDensity[axis] < mi && density > mi;
-						bool stepOutBot = prevDensity[axis] > mi && density < mi;
-						bool stepInTop = prevDensity[axis] > ma && density < ma;
-						bool stepOutTop = prevDensity[axis] < ma && density > ma;
+						bool stepInOut = prevDensity[axis] < mi && density >= mi ||
+							prevDensity[axis] > mi && density <= mi ||
+							prevDensity[axis] > ma && density <= ma ||
+							prevDensity[axis] < ma && density >= ma;
 
 						//this are all the things i have to set to test if a surface has to be drawn
-						brushBits[brushIndex] &= (uint(density<mi||density>ma) << axis) ^ 0xffffffff;
-						brushBorder[brushIndex] = brushBorder[brushIndex] || stepInBot || stepOutBot || stepInTop || stepOutTop;
-						brushBits[brushIndex] |= uint(brushBorder[brushIndex]) << axis;
-						brushColor[brushIndex] = vec4(bInfo.brushes[brushOffset + 2,brushOffset + 3,brushOffset + 4,brushOffset + 5]);
+						brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
+						brushBits[brushIndex] &= (uint((density<mi||density>ma)&&!brushBorder[brushIndex]) << axis) ^ 0xffffffff;
+						brushColor[brushIndex] = vec4(bInfo.brushes[brushOffset + 2],bInfo.brushes[brushOffset + 3],bInfo.brushes[brushOffset + 4],bInfo.brushes[brushOffset + 5]);
 
 						//the surface calculation is moved to the end of the for loop, as we have to check for every attribute of the brush if it is inside it
 						//if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
@@ -106,6 +103,7 @@ void main() {
 						//}
 					}
 				}
+				prevDensity[axis] = density;
 			}
 		}
 

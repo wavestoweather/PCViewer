@@ -641,11 +641,11 @@ void VkUtil::updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImag
 	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
 }
 
-void VkUtil::updateImageArrayDescriptorSet(VkDevice device, VkSampler sampler, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet)
+void VkUtil::updateImageArrayDescriptorSet(VkDevice device, std::vector<VkSampler>& sampler, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorImageInfo* desc_images = new VkDescriptorImageInfo[imageViews.size()];
 	for (int i = 0; i < imageViews.size(); ++i) {
-		desc_images[i].sampler = sampler;
+		desc_images[i].sampler = sampler[i];
 		desc_images[i].imageView = imageViews[i];
 		desc_images[i].imageLayout = imageLayouts[i];
 	}
@@ -677,11 +677,11 @@ void VkUtil::updateStorageImageDescriptorSet(VkDevice device, VkImageView imageV
 	vkUpdateDescriptorSets(device, 1, write_desc, 0, NULL);
 }
 
-void VkUtil::updateStorageImageArrayDescriptorSet(VkDevice device, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet)
+void VkUtil::updateStorageImageArrayDescriptorSet(VkDevice device, std::vector<VkSampler>& sampler, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorImageInfo* desc_images = new VkDescriptorImageInfo[imageViews.size()];
 	for (int i = 0; i < imageViews.size(); ++i) {
-		desc_images[i].sampler = nullptr;
+		desc_images[i].sampler = sampler[i];
 		desc_images[i].imageView = imageViews[i];
 		desc_images[i].imageLayout = imageLayouts[i];
 	}
@@ -771,6 +771,28 @@ void VkUtil::copyBufferTo3dImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
+void VkUtil::copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth)
+{
+	VkBufferImageCopy region = {};
+	region.bufferOffset = 0;
+	region.bufferRowLength = 0;
+	region.bufferImageHeight = 0;
+
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.mipLevel = 0;
+	region.imageSubresource.baseArrayLayer = 0;
+	region.imageSubresource.layerCount = 1;
+
+	region.imageOffset = { 0, 0, 0 };
+	region.imageExtent = {
+		width,
+		height,
+		depth
+	};
+
+	vkCmdCopyImageToBuffer(commandBuffer, image, VK_IMAGE_LAYOUT_GENERAL, buffer, 1, &region);
+}
+
 void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
 	VkImageMemoryBarrier barrier = {};
@@ -832,6 +854,20 @@ void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
 
 		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_GENERAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+		barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -1010,4 +1046,34 @@ void VkUtil::downloadData(VkDevice device, VkDeviceMemory memory, uint32_t offse
 	vkMapMemory(device, memory, offset, byteSize, 0, &d);
 	memcpy(data, d, byteSize);
 	vkUnmapMemory(device, memory);
+}
+
+void VkUtil::uploadImageData(VkDevice device, VkImage image, VkImageLayout imageLayout, VkFormat imageFormat, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
+{
+}
+
+void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
+{
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+	createBuffer(device, byteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &stagingBuffer);
+	VkMemoryRequirements memReq;
+	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReq);
+	VkMemoryAllocateInfo memAlloc{};
+	memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	memAlloc.allocationSize = memReq.size;
+	memAlloc.memoryTypeIndex = findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	vkAllocateMemory(device, &memAlloc, nullptr, &stagingMemory);
+	vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0);
+
+	VkCommandBuffer commands;
+	createCommandBuffer(device, commandPool, &commands);
+	copy3dImageToBuffer(commands, stagingBuffer, image, x, y, z);
+	commitCommandBuffer(queue, commands);
+	check_vk_result(vkQueueWaitIdle(queue));
+	downloadData(device, stagingMemory, 0, byteSize, data);
+	
+	vkDestroyBuffer(device, stagingBuffer, nullptr);
+	vkFreeMemory(device, stagingMemory, nullptr);
+	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 }

@@ -71,7 +71,7 @@ private:
 		float zMin;
 		float zMax;
 		uint32_t padding;
-		//float array containing attribute infos:
+		//int array containing attribute infos:
 		//index attr 1,
 		//index attr 2,
 		//...
@@ -131,7 +131,7 @@ private:
 	std::vector<uint32_t>	image3dOffsets;
 	std::vector<VkImage>	image3d;
 	std::vector<VkImageView>image3dView;
-	VkSampler			image3dSampler;
+	std::vector<VkSampler> image3dSampler;
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkDescriptorPool	descriptorPool;
 	VkDescriptorSet		descriptorSet;
