@@ -2536,7 +2536,13 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 
 #ifdef PRINTRENDERTIME
-		amtOfLines += drawList->activeInd.size();
+		bool* active = new bool[drawList->indices.size()];
+		VkUtil::downloadData(g_Device, drawList->dlMem, drawList->activeIndicesBufferOffset, drawList->indices.size() * sizeof(bool), active);
+		for (int i = 0; i < drawList->indices.size(); ++i) {
+			if (active[i]) ++amtOfLines;
+		}
+		delete[] active;
+		//amtOfLines += drawList->activeInd.size();
 #endif
 	}
 
