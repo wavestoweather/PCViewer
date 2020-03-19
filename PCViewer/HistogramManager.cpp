@@ -33,6 +33,10 @@ HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDev
 	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(descriptorSetLayout);
 	VkUtil::createComputePipeline(device, module, layouts, &pipelineLayout, &pipeline);
+
+	stdDev = -1;
+	ignoreZeroValues = false;
+	ignoreZeroBins = false;
 }
 
 HistogramManager::~HistogramManager()
@@ -58,6 +62,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 	inf[0] = numOfBins;
 	inf[1] = minMax.size();
 	inf[2] = amtOfIndices;
+	inf[3] = ignoreZeroValues;
 #ifdef _DEBUG
 	std::cout << "Bins: " << numOfBins << std::endl << "Amount of attributes: " << minMax.size() << std::endl << "Amount of indices: " << amtOfIndices << std::endl;
 #endif
@@ -129,28 +134,27 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 	uint32_t* bins = (uint32_t*)binsBytes;
 	Histogram histogram = {};
 	for (int i = 0; i < minMax.size(); ++i) {
-		float maxVal = 0;
 		histogram.bins.push_back({ });			//push back empty vector
+		histogram.originalBins.push_back({ });
+		histogram.maxCount.push_back({ });
 		for (int j = 0; j < numOfBins; ++j) {
 			float curVal = 0;
-			int div = 0;
-			int h = .2f * numOfBins;
-			for (int k = -h>>1; k <= h>>1; k += 1) {	//applying a box cernel according to chamers et al.
-				if (j + k >= 0 && j + k < numOfBins) {
-					curVal += bins[i * numOfBins + j + k];
-					div++;
-				}
-			}
-			curVal /= div;
-			if (curVal > maxVal)maxVal = curVal;
+			//int div = 0;
+			//int h = .2f * numOfBins;
+			//for (int k = -h>>1; k <= h>>1; k += 1) {	//applying a box cernel according to chamers et al.
+			//	if (j + k >= 0 && j + k < numOfBins) {
+			//		curVal += bins[i * numOfBins + j + k];
+			//		div++;
+			//	}
+			//}
+			//curVal /= div;
+			//if (curVal > maxVal)maxVal = curVal;
 			histogram.bins.back().push_back(curVal);
-		}
-		histogram.maxCount.push_back(maxVal);
-		if (maxVal > histogram.maxGlobalCount) {
-			histogram.maxGlobalCount = maxVal;
+			histogram.originalBins.back().push_back(bins[i * numOfBins + j]);
 		}
 	}
 	histogram.ranges = minMax;
+	updateSmoothedValues(histogram);
 
 	histograms[name] = histogram;
 
@@ -176,4 +180,52 @@ bool HistogramManager::containsHistogram(std::string& name)
 void HistogramManager::setNumberOfBins(uint32_t n)
 {
 	numOfBins = n;
+}
+
+void HistogramManager::setSmoothingKernelSize(float stdDev)
+{
+	this->stdDev = stdDev;
+	
+	for (auto& hist : histograms) {
+		updateSmoothedValues(hist.second);
+	}
+}
+
+void HistogramManager::updateSmoothedValues()
+{
+	for (auto& hist : histograms) {
+		updateSmoothedValues(hist.second);
+	}
+}
+
+void HistogramManager::updateSmoothedValues(Histogram& hist)
+{
+	float stdDevSq = 2 * stdDev * stdDev;
+	int kSize = (stdDev < 0) ? 0.2 * numOfBins + 1 : stdDev * 3 + 1;	//the plus 1 is there to realise the ceiling function
+
+	//integrated is to 3 sigma standard deviation
+	float maxVal = 0;
+	int att = 0;
+	for (auto& attribute : hist.originalBins) {
+		for (int bin = 0; bin < attribute.size(); ++bin) {
+			float divisor = 0;
+			float divider = 0;
+
+			for (int k = -kSize; k <= kSize; ++k) {
+				if (bin + k >= ((ignoreZeroBins)? 1:0) && bin + k < attribute.size()) {
+					float factor = std::exp(-(k * k) / stdDevSq);
+					divisor += attribute[bin + k] * factor;
+					divider += factor;
+				}
+			}
+
+			hist.bins[att][bin] = divisor / divider;
+			if (hist.bins[att][bin] > maxVal) maxVal = hist.bins[att][bin];
+		}
+		hist.maxCount[att] = maxVal;
+		if (maxVal > hist.maxGlobalCount) {
+			hist.maxGlobalCount = maxVal;
+		}
+		++att;
+	}
 }

@@ -7328,6 +7328,49 @@ int main(int, char**)
 					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 20);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
 					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					if (ImGui::Checkbox("Ignore zero values",&histogramManager->ignoreZeroValues)) {
+						for (auto& drawListPlot : violinDrawlistPlots) {
+							int drawL = 0;
+							for (auto& drawList : drawListPlot.drawLists) {
+								DrawList* dl = &(*std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [drawList](DrawList& draw) {return draw.name == drawList; }));
+
+								std::vector<std::pair<float, float>> minMax;
+								for (Attribute& a : pcAttributes) {
+									minMax.push_back({ a.min,a.max });
+								}
+								DataSet* ds;
+								for (DataSet& d : g_PcPlotDataSets) {
+									if (d.name == dl->parentDataSet) {
+										ds = &d;
+										break;
+									}
+								}
+								histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
+								std::vector<std::pair<uint32_t, float>> area;
+								for (int j = 0; j < hist.maxCount.size(); ++j) {
+									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+										drawListPlot.maxValues[j] = hist.maxCount[j];
+									}
+									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+										drawListPlot.maxGlobalValue = hist.maxCount[j];
+									}
+									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
+								}
+
+								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+								++drawL;
+							}
+						}
+					}
+					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
+						histogramManager->updateSmoothedValues();
+					}
+					static float stdDev = -1;
+					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
+						histogramManager->setSmoothingKernelSize(stdDev);
+					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -7587,6 +7630,49 @@ int main(int, char**)
 					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 20);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
 					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					if (ImGui::Checkbox("Ignore zero values", &histogramManager->ignoreZeroValues)) {		//updating all histogramms if 0 values should be ignored
+						for (auto& drawListPlot : violinDrawlistPlots) {
+							int drawL = 0;
+							for (auto& drawList : drawListPlot.drawLists) {
+								DrawList* dl = &(*std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [drawList](DrawList& draw) {return draw.name == drawList; }));
+
+								std::vector<std::pair<float, float>> minMax;
+								for (Attribute& a : pcAttributes) {
+									minMax.push_back({ a.min,a.max });
+								}
+								DataSet* ds;
+								for (DataSet& d : g_PcPlotDataSets) {
+									if (d.name == dl->parentDataSet) {
+										ds = &d;
+										break;
+									}
+								}
+								histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
+								std::vector<std::pair<uint32_t, float>> area;
+								for (int j = 0; j < hist.maxCount.size(); ++j) {
+									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+										drawListPlot.maxValues[j] = hist.maxCount[j];
+									}
+									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+										drawListPlot.maxGlobalValue = hist.maxCount[j];
+									}
+									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
+								}
+
+								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+								++drawL;
+							}
+						}
+					}
+					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
+						histogramManager->updateSmoothedValues();
+					}
+					static float stdDev = -1;
+					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
+						histogramManager->setSmoothingKernelSize(stdDev);
+					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();

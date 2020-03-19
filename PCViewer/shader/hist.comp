@@ -6,7 +6,7 @@ layout(std430, binding = 0) buffer Informations{
 	uint numOfBins;
 	uint numOfAttributes;
 	uint numOfIndices;
-	uint padding;
+	uint ignoreZero;		//bool to indicate if 0 values should be ignored
 	float minMax[];
 } info;
 
@@ -33,7 +33,9 @@ void main(){
 	if(!a) return;
 	for(int axis = 0; axis<info.numOfAttributes;++axis){
 		float val = d.data[index*info.numOfAttributes + axis];
-		int binIndex = int((val-info.minMax[2*axis])/(info.minMax[2*axis+1]-info.minMax[2*axis]) * .999999f * info.numOfBins);		//multiplication with .999999f is done to prevent that a value could be added to bin at index numOfBins
-		atomicAdd(b.bins[axis*info.numOfBins+binIndex],1);
+		if(!bool(info.ignoreZero) || val != 0){
+			int binIndex = int((val-info.minMax[2*axis])/(info.minMax[2*axis+1]-info.minMax[2*axis]) * .999999f * info.numOfBins);		//multiplication with .999999f is done to prevent that a value could be added to bin at index numOfBins
+			atomicAdd(b.bins[axis*info.numOfBins+binIndex],1);
+		}
 	}
 }

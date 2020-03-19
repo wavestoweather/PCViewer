@@ -15,6 +15,7 @@ public:
 		float maxGlobalCount;							//maximung value accross all attributes
 		std::vector<float> maxCount;					//maximum histogramm value for each attribute
 		std::vector<std::pair<float, float>> ranges;	//the value ranges for each attribute
+		std::vector<std::vector<float>> originalBins;	//histogramm values for each attribute before smoothing was applied
 		std::vector<std::vector<float>> bins;			//histogramm values for each attribute
 	};
 
@@ -26,6 +27,12 @@ public:
 	Histogram& getHistogram(std::string name);
 	bool containsHistogram(std::string& name);
 	void setNumberOfBins(uint32_t n);
+	//setting stdDev to a negative number leads to automatic choose of kernel size
+	void setSmoothingKernelSize(float stdDev);
+	void updateSmoothedValues();
+
+	bool ignoreZeroValues;
+	bool ignoreZeroBins;
 
 private:
 	VkDevice device;
@@ -39,7 +46,7 @@ private:
 	VkDescriptorSetLayout descriptorSetLayout;
 	// 3 ubo buffers for
 	// informations:
-	// numOfBins numOfAttributes float[min,max]
+	// numOfBins, numOfAttributes, amtOfIndices, ignoreZeroValues, float[min,max]
 	// bins:
 	// array for all bins
 	VkBuffer uboBuffers[2];
@@ -47,5 +54,8 @@ private:
 	VkDeviceMemory uboMemory;
 
 	uint32_t numOfBins;
+	float stdDev;
 	std::map<std::string, Histogram> histograms;
+
+	void updateSmoothedValues(Histogram& hist);
 };
