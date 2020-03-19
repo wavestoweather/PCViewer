@@ -79,6 +79,8 @@ public:
     unsigned int chosenPaletteNr;
     unsigned int chosenNrColorNr;
 
+    unsigned int skipFirstAttributes;
+
     int alphaLines;
     int alphaFill;
 
@@ -96,6 +98,7 @@ public:
     void setChosenCategoryNr(unsigned int i);
     void setChosenPaletteNr(unsigned int i);
     void setChosenNrColorNr(unsigned int i);
+    void setChosenSkipFirstAttributes(unsigned int i);
     void setApplyToFillColor(bool b);
     void setApplyToLineColor(bool b);
 

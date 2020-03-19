@@ -730,7 +730,7 @@ static bool animationItemsDisabled = false;
 static int animationCurrentDrawList = -1;
 
 //variables for violin plots
-static int violinPlotHeight = 550;
+static int violinPlotHeight = 1000;//550;
 static int violinPlotXSpacing = 5;
 static bool enableAttributeViolinPlots = false;
 static bool enableDrawlistViolinPlots = false;
@@ -4415,7 +4415,7 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
 //    std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
     ImGui::Separator();
     int previousNrOfColumns = ImGui::GetColumnsCount();
-    ImGui::Columns(4);
+    ImGui::Columns(5);
     ImGui::Checkbox("Apply Palette", &cpm->useColorPalette);
     ImGui::NextColumn();
 
@@ -4461,7 +4461,7 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
     }
     ImGui::NextColumn();
 
-    const char*  numbers[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" };
+    const char*  numbers[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x" };
     unsigned int currColorNr = cpm->chosenNrColorNr;
     CPalette* currPalette =  cpm->colorPalette.getPalletteWithName(pNames[currPaletteNr]);
 
@@ -4476,6 +4476,20 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
         }
         ImGui::EndCombo();
     }
+    ImGui::NextColumn();
+    unsigned int skipFirstAttributes = cpm->skipFirstAttributes;
+    if(ImGui::BeginCombo("Skip first x attrbts",  numbers[skipFirstAttributes])){
+
+        for (unsigned int il =0; il < violinLineColors->size();++il)
+        {
+            if (ImGui::MenuItem(numbers[il], nullptr)){
+                cpm->setChosenSkipFirstAttributes(il);
+
+            }
+        }
+        ImGui::EndCombo();
+    }
+
 
 
 
@@ -4506,25 +4520,25 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
     // Now exchange as many colors as selected if something was changed.
     if ((cpm->useColorPalette) &&
             (cpm->getBValuesChanged())){
-        // Backup existing colors.
+        // Backup existing colors. Only backsup the ones after skipRange...
         cpm->backupColors(*violinLineColors, *violinFillColors);
 
         std::vector<ImVec4> retrievedColors = cpm->colorPalette.getPallettAsImVec4(
                     cpm->chosenCategoryNr,
                     cpm->chosenPaletteNr,
-                    cpm->chosenNrColorNr + 1);
-        for (unsigned int iColor = 0; iColor < cpm->chosenNrColorNr + 1; ++iColor)
+                    cpm->chosenNrColorNr);
+        for (unsigned int iColor = 0; iColor < cpm->chosenNrColorNr; ++iColor)
         {
-            if ((iColor < (*violinFillColors).size())
+            if ((iColor + cpm->skipFirstAttributes < (*violinFillColors).size())
                 && (iColor < retrievedColors.size()))
             {
                 if (cpm->applyToLineColor){
-                    (*violinLineColors)[iColor] = retrievedColors[iColor];
-                    (*violinLineColors)[iColor].w = cpm->alphaLines / 255.;
+                    (*violinLineColors)[iColor + cpm->skipFirstAttributes] = retrievedColors[iColor];
+                    (*violinLineColors)[iColor + cpm->skipFirstAttributes].w = cpm->alphaLines / 255.;
                 }
                 if (cpm->applyToFillColor){
-                    (*violinFillColors)[iColor] = retrievedColors[iColor];
-                    (*violinFillColors)[iColor].w = cpm->alphaFill / 255.;
+                    (*violinFillColors)[iColor + cpm->skipFirstAttributes] = retrievedColors[iColor];
+                    (*violinFillColors)[iColor + cpm->skipFirstAttributes].w = cpm->alphaFill / 255.;
                 }
 
             }

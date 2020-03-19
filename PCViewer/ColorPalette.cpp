@@ -203,7 +203,8 @@ ColorPaletteManager::ColorPaletteManager():
     useColorPalette(true),
     chosenCategoryNr(0),
     chosenPaletteNr(0),
-    chosenNrColorNr(0),
+    chosenNrColorNr(1),
+    skipFirstAttributes(0),
     alphaLines(255),
     alphaFill(127),
     applyToFillColor(true),
@@ -243,6 +244,13 @@ void ColorPaletteManager::setChosenNrColorNr(unsigned int i)
 }
 
 
+void ColorPaletteManager::setChosenSkipFirstAttributes(unsigned int i)
+{
+    skipFirstAttributes = i;
+    bvaluesChanged = true;
+}
+
+
 void ColorPaletteManager::setApplyToFillColor(bool b)
 {
     applyToFillColor = b;
@@ -278,10 +286,14 @@ void ColorPaletteManager::backupColors(std::vector<ImVec4> lineColors, std::vect
         CPalette currPalette;
         currPalette.cName = currColorPaletteName;
         currPalette.category = "cust";
-        currPalette.maxcolors = lineColors.size();
+        currPalette.maxcolors = lineColors.size() - skipFirstAttributes;
         currPalette.categoryC = &currPalette.category[0];
         currPalette.colorblind = false;
-        currPalette.custColors = lineColors;
+
+        std::vector<ImVec4>::const_iterator first = lineColors.begin() + skipFirstAttributes;
+        std::vector<ImVec4>::const_iterator last = lineColors.end();
+        std::vector<ImVec4> newVec(first, last);
+        currPalette.custColors = newVec;//lineColors;
 
         this->colorPalette.palettes.push_back(currPalette);
         this->colorPalette.palettesCust.push_back(currPalette);
@@ -299,10 +311,13 @@ void ColorPaletteManager::backupColors(std::vector<ImVec4> lineColors, std::vect
         CPalette currPalette;
         currPalette.cName = currColorPaletteName;
         currPalette.category = "cust";
-        currPalette.maxcolors = fillColors.size();
+        currPalette.maxcolors = fillColors.size() - skipFirstAttributes;
         currPalette.categoryC = &currPalette.category[0];
         currPalette.colorblind = false;
-        currPalette.custColors = fillColors;
+        std::vector<ImVec4>::const_iterator first = fillColors.begin() + skipFirstAttributes;
+        std::vector<ImVec4>::const_iterator last = fillColors.end();
+        std::vector<ImVec4> newVec(first, last);
+        currPalette.custColors = newVec; //fillColors;
 
         this->colorPalette.palettes.push_back(currPalette);
         this->colorPalette.palettesCust.push_back(currPalette);
