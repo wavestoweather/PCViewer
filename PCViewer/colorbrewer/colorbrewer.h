@@ -41,10 +41,11 @@
 #define COLORBREWER_H
 
 #include <string>
-#include <initializer_list>
+#include <vector>
+//#include <initializer_list>
 
 template <typename T>
-inline std::initializer_list<T> brew(const std::string& colorName, size_t colorCount)
+inline std::vector<T> brew(const std::string& colorName, size_t colorCount)
 {
     if (colorName == "YlGn") {
         switch (colorCount) {
