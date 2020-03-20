@@ -71,6 +71,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <string.h>
 #include <sstream>
 #include <memory>
+#include <cctype>
 //#include <thrust/sort.h>
 
 #ifdef DETECTMEMLEAK
@@ -96,6 +97,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define BRUSHWIDTH 20
 #define EDGEHOVERDIST 5
 #define DRAGTHRESH .02f
+
 
 //defines the amount of fractures per axis
 #define FRACTUREDEPTH 15

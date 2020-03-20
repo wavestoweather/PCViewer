@@ -32,29 +32,34 @@ add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC})
 target_link_libraries(PCViewer Vulkan::Vulkan glfw glm)
 
 message (" Copying shaders")
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+file(GLOB MY_PUBLIC_HEADERS
+  "${CMAKE_CURRENT_SOURCE_DIR}/shader/*.spv"
+)
+file(COPY ${MY_PUBLIC_HEADERS} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/vert.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/densVert.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/frag.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/densFrag.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/densVert.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histVert.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/densFrag.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histGeo.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histVert.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histFrag.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histGeo.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/rectVert.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/histFrag.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/rectFrag.spv
-        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/rectVert.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+
+#file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader/rectFrag.spv
+#        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)

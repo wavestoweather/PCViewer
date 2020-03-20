@@ -1,5 +1,7 @@
 #include "SettingsManager.h"
 
+# include <string>
+
 char SettingsManager::settingsFile[] = "settings.cfg";
 
 SettingsManager::SettingsManager()
