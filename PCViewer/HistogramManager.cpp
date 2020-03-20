@@ -38,6 +38,7 @@ HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDev
 	stdDev = -1;
 	ignoreZeroValues = false;
 	ignoreZeroBins = false;
+	logScale = false;
 }
 
 HistogramManager::~HistogramManager()
@@ -222,6 +223,7 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 			}
 
 			hist.bins[att][bin] = divisor / divider;
+			if (logScale) hist.bins[att][bin] = log(hist.bins[att][bin] + 1);
 			if (hist.bins[att][bin] > maxVal) maxVal = hist.bins[att][bin];
 		}
 		hist.maxCount[att] = maxVal;

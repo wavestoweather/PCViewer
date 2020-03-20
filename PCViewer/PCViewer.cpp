@@ -4552,6 +4552,32 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
 
 }
 
+inline void updateAllViolinPlotMaxValues() {
+	for (auto& drawListPlot : violinDrawlistPlots) {
+		drawListPlot.maxGlobalValue = 0;
+		for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+			drawListPlot.maxValues[j] = 0;
+		}
+		int drawL = 0;
+		for (auto& drawList : drawListPlot.drawLists) {
+			HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
+			std::vector<std::pair<uint32_t, float>> area;
+			for (int j = 0; j < hist.maxCount.size(); ++j) {
+				if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+					drawListPlot.maxValues[j] = hist.maxCount[j];
+				}
+				if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+					drawListPlot.maxGlobalValue = hist.maxCount[j];
+				}
+				area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
+			}
+
+			std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+			for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+			++drawL;
+		}
+	}
+}
 
 int main(int, char**)
 {
@@ -7401,30 +7427,11 @@ int main(int, char**)
 					static float stdDev = -1;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
-						for (auto& drawListPlot : violinDrawlistPlots) {
-							drawListPlot.maxGlobalValue = 0;
-							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
-								drawListPlot.maxValues[j] = 0;
-							}
-							int drawL = 0;
-							for (auto& drawList : drawListPlot.drawLists) {
-								HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
-								std::vector<std::pair<uint32_t, float>> area;
-								for (int j = 0; j < hist.maxCount.size(); ++j) {
-									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
-										drawListPlot.maxValues[j] = hist.maxCount[j];
-									}
-									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
-										drawListPlot.maxGlobalValue = hist.maxCount[j];
-									}
-									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
-								}
-
-								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
-								++drawL;
-							}
-						}
+						updateAllViolinPlotMaxValues();
+					}
+					if (ImGui::Checkbox("Log scale", &histogramManager->logScale)) {
+						histogramManager->updateSmoothedValues();
+						updateAllViolinPlotMaxValues();
 					}
 					ImGui::EndMenu();
 				}
@@ -7730,58 +7737,16 @@ int main(int, char**)
 					}
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
 						histogramManager->updateSmoothedValues();
-						for (auto& drawListPlot : violinDrawlistPlots) {
-							drawListPlot.maxGlobalValue = 0;
-							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
-								drawListPlot.maxValues[j] = 0;
-							}
-							int drawL = 0;
-							for (auto& drawList : drawListPlot.drawLists) {
-								HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
-								std::vector<std::pair<uint32_t, float>> area;
-								for (int j = 0; j < hist.maxCount.size(); ++j) {
-									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
-										drawListPlot.maxValues[j] = hist.maxCount[j];
-									}
-									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
-										drawListPlot.maxGlobalValue = hist.maxCount[j];
-									}
-									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
-								}
-
-								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
-								++drawL;
-							}
-						}
+						updateAllViolinPlotMaxValues();
 					}
 					static float stdDev = -1;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
-						for (auto& drawListPlot : violinDrawlistPlots) {
-							drawListPlot.maxGlobalValue = 0;
-							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
-								drawListPlot.maxValues[j] = 0;
-							}
-							int drawL = 0;
-							for (auto& drawList : drawListPlot.drawLists) {
-								HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
-								std::vector<std::pair<uint32_t, float>> area;
-								for (int j = 0; j < hist.maxCount.size(); ++j) {
-									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
-										drawListPlot.maxValues[j] = hist.maxCount[j];
-									}
-									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
-										drawListPlot.maxGlobalValue = hist.maxCount[j];
-									}
-									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
-								}
-
-								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
-								++drawL;
-							}
-						}
+						updateAllViolinPlotMaxValues();
+					}
+					if (ImGui::Checkbox("Log scale", &histogramManager->logScale)) {
+						histogramManager->updateSmoothedValues();
+						updateAllViolinPlotMaxValues();
 					}
 					ImGui::EndMenu();
 				}

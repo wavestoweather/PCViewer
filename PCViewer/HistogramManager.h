@@ -33,6 +33,7 @@ public:
 
 	bool ignoreZeroValues;
 	bool ignoreZeroBins;
+	bool logScale;
 
 private:
 	VkDevice device;
