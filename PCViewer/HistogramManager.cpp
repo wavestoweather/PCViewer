@@ -1,4 +1,5 @@
 #include "HistogramManager.h"
+#include <cmath>
 
 HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t binsAmount) : device(device), physicalDevice(physicalDevice), commandPool(commandPool), queue(queue), descriptorPool(descriptorPool), numOfBins(binsAmount)
 {
