@@ -205,6 +205,7 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 	int kSize = (stdDev < 0) ? 0.2 * numOfBins + 1 : stdDev * 3 + 1;	//the plus 1 is there to realise the ceiling function
 
 	//integrated is to 3 sigma standard deviation
+	hist.maxGlobalCount = 0;
 	float maxVal = 0;
 	int att = 0;
 	for (auto& attribute : hist.originalBins) {
@@ -227,6 +228,7 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 		if (maxVal > hist.maxGlobalCount) {
 			hist.maxGlobalCount = maxVal;
 		}
+		maxVal = 0;
 		++att;
 	}
 }

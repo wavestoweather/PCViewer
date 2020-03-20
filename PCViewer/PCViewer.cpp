@@ -384,7 +384,8 @@ enum ViolinPlacement {
 enum ViolinScale {
 	ViolinScaleSelf,
 	ViolinScaleLocal,
-	ViolinScaleGlobal
+	ViolinScaleGlobal,
+	ViolinScaleGlobalAttribute
 };
 
 struct DrawListRef {
@@ -7333,6 +7334,10 @@ int main(int, char**)
 					if (ImGui::Checkbox("Ignore zero values",&histogramManager->ignoreZeroValues)) {
 						for (auto& drawListPlot : violinDrawlistPlots) {
 							int drawL = 0;
+							drawListPlot.maxGlobalValue = 0;
+							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+								drawListPlot.maxValues[j] = 0;
+							}
 							for (auto& drawList : drawListPlot.drawLists) {
 								DrawList* dl = &(*std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [drawList](DrawList& draw) {return draw.name == drawList; }));
 
@@ -7368,10 +7373,58 @@ int main(int, char**)
 					}
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
 						histogramManager->updateSmoothedValues();
+						for (auto& drawListPlot : violinDrawlistPlots) {
+							drawListPlot.maxGlobalValue = 0;
+							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+								drawListPlot.maxValues[j] = 0;
+							}
+							int drawL = 0;
+							for (auto& drawList : drawListPlot.drawLists) {
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
+								std::vector<std::pair<uint32_t, float>> area;
+								for (int j = 0; j < hist.maxCount.size(); ++j) {
+									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+										drawListPlot.maxValues[j] = hist.maxCount[j];
+									}
+									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+										drawListPlot.maxGlobalValue = hist.maxCount[j];
+									}
+									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
+								}
+
+								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+								++drawL;
+							}
+						}
 					}
 					static float stdDev = -1;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
+						for (auto& drawListPlot : violinDrawlistPlots) {
+							drawListPlot.maxGlobalValue = 0;
+							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+								drawListPlot.maxValues[j] = 0;
+							}
+							int drawL = 0;
+							for (auto& drawList : drawListPlot.drawLists) {
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
+								std::vector<std::pair<uint32_t, float>> area;
+								for (int j = 0; j < hist.maxCount.size(); ++j) {
+									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+										drawListPlot.maxValues[j] = hist.maxCount[j];
+									}
+									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+										drawListPlot.maxGlobalValue = hist.maxCount[j];
+									}
+									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
+								}
+
+								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+								++drawL;
+							}
+						}
 					}
 					ImGui::EndMenu();
 				}
@@ -7395,10 +7448,10 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					static char* violinScales[] = { "Self","Local","Global" };
+					static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
 					ImGui::SameLine(480);
 					if (ImGui::BeginCombo(("Scale##" + std::to_string(j)).c_str(), violinScales[violinAttributePlots[i].violinScalesX[j]])) {
-						for (int k = 0; k < 3; ++k) {
+						for (int k = 0; k < 4; ++k) {
 							if (ImGui::MenuItem(violinScales[k], nullptr)) {
 								violinAttributePlots[i].violinScalesX[j] = (ViolinScale)k;
 							}
@@ -7550,6 +7603,9 @@ int main(int, char**)
 						case ViolinScaleGlobal:
 							div = violinAttributePlots[i].maxGlobalValue;
 							break;
+						case ViolinScaleGlobalAttribute:
+							div = violinDrawlistPlots[i].maxValues[k];
+							break;
 						}
 
 						switch (violinAttributePlots[i].violinPlacements[k]) {
@@ -7635,6 +7691,10 @@ int main(int, char**)
 					if (ImGui::Checkbox("Ignore zero values", &histogramManager->ignoreZeroValues)) {		//updating all histogramms if 0 values should be ignored
 						for (auto& drawListPlot : violinDrawlistPlots) {
 							int drawL = 0;
+							drawListPlot.maxGlobalValue = 0;
+							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+								drawListPlot.maxValues[j] = 0;
+							}
 							for (auto& drawList : drawListPlot.drawLists) {
 								DrawList* dl = &(*std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [drawList](DrawList& draw) {return draw.name == drawList; }));
 
@@ -7670,10 +7730,58 @@ int main(int, char**)
 					}
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
 						histogramManager->updateSmoothedValues();
+						for (auto& drawListPlot : violinDrawlistPlots) {
+							drawListPlot.maxGlobalValue = 0;
+							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+								drawListPlot.maxValues[j] = 0;
+							}
+							int drawL = 0;
+							for (auto& drawList : drawListPlot.drawLists) {
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
+								std::vector<std::pair<uint32_t, float>> area;
+								for (int j = 0; j < hist.maxCount.size(); ++j) {
+									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+										drawListPlot.maxValues[j] = hist.maxCount[j];
+									}
+									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+										drawListPlot.maxGlobalValue = hist.maxCount[j];
+									}
+									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
+								}
+
+								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+								++drawL;
+							}
+						}
 					}
 					static float stdDev = -1;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
+						for (auto& drawListPlot : violinDrawlistPlots) {
+							drawListPlot.maxGlobalValue = 0;
+							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+								drawListPlot.maxValues[j] = 0;
+							}
+							int drawL = 0;
+							for (auto& drawList : drawListPlot.drawLists) {
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList);
+								std::vector<std::pair<uint32_t, float>> area;
+								for (int j = 0; j < hist.maxCount.size(); ++j) {
+									if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+										drawListPlot.maxValues[j] = hist.maxCount[j];
+									}
+									if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+										drawListPlot.maxGlobalValue = hist.maxCount[j];
+									}
+									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
+								}
+
+								std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+								for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+								++drawL;
+							}
+						}
 					}
 					ImGui::EndMenu();
 				}
@@ -7706,10 +7814,10 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					static char* violinScales[] = { "Self","Local","Global" };
+					static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
 					ImGui::NextColumn();
 					if (ImGui::BeginCombo(("##Scale" + std::to_string(j)).c_str(), violinScales[violinDrawlistPlots[i].violinScalesX[j]])) {
-						for (int k = 0; k < 3; ++k) {
+						for (int k = 0; k < 4; ++k) {
 							if (ImGui::MenuItem(violinScales[k], nullptr)) {
 								violinDrawlistPlots[i].violinScalesX[j] = (ViolinScale)k;
 							}
@@ -7732,6 +7840,9 @@ int main(int, char**)
 									break;
 								case ViolinScaleGlobal:
 									a = 1 / violinDrawlistPlots[i].maxGlobalValue;
+									break;
+								case ViolinScaleGlobalAttribute:
+									a = 1 / violinDrawlistPlots[i].maxValues[k];
 									break;
 								}
 
@@ -7900,6 +8011,9 @@ int main(int, char**)
 								break;
 							case ViolinScaleGlobal:
 								div = violinDrawlistPlots[i].maxGlobalValue;
+								break;
+							case ViolinScaleGlobalAttribute:
+								div = violinDrawlistPlots[i].maxValues[k];
 								break;
 							}
 
