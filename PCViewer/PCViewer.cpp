@@ -7807,7 +7807,9 @@ int main(int, char**)
 									a = 1 / violinDrawlistPlots[i].maxGlobalValue;
 									break;
 								case ViolinScaleGlobalAttribute:
-									a = 1 / violinDrawlistPlots[i].maxValues[k];
+									for (int l = 0; hist.bins[k].size(); ++l) {
+										a += hist.bins[k][l];
+									}
 									break;
 								}
 
