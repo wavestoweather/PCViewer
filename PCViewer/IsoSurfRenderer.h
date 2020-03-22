@@ -11,6 +11,7 @@ The iso surfaces are set by brushes.
 #include <vulkan/vulkan.h>
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include "SpacialData.h"
 #include <limits.h>
 #include <string.h>
 #include <map>
@@ -36,7 +37,8 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	void update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data);
+	//TODO: change back to general solution. Current update3dBinaryVolume is specifically made for a 3d cloud ensemble weather simulation dataset with fixed 3d size
+	void update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices);
 	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);				//minMax has to be a vector containing for each attribute an array of minMax values
 	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a already added brush. Returns true if the brush was updated, else false
@@ -77,6 +79,19 @@ private:
 		//...
 	};
 
+	struct BinaryComputeInfos {
+		uint32_t amtOfAxis;			//This is also the amount of density attributes
+		uint32_t maxX;
+		uint32_t maxY;
+		uint32_t maxZ;
+		//float[] brushes structure (a stands for axis):
+		//offset a1, offset a2, ..., offset an, a1, a2, ..., an
+		//axis structure:
+		//amtOfBrushes, offset b1, offset b2, ..., offset bn, b1, b2, ..., bn
+		//brush structure:
+		//bIndex, amtOfMinMax, color(vec4), minMax1, minMax2, ..., minMaxN
+	};
+
 	struct BrushInfos {		//Note, currently a maximum of 30 brushes is available. For more shader + define in this header have to be changed
 		uint32_t amtOfAxis;
 		uint32_t padding[3];
@@ -97,6 +112,7 @@ private:
 	static char vertPath[];
 	static char fragPath[];
 	static char computePath[];
+	static char binaryComputePath[];
 
 	//general information about the 3d view
 	uint32_t imageHeight;
@@ -146,10 +162,17 @@ private:
 	VkBuffer			brushBuffer;
 	VkDeviceMemory		brushMemory;
 	uint32_t			brushByteSize;
+
+	std::vector<VkImage> binaryImages;
+	VkDeviceMemory		binaryImageMemory;
 	//vulkan resources for the compute pipeline
 	VkPipeline			computePipeline;
 	VkPipelineLayout	computePipelineLayout;
 	VkDescriptorSetLayout computeDescriptorSetLayout;
+	//vulkan resources for the binary image filling compute
+	VkPipeline			binaryComputePipeline;
+	VkPipelineLayout	binaryComputePipelineLayout;
+	VkDescriptorSetLayout binaryComputeDescriptorSetLayout;
 
 	//camera variables
 	glm::vec3 camPos;		//camera position
@@ -157,7 +180,7 @@ private:
 
 	//variables for the brushes
 	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
-	std::map<std::string, float*> brushColors;											//each brush has its own colors
+	std::map<std::string, float*> brushColors;												//each brush has its own colors
 	std::vector<float*> attributeColors;													//if only one brush is active every attribute can be assigned a different color
 
 	//methods to instatiate vulkan resources

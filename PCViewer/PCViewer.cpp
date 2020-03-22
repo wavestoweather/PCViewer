@@ -7323,7 +7323,7 @@ int main(int, char**)
 					minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
 					minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
 					minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
-					isoSurfaceRenderer->update3dDensities(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, dl->indices.size(), dl->indicesBuffer, data->size() * pcAttributes.size() , dl->buffer);
+					isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices);
 				}
 				ImGui::EndDragDropTarget();
 			}

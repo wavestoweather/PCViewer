@@ -3,6 +3,7 @@
 char IsoSurfRenderer::vertPath[]= "shader/isoSurfVert.spv";
 char IsoSurfRenderer::fragPath[]= "shader/isoSurfFrag.spv";
 char IsoSurfRenderer::computePath[] = "shader/isoSurfComp.spv";
+char IsoSurfRenderer::binaryComputePath[] = "shader/isoSurfBinComp.spv";
 
 IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool)
 {
@@ -37,6 +38,9 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	computePipeline = VK_NULL_HANDLE;
 	computePipelineLayout = VK_NULL_HANDLE;
 	computeDescriptorSetLayout = VK_NULL_HANDLE;
+	binaryComputePipeline = VK_NULL_HANDLE;
+	binaryComputePipelineLayout = VK_NULL_HANDLE;
+	binaryComputeDescriptorSetLayout = VK_NULL_HANDLE;
 	brushBuffer = VK_NULL_HANDLE;
 	brushMemory = VK_NULL_HANDLE;
 	brushByteSize = 0;
@@ -134,6 +138,15 @@ IsoSurfRenderer::~IsoSurfRenderer()
 	if (computeDescriptorSetLayout) {
 		vkDestroyDescriptorSetLayout(device, computeDescriptorSetLayout, nullptr);
 	}
+	if (binaryComputePipeline) {
+		vkDestroyPipeline(device, binaryComputePipeline, nullptr);
+	}
+	if (binaryComputePipelineLayout) {
+		vkDestroyPipelineLayout(device, binaryComputePipelineLayout, nullptr);
+	}
+	if (binaryComputeDescriptorSetLayout) {
+		vkDestroyDescriptorSetLayout(device, binaryComputeDescriptorSetLayout, nullptr);
+	}
 	if (brushBuffer) {
 		vkDestroyBuffer(device, brushBuffer, nullptr);
 	}
@@ -197,11 +210,19 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 	render();
 }
 
-void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float,float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, uint32_t amtOfIndices, VkBuffer indices, uint32_t amtOfData, VkBuffer data)
+void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices)
 {
 	VkResult err;
 
 	uint32_t required3dImages = densityAttributes.size();
+
+	//TODO: change to non constant
+	int w = SpacialData::rlatSize;
+	int d = SpacialData::rlonSize;
+	int h = SpacialData::altitudeSize + 22;	//the top 22 layer of the dataset are twice the size of the rest
+	width = w;
+	height = h;
+	depth = d;
 
 	image3dWidth = width;
 	image3dHeight = height;
@@ -262,7 +283,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 
 		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
-		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		//VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	}
 	VkUtil::commitCommandBuffer(queue, imageCommands);
 	err = vkQueueWaitIdle(queue);
@@ -270,7 +291,7 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	vkFreeCommandBuffers(device, commandPool, 1, &imageCommands);
 
 	//checking values in the first 3d image
-	float* im = new float[width * depth * height];
+	//float* im = new float[width * depth * height];
 	//This was checked and is working!!!!!!!
 	//VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d[4], width, height, depth, im, width * depth * height * sizeof(float));
 	//uint32_t zeroCount = 0;
@@ -278,94 +299,134 @@ void IsoSurfRenderer::update3dDensities(uint32_t width, uint32_t height, uint32_
 	//	if (im[i] != 0) zeroCount++;
 	//}
 
-	std::vector<VkDescriptorSetLayout> layouts;
-	layouts.push_back(descriptorSetLayout);
-	if (!descriptorSet) {
-		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+	//std::vector<VkDescriptorSetLayout> layouts;
+	//layouts.push_back(descriptorSetLayout);
+	//if (!descriptorSet) {
+	//	VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+	//}
+	//
+	////creating the density images via the compute pipeline ----------------------------------------
+	//VkBuffer infos;
+	//VkDeviceMemory infosMem;
+	//uint32_t infosByteSize = sizeof(ComputeInfos) + densityAttributes.size() * sizeof(float);
+	//ComputeInfos* infoBytes = (ComputeInfos*)new char[infosByteSize];
+	//VkUtil::createBuffer(device, infosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &infos);
+	//allocInfo = {};
+	//allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	//VkMemoryRequirements memReq = {};
+	//vkGetBufferMemoryRequirements(device, infos, &memReq);
+	//allocInfo.allocationSize = memReq.size;
+	//allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	//vkAllocateMemory(device, &allocInfo, nullptr, &infosMem);
+	//vkBindBufferMemory(device, infos, infosMem, 0);
+	//
+	////fill infoBytes and upload it
+	//infoBytes->amtOfAttributes = amtOfAttributes;
+	//infoBytes->amtOfDensityAttributes = densityAttributes.size();
+	//infoBytes->amtOfIndices = amtOfIndices;
+	//infoBytes->dimX = width;
+	//infoBytes->dimY = height;
+	//infoBytes->dimZ = depth;
+	//infoBytes->xInd = positionIndices.x;
+	//infoBytes->yInd = positionIndices.y;
+	//infoBytes->zInd = positionIndices.z;
+	//infoBytes->xMin = densityAttributesMinMax[positionIndices.x].first;
+	//infoBytes->xMax = densityAttributesMinMax[positionIndices.x].second;
+	//infoBytes->yMin = densityAttributesMinMax[positionIndices.y].first;
+	//infoBytes->yMax = densityAttributesMinMax[positionIndices.y].second;
+	//infoBytes->zMin = densityAttributesMinMax[positionIndices.z].first;
+	//infoBytes->zMax = densityAttributesMinMax[positionIndices.z].second;
+	//int* inf = (int*)(infoBytes + 1);
+	//for (int i = 0; i < densityAttributes.size(); ++i) {
+	//	inf[i] = densityAttributes[i];
+	//	//inf[3 * i + 1] = densityAttributesMinMax[i].first;
+	//	//inf[3 * i + 2] = densityAttributesMinMax[i].second;
+	//}
+	//PCUtil::numdump((int*)(infoBytes), densityAttributes.size() + 16);
+	//VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
+	//
+	////create descriptor set and update all need things
+	//VkDescriptorSet descSet;
+	//std::vector<VkDescriptorSetLayout> sets;
+	//sets.push_back(computeDescriptorSetLayout);
+	//VkUtil::createDescriptorSets(device, sets, descriptorPool, &descSet);
+	//VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	//
+	//std::vector<VkImageLayout> imageLayouts(required3dImages, VK_IMAGE_LAYOUT_GENERAL);
+	//VkUtil::updateStorageImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 1, descSet);
+	//VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	//VkUtil::updateDescriptorSet(device, data, amtOfData * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	//
+	////creating the command buffer, binding all the needed things and dispatching it to update the density images
+	//VkCommandBuffer computeCommands;
+	//VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
+	//
+	//vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+	//vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
+	//uint32_t patchAmount = amtOfIndices / LOCALSIZE;
+	//patchAmount += (amtOfIndices % LOCALSIZE) ? 1 : 0;
+	//vkCmdDispatch(computeCommands, patchAmount, 1, 1);
+	//VkUtil::commitCommandBuffer(queue, computeCommands);
+	//err = vkQueueWaitIdle(queue);
+	//check_vk_result(err);
+	//
+	//vkFreeCommandBuffers(device, commandPool, 1, &computeCommands);
+	//vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
+	//vkFreeMemory(device, infosMem, nullptr);
+	//vkDestroyBuffer(device, infos, nullptr);
+	//delete[] infoBytes;
+
+	//uploading the density values currently manual, as there is an error in the compute pipeline ----------------------------------------------------------
+
+	float** densityImages = new float*[required3dImages];
+	for (int i = 0; i < required3dImages; ++i) {
+		densityImages[i] = new float[w * d * h];
+		memset(densityImages[i], 0, w * d * h * sizeof(float));
 	}
-	
-	//creating the density images via the compute pipeline ----------------------------------------
-	VkBuffer infos;
-	VkDeviceMemory infosMem;
-	uint32_t infosByteSize = sizeof(ComputeInfos) + densityAttributes.size() * sizeof(float);
-	ComputeInfos* infoBytes = (ComputeInfos*)new char[infosByteSize];
-	VkUtil::createBuffer(device, infosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &infos);
-	allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	VkMemoryRequirements memReq = {};
-	vkGetBufferMemoryRequirements(device, infos, &memReq);
-	allocInfo.allocationSize = memReq.size;
-	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-	vkAllocateMemory(device, &allocInfo, nullptr, &infosMem);
-	vkBindBufferMemory(device, infos, infosMem, 0);
+	for (int i : indices) {
+		int x = SpacialData::getRlatIndex(data[i][positionIndices.x]);
+		int y = SpacialData::getAltitudeIndex(data[i][positionIndices.y]);
+		if (y > h - 44)
+			y = (y - h + 44) * 2 + (h - 44);
+		int z = SpacialData::getRlonIndex(data[i][positionIndices.z]);
+		assert(x >= 0);
+		assert(y >= 0);
+		assert(z >= 0);
 
-	//fill infoBytes and upload it
-	infoBytes->amtOfAttributes = amtOfAttributes;
-	infoBytes->amtOfDensityAttributes = densityAttributes.size();
-	infoBytes->amtOfIndices = amtOfIndices;
-	infoBytes->dimX = width;
-	infoBytes->dimY = height;
-	infoBytes->dimZ = depth;
-	infoBytes->xInd = positionIndices.x;
-	infoBytes->yInd = positionIndices.y;
-	infoBytes->zInd = positionIndices.z;
-	infoBytes->xMin = densityAttributesMinMax[positionIndices.x].first;
-	infoBytes->xMax = densityAttributesMinMax[positionIndices.x].second;
-	infoBytes->yMin = densityAttributesMinMax[positionIndices.y].first;
-	infoBytes->yMax = densityAttributesMinMax[positionIndices.y].second;
-	infoBytes->zMin = densityAttributesMinMax[positionIndices.z].first;
-	infoBytes->zMax = densityAttributesMinMax[positionIndices.z].second;
-	int* inf = (int*)(infoBytes + 1);
-	for (int i = 0; i < densityAttributes.size(); ++i) {
-		inf[i] = densityAttributes[i];
-		//inf[3 * i + 1] = densityAttributesMinMax[i].first;
-		//inf[3 * i + 2] = densityAttributesMinMax[i].second;
-	}
-	PCUtil::numdump((int*)(infoBytes), densityAttributes.size() + 16);
-	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
-
-	//create descriptor set and update all need things
-	VkDescriptorSet descSet;
-	std::vector<VkDescriptorSetLayout> sets;
-	sets.push_back(computeDescriptorSetLayout);
-	VkUtil::createDescriptorSets(device, sets, descriptorPool, &descSet);
-	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	
-	std::vector<VkImageLayout> imageLayouts(required3dImages, VK_IMAGE_LAYOUT_GENERAL);
-	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 1, descSet);
-	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, data, amtOfData * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-
-	//creating the command buffer, binding all the needed things and dispatching it to update the density images
-	VkCommandBuffer computeCommands;
-	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
-
-	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
-	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
-	uint32_t patchAmount = amtOfIndices / LOCALSIZE;
-	patchAmount += (amtOfIndices % LOCALSIZE) ? 1 : 0;
-	vkCmdDispatch(computeCommands, patchAmount, 1, 1);
-	VkUtil::commitCommandBuffer(queue, computeCommands);
-	err = vkQueueWaitIdle(queue);
-	check_vk_result(err);
-
-	vkFreeCommandBuffers(device, commandPool, 1, &computeCommands);
-	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
-	vkFreeMemory(device, infosMem, nullptr);
-	vkDestroyBuffer(device, infos, nullptr);
-	delete[] infoBytes;
-
-	//checking change
-	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d[0], width, height, depth, im, width * depth * height * sizeof(float));
-	uint32_t zeroCount2 = 0;
-	for (int i = 0; i < width * depth * height; ++i) {
-		if (im[i] != 0) {
-			float ok = im[i];
-			zeroCount2++;
+		for (int j = 0; j < required3dImages; ++j) {
+			densityImages[j][IDX3D(x, y, z, w, h)] = data[i][densityAttributes[j]];
+			if (y >= h - 44) densityImages[j][IDX3D(x, y + 1, z, w, h)] = data[i][densityAttributes[j]];
 		}
 	}
-	std::cout << "Difference in zeros: " << zeroCount2<< std::endl;
-	delete[] im;
+
+	for (int i = 0; i < required3dImages; ++i) {
+		VkUtil::uploadImageData(device, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_FORMAT_R32_SFLOAT, w, h, d, densityImages[i], w * h * d * sizeof(float));
+		delete[] densityImages[i];
+	}
+	delete[] densityImages;
+
+	VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
+	for (int i = 0; i < required3dImages; ++i) {
+		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
+	VkUtil::commitCommandBuffer(queue, imageCommands);
+	err = vkQueueWaitIdle(queue);
+	check_vk_result(err);
+	vkFreeCommandBuffers(device, commandPool, 1, &imageCommands);
+
+	//end of uploading the density values ------------------------------------------------------------------------------------------------------------------
+
+	//checking change
+	//VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d[0], width, height, depth, im, width * depth * height * sizeof(float));
+	//uint32_t zeroCount2 = 0;
+	//for (int i = 0; i < width * depth * height; ++i) {
+	//	if (im[i] != 0) {
+	//		float ok = im[i];
+	//		zeroCount2++;
+	//	}
+	//}
+	//std::cout << "Difference in zeros: " << zeroCount2<< std::endl;
+	//delete[] im;
 
 	if (!descriptorSet) {
 		resize(1, 1);
@@ -804,6 +865,28 @@ void IsoSurfRenderer::createPipeline()
 	layouts.push_back(computeDescriptorSetLayout);
 
 	VkUtil::createComputePipeline(device, computeModule, layouts, &computePipelineLayout, &computePipeline);
+
+	//creating the compute pipeline to fill the binary images -----------------------------------------------------
+	VkShaderModule binaryModule = VkUtil::createShaderModule(device, PCUtil::readByteFile(binaryComputePath));
+
+	bindings.clear();
+	binding.binding = 0;								//binary compute infos (eg. brush infos)
+	binding.descriptorCount = 1;
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	bindings.push_back(binding);
+
+	binding.binding = 1;								//density images
+	binding.descriptorCount = MAXAMTOF3DTEXTURES;
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	bindings.push_back(binding);
+
+	binding.binding = 2;								//binary image
+	binding.descriptorCount = 1;
+	bindings.push_back(binding);
+
+	validd = { true,false,true };
+
+	VkUtil::createComputePipeline(device, binaryModule, layouts, &binaryComputePipelineLayout, &binaryComputePipeline);
 }
 
 void IsoSurfRenderer::createDescriptorSets()
