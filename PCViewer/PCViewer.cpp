@@ -1,5 +1,5 @@
 ﻿/*
-This program is written and maintained by Josef Stumpfegger(josefstumpfegger@outlook.de).
+This program is written and maintained by Josef Stumpfegger (josefstumpfegger@outlook.de).
 For everyone who wants to read and understand this code. I'm sorry.
 This code was written under time pressure and was not intended to be published in the first place.
 Well if you still want to find out how this precious application works, go ahead.
@@ -16,9 +16,9 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 
 //enable this define to print the time needed to render the pc Plot
 //#define PRINTRENDERTIME
-//enable htis define to print the time since the last fram
+//enable this define to print the time since the last fram
 //#define PRINTFRAMETIME
-//enable to use gpu sorting
+//enable to use gpu sorting (Not implemented yet)
 //#define GPUSORT
 
 // build the pcViewer with 3d view
