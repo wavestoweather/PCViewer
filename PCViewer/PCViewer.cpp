@@ -5512,10 +5512,12 @@ int main(int, char**)
 				if (ImGui::Button("Combine active global brushes")) {
 					GlobalBrush combo;
 					combo.name = "Combined(";
+					bool any = false;
 					for (auto& brush : globalBrushes) {
 						if (!brush.active)
 							continue;
-
+						
+						any = true;
 						for (auto& br : brush.brushes) {
 							combo.brushes[br.first].insert(combo.brushes[br.first].end(), br.second.begin(), br.second.end());
 						}
@@ -5526,8 +5528,10 @@ int main(int, char**)
 					combo.name += ")";
 					combo.parent = nullptr;
 
-					globalBrushes.push_back(combo);
-					updateAllActiveIndices();
+					if (any) {
+						globalBrushes.push_back(combo);
+						updateAllActiveIndices();
+					}
 				}
 
 				//drawing the list for brush templates
