@@ -746,7 +746,7 @@ std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 
 //method declarations
 static void updateDrawListIndexBuffer(DrawList& dl);
-static void updateActiveIndices(DrawList& dl);
+static bool updateActiveIndices(DrawList& dl);
 /*static void check_vk_result(VkResult err)
 {
 	if (err == 0) return;
@@ -3864,10 +3864,10 @@ static void upatePriorityColorBuffer() {
 	updateDrawListIndexBuffer(*dl);
 }
 
-static void updateActiveIndices(DrawList& dl) {
+static bool updateActiveIndices(DrawList& dl) {
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > liveBrushThreshold) {
-		if (ImGui::GetIO().MouseDown[0]) return;
+		if (ImGui::GetIO().MouseDown[0]) return false;
 	}
 
 	//getting the parent dataset data
@@ -4081,14 +4081,17 @@ static void updateActiveIndices(DrawList& dl) {
 
 	//setting the median to no median to enforce median recalculation
 	dl.activeMedian = 0;
+	return true;
 }
 
 //This method does the same as updataActiveIndices, only for ALL drawlists
 //whenever possible use updataActiveIndices, not updateAllActiveIndicess
-static void updateAllActiveIndices() {
+static bool updateAllActiveIndices() {
+	bool ret = false;
 	for (DrawList& dl : g_PcPlotDrawLists) {
-		updateActiveIndices(dl);
+		ret = updateActiveIndices(dl);
 	}
+	return ret;
 }
 
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
@@ -6221,15 +6224,13 @@ int main(int, char**)
 							}
 
 							if (ImGui::GetIO().MouseDelta.y) {
-								updateActiveIndices(*dl);
-								pcPlotRender = true;
+								pcPlotRender = updateActiveIndices(*dl);
 							}
 						}
 						//release edge
 						if (brushDragIds.find(b.id) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
 							brushDragIds.clear();
-							updateActiveIndices(*dl);
-							pcPlotRender = true;
+							pcPlotRender = updateActiveIndices(*dl);
 						}
 
 						//check for deletion of brush
@@ -6246,8 +6247,7 @@ int main(int, char**)
 						dl->brushes[i][del] = dl->brushes[i][dl->brushes[i].size() - 1];
 						dl->brushes[i].pop_back();
 						del = -1;
-						updateActiveIndices(*dl);
-						pcPlotRender = true;
+						pcPlotRender = updateActiveIndices(*dl);
 					}
 
 					//create a new brush
@@ -6361,10 +6361,7 @@ int main(int, char**)
 			}
 
 			if (ImGui::Checkbox("Enable brushing", &enableBrushing)) {
-				for (DrawList& dl : g_PcPlotDrawLists) {
-					updateActiveIndices(dl);
-				}
-				pcPlotRender = true;
+				pcPlotRender = updateAllActiveIndices();
 			}
 
 			if (ImGui::SliderFloat("Median line width", &medianLineWidth, .5f, 20.0f)) {
@@ -6504,8 +6501,7 @@ int main(int, char**)
 								ImGui::CloseCurrentPopup();
 
 								createPcPlotDrawList(tl, ds, pcDrawListName);
-								updateActiveIndices(g_PcPlotDrawLists.back());
-								pcPlotRender = true;
+								pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 							}
 							ImGui::SetItemDefaultFocus();
 							ImGui::SameLine();
@@ -7807,7 +7803,7 @@ int main(int, char**)
 									a = 1 / violinDrawlistPlots[i].maxGlobalValue;
 									break;
 								case ViolinScaleGlobalAttribute:
-									for (int l = 0; hist.bins[k].size(); ++l) {
+									for (int l = 0; l < hist.bins[k].size(); ++l) {
 										a += hist.bins[k][l];
 									}
 									break;

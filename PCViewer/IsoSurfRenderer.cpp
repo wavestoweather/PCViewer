@@ -417,8 +417,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	//end of uploading the density values ------------------------------------------------------------------------------------------------------------------
 
 	//checking change
-	//VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d[0], width, height, depth, im, width * depth * height * sizeof(float));
-	//uint32_t zeroCount2 = 0;
+	//VkUtil::downloadImageData(device, physicalDevice, commandPool
 	//for (int i = 0; i < width * depth * height; ++i) {
 	//	if (im[i] != 0) {
 	//		float ok = im[i];
