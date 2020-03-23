@@ -13,6 +13,7 @@ class HistogramManager {
 public:
 	struct Histogram {
 		float maxGlobalCount;							//maximung value accross all attributes
+		std::vector<float> area;						//area when scaling equals 1
 		std::vector<float> maxCount;					//maximum histogramm value for each attribute
 		std::vector<std::pair<float, float>> ranges;	//the value ranges for each attribute
 		std::vector<std::vector<float>> originalBins;	//histogramm values for each attribute before smoothing was applied
@@ -33,7 +34,7 @@ public:
 
 	bool ignoreZeroValues;
 	bool ignoreZeroBins;
-	bool logScale;
+	bool* logScale;
 
 private:
 	VkDevice device;

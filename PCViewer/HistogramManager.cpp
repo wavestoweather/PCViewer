@@ -38,7 +38,7 @@ HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDev
 	stdDev = -1;
 	ignoreZeroValues = false;
 	ignoreZeroBins = false;
-	logScale = false;
+	logScale = nullptr;
 }
 
 HistogramManager::~HistogramManager()
@@ -52,10 +52,18 @@ HistogramManager::~HistogramManager()
 	if (descriptorSetLayout) {
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 	}
+	if (logScale) {
+		delete[] logScale;
+	}
 }
 
 void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations)
 {
+	if (!logScale) {
+		logScale = new bool[minMax.size()];
+		for (int i = 0; i < minMax.size(); ++i) logScale[i] = false;
+	}
+
 	VkResult err;
 
 	uint32_t infosByteSize = (4 + minMax.size() * 2) * sizeof(float);
@@ -139,6 +147,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 		histogram.bins.push_back({ });			//push back empty vector
 		histogram.originalBins.push_back({ });
 		histogram.maxCount.push_back({ });
+		histogram.area.push_back(0);
 		for (int j = 0; j < numOfBins; ++j) {
 			float curVal = 0;
 			//int div = 0;
@@ -153,6 +162,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 			//if (curVal > maxVal)maxVal = curVal;
 			histogram.bins.back().push_back(curVal);
 			histogram.originalBins.back().push_back(bins[i * numOfBins + j]);
+			histogram.area.back() += histogram.originalBins.back().back();
 		}
 	}
 	histogram.ranges = minMax;
@@ -208,6 +218,7 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 	//integrated is to 3 sigma standard deviation
 	hist.maxGlobalCount = 0;
 	float maxVal = 0;
+	hist.area = std::vector<float>(hist.area.size(), 0);
 	int att = 0;
 	for (auto& attribute : hist.originalBins) {
 		for (int bin = 0; bin < attribute.size(); ++bin) {
@@ -223,7 +234,8 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 			}
 
 			hist.bins[att][bin] = divisor / divider;
-			if (logScale) hist.bins[att][bin] = log(hist.bins[att][bin] + 1);
+			if (logScale[att]) hist.bins[att][bin] = log(hist.bins[att][bin] + 1);
+			hist.area[att] += hist.bins[att][bin];
 			if (hist.bins[att][bin] > maxVal) maxVal = hist.bins[att][bin];
 		}
 		hist.maxCount[att] = maxVal;

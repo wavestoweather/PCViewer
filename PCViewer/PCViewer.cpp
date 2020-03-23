@@ -4001,6 +4001,7 @@ static bool updateActiveIndices(DrawList& dl) {
 						brush[b.first].push_back(br.second);
 					}
 				}
+				if (!brush.size()) continue;
 				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
 				gb.lineRatios[dl.name] = res.first;
 				globalRemainingLines = res.second;
@@ -6775,6 +6776,7 @@ int main(int, char**)
 			static DrawList* exportDl;
 			for (DrawList& dl : g_PcPlotDrawLists) {
 				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
+					selectedGlobalBrush = -1;
 					if (count == pcPlotSelectedDrawList)
 						pcPlotSelectedDrawList = -1;
 					else
@@ -7429,10 +7431,6 @@ int main(int, char**)
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues();
 					}
-					if (ImGui::Checkbox("Log scale", &histogramManager->logScale)) {
-						histogramManager->updateSmoothedValues();
-						updateAllViolinPlotMaxValues();
-					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -7469,6 +7467,11 @@ int main(int, char**)
 					ImGui::ColorEdit4(("Line Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					ImGui::SameLine(900);
 					ImGui::ColorEdit4(("Fill Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					ImGui::SameLine(1200);
+					if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
+						histogramManager->updateSmoothedValues();
+						updateAllViolinPlotMaxValues();
+					};
 				}
 				static char choose[] = "Choose drawlist";
 				if (ImGui::BeginCombo("Add drawlistdata", choose)) {
@@ -7744,10 +7747,6 @@ int main(int, char**)
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues();
 					}
-					if (ImGui::Checkbox("Log scale", &histogramManager->logScale)) {
-						histogramManager->updateSmoothedValues();
-						updateAllViolinPlotMaxValues();
-					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -7757,12 +7756,13 @@ int main(int, char**)
             for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
 				ImGui::PushItemWidth(150);
-				ImGui::Columns(6);
+				ImGui::Columns(7);
 				ImGui::Separator();
 				ImGui::Text("Attributes"); ImGui::NextColumn();
 				ImGui::Text("Position"); ImGui::NextColumn();
 				ImGui::Text("Scale"); ImGui::NextColumn();
 				ImGui::Text("Scale Multiplier"); ImGui::NextColumn();
+				ImGui::Text("Log Scale"); ImGui::NextColumn();
 				ImGui::Text("Line Color"); ImGui::NextColumn();
 				ImGui::Text("Fill Color"); ImGui::NextColumn();
 				ImGui::Separator();
@@ -7798,18 +7798,19 @@ int main(int, char**)
 								float a = 0;
 								switch (violinDrawlistPlots[i].violinScalesX[k]) {
 								case ViolinScaleSelf:
-									a = 1 / hist.maxCount[k];
+									a = hist.area[k] / hist.maxCount[k];
 									break;
 								case ViolinScaleLocal:
-									a = 1 / hist.maxGlobalCount;
+									a = hist.area[k] / hist.maxGlobalCount;
 									break;
 								case ViolinScaleGlobal:
-									a = 1 / violinDrawlistPlots[i].maxGlobalValue;
+									a = hist.area[k] / violinDrawlistPlots[i].maxGlobalValue;
 									break;
 								case ViolinScaleGlobalAttribute:
 									for (int l = 0; l < hist.bins[k].size(); ++l) {
 										a += hist.bins[k][l];
 									}
+									a /= violinDrawlistPlots[i].maxValues[k];
 									break;
 								}
 
@@ -7826,6 +7827,11 @@ int main(int, char**)
 							for (int k = 0; k < pcAttributes.size(); ++k)violinDrawlistPlots[i].attributeOrder[j][k] = (area[k].first);
 						}
 					}
+					ImGui::NextColumn();
+					if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
+						histogramManager->updateSmoothedValues();
+						updateAllViolinPlotMaxValues();
+					};
 					ImGui::NextColumn();
 					ImGui::ColorEdit4(("##Line Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					ImGui::NextColumn();
