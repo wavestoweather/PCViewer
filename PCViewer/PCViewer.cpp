@@ -12,6 +12,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define DETECTMEMLEAK
 #endif
 
+#define PRINTRENDERTIME
+
 //enable this define to print the time needed to render the pc Plot
 //#define PRINTRENDERTIME
 //enable htis define to print the time since the last fram
@@ -7960,9 +7962,9 @@ int main(int, char**)
 											violinDrawlistPlots[i].activeAttributes[j] = true;
 											violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
 											violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
-											violinDrawlistPlots[i].attributePlacements.push_back(ViolinMiddle);
+											violinDrawlistPlots[i].attributePlacements.push_back((j % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
 											violinDrawlistPlots[i].attributeScalings.push_back(1);
-											violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleSelf);
+											violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
 											violinDrawlistPlots[i].maxValues.push_back(0);
 											++j;
 										}
@@ -8161,9 +8163,9 @@ int main(int, char**)
 									violinDrawlistPlots[i].activeAttributes[j] = true;
 									violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
 									violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
-									violinDrawlistPlots[i].attributePlacements.push_back(ViolinMiddle);
+									violinDrawlistPlots[i].attributePlacements.push_back((j % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
 									violinDrawlistPlots[i].attributeScalings.push_back(1);
-									violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleSelf);
+									violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
 									violinDrawlistPlots[i].maxValues.push_back(0);
 									++j;
 								}

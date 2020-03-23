@@ -36,8 +36,9 @@ HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDev
 	VkUtil::createComputePipeline(device, module, layouts, &pipelineLayout, &pipeline);
 
 	stdDev = -1;
-	ignoreZeroValues = false;
-	ignoreZeroBins = false;
+
+	ignoreZeroValues = true;
+	ignoreZeroBins = true;
 	logScale = nullptr;
 }
 
