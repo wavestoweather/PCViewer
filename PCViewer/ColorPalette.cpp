@@ -26,6 +26,9 @@ ColorPalette::ColorPalette()
     // qualitative colormaps
     palettes.push_back(CPalette{std::string("Accent"), 8, std::string("qual"), false});
     palettes.push_back(CPalette{std::string("Dark2"), 8, std::string("qual"), true});
+	palettes.push_back(CPalette{ std::string("Dark2Extended"), 12, std::string("qual"), false });
+	palettes.push_back(CPalette{ std::string("Dark2ExtendedReorder"), 12, std::string("qual"), false });
+	
     palettes.push_back(CPalette{std::string("Paired"), 12, std::string("qual"), true});
     palettes.push_back(CPalette{std::string("Pastel1"), 9, std::string("qual"), false});
     palettes.push_back(CPalette{std::string("Pastel2"), 8, std::string("qual"), false});
@@ -53,6 +56,7 @@ ColorPalette::ColorPalette()
     palettes.push_back(CPalette{std::string("YlGnBu"), 9, std::string("seq"), true});
     palettes.push_back(CPalette{std::string("YlOrBr"), 9, std::string("seq"), true});
     palettes.push_back(CPalette{std::string("YlOrRd"), 9, std::string("seq"), true});
+	palettes.push_back(CPalette{ std::string("Black"), 20, std::string("seq"), false });
 
 //    palettes.push_back(CPalette{std::string("Accent"), 9, std::string("seq"), true});
     std::vector<ImVec4> defaultColorVec;
@@ -173,6 +177,10 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
         // retrieve the palette
         CPalette *currPalette = &palettesCust[paletteNr];
         for (unsigned int i = 0; i < nrColors; ++i){
+			if (currPalette->custColors.size() <= i)
+			{
+				break;
+			}
             choosenColorsImVec.push_back(currPalette->custColors[i]);
         }
     }

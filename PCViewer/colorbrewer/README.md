@@ -19,3 +19,5 @@ QList<QColor> qColors(brew<QColor>("BuGn", 3));
 # License
 
 Licensed under the [Apache 2.0 License](http://www.apache.org/licenses/LICENSE-2.0).
+
+# Original code was adapted! 

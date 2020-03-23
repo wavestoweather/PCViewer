@@ -736,10 +736,10 @@ static int animationCurrentDrawList = -1;
 
 //variables for violin plots
 static int violinPlotHeight = 1000;//550;
-static int violinPlotXSpacing = 5;
+static int violinPlotXSpacing = 15;
 static bool enableAttributeViolinPlots = false;
 static bool enableDrawlistViolinPlots = false;
-static float violinPlotThickness = 1;
+static float violinPlotThickness = 4;
 static float violinPlotBinsSize = 150;
 static ImVec4 violinBackgroundColor = { 1,1,1,1 };
 static bool coupleViolinPlots = true;
@@ -4476,7 +4476,7 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
 
     if(ImGui::BeginCombo("Nr colors",  numbers[currColorNr])){
 
-        for (unsigned int il =0; il < currPalette->maxcolors ;++il)
+        for (unsigned int il =1; il < currPalette->maxcolors+1 ;++il)
         {
             if (ImGui::MenuItem(numbers[il], nullptr)){
                 cpm->setChosenNrColorNr(il);
@@ -7398,7 +7398,7 @@ int main(int, char**)
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
 					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 1000);
-					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 20);
+					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 40);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
 					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					if (ImGui::Checkbox("Ignore zero values",&histogramManager->ignoreZeroValues)) {
@@ -7468,7 +7468,7 @@ int main(int, char**)
 							}
 						}
 					}
-					static float stdDev = -1;
+					static float stdDev = 1.5;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues();
