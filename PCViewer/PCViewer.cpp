@@ -6106,6 +6106,26 @@ int main(int, char**)
 									brushDragIds.clear();
 								}
 
+								//draw tooltip on hover for min and max value
+								if (hover || edgeHover || brushDragIds.find(br.first) != brushDragIds.end()) {
+									float xAnchor = .5f;
+									if (pcAttrOrd[brush.first] == 0) xAnchor = 0;
+									if (pcAttrOrd[brush.first] == pcAttributes.size() - 1) xAnchor = 1;
+
+									ImGui::SetNextWindowPos({ x + width / 2,y }, 0, { xAnchor,1 });
+									ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
+									ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
+									ImGui::Begin("Tooltip brush max", NULL, flags);
+									ImGui::Text("%f", br.second.second);
+									ImGui::End();
+
+									ImGui::SetNextWindowPos({ x + width / 2, y + height }, 0, { xAnchor,0 });
+									ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
+									ImGui::Begin("Tooltip brush min", NULL, flags);
+									ImGui::Text("%f", br.second.first);
+									ImGui::End();
+								}
+
 								ind++;
 							}
 							//deleting a brush
@@ -6242,6 +6262,26 @@ int main(int, char**)
 						if (ImGui::GetIO().MouseClicked[1] && hover) {
 							del = ind;
 							brushDragIds.clear();
+						}
+
+						//draw tooltip on hover for min and max value
+						if (hover || edgeHover || brushDragIds.find(b.id) != brushDragIds.end()) {
+							float xAnchor = .5f;
+							if (pcAttrOrd[i] == 0) xAnchor = 0;
+							if (pcAttrOrd[i] == pcAttributes.size() - 1) xAnchor = 1;
+
+							ImGui::SetNextWindowPos({ x + width / 2,y }, 0, { xAnchor,1 });
+							ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
+							ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
+							ImGui::Begin("Tooltip brush max", NULL, flags);
+							ImGui::Text("%f", b.minMax.second);
+							ImGui::End();
+
+							ImGui::SetNextWindowPos({ x + width / 2, y + height }, 0, { xAnchor,0 });
+							ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
+							ImGui::Begin("Tooltip brush min", NULL, flags);
+							ImGui::Text("%f", b.minMax.first);
+							ImGui::End();
 						}
 
 						ind++;
