@@ -743,6 +743,7 @@ static float violinPlotThickness = 4;
 static float violinPlotBinsSize = 150;
 static ImVec4 violinBackgroundColor = { 1,1,1,1 };
 static bool coupleViolinPlots = true;
+static bool yScaleToCurrenMax = false;
 std::vector<ViolinPlot> violinAttributePlots;
 std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 
@@ -7635,6 +7636,29 @@ int main(int, char**)
 					ImGui::Checkbox(pcAttributes[j].name.c_str(), violinAttributePlots[i].activeAttributes + j);
 					if (violinAttributePlots[i].activeAttributes[j]) ++amtOfAttributes;
 				}
+
+
+
+				int previousNrOfColumns = ImGui::GetColumnsCount();
+				ImGui::Separator();
+				ImGui::Columns(1);
+
+
+				if (ImGui::Button("Optimize sides <right/left>")) {
+					if (violinAttributePlots[i].drawLists.size() != 0) {
+						// Only compute the order for the first histogram in the list (the first one in the matrix. Is that the same?)
+						auto& hist = histogramManager->getHistogram(violinAttributePlots[i].drawLists[0].name);
+						histogramManager->determineSideHist(hist, &violinAttributePlots[i].activeAttributes);
+
+						violinAttributePlots[i].violinPlacements.clear();
+						for (int j = 0; j < violinAttributePlots[i].attributeNames.size(); ++j) {
+							violinAttributePlots[i].violinPlacements.push_back((hist.side[j] % 2) ? ViolinLeft : ViolinRight);
+						}
+					}
+				}
+				ImGui::Columns(previousNrOfColumns);
+
+
 				//labels for the plots
 				ImGui::Separator();
 				int c = 0;
@@ -7823,13 +7847,14 @@ int main(int, char**)
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues();
 					}
+					ImGui::Checkbox("y-scale to current max", &yScaleToCurrenMax);
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
 			}
 
 			const static int plusWidth = 100;
-            for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
+			for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
 				ImGui::PushItemWidth(150);
 				ImGui::Columns(7);
@@ -7843,7 +7868,7 @@ int main(int, char**)
 				ImGui::Text("Fill Color"); ImGui::NextColumn();
 				ImGui::Separator();
 				//settings for the attributes
-                for (unsigned int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+				for (unsigned int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
 					ImGui::Checkbox(violinDrawlistPlots[i].attributeNames[j].c_str(), &violinDrawlistPlots[i].activeAttributes[j]);
 					static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
 					ImGui::NextColumn();
@@ -7871,7 +7896,7 @@ int main(int, char**)
 							std::vector<std::pair<uint32_t, float>> area;
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
 							violinDrawlistPlots[i].attributeOrder[j] = sortHistogram(hist, violinDrawlistPlots[i]);
-                            //for (unsigned int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
+							//for (unsigned int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
 							//	float a = 0;
 							//	switch (violinDrawlistPlots[i].violinScalesX[k]) {
 							//	case ViolinScaleSelf:
@@ -7921,22 +7946,37 @@ int main(int, char**)
 					ImGui::Separator();
 				}
 
-                // Draw everything to load Colorbrewer Colorpalettes
-                if (violinDrawlistPlots[i].attributeNames.size() > 0){
-                    includeColorbrewerToViolinPlot(&(violinDrawlistPlots[i].colorPaletteManager),
-                                                   &(violinDrawlistPlots[i].attributeLineColors),
-                                                   &(violinDrawlistPlots[i].attributeFillColors));
-                }
+				// Draw everything to load Colorbrewer Colorpalettes
+				if (violinDrawlistPlots[i].attributeNames.size() > 0) {
+					includeColorbrewerToViolinPlot(&(violinDrawlistPlots[i].colorPaletteManager),
+						&(violinDrawlistPlots[i].attributeLineColors),
+						&(violinDrawlistPlots[i].attributeFillColors));
+				}
 
 
 
 
 
-				
-                ImGui::Columns(1);
-                if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
-                    violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first* violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
-                }
+
+				ImGui::Columns(2);
+				if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
+					violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first* violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
+				}
+				ImGui::NextColumn();
+
+				if (ImGui::Button("Optimize sides <right/left>")) {
+					if (violinDrawlistPlots[i].drawLists.size() != 0) {
+						// Only compute the order for the first histogram in the list (the first one in the matrix. Is that the same?)
+						auto& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[0]);
+						histogramManager->determineSideHist(hist, &violinDrawlistPlots[i].activeAttributes);
+							
+						violinDrawlistPlots[i].attributePlacements.clear();
+						for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+							violinDrawlistPlots[i].attributePlacements.push_back((hist.side[j] % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
+						}
+					}
+				}
+				ImGui::Columns(1);
 
 				//drawing the setttings for the drawlists
 				for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {

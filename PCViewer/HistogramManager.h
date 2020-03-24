@@ -18,6 +18,7 @@ public:
 		std::vector<std::pair<float, float>> ranges;	//the value ranges for each attribute
 		std::vector<std::vector<float>> originalBins;	//histogramm values for each attribute before smoothing was applied
 		std::vector<std::vector<float>> bins;			//histogramm values for each attribute
+		std::vector<unsigned int> side;					//stores on which side each attribute is rendered.
 	};
 
 
@@ -31,6 +32,8 @@ public:
 	//setting stdDev to a negative number leads to automatic choose of kernel size
 	void setSmoothingKernelSize(float stdDev);
 	void updateSmoothedValues();
+
+	void determineSideHist(Histogram& hist, bool **active = nullptr);
 
 	bool ignoreZeroValues;
 	bool ignoreZeroBins;
@@ -60,4 +63,6 @@ private:
 	std::map<std::string, Histogram> histograms;
 
 	void updateSmoothedValues(Histogram& hist);
+
+	
 };

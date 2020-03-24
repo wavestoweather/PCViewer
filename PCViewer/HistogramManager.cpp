@@ -1,5 +1,7 @@
 #include "HistogramManager.h"
 #include <cmath>
+#include <numeric>
+#include <list>
 
 HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t binsAmount) : device(device), physicalDevice(physicalDevice), commandPool(commandPool), queue(queue), descriptorPool(descriptorPool), numOfBins(binsAmount)
 {
@@ -169,6 +171,8 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 	histogram.ranges = minMax;
 	updateSmoothedValues(histogram);
 
+	// determineSideHist(histogram);
+
 	histograms[name] = histogram;
 
 	vkFreeCommandBuffers(device, commandPool, 1, &commands);
@@ -247,3 +251,148 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 		++att;
 	}
 }
+
+
+void HistogramManager::determineSideHist(Histogram& hist, bool **active)
+{
+	unsigned int n = hist.bins.size();
+	std::vector<std::vector<float>> histOverlaps(n, std::vector<float>(n, 0));
+	std::vector<std::vector<float>> histOverlapsPerc(n, std::vector<float>(n, 0));
+	std::vector<std::vector<float>> histOverlapsPercMin(n, std::vector<float>(n, 0));
+	hist.side.resize(n);
+
+	unsigned int nrBins = 0;
+	if (n > 0)
+	{
+		nrBins = hist.bins[0].size();
+	}
+
+	for (unsigned int i = 0; i < n; ++i)
+	{
+		for (unsigned int j = 0; j < n; ++j)
+		{
+			for (unsigned int k = 0; k < nrBins; ++k)
+				{
+					// The overlap is the minimum of the bin size between the two bars.
+					histOverlaps[i][j] += std::fmin(hist.bins[i][k], hist.bins[j][k]);
+				}
+			
+			// Divide the overlap by the total length of bars in histogram 1. 1 means the whole histogram is covered by the other.
+			histOverlapsPerc[i][j] = histOverlaps[i][j]/hist.area[i];
+
+			if (i >= j)
+			{
+				histOverlapsPercMin[i][j] = std::fmin(histOverlapsPerc[i][j], histOverlapsPerc[j][i]);
+				histOverlapsPercMin[j][i] = std::fmin(histOverlapsPerc[i][j], histOverlapsPerc[j][i]);
+			}
+		}
+	}
+
+	// Now, determin which histogram has to be moved to which side.
+	// Separate the most similar ones, i.e. max(min(PercA, PercB))
+
+	std::vector<unsigned int> v(n);
+	std::vector<unsigned int> vUsed(0);
+	
+	std::iota(v.begin(), v.end(), 0);
+
+	// Remove all inactive attributes from the decision.
+	if (active != nullptr)
+	{
+		for (int i = v.size() - 1; i >= 0 ; --i)
+		{
+			if (!((*active)[i]))
+			{
+				v.erase(v.begin() + i);
+			}
+		}
+	}
+
+	while(true)
+	{
+		float currMax = 0;
+		int currIdx1 = -1;
+		int currIdx2 = -1;
+
+		for (unsigned int i = 0; i < v.size(); ++i) {
+			for (unsigned j = i + 1;j < v.size(); ++j ) {
+				if (histOverlapsPercMin[v[i]][v[j]] > currMax) {
+					currMax = histOverlapsPercMin[v[i]][v[j]];
+					currIdx1 = i;
+					currIdx2 = j;
+				}
+			}
+		}
+
+		if ((currIdx1 == -1) || (currIdx2 == -1)) { break; }
+		
+		// There is a difference in the assignement for the first elements and later ones. The later ones also take into account the overlap with the existing ones, since there are 2 options to distribute them on either side.
+		if (vUsed.size() == 0)
+		{
+			hist.side[v[currIdx1]] = 0;
+			hist.side[v[currIdx2]] = 1;
+		}
+		else
+		{
+			float sideAPerc = 0;
+			float sideBPerc = 0;
+			// Check what insert to each side would mean in the worst case concerning percentage overlap
+
+			// arg min_{sides} (  max(overlapA) + max(overlapB) )
+
+			float maxOverlapIdx1Side1 = 0;
+			float maxOverlapIdx2Side1 = 0;
+			float maxOverlapIdx1Side2 = 0;
+			float maxOverlapIdx2Side2 = 0;
+
+			for (unsigned int i = 0; i < vUsed.size(); i += 2)
+			{
+				float overlap1 = histOverlapsPercMin[vUsed[i]][v[currIdx1]];
+				float overlap2 = histOverlapsPercMin[vUsed[i]][v[currIdx2]];
+
+				if (overlap1 > maxOverlapIdx1Side1) { maxOverlapIdx1Side1 = overlap1; }
+				if (overlap2 > maxOverlapIdx2Side1) { maxOverlapIdx2Side1 = overlap2; }
+			}
+			for (unsigned int i = 1; i < vUsed.size(); i += 2)
+			{
+				float overlap1 = histOverlapsPercMin[vUsed[i]][v[currIdx1]];
+				float overlap2 = histOverlapsPercMin[vUsed[i]][v[currIdx2]];
+
+				if (overlap1 > maxOverlapIdx1Side2) { maxOverlapIdx1Side2 = overlap1; }
+				if (overlap2 > maxOverlapIdx2Side2) { maxOverlapIdx2Side2 = overlap2; }
+			}
+			if (maxOverlapIdx1Side1 + maxOverlapIdx2Side2 < maxOverlapIdx1Side2 + maxOverlapIdx2Side1){ hist.side[v[currIdx1]] = 0; hist.side[v[currIdx2]] = 1;}
+			else{ hist.side[v[currIdx1]] = 1; hist.side[v[currIdx2]] = 0; }
+		}
+		
+		vUsed.push_back(v[currIdx1]);
+		vUsed.push_back(v[currIdx2]);
+
+		// Now, remove the list elements, and put the found indices on opposize sides.
+		
+		v.erase(v.begin() + currIdx2);
+		v.erase(v.begin() + currIdx1);
+
+		if (v.size() == 1)
+		{	
+			// insert the last element to the right side.
+			float maxOverlapIdx1Side1 = 0;
+			float maxOverlapIdx1Side2 = 0;
+			for (unsigned int i = 0; i < vUsed.size(); i += 2)
+			{
+				float overlap1 = histOverlapsPercMin[vUsed[i]][v[0]];
+				float overlap2 = histOverlapsPercMin[vUsed[i+1]][v[0]];
+
+				if (overlap1 > maxOverlapIdx1Side1) { maxOverlapIdx1Side1 = overlap1; }
+				if (overlap2 > maxOverlapIdx1Side2) { maxOverlapIdx1Side2 = overlap2; }
+			}
+			(maxOverlapIdx1Side1 < maxOverlapIdx1Side2) ?  hist.side[v[0]] = 0 :  hist.side[v[0]] = 1;
+			break;
+		}
+		else if (v.size() == 0)
+		{
+			break;
+		}
+	}
+}
+
