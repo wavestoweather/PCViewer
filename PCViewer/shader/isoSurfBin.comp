@@ -15,7 +15,7 @@ layout(std430, binding = 0) buffer Informations{
 //currently the maximum amount of density attributes is 30!
 layout( binding = 1, r32f) uniform readonly image3D densities[30];
 
-layout( binding = 2, r8ui) uniform writeonly uimage3D binary;
+layout( binding = 2, r8) uniform writeonly image3D binary;
 
 layout (local_size_x = 8,local_size_y=8,local_size_z=8) in;
 
@@ -29,29 +29,26 @@ void main(){
 		if(bool(info.brushes[axisOffset])){		//amtOfBrushes > 0
 			//as there exist brushes we get the density for this attribute
 			float density = imageLoad(densities[axis],ivec3(gl_GlobalInvocationID)).x;
+			bool inside = true;
 			//for every brush
 			for(int brush = 0;brush<info.brushes[axisOffset];++brush){
-				int brushOffset = int(info.brushes[axisOffset + 1 + brush]);
-				bool inside = true;
 				//for every MinMax
-				for(int minMax = 0;minMax<info.brushes[brushOffset + 1];++minMax){
-					int minMaxOffset = brushOffset + 6 + 2 * minMax;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
-					//int brushIndex = int(info.brushes[brushOffset]);
-					float mi = info.brushes[minMaxOffset];
-					float ma = info.brushes[minMaxOffset + 1];
-					if(density<mi || density>ma){
-						inside = false;
-						break;
-					}
+				int minMaxOffset = axisOffset + 1 + 2 * brush;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
+				//int brushIndex = int(info.brushes[brushOffset]);
+				float mi = info.brushes[minMaxOffset];
+				float ma = info.brushes[minMaxOffset + 1];
+				if(density<mi || density>ma){
+					inside = false;
+					break;
 				}
-				if(!inside){			//write 0 into binary texture and early out
-					imageStore(binary, ivec3(gl_GlobalInvocationID), uvec4(0));
-					return;
-				}
+			}
+			if(!inside){			//write 0 into binary texture and early out
+				imageStore(binary, ivec3(gl_GlobalInvocationID), vec4(0));
+				return;
 			}
 		}
 	}
 
 	//if we got to this point, all densites were inside the brushes
-	imageStore(binary, ivec3(gl_GlobalInvocationID), uvec4(1));
+	imageStore(binary, ivec3(gl_GlobalInvocationID), vec4(1));
 }
