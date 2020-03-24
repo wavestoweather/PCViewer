@@ -4585,6 +4585,40 @@ inline void updateAllViolinPlotMaxValues() {
 	}
 }
 
+static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist, ViolinDrawlistPlot& violinDrawlistPlot) {
+	std::vector<std::pair<uint32_t, float>> area;
+	for (unsigned int k = 0; k < hist.area.size(); ++k) {
+		float a = 0;
+		switch (violinDrawlistPlot.violinScalesX[k]) {
+		case ViolinScaleSelf:
+			a = hist.area[k] / hist.maxCount[k];
+			break;
+		case ViolinScaleLocal:
+			a = hist.area[k] / hist.maxGlobalCount;
+			break;
+		case ViolinScaleGlobal:
+			a = hist.area[k] / violinDrawlistPlot.maxGlobalValue;
+			break;
+		case ViolinScaleGlobalAttribute:
+			a = hist.area[k] / violinDrawlistPlot.maxValues[k];
+			break;
+		}
+
+		a *= violinDrawlistPlot.attributeScalings[k];
+		if (violinDrawlistPlot.attributePlacements[k] == ViolinLeftHalf ||
+			violinDrawlistPlot.attributePlacements[k] == ViolinRightHalf ||
+			violinDrawlistPlot.attributePlacements[k] == ViolinMiddleLeft ||
+			violinDrawlistPlot.attributePlacements[k] == ViolinMiddleRight)
+			a *= .5f;
+
+		area.push_back({ k,a });
+	}
+	std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+	std::vector<uint32_t> ret(area.size());
+	for (int i = 0; i < area.size(); ++i) ret[i] = area[i].first;
+	return ret;
+}
+
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
@@ -7836,43 +7870,48 @@ int main(int, char**)
 						for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
 							std::vector<std::pair<uint32_t, float>> area;
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
-                            for (unsigned int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
-								float a = 0;
-								switch (violinDrawlistPlots[i].violinScalesX[k]) {
-								case ViolinScaleSelf:
-									a = hist.area[k] / hist.maxCount[k];
-									break;
-								case ViolinScaleLocal:
-									a = hist.area[k] / hist.maxGlobalCount;
-									break;
-								case ViolinScaleGlobal:
-									a = hist.area[k] / violinDrawlistPlots[i].maxGlobalValue;
-									break;
-								case ViolinScaleGlobalAttribute:
-									for (int l = 0; l < hist.bins[k].size(); ++l) {
-										a += hist.bins[k][l];
-									}
-									a /= violinDrawlistPlots[i].maxValues[k];
-									break;
-								}
-
-								a *= violinDrawlistPlots[i].attributeScalings[k];
-								if (violinDrawlistPlots[i].attributePlacements[k] == ViolinLeftHalf ||
-									violinDrawlistPlots[i].attributePlacements[k] == ViolinRightHalf ||
-									violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleLeft ||
-									violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleRight)
-									a *= .5f;
-
-								area.push_back({ k,a });
-							}
-							std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-							for (int k = 0; k < pcAttributes.size(); ++k)violinDrawlistPlots[i].attributeOrder[j][k] = (area[k].first);
+							violinDrawlistPlots[i].attributeOrder[j] = sortHistogram(hist, violinDrawlistPlots[i]);
+                            //for (unsigned int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
+							//	float a = 0;
+							//	switch (violinDrawlistPlots[i].violinScalesX[k]) {
+							//	case ViolinScaleSelf:
+							//		a = hist.area[k] / hist.maxCount[k];
+							//		break;
+							//	case ViolinScaleLocal:
+							//		a = hist.area[k] / hist.maxGlobalCount;
+							//		break;
+							//	case ViolinScaleGlobal:
+							//		a = hist.area[k] / violinDrawlistPlots[i].maxGlobalValue;
+							//		break;
+							//	case ViolinScaleGlobalAttribute:
+							//		//for (int l = 0; l < hist.bins[k].size(); ++l) {
+							//		//	a += hist.bins[k][l];
+							//		//}
+							//		a /= hist.area[k] / violinDrawlistPlots[i].maxValues[k];
+							//		break;
+							//	}
+							//
+							//	a *= violinDrawlistPlots[i].attributeScalings[k];
+							//	if (violinDrawlistPlots[i].attributePlacements[k] == ViolinLeftHalf ||
+							//		violinDrawlistPlots[i].attributePlacements[k] == ViolinRightHalf ||
+							//		violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleLeft ||
+							//		violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleRight)
+							//		a *= .5f;
+							//
+							//	area.push_back({ k,a });
+							//}
+							//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+							//for (int k = 0; k < pcAttributes.size(); ++k)violinDrawlistPlots[i].attributeOrder[j][k] = (area[k].first);
 						}
 					}
 					ImGui::NextColumn();
 					if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
 						histogramManager->updateSmoothedValues();
 						updateAllViolinPlotMaxValues();
+						for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
+							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
+							violinDrawlistPlots[i].attributeOrder[j] = sortHistogram(hist, violinDrawlistPlots[i]);
+						}
 					};
 					ImGui::NextColumn();
 					ImGui::ColorEdit4(("##Line Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
@@ -7983,7 +8022,9 @@ int main(int, char**)
 									}
 									histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 									HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
-									std::vector<std::pair<uint32_t, float>> area;
+									violinDrawlistPlots[i].attributeOrder.push_back({});
+									violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i]);
+									//std::vector<std::pair<uint32_t, float>> area;
 									for (int j = 0; j < hist.maxCount.size(); ++j) {
 										if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
 											violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
@@ -7991,14 +8032,12 @@ int main(int, char**)
 										if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
 											violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
 										}
-										area.push_back({ j, violinDrawlistPlots[i].attributeScalings[j] / hist.maxCount[j] });
 									}
 
 									violinDrawlistPlots[i].drawLists.push_back(dl->name);
 									//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
-									violinDrawlistPlots[i].attributeOrder.push_back({});
-									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-									for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
+									//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+									//for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
 								}
 								violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = violinDrawlistPlots[i].drawLists.size() - 1;
 							}
