@@ -609,50 +609,51 @@ void IsoSurfRenderer::render()
 	vkUnmapMemory(device, constantMemory);
 
 	//uploading the storage buffer with bruhs infos -----------------------------------
+
 	//converting the map of brushes to the graphics data structure
-	std::vector<std::vector<Brush>> gpuData;
-	uint32_t bId = 0;
-	for (auto& brush : brushes) {
-		for (int axis = 0; axis < brush.second.size(); ++axis) {
-			if (gpuData.size() <= axis) gpuData.push_back({});
-			if (brush.second[axis].size()) gpuData[axis].push_back({bId});
-			for (auto& minMax : brush.second[axis]) {
-				gpuData[axis].back().minMax.push_back(minMax);
-			}
-		}
-		++bId;
-	}
-	std::vector<float*> colors;
-	for (auto& col : brushColors) {
-		colors.push_back(col.second);
-	}
-
-	BrushInfos* brushInfos = (BrushInfos*)new char[brushByteSize];
-	brushInfos->amtOfAxis = gpuData.size();
-	float* brushI = (float*)(brushInfos + 1);
-	uint32_t curOffset = gpuData.size();		//the first offset is for axis 1, which is the size of the axis
-	for (int axis = 0; axis < gpuData.size(); ++axis) {
-		brushI[axis] = curOffset;
-		brushI[curOffset++] = gpuData[axis].size();
-		int brushOffset = curOffset;
-		curOffset += gpuData[axis].size();
-		for (int brush = 0; brush < gpuData[axis].size(); ++brush) {
-			brushI[brushOffset + brush] = curOffset;
-			brushI[curOffset++] = gpuData[axis][brush].bIndex;
-			brushI[curOffset++] = gpuData[axis][brush].minMax.size();
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][0];
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][1];
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][2];
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][3];
-			for (int minMax = 0; minMax < gpuData[axis][brush].minMax.size(); ++minMax) {
-				brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].first;
-				brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].second;
-			}
-		}
-	}
-
-	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
-
+	//std::vector<std::vector<Brush>> gpuData;
+	//uint32_t bId = 0;
+	//for (auto& brush : brushes) {
+	//	for (int axis = 0; axis < brush.second.size(); ++axis) {
+	//		if (gpuData.size() <= axis) gpuData.push_back({});
+	//		if (brush.second[axis].size()) gpuData[axis].push_back({bId});
+	//		for (auto& minMax : brush.second[axis]) {
+	//			gpuData[axis].back().minMax.push_back(minMax);
+	//		}
+	//	}
+	//	++bId;
+	//}
+	//std::vector<float*> colors;
+	//for (auto& col : brushColors) {
+	//	colors.push_back(col.second);
+	//}
+	//
+	//BrushInfos* brushInfos = (BrushInfos*)new char[brushByteSize];
+	//brushInfos->amtOfAxis = gpuData.size();
+	//float* brushI = (float*)(brushInfos + 1);
+	//uint32_t curOffset = gpuData.size();		//the first offset is for axis 1, which is the size of the axis
+	//for (int axis = 0; axis < gpuData.size(); ++axis) {
+	//	brushI[axis] = curOffset;
+	//	brushI[curOffset++] = gpuData[axis].size();
+	//	int brushOffset = curOffset;
+	//	curOffset += gpuData[axis].size();
+	//	for (int brush = 0; brush < gpuData[axis].size(); ++brush) {
+	//		brushI[brushOffset + brush] = curOffset;
+	//		brushI[curOffset++] = gpuData[axis][brush].bIndex;
+	//		brushI[curOffset++] = gpuData[axis][brush].minMax.size();
+	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][0];
+	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][1];
+	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][2];
+	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][3];
+	//		for (int minMax = 0; minMax < gpuData[axis][brush].minMax.size(); ++minMax) {
+	//			brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].first;
+	//			brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].second;
+	//		}
+	//	}
+	//}
+	//
+	//VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
+	//
 	//checking the brush infos
 	//for (int axis = 0; axis < brushInfos->amtOfAxis; ++axis) {
 	//	int axisOffset = int(brushI[axis]);
@@ -693,6 +694,18 @@ void IsoSurfRenderer::render()
 	//		//prevDensity[axis] = density;
 	//	}
 	//}
+
+	uint32_t brushInfosSize = sizeof(BrushInfos) + 4 * sizeof(float);
+	BrushInfos* brushInfos = (BrushInfos*)new char[brushInfosSize];
+	brushInfos->amtOfAxis = 1;
+	float* brushColors = (float*)(brushInfos + 1);
+	for (int i = 0; i < 1; ++i) {
+		brushColors[i * 4] = drawlistBrushes[0].brushSurfaceColors[0].x;
+		brushColors[i * 4 + 1] = drawlistBrushes[0].brushSurfaceColors[0].y;
+		brushColors[i * 4 + 2] = drawlistBrushes[0].brushSurfaceColors[0].z;
+		brushColors[i * 4 + 3] = drawlistBrushes[0].brushSurfaceColors[0].w;
+	}
+	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
 
 	delete[] brushInfos;
 

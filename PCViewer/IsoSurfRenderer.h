@@ -33,6 +33,7 @@ public:
 	struct DrawlistBrush {
 		std::string drawlist;
 		std::vector<std::string> brushes;
+		std::vector<glm::vec4> brushSurfaceColors;
 	};
 
 	// height :		height of the rendered image
@@ -103,7 +104,10 @@ private:
 	struct BrushInfos {		//Note, currently a maximum of 30 brushes is available. For more shader + define in this header have to be changed
 		uint32_t amtOfAxis;
 		uint32_t padding[3];
-		//float[] brushes structure (a stands for axis):
+		//float[] colors for the brushes:
+		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
+
+		//[[Depricated]]float[] brushes structure (a stands for axis):
 		//offset a1, offset a2, ..., offset an, a1, a2, ..., an
 		//axis structure:
 		//amtOfBrushes, offset b1, offset b2, ..., offset bn, b1, b2, ..., bn
