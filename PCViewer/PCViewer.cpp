@@ -7946,6 +7946,7 @@ int main(int, char**)
 					ImGui::Separator();
 				}
 
+				ImGui::Columns(1);
 				// Draw everything to load Colorbrewer Colorpalettes
 				if (violinDrawlistPlots[i].attributeNames.size() > 0) {
 					includeColorbrewerToViolinPlot(&(violinDrawlistPlots[i].colorPaletteManager),
@@ -8091,9 +8092,22 @@ int main(int, char**)
 						textPos.y -= ImGui::GetTextLineHeight();
 						ImGui::SetCursorScreenPos(textPos);
 						ImGui::Text(violinDrawlistPlots[i].drawLists[j].c_str());
+						ImGui::PushClipRect(framePos, framePos + size, false);
 						HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
 						for (int k : violinDrawlistPlots[i].attributeOrder[j]) {
 							if (!violinDrawlistPlots[i].activeAttributes[k]) continue;
+							
+							float histYStart = ((hist.ranges[k].second - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
+							float histYEnd = ((hist.ranges[k].first - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
+							if (!yScaleToCurrenMax) {
+								histYStart = 0;
+								histYEnd = size.y;
+							}
+							float histYFillStart = (histYStart < 0) ? 0 : histYStart;
+							float histYFillEnd = (histYEnd > size.y) ? size.y : histYEnd;
+							float histYLineStart = histYStart + framePos.y;
+							float histYLineEnd = histYEnd + framePos.y;
+							float histYLineDiff = histYLineEnd - histYLineStart;
 
 							float div = 0;
 							switch (violinDrawlistPlots[i].violinScalesX[k]) {
@@ -8121,18 +8135,22 @@ int main(int, char**)
 							case ViolinLeft:
 							{
 								//filling
-								for (int p = 0; p < size.y; ++p) {
+								for (int p = histYFillStart; p < histYFillEnd; ++p) {
 									ImVec2 a(framePos.x, framePos.y + p);
-									float v = getBinVal(1 - (p + .5f) / size.y, hist.bins[k]);
+									float v = getBinVal(((1 - (p + .5f) + histYEnd)/(histYEnd - histYStart)), hist.bins[k]);
 									ImVec2 b(framePos.x + v / div * size.x, framePos.y + p + 1);
 									if (b.x - a.x >= 1)
 										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
 								}
 								//outline
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd),
+									ImVec2(framePos.x + hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								for (int l = 1; l < hist.bins[k].size(); ++l) {
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + hist.bins[k][l - 1] / div * size.x, framePos.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
-										ImVec2(framePos.x + hist.bins[k][l] / div * size.x, framePos.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+										ImVec2(framePos.x + hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd - histYLineDiff),
+									ImVec2(framePos.x + hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								break;
 							}
 							case ViolinRightHalf:
@@ -8142,57 +8160,69 @@ int main(int, char**)
 							case ViolinRight:
 							{
 								//filling
-								for (int p = 0; p < size.y; ++p) {
+								for (int p = histYFillStart; p < histYFillEnd; ++p) {
 									ImVec2 a(framePos.x + size.x, framePos.y + p);
-									float v = getBinVal(1 - (p + .5f) / size.y, hist.bins[k]);
+									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
 									ImVec2 b(framePos.x + size.x - v / div * size.x, framePos.y + p + 1);
 									if (a.x - b.x >= 1)
 										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
 								}
 								//outline
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd),
+									ImVec2(framePos.x + size.x - hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								for (int l = 1; l < hist.bins[k].size(); ++l) {
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x - hist.bins[k][l - 1] / div * size.x, framePos.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
-										ImVec2(framePos.x + size.x - hist.bins[k][l] / div * size.x, framePos.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x - hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+										ImVec2(framePos.x + size.x - hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd - histYLineDiff),
+									ImVec2(framePos.x + size.x - hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								break;
 							}
 							case ViolinMiddle:
 							{
 								float xBase = framePos.x + .5f * size.x;
 								//filling
-								for (int p = 0; p < size.y; ++p) {
-									float v = getBinVal(1 - (p + .5f) / size.y, hist.bins[k]);
+								for (int p = histYFillStart; p < histYFillEnd; ++p) {
+									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
 									ImVec2 a(xBase - .5f * v / div * size.x, framePos.y + p);
 									ImVec2 b(xBase + .5f * v / div * size.x, framePos.y + p + 1);
 									if (b.x - a.x >= 1)
 										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
+									ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								for (int l = 1; l < hist.bins[k].size(); ++l) {
 									//left Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, framePos.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
-										ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, framePos.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+										ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 									//right Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, framePos.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
-										ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, framePos.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+										ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
+									ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								break;
 							}
 							case ViolinMiddleLeft:
 							{
 								float xBase = framePos.x + .5f * size.x;
 								//filling
-								for (int p = 0; p < size.y; ++p) {
-									float v = getBinVal(1 - (p + .5f) / size.y, hist.bins[k]);
+								for (int p = histYFillStart; p < histYFillEnd; ++p) {
+									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
 									ImVec2 a(xBase - .5f * v / div * size.x, framePos.y + p);
 									ImVec2 b(xBase, framePos.y + p + 1);
 									if (b.x - a.x >= 1)
 										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd),
+									ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								for (int l = 1; l < hist.bins[k].size(); ++l) {
 									//left Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, framePos.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
-										ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, framePos.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+										ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd - histYLineDiff),
+									ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								//right Line
 								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								break;
@@ -8201,18 +8231,22 @@ int main(int, char**)
 							{
 								float xBase = framePos.x + .5f * size.x;
 								//filling
-								for (int p = 0; p < size.y; ++p) {
-									float v = getBinVal(1 - (p + .5f) / size.y, hist.bins[k]);
+								for (int p = histYFillStart; p < histYFillEnd; ++p) {
+									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
 									ImVec2 a(xBase, framePos.y + p);
 									ImVec2 b(xBase + .5f * v / div * size.x, framePos.y + p + 1);
 									if (b.x - a.x >= 1)
 										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
+									ImVec2(xBase, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								for (int l = 1; l < hist.bins[k].size(); ++l) {
 									//right Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, framePos.y + size.y - (l - 1.0f) / (hist.bins[k].size() - 1) * size.y),
-										ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, framePos.y + size.y - ((float)l) / (hist.bins[k].size() - 1) * size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+										ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								}
+								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
+									ImVec2(xBase, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								//left Line
 								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
 								break;
@@ -8220,6 +8254,7 @@ int main(int, char**)
 							}
 						}
 						leftUpperCorner.x += size.x + violinPlotXSpacing;
+						ImGui::PopClipRect();
 					}
 					leftUpperCorner.x = leftUpperCornerStart.x;
 					leftUpperCorner.y += size.y + ImGui::GetFrameHeightWithSpacing();
