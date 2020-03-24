@@ -167,7 +167,7 @@ CPalette *ColorPalette::getPalletteWithNrs(unsigned int cat, unsigned int ipal)
 }
 
 
-std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,unsigned int paletteNr, unsigned int nrColors, float alpha)
+std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,unsigned int paletteNr, unsigned int nrColors, float alpha, const std::string paletteName)
 {
     std::vector<ImVec4> choosenColorsImVec;
 
@@ -188,9 +188,22 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
     {
         unsigned int minVal = 3;
 
-        int numberOfColors = std::min(std::max(minVal,nrColors), getPalletteWithNrs(categoryNr, paletteNr)->maxcolors);
+		std::vector<std::string> choosenColors;
+		int numberOfColors = 0;
 
-        std::vector<std::string> choosenColors = (brew<std::string>(paletteStr, numberOfColors));
+		if (paletteName != "")
+		{
+			numberOfColors = 12;
+
+			choosenColors = (brew<std::string>(paletteName, numberOfColors));
+		}
+		else
+		{
+			numberOfColors = std::min(std::max(minVal, nrColors), getPalletteWithNrs(categoryNr, paletteNr)->maxcolors);
+			std::vector<std::string> choosenColors = (brew<std::string>(paletteStr, numberOfColors));
+		}
+
+
 
         for (unsigned int i = 0; i < std::min(nrColors,(unsigned int)numberOfColors); ++i){
             int r, g, b;

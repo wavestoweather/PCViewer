@@ -54,7 +54,7 @@ public:
 
     CPalette *getPalletteWithNrs(unsigned int cat, unsigned int ipal);
 
-    std::vector<ImVec4> getPallettAsImVec4(unsigned int categoryNr, unsigned int paletteNr, unsigned int nrColors, float alpha = 0.4);
+    std::vector<ImVec4> getPallettAsImVec4(unsigned int categoryNr, unsigned int paletteNr, unsigned int nrColors, float alpha = 0.4, const std::string paletteName = std::string(""));
 
 
 

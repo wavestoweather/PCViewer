@@ -394,5 +394,8 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 			break;
 		}
 	}
+
+	hist.attributeColorOrderIdx.clear();
+	hist.attributeColorOrderIdx = vUsed;
 }
 

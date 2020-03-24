@@ -19,6 +19,7 @@ public:
 		std::vector<std::vector<float>> originalBins;	//histogramm values for each attribute before smoothing was applied
 		std::vector<std::vector<float>> bins;			//histogramm values for each attribute
 		std::vector<unsigned int> side;					//stores on which side each attribute is rendered.
+		std::vector<unsigned int> attributeColorOrderIdx;//stores indices in the order in which colors have to be assigned to them. In combination with side, the right colors can be chosen from the colorpalette "Dark2ExtendedReorder", such that the colors are on the right side. 
 	};
 
 

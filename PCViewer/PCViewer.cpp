@@ -752,6 +752,10 @@ static float violinPlotThickness = 4;
 static float violinPlotBinsSize = 150;
 static ImVec4 violinBackgroundColor = { 1,1,1,1 };
 static bool coupleViolinPlots = true;
+static bool violinPlotDLInsertCustomColors = true;
+static bool violinPlotAttrInsertCustomColors = true;
+static bool violinPlotAttrReplaceNonStop = false;
+static bool violinPlotDLReplaceNonStop = false;
 static bool yScaleToCurrenMax = false;
 static ViolinYScale violinYScale = ViolinYScaleStandard;
 std::vector<ViolinPlot> violinAttributePlots;
@@ -4483,6 +4487,43 @@ static inline float getBinVal(float x, std::vector<float>& bins) {
 }
 
 
+
+static void changeColorsToCustomAlternatingColors(ColorPaletteManager *cpm, unsigned int nrAttributes, std::vector<ImVec4> *violinLineColors, std::vector<ImVec4> *violinFillColors, HistogramManager::Histogram &hist, bool **activeAttributes)
+{
+	// Get complete colorpalette.
+	const std::string colorStr = std::string("Dark2ExtendedReorder");
+	std::vector<ImVec4> retrievedColors = cpm->colorPalette.getPallettAsImVec4(0, 0, 20, 0.4, colorStr);
+
+	unsigned int colorCount = 0;
+	// So far, only 12 colors are available.
+	for (unsigned int i = 0; (i < nrAttributes) && (i < 12) ; ++i)
+	{
+
+
+		unsigned int times0 = 0;
+		unsigned int times1 = 0;
+		// Colors are sorted alternatingly for right and left side. So, all plots on the right have to get 'right-colors'.
+		for (unsigned int item :hist.attributeColorOrderIdx)
+		{
+			ImVec4 currColor;
+			(!(hist.side[item])) ? currColor = retrievedColors[(2 * times0++)] : currColor= retrievedColors[(2 * times1++ + 1)];
+			if (cpm->applyToLineColor) {
+				(*violinLineColors)[item] = currColor;
+				(*violinLineColors)[item].w = cpm->alphaLines / 255.;
+			}
+			if (cpm->applyToFillColor) {
+				(*violinFillColors)[item] = currColor;
+				(*violinFillColors)[item].w = cpm->alphaFill / 255.;
+			}
+
+
+
+		}
+	}
+}
+
+
+
 static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector<ImVec4> *violinLineColors, std::vector<ImVec4> *violinFillColors)
 {
 
@@ -7917,10 +7958,10 @@ int main(int, char**)
 
 				int previousNrOfColumns = ImGui::GetColumnsCount();
 				ImGui::Separator();
-				ImGui::Columns(1);
+				ImGui::Columns(3);
 
 
-				if (ImGui::Button("Optimize sides <right/left>")) {
+				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotAttrReplaceNonStop)) {
 					if (violinAttributePlots[i].drawLists.size() != 0) {
 						// Only compute the order for the first histogram in the list (the first one in the matrix. Is that the same?)
 						auto& hist = histogramManager->getHistogram(violinAttributePlots[i].drawLists[0].name);
@@ -7929,9 +7970,24 @@ int main(int, char**)
 						violinAttributePlots[i].violinPlacements.clear();
 						for (int j = 0; j < violinAttributePlots[i].attributeNames.size(); ++j) {
 							violinAttributePlots[i].violinPlacements.push_back((hist.side[j] % 2) ? ViolinLeft : ViolinRight);
+
+
 						}
+						if (violinPlotAttrInsertCustomColors) {
+							changeColorsToCustomAlternatingColors(&(violinAttributePlots[i].colorPaletteManager), violinAttributePlots[i].attributeNames.size(), &(violinDrawlistPlots[i].attributeLineColors), &(violinDrawlistPlots[i].attributeFillColors),
+								hist, &(violinAttributePlots[i].activeAttributes) );
+						}
+
 					}
 				}
+				ImGui::NextColumn();
+				ImGui::Checkbox("Apply colors of Dark2ExtendedReorder", &violinPlotAttrInsertCustomColors);
+
+				ImGui::NextColumn();
+				ImGui::Checkbox("Re-place constantly", &violinPlotAttrReplaceNonStop);
+
+
+
 				ImGui::Columns(previousNrOfColumns);
 
 
@@ -8284,13 +8340,13 @@ int main(int, char**)
 
 
 
-				ImGui::Columns(2);
+				ImGui::Columns(4);
 				if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
 					violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first* violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
 				}
 				ImGui::NextColumn();
 
-				if (ImGui::Button("Optimize sides <right/left>")) {
+				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotDLReplaceNonStop)) {
 					if (violinDrawlistPlots[i].drawLists.size() != 0) {
 						// Only compute the order for the first histogram in the list (the first one in the matrix. Is that the same?)
 						auto& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[0]);
@@ -8300,8 +8356,20 @@ int main(int, char**)
 						for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
 							violinDrawlistPlots[i].attributePlacements.push_back((hist.side[j] % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
 						}
+						
+						if (violinPlotDLInsertCustomColors) {
+							changeColorsToCustomAlternatingColors(&(violinDrawlistPlots[i].colorPaletteManager), violinDrawlistPlots[i].attributeNames.size(), &(violinDrawlistPlots[i].attributeLineColors), &(violinDrawlistPlots[i].attributeFillColors),
+								hist, &(violinDrawlistPlots[i].activeAttributes));
+						}
+
+
 					}
 				}
+				ImGui::NextColumn();
+				ImGui::Checkbox("Apply colors of Dark2ExtendedReorder", &violinPlotDLInsertCustomColors);
+				ImGui::NextColumn();
+				ImGui::Checkbox("Re-place constantly", &violinPlotDLReplaceNonStop);
+
 				ImGui::Columns(1);
 
 				//drawing the setttings for the drawlists
