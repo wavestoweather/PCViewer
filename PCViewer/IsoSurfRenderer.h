@@ -32,8 +32,8 @@ class IsoSurfRenderer {
 public:
 	struct DrawlistBrush {
 		std::string drawlist;
-		std::vector<std::string> brushes;
-		std::vector<glm::vec4> brushSurfaceColors;
+		std::string brush;
+		glm::vec4 brushSurfaceColor;
 	};
 
 	// height :		height of the rendered image

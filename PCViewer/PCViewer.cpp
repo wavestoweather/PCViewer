@@ -662,6 +662,7 @@ static bool histogrammDensity = true;
 static bool pcPlotDensity = false;
 static float densityRadius = .05f;
 static bool enableDensityMapping = true;
+static bool enableDensityGreyscale = false;
 static bool calculateMedians = true;
 static bool mapDensity = true;
 static int histogrammDrawListComparison = -1;
@@ -4126,7 +4127,7 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 
 static void uploadDensityUiformBuffer() {
 	DensityUniformBuffer ubo = {};
-	ubo.enableMapping = enableDensityMapping | ((uint8_t)(histogrammDensity && enableDensityMapping)) * 2;
+	ubo.enableMapping = enableDensityMapping | ((uint8_t)(histogrammDensity && enableDensityMapping)) * 2 | uint32_t(enableDensityGreyscale)<<2;
 	ubo.gaussRange = densityRadius;
 	ubo.imageHeight = g_PcPlotHeight;
 	int amtOfIndices = 0;
@@ -6442,6 +6443,13 @@ int main(int, char**)
 				}
 			}
 
+			if (ImGui::Checkbox("Enable grayscale density", &enableDensityGreyscale)) {
+				if (pcAttributes.size()) {
+					uploadDensityUiformBuffer();
+					pcPlotRender = true;
+				}
+			}
+
 			//if (ImGui::Checkbox("Enable additive density", &pcPlotLinDensity)) {
 			//	if (pcAttributes.size()) {
 			//		uploadDensityUiformBuffer();
@@ -7393,19 +7401,45 @@ int main(int, char**)
 				//TODO: fly navigation
 			}
 
-			ImGui::SetCursorPos(ImGui::GetWindowContentRegionMin() + ImVec2(ImGui::GetScrollX(), 2 * ImGui::GetScrollY()));
-			ImGui::Dummy(ImGui::GetWindowContentRegionMax() - ImGui::GetWindowContentRegionMin());
-			//set drawlist data via drag and drop
-			if (ImGui::BeginDragDropTarget()) {
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
-					DrawList* dl = *((DrawList**)payload->Data);
+			ImGui::Text("Add iso surface");
+			static char choose[]{ "choose" };
+			static int selectedDrawlist = -1;
+			static int selectedGlobalBrush = -1;
+			ImGui::PushItemWidth(300);
+			if(ImGui::BeginCombo("Drawlist", (selectedDrawlist == -1) ? choose : std::next(g_PcPlotDrawLists.begin(), selectedDrawlist)->name.c_str())) {
+				if (ImGui::Selectable(choose, selectedDrawlist == -1)) selectedDrawlist = -1;
+				auto dl = g_PcPlotDrawLists.begin();
+				for (int i = 0; i < g_PcPlotDrawLists.size(); ++i) {
+					if (ImGui::Selectable(dl->name.c_str(), selectedDrawlist == i)) selectedDrawlist = i;
+					++dl;
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			if (ImGui::BeginCombo("Brush", (selectedGlobalBrush == -1) ? choose : globalBrushes[selectedGlobalBrush].name.c_str())) {
+				if (ImGui::Selectable(choose, selectedGlobalBrush == -1)) selectedGlobalBrush = -1;
+				for (int i = 0; i < globalBrushes.size(); ++i) {
+					if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) selectedGlobalBrush = i;
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::PopItemWidth();
+
+			static bool showError = false;
+			if (ImGui::Button("Add new iso surface")) {
+				if (selectedDrawlist == -1 || selectedGlobalBrush == -1) {
+					showError = true;
+				}
+				else {
+					DrawList* dl = &*std::next(g_PcPlotDrawLists.begin(), selectedDrawlist);
 					std::vector<float*>* data = nullptr;
 					for (DataSet& ds : g_PcPlotDataSets) {
 						if (dl->parentDataSet == ds.name) {
 							data = &ds.data;
+							break;
 						}
 					}
-					
+
 					std::vector<unsigned int> attr;
 					std::vector<std::pair<float, float>> minMax;
 					for (int i = 0; i < pcAttributes.size(); ++i) {
@@ -7415,26 +7449,66 @@ int main(int, char**)
 					minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
 					minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
 					minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
-					//isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices);
-				}
-				ImGui::EndDragDropTarget();
-			}
-
-			if (ImGui::BeginDragDropTarget()) {
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GlobalBrush")) {
-					GlobalBrush* brush = *((GlobalBrush**)payload->Data);
-
-					std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
-					for (auto& axis : brush->brushes) {
-						for (auto& m : axis.second) {
-							minMax[axis.first].push_back(m.second);
+					std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
+					for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
+						for (auto& brush : axis.second) {
+							miMa[axis.first].push_back(brush.second);
 						}
 					}
-					isoSurfaceRenderer->addBrush(brush->name, minMax);
-				}
 
-				ImGui::EndDragDropTarget();
+					isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,1,1,1 } });
+					isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices, miMa);
+				}
 			}
+			if (showError) ImGui::TextColored({ 1,0,0,1 }, "You have to select a dralist and a global brush!");
+			ImGui::Separator();
+			ImGui::Text("Active iso sufaces:");
+			for (IsoSurfRenderer::DrawlistBrush& db : isoSurfaceRenderer->drawlistBrushes) {
+				ImGui::Text("%s | %s", db.drawlist.c_str(), db.brush.c_str());
+			}
+
+			//ImGui::SetCursorPos(ImGui::GetWindowContentRegionMin() + ImVec2(ImGui::GetScrollX(), 2 * ImGui::GetScrollY()));
+			//ImGui::Dummy(ImGui::GetWindowContentRegionMax() - ImGui::GetWindowContentRegionMin());
+			////set drawlist data via drag and drop
+			//if (ImGui::BeginDragDropTarget()) {
+			//	if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+			//		DrawList* dl = *((DrawList**)payload->Data);
+			//		std::vector<float*>* data = nullptr;
+			//		for (DataSet& ds : g_PcPlotDataSets) {
+			//			if (dl->parentDataSet == ds.name) {
+			//				data = &ds.data;
+			//			}
+			//		}
+			//		
+			//		std::vector<unsigned int> attr;
+			//		std::vector<std::pair<float, float>> minMax;
+			//		for (int i = 0; i < pcAttributes.size(); ++i) {
+			//			attr.push_back(i);
+			//			minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
+			//		}
+			//		minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
+			//		minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
+			//		minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
+			//		//isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices);
+			//	}
+			//	ImGui::EndDragDropTarget();
+			//}
+			//
+			//if (ImGui::BeginDragDropTarget()) {
+			//	if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GlobalBrush")) {
+			//		GlobalBrush* brush = *((GlobalBrush**)payload->Data);
+			//
+			//		std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
+			//		for (auto& axis : brush->brushes) {
+			//			for (auto& m : axis.second) {
+			//				minMax[axis.first].push_back(m.second);
+			//			}
+			//		}
+			//		isoSurfaceRenderer->addBrush(brush->name, minMax);
+			//	}
+			//
+			//	ImGui::EndDragDropTarget();
+			//}
 			ImGui::End();
 		}
 		//end of so surface window -----------------------------------------------------------------------

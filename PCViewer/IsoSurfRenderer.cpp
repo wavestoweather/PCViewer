@@ -295,7 +295,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 
 		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
-		VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		//VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	}
 	VkUtil::commitCommandBuffer(queue, imageCommands);
 	err = vkQueueWaitIdle(queue);
@@ -439,6 +439,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memReq.size;
 		allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, 0);
+		check_vk_result(vkAllocateMemory(device, &allocInfo, nullptr, &binaryImageMemory));
 		vkBindImageMemory(device, binaryImage, binaryImageMemory, 0);
 
 		VkUtil::create3dImageView(device, binaryImage, VK_FORMAT_R8_UNORM, 1, &binaryImageView);
@@ -469,7 +470,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	}
 
 #ifdef _DEBUG
-	assert(curOffset == binaryComputeInfosSize);
+	assert(sizeof(BinaryComputeInfos) + curOffset * sizeof(float) == binaryComputeInfosSize);
 #endif
 
 	VkBuffer binaryComputeBuffer;
@@ -492,7 +493,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 
 	VkUtil::updateDescriptorSet(device, binaryComputeBuffer, binaryComputeInfosSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, binaryDescriptorSet);
 	std::vector<VkImageLayout> imageLayouts(required3dImages, VK_IMAGE_LAYOUT_GENERAL);
-	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 1, binaryDescriptorSet);
+	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 1, binaryDescriptorSet);
 	VkUtil::updateStorageImageDescriptorSet(device, binaryImageView, VK_IMAGE_LAYOUT_GENERAL, 2, binaryDescriptorSet);
 
 	VkUtil::transitionImageLayout(binaryCommands, binaryImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -512,6 +513,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	vkDestroyBuffer(device, binaryComputeBuffer, nullptr);
 	vkFreeMemory(device, binaryComputeMemory, nullptr);
 	vkFreeCommandBuffers(device, commandPool, 1, &binaryCommands);
+	delete[] binaryComputeInfos;
 	//checking change
 	//VkUtil::downloadImageData(device, physicalDevice, commandPool
 	//for (int i = 0; i < width * depth * height; ++i) {
@@ -583,7 +585,7 @@ bool IsoSurfRenderer::deleteBrush(std::string& name)
 
 void IsoSurfRenderer::render()
 {
-	if (!image3dWidth || !image3dHeight || !image3dDepth || !brushes.size())
+	if (!image3dWidth || !image3dHeight || !image3dDepth || !drawlistBrushes.size())
 		return;
 
 	VkResult err;
@@ -700,10 +702,10 @@ void IsoSurfRenderer::render()
 	brushInfos->amtOfAxis = 1;
 	float* brushColors = (float*)(brushInfos + 1);
 	for (int i = 0; i < 1; ++i) {
-		brushColors[i * 4] = drawlistBrushes[0].brushSurfaceColors[0].x;
-		brushColors[i * 4 + 1] = drawlistBrushes[0].brushSurfaceColors[0].y;
-		brushColors[i * 4 + 2] = drawlistBrushes[0].brushSurfaceColors[0].z;
-		brushColors[i * 4 + 3] = drawlistBrushes[0].brushSurfaceColors[0].w;
+		brushColors[i * 4] = drawlistBrushes[0].brushSurfaceColor.x;
+		brushColors[i * 4 + 1] = drawlistBrushes[0].brushSurfaceColor.y;
+		brushColors[i * 4 + 2] = drawlistBrushes[0].brushSurfaceColor.z;
+		brushColors[i * 4 + 3] = drawlistBrushes[0].brushSurfaceColor.w;
 	}
 	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
 
@@ -990,6 +992,7 @@ void IsoSurfRenderer::createPipeline()
 
 	binding.binding = 2;								//binary image
 	binding.descriptorCount = 1;
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	bindings.push_back(binding);
 
 	validd = { true,false,true };
@@ -1012,11 +1015,10 @@ void IsoSurfRenderer::createDescriptorSets()
 void IsoSurfRenderer::updateDescriptorSet()
 {
 	VkUtil::updateDescriptorSet(device, uniformBuffer, sizeof(UniformBuffer), 0, descriptorSet);
-	std::vector<VkImageLayout> layouts;
-	for (int i = 0; i < image3d.size(); ++i) {
-		layouts.push_back(VK_IMAGE_LAYOUT_GENERAL);
-	}
-	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, image3dView, layouts, 1, descriptorSet);
+	std::vector<VkImageLayout> layouts(1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	std::vector<VkImage> binaryImages{ binaryImage };
+	std::vector<VkImageView> binaryImagesView{ binaryImageView };
+	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, binaryImagesView, layouts, 1, descriptorSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 }
 

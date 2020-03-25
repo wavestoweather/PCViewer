@@ -51,5 +51,9 @@ void main() {
 	if((ubo.enableMapping & 1) > 0){
 		outColor = texture(ironMap, vec2(max(max(outColor.x,outColor.y),outColor.z),.5f));
 	}
+	//mapping density to grey values
+	if((ubo.enableMapping & 4) > 0){
+		outColor = vec4(vec3(max(max(outColor.x,outColor.y),outColor.z)),1);
+	}
 	outColor = clamp(outColor,vec4(0),vec4(1));
 }
