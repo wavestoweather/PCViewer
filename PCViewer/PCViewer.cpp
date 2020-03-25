@@ -7728,8 +7728,14 @@ int main(int, char**)
 						float histYStart;
 						float histYEnd;
 						if (dl && dl->brushes[j].size()) {
-							histYStart = ((hist.ranges[j].second - dl->brushes[j][0].minMax.second) / (dl->brushes[j][0].minMax.first - dl->brushes[j][0].minMax.second) * size.y);
-							histYEnd = ((hist.ranges[j].first - dl->brushes[j][0].minMax.second) / (dl->brushes[j][0].minMax.first - dl->brushes[j][0].minMax.second) * size.y);
+							float max = dl->brushes[j][0].minMax.second;
+							float min = dl->brushes[j][0].minMax.first;
+							for (int mi = 1; mi < dl->brushes[j].size(); ++mi) {
+								if (dl->brushes[j][mi].minMax.first < min) min = dl->brushes[j][mi].minMax.first;
+								if (dl->brushes[j][mi].minMax.second > max) max = dl->brushes[j][mi].minMax.second;
+							}
+							histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+							histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
 						}
 						else {
 							histYStart = ((hist.ranges[j].second - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
@@ -8154,8 +8160,14 @@ int main(int, char**)
 							float histYStart;
 							float histYEnd;
 							if (dl && dl->brushes[k].size()) {
-								histYStart = ((hist.ranges[k].second - dl->brushes[k][0].minMax.second) / (dl->brushes[k][0].minMax.first - dl->brushes[k][0].minMax.second) * size.y);
-								histYEnd = ((hist.ranges[k].first - dl->brushes[k][0].minMax.second) / (dl->brushes[k][0].minMax.first - dl->brushes[k][0].minMax.second) * size.y);
+								float max = dl->brushes[k][0].minMax.second;
+								float min = dl->brushes[k][0].minMax.first;
+								for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
+									if (dl->brushes[k][mi].minMax.first < min) min = dl->brushes[k][mi].minMax.first;
+									if (dl->brushes[k][mi].minMax.second > max) max = dl->brushes[k][mi].minMax.second;
+								}
+								histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+								histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
 							}
 							else {
 								histYStart = ((hist.ranges[k].second - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
