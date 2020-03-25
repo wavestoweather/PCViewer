@@ -393,7 +393,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	float** densityImages = new float*[required3dImages];
 	for (int i = 0; i < required3dImages; ++i) {
 		densityImages[i] = new float[w * d * h];
-		memset(densityImages[i], 0, w * d * h * sizeof(float));
+		memset(densityImages[i], -1.0f/0, w * d * h * sizeof(float));
 	}
 	for (int i : indices) {
 		int x = SpacialData::getRlatIndex(data[i][positionIndices.x]);
@@ -412,7 +412,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	}
 
 	for (int i = 0; i < required3dImages; ++i) {
-		VkUtil::uploadImageData(device, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_FORMAT_R32_SFLOAT, w, h, d, densityImages[i], w * h * d * sizeof(float));
+		VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_FORMAT_R32_SFLOAT, w, h, d, densityImages[i], w * h * d * sizeof(float));
 		delete[] densityImages[i];
 	}
 	delete[] densityImages;
@@ -432,7 +432,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 
 	//TODO: change this to be able to be more than just one image
 	if (!binaryImage) {
-		VkUtil::create3dImage(device, w, h, d, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &binaryImage);
+		VkUtil::create3dImage(device, w, h, d, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &binaryImage);
 		VkMemoryRequirements memReq;
 		vkGetImageMemoryRequirements(device, binaryImage, &memReq);
 		VkMemoryAllocateInfo allocInfo = {};
@@ -471,6 +471,35 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 
 #ifdef _DEBUG
 	assert(sizeof(BinaryComputeInfos) + curOffset * sizeof(float) == binaryComputeInfosSize);
+
+	PCUtil::numdump(brushI, curOffset);
+
+	//testing the brush infos
+	//for (int axis = 0; axis < binaryComputeInfos->amtOfAxis; ++axis) {
+	//	int axisOffset = int(brushI[axis]);
+	//	//check if there exists a brush on this axis
+	//	if (bool(brushI[axisOffset])) {		//amtOfBrushes > 0
+	//		//as there exist brushes we get the density for this attribute
+	//		//float density = imageLoad(densities[axis], ivec3(gl_GlobalInvocationID)).x;
+	//		bool inside = true;
+	//		//for every brush
+	//		for (int brush = 0; brush < brushI[axisOffset]; ++brush) {
+	//			//for every MinMax
+	//			int minMaxOffset = axisOffset + 1 + 2 * brush;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
+	//			//int brushIndex = int(info.brushes[brushOffset]);
+	//			float mi = brushI[minMaxOffset];
+	//			float ma = brushI[minMaxOffset + 1];
+	//			//if (density<mi || density>ma) {
+	//			//	inside = false;
+	//			//	break;
+	//			//}
+	//		}
+	//		if (!inside) {			//write 0 into binary texture and early out
+	//			//imageStore(binary, ivec3(gl_GlobalInvocationID), vec4(0));
+	//			return;
+	//		}
+	//	}
+	//}
 #endif
 
 	VkBuffer binaryComputeBuffer;
@@ -506,7 +535,7 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	uint32_t patchAmtY = h / LOCALSIZE3D + ((h % LOCALSIZE) ? 1 : 0);
 	uint32_t patchAmtZ = d / LOCALSIZE3D + ((d % LOCALSIZE) ? 1 : 0);
 	vkCmdDispatch(binaryCommands, patchAmtX, patchAmtY, patchAmtZ);
-	VkUtil::transitionImageLayout(binaryCommands, binaryImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	//VkUtil::transitionImageLayout(binaryCommands, binaryImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkUtil::commitCommandBuffer(queue, binaryCommands);
 	check_vk_result(vkQueueWaitIdle(queue));
 
@@ -514,22 +543,25 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	vkFreeMemory(device, binaryComputeMemory, nullptr);
 	vkFreeCommandBuffers(device, commandPool, 1, &binaryCommands);
 	delete[] binaryComputeInfos;
-	//checking change
-	//VkUtil::downloadImageData(device, physicalDevice, commandPool
-	//for (int i = 0; i < width * depth * height; ++i) {
-	//	if (im[i] != 0) {
-	//		float ok = im[i];
-	//		zeroCount2++;
-	//	}
-	//}
-	//std::cout << "Difference in zeros: " << zeroCount2<< std::endl;
-	//delete[] im;
+	//checking binary values
+	unsigned char* bi = new unsigned char[w * h * d];
+	int nonzero = 0;
+	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage, w, h, d, bi, w * h * d);
+	for (int i = 0; i < width * depth * height; ++i) {
+		if (bi[i] == 0) {
+			nonzero++;
+		}
+	}
+	std::cout << "Number of zero values: " << nonzero<< std::endl;
+	delete[] bi;
 
 	if (!descriptorSet) {
 		resize(1, 1);
 		return;
 	}
 
+	updateBrushBuffer();
+	updateDescriptorSet();
 	updateCommandBuffer();
 	render();
 }
@@ -553,12 +585,6 @@ void IsoSurfRenderer::updateCameraPos(float* mouseMovement)
 
 void IsoSurfRenderer::addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
 {
-	brushes[name] = minMax;
-	brushColors[name] = new float[4];
-	brushColors[name][0] = 1;
-	brushColors[name][1] = 1;
-	brushColors[name][2] = 1;
-	brushColors[name][3] = 1;
 	updateBrushBuffer();
 	updateDescriptorSet();
 	updateCommandBuffer();
@@ -1024,30 +1050,31 @@ void IsoSurfRenderer::updateDescriptorSet()
 
 void IsoSurfRenderer::updateBrushBuffer()
 {
-	if (brushes.empty()) return;
+	if (drawlistBrushes.empty()) return;
 
-	//converting the map of brushes to the graphics data structure
-	std::vector<std::vector<std::vector<std::pair<float, float>>>> gpuData;
-	for (auto& brush : brushes) {
-		for (int axis = 0; axis < brush.second.size(); ++axis) {
-			if (gpuData.size() <= axis) gpuData.push_back({});
-			if(brush.second[axis].size()) gpuData[axis].push_back({});
-			for (auto& minMax : brush.second[axis]) {
-				gpuData[axis].back().push_back(minMax);
-			}
-		}
-	}
+	////converting the map of brushes to the graphics data structure
+	//std::vector<std::vector<std::vector<std::pair<float, float>>>> gpuData;
+	//for (auto& brush : brushes) {
+	//	for (int axis = 0; axis < brush.second.size(); ++axis) {
+	//		if (gpuData.size() <= axis) gpuData.push_back({});
+	//		if(brush.second[axis].size()) gpuData[axis].push_back({});
+	//		for (auto& minMax : brush.second[axis]) {
+	//			gpuData[axis].back().push_back(minMax);
+	//		}
+	//	}
+	//}
+	//
+	////get the size for the new buffer
+	//uint32_t byteSize = 4 * sizeof(float);		//Standard information + padding
+	//byteSize += gpuData.size() * sizeof(float);		//offsets for the axes(offset a1, offset a2, ..., offset an)
+	//for (int axis = 0; axis < gpuData.size(); ++axis) {
+	//	byteSize += (1 + gpuData[axis].size()) * sizeof(float);		//amtOfBrushes + offsets of the brushes
+	//	for (int brush = 0; brush < gpuData[axis].size(); ++brush) {
+	//		byteSize += (6 + 2 * gpuData[axis][brush].size()) * sizeof(float);		//brush index(1) + amtOfMinMax(1) + color(4) + space for minMax
+	//	}
+	//}
 
-	//get the size for the new buffer
-	uint32_t byteSize = 4 * sizeof(float);		//Standard information + padding
-	byteSize += gpuData.size() * sizeof(float);		//offsets for the axes(offset a1, offset a2, ..., offset an)
-	for (int axis = 0; axis < gpuData.size(); ++axis) {
-		byteSize += (1 + gpuData[axis].size()) * sizeof(float);		//amtOfBrushes + offsets of the brushes
-		for (int brush = 0; brush < gpuData[axis].size(); ++brush) {
-			byteSize += (6 + 2 * gpuData[axis][brush].size()) * sizeof(float);		//brush index(1) + amtOfMinMax(1) + color(4) + space for minMax
-		}
-	}
-
+	uint32_t byteSize = sizeof(BrushInfos) + drawlistBrushes.size() + 4 * sizeof(float);
 	if (brushByteSize >= byteSize) return;		//if the current brush byte size is bigger or equal to the requred byte size simply return. No new allocastion needed
 
 	brushByteSize = byteSize;

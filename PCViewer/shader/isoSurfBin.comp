@@ -29,7 +29,7 @@ void main(){
 		if(bool(info.brushes[axisOffset])){		//amtOfBrushes > 0
 			//as there exist brushes we get the density for this attribute
 			float density = imageLoad(densities[axis],ivec3(gl_GlobalInvocationID)).x;
-			bool inside = true;
+			bool anyOne = false;
 			//for every brush
 			for(int brush = 0;brush<info.brushes[axisOffset];++brush){
 				//for every MinMax
@@ -38,11 +38,11 @@ void main(){
 				float mi = info.brushes[minMaxOffset];
 				float ma = info.brushes[minMaxOffset + 1];
 				if(density<mi || density>ma){
-					inside = false;
+					anyOne = true;
 					break;
 				}
 			}
-			if(!inside){			//write 0 into binary texture and early out
+			if(anyOne){			//write 0 into binary texture and early out
 				imageStore(binary, ivec3(gl_GlobalInvocationID), vec4(0));
 				return;
 			}

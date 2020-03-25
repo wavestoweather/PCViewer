@@ -7456,7 +7456,7 @@ int main(int, char**)
 						}
 					}
 
-					isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,1,1,1 } });
+					isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
 					isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices, miMa);
 				}
 			}

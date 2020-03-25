@@ -1055,8 +1055,30 @@ void VkUtil::downloadData(VkDevice device, VkDeviceMemory memory, uint32_t offse
 	vkUnmapMemory(device, memory);
 }
 
-void VkUtil::uploadImageData(VkDevice device, VkImage image, VkImageLayout imageLayout, VkFormat imageFormat, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
+void VkUtil::uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout imageLayout, VkFormat imageFormat, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
 {
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+	createBuffer(device, byteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
+	VkMemoryRequirements memReq;
+	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReq);
+	VkMemoryAllocateInfo memAlloc{};
+	memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	memAlloc.allocationSize = memReq.size;
+	memAlloc.memoryTypeIndex = findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	vkAllocateMemory(device, &memAlloc, nullptr, &stagingMemory);
+	vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0);
+
+	uploadData(device, stagingMemory, 0, byteSize, data);
+	VkCommandBuffer commands;
+	createCommandBuffer(device, commandPool, &commands);
+	copyBufferTo3dImage(commands, stagingBuffer, image, x, y, z);
+	commitCommandBuffer(queue, commands);
+	check_vk_result(vkQueueWaitIdle(queue));
+
+	vkDestroyBuffer(device, stagingBuffer, nullptr);
+	vkFreeMemory(device, stagingMemory, nullptr);
+	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 }
 
 void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
