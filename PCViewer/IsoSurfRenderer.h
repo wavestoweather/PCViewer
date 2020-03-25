@@ -45,7 +45,7 @@ public:
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
 	//TODO: change back to general solution. Current update3dBinaryVolume is specifically made for a 3d cloud ensemble weather simulation dataset with fixed 3d size
-	void update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float, float>>>& brush);
+	void update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float, float>>>& brush, int index);
 	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);				//minMax has to be a vector containing for each attribute an array of minMax values
 	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a already added brush. Returns true if the brush was updated, else false
@@ -57,6 +57,7 @@ public:
 	VkImageView getImageView();
 
 	std::vector<DrawlistBrush> drawlistBrushes;
+	bool shade;
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;				//cameraPosition in model space
@@ -103,7 +104,8 @@ private:
 
 	struct BrushInfos {		//Note, currently a maximum of 30 brushes is available. For more shader + define in this header have to be changed
 		uint32_t amtOfAxis;
-		uint32_t padding[3];
+		uint32_t shade;
+		uint32_t padding[2];
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 
@@ -136,7 +138,7 @@ private:
 	uint32_t image3dDepth;
 
 	//information about the rendered 3dBox
-	float boxHeight = 1;
+	float boxHeight = .5f;
 	float boxWidth = 1;
 	float boxDepth = 1;
 
@@ -175,9 +177,9 @@ private:
 	VkDeviceMemory		brushMemory;
 	uint32_t			brushByteSize;
 
-	VkImage				binaryImage;
-	VkImageView			binaryImageView;
-	VkDeviceMemory		binaryImageMemory;
+	std::vector<VkImage>		binaryImage;
+	std::vector<VkImageView>	binaryImageView;
+	std::vector<VkDeviceMemory>	binaryImageMemory;
 	//vulkan resources for the compute pipeline
 	VkPipeline			computePipeline;
 	VkPipelineLayout	computePipelineLayout;

@@ -12,10 +12,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define DETECTMEMLEAK
 #endif
 
-#define PRINTRENDERTIME
-
 //enable this define to print the time needed to render the pc Plot
-//#define PRINTRENDERTIME
+#define PRINTRENDERTIME
 //enable this define to print the time since the last fram
 //#define PRINTFRAMETIME
 //enable to use gpu sorting (Not implemented yet)
@@ -720,6 +718,7 @@ static GpuBrusher* gpuBrusher;
 static HistogramManager* histogramManager;
 
 static IsoSurfRenderer* isoSurfaceRenderer;
+static bool coupleIsoSurfaceRenderer = true;
 
 //variables for fractions
 static int maxFractionDepth = 20;
@@ -4112,6 +4111,48 @@ static bool updateAllActiveIndices() {
 	return ret;
 }
 
+static void updateIsoSurface(GlobalBrush& gb) {
+	if (ImGui::IsMouseDown(0) || !coupleIsoSurfaceRenderer) return;
+	int index = -1;
+	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
+		++index;
+		if (gb.name != db.brush) continue;
+		DrawList* dl = nullptr;
+		for (DrawList& draw : g_PcPlotDrawLists) {
+			if (draw.name == db.drawlist) {
+				dl = &draw;
+				break;
+			}
+		}
+		if (!dl) continue;
+		std::vector<float*>* data = nullptr;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (dl->parentDataSet == ds.name) {
+				data = &ds.data;
+				break;
+			}
+		}
+
+		std::vector<unsigned int> attr;
+		std::vector<std::pair<float, float>> minMax;
+		for (int i = 0; i < pcAttributes.size(); ++i) {
+			attr.push_back(i);
+			minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
+		}
+		minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
+		minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
+		minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
+		std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
+		for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
+			for (auto& brush : axis.second) {
+				miMa[axis.first].push_back(brush.second);
+			}
+		}
+
+		isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices, miMa, index);
+	}
+}
+
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
 #ifdef _DEBUG
 	std::cout << "Amount of files drag and dropped: " << count << std::endl;
@@ -5123,15 +5164,13 @@ int main(int, char**)
 
 			if (ImGui::BeginMenu("Global brush")) {
 				if (ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes) && !toggleGlobalBrushes) {
-					updateAllActiveIndices();
-					pcPlotRender = true;
+					pcPlotRender = updateAllActiveIndices();
 				}
 
 				if (ImGui::BeginMenu("Brush Combination")) {
 					static char* const combinations[] = { "OR","AND" };
 					if (ImGui::Combo("brushCombination", &brushCombination, combinations, sizeof(combinations) / sizeof(*combinations))) {
-						updateAllActiveIndices();
-						pcPlotRender = true;
+						pcPlotRender = updateAllActiveIndices();
 					}
 
 					ImGui::EndMenu();
@@ -5619,8 +5658,7 @@ int main(int, char**)
 								drawListForTemplateBrush = true;
 								createPcPlotDrawList(preview.parentDataset->drawLists.front(), *templateBrushes[i].parentDataSet, preview.parent->name.c_str());
 							}
-							updateAllActiveIndices();
-							pcPlotRender = true;
+							pcPlotRender = updateAllActiveIndices();
 							if (active3dAttribute.size())
 								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), active3dAttribute, "a", "b", "c");
 						}
@@ -5632,8 +5670,7 @@ int main(int, char**)
 							}
 							if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 							globalBrushes.pop_back();
-							updateAllActiveIndices();
-							pcPlotRender = true;
+							pcPlotRender = updateAllActiveIndices();
 							if (active3dAttribute.size())
 								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), active3dAttribute, "a", "b", "c");
 						}
@@ -5682,8 +5719,7 @@ int main(int, char**)
 									if (ImGui::Selectable(std::to_string(j).c_str())) {
 										globalBrushes[i].fractureDepth = j;
 										globalBrushes[i].fractions = globalBrushes[i].kdTree->getBounds(j);
-										updateAllActiveIndices();
-										pcPlotRender = true;
+										pcPlotRender = updateAllActiveIndices();
 									}
 								}
 								ImGui::EndCombo();
@@ -5771,15 +5807,13 @@ int main(int, char**)
 								}
 								if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 								globalBrushes.pop_back();
-								updateAllActiveIndices();
-								pcPlotRender = true;
+								pcPlotRender = updateAllActiveIndices();
 							}
 							ImGui::CloseCurrentPopup();
 						}
 						if (ImGui::MenuItem("Invert Brush")) {
 							invertGlobalBrush(globalBrushes[i]);
-							updateAllActiveIndices();
-							pcPlotRender = true;
+							pcPlotRender = updateAllActiveIndices();
 						}
 
 						ImGui::EndPopup();
@@ -5787,8 +5821,7 @@ int main(int, char**)
 
 					ImGui::SameLine();
 					if (i < globalBrushes.size() && ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active)) {
-						updateAllActiveIndices();
-						pcPlotRender = true;
+						pcPlotRender = updateAllActiveIndices();
 					}
 				}
 				if (popEnd) {
@@ -5800,8 +5833,7 @@ int main(int, char**)
 					globalBrushes.pop_back();
 					if (selectedGlobalBrush == globalBrushes.size())
 						selectedGlobalBrush = -1;
-					updateAllActiveIndices();
-					pcPlotRender = true;
+					pcPlotRender = updateAllActiveIndices();
 				}
 				if (openConvertToLokal != -1 && !ImGui::IsPopupOpen("Global to lokal brush")) {
 					ImGui::OpenPopup("Global to lokal brush");
@@ -6140,15 +6172,15 @@ int main(int, char**)
 									}
 
 									if (ImGui::GetIO().MouseDelta.y) {
-										updateAllActiveIndices();
-										pcPlotRender = true;
+										pcPlotRender = updateAllActiveIndices();
+										updateIsoSurface(globalBrushes[selectedGlobalBrush]);
 									}
 								}
 								//release edge
 								if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
 									brushDragIds.clear();
-									updateAllActiveIndices();
-									pcPlotRender = true;
+									pcPlotRender = updateAllActiveIndices();
+									updateIsoSurface(globalBrushes[selectedGlobalBrush]);
 								}
 
 								//check for deletion of brush
@@ -6184,8 +6216,8 @@ int main(int, char**)
 								brush.second[del] = brush.second[brush.second.size() - 1];
 								brush.second.pop_back();
 								del = -1;
-								updateAllActiveIndices();
-								pcPlotRender = true;
+								pcPlotRender = updateAllActiveIndices();
+								updateIsoSurface(globalBrushes[selectedGlobalBrush]);
 							}
 
 							//create a new brush
@@ -6651,10 +6683,12 @@ int main(int, char**)
 								if (activeBrushAttributes[i]) {
 									brush.brushes[i].push_back(std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]));
 								}
+								else {
+									brush.brushes[i] = {};
+								}
 							}
 							globalBrushes.push_back(brush);
-							updateAllActiveIndices();
-							pcPlotRender = true;
+							pcPlotRender = updateAllActiveIndices();
 
 							ImGui::CloseCurrentPopup();
 						}
@@ -7273,6 +7307,9 @@ int main(int, char**)
 					if (ImGui::DragFloat("Spacing", &bubblePlotter->layerSpacing, bubblePlotter->layerSpacing / 100.0f, 0.0001, 100)) {
 						bubblePlotter->render();
 					}
+					if (ImGui::DragInt3("Position indices", (int*)&bubblePlotter->posIndices.x, .05f, 0, pcAttributes.size())) {
+						bubblePlotter->render();
+					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -7386,7 +7423,21 @@ int main(int, char**)
 
 		//begin of iso surface window --------------------------------------------------------------------
 		if (enableIsoSurfaceWindow) {
-			ImGui::Begin("Isosurface Renderer",&enableIsoSurfaceWindow);
+			ImGui::Begin("Isosurface Renderer",&enableIsoSurfaceWindow,ImGuiWindowFlags_MenuBar);
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Settings")) {
+					ImGui::Checkbox("Couple to brush", &coupleIsoSurfaceRenderer);
+					static float boxSize[3]{ 1.5f,1.f,1.5f };
+					if (ImGui::DragFloat3("Box dimensions", boxSize, .001f)) {
+						isoSurfaceRenderer->resizeBox(boxSize[0], boxSize[1], boxSize[2]);
+						isoSurfaceRenderer->render();
+					}
+					ImGui::EndMenu();
+				}
+
+				ImGui::EndMenuBar();
+			}
+			
 
 			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });
 			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel)) {
@@ -7456,16 +7507,33 @@ int main(int, char**)
 						}
 					}
 
-					isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
-					isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices, miMa);
+					int index = -1;
+					for (int i = 0; i < isoSurfaceRenderer->drawlistBrushes.size(); ++i) {
+						if (dl->name == isoSurfaceRenderer->drawlistBrushes[i].drawlist && globalBrushes[selectedGlobalBrush].name == isoSurfaceRenderer->drawlistBrushes[i].brush) {
+							index = i;
+							break;
+						}
+					}
+					if(index == -1)
+						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
+					isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices, miMa, index);
 				}
 			}
 			if (showError) ImGui::TextColored({ 1,0,0,1 }, "You have to select a dralist and a global brush!");
 			ImGui::Separator();
 			ImGui::Text("Active iso sufaces:");
+			ImGui::Columns(3);
 			for (IsoSurfRenderer::DrawlistBrush& db : isoSurfaceRenderer->drawlistBrushes) {
-				ImGui::Text("%s | %s", db.drawlist.c_str(), db.brush.c_str());
+				ImGui::Text(db.drawlist.c_str());
+				ImGui::NextColumn();
+				ImGui::Text(db.brush.c_str());
+				ImGui::NextColumn();
+				if (ImGui::ColorEdit4((std::string("##col") + db.drawlist + db.brush).c_str(), (float*)&db.brushSurfaceColor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+					isoSurfaceRenderer->render();
+				}
+				ImGui::NextColumn();
 			}
+			ImGui::Columns(1);
 
 			//ImGui::SetCursorPos(ImGui::GetWindowContentRegionMin() + ImVec2(ImGui::GetScrollX(), 2 * ImGui::GetScrollY()));
 			//ImGui::Dummy(ImGui::GetWindowContentRegionMax() - ImGui::GetWindowContentRegionMin());
