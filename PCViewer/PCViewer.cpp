@@ -7432,6 +7432,12 @@ int main(int, char**)
 						isoSurfaceRenderer->resizeBox(boxSize[0], boxSize[1], boxSize[2]);
 						isoSurfaceRenderer->render();
 					}
+					if (ImGui::Checkbox("Activate shading", &isoSurfaceRenderer->shade)) {
+						isoSurfaceRenderer->render();
+					}
+					if (ImGui::SliderFloat("Ray march step size", &isoSurfaceRenderer->stepSize, 0.001f, .05f, "%.5f")) {
+						isoSurfaceRenderer->render();
+					}
 					ImGui::EndMenu();
 				}
 

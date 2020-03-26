@@ -58,6 +58,7 @@ public:
 
 	std::vector<DrawlistBrush> drawlistBrushes;
 	bool shade;
+	float stepSize;
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;				//cameraPosition in model space
@@ -105,7 +106,8 @@ private:
 	struct BrushInfos {		//Note, currently a maximum of 30 brushes is available. For more shader + define in this header have to be changed
 		uint32_t amtOfAxis;
 		uint32_t shade;
-		uint32_t padding[2];
+		float stepSize;
+		uint32_t padding;
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 

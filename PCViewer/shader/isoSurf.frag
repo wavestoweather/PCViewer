@@ -14,7 +14,8 @@ layout(binding = 1) uniform sampler3D texSampler[30];
 layout(std430 ,binding = 2) buffer brushInfos{
 	uint amtOfAxis;
 	uint shade;
-	uint padding[2];
+	float stepSize;
+	uint padding;
 	float[] colors;
 	//float[] for the colors of the brushes:
 	//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
@@ -43,7 +44,7 @@ void main() {
 	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1.0)*d;
 
 	const float alphaStop = .98f;
-	const float stepsize = .0013f;		//might change this to a non constant to be changed at runtime
+	float stepsize = info.stepSize;			//.0013f;
 	const float isoVal = .5f;
 	
 	outColor = vec4(0,0,0,0);
@@ -55,7 +56,7 @@ void main() {
 
 	vec3 step = normalize(d) * stepsize;
 	//insert random displacement to startpositon (prevents bad visual effects)
-	startPoint += step * rand(startPoint);
+	startPoint += step * rand(startPoint) * .5f;
 
 	float prevDensity[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 
@@ -65,11 +66,11 @@ void main() {
 			if((prevDensity[brush]<isoVal && curDensity>=isoVal) || (prevDensity[brush]>=isoVal&&curDensity<isoVal)){
 				vec4 brushColor = vec4(info.colors[brush*4],info.colors[brush*4+1],info.colors[brush*4+2],info.colors[brush*4+3]);
 				if(bool(info.shade)){
-					float xDir = texture(texSampler[brush],startPoint+vec3(stepsize,0,0)).x, 
-						yDir = texture(texSampler[brush],startPoint+vec3(0,stepsize,0)).x,
-						zDir = texture(texSampler[brush],startPoint+vec3(0,0,stepsize)).x;
+					float xDir = texture(texSampler[brush],startPoint+vec3(stepsize / 4,0,0)).x, 
+						yDir = texture(texSampler[brush],startPoint+vec3(0,stepsize / 4,0)).x,
+						zDir = texture(texSampler[brush],startPoint+vec3(0,0,stepsize / 4)).x;
 					vec3 normal = normalize(vec3(xDir - curDensity, yDir - curDensity, zDir - curDensity));
-					brushColor.xyz = .2 * brushColor.xyz + .7 * dot(normal,normalize(-ubo.lightDir)) * brushColor.xyz + .2 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),15) * vec3(1);
+					brushColor.xyz = .4f * brushColor.xyz + max(.5 * dot(normal,normalize(ubo.lightDir)) * brushColor.xyz , vec3(0)) + max(.6 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(ubo.lightDir))),15) * vec3(1) , vec3(0));
 				}
 				outColor.xyz += (1-outColor.w) * brushColor.w * brushColor.xyz;
 				outColor.w += (1-outColor.w) * brushColor.w;

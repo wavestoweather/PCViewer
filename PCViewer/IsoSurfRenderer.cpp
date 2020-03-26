@@ -45,6 +45,7 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	brushMemory = VK_NULL_HANDLE;
 	brushByteSize = 0;
 	shade = true;
+	stepSize = .0013f;
 
 	camPos = glm::vec3(2, 2, 2);
 	lightDir = glm::vec3(-1, -1, -1);
@@ -733,7 +734,8 @@ void IsoSurfRenderer::render()
 	uint32_t brushInfosSize = sizeof(BrushInfos) + 4 * sizeof(float) * drawlistBrushes.size();
 	BrushInfos* brushInfos = (BrushInfos*)new char[brushInfosSize];
 	brushInfos->amtOfAxis = binaryImage.size();
-	brushInfos->shade = false;
+	brushInfos->shade = shade;
+	brushInfos->stepSize = stepSize;
 	float* brushColors = (float*)(brushInfos + 1);
 	for (int i = 0; i < drawlistBrushes.size(); ++i) {
 		brushColors[i * 4] = drawlistBrushes[i].brushSurfaceColor.x;
