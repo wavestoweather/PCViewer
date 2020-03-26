@@ -7435,7 +7435,7 @@ int main(int, char**)
 					if (ImGui::Checkbox("Activate shading", &isoSurfaceRenderer->shade)) {
 						isoSurfaceRenderer->render();
 					}
-					if (ImGui::SliderFloat("Ray march step size", &isoSurfaceRenderer->stepSize, 0.001f, .05f, "%.5f")) {
+					if (ImGui::SliderFloat("Ray march step size", &isoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {
 						isoSurfaceRenderer->render();
 					}
 					ImGui::EndMenu();
@@ -7444,11 +7444,20 @@ int main(int, char**)
 				ImGui::EndMenuBar();
 			}
 			
-
 			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });
 			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel)) {
-				float movement[] = { -ImGui::GetMouseDragDelta().x, ImGui::GetMouseDragDelta().y, io.MouseWheel };
-				isoSurfaceRenderer->updateCameraPos(movement);
+				CamNav::NavigationInput nav = {};
+				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
+				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
+				nav.mouseScrollDelta = io.MouseWheel;
+				nav.w = io.KeysDown[KEYW];
+				nav.a = io.KeysDown[KEYA];
+				nav.s = io.KeysDown[KEYS];
+				nav.d = io.KeysDown[KEYD];
+				nav.q = io.KeysDown[KEYQ];
+				nav.e = io.KeysDown[KEYE];
+				nav.shift = io.KeyShift;
+				isoSurfaceRenderer->updateCameraPos(nav, io.DeltaTime);
 				isoSurfaceRenderer->render();
 				err = vkDeviceWaitIdle(g_Device);
 				check_vk_result(err);

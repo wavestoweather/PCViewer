@@ -11,7 +11,9 @@ The iso surfaces are set by brushes.
 #include <vulkan/vulkan.h>
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/euler_angles.hpp"
 #include "SpacialData.h"
+#include "CameraNav.hpp"
 #include <limits.h>
 #include <string.h>
 #include <map>
@@ -46,7 +48,7 @@ public:
 	void resizeBox(float width, float height, float depth);
 	//TODO: change back to general solution. Current update3dBinaryVolume is specifically made for a 3d cloud ensemble weather simulation dataset with fixed 3d size
 	void update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float, float>>>& brush, int index);
-	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
+	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
 	void addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);				//minMax has to be a vector containing for each attribute an array of minMax values
 	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a already added brush. Returns true if the brush was updated, else false
 	bool deleteBrush(std::string& name);
@@ -59,6 +61,9 @@ public:
 	std::vector<DrawlistBrush> drawlistBrushes;
 	bool shade;
 	float stepSize;
+	float flySpeed;
+	float fastFlyMultiplier;
+	float rotationSpeed;
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;				//cameraPosition in model space
@@ -192,9 +197,9 @@ private:
 	VkDescriptorSetLayout binaryComputeDescriptorSetLayout;
 
 	//camera variables
-	glm::vec3 camPos;		//camera position
+	glm::vec3 cameraPos;		//camera position
+	glm::vec2 cameraRot;
 	glm::vec3 lightDir;
-
 	//variables for the brushes
 	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
 	std::map<std::string, float*> brushColors;												//each brush has its own colors

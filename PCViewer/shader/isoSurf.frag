@@ -56,7 +56,7 @@ void main() {
 
 	vec3 step = normalize(d) * stepsize;
 	//insert random displacement to startpositon (prevents bad visual effects)
-	startPoint += step * rand(startPoint) * .5f;
+	startPoint += step * rand(startPoint);
 
 	float prevDensity[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 

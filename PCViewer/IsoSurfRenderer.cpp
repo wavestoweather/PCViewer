@@ -44,10 +44,14 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	brushBuffer = VK_NULL_HANDLE;
 	brushMemory = VK_NULL_HANDLE;
 	brushByteSize = 0;
-	shade = true;
+	shade = false;
 	stepSize = .0013f;
 
-	camPos = glm::vec3(2, 2, 2);
+	cameraPos = glm::vec3(1, 0, 1);
+	cameraRot = glm::vec2(0, .78f);
+	flySpeed = .5f;
+	fastFlyMultiplier = 2.5f;
+	rotationSpeed = .15f;
 	lightDir = glm::vec3(-1, -1, -1);
 
 	//setting up graphic resources
@@ -572,21 +576,39 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	render();
 }
 
-void IsoSurfRenderer::updateCameraPos(float* mouseMovement)
+void IsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float deltaT)
 {
-	//rotation matrix for height adjustment
-	glm::mat4 vertical;
-	vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALPANSPEED, glm::normalize(glm::cross(camPos, glm::vec3(0, 1, 0))));
-	glm::vec3 temp = vertical * glm::vec4(camPos, 1);
-	if (dot(temp, glm::vec3(1, 0, 0)) * dot(camPos, glm::vec3(1, 0, 0)) < 0 || dot(temp, glm::vec3(0, 0, 1)) * dot(camPos, glm::vec3(0, 0, 1)) < 0)
-		vertical = glm::mat4(1.0f);
-	//rotation matrix for horizontal adjustment
-	glm::mat4 horizontal = glm::rotate(glm::mat4(1.0f), mouseMovement[0] * HORIZONTALPANSPEED, glm::vec3(0, 1, 0));
-	camPos = horizontal * vertical * glm::vec4(camPos,1);
+	//first do the rotation, as the user has a more inert feeling when the fly direction matches the view direction instantly
+	if (input.mouseDeltaX) {
+		cameraRot.y -= rotationSpeed * input.mouseDeltaX * deltaT;
+	}
+	if (input.mouseDeltaY) {
+		cameraRot.x -= rotationSpeed * input.mouseDeltaY * deltaT;
+	}
 
-	//adding zooming
-	glm::vec3 zoomDir = -camPos;
-	camPos += ZOOMSPEED * zoomDir * mouseMovement[2];
+	glm::mat4 rot = glm::eulerAngleYX(cameraRot.y, cameraRot.x);
+	if (input.a) {	//fly left
+		glm::vec4 left = rot * glm::vec4(-1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(left.x, left.y, left.z);
+	}
+	if (input.d) {	//fly right
+		glm::vec4 right = rot * glm::vec4(1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(right.x, right.y, right.z);
+	}
+	if (input.s) {	//fly backward
+		glm::vec4 back = rot * glm::vec4(0, 0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(back.x, back.y, back.z);
+	}
+	if (input.w) {	//fly forward
+		glm::vec4 front = rot * glm::vec4(0, 0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		cameraPos += glm::vec3(front.x, front.y, front.z);
+	}
+	if (input.q) {	//fly down
+		cameraPos += glm::vec3(0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
+	if (input.e) {	//fly up
+		cameraPos += glm::vec3(0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
 }
 
 void IsoSurfRenderer::addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
@@ -628,11 +650,11 @@ void IsoSurfRenderer::render()
 	UniformBuffer ubo;
 	ubo.mvp = glm::perspective(glm::radians(45.0f), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);;
 	ubo.mvp[1][1] *= -1;
-	glm::mat4 look = glm::lookAt(camPos, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+	glm::mat4 view = glm::transpose(glm::eulerAngleY(cameraRot.y) * glm::eulerAngleX(cameraRot.x)) * glm::translate(glm::mat4(1.0), -cameraPos);;
 	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
 	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
-	ubo.mvp = ubo.mvp * look *scale;
-	ubo.camPos = glm::inverse(scale) * glm::vec4(camPos,1);
+	ubo.mvp = ubo.mvp * view *scale;
+	ubo.camPos = glm::inverse(scale) * glm::vec4(cameraPos,1);
 
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
 	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;
