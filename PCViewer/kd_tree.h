@@ -41,11 +41,49 @@ public:
 				}
 			}
 			curIndices = backIndices;
-			backIndices = {};
+			backIndices.clear();
 		}
 		PCUtil::matrixdump(curIndices);
-		int curIndex = 0;
-		//root = buildRec(0, indices, data, attributes, initialBounds, recursionDepth);
+
+		int headSize = ceil(log2(curIndices.size()));
+		std::vector<int> curKds;
+		for (int line = 0; line < curIndices.size(); ++line) {
+			std::vector<std::pair<float, float>> bounds;
+			for (int bound = 0; bound < curIndices[line].size(); ++bound) {
+				bounds.push_back(initialBounds[bound][curIndices[line][bound]]);
+			}
+			curKds.push_back(buildRec(0, indices, data, attributes, bounds, recursionDepth - headSize));
+		}
+		std::vector<int> backKds;
+		while (curKds.size() > 1) {
+			for (int i = 0; i < curKds.size() - 1; i += 2) {
+				Node curNode{};
+				curNode.leftChild = curKds[i];
+				curNode.rightChild = curKds[i + 1];
+				for (int bound = 0; bound < nodes[curNode.leftChild].bounds.size(); ++bound) {
+					std::pair<float, float> bounds;
+					bounds.first = (nodes[curNode.leftChild].bounds[bound].first < nodes[curNode.rightChild].bounds[bound].first) ? nodes[curNode.leftChild].bounds[bound].first : nodes[curNode.rightChild].bounds[bound].first;
+					bounds.second = (nodes[curNode.leftChild].bounds[bound].second > nodes[curNode.rightChild].bounds[bound].second) ? nodes[curNode.leftChild].bounds[bound].second : nodes[curNode.rightChild].bounds[bound].second;
+					curNode.bounds.push_back(bounds);
+				}
+				curNode.split = (nodes[curNode.leftChild].split - 1 + attributes.size()) % attributes.size();
+				nodes.push_back(curNode);
+				backKds.push_back(nodes.size() - 1);
+			}
+			if (curKds.size() & 1) {
+				Node curNode{};
+				curNode.leftChild = curKds.back();
+				curNode.rightChild = -1;
+				curNode.split = (nodes[curNode.leftChild].split - 1 + attributes.size()) % attributes.size();
+				curNode.bounds = nodes[curNode.leftChild].bounds;
+				nodes.push_back(curNode);
+				backKds.push_back(nodes.size() - 1);
+			}
+			curKds = backKds;
+			backKds.clear();
+		}
+
+		root = curKds[0];
 	};
 	~KdTree() {};
 
@@ -102,27 +140,29 @@ private:
 				switch (adjustBounds) {
 				case KdTree_Bounds_Static: break;
 				case KdTree_Bounds_Pull_In_Outer_Border:
-					if (val < leftBounds[split].first) leftBounds[split].first = val;
+					if (val < leftBounds[split].first && val >= bounds[split].first) leftBounds[split].first = val;
 					break;
 				case KdTree_Bounds_Pull_In_Both_Borders:
-					if (val < leftBounds[split].first) leftBounds[split].first = val;
-					if (val > leftBounds[split].second) leftBounds[split].second = val;
+					if (val < leftBounds[split].first && val >= bounds[split].first) leftBounds[split].first = val;
+					if (val > leftBounds[split].second && val <= bounds[split].second) leftBounds[split].second = val;
 					break;
 				}
-				leftPts.push_back(i);
+				if(val >= bounds[split].first)
+					leftPts.push_back(i);
 			}
 			else {
 				switch (adjustBounds) {
 				case KdTree_Bounds_Static: break;
 				case KdTree_Bounds_Pull_In_Outer_Border:
-					if (val > rightBounds[split].second) rightBounds[split].second = val;
+					if (val > rightBounds[split].second && val <= bounds[split].second) rightBounds[split].second = val;
 					break;
 				case KdTree_Bounds_Pull_In_Both_Borders:
-					if (val > rightBounds[split].second) rightBounds[split].second = val;
-					if (val < rightBounds[split].first) rightBounds[split].first = val;
+					if (val > rightBounds[split].second && val <= bounds[split].second) rightBounds[split].second = val;
+					if (val < rightBounds[split].first && val >= bounds[split].first) rightBounds[split].first = val;
 					break;
 				}
-				rightPts.push_back(i);
+				if(val <= bounds[split].second)
+					rightPts.push_back(i);
 			}
 		}
 		

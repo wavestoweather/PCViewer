@@ -5746,7 +5746,8 @@ int main(int, char**)
 #ifdef _DEBUG
 								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
-								globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+
+								globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
 #ifdef _DEBUG
 								std::cout << "Kd tree done." << std::endl;
 #endif
