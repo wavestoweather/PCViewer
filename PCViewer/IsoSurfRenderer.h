@@ -17,6 +17,7 @@ The iso surfaces are set by brushes.
 #include <limits.h>
 #include <string.h>
 #include <map>
+#include <numeric>
 
 #define VERTICALPANSPEED .01f
 #define HORIZONTALPANSPEED .01f

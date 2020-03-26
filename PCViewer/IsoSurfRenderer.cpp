@@ -400,7 +400,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	for (int i = 0; i < required3dImages; ++i) {
 		densityImages[i] = new float[w * d * h];
 		for (int j = 0; j < w * d * h; ++j) {
-			densityImages[i][j] = -1.0f / 0;
+			densityImages[i][j] = std::numeric_limits<float>::infinity();
 		}
 	}
 	bool error = false;
