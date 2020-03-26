@@ -5646,6 +5646,9 @@ int main(int, char**)
 							GlobalBrush preview;
 							preview.active = true;
 							preview.name = templateBrushes[i].name;
+							for (int i = 0; i < pcAttributes.size(); ++i) {
+								preview.brushes[i] = {};
+							}
 							for (const auto& brush : templateBrushes[i].brushes) {
 								preview.brushes[brush.first].push_back(std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, brush.second));
 							}
@@ -5732,6 +5735,7 @@ int main(int, char**)
 								//NOTE: only the first brush for each axis is taken
 								int index = 0;
 								for (auto brush : globalBrushes[i].brushes) {
+									if (!brush.second.size()) continue;
 									globalBrushes[i].attributes.push_back(brush.first);
 									bounds.push_back({});
 									for (auto& minMax : brush.second) {
@@ -6242,7 +6246,7 @@ int main(int, char**)
 				//drawing the template brush, these are not changeable
 				if (selectedTemplateBrush != -1) {
 					for (const auto& brush : globalBrushes.back().brushes) {
-						if (!pcAttributeEnabled[brush.first])
+						if (!pcAttributeEnabled[brush.first] || !brush.second.size())
 							continue;
 
 						float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
@@ -7491,9 +7495,13 @@ int main(int, char**)
 			}
 			ImGui::PopItemWidth();
 
+			static glm::uvec3 posIndices{ 0,2,1 };
+			ImGui::DragInt3("Position indices", (int*)&posIndices.x, 0.00000001f, 0, pcAttributes.size());
+
 			static bool showError = false;
+			static bool positionError = false;
 			if (ImGui::Button("Add new iso surface")) {
-				if (selectedDrawlist == -1 || selectedGlobalBrush == -1) {
+				if (selectedDrawlist == -1 || selectedGlobalBrush == -1 || posIndices.x==posIndices.y || posIndices.y==posIndices.z || posIndices.x==posIndices.z) {
 					showError = true;
 				}
 				else {
@@ -7531,10 +7539,22 @@ int main(int, char**)
 					}
 					if(index == -1)
 						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
-					isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices, miMa, index);
+					if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index) && index == -1) {
+						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
+						positionError = true;
+					}
+					else {
+						positionError = false;
+					}
 				}
 			}
-			if (showError) ImGui::TextColored({ 1,0,0,1 }, "You have to select a dralist and a global brush!");
+			if (showError) {
+				ImGui::TextColored({ 1,0,0,1 }, "You have to select a drawlist and a global brush!");
+				ImGui::TextColored({ 1,0,0,1 }, "Or you made a mistake when setting the positon indices!");
+			}
+			if (positionError) {
+				ImGui::TextColored({ 1,0,0,1 }, "The binary volume coulndt be created! Perhaps there is a error with the position indices.");
+			}
 			ImGui::Separator();
 			ImGui::Text("Active iso sufaces:");
 			ImGui::Columns(3);

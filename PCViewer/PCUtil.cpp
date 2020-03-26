@@ -51,3 +51,13 @@ void PCUtil::numdump(const int* ptr, int len)
 		std::cout << ptr[i] << std::endl;
 	}
 }
+
+void PCUtil::matrixdump(const std::vector<std::vector<int>>& matrix)
+{
+	for (auto& x : matrix) {
+		for (auto& y : x) {
+			std::cout << y << " ";
+		}
+		std::cout << std::endl;
+	}
+}

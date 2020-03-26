@@ -17,11 +17,34 @@ public:
 		this->attributes = attributes;
 
 		bool done = false;
-		std::vector<int> curIndices(indices.size(),0);
-		int curIndex = 0;
-		while (!done) {
-
+		std::vector<std::vector<int>> curIndices;
+		std::vector<std::vector<int>> backIndices;
+		for (int i = 0; i < initialBounds.size(); ++i) {
+			if (!curIndices.size()) {
+				for (int neww = 0; neww < initialBounds[i].size(); ++neww) {
+					backIndices.push_back({ neww });
+				}
+			}
+			else {
+				for (int line = 0; line < curIndices.size(); ++line) {
+					for (int neww = 0; neww < initialBounds[i].size(); ++neww) {
+						backIndices.push_back({});
+						for (int j = 0; j <= i; ++j) {
+							if (j < i) {
+								backIndices.back().push_back(curIndices[line][j]);
+							}
+							else {
+								backIndices.back().push_back(neww);
+							}
+						}
+					}
+				}
+			}
+			curIndices = backIndices;
+			backIndices = {};
 		}
+		PCUtil::matrixdump(curIndices);
+		int curIndex = 0;
 		//root = buildRec(0, indices, data, attributes, initialBounds, recursionDepth);
 	};
 	~KdTree() {};

@@ -228,7 +228,7 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 	render();
 }
 
-void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float,float>>>& brush, int index)
+bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float,float>>>& brush, int index)
 {
 	VkResult err;
 
@@ -403,27 +403,31 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 			densityImages[i][j] = -1.0f / 0;
 		}
 	}
+	bool error = false;
 	for (int i : indices) {
 		int x = SpacialData::getRlatIndex(data[i][positionIndices.x]);
 		int y = SpacialData::getAltitudeIndex(data[i][positionIndices.y]);
 		if (y > h - 44)
 			y = (y - h + 44) * 2 + (h - 44);
 		int z = SpacialData::getRlonIndex(data[i][positionIndices.z]);
-		assert(x >= 0);
-		assert(y >= 0);
-		assert(z >= 0);
+		if (x < 0 || y < 0 || z < 0) { 
+			error = true; 
+			break;
+		}
 
 		for (int j = 0; j < required3dImages; ++j) {
 			densityImages[j][IDX3D(x, y, z, w, h)] = data[i][densityAttributes[j]];
 			if (y >= h - 44) densityImages[j][IDX3D(x, y + 1, z, w, h)] = data[i][densityAttributes[j]];
 		}
 	}
-
+	
 	for (int i = 0; i < required3dImages; ++i) {
-		VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_FORMAT_R32_SFLOAT, w, h, d, densityImages[i], w * h * d * sizeof(float));
+		if(!error)
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_FORMAT_R32_SFLOAT, w, h, d, densityImages[i], w * h * d * sizeof(float));
 		delete[] densityImages[i];
 	}
 	delete[] densityImages;
+	if (error) return false;
 
 	VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
 	for (int i = 0; i < required3dImages; ++i) {
@@ -567,13 +571,14 @@ void IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 
 	if (!descriptorSet) {
 		resize(1, 1);
-		return;
+		return true;
 	}
 
 	updateBrushBuffer();
 	updateDescriptorSet();
 	updateCommandBuffer();
 	render();
+	return true;
 }
 
 void IsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float deltaT)
