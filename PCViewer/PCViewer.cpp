@@ -7533,8 +7533,10 @@ int main(int, char**)
 			}
 			ImGui::PopItemWidth();
 
+			ImGui::PushItemWidth(300);
 			static glm::uvec3 posIndices{ 0,2,1 };
-			ImGui::DragInt3("Position indices", (int*)&posIndices.x, 0.00000001f, 0, pcAttributes.size());
+			ImGui::DragInt3("Position indices (Order: lat, alt, lon)", (int*)&posIndices.x, 0.00000001f, 0, pcAttributes.size());
+			ImGui::PopItemWidth();
 
 			static bool showError = false;
 			static bool positionError = false;
