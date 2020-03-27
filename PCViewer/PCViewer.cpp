@@ -4735,13 +4735,17 @@ int main(int, char**)
 	engine.seed(15);
 
 	//test of multivariate gauss calculations
-	//std::vector<std::vector<double>> X{ {2.5, 2.4}, {0.5, 0.7} };
-	//std::vector<std::vector<double>> S(X[0].size(),std::vector<double>(X[0].size()));
+	//std::vector<std::vector<double>> X{ {4,2,.60}, {4.2,2.1,.59},{3.9,2,.58},{4.3,2.1,0.62},{4.1,2.2,.63} };
+	//std::vector<std::vector<double>> S(X[0].size(),std::vector<double>(X[0].size())), I(X[0].size(), std::vector<double>(X[0].size())), D(X[0].size(), std::vector<double>(X[0].size()));
 	//std::vector<double> mean(X[0].size());
 	//MultivariateGauss::compute_average_vector(X, mean);
 	//MultivariateGauss::compute_covariance_matrix(X, S);
+	//MultivariateGauss::compute_matrix_inverse(S, I);
+	//MultivariateGauss::compute_matrix_times_matrix(S, I, D);
 	//PCUtil::matrixdump(X);
 	//PCUtil::matrixdump(S);
+	//PCUtil::matrixdump(I);
+	//PCUtil::matrixdump(D);
 
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
