@@ -13,6 +13,7 @@ public:
 	static void numdump(const float* ptr, int len);
 	static void numdump(const int* ptr, int len);
 	static void matrixdump(const std::vector<std::vector<int>>& matrix);
+	static void matrixdump(const std::vector<std::vector<double>>& matrix);
 };
 
 #endif

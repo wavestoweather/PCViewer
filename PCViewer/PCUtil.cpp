@@ -61,3 +61,13 @@ void PCUtil::matrixdump(const std::vector<std::vector<int>>& matrix)
 		std::cout << std::endl;
 	}
 }
+
+void PCUtil::matrixdump(const std::vector<std::vector<double>>& matrix)
+{
+	for (auto& x : matrix) {
+		for (auto& y : x) {
+			std::cout << y << " ";
+		}
+		std::cout << std::endl;
+	}
+}

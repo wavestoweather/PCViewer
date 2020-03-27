@@ -48,6 +48,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "CameraNav.hpp"
 #include "HistogramManager.h"
 #include "IsoSurfRenderer.h"
+#include "MultivariateGauss.h"
 
 #include "ColorPalette.h"
 
@@ -387,6 +388,13 @@ enum ViolinScale {
 	ViolinScaleLocal,
 	ViolinScaleGlobal,
 	ViolinScaleGlobalAttribute
+};
+
+enum ViolinYScale {
+	ViolinYScaleStandard,
+	ViolinYScaleLocalBrush,
+	ViolinYScaleGlobalBrush,
+	ViolinYScaleBrushes
 };
 
 struct DrawListRef {
@@ -745,6 +753,7 @@ static float violinPlotBinsSize = 150;
 static ImVec4 violinBackgroundColor = { 1,1,1,1 };
 static bool coupleViolinPlots = true;
 static bool yScaleToCurrenMax = false;
+static ViolinYScale violinYScale = ViolinYScaleStandard;
 std::vector<ViolinPlot> violinAttributePlots;
 std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 
@@ -4684,6 +4693,15 @@ int main(int, char**)
 
 	engine.seed(15);
 
+	//test of multivariate gauss calculations
+	//std::vector<std::vector<double>> X{ {2.5, 2.4}, {0.5, 0.7} };
+	//std::vector<std::vector<double>> S(X[0].size(),std::vector<double>(X[0].size()));
+	//std::vector<double> mean(X[0].size());
+	//MultivariateGauss::compute_average_vector(X, mean);
+	//MultivariateGauss::compute_covariance_matrix(X, S);
+	//PCUtil::matrixdump(X);
+	//PCUtil::matrixdump(S);
+
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
 	//float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
@@ -7657,6 +7675,23 @@ int main(int, char**)
 		//end of so surface window -----------------------------------------------------------------------
 		
 		//begin of violin plots attribute major ----------------------------------------------------------
+		std::vector<std::pair<float, float>> globalMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+		if (violinYScale == ViolinYScaleGlobalBrush || violinYScale == ViolinYScaleBrushes) {
+			for (auto& brush : globalBrushes) {
+				for (auto& br : brush.brushes) {
+					for (auto& minMax : br.second) {
+						if (minMax.second.first < globalMinMax[br.first].first) globalMinMax[br.first].first = minMax.second.first;
+						if (minMax.second.second > globalMinMax[br.first].second) globalMinMax[br.first].second = minMax.second.second;
+					}
+				}
+			}
+			for (int in = 0; in < globalMinMax.size(); ++in) {
+				if (globalMinMax[in].first == std::numeric_limits<float>().max()) {
+					globalMinMax[in].first = pcAttributes[in].min;
+					globalMinMax[in].second = pcAttributes[in].max;
+				}
+			}
+		}
 		if (enableAttributeViolinPlots) {
 			ImGui::Begin("Violin attribute window", &enableAttributeViolinPlots, ImGuiWindowFlags_MenuBar);
 			if (ImGui::BeginMenuBar()) {
@@ -7738,7 +7773,16 @@ int main(int, char**)
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues();
 					}
-					ImGui::Checkbox("y-scale to current max", &yScaleToCurrenMax);
+					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
+					if (ImGui::BeginCombo("Y Scale", violinYs[violinYScale])) {
+						for (int v = 0; v < 4; ++v) {
+							if (ImGui::MenuItem(violinYs[v])) {
+								violinYScale =(ViolinYScale) v;
+							}
+						}
+						ImGui::EndCombo();
+					}
+					//ImGui::Checkbox("y-scale to current max", &yScaleToCurrenMax);
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -7941,27 +7985,62 @@ int main(int, char**)
 								}
 							}
 						}
+						std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+							for (int j = 0; j < pcAttributes.size(); ++j) {
+								for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
+									if (dl->brushes[j][mi].minMax.first < localMinMax[j].first) localMinMax[j].first = dl->brushes[j][mi].minMax.first;
+									if (dl->brushes[j][mi].minMax.second > localMinMax[j].second) localMinMax[j].second = dl->brushes[j][mi].minMax.second;
+								}
+							}
+							for (int j = 0; j < pcAttributes.size(); ++j) {
+								if (localMinMax[j].first == std::numeric_limits<float>().max()) {
+									localMinMax[j].first = pcAttributes[j].min;
+									localMinMax[j].second = pcAttributes[j].max;
+								}
+							}
+						}
 						
 						float histYStart;
 						float histYEnd;
-						if (dl && dl->brushes[j].size()) {
-							float max = dl->brushes[j][0].minMax.second;
-							float min = dl->brushes[j][0].minMax.first;
-							for (int mi = 1; mi < dl->brushes[j].size(); ++mi) {
-								if (dl->brushes[j][mi].minMax.first < min) min = dl->brushes[j][mi].minMax.first;
-								if (dl->brushes[j][mi].minMax.second > max) max = dl->brushes[j][mi].minMax.second;
-							}
-							histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
-							histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
-						}
-						else {
-							histYStart = ((hist.ranges[j].second - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
-							histYEnd = ((hist.ranges[j].first - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
-						}
-						if (!yScaleToCurrenMax) {
+						switch (violinYScale) {
+						case ViolinYScaleStandard:
 							histYStart = 0;
 							histYEnd = size.y;
+							break;
+						case ViolinYScaleLocalBrush:
+							histYStart = ((hist.ranges[j].second - localMinMax[j].second) / (localMinMax[j].first - localMinMax[j].second) * size.y);
+							histYEnd = ((hist.ranges[j].first - localMinMax[j].second) / (localMinMax[j].first - localMinMax[j].second) * size.y);
+							break;
+						case ViolinYScaleGlobalBrush:
+							histYStart = ((hist.ranges[j].second - globalMinMax[j].second) / (globalMinMax[j].first - globalMinMax[j].second) * size.y);
+							histYEnd = ((hist.ranges[j].first - globalMinMax[j].second) / (globalMinMax[j].first - globalMinMax[j].second) * size.y);
+							break;
+						case ViolinYScaleBrushes:
+							float min = (localMinMax[j].first < globalMinMax[j].first) ? localMinMax[j].first : globalMinMax[j].first;
+							float max = (localMinMax[j].second < globalMinMax[j].second) ? localMinMax[j].second : globalMinMax[j].second;
+							histYStart = ((hist.ranges[j].second - max) / (min - max) * size.y);
+							histYEnd = ((hist.ranges[j].first - max) / (min - max) * size.y);
+							break;
 						}
+						//if (dl && dl->brushes[j].size()) {
+						//	float max = dl->brushes[j][0].minMax.second;
+						//	float min = dl->brushes[j][0].minMax.first;
+						//	for (int mi = 1; mi < dl->brushes[j].size(); ++mi) {
+						//		if (dl->brushes[j][mi].minMax.first < min) min = dl->brushes[j][mi].minMax.first;
+						//		if (dl->brushes[j][mi].minMax.second > max) max = dl->brushes[j][mi].minMax.second;
+						//	}
+						//	histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+						//	histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
+						//}
+						//else {
+						//	histYStart = ((hist.ranges[j].second - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
+						//	histYEnd = ((hist.ranges[j].first - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
+						//}
+						//if (!yScaleToCurrenMax) {
+						//	histYStart = 0;
+						//	histYEnd = size.y;
+						//}
 						float histYFillStart = (histYStart < 0) ? 0 : histYStart;
 						float histYFillEnd = (histYEnd > size.y) ? size.y : histYEnd;
 						float histYLineStart = histYStart + leftUpperCorner.y;
@@ -8114,7 +8193,16 @@ int main(int, char**)
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues();
 					}
-					ImGui::Checkbox("y-scale to current max", &yScaleToCurrenMax);
+					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
+					if (ImGui::BeginCombo("Y Scale", violinYs[violinYScale])) {
+						for (int v = 0; v < 4; ++v) {
+							if (ImGui::MenuItem(violinYs[v])) {
+								violinYScale = (ViolinYScale)v;
+							}
+						}
+						ImGui::EndCombo();
+					}
+					//ImGui::Checkbox("y-scale to current max", &yScaleToCurrenMax);
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -8163,37 +8251,6 @@ int main(int, char**)
 							std::vector<std::pair<uint32_t, float>> area;
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
 							violinDrawlistPlots[i].attributeOrder[j] = sortHistogram(hist, violinDrawlistPlots[i]);
-							//for (unsigned int k = 0; k < violinDrawlistPlots[i].attributeNames.size(); ++k) {
-							//	float a = 0;
-							//	switch (violinDrawlistPlots[i].violinScalesX[k]) {
-							//	case ViolinScaleSelf:
-							//		a = hist.area[k] / hist.maxCount[k];
-							//		break;
-							//	case ViolinScaleLocal:
-							//		a = hist.area[k] / hist.maxGlobalCount;
-							//		break;
-							//	case ViolinScaleGlobal:
-							//		a = hist.area[k] / violinDrawlistPlots[i].maxGlobalValue;
-							//		break;
-							//	case ViolinScaleGlobalAttribute:
-							//		//for (int l = 0; l < hist.bins[k].size(); ++l) {
-							//		//	a += hist.bins[k][l];
-							//		//}
-							//		a /= hist.area[k] / violinDrawlistPlots[i].maxValues[k];
-							//		break;
-							//	}
-							//
-							//	a *= violinDrawlistPlots[i].attributeScalings[k];
-							//	if (violinDrawlistPlots[i].attributePlacements[k] == ViolinLeftHalf ||
-							//		violinDrawlistPlots[i].attributePlacements[k] == ViolinRightHalf ||
-							//		violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleLeft ||
-							//		violinDrawlistPlots[i].attributePlacements[k] == ViolinMiddleRight)
-							//		a *= .5f;
-							//
-							//	area.push_back({ k,a });
-							//}
-							//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-							//for (int k = 0; k < pcAttributes.size(); ++k)violinDrawlistPlots[i].attributeOrder[j][k] = (area[k].first);
 						}
 					}
 					ImGui::NextColumn();
@@ -8364,10 +8421,25 @@ int main(int, char**)
 						ImGui::PushClipRect(framePos, framePos + size, false);
 						HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
 						DrawList* dl = nullptr;
-						if (yScaleToCurrenMax) {
+						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
 							for (DrawList& draw : g_PcPlotDrawLists) {
 								if (draw.name == violinDrawlistPlots[i].drawLists[j]) {
 									dl = &draw;
+								}
+							}
+						}
+						std::vector<std::pair<float, float>> localMinMax = std::vector<std::pair<float,float>>(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+							for (int k = 0; k < pcAttributes.size(); ++k) {
+								for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
+									if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
+									if (dl->brushes[k][mi].minMax.second > localMinMax[k].second) localMinMax[k].second = dl->brushes[k][mi].minMax.second;
+								}
+							}
+							for (int k = 0; k < pcAttributes.size(); ++k) {
+								if (localMinMax[k].first == std::numeric_limits<float>().max()) {
+									localMinMax[k].first = pcAttributes[k].min;
+									localMinMax[k].second = pcAttributes[k].max;
 								}
 							}
 						}
@@ -8376,24 +8448,44 @@ int main(int, char**)
 							
 							float histYStart;
 							float histYEnd;
-							if (dl && dl->brushes[k].size()) {
-								float max = dl->brushes[k][0].minMax.second;
-								float min = dl->brushes[k][0].minMax.first;
-								for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
-									if (dl->brushes[k][mi].minMax.first < min) min = dl->brushes[k][mi].minMax.first;
-									if (dl->brushes[k][mi].minMax.second > max) max = dl->brushes[k][mi].minMax.second;
-								}
-								histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
-								histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
-							}
-							else {
-								histYStart = ((hist.ranges[k].second - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
-								histYEnd = ((hist.ranges[k].first - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
-							}
-							if (!yScaleToCurrenMax) {
+							switch (violinYScale) {
+							case ViolinYScaleStandard:
 								histYStart = 0;
 								histYEnd = size.y;
+								break;
+							case ViolinYScaleLocalBrush:
+								histYStart = ((hist.ranges[k].second - localMinMax[k].second) / (localMinMax[k].first - localMinMax[k].second) * size.y);
+								histYEnd = ((hist.ranges[k].first - localMinMax[k].second) / (localMinMax[k].first - localMinMax[k].second) * size.y);
+								break;
+							case ViolinYScaleGlobalBrush:
+								histYStart = ((hist.ranges[k].second - globalMinMax[k].second) / (globalMinMax[k].first - globalMinMax[k].second) * size.y);
+								histYEnd = ((hist.ranges[k].first - globalMinMax[k].second) / (globalMinMax[k].first - globalMinMax[k].second) * size.y);
+								break;
+							case ViolinYScaleBrushes:
+								float min = (localMinMax[k].first < globalMinMax[k].first) ? localMinMax[k].first : globalMinMax[k].first;
+								float max = (localMinMax[k].second > globalMinMax[k].second) ? localMinMax[k].second : globalMinMax[k].second;
+								histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+								histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
+								break;
 							}
+							//if (dl && dl->brushes[k].size()) {
+							//	float max = dl->brushes[k][0].minMax.second;
+							//	float min = dl->brushes[k][0].minMax.first;
+							//	for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
+							//		if (dl->brushes[k][mi].minMax.first < min) min = dl->brushes[k][mi].minMax.first;
+							//		if (dl->brushes[k][mi].minMax.second > max) max = dl->brushes[k][mi].minMax.second;
+							//	}
+							//	histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+							//	histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
+							//}
+							//else {
+							//	histYStart = ((hist.ranges[k].second - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
+							//	histYEnd = ((hist.ranges[k].first - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
+							//}
+							//if (!yScaleToCurrenMax) {
+							//	histYStart = 0;
+							//	histYEnd = size.y;
+							//}
 							float histYFillStart = (histYStart < 0) ? 0 : histYStart;
 							float histYFillEnd = (histYEnd > size.y) ? size.y : histYEnd;
 							float histYLineStart = histYStart + framePos.y;
