@@ -43,7 +43,7 @@ public:
 			curIndices = backIndices;
 			backIndices.clear();
 		}
-		PCUtil::matrixdump(curIndices);
+		//PCUtil::matrixdump(curIndices);
 
 		int headSize = ceil(log2(curIndices.size()));
 		std::vector<int> curKds;

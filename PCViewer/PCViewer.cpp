@@ -315,6 +315,7 @@ struct DataSet {
 
 struct GlobalBrush {
 	bool active;										//global brushes can be activated and deactivated
+	bool edited;										//indicates if the brush was edited. This is important for kd-tree creation
 	TemplateList* parent;
 	DataSet* parentDataset;
 	std::vector<int> attributes;
@@ -5616,6 +5617,7 @@ int main(int, char**)
 						combo.name += brush.name.substr(5) + "|";
 					}
 					combo.active = true;
+					combo.edited = true;
 					combo.name += ")";
 					combo.parent = nullptr;
 
@@ -5645,6 +5647,7 @@ int main(int, char**)
 							selectedTemplateBrush = i;
 							GlobalBrush preview;
 							preview.active = true;
+							preview.edited = false;
 							preview.name = templateBrushes[i].name;
 							for (int i = 0; i < pcAttributes.size(); ++i) {
 								preview.brushes[i] = {};
@@ -5727,6 +5730,32 @@ int main(int, char**)
 								}
 								ImGui::EndCombo();
 							}
+							if (ImGui::MenuItem("Recreate brush fractures")) {
+								delete globalBrushes[i].kdTree;
+								std::vector<std::vector<std::pair<float, float>>> bounds;
+								globalBrushes[i].attributes.clear();
+								//NOTE: only the first brush for each axis is taken
+								int index = 0;
+								for (auto brush : globalBrushes[i].brushes) {
+									if (!brush.second.size()) continue;
+									globalBrushes[i].attributes.push_back(brush.first);
+									bounds.push_back({});
+									for (auto& minMax : brush.second) {
+										bounds[index].push_back(minMax.second);
+									}
+									index++;
+								}
+#ifdef _DEBUG
+								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
+#endif
+								if (globalBrushes[i].edited)
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+								else
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+#ifdef _DEBUG
+								std::cout << "Kd tree done." << std::endl;
+#endif
+							}
 						}
 						else {
 							if (ImGui::MenuItem("Create brush fractures")) {
@@ -5746,13 +5775,16 @@ int main(int, char**)
 #ifdef _DEBUG
 								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
-
-								globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+								if(globalBrushes[i].edited)
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+								else
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
 #ifdef _DEBUG
 								std::cout << "Kd tree done." << std::endl;
 #endif
 							}
 						}
+						ImGui::MenuItem("Brush edited", "", &globalBrushes[i].edited);
 						if (ImGui::MenuItem("Focus axis on brush")) {
 							std::pair<float, float> mm;
 							for (auto& axis : globalBrushes[i].brushes) {
@@ -5938,6 +5970,7 @@ int main(int, char**)
 
 						GlobalBrush gb = {};
 						gb.active = true;
+						gb.edited = true;
 						gb.name = dl->name;
 						gb.parent = dl->parentTemplateList;
 						DataSet* ds = &(*std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [dl](auto d) {return d.name == dl->parentDataSet; }));
@@ -6156,6 +6189,7 @@ int main(int, char**)
 								}
 								//drag edge
 								if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseDown[0]) {
+									globalBrushes[selectedGlobalBrush].edited = true;
 									if (brushDragMode == 0) {
 										float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
 										br.second.second -= delta;
@@ -6218,6 +6252,7 @@ int main(int, char**)
 							}
 							//deleting a brush
 							if (del != -1) {
+								globalBrushes[selectedGlobalBrush].edited = true;
 								brush.second[del] = brush.second[brush.second.size() - 1];
 								brush.second.pop_back();
 								del = -1;
@@ -6231,6 +6266,7 @@ int main(int, char**)
 								ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
 								if (ImGui::GetIO().MouseClicked[0]) {
+									globalBrushes[selectedGlobalBrush].edited = true;
 									std::pair<unsigned int, std::pair<float, float>> temp = {};
 									temp.first = currentBrushId++;
 									temp.second.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[brush.first].min - pcAttributes[brush.first].max) + pcAttributes[brush.first].max;
@@ -6684,6 +6720,7 @@ int main(int, char**)
 							GlobalBrush brush = {};
 							brush.name = std::string(n);
 							brush.active = true;
+							brush.edited = false;
 							for (int i = 0; i < pcAttributes.size(); i++) {
 								if (activeBrushAttributes[i]) {
 									brush.brushes[i].push_back(std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]));
