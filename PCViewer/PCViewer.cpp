@@ -7676,6 +7676,7 @@ int main(int, char**)
 		
 		//begin of violin plots attribute major ----------------------------------------------------------
 		std::vector<std::pair<float, float>> globalMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+		std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 		if (violinYScale == ViolinYScaleGlobalBrush || violinYScale == ViolinYScaleBrushes) {
 			for (auto& brush : globalBrushes) {
 				for (auto& br : brush.brushes) {
@@ -7985,10 +7986,10 @@ int main(int, char**)
 								}
 							}
 						}
-						std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+						//std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
 							for (int j = 0; j < pcAttributes.size(); ++j) {
-								for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
+								for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
 									if (dl->brushes[j][mi].minMax.first < localMinMax[j].first) localMinMax[j].first = dl->brushes[j][mi].minMax.first;
 									if (dl->brushes[j][mi].minMax.second > localMinMax[j].second) localMinMax[j].second = dl->brushes[j][mi].minMax.second;
 								}
@@ -8428,10 +8429,10 @@ int main(int, char**)
 								}
 							}
 						}
-						std::vector<std::pair<float, float>> localMinMax = std::vector<std::pair<float,float>>(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+						//std::vector<std::pair<float, float>> localMinMax = std::vector<std::pair<float,float>>(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
 							for (int k = 0; k < pcAttributes.size(); ++k) {
-								for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
+								for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
 									if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
 									if (dl->brushes[k][mi].minMax.second > localMinMax[k].second) localMinMax[k].second = dl->brushes[k][mi].minMax.second;
 								}
