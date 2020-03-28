@@ -1,6 +1,7 @@
 #ifndef kd_tree_H
 #define kd_tree_H
 #include <vector>
+#include "MultivariateGauss.h"
 
 class KdTree {
 public:
@@ -10,13 +11,17 @@ public:
 		KdTree_Bounds_Pull_In_Both_Borders	//pull in bot borders
 	};
 
+	struct MultivariateBrush {
+		std::vector<float> mean;					//mean vector
+		std::vector<std::vector<float>> invCov;		//inverse matrix of covariance
+	};
+
 	KdTree() {};
 	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::vector<std::pair<float, float>>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
 		this->attributes = attributes;
 
-		bool done = false;
 		std::vector<std::vector<int>> curIndices;
 		std::vector<std::vector<int>> backIndices;
 		for (int i = 0; i < initialBounds.size(); ++i) {
@@ -67,6 +72,10 @@ public:
 					curNode.bounds.push_back(bounds);
 				}
 				curNode.split = (nodes[curNode.leftChild].split - 1 + attributes.size()) % attributes.size();
+				std::vector<uint32_t> activeInd = getActiveIndices(attributes, data, indices, curNode.bounds);
+				curNode.rank = activeInd.size();
+				if (attributes.size() >= activeInd.size())
+					curNode.multivariate = calcMultivariateBrush(attributes, data, activeInd);
 				nodes.push_back(curNode);
 				backKds.push_back(nodes.size() - 1);
 			}
@@ -76,6 +85,10 @@ public:
 				curNode.rightChild = -1;
 				curNode.split = (nodes[curNode.leftChild].split - 1 + attributes.size()) % attributes.size();
 				curNode.bounds = nodes[curNode.leftChild].bounds;
+				std::vector<uint32_t> activeInd = getActiveIndices(attributes, data, indices, curNode.bounds);
+				curNode.rank = activeInd.size();
+				if (attributes.size() >= activeInd.size())
+					curNode.multivariate = calcMultivariateBrush(attributes, data, activeInd);
 				nodes.push_back(curNode);
 				backKds.push_back(nodes.size() - 1);
 			}
@@ -88,12 +101,22 @@ public:
 	~KdTree() {};
 
 	std::vector<std::vector<std::pair<float, float>>> getBounds(int recursionDepth) {
-		return getBoundsRec(nodes[root], recursionDepth);
+		return getBoundsRec(nodes[root], recursionDepth, 0);
+	};
+
+	std::vector<std::vector<std::pair<float, float>>> getBounds(int recursionDepth, int minRank) {
+		return getBoundsRec(nodes[root], recursionDepth, minRank);
+	};
+
+	std::vector<MultivariateBrush> getMultivariates(int recursionDepth) {
+		return getMulBrushesRec(nodes[root], recursionDepth, attributes.size());
 	};
 
 private:
 	struct Node {
 		int split;
+		int rank;							//amount of indices in this node
+		MultivariateBrush multivariate;
 		std::vector<std::pair<float, float>> bounds;
 		int leftChild;						//index at which the childs are lying
 		int rightChild;
@@ -105,11 +128,66 @@ private:
 	int root;								//root index
 	BoundsBehaviour adjustBounds;
 
+	std::vector<uint32_t> getActiveIndices(std::vector<int>& attributes, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::pair<float, float>>& bounds) {
+		std::vector<uint32_t> res;
+		for (uint32_t i : indices) {
+			bool active = true;
+			for (int atb = 0; atb < attributes.size(); ++atb) {
+				if (data[i][attributes[atb]] < bounds[atb].first || data[i][attributes[atb]] > bounds[atb].second) {
+					active = false;
+					break;
+				}
+			}
+			if (active) {
+				res.push_back(i);
+			}
+		}
+		return res;
+	}
+
+	std::vector<int> vectorUnion(std::vector<int>& a, std::vector<int>& b) {
+		std::sort(a.begin(), a.end());
+		std::sort(b.begin(), b.end());
+		std::vector<int> res(a.size() + b.size());
+		std::set_union(a.begin(), a.end(), b.begin(), b.end(), res.begin());
+		res.erase(std::unique(res.begin(), res.end()), res.end());
+		return res;
+	};
+
+	MultivariateBrush calcMultivariateBrush(std::vector<int>& attributes, std::vector<float*>& data, std::vector<uint32_t>& indices) {
+		std::vector<std::vector<double>> dataMatrix(indices.size(), std::vector<double>(attributes.size()));
+		std::vector<std::vector<double>> covariance(attributes.size(), std::vector<double>(attributes.size(), 0));
+		std::vector<std::vector<double>> invCov(attributes.size(), std::vector<double>(attributes.size(), 0));
+		std::vector<double> mean(attributes.size(), 0);
+		for (int i = 0; i < indices.size(); ++i) {
+			for (int j = 0; j < attributes.size(); ++j) {
+				dataMatrix[i][j] = data[indices[i]][attributes[j]];
+			}
+		}
+		MultivariateGauss::compute_average_vector(dataMatrix, mean);
+		MultivariateGauss::compute_covariance_matrix(dataMatrix, covariance);
+		MultivariateGauss::compute_matrix_inverse(covariance, invCov);
+		MultivariateBrush multBrush{};
+		multBrush.mean = std::vector<float>(mean.size());
+		for (int i = 0; i < mean.size(); ++i) multBrush.mean[i] = mean[i];
+		for (int i = 0; i < invCov.size(); ++i) {
+			for (int j = 0; j < invCov.size(); ++j) {
+				multBrush.invCov[i][j] = invCov[i][j];
+			}
+		}
+		return multBrush;
+	}
+
 	int buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int> attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
 		if (!indices.size() || !recDepth) return -1;
 		Node n = {};
 		n.bounds = bounds;
 		n.split = split;
+		n.rank = indices.size();
+
+		//multivariate gauss calculation
+		if(attributes.size() >= indices.size())
+			n.multivariate = calcMultivariateBrush(attributes, data, indices);
 
 		//splitting the bounding box in the middle
 		std::vector<std::pair<float, float>> leftBounds(bounds), rightBounds(bounds);
@@ -174,21 +252,38 @@ private:
 		return nodes.size() - 1;
 	};
 
-	std::vector<std::vector<std::pair<float,float>>> getBoundsRec(Node& n, int recDepth) {
+	std::vector<std::vector<std::pair<float,float>>> getBoundsRec(Node& n, int recDepth, int minRank) {
 		if (!recDepth) {
 			std::vector<std::vector<std::pair<float,float>>> r;
 			r.push_back(n.bounds);
 			return r;
 		}
 
+		if (n.rank < minRank) return { };
+
 		//getting the bounds from the left and right child and appending the vectors
-		std::vector<std::vector<std::pair<float, float>>> left = (n.leftChild >= 0)?getBoundsRec(nodes[n.leftChild], recDepth - 1):std::vector<std::vector<std::pair<float, float>>>(), 
-			right = (n.rightChild >= 0)?getBoundsRec(nodes[n.rightChild], recDepth - 1): std::vector<std::vector<std::pair<float, float>>>();
+		std::vector<std::vector<std::pair<float, float>>> left = (n.leftChild >= 0)?getBoundsRec(nodes[n.leftChild], recDepth - 1, minRank):std::vector<std::vector<std::pair<float, float>>>(), 
+			right = (n.rightChild >= 0)?getBoundsRec(nodes[n.rightChild], recDepth - 1, minRank): std::vector<std::vector<std::pair<float, float>>>();
 		left.reserve(left.size() + right.size());
 		left.insert(left.end(), right.begin(), right.end());
 		return left;
 	};
-};
 
+	std::vector<MultivariateBrush> getMulBrushesRec(Node& n, int recDepth, int minRank) {
+		if (!recDepth) {
+			std::vector<MultivariateBrush> r;
+			r.push_back(n.multivariate);
+			return r;
+		}
+
+		if (n.rank < minRank) return { };
+
+		std::vector<MultivariateBrush> left = (n.leftChild >= 0) ? getMulBrushesRec(nodes[n.leftChild], recDepth - 1, minRank) : std::vector<MultivariateBrush>(),
+			right = (n.rightChild >= 0) ? getMulBrushesRec(nodes[n.rightChild], recDepth - 1, minRank) : std::vector<MultivariateBrush>();
+		left.reserve(left.size() + right.size());
+		left.insert(left.end(), right.begin(), right.end());
+		return left;
+	}
+};
 
 #endif // !kd_tree_H
