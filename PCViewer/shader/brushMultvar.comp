@@ -1,0 +1,88 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+layout(std430, binding = 0) buffer Informations{
+	uint amtOfAttributes;
+	uint amtOfMultvarAxes;
+	uint amtOfMultvar;
+	uint amtOfIndices;
+	uint lineCount;
+	int globalLineCount;
+	uint first;
+	uint and;
+	uint attributeInd[];		//indices of the fracture attributes
+} info;
+
+layout(std430, binding = 1) buffer Multivariats{
+	float m[];					//mean vectors and inverse covariance matrices: preFactor1[1], mean1[amtOfMultvarAxes], covariance1[amtOfMultvarAxes^2], preFactor2[1], mean2 ...
+}multvar;
+
+layout(std430, binding = 2) buffer Data{
+	float data[];
+}d;
+
+layout(std430, binding = 3) buffer Ind{
+	uint ind[];
+}indices;
+
+layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+void main(){
+	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
+	float gaussMin = pow(.38774,info.amtOfMultvarAxes) * 0.00598;
+	//maximum amount of fracture axis is 30
+	float x[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
+	//fill x
+	for (int j = 0; j < info.amtOfMultvarAxes; ++j) {
+		uint dataIndex = lineIndex * info.amtOfAttributes + info.attributeInd[j];		//getting the data index for the current axis
+		x[j] = d.data[dataIndex];
+	}
+
+	bool lineKeep = false;
+	for(int mulvar = 0; mulvar<info.amtOfMultvar;++mulvar){
+		uint preFactorBase =  mulvar * (1 + info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
+		uint meanBase = preFactorBase + 1;
+		uint covarBase = meanBase + info.amtOfMultvarAxes;
+
+		//doing calculation of: fac * exp(-.5 * (x - mu)' * COV * (x - mu))
+		float s = 0;
+		for(int c = 0;c<info.amtOfMultvarAxes;++c){
+			float m = 0;
+			uint rowBase = c * info.amtOfMultvarAxes + covarBase;
+			for(int c1 = 0;c<info.amtOfMultvarAxes;++c){
+				m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
+			}
+			
+			s += (x[c] - multvar.m[meanBase + c]) * m;
+		}
+		s = multvar.m[preFactorBase] * exp(-.5f * s);
+		
+		if (s >= gaussMin){
+			lineKeep = true;
+			break;
+		}
+	}
+	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
+	if(bool(info.first)){
+		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
+		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
+	}
+	else{
+		if(bool(info.and)){
+			a = a && lineKeep;
+		}
+		else{
+			a = a || lineKeep;
+		}
+		if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
+		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
+	}
+	
+	if(lineKeep){
+		atomicAdd(info.lineCount,1);
+	}
+}

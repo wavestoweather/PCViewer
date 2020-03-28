@@ -11,11 +11,6 @@ public:
 		KdTree_Bounds_Pull_In_Both_Borders	//pull in bot borders
 	};
 
-	struct MultivariateBrush {
-		std::vector<float> mean;					//mean vector
-		std::vector<std::vector<float>> invCov;		//inverse matrix of covariance
-	};
-
 	KdTree() {};
 	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::vector<std::pair<float, float>>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
 		//building the kd tree;
@@ -108,7 +103,7 @@ public:
 		return getBoundsRec(nodes[root], recursionDepth, minRank);
 	};
 
-	std::vector<MultivariateBrush> getMultivariates(int recursionDepth) {
+	std::vector<MultivariateGauss::MultivariateBrush> getMultivariates(int recursionDepth) {
 		return getMulBrushesRec(nodes[root], recursionDepth, attributes.size());
 	};
 
@@ -116,7 +111,7 @@ private:
 	struct Node {
 		int split;
 		int rank;							//amount of indices in this node
-		MultivariateBrush multivariate;
+		MultivariateGauss::MultivariateBrush multivariate;
 		std::vector<std::pair<float, float>> bounds;
 		int leftChild;						//index at which the childs are lying
 		int rightChild;
@@ -154,7 +149,7 @@ private:
 		return res;
 	};
 
-	MultivariateBrush calcMultivariateBrush(std::vector<int>& attributes, std::vector<float*>& data, std::vector<uint32_t>& indices) {
+	MultivariateGauss::MultivariateBrush calcMultivariateBrush(std::vector<int>& attributes, std::vector<float*>& data, std::vector<uint32_t>& indices) {
 		std::vector<std::vector<double>> dataMatrix(indices.size(), std::vector<double>(attributes.size()));
 		std::vector<std::vector<double>> covariance(attributes.size(), std::vector<double>(attributes.size(), 0));
 		std::vector<std::vector<double>> invCov(attributes.size(), std::vector<double>(attributes.size(), 0));
@@ -167,7 +162,7 @@ private:
 		MultivariateGauss::compute_average_vector(dataMatrix, mean);
 		MultivariateGauss::compute_covariance_matrix(dataMatrix, covariance);
 		MultivariateGauss::compute_matrix_inverse(covariance, invCov);
-		MultivariateBrush multBrush{};
+		MultivariateGauss::MultivariateBrush multBrush{};
 		multBrush.mean = std::vector<float>(mean.size());
 		for (int i = 0; i < mean.size(); ++i) multBrush.mean[i] = mean[i];
 		for (int i = 0; i < invCov.size(); ++i) {
@@ -269,17 +264,17 @@ private:
 		return left;
 	};
 
-	std::vector<MultivariateBrush> getMulBrushesRec(Node& n, int recDepth, int minRank) {
+	std::vector<MultivariateGauss::MultivariateBrush> getMulBrushesRec(Node& n, int recDepth, int minRank) {
 		if (!recDepth) {
-			std::vector<MultivariateBrush> r;
+			std::vector<MultivariateGauss::MultivariateBrush> r;
 			r.push_back(n.multivariate);
 			return r;
 		}
 
 		if (n.rank < minRank) return { };
 
-		std::vector<MultivariateBrush> left = (n.leftChild >= 0) ? getMulBrushesRec(nodes[n.leftChild], recDepth - 1, minRank) : std::vector<MultivariateBrush>(),
-			right = (n.rightChild >= 0) ? getMulBrushesRec(nodes[n.rightChild], recDepth - 1, minRank) : std::vector<MultivariateBrush>();
+		std::vector<MultivariateGauss::MultivariateBrush> left = (n.leftChild >= 0) ? getMulBrushesRec(nodes[n.leftChild], recDepth - 1, minRank) : std::vector<MultivariateGauss::MultivariateBrush>(),
+			right = (n.rightChild >= 0) ? getMulBrushesRec(nodes[n.rightChild], recDepth - 1, minRank) : std::vector<MultivariateGauss::MultivariateBrush>();
 		left.reserve(left.size() + right.size());
 		left.insert(left.end(), right.begin(), right.end());
 		return left;

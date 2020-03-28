@@ -77,6 +77,20 @@ void MultivariateGauss::compute_matrix_times_matrix(const std::vector<std::vecto
 	}
 }
 
+void MultivariateGauss::compute_matrix_determinant(const std::vector<std::vector<float>>& a, float& det)
+{
+	std::vector<std::vector<double>> b(a.size(),std::vector<double>(a[0].size()));
+	for (int i = 0; i < a.size(); ++i) {
+		for (int j = 0; j < a[i].size(); ++j) {
+			b[i][j] = a[i][j];
+		}
+	}
+
+	std::vector<uint32_t> idx(a[0].size());
+	ludcmp(b, idx, det);
+	for (int i = 0; i < b.size(); ++i) det *= b[i][i];
+}
+
 bool MultivariateGauss::ludcmp(std::vector<std::vector<double>>& a, std::vector<uint32_t>& idx, float& d)
 {
 	int i, imax, j, k;
