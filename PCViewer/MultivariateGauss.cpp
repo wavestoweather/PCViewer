@@ -91,6 +91,16 @@ void MultivariateGauss::compute_matrix_determinant(const std::vector<std::vector
 	for (int i = 0; i < b.size(); ++i) det *= b[i][i];
 }
 
+void MultivariateGauss::compute_matrix_determinant(const std::vector<std::vector<double>>& a, float& det)
+{
+	std::vector<std::vector<double>> b = a;
+
+	std::vector<uint32_t> idx(a[0].size());
+	ludcmp(b, idx, det);
+	for (int i = 0; i < b.size(); ++i) det *= b[i][i];
+}
+
+
 bool MultivariateGauss::ludcmp(std::vector<std::vector<double>>& a, std::vector<uint32_t>& idx, float& d)
 {
 	int i, imax, j, k;

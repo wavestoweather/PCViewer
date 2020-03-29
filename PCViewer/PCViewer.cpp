@@ -322,7 +322,9 @@ struct GlobalBrush {
 	std::vector<int> attributes;
 	KdTree* kdTree;										//kdTree for the division of cluster
 	int fractureDepth;
+	bool useMultivariate;								//indicator if brush should use fractions or multivariates
 	std::vector<std::vector<std::pair<float, float>>> fractions;
+	std::vector<MultivariateGauss::MultivariateBrush> multivariates;
 	std::string name;									//the name of a global brush describes the template list it was created from and more...
 	std::map<std::string, int> lineRatios;			//contains the ratio of still active lines per drawlist
 	std::map<int, std::vector<std::pair<unsigned int, std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
@@ -731,6 +733,7 @@ static bool coupleIsoSurfaceRenderer = true;
 
 //variables for fractions
 static int maxFractionDepth = 20;
+static int outlierRank = 1;					//min rank(amount ofdatapoints in a kd tree node) needed to not be an outlier node
 static int boundsBehaviour = 1;
 static int maxRenderDepth = 13;
 static float fractionBoxWidth = BRUSHWIDTH;
@@ -4023,7 +4026,13 @@ static bool updateActiveIndices(DrawList& dl) {
 			if (gb.fractureDepth > 0) { //fractured brush
 				if (!gb.active) continue;
 				globalBrushesActive = true;
-				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				std::pair<uint32_t, int> res;// = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				if (gb.useMultivariate) {
+					res = gpuBrusher->brushIndices(gb.multivariates, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				}
+				else {
+					res = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				}
 				gb.lineRatios[dl.name] = res.first;
 				globalRemainingLines = res.second;
 				firstBrush = false;
@@ -4735,17 +4744,20 @@ int main(int, char**)
 	engine.seed(15);
 
 	//test of multivariate gauss calculations
-	//std::vector<std::vector<double>> X{ {4,2,.60}, {4.2,2.1,.59},{3.9,2,.58},{4.3,2.1,0.62},{4.1,2.2,.63} };
+	//float determinant;
+	//std::vector<std::vector<double>> X{ {10,0,-3,10}, {-2,-4,1,.5},{3,0,2,7},{-3,5,9,0} };
 	//std::vector<std::vector<double>> S(X[0].size(),std::vector<double>(X[0].size())), I(X[0].size(), std::vector<double>(X[0].size())), D(X[0].size(), std::vector<double>(X[0].size()));
 	//std::vector<double> mean(X[0].size());
 	//MultivariateGauss::compute_average_vector(X, mean);
 	//MultivariateGauss::compute_covariance_matrix(X, S);
 	//MultivariateGauss::compute_matrix_inverse(S, I);
 	//MultivariateGauss::compute_matrix_times_matrix(S, I, D);
+	//MultivariateGauss::compute_matrix_determinant(X, determinant);
 	//PCUtil::matrixdump(X);
 	//PCUtil::matrixdump(S);
 	//PCUtil::matrixdump(I);
 	//PCUtil::matrixdump(D);
+	//std::cout << determinant << std::endl;
 
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
@@ -5248,6 +5260,10 @@ int main(int, char**)
 					if (maxFractionDepth > 30) maxFractionDepth = 30;
 				}
 
+				if (ImGui::InputInt("Outlier rank", &outlierRank, 1, 1)) {
+					if (outlierRank < 1) outlierRank = 1;
+				}
+
 				static char* boundsTypes[] = { "No adjustment","Pull in outside", "Pull in both sides" };
 				if (ImGui::BeginCombo("Bounds behaviour", boundsTypes[boundsBehaviour])) {
 					for (int i = 0; i < 3; i++) {
@@ -5708,9 +5724,10 @@ int main(int, char**)
 								globalBrushes.pop_back();
 							}
 							selectedTemplateBrush = i;
-							GlobalBrush preview;
+							GlobalBrush preview{};
 							preview.active = true;
 							preview.edited = false;
+							preview.useMultivariate = false;
 							preview.name = templateBrushes[i].name;
 							for (int i = 0; i < pcAttributes.size(); ++i) {
 								preview.brushes[i] = {};
@@ -5787,7 +5804,8 @@ int main(int, char**)
 								for (int j = 0; j < maxFractionDepth; j++) {
 									if (ImGui::Selectable(std::to_string(j).c_str())) {
 										globalBrushes[i].fractureDepth = j;
-										globalBrushes[i].fractions = globalBrushes[i].kdTree->getBounds(j);
+										globalBrushes[i].fractions = globalBrushes[i].kdTree->getBounds(j, outlierRank);
+										globalBrushes[i].multivariates = globalBrushes[i].kdTree->getMultivariates(j);
 										pcPlotRender = updateAllActiveIndices();
 									}
 								}
@@ -5819,6 +5837,8 @@ int main(int, char**)
 								std::cout << "Kd tree done." << std::endl;
 #endif
 							}
+							ImGui::MenuItem("Use normal dist", "", &globalBrushes[i].useMultivariate);
+							ImGui::Separator();
 						}
 						else {
 							if (ImGui::MenuItem("Create brush fractures")) {
@@ -6034,6 +6054,7 @@ int main(int, char**)
 						GlobalBrush gb = {};
 						gb.active = true;
 						gb.edited = true;
+						gb.useMultivariate = false;
 						gb.name = dl->name;
 						gb.parent = dl->parentTemplateList;
 						DataSet* ds = &(*std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [dl](auto d) {return d.name == dl->parentDataSet; }));
@@ -6783,6 +6804,7 @@ int main(int, char**)
 							GlobalBrush brush = {};
 							brush.name = std::string(n);
 							brush.active = true;
+							brush.useMultivariate = false;
 							brush.edited = false;
 							for (int i = 0; i < pcAttributes.size(); i++) {
 								if (activeBrushAttributes[i]) {

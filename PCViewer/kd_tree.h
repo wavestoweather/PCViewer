@@ -164,12 +164,14 @@ private:
 		MultivariateGauss::compute_matrix_inverse(covariance, invCov);
 		MultivariateGauss::MultivariateBrush multBrush{};
 		multBrush.mean = std::vector<float>(mean.size());
+		multBrush.invCov = std::vector<std::vector<float>>(attributes.size(), std::vector<float>(attributes.size()));
 		for (int i = 0; i < mean.size(); ++i) multBrush.mean[i] = mean[i];
 		for (int i = 0; i < invCov.size(); ++i) {
 			for (int j = 0; j < invCov.size(); ++j) {
 				multBrush.invCov[i][j] = invCov[i][j];
 			}
 		}
+		MultivariateGauss::compute_matrix_determinant(covariance, multBrush.detCov);
 		return multBrush;
 	}
 
@@ -181,7 +183,7 @@ private:
 		n.rank = indices.size();
 
 		//multivariate gauss calculation
-		if(attributes.size() >= indices.size())
+		if(attributes.size() <= indices.size())
 			n.multivariate = calcMultivariateBrush(attributes, data, indices);
 
 		//splitting the bounding box in the middle
@@ -267,7 +269,8 @@ private:
 	std::vector<MultivariateGauss::MultivariateBrush> getMulBrushesRec(Node& n, int recDepth, int minRank) {
 		if (!recDepth) {
 			std::vector<MultivariateGauss::MultivariateBrush> r;
-			r.push_back(n.multivariate);
+			if(n.multivariate.mean.size())
+				r.push_back(n.multivariate);
 			return r;
 		}
 

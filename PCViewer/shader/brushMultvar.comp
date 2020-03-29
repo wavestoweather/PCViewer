@@ -32,7 +32,7 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
 	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
-	float gaussMin = pow(.38774,info.amtOfMultvarAxes) * 0.00598;
+	//float gaussMin = pow(.38774,info.amtOfMultvarAxes) * 0.00598;
 	//maximum amount of fracture axis is 30
 	float x[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
@@ -48,10 +48,10 @@ void main(){
 		uint meanBase = preFactorBase + 1;
 		uint covarBase = meanBase + info.amtOfMultvarAxes;
 
-		//doing calculation of: fac * exp(-.5 * (x - mu)' * COV * (x - mu))
-		float s = 0;
+		//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
+		double s = 0;
 		for(int c = 0;c<info.amtOfMultvarAxes;++c){
-			float m = 0;
+			double m = 0;
 			uint rowBase = c * info.amtOfMultvarAxes + covarBase;
 			for(int c1 = 0;c<info.amtOfMultvarAxes;++c){
 				m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
@@ -59,9 +59,10 @@ void main(){
 			
 			s += (x[c] - multvar.m[meanBase + c]) * m;
 		}
-		s = multvar.m[preFactorBase] * exp(-.5f * s);
-		
-		if (s >= gaussMin){
+		//s = multvar.m[preFactorBase] * exp(-.5f * s);
+		float gaussMin = info.amtOfMultvarAxes * 9;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+		//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
+		if (s <= gaussMin){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 			lineKeep = true;
 			break;
 		}

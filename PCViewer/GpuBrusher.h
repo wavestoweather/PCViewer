@@ -392,7 +392,7 @@ public:
 		uint32_t infoBytesSize = sizeof(UBOFractureInfo) + attributes.size() * sizeof(uint32_t);
 		UBOFractureInfo* informations = (UBOFractureInfo*)malloc(infoBytesSize);
 
-		uint32_t fracturesByteSize = attributes.size() * fractures.size() * 2 * sizeof(float);
+		uint32_t fracturesByteSize = fractures.size() * (1 + attributes.size() + attributes.size() * attributes.size()) * sizeof(float);
 		UBObrushes* gpuFractures = (UBObrushes*)malloc(fracturesByteSize);
 
 		//allocating buffers and memory for ubos
@@ -468,13 +468,14 @@ public:
 
 		int offset = 0;
 		float* bru = (float*)gpuFractures;
-		//TODO: change
-		//for (auto& range : fractures) {
-		//	for (int axis = 0; axis < attributes.size(); ++axis) {
-		//		bru[offset++] = range[axis].first;
-		//		bru[offset++] = range[axis].second;
-		//	}
-		//}
+		double constFac = 1. / sqrt(pow(2 * M_PI, attributes.size()));
+		for (auto& mult : fractures) {
+			bru[offset++] = constFac / sqrt(mult.detCov);
+			for (int i = 0; i < attributes.size(); ++i) bru[offset++] = mult.mean[i];
+			for (int i = 0; i < attributes.size(); ++i)
+				for (int j = 0; j < attributes.size(); ++j) bru[offset++] = mult.invCov[i][j];
+		}
+		assert(offset == fracturesByteSize / sizeof(float));
 		vkMapMemory(device, uboMemory, uboOffsets[1], fracturesByteSize, 0, &d);
 		memcpy(d, bru, fracturesByteSize);
 		vkUnmapMemory(device, uboMemory);
@@ -483,8 +484,8 @@ public:
 		VkCommandBuffer command;
 		VkUtil::createCommandBuffer(device, commandPool, &command);
 
-		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, fracturePipelineLayout, 0, 1, &descriptorSet, 0, {});
-		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, fracturePipeline);
+		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, multivariatePipelineLayout, 0, 1, &descriptorSet, 0, {});
+		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, multivariatePipeline);
 		int patchAmount = indicesSize / LOCALSIZE;
 		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
 		vkCmdDispatch(command, patchAmount, 1, 1);
