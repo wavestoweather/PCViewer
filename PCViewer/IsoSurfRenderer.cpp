@@ -340,7 +340,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	//
 	////fill infoBytes and upload it
 	//infoBytes->amtOfAttributes = amtOfAttributes;
-	//infoBytes->amtOfDensityAttributes = densityAttributes.size();
+	//infoBytes->amtOfBrushAttributes = densityAttributes.size();
 	//infoBytes->amtOfIndices = amtOfIndices;
 	//infoBytes->dimX = width;
 	//infoBytes->dimY = height;
@@ -568,6 +568,149 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	//}
 	//std::cout << "Number of zero values: " << nonzero<< std::endl;
 	//delete[] bi;
+
+	if (!descriptorSet) {
+		resize(1, 1);
+		return true;
+	}
+
+	updateBrushBuffer();
+	updateDescriptorSet();
+	updateCommandBuffer();
+	render();
+	return true;
+}
+
+bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& brushAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t amtOfIndices, std::vector<std::vector<std::pair<float, float>>>& brush, int index)
+{
+	VkResult err;
+
+	image3dWidth = width;
+	image3dHeight = height;
+	image3dDepth = depth;
+
+	VkClearColorValue clear = { 0,0,0,0 };
+	VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
+
+	//creating the binary image via compute pipeline ----------------------------------------
+	if (index == -1) {
+		binaryImage.push_back({});
+		binaryImageView.push_back({});
+		binaryImageMemory.push_back({});
+		VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &binaryImage.back());
+		VkMemoryRequirements memReq;
+		vkGetImageMemoryRequirements(device, binaryImage.back(), &memReq);
+		VkMemoryAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memReq.size;
+		allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, 0);
+		check_vk_result(vkAllocateMemory(device, &allocInfo, nullptr, &binaryImageMemory.back()));
+		vkBindImageMemory(device, binaryImage.back(), binaryImageMemory.back(), 0);
+
+		VkUtil::create3dImageView(device, binaryImage.back(), VK_FORMAT_R8_UNORM, 1, &binaryImageView.back());
+	}
+
+	VkBuffer infos;
+	VkDeviceMemory infosMem;
+	uint32_t infosByteSize = sizeof(ComputeInfos) + brushAttributes.size() * sizeof(float) * 3;
+	ComputeInfos* infoBytes = (ComputeInfos*)new char[infosByteSize];
+	VkUtil::createBuffer(device, infosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &infos);
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	VkMemoryRequirements memReq = {};
+	vkGetBufferMemoryRequirements(device, infos, &memReq);
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &infosMem);
+	vkBindBufferMemory(device, infos, infosMem, 0);
+	
+	//fill infoBytes and upload it
+	infoBytes->amtOfAttributes = amtOfAttributes;
+	infoBytes->amtOfBrushAttributes = brushAttributes.size();
+	infoBytes->amtOfIndices = amtOfIndices;
+	infoBytes->dimX = width;
+	infoBytes->dimY = height;
+	infoBytes->dimZ = depth;
+	infoBytes->xInd = positionIndices.x;
+	infoBytes->yInd = positionIndices.y;
+	infoBytes->zInd = positionIndices.z;
+	infoBytes->xMin = densityAttributesMinMax[positionIndices.x].first;
+	infoBytes->xMax = densityAttributesMinMax[positionIndices.x].second;
+	infoBytes->yMin = densityAttributesMinMax[positionIndices.y].first;
+	infoBytes->yMax = densityAttributesMinMax[positionIndices.y].second;
+	infoBytes->zMin = densityAttributesMinMax[positionIndices.z].first;
+	infoBytes->zMax = densityAttributesMinMax[positionIndices.z].second;
+	int* inf = (int*)(infoBytes + 1);
+	int offset = 0;
+	for (int i = 0; i < brushAttributes.size(); ++i) {
+		inf[i * 3] = brushAttributes[i];
+		inf[i * 3 + 1] = brush[i].size();
+		inf[i * 3 + 2] = offset;
+		offset += brush[i].size() * 2;
+	}
+	assert(infosByteSize == offset * sizeof(float) + sizeof(ComputeInfos));
+	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
+
+	//create graphics buffer for brushes
+	uint32_t brushByteSize = offset * sizeof(float);		//the offset has already counted the amount of brushes that there are going to be
+	float* brushBytes = new float[offset];
+	VkBuffer brushBuffer;
+	VkDeviceMemory brushMemory;
+	VkUtil::createBuffer(device, brushByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &brushBuffer);
+	vkGetBufferMemoryRequirements(device, brushBuffer, &memReq);
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, allocInfo.memoryTypeIndex, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &brushMemory);
+	vkBindBufferMemory(device, brushBuffer, brushMemory, 0);
+	offset = 0;
+	for (int i = 0; i < brush.size(); ++i) {
+		for (auto& minMax : brush[i]) {
+			brushBytes[offset++] = minMax.first;
+			brushBytes[offset++] = minMax.second;
+		}
+	}
+	assert(offset * sizeof(float) == brushByteSize);
+	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushBytes);
+	delete[] brushBytes;
+	
+	//create descriptor set and update all need things
+	VkDescriptorSet descSet;
+	std::vector<VkDescriptorSetLayout> sets;
+	sets.push_back(computeDescriptorSetLayout);
+	VkUtil::createDescriptorSets(device, sets, descriptorPool, &descSet);
+	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, dataByteSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 4, descSet);
+	
+	//creating the command buffer, binding all the needed things and dispatching it to update the density images
+	VkCommandBuffer computeCommands;
+	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
+	
+	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+	if(index == -1)
+		VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	else
+		VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	vkCmdClearColorImage(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+	VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
+	uint32_t patchAmount = amtOfIndices / LOCALSIZE;
+	patchAmount += (amtOfIndices % LOCALSIZE) ? 1 : 0;
+	vkCmdDispatch(computeCommands, patchAmount, 1, 1);
+	VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::commitCommandBuffer(queue, computeCommands);
+	err = vkQueueWaitIdle(queue);
+	check_vk_result(err);
+	
+	vkDestroyBuffer(device, brushBuffer, nullptr);
+	vkFreeMemory(device, brushMemory, nullptr);
+	vkFreeCommandBuffers(device, commandPool, 1, &computeCommands);
+	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
+	vkFreeMemory(device, infosMem, nullptr);
+	vkDestroyBuffer(device, infos, nullptr);
+	delete[] infoBytes;
 
 	if (!descriptorSet) {
 		resize(1, 1);
@@ -1019,9 +1162,7 @@ void IsoSurfRenderer::createPipeline()
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(binding);
 
-	binding.binding = 1;								//density pictures
-	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	binding.descriptorCount = MAXAMTOF3DTEXTURES;
+	binding.binding = 1;								//brushes
 	bindings.push_back(binding);
 
 	binding.binding = 2;								//indices buffer
@@ -1032,8 +1173,12 @@ void IsoSurfRenderer::createPipeline()
 	binding.binding = 3;								//data buffer
 	bindings.push_back(binding);
 
+	binding.binding = 4;								//binary image
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	bindings.push_back(binding);
+
 	std::vector<bool> validd{ true,false,true,true };
-	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, validd, &computeDescriptorSetLayout);
+	VkUtil::createDescriptorSetLayout(device,bindings,&computeDescriptorSetLayout);
 	std::vector<VkDescriptorSetLayout>layouts;
 	layouts.push_back(computeDescriptorSetLayout);
 

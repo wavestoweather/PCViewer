@@ -47,8 +47,8 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	//TODO: change back to general solution. Current update3dBinaryVolume is specifically made for a 3d cloud ensemble weather simulation dataset with fixed 3d size
 	bool update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float, float>>>& brush, int index);
+	bool update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& brushAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, const glm::uvec3& positionIndices, VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t amtOfIndices, std::vector<std::vector<std::pair<float, float>>>& brush, int index);
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
 	void addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);				//minMax has to be a vector containing for each attribute an array of minMax values
 	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a already added brush. Returns true if the brush was updated, else false
@@ -75,7 +75,7 @@ private:
 
 	struct ComputeInfos {
 		uint32_t amtOfAttributes;		//amount of attributes in the dataset
-		uint32_t amtOfDensityAttributes;//amount of attributes for which the density maps should be created
+		uint32_t amtOfBrushAttributes;//amount of attributes for which the density maps should be created
 		uint32_t amtOfIndices;
 		uint32_t dimX;
 		uint32_t dimY;
@@ -91,8 +91,8 @@ private:
 		float zMax;
 		uint32_t padding;
 		//int array containing attribute infos:
-		//index attr 1,
-		//index attr 2,
+		//index attr 1, amtOfBrushes 1, offset brush1
+		//index attr 2, amtOfBrushes 2, offset brush2
 		//...
 	};
 

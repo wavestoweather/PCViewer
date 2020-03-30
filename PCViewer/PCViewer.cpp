@@ -730,6 +730,8 @@ static HistogramManager* histogramManager;
 
 static IsoSurfRenderer* isoSurfaceRenderer;
 static bool coupleIsoSurfaceRenderer = true;
+static bool isoSurfaceRegularGrid = false;
+static int isoSurfaceRegularGridDim[3]{ 100,100,100 };
 
 //variables for fractions
 static int maxFractionDepth = 20;
@@ -7554,6 +7556,12 @@ int main(int, char**)
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to brush", &coupleIsoSurfaceRenderer);
+					ImGui::Checkbox("Regular grid", &isoSurfaceRegularGrid);
+					ImGui::InputInt3("Regular grid dimensions", isoSurfaceRegularGridDim);
+					
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Rendering")) {
 					static float boxSize[3]{ 1.5f,1.f,1.5f };
 					if (ImGui::DragFloat3("Box dimensions", boxSize, .001f)) {
 						isoSurfaceRenderer->resizeBox(boxSize[0], boxSize[1], boxSize[2]);
@@ -7572,7 +7580,8 @@ int main(int, char**)
 			}
 			
 			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });
-			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel)) {
+			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel || 
+				ImGui::IsKeyDown(KEYA) || ImGui::IsKeyDown(KEYS) || ImGui::IsKeyDown(KEYD) || ImGui::IsKeyDown(KEYQ) || ImGui::IsKeyDown(KEYW) || ImGui::IsKeyDown(KEYE))) {
 				CamNav::NavigationInput nav = {};
 				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
 				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
@@ -7589,9 +7598,6 @@ int main(int, char**)
 				err = vkDeviceWaitIdle(g_Device);
 				check_vk_result(err);
 				ImGui::ResetMouseDragDelta();
-			}
-			if (ImGui::IsItemHovered() && (ImGui::IsKeyDown(KEYA) || ImGui::IsKeyDown(KEYS) || ImGui::IsKeyDown(KEYD) || ImGui::IsKeyDown(KEYQ) || ImGui::IsKeyDown(KEYW) || ImGui::IsKeyDown(KEYE))) {
-				//TODO: fly navigation
 			}
 
 			ImGui::Text("Add iso surface");
@@ -7649,7 +7655,9 @@ int main(int, char**)
 					minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
 					minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
 					std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
+					std::vector<uint32_t> brushIndices;
 					for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
+						if (axis.second.size()) brushIndices.push_back(axis.first);
 						for (auto& brush : axis.second) {
 							miMa[axis.first].push_back(brush.second);
 						}
@@ -7664,12 +7672,17 @@ int main(int, char**)
 					}
 					if(index == -1)
 						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
-					if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index) && index == -1) {
-						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
-						positionError = true;
+					if (isoSurfaceRegularGrid) {
+						isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, dl->indices.size()* pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 					}
 					else {
-						positionError = false;
+						if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index) && index == -1) {
+							isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
+							positionError = true;
+						}
+						else {
+							positionError = false;
+						}
 					}
 				}
 			}

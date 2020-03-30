@@ -5,7 +5,7 @@
 
 layout(std430, binding = 0) buffer Informations{
 	uint amtOfAttributes;
-	uint amtOfDensityAttributes;
+	uint amtOfBrushAttributes;
 	uint amtOfIndices;
 	uint dimX;
 
@@ -25,10 +25,16 @@ layout(std430, binding = 0) buffer Informations{
 	uint padding;
 
 	uint attributes[];
+	//int array containing attribute infos:
+	//index attr 1, amtOfBrushes 1, offset brush1
+	//index attr 2, amtOfBrushes 2, offset brush2
+	//...
 } info;
 
 //currently the maximum amount of density attributes is 30!
-layout( binding = 1, r32f) uniform writeonly image3D densities[30];
+layout(std430, binding = 1) buffer brushes{
+	float[] minMax;
+};
 
 layout(std430, binding = 2) buffer IndexBuffer{
 	uint ind[];
@@ -38,20 +44,37 @@ layout(std430, binding = 3) buffer DataBuffer{
 	float data[];
 };
 
+layout(binding = 4, r8) uniform writeonly image3D binary;
+
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
 	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
 	uint i = ind[gl_GlobalInvocationID.x];
+	bool lineKeep = true;
+	for(int axis = 0;axis < info.amtOfBrushAttributes;++axis){
+		bool good = false;
+		uint axisInd = info.attributes[axis * 3];
+		for(int brush = 0;brush< info.attributes[axis*3+1];++brush){
+			float datum = data[i * info.amtOfAttributes + axisInd];
+			float minn = minMax[info.attributes[axis*3+2]+brush * 2];
+			float maxx = minMax[info.attributes[axis*3+2]+brush * 2 + 1];
+			if(datum>=minn && datum<=maxx){
+				good = true;
+				break;
+			}
+		}
+		if(!good){
+			return;
+		}
+	}
+
 	ivec3 pos;
 	pos.x = int(((data[i*info.amtOfIndices + info.xInd] - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX));
 	pos.y = int(((data[i*info.amtOfIndices + info.yInd] - info.yMin) / (info.yMax - info.yMin)) * float(info.dimY));
 	pos.z = int(((data[i*info.amtOfIndices + info.zInd] - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ));
+	if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
 
-	//creating the vec4s which should be stored
-	for(int j = 0;j<info.amtOfDensityAttributes;++j){
-		uint attributeIndex = info.attributes[j];
-		float data = data[i*info.amtOfIndices + attributeIndex];
-		imageStore(densities[j], pos, vec4(data));
-	}
+	//storing 1 if element is in the brush
+	imageStore(binary, pos, vec4(1));
 }

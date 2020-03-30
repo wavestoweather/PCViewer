@@ -49,9 +49,9 @@ void main(){
 		uint covarBase = meanBase + info.amtOfMultvarAxes;
 
 		//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
-		double s = 0;
+		float s = 0;
 		for(int c = 0;c<info.amtOfMultvarAxes;++c){
-			double m = 0;
+			float m = 0;
 			uint rowBase = c * info.amtOfMultvarAxes + covarBase;
 			for(int c1 = 0;c<info.amtOfMultvarAxes;++c){
 				m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
