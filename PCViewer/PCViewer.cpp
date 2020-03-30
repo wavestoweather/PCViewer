@@ -7870,7 +7870,7 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					//ImGui::Checkbox("y-scale to current max", &yScaleToCurrenMax);
+					ImGui::Checkbox("Overlay lines", &violinPlotOverlayLines);
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
