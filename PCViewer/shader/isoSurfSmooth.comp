@@ -1,0 +1,57 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_nonuniform_qualifier : enable
+
+layout(binding = 0) uniform Informations{
+	uint axis;
+	float stdDev;
+	uint padding[2];
+} info;
+
+//currently the maximum amount of density attributes is 30!
+layout( binding = 1, r8) uniform readonly image3D src;
+
+layout( binding = 2, r8) uniform writeonly image3D dst;
+
+layout (local_size_x = 8,local_size_y=8,local_size_z=8) in;
+
+void main(){
+	int k = int(3*info.stdDev);
+	float div = 0;
+	float sum = 0;
+	ivec3 imSize = imageSize(src);
+	switch(info.axis){
+	case 0:
+		for(int i = -k;i<=k;++k){
+			ivec3 picPos = ivec3(gl_GlobalInvocationID + vec3(i,0,0));
+			if(picPos.x>0&&picPos.x<=imSize.x){
+				float gaussFac = exp(pow(i,2)/(-2 * info.stdDev));
+				div += gaussFac;
+				sum += gaussFac * imageLoad(src,picPos).x;
+			}
+		}
+	break;
+	case 1:
+		for(int i = -k;i<=k;++k){
+			ivec3 picPos = ivec3(gl_GlobalInvocationID + vec3(0,i,0));
+			if(picPos.y>0&&picPos.y<=imSize.y){
+				float gaussFac = exp(pow(i,2)/(-2 * info.stdDev));
+				div += gaussFac;
+				sum += gaussFac * imageLoad(src,picPos).x;
+			}
+		}
+	break;
+	case 2:
+		for(int i = -k;i<=k;++k){
+			ivec3 picPos = ivec3(gl_GlobalInvocationID + vec3(0,0,i));
+			if(picPos.z>0&&picPos.z<=imSize.z){
+				float gaussFac = exp(pow(i,2)/(-2 * info.stdDev));
+				div += gaussFac;
+				sum += gaussFac * imageLoad(src,picPos).x;
+			}
+		}
+	break;
+	}
+	imageStore(dst,ivec3(gl_GlobalInvocationID),vec4(sum/div));
+}

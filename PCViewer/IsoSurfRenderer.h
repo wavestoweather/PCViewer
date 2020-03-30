@@ -129,12 +129,19 @@ private:
 		uint32_t bIndex;
 		std::vector<std::pair<float, float>> minMax;
 	};
+
+	struct SmoothUBO {
+		uint32_t index;			//position index to be smoothed(0->x, 1->y, 2->z)
+		float stdDev;			//standard deviation
+		uint32_t padding[2];
+	};
 	
 	//shaderpaths
 	static char vertPath[];
 	static char fragPath[];
 	static char computePath[];
 	static char binaryComputePath[];
+	static char binarySmoothPath[];
 
 	//general information about the 3d view
 	uint32_t imageHeight;
@@ -187,7 +194,9 @@ private:
 
 	VkSampler					binaryImageSampler;
 	std::vector<VkImage>		binaryImage;
+	std::vector<VkImage>		binarySmooth;
 	std::vector<VkImageView>	binaryImageView;
+	std::vector<VkImageView>	binarySmoothView;
 	std::vector<VkDeviceMemory>	binaryImageMemory;
 	//vulkan resources for the compute pipeline
 	VkPipeline			computePipeline;
@@ -197,6 +206,10 @@ private:
 	VkPipeline			binaryComputePipeline;
 	VkPipelineLayout	binaryComputePipelineLayout;
 	VkDescriptorSetLayout binaryComputeDescriptorSetLayout;
+	//vulkan resources for the smoothing pipeline
+	VkPipeline			binarySmoothPipeline;
+	VkPipelineLayout	binarySmoothPipelineLayout;
+	VkDescriptorSetLayout binarySmoothDescriptorSetLayout;
 
 	std::vector<glm::uvec3> posIndices;
 
@@ -208,6 +221,11 @@ private:
 	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
 	std::map<std::string, float*> brushColors;												//each brush has its own colors
 	std::vector<float*> attributeColors;													//if only one brush is active every attribute can be assigned a different color
+
+	float smoothStdDiv = 1;
+
+	//private methods
+	void smoothImage(int index);
 
 	//methods to instatiate vulkan resources
 	void createPrepareImageCommandBuffer();

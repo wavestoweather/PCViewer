@@ -606,6 +606,25 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, uint32_t offset, VkDescriptorSet descriptorSet)
+{
+	VkDescriptorBufferInfo desBufferInfo = {};
+	desBufferInfo.buffer = buffer;
+	desBufferInfo.offset = offset;
+	desBufferInfo.range = size;
+
+	VkWriteDescriptorSet descriptorWrite = {};
+	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstSet = descriptorSet;
+	descriptorWrite.dstBinding = binding;
+	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	descriptorWrite.descriptorCount = 1;
+	descriptorWrite.pBufferInfo = &desBufferInfo;
+
+	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+}
+
 void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorBufferInfo desBufferInfo = {};
@@ -882,6 +901,13 @@ void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
 
 		sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
+		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
 	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
