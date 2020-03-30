@@ -399,6 +399,12 @@ enum ViolinYScale {
 	ViolinYScaleBrushes
 };
 
+enum ViolinDrawState {
+	ViolinDrawStateAll,
+	ViolinDrawStateArea,
+	ViolinDrawStateLine
+};
+
 struct DrawListRef {
 	std::string name;
 	bool activated;
@@ -762,6 +768,7 @@ static bool violinPlotAttrInsertCustomColors = true;
 static bool violinPlotAttrReplaceNonStop = false;
 static bool violinPlotDLReplaceNonStop = false;
 static bool yScaleToCurrenMax = false;
+static bool violinPlotOverlayLines = true;
 static ViolinYScale violinYScale = ViolinYScaleStandard;
 std::vector<ViolinPlot> violinAttributePlots;
 std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
@@ -8065,158 +8072,178 @@ int main(int, char**)
 
 				// Drawing the violin plots
 				ImVec2 leftUpperCorner = ImGui::GetCursorScreenPos();
+				ImVec2 origLeftUpper = leftUpperCorner;
 				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y);
-				for (int j : violinAttributePlots[i].attributeOrder) {		//Drawing the plots per Attribute
-					if (!violinAttributePlots[i].activeAttributes[j]) continue;
-					ImGui::RenderFrame(leftUpperCorner, leftUpperCorner + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
-					ImGui::PushClipRect(leftUpperCorner, leftUpperCorner + size + ImVec2{ 1,1 }, false);
-					for (int k = 0; k < violinAttributePlots[i].drawLists.size(); ++k) {
-						if (!violinAttributePlots[i].drawLists[k].activated) continue;
-						HistogramManager::Histogram& hist = histogramManager->getHistogram(violinAttributePlots[i].drawLists[k].name);
-						DrawList* dl = nullptr;
-						if (yScaleToCurrenMax) {
-							for (DrawList& draw : g_PcPlotDrawLists) {
-								if (draw.name == violinAttributePlots[i].drawLists[k].name) {
-									dl = &draw;
+				ViolinDrawState drawState = (violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
+				bool done = false;
+				while (!done) {
+					leftUpperCorner = origLeftUpper;
+					for (int j : violinAttributePlots[i].attributeOrder) {		//Drawing the plots per Attribute
+						if (!violinAttributePlots[i].activeAttributes[j]) continue;
+						if (drawState == ViolinDrawStateAll || drawState == ViolinDrawStateArea) ImGui::RenderFrame(leftUpperCorner, leftUpperCorner + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
+						ImGui::PushClipRect(leftUpperCorner, leftUpperCorner + size + ImVec2{ 1,1 }, false);
+						for (int k = 0; k < violinAttributePlots[i].drawLists.size(); ++k) {
+							if (!violinAttributePlots[i].drawLists[k].activated) continue;
+							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinAttributePlots[i].drawLists[k].name);
+							DrawList* dl = nullptr;
+							if (yScaleToCurrenMax) {
+								for (DrawList& draw : g_PcPlotDrawLists) {
+									if (draw.name == violinAttributePlots[i].drawLists[k].name) {
+										dl = &draw;
+									}
 								}
 							}
-						}
-						//std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
-							for (int j = 0; j < pcAttributes.size(); ++j) {
-								for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
-									if (dl->brushes[j][mi].minMax.first < localMinMax[j].first) localMinMax[j].first = dl->brushes[j][mi].minMax.first;
-									if (dl->brushes[j][mi].minMax.second > localMinMax[j].second) localMinMax[j].second = dl->brushes[j][mi].minMax.second;
+							//std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+							if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+								for (int j = 0; j < pcAttributes.size(); ++j) {
+									for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
+										if (dl->brushes[j][mi].minMax.first < localMinMax[j].first) localMinMax[j].first = dl->brushes[j][mi].minMax.first;
+										if (dl->brushes[j][mi].minMax.second > localMinMax[j].second) localMinMax[j].second = dl->brushes[j][mi].minMax.second;
+									}
+								}
+								for (int j = 0; j < pcAttributes.size(); ++j) {
+									if (localMinMax[j].first == std::numeric_limits<float>().max()) {
+										localMinMax[j].first = pcAttributes[j].min;
+										localMinMax[j].second = pcAttributes[j].max;
+									}
 								}
 							}
-							for (int j = 0; j < pcAttributes.size(); ++j) {
-								if (localMinMax[j].first == std::numeric_limits<float>().max()) {
-									localMinMax[j].first = pcAttributes[j].min;
-									localMinMax[j].second = pcAttributes[j].max;
+
+							float histYStart;
+							float histYEnd;
+							switch (violinYScale) {
+							case ViolinYScaleStandard:
+								histYStart = 0;
+								histYEnd = size.y;
+								break;
+							case ViolinYScaleLocalBrush:
+								histYStart = ((hist.ranges[j].second - localMinMax[j].second) / (localMinMax[j].first - localMinMax[j].second) * size.y);
+								histYEnd = ((hist.ranges[j].first - localMinMax[j].second) / (localMinMax[j].first - localMinMax[j].second) * size.y);
+								break;
+							case ViolinYScaleGlobalBrush:
+								histYStart = ((hist.ranges[j].second - globalMinMax[j].second) / (globalMinMax[j].first - globalMinMax[j].second) * size.y);
+								histYEnd = ((hist.ranges[j].first - globalMinMax[j].second) / (globalMinMax[j].first - globalMinMax[j].second) * size.y);
+								break;
+							case ViolinYScaleBrushes:
+								float min = (localMinMax[j].first < globalMinMax[j].first) ? localMinMax[j].first : globalMinMax[j].first;
+								float max = (localMinMax[j].second < globalMinMax[j].second) ? localMinMax[j].second : globalMinMax[j].second;
+								histYStart = ((hist.ranges[j].second - max) / (min - max) * size.y);
+								histYEnd = ((hist.ranges[j].first - max) / (min - max) * size.y);
+								break;
+							}
+							//if (dl && dl->brushes[j].size()) {
+							//	float max = dl->brushes[j][0].minMax.second;
+							//	float min = dl->brushes[j][0].minMax.first;
+							//	for (int mi = 1; mi < dl->brushes[j].size(); ++mi) {
+							//		if (dl->brushes[j][mi].minMax.first < min) min = dl->brushes[j][mi].minMax.first;
+							//		if (dl->brushes[j][mi].minMax.second > max) max = dl->brushes[j][mi].minMax.second;
+							//	}
+							//	histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+							//	histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
+							//}
+							//else {
+							//	histYStart = ((hist.ranges[j].second - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
+							//	histYEnd = ((hist.ranges[j].first - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
+							//}
+							//if (!yScaleToCurrenMax) {
+							//	histYStart = 0;
+							//	histYEnd = size.y;
+							//}
+							float histYFillStart = (histYStart < 0) ? 0 : histYStart;
+							float histYFillEnd = (histYEnd > size.y) ? size.y : histYEnd;
+							float histYLineStart = histYStart + leftUpperCorner.y;
+							float histYLineEnd = histYEnd + leftUpperCorner.y;
+							float histYLineDiff = histYLineEnd - histYLineStart;
+
+							float div = 0;
+							switch (violinAttributePlots[i].violinScalesX[k]) {
+							case ViolinScaleSelf:
+								div = hist.maxCount[j];
+								break;
+							case ViolinScaleLocal:
+								div = hist.maxGlobalCount;
+								break;
+							case ViolinScaleGlobal:
+								div = violinAttributePlots[i].maxGlobalValue;
+								break;
+							case ViolinScaleGlobalAttribute:
+								div = violinDrawlistPlots[i].maxValues[k];
+								break;
+							}
+
+							switch (violinAttributePlots[i].violinPlacements[k]) {
+							case ViolinLeft:
+								//filling
+								if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+									for (int p = histYFillStart; p < histYFillEnd; ++p) {
+										ImVec2 a(leftUpperCorner.x, leftUpperCorner.y + p);
+										float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[j]);
+										ImVec2 b(leftUpperCorner.x + v / div * size.x, leftUpperCorner.y + p + 1);
+										if (b.x - a.x >= 1)
+											ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinAttributePlots[i].drawListFillColors[k]));
+									}
 								}
-							}
-						}
-						
-						float histYStart;
-						float histYEnd;
-						switch (violinYScale) {
-						case ViolinYScaleStandard:
-							histYStart = 0;
-							histYEnd = size.y;
-							break;
-						case ViolinYScaleLocalBrush:
-							histYStart = ((hist.ranges[j].second - localMinMax[j].second) / (localMinMax[j].first - localMinMax[j].second) * size.y);
-							histYEnd = ((hist.ranges[j].first - localMinMax[j].second) / (localMinMax[j].first - localMinMax[j].second) * size.y);
-							break;
-						case ViolinYScaleGlobalBrush:
-							histYStart = ((hist.ranges[j].second - globalMinMax[j].second) / (globalMinMax[j].first - globalMinMax[j].second) * size.y);
-							histYEnd = ((hist.ranges[j].first - globalMinMax[j].second) / (globalMinMax[j].first - globalMinMax[j].second) * size.y);
-							break;
-						case ViolinYScaleBrushes:
-							float min = (localMinMax[j].first < globalMinMax[j].first) ? localMinMax[j].first : globalMinMax[j].first;
-							float max = (localMinMax[j].second < globalMinMax[j].second) ? localMinMax[j].second : globalMinMax[j].second;
-							histYStart = ((hist.ranges[j].second - max) / (min - max) * size.y);
-							histYEnd = ((hist.ranges[j].first - max) / (min - max) * size.y);
-							break;
-						}
-						//if (dl && dl->brushes[j].size()) {
-						//	float max = dl->brushes[j][0].minMax.second;
-						//	float min = dl->brushes[j][0].minMax.first;
-						//	for (int mi = 1; mi < dl->brushes[j].size(); ++mi) {
-						//		if (dl->brushes[j][mi].minMax.first < min) min = dl->brushes[j][mi].minMax.first;
-						//		if (dl->brushes[j][mi].minMax.second > max) max = dl->brushes[j][mi].minMax.second;
-						//	}
-						//	histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
-						//	histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
-						//}
-						//else {
-						//	histYStart = ((hist.ranges[j].second - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
-						//	histYEnd = ((hist.ranges[j].first - pcAttributes[j].max) / (pcAttributes[j].min - pcAttributes[j].max) * size.y);
-						//}
-						//if (!yScaleToCurrenMax) {
-						//	histYStart = 0;
-						//	histYEnd = size.y;
-						//}
-						float histYFillStart = (histYStart < 0) ? 0 : histYStart;
-						float histYFillEnd = (histYEnd > size.y) ? size.y : histYEnd;
-						float histYLineStart = histYStart + leftUpperCorner.y;
-						float histYLineEnd = histYEnd + leftUpperCorner.y;
-						float histYLineDiff = histYLineEnd - histYLineStart;
+								//outline
+								if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+									for (int l = 1; l < hist.bins[j].size(); ++l) {
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+											ImVec2(leftUpperCorner.x + hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+									}
+								}
+								break;
+							case ViolinRight:
+								//filling
+								if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+									for (int p = histYFillStart; p < histYFillEnd; ++p) {
+										ImVec2 a(leftUpperCorner.x + size.x, leftUpperCorner.y + p);
+										float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[j]);
+										ImVec2 b(leftUpperCorner.x + size.x - v / div * size.x, leftUpperCorner.y + p + 1);
+										if (a.x - b.x >= 1)
+											ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinAttributePlots[i].drawListFillColors[k]));
+									}
+								}
+								//outline
+								if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+									for (int l = 1; l < hist.bins[j].size(); ++l) {
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + size.x - hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+											ImVec2(leftUpperCorner.x + size.x - hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+									}
+								}
+								break;
+							case ViolinMiddle:
+								float xBase = leftUpperCorner.x + .5f * size.x;
+								//filling
+								if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+									for (int p = histYFillStart; p < histYFillEnd; ++p) {
+										float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[j]);
+										ImVec2 a(xBase - .5f * v / div * size.x, leftUpperCorner.y + p);
+										ImVec2 b(xBase + .5f * v / div * size.x, leftUpperCorner.y + p + 1);
+										if (b.x - a.x >= 1)
+											ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinAttributePlots[i].drawListFillColors[k]));
+									}
+								}
+								if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+									for (int l = 1; l < hist.bins[j].size(); ++l) {
+										//left Line
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+											ImVec2(xBase - .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+										//right Line
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+											ImVec2(xBase + .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+									}
+								}
 
-						float div = 0;
-						switch (violinAttributePlots[i].violinScalesX[k]) {
-						case ViolinScaleSelf:
-							div = hist.maxCount[j];
-							break;
-						case ViolinScaleLocal:
-							div = hist.maxGlobalCount;
-							break;
-						case ViolinScaleGlobal:
-							div = violinAttributePlots[i].maxGlobalValue;
-							break;
-						case ViolinScaleGlobalAttribute:
-							div = violinDrawlistPlots[i].maxValues[k];
-							break;
+								break;
+							}
 						}
 
-						switch (violinAttributePlots[i].violinPlacements[k]) {
-						case ViolinLeft:
-							//filling
-							for (int p = histYFillStart; p < histYFillEnd; ++p) {
-								ImVec2 a(leftUpperCorner.x, leftUpperCorner.y + p);
-								float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[j]);
-								ImVec2 b(leftUpperCorner.x + v / div * size.x, leftUpperCorner.y + p + 1);
-								if (b.x - a.x >= 1)
-									ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinAttributePlots[i].drawListFillColors[k]));
-							}
-							//outline
-							for (int l = 1; l < hist.bins[j].size(); ++l) {
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-									ImVec2(leftUpperCorner.x + hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
-							}
-							break;
-						case ViolinRight:
-							//filling
-							for (int p = histYFillStart; p < histYFillEnd; ++p) {
-								ImVec2 a(leftUpperCorner.x + size.x, leftUpperCorner.y + p);
-								float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[j]);
-								ImVec2 b(leftUpperCorner.x + size.x - v / div * size.x, leftUpperCorner.y + p + 1);
-								if (a.x - b.x >= 1)
-									ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinAttributePlots[i].drawListFillColors[k]));
-							}
-							//outline
-							for (int l = 1; l < hist.bins[j].size(); ++l) {
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + size.x - hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-									ImVec2(leftUpperCorner.x + size.x - hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
-							}
-							break;
-						case ViolinMiddle:
-							float xBase = leftUpperCorner.x + .5f * size.x;
-							//filling
-							for (int p = histYFillStart; p < histYFillEnd; ++p) {
-								float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[j]);
-								ImVec2 a(xBase - .5f * v / div * size.x, leftUpperCorner.y + p);
-								ImVec2 b(xBase + .5f * v / div * size.x, leftUpperCorner.y + p + 1);
-								if (b.x - a.x >= 1)
-									ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinAttributePlots[i].drawListFillColors[k]));
-							}
-							for (int l = 1; l < hist.bins[j].size(); ++l) {
-								//left Line
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-									ImVec2(xBase - .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
-								//right Line
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-									ImVec2(xBase + .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
-							}
-
-							break;
-						}
+						ImGui::PopClipRect();
+						leftUpperCorner.x += size.x + violinPlotXSpacing;
 					}
 
-					ImGui::PopClipRect();
-					leftUpperCorner.x += size.x + violinPlotXSpacing;
+					if (drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) done = true;
+					if (drawState == ViolinDrawStateArea) drawState = ViolinDrawStateLine;
 				}
-
 				ImGui::PopItemWidth();
 				ImGui::EndChild();
 			}
@@ -8298,7 +8325,7 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					//ImGui::Checkbox("y-scale to current max", &yScaleToCurrenMax);
+					ImGui::Checkbox("Overlay lines", &violinPlotOverlayLines);
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -8427,330 +8454,357 @@ int main(int, char**)
 				ImVec2 leftUpperCorner = ImGui::GetCursorScreenPos();
 				ImVec2 leftUpperCornerStart = leftUpperCorner;
 				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (violinDrawlistPlots[i].matrixSize.second - 1) * violinPlotXSpacing) / violinDrawlistPlots[i].matrixSize.second, (ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - violinDrawlistPlots[i].matrixSize.first * ImGui::GetFrameHeightWithSpacing()) / (float)violinDrawlistPlots[i].matrixSize.first);
-				for (int x = 0; x < violinDrawlistPlots[i].matrixSize.first; ++x) {	//Drawing the plots per matrix entry
-					for (int y = 0; y < violinDrawlistPlots[i].matrixSize.second; ++y) {
-						int j = violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y];
+				ViolinDrawState drawState = (violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
+				bool done = false;
+				while (!done) {
+					leftUpperCorner = leftUpperCornerStart;
+					for (int x = 0; x < violinDrawlistPlots[i].matrixSize.first; ++x) {	//Drawing the plots per matrix entry
+						for (int y = 0; y < violinDrawlistPlots[i].matrixSize.second; ++y) {
+							int j = violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y];
 
-						ImVec2 framePos = leftUpperCorner;
-						framePos.y += ImGui::GetFrameHeightWithSpacing();
-						ImGui::RenderFrame(framePos, framePos + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
-						ImGui::SetCursorScreenPos(framePos);
-						if (size.x > 0 && size.y > 0)	//safety check. ImGui crahes when button size is 0
-							ImGui::InvisibleButton(("invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size);
-						if (ImGui::IsItemClicked(1)) {
-							violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = 0xffffffff;
-							updateMaxHistogramValues(violinDrawlistPlots[i]);
-						}
-						if (j != 0xffffffff && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-							int p[] = { (int)(x * violinDrawlistPlots[i].matrixSize.second + y),j };		//holding the index in the pcAttriOrd array and the value of it
-							ImGui::SetDragDropPayload("ViolinDrawlist", p, sizeof(p));
-							ImGui::Text("%s", violinDrawlistPlots[i].drawLists[j].c_str());
-							ImGui::EndDragDropSource();
-						}
-						if (ImGui::BeginDragDropTarget()) {
-							if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ViolinDrawlist")) {
-								int* other = (int*)payload->Data;
-								if (other[0] == -1) {
-									violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = other[1];
-								}
-								else {
-									violinDrawlistPlots[i].drawListOrder[other[0]] = j;
-									violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = other[1];
-								}
+							ImVec2 framePos = leftUpperCorner;
+							framePos.y += ImGui::GetFrameHeightWithSpacing();
+							if(drawState == ViolinDrawStateAll || drawState == ViolinDrawStateArea) ImGui::RenderFrame(framePos, framePos + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
+							ImGui::SetCursorScreenPos(framePos);
+							if (size.x > 0 && size.y > 0)	//safety check. ImGui crahes when button size is 0
+								ImGui::InvisibleButton(("invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size);
+							if (ImGui::IsItemClicked(1)) {
+								violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = 0xffffffff;
 								updateMaxHistogramValues(violinDrawlistPlots[i]);
 							}
-							ImGui::EndDragDropTarget();
-						}
-						// we also support to drop a drawlist directly into a gridspace
-						if (ImGui::BeginDragDropTarget()) {
-							if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
-								DrawList* dl = *((DrawList**)payload->Data);
-								//check if the drawlist was already added to this plot
-								if (std::find(violinDrawlistPlots[i].drawLists.begin(), violinDrawlistPlots[i].drawLists.end(), dl->name) == violinDrawlistPlots[i].drawLists.end()) {
-									if (!violinDrawlistPlots[i].attributeNames.size()) {	//creating all needed resources e.g. attribute components
-										violinDrawlistPlots[i].activeAttributes = new bool[pcAttributes.size()];
-										violinDrawlistPlots[i].maxGlobalValue = 0;
-										int j = 0;
+							if ((drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) && j != 0xffffffff && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+								int p[] = { (int)(x * violinDrawlistPlots[i].matrixSize.second + y),j };		//holding the index in the pcAttriOrd array and the value of it
+								ImGui::SetDragDropPayload("ViolinDrawlist", p, sizeof(p));
+								ImGui::Text("%s", violinDrawlistPlots[i].drawLists[j].c_str());
+								ImGui::EndDragDropSource();
+							}
+							if ((drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) && ImGui::BeginDragDropTarget()) {
+								if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ViolinDrawlist")) {
+									int* other = (int*)payload->Data;
+									if (other[0] == -1) {
+										violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = other[1];
+									}
+									else {
+										violinDrawlistPlots[i].drawListOrder[other[0]] = j;
+										violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = other[1];
+									}
+									updateMaxHistogramValues(violinDrawlistPlots[i]);
+								}
+								ImGui::EndDragDropTarget();
+							}
+							// we also support to drop a drawlist directly into a gridspace
+							if ((drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) && ImGui::BeginDragDropTarget()) {
+								if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+									DrawList* dl = *((DrawList**)payload->Data);
+									//check if the drawlist was already added to this plot
+									if (std::find(violinDrawlistPlots[i].drawLists.begin(), violinDrawlistPlots[i].drawLists.end(), dl->name) == violinDrawlistPlots[i].drawLists.end()) {
+										if (!violinDrawlistPlots[i].attributeNames.size()) {	//creating all needed resources e.g. attribute components
+											violinDrawlistPlots[i].activeAttributes = new bool[pcAttributes.size()];
+											violinDrawlistPlots[i].maxGlobalValue = 0;
+											int j = 0;
+											for (Attribute& a : pcAttributes) {
+												violinDrawlistPlots[i].attributeNames.push_back(a.name);
+												violinDrawlistPlots[i].activeAttributes[j] = true;
+												violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
+												violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
+												violinDrawlistPlots[i].attributePlacements.push_back((j % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
+												violinDrawlistPlots[i].attributeScalings.push_back(1);
+												violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
+												violinDrawlistPlots[i].maxValues.push_back(0);
+												++j;
+											}
+										}
+
+										std::vector<std::pair<float, float>> minMax;
 										for (Attribute& a : pcAttributes) {
-											violinDrawlistPlots[i].attributeNames.push_back(a.name);
-											violinDrawlistPlots[i].activeAttributes[j] = true;
-											violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
-											violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
-											violinDrawlistPlots[i].attributePlacements.push_back((j % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
-											violinDrawlistPlots[i].attributeScalings.push_back(1);
-											violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
-											violinDrawlistPlots[i].maxValues.push_back(0);
-											++j;
+											minMax.push_back({ a.min,a.max });
 										}
-									}
+										DataSet* ds;
+										for (DataSet& d : g_PcPlotDataSets) {
+											if (d.name == dl->parentDataSet) {
+												ds = &d;
+												break;
+											}
+										}
+										histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+										HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
+										violinDrawlistPlots[i].attributeOrder.push_back({});
+										violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i]);
+										//std::vector<std::pair<uint32_t, float>> area;
+										for (int j = 0; j < hist.maxCount.size(); ++j) {
+											if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
+												violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
+											}
+											if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
+												violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
+											}
+										}
 
-									std::vector<std::pair<float, float>> minMax;
-									for (Attribute& a : pcAttributes) {
-										minMax.push_back({ a.min,a.max });
+										violinDrawlistPlots[i].drawLists.push_back(dl->name);
+										//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
+										//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+										//for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
 									}
-									DataSet* ds;
-									for (DataSet& d : g_PcPlotDataSets) {
-										if (d.name == dl->parentDataSet) {
-											ds = &d;
-											break;
-										}
-									}
-									histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
-									HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
-									violinDrawlistPlots[i].attributeOrder.push_back({});
-									violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i]);
-									//std::vector<std::pair<uint32_t, float>> area;
-									for (int j = 0; j < hist.maxCount.size(); ++j) {
-										if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
-											violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
-										}
-										if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
-											violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
-										}
-									}
-
-									violinDrawlistPlots[i].drawLists.push_back(dl->name);
-									//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
-									//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-									//for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
+									violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = violinDrawlistPlots[i].drawLists.size() - 1;
 								}
-								violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = violinDrawlistPlots[i].drawLists.size() - 1;
+								ImGui::EndDragDropTarget();
 							}
-							ImGui::EndDragDropTarget();
-						}
-						if (j == 0xffffffff) {
+							if (j == 0xffffffff) {
+								leftUpperCorner.x += size.x + violinPlotXSpacing;
+								continue;
+							}
+							ImVec2 textPos = framePos;
+							textPos.y -= ImGui::GetTextLineHeight();
+							ImGui::SetCursorScreenPos(textPos);
+							ImGui::Text(violinDrawlistPlots[i].drawLists[j].c_str());
+							ImGui::PushClipRect(framePos, framePos + size, false);
+							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
+							DrawList* dl = nullptr;
+							if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+								for (DrawList& draw : g_PcPlotDrawLists) {
+									if (draw.name == violinDrawlistPlots[i].drawLists[j]) {
+										dl = &draw;
+									}
+								}
+							}
+							//std::vector<std::pair<float, float>> localMinMax = std::vector<std::pair<float,float>>(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+							if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+								for (int k = 0; k < pcAttributes.size(); ++k) {
+									for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
+										if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
+										if (dl->brushes[k][mi].minMax.second > localMinMax[k].second) localMinMax[k].second = dl->brushes[k][mi].minMax.second;
+									}
+								}
+								for (int k = 0; k < pcAttributes.size(); ++k) {
+									if (localMinMax[k].first == std::numeric_limits<float>().max()) {
+										localMinMax[k].first = pcAttributes[k].min;
+										localMinMax[k].second = pcAttributes[k].max;
+									}
+								}
+							}
+							for (int k : violinDrawlistPlots[i].attributeOrder[j]) {
+								if (!violinDrawlistPlots[i].activeAttributes[k]) continue;
+
+								float histYStart;
+								float histYEnd;
+								switch (violinYScale) {
+								case ViolinYScaleStandard:
+									histYStart = 0;
+									histYEnd = size.y;
+									break;
+								case ViolinYScaleLocalBrush:
+									histYStart = ((hist.ranges[k].second - localMinMax[k].second) / (localMinMax[k].first - localMinMax[k].second) * size.y);
+									histYEnd = ((hist.ranges[k].first - localMinMax[k].second) / (localMinMax[k].first - localMinMax[k].second) * size.y);
+									break;
+								case ViolinYScaleGlobalBrush:
+									histYStart = ((hist.ranges[k].second - globalMinMax[k].second) / (globalMinMax[k].first - globalMinMax[k].second) * size.y);
+									histYEnd = ((hist.ranges[k].first - globalMinMax[k].second) / (globalMinMax[k].first - globalMinMax[k].second) * size.y);
+									break;
+								case ViolinYScaleBrushes:
+									float min = (localMinMax[k].first < globalMinMax[k].first) ? localMinMax[k].first : globalMinMax[k].first;
+									float max = (localMinMax[k].second > globalMinMax[k].second) ? localMinMax[k].second : globalMinMax[k].second;
+									histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+									histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
+									break;
+								}
+								//if (dl && dl->brushes[k].size()) {
+								//	float max = dl->brushes[k][0].minMax.second;
+								//	float min = dl->brushes[k][0].minMax.first;
+								//	for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
+								//		if (dl->brushes[k][mi].minMax.first < min) min = dl->brushes[k][mi].minMax.first;
+								//		if (dl->brushes[k][mi].minMax.second > max) max = dl->brushes[k][mi].minMax.second;
+								//	}
+								//	histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
+								//	histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
+								//}
+								//else {
+								//	histYStart = ((hist.ranges[k].second - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
+								//	histYEnd = ((hist.ranges[k].first - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
+								//}
+								//if (!yScaleToCurrenMax) {
+								//	histYStart = 0;
+								//	histYEnd = size.y;
+								//}
+								float histYFillStart = (histYStart < 0) ? 0 : histYStart;
+								float histYFillEnd = (histYEnd > size.y) ? size.y : histYEnd;
+								float histYLineStart = histYStart + framePos.y;
+								float histYLineEnd = histYEnd + framePos.y;
+								float histYLineDiff = histYLineEnd - histYLineStart;
+
+								float div = 0;
+								switch (violinDrawlistPlots[i].violinScalesX[k]) {
+								case ViolinScaleSelf:
+									div = hist.maxCount[k];
+									break;
+								case ViolinScaleLocal:
+									div = hist.maxGlobalCount;
+									break;
+								case ViolinScaleGlobal:
+									div = violinDrawlistPlots[i].maxGlobalValue;
+									break;
+								case ViolinScaleGlobalAttribute:
+									div = violinDrawlistPlots[i].maxValues[k];
+									break;
+								}
+
+								div /= violinDrawlistPlots[i].attributeScalings[k];
+
+								switch (violinDrawlistPlots[i].attributePlacements[k]) {
+								case ViolinLeftHalf:
+								{
+									div *= 2;
+								}
+								case ViolinLeft:
+								{
+									//filling
+									if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+										for (int p = histYFillStart; p < histYFillEnd; ++p) {
+											ImVec2 a(framePos.x, framePos.y + p);
+											float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
+											ImVec2 b(framePos.x + v / div * size.x, framePos.y + p + 1);
+											if (b.x - a.x >= 1)
+												ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
+										}
+									}
+									//outline
+									if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd),
+											ImVec2(framePos.x + hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										for (int l = 1; l < hist.bins[k].size(); ++l) {
+											ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+												ImVec2(framePos.x + hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										}
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd - histYLineDiff),
+											ImVec2(framePos.x + hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									}
+									break;
+								}
+								case ViolinRightHalf:
+								{
+									div *= 2;
+								}
+								case ViolinRight:
+								{
+									//filling
+									if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+										for (int p = histYFillStart; p < histYFillEnd; ++p) {
+											ImVec2 a(framePos.x + size.x, framePos.y + p);
+											float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
+											ImVec2 b(framePos.x + size.x - v / div * size.x, framePos.y + p + 1);
+											if (a.x - b.x >= 1)
+												ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
+										}
+									}
+									//outline
+									if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd),
+											ImVec2(framePos.x + size.x - hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										for (int l = 1; l < hist.bins[k].size(); ++l) {
+											ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x - hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+												ImVec2(framePos.x + size.x - hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										}
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd - histYLineDiff),
+											ImVec2(framePos.x + size.x - hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									}
+									break;
+								}
+								case ViolinMiddle:
+								{
+									float xBase = framePos.x + .5f * size.x;
+									//filling
+									if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+										for (int p = histYFillStart; p < histYFillEnd; ++p) {
+											float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
+											ImVec2 a(xBase - .5f * v / div * size.x, framePos.y + p);
+											ImVec2 b(xBase + .5f * v / div * size.x, framePos.y + p + 1);
+											if (b.x - a.x >= 1)
+												ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
+										}
+									}
+									if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
+											ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										for (int l = 1; l < hist.bins[k].size(); ++l) {
+											//left Line
+											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+												ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											//right Line
+											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+												ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										}
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
+											ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									}
+									break;
+								}
+								case ViolinMiddleLeft:
+								{
+									float xBase = framePos.x + .5f * size.x;
+									//filling
+									if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+										for (int p = histYFillStart; p < histYFillEnd; ++p) {
+											float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
+											ImVec2 a(xBase - .5f * v / div * size.x, framePos.y + p);
+											ImVec2 b(xBase, framePos.y + p + 1);
+											if (b.x - a.x >= 1)
+												ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
+										}
+									}
+									if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd),
+											ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										for (int l = 1; l < hist.bins[k].size(); ++l) {
+											//left Line
+											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+												ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										}
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd - histYLineDiff),
+											ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										//right Line
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									}
+									break;
+								}
+								case ViolinMiddleRight:
+								{
+									float xBase = framePos.x + .5f * size.x;
+									//filling
+									if (drawState == ViolinDrawStateArea || drawState == ViolinDrawStateAll) {
+										for (int p = histYFillStart; p < histYFillEnd; ++p) {
+											float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
+											ImVec2 a(xBase, framePos.y + p);
+											ImVec2 b(xBase + .5f * v / div * size.x, framePos.y + p + 1);
+											if (b.x - a.x >= 1)
+												ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
+										}
+									}
+									if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
+											ImVec2(xBase, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										for (int l = 1; l < hist.bins[k].size(); ++l) {
+											//right Line
+											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
+												ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										}
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
+											ImVec2(xBase, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										//left Line
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+									}
+									break;
+								}
+								}
+							}
 							leftUpperCorner.x += size.x + violinPlotXSpacing;
-							continue;
+							ImGui::PopClipRect();
 						}
-						ImVec2 textPos = framePos;
-						textPos.y -= ImGui::GetTextLineHeight();
-						ImGui::SetCursorScreenPos(textPos);
-						ImGui::Text(violinDrawlistPlots[i].drawLists[j].c_str());
-						ImGui::PushClipRect(framePos, framePos + size, false);
-						HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
-						DrawList* dl = nullptr;
-						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
-							for (DrawList& draw : g_PcPlotDrawLists) {
-								if (draw.name == violinDrawlistPlots[i].drawLists[j]) {
-									dl = &draw;
-								}
-							}
-						}
-						//std::vector<std::pair<float, float>> localMinMax = std::vector<std::pair<float,float>>(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-						if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
-							for (int k = 0; k < pcAttributes.size(); ++k) {
-								for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
-									if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
-									if (dl->brushes[k][mi].minMax.second > localMinMax[k].second) localMinMax[k].second = dl->brushes[k][mi].minMax.second;
-								}
-							}
-							for (int k = 0; k < pcAttributes.size(); ++k) {
-								if (localMinMax[k].first == std::numeric_limits<float>().max()) {
-									localMinMax[k].first = pcAttributes[k].min;
-									localMinMax[k].second = pcAttributes[k].max;
-								}
-							}
-						}
-						for (int k : violinDrawlistPlots[i].attributeOrder[j]) {
-							if (!violinDrawlistPlots[i].activeAttributes[k]) continue;
-							
-							float histYStart;
-							float histYEnd;
-							switch (violinYScale) {
-							case ViolinYScaleStandard:
-								histYStart = 0;
-								histYEnd = size.y;
-								break;
-							case ViolinYScaleLocalBrush:
-								histYStart = ((hist.ranges[k].second - localMinMax[k].second) / (localMinMax[k].first - localMinMax[k].second) * size.y);
-								histYEnd = ((hist.ranges[k].first - localMinMax[k].second) / (localMinMax[k].first - localMinMax[k].second) * size.y);
-								break;
-							case ViolinYScaleGlobalBrush:
-								histYStart = ((hist.ranges[k].second - globalMinMax[k].second) / (globalMinMax[k].first - globalMinMax[k].second) * size.y);
-								histYEnd = ((hist.ranges[k].first - globalMinMax[k].second) / (globalMinMax[k].first - globalMinMax[k].second) * size.y);
-								break;
-							case ViolinYScaleBrushes:
-								float min = (localMinMax[k].first < globalMinMax[k].first) ? localMinMax[k].first : globalMinMax[k].first;
-								float max = (localMinMax[k].second > globalMinMax[k].second) ? localMinMax[k].second : globalMinMax[k].second;
-								histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
-								histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
-								break;
-							}
-							//if (dl && dl->brushes[k].size()) {
-							//	float max = dl->brushes[k][0].minMax.second;
-							//	float min = dl->brushes[k][0].minMax.first;
-							//	for (int mi = 1; mi < dl->brushes[k].size(); ++mi) {
-							//		if (dl->brushes[k][mi].minMax.first < min) min = dl->brushes[k][mi].minMax.first;
-							//		if (dl->brushes[k][mi].minMax.second > max) max = dl->brushes[k][mi].minMax.second;
-							//	}
-							//	histYStart = ((hist.ranges[k].second - max) / (min - max) * size.y);
-							//	histYEnd = ((hist.ranges[k].first - max) / (min - max) * size.y);
-							//}
-							//else {
-							//	histYStart = ((hist.ranges[k].second - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
-							//	histYEnd = ((hist.ranges[k].first - pcAttributes[k].max) / (pcAttributes[k].min - pcAttributes[k].max) * size.y);
-							//}
-							//if (!yScaleToCurrenMax) {
-							//	histYStart = 0;
-							//	histYEnd = size.y;
-							//}
-							float histYFillStart = (histYStart < 0) ? 0 : histYStart;
-							float histYFillEnd = (histYEnd > size.y) ? size.y : histYEnd;
-							float histYLineStart = histYStart + framePos.y;
-							float histYLineEnd = histYEnd + framePos.y;
-							float histYLineDiff = histYLineEnd - histYLineStart;
-
-							float div = 0;
-							switch (violinDrawlistPlots[i].violinScalesX[k]) {
-							case ViolinScaleSelf:
-								div = hist.maxCount[k];
-								break;
-							case ViolinScaleLocal:
-								div = hist.maxGlobalCount;
-								break;
-							case ViolinScaleGlobal:
-								div = violinDrawlistPlots[i].maxGlobalValue;
-								break;
-							case ViolinScaleGlobalAttribute:
-								div = violinDrawlistPlots[i].maxValues[k];
-								break;
-							}
-
-							div /= violinDrawlistPlots[i].attributeScalings[k];
-
-							switch (violinDrawlistPlots[i].attributePlacements[k]) {
-							case ViolinLeftHalf:
-							{
-								div *= 2;
-							}
-							case ViolinLeft:
-							{
-								//filling
-								for (int p = histYFillStart; p < histYFillEnd; ++p) {
-									ImVec2 a(framePos.x, framePos.y + p);
-									float v = getBinVal(((1 - (p + .5f) + histYEnd)/(histYEnd - histYStart)), hist.bins[k]);
-									ImVec2 b(framePos.x + v / div * size.x, framePos.y + p + 1);
-									if (b.x - a.x >= 1)
-										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
-								}
-								//outline
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd),
-									ImVec2(framePos.x + hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								for (int l = 1; l < hist.bins[k].size(); ++l) {
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-										ImVec2(framePos.x + hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd - histYLineDiff),
-									ImVec2(framePos.x + hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								break;
-							}
-							case ViolinRightHalf:
-							{
-								div *= 2;
-							}
-							case ViolinRight:
-							{
-								//filling
-								for (int p = histYFillStart; p < histYFillEnd; ++p) {
-									ImVec2 a(framePos.x + size.x, framePos.y + p);
-									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
-									ImVec2 b(framePos.x + size.x - v / div * size.x, framePos.y + p + 1);
-									if (a.x - b.x >= 1)
-										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
-								}
-								//outline
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd),
-									ImVec2(framePos.x + size.x - hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								for (int l = 1; l < hist.bins[k].size(); ++l) {
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x - hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-										ImVec2(framePos.x + size.x - hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd - histYLineDiff),
-									ImVec2(framePos.x + size.x - hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								break;
-							}
-							case ViolinMiddle:
-							{
-								float xBase = framePos.x + .5f * size.x;
-								//filling
-								for (int p = histYFillStart; p < histYFillEnd; ++p) {
-									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
-									ImVec2 a(xBase - .5f * v / div * size.x, framePos.y + p);
-									ImVec2 b(xBase + .5f * v / div * size.x, framePos.y + p + 1);
-									if (b.x - a.x >= 1)
-										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
-									ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								for (int l = 1; l < hist.bins[k].size(); ++l) {
-									//left Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-										ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-									//right Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-										ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
-									ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								break;
-							}
-							case ViolinMiddleLeft:
-							{
-								float xBase = framePos.x + .5f * size.x;
-								//filling
-								for (int p = histYFillStart; p < histYFillEnd; ++p) {
-									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
-									ImVec2 a(xBase - .5f * v / div * size.x, framePos.y + p);
-									ImVec2 b(xBase, framePos.y + p + 1);
-									if (b.x - a.x >= 1)
-										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd),
-									ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								for (int l = 1; l < hist.bins[k].size(); ++l) {
-									//left Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-										ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd - histYLineDiff),
-									ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								//right Line
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								break;
-							}
-							case ViolinMiddleRight:
-							{
-								float xBase = framePos.x + .5f * size.x;
-								//filling
-								for (int p = histYFillStart; p < histYFillEnd; ++p) {
-									float v = getBinVal(((1 - (p + .5f) + histYEnd) / (histYEnd - histYStart)), hist.bins[k]);
-									ImVec2 a(xBase, framePos.y + p);
-									ImVec2 b(xBase + .5f * v / div * size.x, framePos.y + p + 1);
-									if (b.x - a.x >= 1)
-										ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImColor(violinDrawlistPlots[i].attributeFillColors[k]));
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
-									ImVec2(xBase, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								for (int l = 1; l < hist.bins[k].size(); ++l) {
-									//right Line
-									ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-										ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								}
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
-									ImVec2(xBase, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								//left Line
-								ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
-								break;
-							}
-							}
-						}
-						leftUpperCorner.x += size.x + violinPlotXSpacing;
-						ImGui::PopClipRect();
+						leftUpperCorner.x = leftUpperCornerStart.x;
+						leftUpperCorner.y += size.y + ImGui::GetFrameHeightWithSpacing();
 					}
-					leftUpperCorner.x = leftUpperCornerStart.x;
-					leftUpperCorner.y += size.y + ImGui::GetFrameHeightWithSpacing();
+					
+					if (drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) done = true;
+					if (drawState == ViolinDrawStateArea) drawState = ViolinDrawStateLine;
 				}
-
 				ImGui::PopItemWidth();
 				ImGui::EndChild();
 				//drag and drop drawlists onto this plot child to add it to this violin plot
