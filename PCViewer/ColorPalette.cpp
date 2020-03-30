@@ -200,7 +200,7 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
 		else
 		{
 			numberOfColors = std::min(std::max(minVal, nrColors), getPalletteWithNrs(categoryNr, paletteNr)->maxcolors);
-			std::vector<std::string> choosenColors = (brew<std::string>(paletteStr, numberOfColors));
+			choosenColors = (brew<std::string>(paletteStr, numberOfColors));
 		}
 
 
