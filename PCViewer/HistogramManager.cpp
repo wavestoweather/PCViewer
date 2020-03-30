@@ -148,9 +148,11 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 	Histogram histogram = {};
 	for (int i = 0; i < minMax.size(); ++i) {
 		histogram.bins.push_back({ });			//push back empty vector
+		histogram.binsRendered.push_back({ });			//push back empty vector
 		histogram.originalBins.push_back({ });
 		histogram.maxCount.push_back({ });
 		histogram.area.push_back(0);
+		histogram.areaRendered.push_back(0);
 		for (int j = 0; j < numOfBins; ++j) {
 			float curVal = 0;
 			//int div = 0;
@@ -255,7 +257,33 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 
 void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 {
-	unsigned int n = hist.bins.size();
+	std::vector<std::vector<float>> *bins = nullptr;
+	std::vector<float> *area = nullptr;
+	// If binsRendered is filled, the actual rendered size of the violins is known. Hence, this is taken to compute the side assignement. 
+	// If it is empty, the vertical scaling as well as the specific horizontal scaling might be ignored!
+
+	bool bRendered = false;
+	if (hist.binsRendered.size() > 0)
+	{
+		if (hist.binsRendered[0].size() > 0)
+		{
+			bins = &hist.binsRendered;
+			area = &hist.areaRendered;
+			for (unsigned int i = 0; i < area->size(); ++i)
+			{
+				// If less than one pixel is occupied, set the area to plain 0.
+				if ((area->at(i) < 1) || isnan(area->at(i)))
+				{
+					(*area)[i] = 0;
+				}
+			}
+			bRendered = true;
+		}
+	}
+
+	if (!bRendered) { bins = &hist.bins; area = &hist.area; }
+
+	unsigned int n = bins->size();
 	std::vector<std::vector<float>> histOverlaps(n, std::vector<float>(n, 0));
 	std::vector<std::vector<float>> histOverlapsPerc(n, std::vector<float>(n, 0));
 	std::vector<std::vector<float>> histOverlapsPercMin(n, std::vector<float>(n, 0));
@@ -264,7 +292,7 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 	unsigned int nrBins = 0;
 	if (n > 0)
 	{
-		nrBins = hist.bins[0].size();
+		nrBins = bins->at(0).size();
 	}
 
 	for (unsigned int i = 0; i < n; ++i)
@@ -274,11 +302,11 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 			for (unsigned int k = 0; k < nrBins; ++k)
 				{
 					// The overlap is the minimum of the bin size between the two bars.
-					histOverlaps[i][j] += std::fmin(hist.bins[i][k], hist.bins[j][k]);
+					histOverlaps[i][j] += std::fmin(bins->at(i)[k], bins->at(j)[k]);
 				}
 			
 			// Divide the overlap by the total length of bars in histogram 1. 1 means the whole histogram is covered by the other.
-			histOverlapsPerc[i][j] = histOverlaps[i][j]/hist.area[i];
+			histOverlapsPerc[i][j] = histOverlaps[i][j]/ area->at(i);
 
 			if (i >= j)
 			{
@@ -307,6 +335,19 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 			}
 		}
 	}
+
+	for (int i = v.size() - 1; i >= 0; --i)
+	{
+		// If the area is too small, don't take the attribute into consideration.
+		if (area->at(i) < 0.000001)
+		{
+			vUsed.push_back(v[i]);
+			v.erase(v.begin() + i);
+		}
+	}
+
+
+
 
 	while(true)
 	{

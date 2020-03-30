@@ -14,10 +14,12 @@ public:
 	struct Histogram {
 		float maxGlobalCount;							//maximung value accross all attributes
 		std::vector<float> area;						//area when scaling equals 1
+		std::vector<float> areaRendered;				//area of rendered violin
 		std::vector<float> maxCount;					//maximum histogramm value for each attribute
 		std::vector<std::pair<float, float>> ranges;	//the value ranges for each attribute
 		std::vector<std::vector<float>> originalBins;	//histogramm values for each attribute before smoothing was applied
 		std::vector<std::vector<float>> bins;			//histogramm values for each attribute
+		std::vector<std::vector<float>> binsRendered;	//histogramm values for each attribute in final x-coordinate differences
 		std::vector<unsigned int> side;					//stores on which side each attribute is rendered.
 		std::vector<unsigned int> attributeColorOrderIdx;//stores indices in the order in which colors have to be assigned to them. In combination with side, the right colors can be chosen from the colorpalette "Dark2ExtendedReorder", such that the colors are on the right side. 
 	};

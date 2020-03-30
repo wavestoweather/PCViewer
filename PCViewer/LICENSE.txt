@@ -1,4 +1,5 @@
 Current License: Contact the copyright owners for further details.
+After acceptance of the paper, the final license will at least permit non-commercial use, including changes/adaptions... of the code.
 
 Additionally, the licenses of included 3rd party code apply:
 
