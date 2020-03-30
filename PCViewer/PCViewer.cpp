@@ -737,7 +737,7 @@ static HistogramManager* histogramManager;
 static IsoSurfRenderer* isoSurfaceRenderer;
 static bool coupleIsoSurfaceRenderer = true;
 static bool isoSurfaceRegularGrid = false;
-static int isoSurfaceRegularGridDim[3]{ 100,100,100 };
+static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
 
 //variables for fractions
 static int maxFractionDepth = 20;
@@ -4144,7 +4144,9 @@ static bool updateAllActiveIndices() {
 }
 
 static void updateIsoSurface(GlobalBrush& gb) {
-	if (ImGui::IsMouseDown(0) || !coupleIsoSurfaceRenderer) return;
+	int amtOfLines = 0;
+	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
+	if ((ImGui::IsMouseDown(0) && liveBrushThreshold < amtOfLines) || !coupleIsoSurfaceRenderer) return;
 	int index = -1;
 	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
 		++index;
@@ -4171,17 +4173,23 @@ static void updateIsoSurface(GlobalBrush& gb) {
 			attr.push_back(i);
 			minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
 		}
-		minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
-		minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
-		minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
 		std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
+		std::vector<uint32_t> brushIndices;
 		for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
+			if (axis.second.size()) brushIndices.push_back(axis.first);
 			for (auto& brush : axis.second) {
 				miMa[axis.first].push_back(brush.second);
 			}
 		}
 
-		isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices, miMa, index);
+		glm::uvec3 posIndices{ 0,2,1 };
+
+		if (isoSurfaceRegularGrid) {
+			isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
+		}
+		else {
+			isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index);
+		}
 	}
 }
 
@@ -7658,9 +7666,6 @@ int main(int, char**)
 						attr.push_back(i);
 						minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
 					}
-					minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
-					minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
-					minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
 					std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
 					std::vector<uint32_t> brushIndices;
 					for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
@@ -7680,7 +7685,7 @@ int main(int, char**)
 					if(index == -1)
 						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
 					if (isoSurfaceRegularGrid) {
-						isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, dl->indices.size()* pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
+						isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 					}
 					else {
 						if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index) && index == -1) {
