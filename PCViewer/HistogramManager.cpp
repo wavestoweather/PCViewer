@@ -387,6 +387,7 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 				if (overlap2 > maxOverlapIdx1Side2) { maxOverlapIdx1Side2 = overlap2; }
 			}
 			(maxOverlapIdx1Side1 < maxOverlapIdx1Side2) ?  hist.side[v[0]] = 0 :  hist.side[v[0]] = 1;
+			vUsed.push_back(v[0]);
 			break;
 		}
 		else if (v.size() == 0)
