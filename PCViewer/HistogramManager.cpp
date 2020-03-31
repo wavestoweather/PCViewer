@@ -295,39 +295,16 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 		nrBins = bins->at(0).size();
 	}
 
-	for (unsigned int i = 0; i < n; ++i)
-	{
-		for (unsigned int j = 0; j < n; ++j)
-		{
-			for (unsigned int k = 0; k < nrBins; ++k)
-				{
-					// The overlap is the minimum of the bin size between the two bars.
-					histOverlaps[i][j] += std::fmin(bins->at(i)[k], bins->at(j)[k]);
-				}
-			
-			// Divide the overlap by the total length of bars in histogram 1. 1 means the whole histogram is covered by the other.
-			histOverlapsPerc[i][j] = histOverlaps[i][j]/ area->at(i);
-
-			if (i >= j)
-			{
-				histOverlapsPercMin[i][j] = std::fmin(histOverlapsPerc[i][j], histOverlapsPerc[j][i]);
-				histOverlapsPercMin[j][i] = std::fmin(histOverlapsPerc[i][j], histOverlapsPerc[j][i]);
-			}
-		}
-	}
-
-	// Now, determin which histogram has to be moved to which side.
-	// Separate the most similar ones, i.e. max(min(PercA, PercB))
 
 	std::vector<unsigned int> v(n);
 	std::vector<unsigned int> vUsed(0);
-	
+
 	std::iota(v.begin(), v.end(), 0);
 
 	// Remove all inactive attributes from the decision.
 	if (active != nullptr)
 	{
-		for (int i = v.size() - 1; i >= 0 ; --i)
+		for (int i = v.size() - 1; i >= 0; --i)
 		{
 			if (!((*active)[i]))
 			{
@@ -339,7 +316,7 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 	for (int i = v.size() - 1; i >= 0; --i)
 	{
 		// If the area is too small, don't take the attribute into consideration.
-		if (area->at(i) < 0.000001)
+		if (area->at(v[i]) < 0.000001)
 		{
 			vUsed.push_back(v[i]);
 			v.erase(v.begin() + i);
@@ -347,8 +324,31 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 	}
 
 
+	for (unsigned int i = 0; i < v.size(); ++i)
+	{
+		for (unsigned int j = 0; j < v.size(); ++j)
+		{
+			for (unsigned int k = 0; k < nrBins; ++k)
+				{
+					// The overlap is the minimum of the bin size between the two bars.
+					histOverlaps[v[i]][v[j]] += std::fmin(bins->at(v[i])[k], bins->at(v[j])[k]);
+				}
+			
+			// Divide the overlap by the total length of bars in histogram 1. 1 means the whole histogram is covered by the other.
+			histOverlapsPerc[v[i]][v[j]] = histOverlaps[v[i]][v[j]]/ area->at(v[i]);
+
+			if (v[i] >= v[j])
+			{
+				histOverlapsPercMin[v[i]][v[j]] = std::fmin(histOverlapsPerc[v[i]][v[j]], histOverlapsPerc[v[j]][v[i]]);
+				histOverlapsPercMin[v[j]][v[i]] = std::fmin(histOverlapsPerc[v[i]][v[j]], histOverlapsPerc[v[j]][v[i]]);
+			}
+		}
+	}
 
 
+
+	// Now, determin which histogram has to be moved to which side.
+	// Separate the most similar ones, i.e. max(min(PercA, PercB))
 	while(true)
 	{
 		float currMax = 0;
@@ -422,7 +422,11 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 			for (unsigned int i = 0; i < vUsed.size(); i += 2)
 			{
 				float overlap1 = histOverlapsPercMin[vUsed[i]][v[0]];
-				float overlap2 = histOverlapsPercMin[vUsed[i+1]][v[0]];
+				float overlap2 = 0;
+				if (vUsed.size() > i + 1)
+				{
+					overlap2 = histOverlapsPercMin[vUsed[i + 1]][v[0]];
+				}
 
 				if (overlap1 > maxOverlapIdx1Side1) { maxOverlapIdx1Side1 = overlap1; }
 				if (overlap2 > maxOverlapIdx1Side2) { maxOverlapIdx1Side2 = overlap2; }
