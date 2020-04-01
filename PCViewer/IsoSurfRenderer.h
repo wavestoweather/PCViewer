@@ -18,6 +18,7 @@ The iso surfaces are set by brushes.
 #include <string.h>
 #include <map>
 #include <numeric>
+#include <fstream>
 
 #define VERTICALPANSPEED .01f
 #define HORIZONTALPANSPEED .01f
@@ -58,6 +59,7 @@ public:
 	VkDescriptorSet getImageDescriptorSet();
 	VkSampler getImageSampler();
 	VkImageView getImageView();
+	void exportBinaryCsv(std::string path, uint32_t binaryIndex);
 
 	std::vector<DrawlistBrush> drawlistBrushes;
 	bool shade;

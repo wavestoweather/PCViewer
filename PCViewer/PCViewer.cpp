@@ -7568,6 +7568,7 @@ int main(int, char**)
 		//begin of iso surface window --------------------------------------------------------------------
 		if (enableIsoSurfaceWindow) {
 			ImGui::Begin("Isosurface Renderer",&enableIsoSurfaceWindow,ImGuiWindowFlags_MenuBar);
+			int dlbExport = -1;
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to brush", &coupleIsoSurfaceRenderer);
@@ -7590,8 +7591,41 @@ int main(int, char**)
 					}
 					ImGui::EndMenu();
 				}
+				if (ImGui::BeginMenu("Export")) {
+					int ind = 0;
+					for (auto& dlb : isoSurfaceRenderer->drawlistBrushes) {
+						if (ImGui::MenuItem((dlb.drawlist + dlb.brush).c_str())) {
+							dlbExport = ind;
+						}
+						++ind;
+					}
+					ImGui::EndMenu();
+				}
 
 				ImGui::EndMenuBar();
+			}
+
+			static int dlbEx;
+			if (dlbExport != -1) { 
+				ImGui::OpenPopup("Export binary volume"); 
+				dlbEx = dlbExport;
+			}
+			if (ImGui::BeginPopupModal("Export binary volume", 0, ImGuiWindowFlags_AlwaysAutoResize)) {
+				
+				static char path[200]{};
+				ImGui::InputText("filepath (including filename and file ending)", path, 200);
+
+				if ((ImGui::Button("Save", ImVec2(120, 0)) || ImGui::IsKeyPressed(KEYENTER)) && std::string(path).size()) {
+					isoSurfaceRenderer->exportBinaryCsv(std::string(path), dlbEx);
+					ImGui::CloseCurrentPopup();
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(KEYESC)) {
+					ImGui::CloseCurrentPopup();
+				}
+
+				ImGui::EndPopup();
 			}
 			
 			ImGui::Image((ImTextureID)isoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });

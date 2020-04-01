@@ -489,6 +489,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 		binarySmoothView.push_back({});
 		binaryImageMemory.push_back({});
 		VkUtil::create3dImage(device, w, h, d, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &binaryImage.back());
+		VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &binarySmooth.back());
 		VkMemoryRequirements memReq;
 		vkGetImageMemoryRequirements(device, binaryImage.back(), &memReq);
 		vkGetImageMemoryRequirements(device, binarySmooth.back(), &memReq);
@@ -1015,6 +1016,27 @@ VkSampler IsoSurfRenderer::getImageSampler()
 VkImageView IsoSurfRenderer::getImageView()
 {
 	return imageView;
+}
+
+void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
+{
+	if (binaryIndex >= drawlistBrushes.size()) return;
+
+	uint8_t* binaryData = new uint8_t[image3dHeight * image3dDepth * image3dWidth];
+	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage[binaryIndex], image3dWidth, image3dHeight, image3dDepth, binaryData, image3dHeight * image3dDepth * image3dWidth);
+
+	std::ofstream file(path);
+
+	//int count = 0;
+	for (int i = 0; i < image3dHeight * image3dDepth * image3dWidth; ++i) {
+		//if (binaryData[i]) ++count;
+		file << std::to_string(binaryData[i]);
+		if (i < image3dHeight * image3dDepth * image3dWidth - 1) file << ",";
+	}
+	//std::cout << count << std::endl;
+
+	file.close();
+	delete[] binaryData;
 }
 
 void IsoSurfRenderer::smoothImage(int index)
