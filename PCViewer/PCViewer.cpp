@@ -2580,9 +2580,16 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 
 #ifdef PRINTRENDERTIME
-		bool* active = new bool[drawList->indices.size()];
-		VkUtil::downloadData(g_Device, drawList->dlMem, drawList->activeIndicesBufferOffset, drawList->indices.size() * sizeof(bool), active);
-		for (int i = 0; i < drawList->indices.size(); ++i) {
+		uint32_t boolSize;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (ds.name == drawList->parentDataSet) {
+				ds.data.size();
+				break;
+			}
+		}
+		bool* active = new bool[boolSize];
+		VkUtil::downloadData(g_Device, drawList->dlMem, drawList->activeIndicesBufferOffset, boolSize * sizeof(bool), active);
+		for (int i = 0; i < boolSize; ++i) {
 			if (active[i]) ++amtOfLines;
 		}
 		delete[] active;
@@ -7148,10 +7155,17 @@ int main(int, char**)
 
 							if (ImGui::Selectable(draw->name.c_str(), false)) {
 								std::vector<uint32_t> activeDraw, activeDl;
-								bool* actDraw = new bool[draw->indices.size()];
-								bool* actDl = new bool[dl.indices.size()];
-								VkUtil::downloadData(g_Device, draw->dlMem, draw->activeIndicesBufferOffset, draw->indices.size() * sizeof(bool), actDraw);
-								VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, dl.indices.size() * sizeof(bool), actDl);
+								uint32_t boolSize;
+								for (DataSet& ds : g_PcPlotDataSets) {
+									if (ds.name == draw->parentDataSet) {
+										boolSize = ds.data.size();
+										break;
+									}
+								}
+								bool* actDraw = new bool[boolSize];
+								bool* actDl = new bool[boolSize];
+								VkUtil::downloadData(g_Device, draw->dlMem, draw->activeIndicesBufferOffset, boolSize * sizeof(bool), actDraw);
+								VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, boolSize * sizeof(bool), actDl);
 								for (int i : draw->indices) {
 									if (actDraw[i]) activeDraw.push_back(i);
 								}
