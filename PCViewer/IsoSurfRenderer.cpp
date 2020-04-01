@@ -785,7 +785,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 		return true;
 	}
 
-	//smoothImage((index == -1)?binaryImage.size() - 1:index);
+	smoothImage((index == -1)?binaryImage.size() - 1:index);
 	updateBrushBuffer();
 	updateDescriptorSet();
 	updateCommandBuffer();
@@ -1039,6 +1039,14 @@ void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 	delete[] binaryData;
 }
 
+void IsoSurfRenderer::setBinarySmoothing(float stdDiv)
+{
+	smoothStdDiv = stdDiv;
+	for (int i = 0; i < binaryImage.size(); ++i) {
+		smoothImage(i);
+	}
+}
+
 void IsoSurfRenderer::smoothImage(int index)
 {
 	VkResult err;
@@ -1060,7 +1068,7 @@ void IsoSurfRenderer::smoothImage(int index)
 
 	VkBuffer ubos;
 	VkDeviceMemory uboMemory;
-	VkUtil::createBuffer(device, sizeof(SmoothUBO) * 3, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &ubos);
+	VkUtil::createBuffer(device, sizeof(SmoothUBO) * 3, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubos);
 	vkGetBufferMemoryRequirements(device, ubos, &memReq);
 	allocInfo.allocationSize = memReq.size;
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -1076,35 +1084,35 @@ void IsoSurfRenderer::smoothImage(int index)
 	ubo.index = 2;
 	VkUtil::uploadData(device, uboMemory, 2 * sizeof(SmoothUBO), sizeof(SmoothUBO), &ubo);
 
+	VkDescriptorSet descSets[3];
+	std::vector<VkDescriptorSetLayout> layouts(3, binarySmoothDescriptorSetLayout);
+	VkUtil::createDescriptorSets(device, layouts, descriptorPool, descSets);
+	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSets[0]);
+	VkUtil::updateStorageImageDescriptorSet(device, binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 1, descSets[0]);
+	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[0]);
+	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, sizeof(SmoothUBO), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSets[1]);
+	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 1, descSets[1]);
+	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 2, descSets[1]);
+	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 2 * sizeof(SmoothUBO), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSets[2]);
+	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 1, descSets[2]);
+	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[2]);
+
+	uint32_t patchAmtX = image3dWidth / LOCALSIZE3D + ((image3dWidth % LOCALSIZE3D) ? 1 : 0);
+	uint32_t patchAmtY = image3dHeight / LOCALSIZE3D + ((image3dHeight % LOCALSIZE3D) ? 1 : 0);
+	uint32_t patchAmtZ = image3dDepth / LOCALSIZE3D + ((image3dDepth % LOCALSIZE3D) ? 1 : 0);
+
 	VkCommandBuffer commands;
 	VkUtil::createCommandBuffer(device, commandPool, &commands);
 	VkUtil::transitionImageLayout(commands, binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	VkUtil::transitionImageLayout(commands, binarySmooth[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	VkUtil::transitionImageLayout(commands, tmpImage, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-	VkUtil::commitCommandBuffer(queue, commands);
-	check_vk_result(vkQueueWaitIdle(queue));
-
-	VkDescriptorSet descSets[3];
-	std::vector<VkDescriptorSetLayout> layouts(3, binarySmoothDescriptorSetLayout);
-	VkUtil::createDescriptorSets(device, layouts, descriptorPool, descSets);
-	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 0, descSets[0]);
-	VkUtil::updateStorageImageDescriptorSet(device, binaryImageView[index], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, descSets[0]);
-	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[0]);
-	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 1, sizeof(SmoothUBO), descSets[1]);
-	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 1, descSets[1]);
-	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 2, descSets[1]);
-	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 2, 2 * sizeof(SmoothUBO), descSets[2]);
-	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 1, descSets[2]);
-	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[2]);
-
-	uint32_t patchAmtX = image3dWidth / LOCALSIZE3D + ((image3dWidth % LOCALSIZE) ? 1 : 0);
-	uint32_t patchAmtY = image3dHeight / LOCALSIZE3D + ((image3dHeight % LOCALSIZE) ? 1 : 0);
-	uint32_t patchAmtZ = image3dDepth / LOCALSIZE3D + ((image3dDepth % LOCALSIZE) ? 1 : 0);
-
-	vkResetCommandBuffer(commands, 0);
 	vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, binarySmoothPipeline);
 	vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, binarySmoothPipelineLayout, 0, 1, descSets, 0, nullptr);
-	vkCmdDispatch(commands, patchAmtX, patchAmtY, patchAmtY);
+	vkCmdDispatch(commands, patchAmtX, patchAmtY, patchAmtZ);
+	vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, binarySmoothPipelineLayout, 0, 1, &descSets[1], 0, nullptr);
+	vkCmdDispatch(commands, patchAmtX, patchAmtY, patchAmtZ);
+	vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, binarySmoothPipelineLayout, 0, 1, &descSets[2], 0, nullptr);
+	vkCmdDispatch(commands, patchAmtX, patchAmtY, patchAmtZ);
 	VkUtil::transitionImageLayout(commands, binarySmooth[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkUtil::transitionImageLayout(commands, binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkUtil::commitCommandBuffer(queue, commands);
@@ -1386,7 +1394,7 @@ void IsoSurfRenderer::createPipeline()
 	bindings.clear();
 	binding.binding = 0;								//smooth infos
 	binding.descriptorCount = 1;
-	binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(binding);
 
 	binding.binding = 1;								//src image
@@ -1419,7 +1427,7 @@ void IsoSurfRenderer::updateDescriptorSet()
 	//std::vector<VkImage> binaryImages{ binaryImage };
 	//std::vector<VkImageView> binaryImagesView{ binaryImageView };
 	std::vector<VkSampler> samplers(binaryImageView.size(), binaryImageSampler);
-	VkUtil::updateImageArrayDescriptorSet(device, samplers, binaryImageView, layouts, 1, descriptorSet);
+	VkUtil::updateImageArrayDescriptorSet(device, samplers, binarySmoothView, layouts, 1, descriptorSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 }
 

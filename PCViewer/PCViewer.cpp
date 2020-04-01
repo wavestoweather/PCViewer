@@ -2583,7 +2583,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		uint32_t boolSize;
 		for (DataSet& ds : g_PcPlotDataSets) {
 			if (ds.name == drawList->parentDataSet) {
-				ds.data.size();
+				boolSize = ds.data.size();
 				break;
 			}
 		}
@@ -7669,6 +7669,11 @@ int main(int, char**)
 						isoSurfaceRenderer->render();
 					}
 					if (ImGui::SliderFloat("Ray march step size", &isoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {
+						isoSurfaceRenderer->render();
+					}
+					static float stdDiv = 1;
+					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, .1f, 10)) {
+						isoSurfaceRenderer->setBinarySmoothing(stdDiv);
 						isoSurfaceRenderer->render();
 					}
 					ImGui::EndMenu();

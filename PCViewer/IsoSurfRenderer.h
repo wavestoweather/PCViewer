@@ -60,6 +60,7 @@ public:
 	VkSampler getImageSampler();
 	VkImageView getImageView();
 	void exportBinaryCsv(std::string path, uint32_t binaryIndex);
+	void setBinarySmoothing(float stdDiv);
 
 	std::vector<DrawlistBrush> drawlistBrushes;
 	bool shade;
