@@ -7672,7 +7672,7 @@ int main(int, char**)
 						isoSurfaceRenderer->render();
 					}
 					static float stdDiv = 1;
-					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, .1f, 10)) {
+					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, 0, 10)) {
 						isoSurfaceRenderer->setBinarySmoothing(stdDiv);
 						isoSurfaceRenderer->render();
 					}
@@ -7751,6 +7751,7 @@ int main(int, char**)
 				ImGui::EndCombo();
 			}
 			ImGui::SameLine();
+			if (selectedGlobalBrush != -1 && !globalBrushes.size()) selectedGlobalBrush = -1;
 			if (ImGui::BeginCombo("Brush", (selectedGlobalBrush == -1) ? choose : globalBrushes[selectedGlobalBrush].name.c_str())) {
 				if (ImGui::Selectable(choose, selectedGlobalBrush == -1)) selectedGlobalBrush = -1;
 				for (int i = 0; i < globalBrushes.size(); ++i) {

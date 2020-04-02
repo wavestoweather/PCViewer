@@ -227,6 +227,8 @@ private:
 
 	float smoothStdDiv = 1;
 
+	uint32_t uboAlignment;
+
 	//private methods
 	void smoothImage(int index);
 
