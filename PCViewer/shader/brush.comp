@@ -52,7 +52,8 @@ void main(){
 	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
 	if(bool(info.first)){
 		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
-		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
+		if(info.first!=2)
+			imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
 	}
 	else{
 		if(bool(info.and)){
@@ -62,7 +63,8 @@ void main(){
 			a = a || lineKeep;
 		}
 		if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
-		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
+		if(info.first!=2)
+			imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
 	}
 	
 	if(lineKeep){

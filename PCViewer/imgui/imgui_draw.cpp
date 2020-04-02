@@ -1174,6 +1174,44 @@ void ImDrawList::AddCircleFilled(const ImVec2& center, float radius, ImU32 col, 
     PathFillConvex(col);
 }
 
+void ImDrawList::AddPie(const ImVec2& center, float radius, ImU32 col, float percentage, int num_segments) {
+	if (radius <= 2) return;
+	AddCircleFilled(center, radius, IM_COL32(0,0,0,255), num_segments);
+	radius -= 2;
+	if (percentage == 0)
+	{
+		AddLine(center, center + ImVec2{radius, 0},col);
+	}
+
+	//Obtain segment count
+	if (num_segments <= 0) {
+		// Automatic segment count
+		const int radius_idx = (int)radius - 1;
+		if (radius_idx < IM_ARRAYSIZE(_Data->CircleSegmentCounts))
+			num_segments = _Data->CircleSegmentCounts[radius_idx]; // Use cached value
+		else
+			num_segments = IM_DRAWLIST_CIRCLE_AUTO_SEGMENT_CALC(radius, _Data->CircleSegmentMaxError);
+	}
+	else {
+		// Explicit segment count (still clamp to avoid drawing insanely tessellated shapes)
+		num_segments = ImClamp(num_segments, 3, IM_DRAWLIST_CIRCLE_AUTO_SEGMENT_MAX);
+	}
+	num_segments = ceilf(percentage * num_segments);
+
+	const float a_min = (IM_PI * 2.0f) * - percentage / 2;
+	const float a_max = (IM_PI * 2.0f) * percentage / 2;
+	ImVec2 points[3]{};
+	points[0] = center;
+	points[1] = ImVec2(center.x + ImCos(a_min) * radius, center.y + ImSin(a_min) * radius);
+	for (int i = 1; i <= num_segments; i++)
+	{
+		const float a = a_min + ((float)i / (float)num_segments) * (a_max - a_min);
+		points[2] = ImVec2(center.x + ImCos(a) * radius, center.y + ImSin(a) * radius);
+		AddConvexPolyFilled(points, 3, col);
+		points[1] = ImVec2(center.x + ImCos(a - .1f) * radius, center.y + ImSin(a - .1f) * radius);
+	}
+}
+
 // Guaranteed to honor 'num_segments'
 void ImDrawList::AddNgon(const ImVec2& center, float radius, ImU32 col, int num_segments, float thickness)
 {
