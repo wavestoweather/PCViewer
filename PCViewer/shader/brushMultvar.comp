@@ -53,14 +53,14 @@ void main(){
 		for(int c = 0;c<info.amtOfMultvarAxes;++c){
 			float m = 0;
 			uint rowBase = c * info.amtOfMultvarAxes + covarBase;
-			for(int c1 = 0;c<info.amtOfMultvarAxes;++c){
+			for(int c1 = 0;c1<info.amtOfMultvarAxes;++c1){
 				m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
 			}
 			
 			s += (x[c] - multvar.m[meanBase + c]) * m;
 		}
 		//s = multvar.m[preFactorBase] * exp(-.5f * s);
-		float gaussMin = info.amtOfMultvarAxes * 9;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+		float gaussMin = info.amtOfMultvarAxes * 4;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 		//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
 		if (s <= gaussMin){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 			lineKeep = true;
