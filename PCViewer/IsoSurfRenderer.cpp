@@ -50,7 +50,7 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	binarySmoothDescriptorSetLayout = VK_NULL_HANDLE;
 	brushByteSize = 0;
 	shade = false;
-	stepSize = .0013f;
+	stepSize = .006f;
 
 	cameraPos = glm::vec3(1, 0, 1);
 	cameraRot = glm::vec2(0, .78f);
