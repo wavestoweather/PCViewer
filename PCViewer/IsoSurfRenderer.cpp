@@ -261,7 +261,7 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 
 bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float,float>>>& brush, int index)
 {
-	if (binaryImage.size() && (image3dHeight != height || image3dWidth != width || image3dDepth != depth)) return false;
+	if (binaryImage.size() && (image3dHeight != height || image3dWidth != width || image3dDepth != depth) && index == -1) return false;
 
 	VkResult err;
 
