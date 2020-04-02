@@ -69,7 +69,7 @@ public:
 				curNode.split = (nodes[curNode.leftChild].split - 1 + attributes.size()) % attributes.size();
 				std::vector<uint32_t> activeInd = getActiveIndices(attributes, data, indices, curNode.bounds);
 				curNode.rank = activeInd.size();
-				if (attributes.size() >= activeInd.size())
+				if (attributes.size() <= activeInd.size())
 					curNode.multivariate = calcMultivariateBrush(attributes, data, activeInd);
 				nodes.push_back(curNode);
 				backKds.push_back(nodes.size() - 1);
@@ -82,7 +82,7 @@ public:
 				curNode.bounds = nodes[curNode.leftChild].bounds;
 				std::vector<uint32_t> activeInd = getActiveIndices(attributes, data, indices, curNode.bounds);
 				curNode.rank = activeInd.size();
-				if (attributes.size() >= activeInd.size())
+				if (attributes.size() <= activeInd.size())
 					curNode.multivariate = calcMultivariateBrush(attributes, data, activeInd);
 				nodes.push_back(curNode);
 				backKds.push_back(nodes.size() - 1);
@@ -267,14 +267,13 @@ private:
 	};
 
 	std::vector<MultivariateGauss::MultivariateBrush> getMulBrushesRec(Node& n, int recDepth, int minRank) {
+		if (n.rank < minRank) return { };
+		
 		if (!recDepth) {
 			std::vector<MultivariateGauss::MultivariateBrush> r;
-			if(n.multivariate.mean.size())
-				r.push_back(n.multivariate);
+			r.push_back(n.multivariate);
 			return r;
 		}
-
-		if (n.rank < minRank) return { };
 
 		std::vector<MultivariateGauss::MultivariateBrush> left = (n.leftChild >= 0) ? getMulBrushesRec(nodes[n.leftChild], recDepth - 1, minRank) : std::vector<MultivariateGauss::MultivariateBrush>(),
 			right = (n.rightChild >= 0) ? getMulBrushesRec(nodes[n.rightChild], recDepth - 1, minRank) : std::vector<MultivariateGauss::MultivariateBrush>();
