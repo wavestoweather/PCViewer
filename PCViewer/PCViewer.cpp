@@ -345,6 +345,7 @@ struct DrawList {
 	Vec4 prefColor;
 	bool show;
 	bool showHistogramm;
+	bool immuneToGlobalBrushes;
 	VkBuffer buffer;
 	VkBuffer indexBuffer;
 	uint32_t indexBufferOffset;
@@ -4048,7 +4049,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	//apply global brushes
 	std::vector<int> globalIndices;
 	bool globalBrushesActive = false;
-	if (toggleGlobalBrushes) {
+	if (toggleGlobalBrushes && !dl.immuneToGlobalBrushes) {
 		int c = 1;
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.fractureDepth > 0) { //fractured brush
@@ -7143,6 +7144,9 @@ int main(int, char**)
 					ImGui::OpenPopup(("drawListMenu" + dl.name).c_str());
 				}
 				if (ImGui::BeginPopup(("drawListMenu" + dl.name).c_str())) {
+					if (ImGui::MenuItem("Immune to global brushes", "", &dl.immuneToGlobalBrushes)) {
+						pcPlotRender = updateActiveIndices(dl);
+					}
 					if (ImGui::BeginCombo("##combo", "Compare to")) // The second parameter is the label previewed before opening the combo.
 					{
 						auto draw = g_PcPlotDrawLists.begin();
