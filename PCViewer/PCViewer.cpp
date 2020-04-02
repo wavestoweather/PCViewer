@@ -2787,6 +2787,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces * 6, 1, 0, 0, 0);
 		}
+	}
 
 	//when cleaning up the command buffer all data is drawn
 	cleanupPcPlotCommandBuffer();
