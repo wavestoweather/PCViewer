@@ -345,6 +345,7 @@ struct DrawList {
 	Vec4 prefColor;
 	bool show;
 	bool showHistogramm;
+	std::vector<float> brushedRatioToParent;     // Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
 	VkBuffer buffer;
 	VkBuffer indexBuffer;
 	uint32_t indexBufferOffset;
@@ -673,6 +674,7 @@ static bool rescaleTableColumns = true;
 //variables for the histogramm
 static float histogrammWidth = .1f;
 static bool drawHistogramm = false;
+static bool computeRatioPtsInDLvsIn1axbrushedParent = true;
 static bool histogrammDensity = true;
 static bool pcPlotDensity = false;
 static float densityRadius = .05f;
@@ -2784,6 +2786,72 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces * 6, 1, 0, 0, 0);
 		}
+
+		// Drawing ratio pie-chart on top of histogramms
+		// How to draw a fan-triangle?
+		// Which are the correct x,y positions?
+		// Why does it not stay rendered?
+		if (computeRatioPtsInDLvsIn1axbrushedParent && drawHistogramm)
+		{
+
+			//////////// Code that might be useful
+			/*
+			size_t paddingSide = 10;			//padding from left and right screen border
+			size_t gap = (windowW - 2 * paddingSide) / (amtOfLabels - 1);
+			ImVec2 buttonSize = ImVec2(70, 20);
+			size_t offset = 0;
+
+			ImVec2 picSize(ImGui::GetWindowWidth() - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
+
+			float gap = (picSize.x - ((drawHistogramm) ? histogrammWidth / 2.0f * picSize.x : 0)) / (amtOfLabels - 1);
+			//drawing axis lines
+			if (enableAxisLines) {
+				for (int i = 0; i < amtOfLabels; i++) {
+					float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+			*/
+				/////////////////
+			
+			for (auto drawList = g_PcPlotDrawLists.begin(); g_PcPlotDrawLists.end() != drawList; ++drawList) {
+				//ignore drawLists which are disabled
+				if (!drawList->showHistogramm)
+					continue;
+				
+				
+				float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
+				float xOffset = .0f;
+				float width = histogrammWidth / amtOfHisto;
+
+				for (int i = 0; i < pcAttributes.size(); i++) {
+					
+					
+
+					float x = -1 + placeOfInd(i) * gap + xOffset;
+					float y = -1;
+					ImVec2 center(200,200);
+					float radius = 200;// 0.8 * histogrammWidth;
+					if (drawList->brushedRatioToParent.size() <= i) {
+						break;
+					}
+					int degrees = std::round(drawList->brushedRatioToParent[i]);
+					if (degrees < 0) { degrees = 0; }
+					if (degrees > 360) { degrees = 360; }
+					degrees = 1;
+
+					//ImGui::GetWindowDrawList()->AddLine;
+					
+
+					ImGui::GetWindowDrawList()->PathArcTo(center, radius, 0.0f, degrees, 360);
+					ImGui::GetWindowDrawList()->PathFillConvex(IM_COL32(255, 255, 255, 255));
+					//ImGui::GetWindowDrawList()->AddCircleFilled(center, radius, ImU32(0), 360);
+
+
+					//vkCmdSetLineWidth(g_PcPlotCommandBuffer, medianLineWidth);
+
+					//increasing the xOffset for the next drawlist
+					xOffset += width;
+				}
+			}
+		}
 	}
 
 	//when cleaning up the command buffer all data is drawn
@@ -4110,6 +4178,140 @@ static bool updateActiveIndices(DrawList& dl) {
 		if (it.first == dl.name)
 			it.second /= dl.indices.size();
 	}
+
+	// Compute the ratio of points in the DL vs the one in the parents' 1 axis brush
+	if (computeRatioPtsInDLvsIn1axbrushedParent && drawHistogramm)
+	{
+		dl.brushedRatioToParent.clear();
+		// Assume that there are no global brushes atm. So active indices / parentds indices.
+		// ax, min,max
+		/*
+		std::pair<float, float> pp (std::numeric_limits<float>::min(), std::numeric_limits<float>::max());
+		std::vector<std::pair<float, float>> vpp{ pp };
+		std::map<int, std::vector<std::pair<float, float>>> extremeMinMaxBrush{ {0,vpp} };
+
+		std::pair<uint32_t, int> res = gpuBrusher->brushIndices(
+			extremeMinMaxBrush, data->size(),
+			dl.buffer, 
+			dl.indicesBuffer, 
+			dl.indices.size(), 
+			dl.activeIndicesBufferView, 
+			pcAttributes.size(), 
+			firstBrush, 
+			brushCombination == 1, 
+			true);
+			*/
+
+		for (int i = 0; i < dl.parentTemplateList->minMax.size(); ++i)
+		{
+			// Divide number of all points in dl and parent dl by each other. This is the default, if no brushes are active.
+			float currRatio = dl.indices.size() / dl.parentTemplateList->indices.size();
+			dl.brushedRatioToParent.push_back(currRatio);
+		}
+
+		for (auto& gb : globalBrushes)
+		{
+			
+			if (!gb.active) { continue; }
+			std::map<int, std::vector<std::pair<float, float>>> brush;
+			brush.clear();
+			for (auto b : gb.brushes) {
+				for (auto br : b.second) {
+					brush[b.first].push_back(br.second);
+				}
+			}
+
+
+			/*res = gpuBrusher->brushIndices(
+				brush, data->size(),
+				dl.buffer,
+				dl.indicesBuffer,
+				dl.indices.size(),
+				dl.activeIndicesBufferView,
+				pcAttributes.size(),
+				firstBrush,
+				brushCombination == 1,
+				true);*/
+			
+			for (int i = 0; i < dl.parentTemplateList->minMax.size(); ++i)
+			{
+				// Divide number of all points in dl and parent dl by each other. This is the default, if no brushes are active.
+//ToDO : Hier die anzahl aktiver Indices von Dl  / Anzahl indices in ParentDataset gesamt
+				float currRatio = dl.indices.size() / dl.parentTemplateList->indices.size();
+			}
+
+
+			// Loop through the attributes which are brushed
+			for (auto& ax : gb.attributes)
+			{
+//ToDO Hier die anzahl aktiver Indices von Dl, kann auch vor den for loop, bzw. wurde da ja dann schon berechnet 
+				int activeIndicesInDL = dl.indices.size();
+				//int indicesInDL = globalRemainingLines;
+
+				// Compute indices brushed in parent by 1D brush
+
+				DrawList* currParentDrawlist = nullptr;
+				DataSet* currParentDataSet = nullptr;
+				// Determine parent drawlist
+				for (auto& currdl : g_PcPlotDrawLists)
+				{
+					if (currdl.name == dl.parentDataSet)
+					{
+						currParentDrawlist = &currdl;
+
+					}
+				}
+				
+				for (auto& currds : g_PcPlotDataSets)
+				{
+					if (currds.name == dl.parentDataSet)
+					{
+						currParentDataSet = &currds;
+					}
+				}
+				
+				int parentCount = 0;
+				// Access histogramm data, loop through all brushes for the one axis, and add up the indices in the range of the brushes which are in the histogram
+// ToDo : Geht das besser? Wir haben einen nDBrush. Zersplitten in 1D Brushes, und jeden 1D Brush auf Parent anwenden, Linien zählen
+				if (true)//(!gb.fractureDepth)
+				{
+					// auto it = gb.brushes.find(ax);
+					for (auto& currBr : gb.brushes.at(ax))
+					{
+						{
+							float currBrMin = currBr.second.first;
+							float currBrMax = currBr.second.second;
+							for (auto& val : currParentDataSet->data)
+							{
+								if ((val[ax] > currBrMin) && (val[ax] < currBrMax))
+								{
+									++parentCount;
+								}
+							}
+						}
+
+					}
+
+				}
+
+				// Ratio das gespeichert werden muss ist jetzt  indicesInDL / parentCount
+				dl.brushedRatioToParent[ax] = activeIndicesInDL / parentCount;
+				
+				
+
+			}
+
+			for (int i = 0; i < dl.parentTemplateList->minMax.size(); ++i)
+			{
+				std::cout << "Pie-chart percent for brushed axes: " << dl.brushedRatioToParent[i] << std::endl;
+			}
+			// Only do this for the first global brush which is active...
+			break;
+		}
+	}
+
+
+
 
 	//updating the standard indexbuffer
 	updateDrawListIndexBuffer(dl);
@@ -6654,9 +6856,17 @@ int main(int, char**)
 			ImGui::Separator();
 
 			ImGui::Text("Histogramm Settings:");
+			ImGui::Columns(2);
 			if (ImGui::Checkbox("Draw Histogramm", &drawHistogramm)) {
 				pcPlotRender = true;
 			}
+			ImGui::NextColumn();
+			if (ImGui::Checkbox("Draw Pie-Ratio", &computeRatioPtsInDLvsIn1axbrushedParent)) {
+				pcPlotRender = true;
+			}
+
+
+			ImGui::Columns(1);
 			if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
 				if (histogrammDrawListComparison != -1) {
 					uploadDensityUiformBuffer();
