@@ -50,7 +50,7 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	binarySmoothDescriptorSetLayout = VK_NULL_HANDLE;
 	brushByteSize = 0;
 	shade = false;
-	stepSize = .0013f;
+	stepSize = .006f;
 
 	cameraPos = glm::vec3(1, 0, 1);
 	cameraRot = glm::vec2(0, .78f);
@@ -58,6 +58,10 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	fastFlyMultiplier = 2.5f;
 	rotationSpeed = .15f;
 	lightDir = glm::vec3(-1, -1, -1);
+
+	VkPhysicalDeviceProperties devProp;
+	vkGetPhysicalDeviceProperties(physicalDevice, &devProp);
+	uboAlignment = devProp.limits.minUniformBufferOffsetAlignment;
 
 	//setting up graphic resources
 	
@@ -257,7 +261,7 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 
 bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float,float>>>& brush, int index)
 {
-	if (binaryImage.size() && (image3dHeight != height || image3dWidth != width || image3dDepth != depth)) return false;
+	if (binaryImage.size() && (image3dHeight != height || image3dWidth != width || image3dDepth != depth) && index == -1) return false;
 
 	VkResult err;
 
@@ -621,6 +625,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 		return true;
 	}
 
+	smoothImage((index == -1) ? binaryImage.size() - 1 : index);
 	updateBrushBuffer();
 	updateDescriptorSet();
 	updateCommandBuffer();
@@ -1068,7 +1073,8 @@ void IsoSurfRenderer::smoothImage(int index)
 
 	VkBuffer ubos;
 	VkDeviceMemory uboMemory;
-	VkUtil::createBuffer(device, sizeof(SmoothUBO) * 3, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubos);
+	uint32_t uboSize = (sizeof(SmoothUBO) % uboAlignment) ? sizeof(SmoothUBO) + uboAlignment - sizeof(SmoothUBO) % uboAlignment : sizeof(SmoothUBO);
+	VkUtil::createBuffer(device, uboSize * 3, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &ubos);
 	vkGetBufferMemoryRequirements(device, ubos, &memReq);
 	allocInfo.allocationSize = memReq.size;
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -1080,20 +1086,20 @@ void IsoSurfRenderer::smoothImage(int index)
 	ubo.stdDev = smoothStdDiv;
 	VkUtil::uploadData(device, uboMemory, 0, sizeof(SmoothUBO), &ubo);
 	ubo.index = 1;
-	VkUtil::uploadData(device, uboMemory, sizeof(SmoothUBO), sizeof(SmoothUBO), &ubo);
+	VkUtil::uploadData(device, uboMemory, uboSize, sizeof(SmoothUBO), &ubo);
 	ubo.index = 2;
-	VkUtil::uploadData(device, uboMemory, 2 * sizeof(SmoothUBO), sizeof(SmoothUBO), &ubo);
+	VkUtil::uploadData(device, uboMemory, 2 * uboSize, sizeof(SmoothUBO), &ubo);
 
 	VkDescriptorSet descSets[3];
 	std::vector<VkDescriptorSetLayout> layouts(3, binarySmoothDescriptorSetLayout);
 	VkUtil::createDescriptorSets(device, layouts, descriptorPool, descSets);
-	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSets[0]);
+	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descSets[0]);
 	VkUtil::updateStorageImageDescriptorSet(device, binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 1, descSets[0]);
 	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[0]);
-	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, sizeof(SmoothUBO), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSets[1]);
+	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, uboSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descSets[1]);
 	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 1, descSets[1]);
 	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 2, descSets[1]);
-	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 2 * sizeof(SmoothUBO), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSets[2]);
+	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 2 * uboSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descSets[2]);
 	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 1, descSets[2]);
 	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[2]);
 
@@ -1394,7 +1400,7 @@ void IsoSurfRenderer::createPipeline()
 	bindings.clear();
 	binding.binding = 0;								//smooth infos
 	binding.descriptorCount = 1;
-	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	bindings.push_back(binding);
 
 	binding.binding = 1;								//src image

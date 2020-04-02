@@ -45,42 +45,78 @@ void main() {
 
 	const float alphaStop = .98f;
 	float stepsize = info.stepSize;			//.0013f;
+	float curStepsize = stepsize;
+	float growth = 1.5f;
+	float maxStepsize = stepsize * 8;
 	const float isoVal = .5f;
+	const int refinmentSteps = 4;
 	
 	outColor = vec4(0,0,0,0);
 	d = endPos-startPoint;
 	float len = length(d);
-	int iterations = int(len/stepsize);
+	if(len < .0001) return;
+	d = normalize(d);
 
 	startPoint += .5f;
 
-	vec3 step = normalize(d) * stepsize;
+	vec3 step = d * stepsize;
 	//insert random displacement to startpositon (prevents bad visual effects)
 	startPoint += step * rand(startPoint);
 
 	float prevDensity[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+	int safety = 0;
 
-	for(int i = 0; i < iterations; i++){
+	while(startPoint.x >= 0 && startPoint.x <= 1 && startPoint.y >= 0 && startPoint.y <= 1 && startPoint.z >= 0 && startPoint.z <= 1){
+		bool density = false;
 		for(int brush = 0; brush<info.amtOfAxis;++brush){
 			float curDensity = texture(texSampler[brush],startPoint).x;
+			if(bool(curDensity)){
+				density = true;
+				if(curStepsize > stepsize)
+					break;
+			}
 			if((prevDensity[brush]<isoVal && curDensity>=isoVal) || (prevDensity[brush]>=isoVal&&curDensity<isoVal)){
 				vec4 brushColor = vec4(info.colors[brush*4],info.colors[brush*4+1],info.colors[brush*4+2],info.colors[brush*4+3]);
 				if(bool(info.shade)){
-					float xDir = texture(texSampler[brush],startPoint+vec3(stepsize / 4,0,0)).x, 
-						yDir = texture(texSampler[brush],startPoint+vec3(0,stepsize / 4,0)).x,
-						zDir = texture(texSampler[brush],startPoint+vec3(0,0,stepsize / 4)).x;
-					vec3 normal = normalize(vec3(xDir - curDensity, yDir - curDensity, zDir - curDensity));
-					brushColor.xyz = .4f * brushColor.xyz + max(.5 * dot(normal,normalize(ubo.lightDir)) * brushColor.xyz , vec3(0)) + max(.6 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(ubo.lightDir))),15) * vec3(1) , vec3(0));
+					//find exact surface position for lighting
+					vec3 curPos = startPoint;
+					vec3 prevPos = startPoint - curStepsize * d;
+					float precDensity = curDensity;
+					for(int i = 0;i<refinmentSteps;++i){
+						vec3 tmpPoint = .5f * curPos + .5f * prevPos;
+						precDensity = texture(texSampler[brush], tmpPoint).x;
+						if(precDensity<isoVal){		//intersection is in interval[tmpPoint , curPos]
+							prevPos = tmpPoint;
+						}
+						else{						//intersection is in interval[prevPoint, tmpPoint]
+							curPos = tmpPoint;
+						}
+					}
+					curPos = .5f * prevPos + .5f * curPos;
+
+					float xDir = texture(texSampler[brush],curPos+vec3(stepsize * 2,0,0)).x, 
+						yDir = texture(texSampler[brush],curPos+vec3(0,stepsize * 2,0)).x,
+						zDir = texture(texSampler[brush],curPos+vec3(0,0,stepsize * 2)).x;
+					vec3 normal = -normalize(vec3(xDir - precDensity, yDir - precDensity, zDir - precDensity));
+					brushColor.xyz = .5f * brushColor.xyz + max(.5 * dot(normal,normalize(-ubo.lightDir)) * brushColor.xyz , vec3(0)) + max(.4 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),50) * vec3(1) , vec3(0));
 				}
 				outColor.xyz += (1-outColor.w) * brushColor.w * brushColor.xyz;
 				outColor.w += (1-outColor.w) * brushColor.w;
-				if(outColor.w>alphaStop) break;
+				if(outColor.w>alphaStop) return;
 			}
 			prevDensity[brush] = curDensity;
 		}
-		if(outColor.w>alphaStop) break;
 
-		startPoint += step;
+		if(density){
+			if(curStepsize > stepsize)
+				startPoint -= curStepsize * d;
+			curStepsize = stepsize;
+		}
+		else{
+			curStepsize = clamp(curStepsize  * growth,stepsize,maxStepsize);
+		}
+
+		startPoint += curStepsize * d;
 	}
 
 	////for every axis/attribute here the last density is stored

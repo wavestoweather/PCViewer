@@ -346,6 +346,7 @@ struct DrawList {
 	bool show;
 	bool showHistogramm;
 	std::vector<float> brushedRatioToParent;     // Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
+	bool immuneToGlobalBrushes;
 	VkBuffer buffer;
 	VkBuffer indexBuffer;
 	uint32_t indexBufferOffset;
@@ -4053,7 +4054,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	//apply global brushes
 	std::vector<int> globalIndices;
 	bool globalBrushesActive = false;
-	if (toggleGlobalBrushes) {
+	if (toggleGlobalBrushes && !dl.immuneToGlobalBrushes) {
 		int c = 1;
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.fractureDepth > 0) { //fractured brush
@@ -4366,7 +4367,8 @@ static void updateIsoSurface(GlobalBrush& gb) {
 			isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 		}
 		else {
-			isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index);
+			if (!ImGui::IsMouseDown(0))
+				isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index);
 		}
 	}
 }
@@ -5062,6 +5064,8 @@ int main(int, char**)
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;	// Enable Keyboard Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;		// Enable docking
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.ConfigViewportsNoDecoration = false;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;	// Enable Gamepad Controls
 
 	// Setup Dear ImGui style
@@ -7319,6 +7323,9 @@ int main(int, char**)
 					ImGui::OpenPopup(("drawListMenu" + dl.name).c_str());
 				}
 				if (ImGui::BeginPopup(("drawListMenu" + dl.name).c_str())) {
+					if (ImGui::MenuItem("Immune to global brushes", "", &dl.immuneToGlobalBrushes)) {
+						pcPlotRender = updateActiveIndices(dl);
+					}
 					if (ImGui::BeginCombo("##combo", "Compare to")) // The second parameter is the label previewed before opening the combo.
 					{
 						auto draw = g_PcPlotDrawLists.begin();
@@ -7848,7 +7855,7 @@ int main(int, char**)
 						isoSurfaceRenderer->render();
 					}
 					static float stdDiv = 1;
-					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, .1f, 10)) {
+					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, 0, 10)) {
 						isoSurfaceRenderer->setBinarySmoothing(stdDiv);
 						isoSurfaceRenderer->render();
 					}
@@ -7927,6 +7934,7 @@ int main(int, char**)
 				ImGui::EndCombo();
 			}
 			ImGui::SameLine();
+			if (selectedGlobalBrush != -1 && !globalBrushes.size()) selectedGlobalBrush = -1;
 			if (ImGui::BeginCombo("Brush", (selectedGlobalBrush == -1) ? choose : globalBrushes[selectedGlobalBrush].name.c_str())) {
 				if (ImGui::Selectable(choose, selectedGlobalBrush == -1)) selectedGlobalBrush = -1;
 				for (int i = 0; i < globalBrushes.size(); ++i) {
@@ -9258,6 +9266,8 @@ int main(int, char**)
 
 		// Rendering
 		ImGui::Render();
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
 		memcpy(&wd->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
 		FrameRender(wd);
 

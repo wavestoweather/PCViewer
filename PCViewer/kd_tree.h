@@ -172,6 +172,21 @@ private:
 			}
 		}
 		MultivariateGauss::compute_matrix_determinant(covariance, multBrush.detCov);
+
+		//checking the exponent values for each datum(datums are already mean centered after compute_average_vector)
+		//for (auto& datum : dataMatrix) {
+		//	float s = 0;
+		//	for (int c = 0; c < datum.size(); ++c) {
+		//		float m = 0;
+		//		for (int c1 = 0; c1 < datum.size(); ++c1) {
+		//			m += datum[c1] * multBrush.invCov[c][c1];
+		//		}
+		//
+		//		s += datum[c] * m;
+		//	}
+		//	float x = s;
+		//}
+
 		return multBrush;
 	}
 
