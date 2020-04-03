@@ -268,7 +268,7 @@ public:
 	//returns a pair containing the number of lines which would be active, would only one brush be applied, and the number of lines that really are still active
 	//this pipeline does not change the contents of the active indices bool array
 	std::pair<uint32_t, int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes) {
-		//allocating all ubos and collection iformation about amount of brushes etc.
+		//allocating all ubos and collection information about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(UBOinfo) - sizeof(uint32_t) + sizeof(uint32_t) * 4 * brushes.size();
 		UBOinfo* informations = (UBOinfo*)malloc(infoBytesSize);
 

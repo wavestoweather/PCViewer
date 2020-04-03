@@ -1174,10 +1174,11 @@ void ImDrawList::AddCircleFilled(const ImVec2& center, float radius, ImU32 col, 
     PathFillConvex(col);
 }
 
-void ImDrawList::AddPie(const ImVec2& center, float radius, ImU32 col, float percentage, int num_segments) {
+void ImDrawList::AddPie(const ImVec2& center, float radius, ImU32 col, float percentage, int num_segments, float border) {
 	if (radius <= 2) return;
 	AddCircleFilled(center, radius, IM_COL32(0,0,0,255), num_segments);
-	radius -= 2;
+	AddCircle(center, radius-1, IM_COL32(255, 255, 255, 255), num_segments, border);
+	radius -= border - 1.0f;
 	if (percentage == 0)
 	{
 		AddLine(center, center + ImVec2{radius, 0},col);

@@ -4111,7 +4111,28 @@ static bool updateActiveIndices(DrawList& dl) {
 
 	// Computing ratios for the pie charts
 	if (computeRatioPtsInDLvsIn1axbrushedParent && drawHistogramm) {
-		dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), (float)globalRemainingLines/dl.indices.size());			//instantiate with the standard active lines
+		//Todo: dl.indices,size() of parent!
+		//dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), (float)globalRemainingLines/dl.indices.size());			//instantiate with the standard active lines
+
+		DataSet* parentDS = nullptr;
+		// DataSet* currParentDataSet = nullptr;
+		// Determine parent drawlist
+		for (auto& ds : g_PcPlotDataSets)
+		{
+			for (auto& currdl : ds.drawLists)
+			{
+				if (currdl.name == dl.parentTemplateList->name)
+				{
+					parentDS = &ds;
+					break;
+
+				}
+			}
+			if (parentDS != nullptr) { break; }
+		}
+
+		dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), (float)globalRemainingLines / parentDS->data.size());			//instantiate with the standard active lines
+		
 		for (GlobalBrush& gb : globalBrushes) {
 			if (!gb.active) continue;
 			for (auto b : gb.brushes) {
@@ -6466,10 +6487,36 @@ int main(int, char**)
 
 				//drawing pie chart for the first drawlist
 				if (computeRatioPtsInDLvsIn1axbrushedParent && drawHistogramm) {
+					// Count, how many histograms are drawn
+					int nrActiveHists = 0;
+					for (auto &currdl : g_PcPlotDrawLists)
+					{
+						nrActiveHists += int(currdl.showHistogramm);
+					}
+					float xStartOffset = -histogrammWidth / 4.0 * picSize.x;
+					float xOffsetPerAttr = (histogrammWidth * picSize.x) / (2 * nrActiveHists);
+					float xoffset = 0;
+					xStartOffset +=  0.5 * xOffsetPerAttr;
+					float pieBorder = 3;
+					float radius = xOffsetPerAttr / 2.0 - 3;
+
 					for (int i = 0; i < amtOfLabels; i++) {
-						float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
-						ImVec2 a(x, picPos.y + 8);
-						ImGui::GetWindowDrawList()->AddPie(a, 16, IM_COL32(255, 255, 255, 255), g_PcPlotDrawLists.front().brushedRatioToParent[placeOfInd(i)]);
+						for (auto &currdl : g_PcPlotDrawLists){
+							if (!currdl.showHistogramm) { continue; }
+
+
+							float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+							x += xStartOffset + xoffset;
+
+							// x is the center of the axis. Now, the hist goes to the left and right, no matter how many are drawn. So, calculate the min_x, max_x, h*2 +1 axes, every second is the middle of a histogrm
+
+
+							ImVec2 a(x, picPos.y + std::min(14.f, radius +14.f));
+							ImGui::GetWindowDrawList()->AddPie(a, radius, IM_COL32(255, 255, 255, 255), currdl.brushedRatioToParent[placeOfInd(i)], -1,  pieBorder);
+
+							xoffset += xOffsetPerAttr;
+						}
+						xoffset = 0;
 					}
 				}
 
@@ -6829,10 +6876,16 @@ int main(int, char**)
 			ImGui::Columns(2);
 			if (ImGui::Checkbox("Draw Histogramm", &drawHistogramm)) {
 				pcPlotRender = true;
+				if (computeRatioPtsInDLvsIn1axbrushedParent)
+				{
+					pcPlotRender = updateAllActiveIndices();
+				}
 			}
 			ImGui::NextColumn();
 			if (ImGui::Checkbox("Draw Pie-Ratio", &computeRatioPtsInDLvsIn1axbrushedParent)) {
-				pcPlotRender = true;
+				if (drawHistogramm) {
+					pcPlotRender = updateAllActiveIndices();
+				}
 			}
 
 
@@ -6993,8 +7046,9 @@ int main(int, char**)
 			if (ImGui::Button("Open")) {
 				openDataset(pcFilePath);
 				if (createDefaultOnLoad) {
-					pcPlotRender = true;
+					//pcPlotRender = true;
 					createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 			}
 			ImGui::EndChild();
@@ -7522,7 +7576,7 @@ int main(int, char**)
 					tl.name = name;
 					tl.indices = drawListComparator.aAndb;
 					createPcPlotDrawList(tl, parent, name);
-					pcPlotRender = true;
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
 				if (ImGui::Button("Create union##a")) {
@@ -7538,7 +7592,7 @@ int main(int, char**)
 					tl.name = name;
 					tl.indices = drawListComparator.aOrB;
 					createPcPlotDrawList(tl, parent, name);
-					pcPlotRender = true;
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Difference has %8d points", drawListComparator.aMinusB.size());
 				if (ImGui::Button("Create difference##a")) {
@@ -7554,7 +7608,7 @@ int main(int, char**)
 					tl.name = name;
 					tl.indices = drawListComparator.aMinusB;
 					createPcPlotDrawList(tl, parent, name);
-					pcPlotRender = true;
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::EndChild();
 				ImGui::SameLine();
@@ -7576,7 +7630,7 @@ int main(int, char**)
 					tl.name = name;
 					tl.indices = drawListComparator.aAndb;
 					createPcPlotDrawList(tl, parent, name);
-					pcPlotRender = true;
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
 				if (ImGui::Button("Create union##b")) {
@@ -7592,7 +7646,7 @@ int main(int, char**)
 					tl.name = name;
 					tl.indices = drawListComparator.aOrB;
 					createPcPlotDrawList(tl, parent, name);
-					pcPlotRender = true;
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Difference has %8d points", drawListComparator.bMinusA.size());
 				if (ImGui::Button("Create difference##b")) {
@@ -7608,7 +7662,7 @@ int main(int, char**)
 					tl.name = name;
 					tl.indices = drawListComparator.bMinusA;
 					createPcPlotDrawList(tl, parent, name);
-					pcPlotRender = true;
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::EndChild();
 
