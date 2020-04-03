@@ -1,6 +1,7 @@
 #ifndef kd_tree_H
 #define kd_tree_H
 #include <vector>
+#include <limits>
 #include "MultivariateGauss.h"
 
 class KdTree {
@@ -16,6 +17,13 @@ public:
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
 		this->attributes = attributes;
+		this->origBounds = std::vector<std::pair<float, float>>(attributes.size(), std::pair<float,float>( std::numeric_limits<float>::max(),std::numeric_limits<float>::min() ));
+		for (int i = 0; i < initialBounds.size();++i) {
+			for (auto& pair : initialBounds[i]) {
+				if (origBounds[i].first > pair.first)origBounds[i].first = pair.first;
+				if (origBounds[i].second < pair.second)origBounds[i].second = pair.second;
+			}
+		}
 
 		std::vector<std::vector<int>> curIndices;
 		std::vector<std::vector<int>> backIndices;
@@ -120,6 +128,8 @@ private:
 	//contains all nodes. All nodes are identified by their index in this vector.
 	std::vector<Node> nodes;
 	std::vector<int> attributes;
+	std::vector<std::pair<float, float>> origBounds;
+	float minBoundsRatio = .1f;
 	int root;								//root index
 	BoundsBehaviour adjustBounds;
 
@@ -190,16 +200,25 @@ private:
 		return multBrush;
 	}
 
-	int buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int> attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
+	int buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
 		if (!indices.size() || !recDepth) return -1;
 		Node n = {};
 		n.bounds = bounds;
 		n.split = split;
 		n.rank = indices.size();
+		int s2 = (split + 1) % attributes.size();
 
 		//multivariate gauss calculation
 		if(attributes.size() <= indices.size())
 			n.multivariate = calcMultivariateBrush(attributes, data, indices);
+
+		//check if bounds are too small already
+		if ((bounds[split].second - bounds[split].first) / (origBounds[split].second - origBounds[split].first) <= minBoundsRatio) {
+			n.rightChild = -1;
+			n.leftChild = buildRec(s2, indices, data, attributes, bounds, recDepth - 1);
+			nodes.push_back(n);
+			return nodes.size() - 1;
+		}
 
 		//splitting the bounding box in the middle
 		std::vector<std::pair<float, float>> leftBounds(bounds), rightBounds(bounds);
@@ -257,7 +276,6 @@ private:
 		}
 		
 		//creating the childs recursiveley
-		int s2 = (split + 1) % attributes.size();
 		n.leftChild = buildRec(s2, leftPts, data, attributes, leftBounds, recDepth -1);
 		n.rightChild = buildRec(s2, rightPts, data, attributes, rightBounds, recDepth -1);
 		nodes.push_back(n);

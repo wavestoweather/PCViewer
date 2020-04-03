@@ -45,6 +45,7 @@ void main(){
 	bool lineKeep = false;
 	for(int mulvar = 0; mulvar<info.amtOfMultvar;++mulvar){
 		uint preFactorBase =  mulvar * (1 + info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
+		if(multvar.m[preFactorBase] < 1e-30) continue;
 		uint meanBase = preFactorBase + 1;
 		uint covarBase = meanBase + info.amtOfMultvarAxes;
 
@@ -60,7 +61,7 @@ void main(){
 			s += (x[c] - multvar.m[meanBase + c]) * m;
 		}
 		//s = multvar.m[preFactorBase] * exp(-.5f * s);
-		float gaussMin = info.amtOfMultvarAxes * 4;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+		float gaussMin = 1 * info.amtOfMultvarAxes;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 		//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
 		if (s <= gaussMin){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 			lineKeep = true;
