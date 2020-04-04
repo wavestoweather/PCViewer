@@ -4,7 +4,7 @@
 #include <cassert>
 #include <math.h>
 
-#define TINY 1.0e-20
+#define TINY 1.0e-100
 
 class MultivariateGauss {
 public:

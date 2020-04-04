@@ -142,7 +142,7 @@ bool MultivariateGauss::ludcmp(std::vector<std::vector<double>>& a, std::vector<
 			vv[imax] = vv[j];
 		}
 		idx[j] = imax;
-		if (a[j][j] == 0) a[j][j] = TINY;
+		if (a[j][j] < TINY) a[j][j] = TINY;
 		if (j != a[0].size() - 1) {
 			dum = 1.0 / (a[j][j]);
 			for (i = j + 1; i < a[0].size(); ++i) a[i][j] *= dum;
@@ -168,6 +168,7 @@ void MultivariateGauss::lubksb(std::vector<std::vector<double>>& a, std::vector<
 	for (i = a[0].size() - 1; i >= 0; --i) {
 		sum = b[i];
 		for (j = i + 1; j < a[0].size(); ++j) sum -= a[i][j] * b[j];
+		if (a[i][i] < TINY) a[i][i] = TINY;
 		b[i] = sum / a[i][i];
 	}
 }
