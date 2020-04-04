@@ -4074,7 +4074,7 @@ static bool updateActiveIndices(DrawList& dl) {
 
 						bool lineKeep = false;
 						for (auto& multvar:gb.multivariates) {
-							//if (multvar.detCov < 1e-30) continue;
+							if (multvar.detCov < TINY) continue;
 
 							//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
 							float s = 0;
@@ -4087,7 +4087,7 @@ static bool updateActiveIndices(DrawList& dl) {
 								s += (x[c] - multvar.mean[c]) * m;
 							}
 							//s = multvar.m[preFactorBase] * exp(-.5f * s);
-							float gaussMin = 1.0f / pow(gb.attributes.size(),2);	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+							float gaussMin = 4.0f * gb.attributes.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 							//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
 							if (s <= gaussMin) {			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 								lineKeep = true;

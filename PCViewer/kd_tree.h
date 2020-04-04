@@ -171,6 +171,9 @@ private:
 		}
 		MultivariateGauss::compute_average_vector(dataMatrix, mean);
 		MultivariateGauss::compute_covariance_matrix(dataMatrix, covariance);
+		for (int i = 0; i < covariance.size(); ++i) {
+			covariance[i][i] += TINY;
+		}
 		MultivariateGauss::compute_matrix_inverse(covariance, invCov);
 		MultivariateGauss::MultivariateBrush multBrush{};
 		multBrush.mean = std::vector<float>(mean.size());
