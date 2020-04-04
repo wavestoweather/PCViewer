@@ -6993,9 +6993,9 @@ int main(int, char**)
 			ImGui::Text("Settings");
 			ImGui::Separator();
 
-			ImGui::Text("Histogramm Settings:");
+			ImGui::Text("Histogram Settings:");
 			ImGui::Columns(2);
-			if (ImGui::Checkbox("Draw Histogramm", &drawHistogramm)) {
+			if (ImGui::Checkbox("Draw Histogram", &drawHistogramm)) {
 				pcPlotRender = true;
 				if (computeRatioPtsInDLvsIn1axbrushedParent)
 				{
@@ -7011,13 +7011,13 @@ int main(int, char**)
 
 
 			ImGui::Columns(1);
-			if (ImGui::SliderFloat("Histogramm Width", &histogrammWidth, 0, .5) && drawHistogramm) {
+			if (ImGui::SliderFloat("Histogram Width", &histogrammWidth, 0, .5) && drawHistogramm) {
 				if (histogrammDrawListComparison != -1) {
 					uploadDensityUiformBuffer();
 				}
 				pcPlotRender = true;
 			}
-			if (ImGui::ColorEdit4("Histogramm Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && drawHistogramm) {
+			if (ImGui::ColorEdit4("Histogram Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && drawHistogramm) {
 				pcPlotRender = true;
 			}
 			if (ImGui::Checkbox("Show Density", &histogrammDensity) && drawHistogramm) {
