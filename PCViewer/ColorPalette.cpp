@@ -227,7 +227,7 @@ ColorPaletteManager::ColorPaletteManager():
     chosenNrColorNr(1),
     skipFirstAttributes(0),
     alphaLines(255),
-    alphaFill(127),
+    alphaFill(153),
     applyToFillColor(true),
     applyToLineColor(true),
     backupLineColor(false),

@@ -745,10 +745,10 @@ static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
 //variables for fractions
 static int maxFractionDepth = 20;
 static int outlierRank = 1;					//min rank(amount ofdatapoints in a kd tree node) needed to not be an outlier node
-static int boundsBehaviour = 1;
+static int boundsBehaviour = 2;
 static int maxRenderDepth = 13;
 static float fractionBoxWidth = BRUSHWIDTH;
-static int fractionBoxLineWidth = 1;
+static int fractionBoxLineWidth = 3;
 
 //variables for animation
 static float animationDuration = 2.0f;		//time for every active brush to show in seconds
@@ -4050,7 +4050,7 @@ static bool updateActiveIndices(DrawList& dl) {
 		globalRemainingLines = res.second;
 		firstBrush = false;
 	}
-
+	
 	//apply global brushes
 	std::vector<int> globalIndices;
 	bool globalBrushesActive = false;
@@ -4174,6 +4174,9 @@ static bool updateActiveIndices(DrawList& dl) {
 
 		dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), (float)globalRemainingLines / parentDS->data.size());			//instantiate with the standard active lines
 		
+
+
+		if (false)
 		for (GlobalBrush& gb : globalBrushes) {
 			if (!gb.active) continue;
 			for (auto b : gb.brushes) {
@@ -4189,6 +4192,68 @@ static bool updateActiveIndices(DrawList& dl) {
 			}
 			break;
 		}
+
+		if (true) {
+			int parentCount = 0;
+			for (auto& gb : globalBrushes) {
+				//for (int iax = 0; iax < dl.parentTemplateList->minMax.size(); iax++) {
+				if (gb.fractureDepth > 0) {
+					int iax = 0;
+					for (auto& ax : gb.attributes) {
+						// if (gb.fractureDepth > 0) {}if (gb.useMultivariate) {}gb.fractions
+
+							// Multivariate works the same as normal brushes for those pie-charts.
+							//if (gb.useMultivariate) {
+							//
+							//}
+							//else {
+						for (std::vector<std::pair<float, float>>& currFr : gb.fractions) {
+							float currBrMin = currFr[iax].first;
+							float currBrMax = currFr[iax].second;
+							for (auto& val : parentDS->data)
+							{
+								if ((val[ax] > currBrMin) && (val[ax] < currBrMax))
+								{
+									++parentCount;
+								}
+							}
+						}
+						if (parentCount != 0)
+						{
+							dl.brushedRatioToParent[ax] = float(globalRemainingLines) / parentCount;
+						}
+						parentCount = 0;
+						//}
+						++iax;
+					}
+				}
+				else {
+					for (int iax = 0; iax < dl.parentTemplateList->minMax.size(); iax++) {
+						for (auto& currBr : gb.brushes.at(iax))
+						{
+							float currBrMin = currBr.second.first;
+							float currBrMax = currBr.second.second;
+							for (auto& val : parentDS->data)
+							{
+								if ((val[iax] > currBrMin) && (val[iax] < currBrMax))
+								{
+									++parentCount;
+								}
+							}
+						}
+						if (parentCount != 0)
+						{
+							dl.brushedRatioToParent[iax] = float(globalRemainingLines) / parentCount;
+						}
+
+						parentCount = 0;
+					}
+				}
+				break;
+			}
+		}
+
+
 	}
 	//for (GlobalBrush& b : globalBrushes) {
 		//b.lineRatios[dl.name] /= dl.indices.size();
@@ -5996,7 +6061,7 @@ int main(int, char**)
 					updateBrushTemplates = true;
 				}
 
-				ImGui::SameLine(200);
+				ImGui::SameLine(250);
 				if (ImGui::Button("Combine active global brushes")) {
 					GlobalBrush combo;
 					combo.name = "Combined(";
@@ -6021,6 +6086,21 @@ int main(int, char**)
 						globalBrushes.push_back(combo);
 						updateAllActiveIndices();
 					}
+				}
+				ImGui::SameLine(500);
+				if (ImGui::Button("Activate/deactivate parameter checkboxes")) {
+					int activate = -1;
+					for (auto i : pcAttrOrd) {
+						if (!pcAttributeEnabled[i]) {
+							c++;
+							continue;
+						}
+						if (activate == -1) {
+							activate = int((!brushTemplateAttrEnabled[i]));
+						}
+						(activate) ? brushTemplateAttrEnabled[i] = true :brushTemplateAttrEnabled[i] = false;
+					}
+					updateBrushTemplates = true;
 				}
 
 				//drawing the list for brush templates
@@ -6539,7 +6619,7 @@ int main(int, char**)
 					float xoffset = 0;
 					xStartOffset +=  0.5 * xOffsetPerAttr;
 					float pieBorder = 3;
-					float radius = xOffsetPerAttr / 2.0 - 3;
+					float radius = (xOffsetPerAttr / 2.0 - 3) * 0.9;
 
 					for (int i = 0; i < amtOfLabels; i++) {
 						for (auto &currdl : g_PcPlotDrawLists){
@@ -6552,7 +6632,7 @@ int main(int, char**)
 							// x is the center of the axis. Now, the hist goes to the left and right, no matter how many are drawn. So, calculate the min_x, max_x, h*2 +1 axes, every second is the middle of a histogrm
 
 
-							ImVec2 a(x, picPos.y + std::min(14.f, radius +14.f));
+							ImVec2 a(x, picPos.y + std::min(14.f, radius + 14.f));
 							ImGui::GetWindowDrawList()->AddPie(a, radius, IM_COL32(255, 255, 255, 255), currdl.brushedRatioToParent[placeOfInd(i)], -1,  pieBorder);
 
 							xoffset += xOffsetPerAttr;
