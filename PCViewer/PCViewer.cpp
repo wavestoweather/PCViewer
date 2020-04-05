@@ -4213,7 +4213,7 @@ static bool updateActiveIndices(DrawList& dl) {
 							float currBrMax = currFr[iax].second;
 							for (auto& val : parentDS->data)
 							{
-								if ((val[ax] > currBrMin) && (val[ax] < currBrMax))
+								if ((val[ax] >= currBrMin) && (val[ax] <= currBrMax))
 								{
 									++parentCount;
 								}
@@ -4230,13 +4230,20 @@ static bool updateActiveIndices(DrawList& dl) {
 				}
 				else {
 					for (int iax = 0; iax < dl.parentTemplateList->minMax.size(); iax++) {
-						for (auto& currBr : gb.brushes.at(iax))
-						{
+						//for (auto br : b.second) {
+						for (auto& currBr : gb.brushes.at(iax)){
+						
+							brush.clear();
+							brush[currBr.first].push_back(currBr.second);
+							std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size());
+
+							std::cout << res.first << "\n";
+
 							float currBrMin = currBr.second.first;
 							float currBrMax = currBr.second.second;
 							for (auto& val : parentDS->data)
 							{
-								if ((val[iax] > currBrMin) && (val[iax] < currBrMax))
+								if ((val[iax] >= currBrMin) && (val[iax] <= currBrMax))
 								{
 									++parentCount;
 								}
@@ -6633,7 +6640,7 @@ int main(int, char**)
 							// x is the center of the axis. Now, the hist goes to the left and right, no matter how many are drawn. So, calculate the min_x, max_x, h*2 +1 axes, every second is the middle of a histogrm
 
 
-							ImVec2 a(x, picPos.y + std::min(14.f, radius + 14.f));
+							ImVec2 a(x, picPos.y + std::max(14.f, radius + 4.f));
 							ImGui::GetWindowDrawList()->AddPie(a, radius, IM_COL32(255, 255, 255, 255), currdl.brushedRatioToParent[placeOfInd(i)], -1,  pieBorder);
 
 							xoffset += xOffsetPerAttr;
