@@ -11,7 +11,7 @@ layout(std430, binding = 0) buffer Informations{
 	int globalLineCount;
 	uint first;
 	uint and;
-	uint attributeInd[];		//indices of the fracture attributes
+	float attributeInd[];		//indices of the fracture attributes
 } info;
 
 layout(std430, binding = 1) buffer Multivariats{
@@ -38,14 +38,15 @@ void main(){
 	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
 	//fill x
 	for (int j = 0; j < info.amtOfMultvarAxes; ++j) {
-		uint dataIndex = lineIndex * info.amtOfAttributes + info.attributeInd[j];		//getting the data index for the current axis
+		uint dataIndex = lineIndex * info.amtOfAttributes + uint(info.attributeInd[j * 3]);		//getting the data index for the current axis
 		x[j] = d.data[dataIndex];
+		x[j] = (x[j] - info.attributeInd[j * 3 + 1]) / (info.attributeInd[j * 3 + 2] - info.attributeInd[j * 3 + 1]);	//normalizing the datum
 	}
 
 	bool lineKeep = false;
 	for(int mulvar = 0; mulvar<info.amtOfMultvar;++mulvar){
 		uint preFactorBase =  mulvar * (1 + info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
-		if(multvar.m[preFactorBase] < 1e-30) continue;
+		if(multvar.m[preFactorBase] < 1.0e-100) continue;
 		uint meanBase = preFactorBase + 1;
 		uint covarBase = meanBase + info.amtOfMultvarAxes;
 
@@ -61,14 +62,14 @@ void main(){
 			s += (x[c] - multvar.m[meanBase + c]) * m;
 		}
 		//s = multvar.m[preFactorBase] * exp(-.5f * s);
-		float gaussMin = 1 * info.amtOfMultvarAxes;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+		float gaussMin = 4 * info.amtOfMultvarAxes;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 		//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
 		if (s <= gaussMin){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 			lineKeep = true;
 			break;
 		}
 	}
-	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
+	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
 	if(bool(info.first)){
 		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
 		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));

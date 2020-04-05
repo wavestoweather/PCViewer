@@ -517,9 +517,9 @@ public:
 	};
 
 	//returns a pair containing the number of lines which would be active, would only these fractures be applied, and the number of lines that really are still active
-	std::pair<uint32_t, int> brushIndices(std::vector<MultivariateGauss::MultivariateBrush>& fractures, std::vector<int>& attributes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
+	std::pair<uint32_t, int> brushIndices(std::vector<MultivariateGauss::MultivariateBrush>& fractures, std::vector<std::pair<float,float>>& bounds, std::vector<int>& attributes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
-		uint32_t infoBytesSize = sizeof(UBOFractureInfo) + attributes.size() * sizeof(uint32_t);
+		uint32_t infoBytesSize = sizeof(UBOFractureInfo) + attributes.size() * sizeof(float) * 3;
 		UBOFractureInfo* informations = (UBOFractureInfo*)malloc(infoBytesSize);
 
 		uint32_t fracturesByteSize = fractures.size() * (1 + attributes.size() + attributes.size() * attributes.size()) * sizeof(float);
@@ -568,17 +568,19 @@ public:
 
 		//uploading data for brushing
 		void* d;
+		informations->amtOfAttributes = amtOfAttributes;
 		informations->amtOfFractureAxes = attributes.size();
 		informations->amtOfFractures = fractures.size();
-		informations->amtOfAttributes = amtOfAttributes;
 		informations->amtOfIndices = indicesSize;
 		informations->lineCount = 0;
 		informations->globalLineCount = (lastBrush) ? 0 : -1;
 		informations->first = first;
 		informations->andOr = andy;
-		uint32_t* inf = (uint32_t*)(informations + 1);
+		float* inf = (float*)(informations + 1);
 		for (int i = 0; i < attributes.size(); ++i) {
-			inf[i] = attributes[i];
+			inf[i * 3] = attributes[i];
+			inf[i * 3 + 1] = bounds[i].first;
+			inf[i * 3 + 2] = bounds[i].second;
 		}
 		//#ifdef _DEBUG
 		//		std::cout << "Brush informations:" << std::endl;
@@ -598,9 +600,9 @@ public:
 
 		int offset = 0;
 		float* bru = (float*)gpuFractures;
-		double constFac = 1. / sqrt(pow(2 * M_PI, attributes.size()));
+		//double constFac = 1. / sqrt(pow(2 * M_PI, attributes.size()));
 		for (auto& mult : fractures) {
-			bru[offset++] = constFac / sqrt(mult.detCov);
+			bru[offset++] = mult.detCov;
 			for (int i = 0; i < attributes.size(); ++i) bru[offset++] = mult.mean[i];
 			for (int i = 0; i < attributes.size(); ++i)
 				for (int j = 0; j < attributes.size(); ++j) bru[offset++] = mult.invCov[i][j];

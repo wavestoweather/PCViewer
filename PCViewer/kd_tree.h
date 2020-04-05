@@ -115,6 +115,10 @@ public:
 		return getMulBrushesRec(nodes[root], recursionDepth, attributes.size());
 	};
 
+	std::vector<std::pair<float, float>>& getOriginalBounds() {
+		return origBounds;
+	}
+
 private:
 	struct Node {
 		int split;
@@ -164,9 +168,12 @@ private:
 		std::vector<std::vector<double>> covariance(attributes.size(), std::vector<double>(attributes.size(), 0));
 		std::vector<std::vector<double>> invCov(attributes.size(), std::vector<double>(attributes.size(), 0));
 		std::vector<double> mean(attributes.size(), 0);
+		std::vector<float> brushDiff(attributes.size());
+		for (int i = 0; i < brushDiff.size(); ++i) brushDiff[i] = 1. / (origBounds[i].second - origBounds[i].first);
 		for (int i = 0; i < indices.size(); ++i) {
 			for (int j = 0; j < attributes.size(); ++j) {
-				dataMatrix[i][j] = data[indices[i]][attributes[j]];
+				//normalizing the data to the brush ot have a more stabel covariance matrix
+				dataMatrix[i][j] = (data[indices[i]][attributes[j]] - origBounds[j].first) * brushDiff[j];
 			}
 		}
 		MultivariateGauss::compute_average_vector(dataMatrix, mean);

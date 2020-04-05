@@ -49,7 +49,7 @@ void main(){
 			break;
 		}
 	}
-	bool a = bool(imageLoad( act, int(gl_GlobalInvocationID.x)));
+	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
 	if(bool(info.first)){
 		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
 		if(info.first!=2)

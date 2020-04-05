@@ -4062,6 +4062,7 @@ static bool updateActiveIndices(DrawList& dl) {
 				globalBrushesActive = true;
 				std::pair<uint32_t, int> res;// = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
 				if (gb.useMultivariate) {
+					std::vector<std::pair<float, float>> origBounds = gb.kdTree->getOriginalBounds();
 					float x[30]{};
 					std::vector<float*>& data = gb.parentDataset->data;
 					std::vector<int> activeInd;
@@ -4069,13 +4070,13 @@ static bool updateActiveIndices(DrawList& dl) {
 						//fill x
 						int amtOfMultvarAxes = 0;
 						for (int j = 0; j < gb.attributes.size(); ++j) {
-							x[j] = data[lineIndex][gb.attributes[j]];
+							x[j] = (data[lineIndex][gb.attributes[j]] - origBounds[j].first) / (origBounds[j].second - origBounds[j].first);
 						}
-
+					
 						bool lineKeep = false;
 						for (auto& multvar:gb.multivariates) {
 							if (multvar.detCov < TINY) continue;
-
+					
 							//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
 							float s = 0;
 							for (int c = 0; c < multvar.invCov.size(); ++c) {
@@ -4083,7 +4084,7 @@ static bool updateActiveIndices(DrawList& dl) {
 								for (int c1 = 0; c1 < multvar.invCov[c].size(); ++c1) {
 									m += (x[c1] - multvar.mean[c1]) * multvar.invCov[c][c1];
 								}
-
+					
 								s += (x[c] - multvar.mean[c]) * m;
 							}
 							//s = multvar.m[preFactorBase] * exp(-.5f * s);
@@ -4103,7 +4104,7 @@ static bool updateActiveIndices(DrawList& dl) {
 					}
 					VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, data.size(), actives);
 					delete[] actives;
-					//res = gpuBrusher->brushIndices(gb.multivariates, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+					//res = gpuBrusher->brushIndices(gb.multivariates, gb.kdTree->getOriginalBounds(), gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
 				}
 				else {
 					res = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
