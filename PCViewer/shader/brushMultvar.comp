@@ -46,27 +46,28 @@ void main(){
 	bool lineKeep = false;
 	for(int mulvar = 0; mulvar<info.amtOfMultvar;++mulvar){
 		uint preFactorBase =  mulvar * (1 + info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
-		if(multvar.m[preFactorBase] < 1.0e-100) continue;
-		uint meanBase = preFactorBase + 1;
-		uint covarBase = meanBase + info.amtOfMultvarAxes;
+		if(multvar.m[preFactorBase] >= 1.0e-100){
+			uint meanBase = preFactorBase + 1;
+			uint covarBase = meanBase + info.amtOfMultvarAxes;
 
-		//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
-		float s = 0;
-		for(int c = 0;c<info.amtOfMultvarAxes;++c){
-			float m = 0;
-			uint rowBase = c * info.amtOfMultvarAxes + covarBase;
-			for(int c1 = 0;c1<info.amtOfMultvarAxes;++c1){
-				m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
+			//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
+			float s = 0;
+			for(int c = 0;c<info.amtOfMultvarAxes;++c){
+				float m = 0;
+				uint rowBase = c * info.amtOfMultvarAxes + covarBase;
+				for(int c1 = 0;c1<info.amtOfMultvarAxes;++c1){
+					m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
+				}
+				
+				s += (x[c] - multvar.m[meanBase + c]) * m;
 			}
-			
-			s += (x[c] - multvar.m[meanBase + c]) * m;
-		}
-		//s = multvar.m[preFactorBase] * exp(-.5f * s);
-		float gaussMin = 4 * info.amtOfMultvarAxes;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
-		//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
-		if (s <= gaussMin){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
-			lineKeep = true;
-			break;
+			//s = multvar.m[preFactorBase] * exp(-.5f * s);
+			float gaussMin = 4 * info.amtOfMultvarAxes;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+			//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
+			if (s <= gaussMin){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
+				lineKeep = true;
+				break;
+			}
 		}
 	}
 	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
