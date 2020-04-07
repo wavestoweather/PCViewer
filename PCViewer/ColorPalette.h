@@ -17,11 +17,11 @@ typedef struct {
 
 
 
-
+class ColorPaletteManager;
 
 class ColorPalette{
 public:
-    ColorPalette();
+	ColorPalette(ColorPaletteManager* parentColorPaletteManager = nullptr);
     ~ColorPalette();
 
     std::vector<CPalette> palettes;
@@ -56,6 +56,7 @@ public:
 
     std::vector<ImVec4> getPallettAsImVec4(unsigned int categoryNr, unsigned int paletteNr, unsigned int nrColors, float alpha = 0.4, const std::string paletteName = std::string(""));
 
+	ColorPaletteManager *parentColorPaletteManager;
 
 
 protected:
@@ -71,7 +72,9 @@ public:
     ColorPaletteManager();
     ~ColorPaletteManager();
 
-    ColorPalette colorPalette;
+	ColorPaletteManager(const ColorPaletteManager &obj);
+
+    ColorPalette *colorPalette;
 
     bool useColorPalette;
 
@@ -92,6 +95,8 @@ public:
 
     bool bvaluesChanged;
 
+	bool bReverseColorOrder;
+
     void backupColors(std::vector<ImVec4> lineColors, std::vector<ImVec4> fillColors);
 
     // The set methods set valuesChanged to true.
@@ -101,6 +106,10 @@ public:
     void setChosenSkipFirstAttributes(unsigned int i);
     void setApplyToFillColor(bool b);
     void setApplyToLineColor(bool b);
+
+	void setReverseColorOrder(bool b);
+
+	void checkPallette();
 
     bool getBValuesChanged();
 

@@ -7,9 +7,9 @@
 #include <stdlib.h>
 #include <iostream>
 
-ColorPalette::ColorPalette()
+ColorPalette::ColorPalette(ColorPaletteManager* parentColorPaletteManager)
 {
-
+	this->parentColorPaletteManager = parentColorPaletteManager;
 
 
     // Diverging colormaps
@@ -215,12 +215,21 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
         }
     }
 
+	if (this->parentColorPaletteManager != nullptr)
+	{
+		if (this->parentColorPaletteManager->bReverseColorOrder)
+		{
+			std::reverse(std::begin(choosenColorsImVec), std::end(choosenColorsImVec));
+		}
+	}
+
     return choosenColorsImVec;
 }
 
 // ##############################
 
 ColorPaletteManager::ColorPaletteManager():
+	colorPalette(new ColorPalette(this)),
     useColorPalette(true),
     chosenCategoryNr(0),
     chosenPaletteNr(0),
@@ -232,16 +241,23 @@ ColorPaletteManager::ColorPaletteManager():
     applyToLineColor(true),
     backupLineColor(false),
     backupFillColor(false),
-    bvaluesChanged(false)
+    bvaluesChanged(false),
+	bReverseColorOrder(false)
 {
 
 }
 
 ColorPaletteManager::~ColorPaletteManager()
 {
-
+	delete colorPalette;
 }
 
+
+ColorPaletteManager::ColorPaletteManager(const ColorPaletteManager &obj)
+{
+	colorPalette = new ColorPalette();
+	*colorPalette = *obj.colorPalette;
+}
 
 void ColorPaletteManager::setChosenCategoryNr(unsigned int i)
 {
@@ -286,7 +302,11 @@ void ColorPaletteManager::setApplyToLineColor(bool b)
 }
 
 
-
+void ColorPaletteManager::setReverseColorOrder(bool b)
+{
+	bReverseColorOrder = b;
+	bvaluesChanged = true;
+}
 
 
 bool ColorPaletteManager::getBValuesChanged()
@@ -298,12 +318,20 @@ bool ColorPaletteManager::getBValuesChanged()
 }
 
 
+void ColorPaletteManager::checkPallette()
+{
+	if (this->colorPalette == nullptr)
+	{
+		this->colorPalette = new ColorPalette();
+	}
+}
+
 void ColorPaletteManager::backupColors(std::vector<ImVec4> lineColors, std::vector<ImVec4> fillColors)
 {
     if (backupLineColor)
     {
         backupLineColor = false;
-        std::string currColorPaletteName = "line_" + std::to_string(colorPalette.palettesCust.size());
+        std::string currColorPaletteName = "line_" + std::to_string(colorPalette->palettesCust.size());
         CPalette currPalette;
         currPalette.cName = currColorPaletteName;
         currPalette.category = "cust";
@@ -316,19 +344,19 @@ void ColorPaletteManager::backupColors(std::vector<ImVec4> lineColors, std::vect
         std::vector<ImVec4> newVec(first, last);
         currPalette.custColors = newVec;//lineColors;
 
-        this->colorPalette.palettes.push_back(currPalette);
-        this->colorPalette.palettesCust.push_back(currPalette);
-        this->colorPalette.custNameList.push_back(currPalette.cName);
+        this->colorPalette->palettes.push_back(currPalette);
+        this->colorPalette->palettesCust.push_back(currPalette);
+        this->colorPalette->custNameList.push_back(currPalette.cName);
 
 //        std::vector<std::string> existingNames = this->colorPalette.custNameList;
 //        existingNames.push_back(currColorPaletteName);
-        this->colorPalette.paletteNamesVec[3].push_back(currColorPaletteName);
+        this->colorPalette->paletteNamesVec[3].push_back(currColorPaletteName);
 
     }
     if (backupFillColor)
     {
         backupFillColor = false;
-        std::string currColorPaletteName = "fill_" + std::to_string(colorPalette.palettesCust.size());
+        std::string currColorPaletteName = "fill_" + std::to_string(colorPalette->palettesCust.size());
         CPalette currPalette;
         currPalette.cName = currColorPaletteName;
         currPalette.category = "cust";
@@ -340,11 +368,11 @@ void ColorPaletteManager::backupColors(std::vector<ImVec4> lineColors, std::vect
         std::vector<ImVec4> newVec(first, last);
         currPalette.custColors = newVec; //fillColors;
 
-        this->colorPalette.palettes.push_back(currPalette);
-        this->colorPalette.palettesCust.push_back(currPalette);
-        this->colorPalette.custNameList.push_back(currPalette.cName);
+        this->colorPalette->palettes.push_back(currPalette);
+        this->colorPalette->palettesCust.push_back(currPalette);
+        this->colorPalette->custNameList.push_back(currPalette.cName);
 
-        this->colorPalette.paletteNamesVec[3].push_back(currColorPaletteName);
+        this->colorPalette->paletteNamesVec[3].push_back(currColorPaletteName);
     }
 
 }

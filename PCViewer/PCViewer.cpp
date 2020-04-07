@@ -424,7 +424,8 @@ struct ViolinPlot {
 	float maxGlobalValue;							//max global value accross all histograms
 	std::vector<float> maxValues;					//max value of all histogramms
 
-    ColorPaletteManager colorPaletteManager;
+    ColorPaletteManager *colorPaletteManager = new ColorPaletteManager();
+	~ViolinPlot() {delete colorPaletteManager;}
 };
 
 struct ViolinDrawlistPlot {
@@ -442,7 +443,9 @@ struct ViolinDrawlistPlot {
 	float maxGlobalValue;
 	std::vector<float> maxValues;
 
-    ColorPaletteManager colorPaletteManager;
+    ColorPaletteManager *colorPaletteManager = new ColorPaletteManager();
+
+	~ViolinDrawlistPlot() { delete colorPaletteManager; }
 //    std::unique_ptr<ColorPaletteManager> colorPaletteManager
 //        = ColorPaletteManager();
 };
@@ -779,6 +782,8 @@ static bool violinPlotAttrReplaceNonStop = false;
 static bool violinPlotAttrConsiderBlendingOrder = true;
 static bool violinPlotDLConsiderBlendingOrder = true;
 static bool violinPlotDLReplaceNonStop = false;
+static bool violinPlotAttrReverseColorPallette = false;
+static bool violinPlotDLReverseColorPallette = false;
 static bool yScaleToCurrenMax = false;
 static bool violinPlotOverlayLines = true;
 static bool renderOrderBasedOnFirstAtt = true;
@@ -4880,11 +4885,20 @@ static void changeColorsToCustomAlternatingColors(ColorPaletteManager *cpm,
 	std::vector<ImVec4> *violinLineColors, 
 	std::vector<ImVec4> *violinFillColors, 
 	HistogramManager::Histogram &hist, 
-	bool **activeAttributes)
+	bool **activeAttributes,
+	bool custColors = false)
 {
 	// Get complete colorpalette.
 	const std::string colorStr = std::string("Dark2ReorderSplitYellowExtended");
-	std::vector<ImVec4> retrievedColors = cpm->colorPalette.getPallettAsImVec4(0, 0, 20, cpm->alphaFill, colorStr);
+	std::vector<ImVec4> retrievedColors;
+	if (custColors)
+	{
+		retrievedColors = cpm->colorPalette->getPallettAsImVec4(0, 0, 20, cpm->alphaFill, colorStr);
+	}
+	else
+	{
+		retrievedColors = cpm->colorPalette->getPallettAsImVec4(cpm->chosenCategoryNr, cpm->chosenPaletteNr, cpm->chosenNrColorNr, cpm->alphaFill);
+	}
 
 	unsigned int colorCount = 0;
 	// So far, only 12 colors are available.
@@ -4949,7 +4963,7 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
     }
 
 
-    const std::vector<std::string> pNames = cpm->colorPalette.paletteNamesVec.at(cpm->chosenCategoryNr);
+    const std::vector<std::string> pNames = cpm->colorPalette->paletteNamesVec.at(cpm->chosenCategoryNr);
     unsigned int currPaletteNr = cpm->chosenPaletteNr;
     char const * pName;
     if (currPaletteNr > pNames.size())
@@ -4979,7 +4993,7 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
 
     const char*  numbers[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "x" };
     unsigned int currColorNr = cpm->chosenNrColorNr;
-    CPalette* currPalette =  cpm->colorPalette.getPalletteWithName(pNames[currPaletteNr]);
+    CPalette* currPalette =  cpm->colorPalette->getPalletteWithName(pNames[currPaletteNr]);
 
     if(ImGui::BeginCombo("Nr colors",  numbers[currColorNr])){
 
@@ -5039,7 +5053,7 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
         // Backup existing colors. Only backsup the ones after skipRange...
         cpm->backupColors(*violinLineColors, *violinFillColors);
 
-        std::vector<ImVec4> retrievedColors = cpm->colorPalette.getPallettAsImVec4(
+        std::vector<ImVec4> retrievedColors = cpm->colorPalette->getPallettAsImVec4(
                     cpm->chosenCategoryNr,
                     cpm->chosenPaletteNr,
                     cpm->chosenNrColorNr);
@@ -5145,9 +5159,9 @@ static void optimizeViolinSidesAndAssignCustColors() {
 
 
 		}
-		if (violinPlotAttrInsertCustomColors) {
-			changeColorsToCustomAlternatingColors(&(violinAdaptSidesAutoObj.vp->colorPaletteManager), violinAdaptSidesAutoObj.vp->attributeNames.size(), &(violinAdaptSidesAutoObj.vp->drawListLineColors), &(violinAdaptSidesAutoObj.vp->drawListFillColors),
-				hist, &(violinAdaptSidesAutoObj.vp->activeAttributes));
+		if (violinPlotAttrInsertCustomColors || violinPlotAttrConsiderBlendingOrder) {
+			changeColorsToCustomAlternatingColors((violinAdaptSidesAutoObj.vp->colorPaletteManager), violinAdaptSidesAutoObj.vp->attributeNames.size(), &(violinAdaptSidesAutoObj.vp->drawListLineColors), &(violinAdaptSidesAutoObj.vp->drawListFillColors),
+				hist, &(violinAdaptSidesAutoObj.vp->activeAttributes), violinPlotAttrInsertCustomColors);
 		}
 		violinAdaptSidesAutoObj.optimizeSidesNowAttr = false;
 	}
@@ -5164,9 +5178,9 @@ static void optimizeViolinSidesAndAssignCustColors() {
 			violinAdaptSidesAutoObj.vdlp->attributePlacements.push_back((hist.side[j] % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
 		}
 
-		if (violinPlotDLInsertCustomColors) {
-			changeColorsToCustomAlternatingColors(&(violinAdaptSidesAutoObj.vdlp->colorPaletteManager), violinAdaptSidesAutoObj.vdlp->attributeNames.size(), &(violinAdaptSidesAutoObj.vdlp->attributeLineColors), &(violinAdaptSidesAutoObj.vdlp->attributeFillColors),
-				hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes));
+		if (violinPlotDLInsertCustomColors || violinPlotDLConsiderBlendingOrder) {
+			changeColorsToCustomAlternatingColors((violinAdaptSidesAutoObj.vdlp->colorPaletteManager), violinAdaptSidesAutoObj.vdlp->attributeNames.size(), &(violinAdaptSidesAutoObj.vdlp->attributeLineColors), &(violinAdaptSidesAutoObj.vdlp->attributeFillColors),
+				hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes), violinPlotDLInsertCustomColors);
 		}
 		violinAdaptSidesAutoObj.optimizeSidesNowDL = false;
 	}
@@ -8593,7 +8607,7 @@ int main(int, char**)
 
                 // Draw everything to load Colorbrewer Colorpalettes
                 if (violinAttributePlots[i].attributeNames.size() > 0){
-                    includeColorbrewerToViolinPlot(&(violinAttributePlots[i].colorPaletteManager),
+                    includeColorbrewerToViolinPlot((violinAttributePlots[i].colorPaletteManager),
                                                    &(violinAttributePlots[i].drawListLineColors),
                                                    &(violinAttributePlots[i].drawListFillColors));
                 }
@@ -8609,7 +8623,7 @@ int main(int, char**)
 
 				int previousNrOfColumns = ImGui::GetColumnsCount();
 				ImGui::Separator();
-				ImGui::Columns(4);
+				ImGui::Columns(5);
 
 
 				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotAttrReplaceNonStop)) {
@@ -8658,7 +8672,11 @@ int main(int, char**)
 
 				ImGui::NextColumn();
 				ImGui::Checkbox("Consider blending order", &violinPlotAttrConsiderBlendingOrder);
-
+				ImGui::NextColumn();
+				if(ImGui::Checkbox("Reverse color pallette", &violinPlotAttrReverseColorPallette))
+				{
+					violinDrawlistPlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
+				}
 
 				ImGui::Columns(previousNrOfColumns);
 
@@ -8892,7 +8910,9 @@ int main(int, char**)
 			//adding new Plots
 			ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - plusWidth / 2);
 			if (ImGui::Button("+", ImVec2(plusWidth, 0))) {
-				violinAttributePlots.push_back({});
+				ViolinPlot *currVP = new ViolinPlot();
+				violinAttributePlots.emplace_back(*currVP);
+				currVP = nullptr;
 			}
 
 			ImGui::End();
@@ -9048,7 +9068,7 @@ int main(int, char**)
 				ImGui::Columns(1);
 				// Draw everything to load Colorbrewer Colorpalettes
 				if (violinDrawlistPlots[i].attributeNames.size() > 0) {
-					includeColorbrewerToViolinPlot(&(violinDrawlistPlots[i].colorPaletteManager),
+					includeColorbrewerToViolinPlot((violinDrawlistPlots[i].colorPaletteManager),
 						&(violinDrawlistPlots[i].attributeLineColors),
 						&(violinDrawlistPlots[i].attributeFillColors));
 				}
@@ -9058,7 +9078,7 @@ int main(int, char**)
 
 
 
-				ImGui::Columns(5);
+				ImGui::Columns(6);
 				if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
 					violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first* violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
 				}
@@ -9077,6 +9097,12 @@ int main(int, char**)
 				ImGui::Checkbox("Re-place constantly", &violinPlotDLReplaceNonStop);
 				ImGui::NextColumn();
 				ImGui::Checkbox("Consider blending order", &violinPlotDLConsiderBlendingOrder);
+				ImGui::NextColumn();
+				if (ImGui::Checkbox("Reverse color pallette", &violinPlotDLReverseColorPallette))
+				{
+					violinDrawlistPlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
+				}
+
 
 				ImGui::Columns(1);
 
@@ -9532,7 +9558,9 @@ int main(int, char**)
 			//adding new Plots
 			ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - plusWidth / 2);
 			if (ImGui::Button("+", ImVec2(plusWidth, 0))) {
-				violinDrawlistPlots.push_back({});
+				ViolinDrawlistPlot *currVPDLP = new ViolinDrawlistPlot();
+				violinDrawlistPlots.emplace_back(*currVPDLP);
+				currVPDLP = nullptr;
 				violinDrawlistPlots.back().matrixSize = { 1,5 };
 				violinDrawlistPlots.back().drawListOrder = std::vector<uint32_t>(5, 0xffffffff);
 			}
