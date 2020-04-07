@@ -2374,6 +2374,7 @@ static void cleanupPcPlotCommandBuffer() {
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
 }
 
+// This function assumes that only indices of active attributes are passed. 
 static int placeOfInd(int ind) {
 	int place = 0;
 	for (int i : pcAttrOrd) {
@@ -6671,19 +6672,30 @@ int main(int, char**)
 					float pieBorder = 3;
 					float radius = (xOffsetPerAttr / 2.0 - 3) * 0.9;
 
-					for (int i = 0; i < amtOfLabels; i++) {
+//					for (int i = 0; i < amtOfLabels; i++) { 
+					// Loop through all attributes, since placeOfInd expects ids of active attributes only.
+					int iActAttr = -1;
+					for (int i = 0; i < pcAttrOrd.size(); i++) {
+						if (!pcAttributeEnabled[i]) { continue; }
+
+						++iActAttr;
 						for (auto &currdl : g_PcPlotDrawLists){
+							
 							if (!currdl.showHistogramm) { continue; }
 
 
-							float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+
+							float x = picPos.x + iActAttr * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 							x += xStartOffset + xoffset;
 
 							// x is the center of the axis. Now, the hist goes to the left and right, no matter how many are drawn. So, calculate the min_x, max_x, h*2 +1 axes, every second is the middle of a histogrm
 
-
+							std::cout << placeOfInd(i) << "\n";
+							std::cout << pcAttrOrd[i] << "\n";
+							
 							ImVec2 a(x, picPos.y + std::max(14.f, radius + 4.f));
-							ImGui::GetWindowDrawList()->AddPie(a, radius, IM_COL32(255, 255, 255, 255), currdl.brushedRatioToParent[placeOfInd(i)], -1,  pieBorder);
+							ImGui::GetWindowDrawList()->AddPie(a, radius, IM_COL32(255, 255, 255, 255), currdl.brushedRatioToParent[pcAttrOrd[i]], -1,  pieBorder);
+							// ImGui::GetWindowDrawList()->AddPie(a, radius, IM_COL32(255, 255, 255, 255), currdl.brushedRatioToParent[placeOfInd(i)], -1, pieBorder);
 
 							xoffset += xOffsetPerAttr;
 						}
