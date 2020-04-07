@@ -452,11 +452,12 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active, bool co
 	{
 		std::vector<int> idxLeftSide;
 		std::vector<int> idxRightSide;
+		std::vector<int> activeParameters;
 
 		for (int i = 0; i < hist.side.size(); ++i)
 		{	
 			if (!((*active)[i])) { continue; }
-
+			activeParameters.push_back(i);
 			if (hist.side[i] == 0)
 			{
 				idxLeftSide.push_back(i);
@@ -476,15 +477,15 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active, bool co
 		std::sort(w.begin(), w.end(), [area, idxLeftSide](size_t  a, size_t  b) {return area->at(idxLeftSide[a]) > area->at(idxLeftSide[b]);});
 
 		std::iota(z.begin(), z.end(), 0);
-		std::sort(z.begin(), z.end(), [area, idxLeftSide](size_t  a, size_t  b) {return area->at(idxLeftSide[a]) > area->at(idxLeftSide[b]);});
+		std::sort(z.begin(), z.end(), [area, idxRightSide](size_t  a, size_t  b) {return area->at(idxRightSide[a]) > area->at(idxRightSide[b]);});
 
 		int iLeft = 0;
 		int iRight = 0;
 		for (int i = 0; i < hist.attributeColorOrderIdx.size(); ++i)
 		{
-			if (hist.side[i] == 0) { hist.attributeColorOrderIdx[i] = idxLeftSide[w[iLeft++]]; };
+			if (hist.side[activeParameters[i]] == 0) { hist.attributeColorOrderIdx[i] = idxLeftSide[w[iLeft++]]; };
 
-			if (hist.side[i] == 1) { hist.attributeColorOrderIdx[i] = idxRightSide[z[iRight++]]; };
+			if (hist.side[activeParameters[i]] == 1) { hist.attributeColorOrderIdx[i] = idxRightSide[z[iRight++]]; };
 		}
 
 	}
