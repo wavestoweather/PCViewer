@@ -261,6 +261,17 @@ void IsoSurfRenderer::resizeBox(float width, float height, float depth)
 
 bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float,float>>>& brush, int index)
 {
+	int w = SpacialData::rlatSize;
+	int d = SpacialData::rlonSize;
+	int h = SpacialData::altitudeSize + 22;	//the top 22 layer of the dataset are twice the size of the rest
+	width = w;
+	height = h;
+	depth = d;
+
+	image3dWidth = width;
+	image3dHeight = height;
+	image3dDepth = depth;
+
 	if (binaryImage.size() && (image3dHeight != height || image3dWidth != width || image3dDepth != depth) && index == -1) return false;
 
 	VkResult err;
@@ -279,16 +290,6 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	densityAttributesMinMax[positionIndices.x] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
 	densityAttributesMinMax[positionIndices.y] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
 	densityAttributesMinMax[positionIndices.z] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
-	int w = SpacialData::rlatSize;
-	int d = SpacialData::rlonSize;
-	int h = SpacialData::altitudeSize + 22;	//the top 22 layer of the dataset are twice the size of the rest
-	width = w;
-	height = h;
-	depth = d;
-
-	image3dWidth = width;
-	image3dHeight = height;
-	image3dDepth = depth;
 
 	//destroying old resources
 	if (image3dMemory) {
