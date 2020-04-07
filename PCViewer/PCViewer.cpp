@@ -4253,7 +4253,8 @@ static bool updateActiveIndices(DrawList& dl) {
 		{
 			for (auto& currdl : ds.drawLists)
 			{
-				if (currdl.name == dl.parentTemplateList->name)
+				// Checking the buffer Reference should be enough, nevertheless, we check all 3 conditions.
+				if ((currdl.name == dl.parentTemplateList->name) && (currdl.indices.size() == dl.parentTemplateList->indices.size())  && (&currdl.buffer == &(dl.parentTemplateList->buffer) ) )
 				{
 					parentDS = &ds;
 					break;
