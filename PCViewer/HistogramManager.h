@@ -9,6 +9,7 @@
 #define SHADERPATH "shader/histComp.spv"
 #define LOCALSIZE 256
 
+
 class HistogramManager {
 public:
 	struct Histogram {
@@ -36,7 +37,7 @@ public:
 	void setSmoothingKernelSize(float stdDev);
 	void updateSmoothedValues();
 
-	void determineSideHist(Histogram& hist, bool **active = nullptr);
+	void determineSideHist(Histogram& hist, bool **active = nullptr, bool considerBlendingOrder = false);
 
 	bool ignoreZeroValues;
 	bool ignoreZeroBins;

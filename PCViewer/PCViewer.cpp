@@ -776,6 +776,8 @@ static bool coupleViolinPlots = true;
 static bool violinPlotDLInsertCustomColors = true;
 static bool violinPlotAttrInsertCustomColors = true;
 static bool violinPlotAttrReplaceNonStop = false;
+static bool violinPlotAttrConsiderBlendingOrder = true;
+static bool violinPlotDLConsiderBlendingOrder = true;
 static bool violinPlotDLReplaceNonStop = false;
 static bool yScaleToCurrenMax = false;
 static bool violinPlotOverlayLines = true;
@@ -4873,18 +4875,21 @@ static inline float getBinVal(float x, std::vector<float>& bins) {
 
 
 
-static void changeColorsToCustomAlternatingColors(ColorPaletteManager *cpm, unsigned int nrAttributes, std::vector<ImVec4> *violinLineColors, std::vector<ImVec4> *violinFillColors, HistogramManager::Histogram &hist, bool **activeAttributes)
+static void changeColorsToCustomAlternatingColors(ColorPaletteManager *cpm, 
+	unsigned int nrAttributes, 
+	std::vector<ImVec4> *violinLineColors, 
+	std::vector<ImVec4> *violinFillColors, 
+	HistogramManager::Histogram &hist, 
+	bool **activeAttributes)
 {
 	// Get complete colorpalette.
-	const std::string colorStr = std::string("Dark2ExtendedReorder");
+	const std::string colorStr = std::string("Dark2ReorderSplitYellowExtended");
 	std::vector<ImVec4> retrievedColors = cpm->colorPalette.getPallettAsImVec4(0, 0, 20, cpm->alphaFill, colorStr);
 
 	unsigned int colorCount = 0;
 	// So far, only 12 colors are available.
 	for (unsigned int i = 0; (i < nrAttributes) && (i < 12) ; ++i)
 	{
-
-
 		unsigned int times0 = 0;
 		unsigned int times1 = 0;
 		// Colors are sorted alternatingly for right and left side. So, all plots on the right have to get 'right-colors'.
@@ -5132,7 +5137,7 @@ static void optimizeViolinSidesAndAssignCustColors() {
 	if (violinAdaptSidesAutoObj.optimizeSidesNowAttr)
 	{
 		auto& hist = histogramManager->getHistogram(violinAdaptSidesAutoObj.vp->drawLists[0].name);
-		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vp->activeAttributes));
+		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vp->activeAttributes), violinPlotAttrConsiderBlendingOrder);
 
 		violinAdaptSidesAutoObj.vp->violinPlacements.clear();
 		for (int j = 0; j < violinAdaptSidesAutoObj.vp->attributeNames.size(); ++j) {
@@ -5152,7 +5157,7 @@ static void optimizeViolinSidesAndAssignCustColors() {
 	if (violinAdaptSidesAutoObj.optimizeSidesNowDL)
 	{
 		auto& hist = histogramManager->getHistogram(violinAdaptSidesAutoObj.vdlp->drawLists[0]);
-		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes));
+		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes), violinPlotDLConsiderBlendingOrder);
 
 		violinAdaptSidesAutoObj.vdlp->attributePlacements.clear();
 		for (int j = 0; j < violinAdaptSidesAutoObj.vdlp->attributeNames.size(); ++j) {
@@ -8604,7 +8609,7 @@ int main(int, char**)
 
 				int previousNrOfColumns = ImGui::GetColumnsCount();
 				ImGui::Separator();
-				ImGui::Columns(3);
+				ImGui::Columns(4);
 
 
 				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotAttrReplaceNonStop)) {
@@ -8646,11 +8651,13 @@ int main(int, char**)
 					}
 				}
 				ImGui::NextColumn();
-				ImGui::Checkbox("Apply colors of Dark2ExtendedReorder", &violinPlotAttrInsertCustomColors);
+				ImGui::Checkbox("Apply colors of Dark2YellowSplit", &violinPlotAttrInsertCustomColors);
 
 				ImGui::NextColumn();
 				ImGui::Checkbox("Re-place constantly", &violinPlotAttrReplaceNonStop);
 
+				ImGui::NextColumn();
+				ImGui::Checkbox("Consider blending order", &violinPlotAttrConsiderBlendingOrder);
 
 
 				ImGui::Columns(previousNrOfColumns);
@@ -9051,7 +9058,7 @@ int main(int, char**)
 
 
 
-				ImGui::Columns(4);
+				ImGui::Columns(5);
 				if (ImGui::DragInt2(("Matrix dimensions##" + std::to_string(i)).c_str(), (int*)&violinDrawlistPlots[i].matrixSize.first, .01f, 1, 10)) {
 					violinDrawlistPlots[i].drawListOrder.resize(violinDrawlistPlots[i].matrixSize.first* violinDrawlistPlots[i].matrixSize.second, 0xffffffff);
 				}
@@ -9068,6 +9075,8 @@ int main(int, char**)
 				ImGui::Checkbox("Apply colors of Dark2ExtendedReorder", &violinPlotDLInsertCustomColors);
 				ImGui::NextColumn();
 				ImGui::Checkbox("Re-place constantly", &violinPlotDLReplaceNonStop);
+				ImGui::NextColumn();
+				ImGui::Checkbox("Consider blending order", &violinPlotDLConsiderBlendingOrder);
 
 				ImGui::Columns(1);
 

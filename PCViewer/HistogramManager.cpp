@@ -2,6 +2,10 @@
 #include <cmath>
 #include <numeric>
 #include <list>
+#include <iostream>
+#include <algorithm>
+#include <vector>
+#include <string>
 
 HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t binsAmount) : device(device), physicalDevice(physicalDevice), commandPool(commandPool), queue(queue), descriptorPool(descriptorPool), numOfBins(binsAmount)
 {
@@ -255,7 +259,7 @@ void HistogramManager::updateSmoothedValues(Histogram& hist)
 }
 
 
-void HistogramManager::determineSideHist(Histogram& hist, bool **active)
+void HistogramManager::determineSideHist(Histogram& hist, bool **active, bool considerBlendingOrder)
 {
 	std::vector<std::vector<float>> *bins = nullptr;
 	std::vector<float> *area = nullptr;
@@ -443,5 +447,48 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active)
 
 	hist.attributeColorOrderIdx.clear();
 	hist.attributeColorOrderIdx = vUsed;
+
+	if (considerBlendingOrder)
+	{
+		std::vector<int> idxLeftSide;
+		std::vector<int> idxRightSide;
+
+		for (int i = 0; i < hist.side.size(); ++i)
+		{	
+			if (!((*active)[i])) { continue; }
+
+			if (hist.side[i] == 0)
+			{
+				idxLeftSide.push_back(i);
+
+			}
+			else
+			{
+				idxRightSide.push_back(i);
+			}
+		}
+
+		std::vector<unsigned int> w(idxLeftSide.size());
+		std::vector<unsigned int> z(idxRightSide.size());
+
+		// Create a vector with increasing indices. Then sort them with decreasing area for the left side. Then, adapt attributeColorOrderIdx. 
+		std::iota(w.begin(), w.end(), 0);
+		std::sort(w.begin(), w.end(), [area, idxLeftSide](size_t  a, size_t  b) {return area->at(idxLeftSide[a]) > area->at(idxLeftSide[b]);});
+
+		std::iota(z.begin(), z.end(), 0);
+		std::sort(z.begin(), z.end(), [area, idxLeftSide](size_t  a, size_t  b) {return area->at(idxLeftSide[a]) > area->at(idxLeftSide[b]);});
+
+		int iLeft = 0;
+		int iRight = 0;
+		for (int i = 0; i < hist.attributeColorOrderIdx.size(); ++i)
+		{
+			if (hist.side[i] == 0) { hist.attributeColorOrderIdx[i] = idxLeftSide[w[iLeft++]]; };
+
+			if (hist.side[i] == 1) { hist.attributeColorOrderIdx[i] = idxRightSide[z[iRight++]]; };
+		}
+
+	}
+
+
 }
 

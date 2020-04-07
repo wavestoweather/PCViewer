@@ -698,6 +698,31 @@ inline std::vector<T> brew(const std::string& colorName, size_t colorCount)
 		}
 	}
 
+	else if (colorName == "Dark2ReorderSplitYellowExtended") {
+		switch (colorCount) {
+		case 3:
+			return { "#1b9e77", "#d95f02", "#7570b3"};
+		case 4:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a" };
+		case 5:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e"  };
+		case 6:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e" , "#a6761d"  };
+		case 7:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e" , "#a6761d" , "#e6ab02"  };
+		case 8:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e" , "#a6761d" , "#e6ab02" , "#666666"  };
+		case 9:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e" , "#a6761d" , "#e6ab02" , "#666666" , "#7a0177"  };
+		case 10:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e" , "#a6761d" , "#e6ab02" , "#666666" , "#7a0177" , "#04eb51" };
+		case 11:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e" , "#a6761d" , "#e6ab02" , "#666666" , "#7a0177" , "#04eb51" , "#b2182b" };
+		case 12:
+			return { "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e" , "#a6761d" , "#e6ab02" , "#666666" , "#7a0177" , "#04eb51" , "#b2182b" , "#0000ff" };
+		}
+	}
+
     else if (colorName == "Paired") {
         switch (colorCount) {
         case 3:
