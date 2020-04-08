@@ -45,22 +45,14 @@ void main(){
 	if(!bool(imageLoad(act,int(i)))) return;
 
 	ivec3 pos;
-	if(bool(info.regularGrid)){
-		pos.x = int(((data[i*info.amtOfAttributes + info.xInd] - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX));
-		pos.y = int(((data[i*info.amtOfAttributes + info.yInd] - info.yMin) / (info.yMax - info.yMin)) * float(info.dimY));
-		pos.z = int(((data[i*info.amtOfAttributes + info.zInd] - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ));
-		if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
-	}
-	else{
-		pos.x = int(((data[i*info.amtOfAttributes + info.xInd] - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX));
-		pos.y = int(((data[i*info.amtOfAttributes + info.yInd] - info.yMin) / (info.yMax - info.yMin)) * float(info.dimY + 43));
-		pos.z = int(((data[i*info.amtOfAttributes + info.zInd] - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ));
-		if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY + 43||pos.z>=info.dimZ) return;
-	}
+	pos.x = int(((data[i*info.amtOfAttributes + info.xInd] - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX));
+	pos.y = int(((data[i*info.amtOfAttributes + info.yInd] - info.yMin) / (info.yMax - info.yMin)) * float(info.dimY));
+	pos.z = int(((data[i*info.amtOfAttributes + info.zInd] - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ));
+	if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
 
 	//storing 1 if element is in the brush
 	imageStore(binary, pos, vec4(1));
-	if(!bool(info.regularGrid)){
-		imageStore(binary, pos + ivec3(0,1,0),vec4(1));
+	if(!bool(info.regularGrid) && pos.y >= info.dimY - 44){
+		imageStore(binary, pos + ivec3(0,-1,0),vec4(1));
 	}
 }

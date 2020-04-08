@@ -803,12 +803,21 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 
 IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t posIndices[3], std::vector<std::pair<float, float>>& posBounds, uint32_t amtOfAttributes, uint32_t dataSize, VkBuffer data, VkBufferView activeIndices, uint32_t indicesSize, VkBuffer indices, bool regularGrid, int index)
 {
-	if (index != -1 && (drawlistBrushes[index].gridDimensions[0]!= width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return IsoSurfRendererError_GridDimensionMissmatch;
 
+	if (index != -1 && (drawlistBrushes[index].gridDimensions[0]!= width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return IsoSurfRendererError_GridDimensionMissmatch;
+	
 	VkResult err;
 
 	if (!binaryImageSampler) {
 		VkUtil::createImageSampler(device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_LINEAR, 1, 1, &binaryImageSampler);
+	}
+
+	if (index == -1)
+		this->posIndices.push_back({ posIndices[0],posIndices[1],posIndices[2] });
+	else {
+		posIndices[0] = this->posIndices[index][0];
+		posIndices[1] = this->posIndices[index][1];
+		posIndices[2] = this->posIndices[index][2];
 	}
 
 	VkClearColorValue clear = { 0,0,0,0 };
@@ -863,12 +872,12 @@ IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(uint
 	infoBytes->xInd = posIndices[0];
 	infoBytes->yInd = posIndices[1];
 	infoBytes->zInd = posIndices[2];
-	infoBytes->xMin = posBounds[posIndices[0]].first;
-	infoBytes->xMax = posBounds[posIndices[0]].second;
-	infoBytes->yMin = posBounds[posIndices[1]].first;
-	infoBytes->yMax = posBounds[posIndices[1]].second;
-	infoBytes->zMin = posBounds[posIndices[2]].first;
-	infoBytes->zMax = posBounds[posIndices[2]].second;
+	infoBytes->xMin = posBounds[0].first;
+	infoBytes->xMax = posBounds[0].second;
+	infoBytes->yMin = posBounds[1].first;
+	infoBytes->yMax = posBounds[1].second;
+	infoBytes->zMin = posBounds[2].first;
+	infoBytes->zMax = posBounds[2].second;
 	infoBytes->padding = regularGrid;
 	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
 
@@ -920,6 +929,13 @@ IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(uint
 	updateCommandBuffer();
 	render();
 	return IsoSurfRendererError_Success;
+}
+
+void IsoSurfRenderer::getPosIndices(int index, uint32_t* ind)
+{
+	ind[0] = posIndices[index].x;
+	ind[1] = posIndices[index].y;
+	ind[2] = posIndices[index].z;
 }
 
 void IsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float deltaT)

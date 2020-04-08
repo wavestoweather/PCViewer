@@ -3936,6 +3936,95 @@ static void updateMaxHistogramValues(ViolinDrawlistPlot& plot) {
 	}
 }
 
+static void updateIsoSurface(GlobalBrush& gb) {
+	int amtOfLines = 0;
+	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
+	if ((ImGui::IsMouseDown(0) && liveBrushThreshold < amtOfLines) || !coupleIsoSurfaceRenderer) return;
+	int index = -1;
+	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
+		++index;
+		if (gb.name != db.brush) continue;
+		DrawList* dl = nullptr;
+		for (DrawList& draw : g_PcPlotDrawLists) {
+			if (draw.name == db.drawlist) {
+				dl = &draw;
+				break;
+			}
+		}
+		if (!dl) continue;
+		std::vector<float*>* data = nullptr;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (dl->parentDataSet == ds.name) {
+				data = &ds.data;
+				break;
+			}
+		}
+
+		std::vector<unsigned int> attr;
+		std::vector<std::pair<float, float>> minMax;
+		for (int i = 0; i < pcAttributes.size(); ++i) {
+			attr.push_back(i);
+			minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
+		}
+		std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
+		std::vector<uint32_t> brushIndices;
+		for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
+			if (axis.second.size()) brushIndices.push_back(axis.first);
+			for (auto& brush : axis.second) {
+				miMa[axis.first].push_back(brush.second);
+			}
+		}
+
+		glm::uvec3 posIndices{ 0,2,1 };
+
+		if (isoSurfaceRegularGrid) {
+			isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
+		}
+		else {
+			if (!ImGui::IsMouseDown(0))
+				isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index);
+		}
+	}
+}
+
+static void updateIsoSurface(DrawList& dl) {
+	int amtOfLines = 0;
+	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
+	if ((ImGui::IsMouseDown(0) && liveBrushThreshold < amtOfLines) || !coupleIsoSurfaceRenderer) return;
+
+	int index = -1;
+	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
+		++index;
+		if (dl.name != db.drawlist || db.brush.size()) continue;
+		uint32_t w = db.gridDimensions[0];
+		uint32_t h = db.gridDimensions[1];
+		uint32_t d = db.gridDimensions[2];
+		uint32_t posIndices[3];
+		isoSurfaceRenderer->getPosIndices(index, posIndices);
+		std::vector<std::pair<float, float>> posBounds(3);
+		for (int i = 0; i < 3; ++i) {
+			posBounds[i].first = pcAttributes[posIndices[i]].min;
+			posBounds[i].second = pcAttributes[posIndices[i]].max;
+		}
+		if (!isoSurfaceRegularGrid) {
+			posBounds[0].first = SpacialData::rlat[0];
+			posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
+			posBounds[1].first = SpacialData::altitude[0];
+			posBounds[1].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
+			posBounds[2].first = SpacialData::rlon[0];
+			posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
+		}
+		std::vector<float*>* data;
+		for (DataSet& ds : g_PcPlotDataSets) {
+			if (ds.name == dl.parentDataSet) {
+				data = &ds.data;
+				break;
+			}
+		}
+		isoSurfaceRenderer->update3dBinaryVolume(w, h, d, posIndices, posBounds, pcAttributes.size(), data->size(), dl.buffer, dl.activeIndicesBufferView, dl.indices.size(), dl.indicesBuffer, isoSurfaceRegularGrid, index);
+	}
+}
+
 static bool updateActiveIndices(DrawList& dl) {
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > liveBrushThreshold) {
@@ -4442,6 +4531,10 @@ static bool updateActiveIndices(DrawList& dl) {
 		}
 	}
 
+	if (coupleIsoSurfaceRenderer && enableIsoSurfaceWindow) {
+		updateIsoSurface(dl);
+	}
+
 	//setting the median to no median to enforce median recalculation
 	dl.activeMedian = 0;
 	return true;
@@ -4455,57 +4548,6 @@ static bool updateAllActiveIndices() {
 		ret = updateActiveIndices(dl);
 	}
 	return ret;
-}
-
-static void updateIsoSurface(GlobalBrush& gb) {
-	int amtOfLines = 0;
-	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
-	if ((ImGui::IsMouseDown(0) && liveBrushThreshold < amtOfLines) || !coupleIsoSurfaceRenderer) return;
-	int index = -1;
-	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
-		++index;
-		if (gb.name != db.brush) continue;
-		DrawList* dl = nullptr;
-		for (DrawList& draw : g_PcPlotDrawLists) {
-			if (draw.name == db.drawlist) {
-				dl = &draw;
-				break;
-			}
-		}
-		if (!dl) continue;
-		std::vector<float*>* data = nullptr;
-		for (DataSet& ds : g_PcPlotDataSets) {
-			if (dl->parentDataSet == ds.name) {
-				data = &ds.data;
-				break;
-			}
-		}
-
-		std::vector<unsigned int> attr;
-		std::vector<std::pair<float, float>> minMax;
-		for (int i = 0; i < pcAttributes.size(); ++i) {
-			attr.push_back(i);
-			minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
-		}
-		std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
-		std::vector<uint32_t> brushIndices;
-		for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
-			if (axis.second.size()) brushIndices.push_back(axis.first);
-			for (auto& brush : axis.second) {
-				miMa[axis.first].push_back(brush.second);
-			}
-		}
-
-		glm::uvec3 posIndices{ 0,2,1 };
-
-		if (isoSurfaceRegularGrid) {
-			isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
-		}
-		else {
-			if (!ImGui::IsMouseDown(0))
-				isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index);
-		}
-	}
 }
 
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
@@ -8167,21 +8209,39 @@ int main(int, char**)
 
 					int index = -1;
 					for (int i = 0; i < isoSurfaceRenderer->drawlistBrushes.size(); ++i) {
-						if (dl->name == isoSurfaceRenderer->drawlistBrushes[i].drawlist && globalBrushes[selectedGlobalBrush].name == isoSurfaceRenderer->drawlistBrushes[i].brush) {
-							index = i;
-							break;
+						if (dl->name == isoSurfaceRenderer->drawlistBrushes[i].drawlist){
+							if (isoSurfaceRenderer->drawlistBrushes[i].brush.size() && globalBrushes[selectedGlobalBrush].name == isoSurfaceRenderer->drawlistBrushes[i].brush) {
+								index = i;
+								break;
+							}
+							else if (!isoSurfaceRenderer->drawlistBrushes[i].brush.size()) {
+								index = i;
+								break;
+							}
 						}
 					}
-					if(index == -1)
-						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,(selectedGlobalBrush == -1)?"":globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {uint32_t(isoSurfaceRegularGridDim[0]), uint32_t(isoSurfaceRegularGridDim[1]), uint32_t(isoSurfaceRegularGridDim[2])} });
+					if (index == -1) {
+						uint32_t wi = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+						uint32_t he = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+						uint32_t de = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,(selectedGlobalBrush == -1) ? "" : globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {wi, he, de} });
+					}
 					if (selectedGlobalBrush == -1) {
 						uint32_t w = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
-						uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize;
+						uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
 						uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
 						std::vector<std::pair<float, float>> posBounds(3);
 						for (int i = 0; i < 3; ++i) {
 							posBounds[i].first = pcAttributes[posIndices[i]].min;
 							posBounds[i].second = pcAttributes[posIndices[i]].max;
+						}
+						if (!isoSurfaceRegularGrid) {
+							posBounds[0].first = SpacialData::rlat[0];
+							posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
+							posBounds[1].first = SpacialData::altitude[0];
+							posBounds[1].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
+							posBounds[2].first = SpacialData::rlon[0];
+							posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
 						}
 						isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfaceRegularGrid, index);
 					}
