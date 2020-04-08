@@ -3,6 +3,7 @@
 char IsoSurfRenderer::vertPath[]= "shader/isoSurfVert.spv";
 char IsoSurfRenderer::fragPath[]= "shader/isoSurfFrag.spv";
 char IsoSurfRenderer::computePath[] = "shader/isoSurfComp.spv";
+char IsoSurfRenderer::activeIndComputePath[] = "shader/isoSurfActiveIndComp.spv";
 char IsoSurfRenderer::binaryComputePath[] = "shader/isoSurfBinComp.spv";
 char IsoSurfRenderer::binarySmoothPath[] = "shader/isoSurfSmooth.spv";
 
@@ -10,9 +11,6 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 {
 	imageHeight = 0;
 	imageWidth = 0;
-	image3dHeight = 0;
-	image3dWidth = 0;
-	image3dDepth = 0;
 	this->device = device;
 	this->physicalDevice = physicalDevice;
 	this->commandPool = commandPool;
@@ -48,6 +46,9 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	binarySmoothPipeline = VK_NULL_HANDLE;
 	binarySmoothPipelineLayout = VK_NULL_HANDLE;
 	binarySmoothDescriptorSetLayout = VK_NULL_HANDLE;
+	activeIndComputePipeline = VK_NULL_HANDLE;
+	activeIndComputePipelineLayout = VK_NULL_HANDLE;
+	activeIndComputeDescriptorSetLayout = VK_NULL_HANDLE;
 	brushByteSize = 0;
 	shade = false;
 	stepSize = .006f;
@@ -202,6 +203,15 @@ IsoSurfRenderer::~IsoSurfRenderer()
 	if (binarySmoothDescriptorSetLayout) {
 		vkDestroyDescriptorSetLayout(device, binarySmoothDescriptorSetLayout, nullptr);
 	}
+	if (activeIndComputePipeline) {
+		vkDestroyPipeline(device, activeIndComputePipeline, nullptr);
+	}
+	if (activeIndComputePipelineLayout) {
+		vkDestroyPipelineLayout(device, activeIndComputePipelineLayout, nullptr);
+	}
+	if (activeIndComputeDescriptorSetLayout) {
+		vkDestroyDescriptorSetLayout(device, activeIndComputeDescriptorSetLayout, nullptr);
+	}
 	for (auto& col : brushColors) {
 		delete[] col.second;
 	}
@@ -268,11 +278,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	height = h;
 	depth = d;
 
-	image3dWidth = width;
-	image3dHeight = height;
-	image3dDepth = depth;
-
-	if (binaryImage.size() && (image3dHeight != height || image3dWidth != width || image3dDepth != depth) && index == -1) return false;
+	if (binaryImage.size() && index != -1 && (drawlistBrushes[index].gridDimensions[0] != width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return false;
 
 	VkResult err;
 
@@ -324,7 +330,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 		image3dOffsets.push_back(0);
 
 		image3dOffsets[i] = allocInfo.allocationSize;
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
+		VkUtil::create3dImage(device, w, d, h, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
 
 		vkGetImageMemoryRequirements(device, image3d[i], &memRequirements);
 
@@ -636,7 +642,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 
 bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& brushAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t amtOfIndices, std::vector<std::vector<std::pair<float, float>>>& brush, int index)
 {
-	if(binaryImage.size() && (image3dHeight != height || image3dWidth != width || image3dDepth != depth)) return false;
+	if(binaryImage.size() && index != -1 && (drawlistBrushes[index].gridDimensions[0] != width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return false;
 
 	VkResult err;
 
@@ -649,10 +655,6 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	else {
 		positionIndices = posIndices[index];
 	}
-
-	image3dWidth = width;
-	image3dHeight = height;
-	image3dDepth = depth;
 
 	VkClearColorValue clear = { 0,0,0,0 };
 	VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
@@ -799,6 +801,127 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	return true;
 }
 
+IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t posIndices[3], std::vector<std::pair<float, float>>& posBounds, uint32_t amtOfAttributes, uint32_t dataSize, VkBuffer data, VkBufferView activeIndices, uint32_t indicesSize, VkBuffer indices, bool regularGrid, int index)
+{
+	if (index != -1 && (drawlistBrushes[index].gridDimensions[0]!= width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return IsoSurfRendererError_GridDimensionMissmatch;
+
+	VkResult err;
+
+	if (!binaryImageSampler) {
+		VkUtil::createImageSampler(device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_LINEAR, 1, 1, &binaryImageSampler);
+	}
+
+	VkClearColorValue clear = { 0,0,0,0 };
+	VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
+
+	//creating the binary image via compute pipeline ----------------------------------------
+	if (index == -1) {
+		binaryImage.push_back({});
+		binarySmooth.push_back({});
+		binaryImageView.push_back({});
+		binarySmoothView.push_back({});
+		binaryImageMemory.push_back({});
+		VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &binaryImage.back());
+		VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &binarySmooth.back());
+		VkMemoryRequirements memReq;
+		vkGetImageMemoryRequirements(device, binaryImage.back(), &memReq);
+		vkGetImageMemoryRequirements(device, binarySmooth.back(), &memReq);
+		memReq.size *= 2;
+		VkMemoryAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memReq.size;
+		allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, 0);
+		check_vk_result(vkAllocateMemory(device, &allocInfo, nullptr, &binaryImageMemory.back()));
+		vkBindImageMemory(device, binaryImage.back(), binaryImageMemory.back(), 0);
+		vkBindImageMemory(device, binarySmooth.back(), binaryImageMemory.back(), memReq.size / 2);
+
+		VkUtil::create3dImageView(device, binaryImage.back(), VK_FORMAT_R8_UNORM, 1, &binaryImageView.back());
+		VkUtil::create3dImageView(device, binarySmooth.back(), VK_FORMAT_R8_UNORM, 1, &binarySmoothView.back());
+	}
+
+	VkBuffer infos;
+	VkDeviceMemory infosMem;
+	uint32_t infosByteSize = sizeof(ComputeInfos);
+	ComputeInfos* infoBytes = (ComputeInfos*)new char[infosByteSize];
+	VkUtil::createBuffer(device, infosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &infos);
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	VkMemoryRequirements memReq = {};
+	vkGetBufferMemoryRequirements(device, infos, &memReq);
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &infosMem);
+	vkBindBufferMemory(device, infos, infosMem, 0);
+
+	//fill infoBytes and upload it
+	infoBytes->amtOfAttributes = amtOfAttributes;
+	infoBytes->amtOfBrushAttributes = 0;
+	infoBytes->amtOfIndices = indicesSize;
+	infoBytes->dimX = width;
+	infoBytes->dimY = height;
+	infoBytes->dimZ = depth;
+	infoBytes->xInd = posIndices[0];
+	infoBytes->yInd = posIndices[1];
+	infoBytes->zInd = posIndices[2];
+	infoBytes->xMin = posBounds[posIndices[0]].first;
+	infoBytes->xMax = posBounds[posIndices[0]].second;
+	infoBytes->yMin = posBounds[posIndices[1]].first;
+	infoBytes->yMax = posBounds[posIndices[1]].second;
+	infoBytes->zMin = posBounds[posIndices[2]].first;
+	infoBytes->zMax = posBounds[posIndices[2]].second;
+	infoBytes->padding = regularGrid;
+	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
+
+	//create descriptor set and update all need things
+	VkDescriptorSet descSet;
+	std::vector<VkDescriptorSetLayout> sets;
+	sets.push_back(activeIndComputeDescriptorSetLayout);
+	VkUtil::createDescriptorSets(device, sets, descriptorPool, &descSet);
+	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 1, descSet);
+	VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 4, descSet);
+
+	//creating the command buffer, binding all the needed things and dispatching it to update the density images
+	VkCommandBuffer computeCommands;
+	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
+
+	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, activeIndComputePipeline);
+	if (index == -1)
+		VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	else
+		VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	vkCmdClearColorImage(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+	VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, activeIndComputePipelineLayout, 0, 1, &descSet, 0, { 0 });
+	uint32_t patchAmount = indicesSize / LOCALSIZE;
+	patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+	vkCmdDispatch(computeCommands, patchAmount, 1, 1);
+	VkUtil::transitionImageLayout(computeCommands, (index == -1) ? binaryImage.back() : binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::commitCommandBuffer(queue, computeCommands);
+	err = vkQueueWaitIdle(queue);
+	check_vk_result(err);
+
+	vkFreeCommandBuffers(device, commandPool, 1, &computeCommands);
+	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
+	vkFreeMemory(device, infosMem, nullptr);
+	vkDestroyBuffer(device, infos, nullptr);
+	delete[] infoBytes;
+
+	if (!descriptorSet) {
+		resize(1, 1);
+		return IsoSurfRendererError_Success;
+	}
+
+	smoothImage((index == -1) ? binaryImage.size() - 1 : index);
+	updateBrushBuffer();
+	updateDescriptorSet();
+	updateCommandBuffer();
+	render();
+	return IsoSurfRendererError_Success;
+}
+
 void IsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float deltaT)
 {
 	//first do the rotation, as the user has a more inert feeling when the fly direction matches the view direction instantly
@@ -864,7 +987,7 @@ void IsoSurfRenderer::render()
 {
 	assert(drawlistBrushes.size() == binaryImage.size());
 
-	if (!image3dWidth || !image3dHeight || !image3dDepth || !drawlistBrushes.size())
+	if (!drawlistBrushes.size())
 		return;
 
 	VkResult err;
@@ -874,7 +997,6 @@ void IsoSurfRenderer::render()
 	ubo.mvp = glm::perspective(glm::radians(45.0f), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);;
 	ubo.mvp[1][1] *= -1;
 	glm::mat4 view = glm::transpose(glm::eulerAngleY(cameraRot.y) * glm::eulerAngleX(cameraRot.x)) * glm::translate(glm::mat4(1.0), -cameraPos);;
-	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
 	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
 	ubo.mvp = ubo.mvp * view *scale;
 	ubo.camPos = glm::inverse(scale) * glm::vec4(cameraPos,1);
@@ -1028,16 +1150,19 @@ void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 {
 	if (binaryIndex >= drawlistBrushes.size()) return;
 
-	uint8_t* binaryData = new uint8_t[image3dHeight * image3dDepth * image3dWidth];
-	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage[binaryIndex], image3dWidth, image3dHeight, image3dDepth, binaryData, image3dHeight * image3dDepth * image3dWidth);
+	uint32_t w = drawlistBrushes[binaryIndex].gridDimensions[0];
+	uint32_t h = drawlistBrushes[binaryIndex].gridDimensions[1];
+	uint32_t d = drawlistBrushes[binaryIndex].gridDimensions[2];
+	uint8_t* binaryData = new uint8_t[w * h * d];
+	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage[binaryIndex], w, h, d, binaryData, w * h * d);
 
 	std::ofstream file(path);
 
 	//int count = 0;
-	for (int i = 0; i < image3dHeight * image3dDepth * image3dWidth; ++i) {
+	for (int i = 0; i < w * h * d; ++i) {
 		//if (binaryData[i]) ++count;
 		file << std::to_string(binaryData[i]);
-		if (i < image3dHeight * image3dDepth * image3dWidth - 1) file << ",";
+		if (i < w * h * d - 1) file << ",";
 	}
 	//std::cout << count << std::endl;
 
@@ -1060,7 +1185,7 @@ void IsoSurfRenderer::smoothImage(int index)
 	VkImage tmpImage;
 	VkImageView tmpImageView;
 	VkDeviceMemory tmpMemory;
-	VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, &tmpImage);
+	VkUtil::create3dImage(device, drawlistBrushes[index].gridDimensions[0], drawlistBrushes[index].gridDimensions[1], drawlistBrushes[index].gridDimensions[2], VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, &tmpImage);
 	VkMemoryRequirements memReq;
 	vkGetImageMemoryRequirements(device, tmpImage, &memReq);
 	VkMemoryAllocateInfo allocInfo{};
@@ -1104,9 +1229,9 @@ void IsoSurfRenderer::smoothImage(int index)
 	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 1, descSets[2]);
 	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[2]);
 
-	uint32_t patchAmtX = image3dWidth / LOCALSIZE3D + ((image3dWidth % LOCALSIZE3D) ? 1 : 0);
-	uint32_t patchAmtY = image3dHeight / LOCALSIZE3D + ((image3dHeight % LOCALSIZE3D) ? 1 : 0);
-	uint32_t patchAmtZ = image3dDepth / LOCALSIZE3D + ((image3dDepth % LOCALSIZE3D) ? 1 : 0);
+	uint32_t patchAmtX = drawlistBrushes[index].gridDimensions[0] / LOCALSIZE3D + ((drawlistBrushes[index].gridDimensions[0] % LOCALSIZE3D) ? 1 : 0);
+	uint32_t patchAmtY = drawlistBrushes[index].gridDimensions[1] / LOCALSIZE3D + ((drawlistBrushes[index].gridDimensions[1] % LOCALSIZE3D) ? 1 : 0);
+	uint32_t patchAmtZ = drawlistBrushes[index].gridDimensions[2] / LOCALSIZE3D + ((drawlistBrushes[index].gridDimensions[2] % LOCALSIZE3D) ? 1 : 0);
 
 	VkCommandBuffer commands;
 	VkUtil::createCommandBuffer(device, commandPool, &commands);
@@ -1416,6 +1541,38 @@ void IsoSurfRenderer::createPipeline()
 	layouts.push_back(binarySmoothDescriptorSetLayout);
 
 	VkUtil::createComputePipeline(device, computeModule, layouts, &binarySmoothPipelineLayout, &binarySmoothPipeline);
+
+	//creating the compute pipeline to fill the binary iamge with active indices ------------------------------------
+	computeModule = VkUtil::createShaderModule(device, PCUtil::readByteFile(activeIndComputePath));
+
+	bindings.clear();
+	binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	binding.binding = 0;								//compute infos
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	bindings.push_back(binding);
+
+	binding.binding = 1;								//active indices buffer
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+	bindings.push_back(binding);
+
+	binding.binding = 2;								//indices buffer
+	binding.descriptorCount = 1;
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	bindings.push_back(binding);
+
+	binding.binding = 3;								//data buffer
+	bindings.push_back(binding);
+
+	binding.binding = 4;								//binary image
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	bindings.push_back(binding);
+
+	VkUtil::createDescriptorSetLayout(device, bindings, &activeIndComputeDescriptorSetLayout);
+	layouts.clear();
+	layouts.push_back(activeIndComputeDescriptorSetLayout);
+
+	VkUtil::createComputePipeline(device, computeModule, layouts, &activeIndComputePipelineLayout, &activeIndComputePipeline);
 }
 
 void IsoSurfRenderer::createDescriptorSets()

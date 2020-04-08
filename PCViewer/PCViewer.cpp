@@ -8118,7 +8118,7 @@ int main(int, char**)
 			}
 			ImGui::SameLine();
 			if (selectedGlobalBrush != -1 && !globalBrushes.size()) selectedGlobalBrush = -1;
-			if (ImGui::BeginCombo("Brush", (selectedGlobalBrush == -1) ? choose : globalBrushes[selectedGlobalBrush].name.c_str())) {
+			if (ImGui::BeginCombo("Brush(if now brush is selected, active indices are used for iso Surface)", (selectedGlobalBrush == -1) ? choose : globalBrushes[selectedGlobalBrush].name.c_str())) {
 				if (ImGui::Selectable(choose, selectedGlobalBrush == -1)) selectedGlobalBrush = -1;
 				for (int i = 0; i < globalBrushes.size(); ++i) {
 					if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) selectedGlobalBrush = i;
@@ -8135,7 +8135,7 @@ int main(int, char**)
 			static bool showError = false;
 			static bool positionError = false;
 			if (ImGui::Button("Add new iso surface")) {
-				if (selectedDrawlist == -1 || selectedGlobalBrush == -1 || posIndices.x==posIndices.y || posIndices.y==posIndices.z || posIndices.x==posIndices.z) {
+				if (selectedDrawlist == -1 || posIndices.x==posIndices.y || posIndices.y==posIndices.z || posIndices.x==posIndices.z) {
 					showError = true;
 				}
 				else {
@@ -8156,10 +8156,12 @@ int main(int, char**)
 					}
 					std::vector<std::vector<std::pair<float, float>>> miMa(pcAttributes.size());
 					std::vector<uint32_t> brushIndices;
-					for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
-						if (axis.second.size()) brushIndices.push_back(axis.first);
-						for (auto& brush : axis.second) {
-							miMa[axis.first].push_back(brush.second);
+					if (selectedGlobalBrush != -1) {
+						for (auto axis : globalBrushes[selectedGlobalBrush].brushes) {
+							if (axis.second.size()) brushIndices.push_back(axis.first);
+							for (auto& brush : axis.second) {
+								miMa[axis.first].push_back(brush.second);
+							}
 						}
 					}
 
@@ -8171,17 +8173,30 @@ int main(int, char**)
 						}
 					}
 					if(index == -1)
-						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
-					if (isoSurfaceRegularGrid) {
-						isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
+						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,(selectedGlobalBrush == -1)?"":globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {uint32_t(isoSurfaceRegularGridDim[0]), uint32_t(isoSurfaceRegularGridDim[1]), uint32_t(isoSurfaceRegularGridDim[2])} });
+					if (selectedGlobalBrush == -1) {
+						uint32_t w = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+						uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize;
+						uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+						std::vector<std::pair<float, float>> posBounds(3);
+						for (int i = 0; i < 3; ++i) {
+							posBounds[i].first = pcAttributes[posIndices[i]].min;
+							posBounds[i].second = pcAttributes[posIndices[i]].max;
+						}
+						isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfaceRegularGrid, index);
 					}
 					else {
-						if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index) && index == -1) {
-							isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 } });
-							positionError = true;
+						if (isoSurfaceRegularGrid) {
+							isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 						}
 						else {
-							positionError = false;
+							if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index) && index == -1) {
+								isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {uint32_t(SpacialData::rlatSize), uint32_t(SpacialData::altitudeSize), uint32_t(SpacialData::rlonSize)} });
+								positionError = true;
+							}
+							else {
+								positionError = false;
+							}
 						}
 					}
 				}

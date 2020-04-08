@@ -22,6 +22,7 @@ E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o nodeFrag.spv nodeViewer.fra
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfVert.spv isoSurf.vert
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfFrag.spv isoSurf.frag
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfComp.spv isoSurf.comp
+E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfActiveIndComp.spv isoSurfActiveInd.comp
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfBinComp.spv isoSurfBin.comp
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfSmooth.spv isoSurfSmooth.comp
 
