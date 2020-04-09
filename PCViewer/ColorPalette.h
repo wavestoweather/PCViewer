@@ -54,6 +54,8 @@ public:
 
     CPalette *getPalletteWithNrs(unsigned int cat, unsigned int ipal);
 
+	std::vector< std::string>* getQualPaletteNames();
+
     std::vector<ImVec4> getPallettAsImVec4(unsigned int categoryNr, unsigned int paletteNr, unsigned int nrColors, float alpha = 0.4, const std::string paletteName = std::string(""));
 
 	ColorPaletteManager *parentColorPaletteManager;
@@ -81,6 +83,9 @@ public:
     unsigned int chosenCategoryNr;
     unsigned int chosenPaletteNr;
     unsigned int chosenNrColorNr;
+
+	std::string chosenAutoColorPaletteLine;
+	std::string chosenAutoColorPaletteFill;
 
     unsigned int skipFirstAttributes;
 

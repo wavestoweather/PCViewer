@@ -29,6 +29,8 @@ ColorPalette::ColorPalette(ColorPaletteManager* parentColorPaletteManager)
 	palettes.push_back(CPalette{ std::string("Dark2Extended"), 12, std::string("qual"), false });
 	palettes.push_back(CPalette{ std::string("Dark2ExtendedReorder"), 12, std::string("qual"), false });
 	palettes.push_back(CPalette{ std::string("Dark2ReorderSplitYellowExtended"), 12, std::string("qual"), false });
+	palettes.push_back(CPalette{ std::string("Dark2ReorderSplitYellowExtendedSaturated"), 12, std::string("qual"), false });
+	
 	
     palettes.push_back(CPalette{std::string("Paired"), 12, std::string("qual"), true});
     palettes.push_back(CPalette{std::string("Pastel1"), 9, std::string("qual"), false});
@@ -147,6 +149,11 @@ CPalette* ColorPalette::getPalletteWithName(std::string str)
 }
 
 
+std::vector<std::string>* ColorPalette::getQualPaletteNames()
+{
+	return &qualNameList;
+}
+
 CPalette *ColorPalette::getPalletteWithNrs(unsigned int cat, unsigned int ipal)
 {
     std::vector<CPalette> *ptrCPallList = nullptr;
@@ -235,6 +242,8 @@ ColorPaletteManager::ColorPaletteManager():
     chosenCategoryNr(0),
     chosenPaletteNr(0),
     chosenNrColorNr(1),
+	chosenAutoColorPaletteLine(std::string("Dark2ReorderSplitYellowExtendedSaturated")),
+	chosenAutoColorPaletteFill(std::string("Dark2ReorderSplitYellowExtended")),
     skipFirstAttributes(0),
     alphaLines(255),
     alphaFill(153),

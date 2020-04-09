@@ -784,6 +784,12 @@ static bool violinPlotDLConsiderBlendingOrder = true;
 static bool violinPlotDLReplaceNonStop = false;
 static bool violinPlotAttrReverseColorPallette = false;
 static bool violinPlotDLReverseColorPallette = false;
+
+static int violinPlotAttrAutoColorAssignFill = 4;
+static int violinPlotDLAutoColorAssignFill = 4;
+static int violinPlotAttrAutoColorAssignLine = 5;
+static int violinPlotDLAutoColorAssignLine = 5;
+
 static bool yScaleToCurrenMax = false;
 static bool violinPlotOverlayLines = true;
 static bool renderOrderBasedOnFirstAtt = true;
@@ -813,6 +819,29 @@ static bool sortAscPair(std::pair<T, T2> a, std::pair<T, T2> b) {
 	if (isnan(b.second)) { return false; }
 	return a.second < b.second;
 }
+
+// For converting std::vector<std::string>> to char array
+char *convertToChar(const std::string & s)
+{
+	char *pc = new char[s.size() + 1];
+	std::strcpy(pc, s.c_str());
+	return pc;
+}
+
+const char *convertToConstChar(const std::string & s)
+{
+	return s.c_str();
+}
+
+
+std::vector<const char*> convertStringVecToConstChar(std::vector<std::string> *strV)
+{
+	std::vector<const char*>  vc;
+	std::transform(strV->begin(), strV->end(), std::back_inserter(vc), convertToConstChar);
+	return vc;
+}
+
+
 
 static void updateDrawListIndexBuffer(DrawList& dl);
 static bool updateActiveIndices(DrawList& dl);
@@ -4907,15 +4936,21 @@ static void changeColorsToCustomAlternatingColors(ColorPaletteManager *cpm,
 	bool custColors = false)
 {
 	// Get complete colorpalette.
-	const std::string colorStr = std::string("Dark2ReorderSplitYellowExtended");
-	std::vector<ImVec4> retrievedColors;
+	//const std::string colorStr = std::string("Dark2ReorderSplitYellowExtended");
+	const std::string colorStrFill = cpm->chosenAutoColorPaletteFill;
+	const std::string colorStrLine = cpm->chosenAutoColorPaletteLine;
+
+	std::vector<ImVec4> retrievedColorsFill;
+	std::vector<ImVec4> retrievedColorsLine;
 	if (custColors)
 	{
-		retrievedColors = cpm->colorPalette->getPallettAsImVec4(0, 0, 20, cpm->alphaFill, colorStr);
+		retrievedColorsFill = cpm->colorPalette->getPallettAsImVec4(0, 0, 20, cpm->alphaFill, colorStrFill);
+		retrievedColorsLine = cpm->colorPalette->getPallettAsImVec4(0, 0, 20, cpm->alphaFill, colorStrLine);
 	}
 	else
 	{
-		retrievedColors = cpm->colorPalette->getPallettAsImVec4(cpm->chosenCategoryNr, cpm->chosenPaletteNr, cpm->chosenNrColorNr, cpm->alphaFill);
+		retrievedColorsFill = cpm->colorPalette->getPallettAsImVec4(cpm->chosenCategoryNr, cpm->chosenPaletteNr, cpm->chosenNrColorNr, cpm->alphaFill);
+		retrievedColorsLine = cpm->colorPalette->getPallettAsImVec4(cpm->chosenCategoryNr, cpm->chosenPaletteNr, cpm->chosenNrColorNr, cpm->alphaFill);
 	}
 
 	unsigned int colorCount = 0;
@@ -4927,12 +4962,14 @@ static void changeColorsToCustomAlternatingColors(ColorPaletteManager *cpm,
 		// Colors are sorted alternatingly for right and left side. So, all plots on the right have to get 'right-colors'.
 		for (unsigned int item :hist.attributeColorOrderIdx)
 		{
-			ImVec4 currColor;
+			ImVec4 currColorFill;
+			ImVec4 currColorLine;
 			unsigned int currColorIdx = 0;
 			(!(hist.side[item])) ? currColorIdx = (2 * times0++) : currColorIdx = (2 * times1++ + 1);
-			if (retrievedColors.size() > currColorIdx)
+			if ((retrievedColorsFill.size() > currColorIdx) && (retrievedColorsLine.size() > currColorIdx))
 			 {
-				currColor = retrievedColors[currColorIdx];
+				currColorFill = retrievedColorsFill[currColorIdx];
+				currColorLine = retrievedColorsLine[currColorIdx];
 			}
 			else
 			{
@@ -4940,11 +4977,11 @@ static void changeColorsToCustomAlternatingColors(ColorPaletteManager *cpm,
 			}
 			//(!(hist.side[item])) ? currColor = retrievedColors[(2 * times0++)] : currColor= retrievedColors[(2 * times1++ + 1)];
 			if (cpm->applyToLineColor) {
-				(*violinLineColors)[item] = currColor;
+				(*violinLineColors)[item] = currColorLine;
 				(*violinLineColors)[item].w = cpm->alphaLines / 255.;
 			}
 			if (cpm->applyToFillColor) {
-				(*violinFillColors)[item] = currColor;
+				(*violinFillColors)[item] = currColorFill;
 				(*violinFillColors)[item].w = cpm->alphaFill / 255.;
 			}
 
@@ -8710,7 +8747,40 @@ int main(int, char**)
 					}
 				}
 				ImGui::NextColumn();
-				ImGui::Checkbox("Apply colors of Dark2YellowSplit", &violinPlotAttrInsertCustomColors);
+				ImGui::Checkbox("", &violinPlotAttrInsertCustomColors);
+				ImGui::SameLine(50);
+				if (ImGui::BeginMenu("Apply colors of Dark2YellowSplit")) {
+					std::vector<std::string> *availablePalettes = 
+						violinAttributePlots[i].colorPaletteManager->colorPalette->getQualPaletteNames();
+
+					std::vector<const char*>  vc = convertStringVecToConstChar(availablePalettes);
+				
+					if (vc.size() > 0) {
+						//static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
+						if (ImGui::BeginCombo("Line Palette", vc[violinPlotAttrAutoColorAssignLine])) {
+							for (int v = 0; v < vc.size(); ++v) {
+								if (ImGui::MenuItem(vc[v])) {
+									violinAttributePlots[i].colorPaletteManager->chosenAutoColorPaletteLine =
+										(*availablePalettes)[v];
+									violinPlotAttrAutoColorAssignFill = v;
+								}
+							}
+							ImGui::EndCombo();
+						}
+						if (ImGui::BeginCombo("Fill Palette", vc[violinPlotAttrAutoColorAssignFill])) {
+							for (int v = 0; v < vc.size(); ++v) {
+								if (ImGui::MenuItem(vc[v])) {
+									violinAttributePlots[i].colorPaletteManager->chosenAutoColorPaletteFill =
+										(*availablePalettes)[v];
+									violinPlotAttrAutoColorAssignFill = v;
+								}
+							}
+							ImGui::EndCombo();
+						}
+					}
+					ImGui::EndMenu();
+				}
+				
 
 				ImGui::NextColumn();
 				ImGui::Checkbox("Re-place constantly", &violinPlotAttrReplaceNonStop);
@@ -9207,7 +9277,41 @@ int main(int, char**)
 					}
 				}
 				ImGui::NextColumn();
-				ImGui::Checkbox("Apply colors of Dark2ExtendedReorder", &violinPlotDLInsertCustomColors);
+				ImGui::Checkbox("", &violinPlotDLInsertCustomColors);
+				ImGui::SameLine(50);
+				if (ImGui::BeginMenu("Apply colors of Dark2YellowSplit")) {
+					std::vector<std::string> *availablePalettes =
+						violinDrawlistPlots[i].colorPaletteManager->colorPalette->getQualPaletteNames();
+
+					std::vector<const char*>  vc = convertStringVecToConstChar(availablePalettes);
+
+					if (vc.size() > 0) {
+						//static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
+						if (ImGui::BeginCombo("Line Palette", vc[violinPlotDLAutoColorAssignLine])) {
+							for (int v = 0; v < vc.size(); ++v) {
+								if (ImGui::MenuItem(vc[v])) {
+									violinDrawlistPlots[i].colorPaletteManager->chosenAutoColorPaletteLine =
+										(*availablePalettes)[v];
+									violinPlotDLAutoColorAssignLine = v;
+								}
+							}
+							ImGui::EndCombo();
+						}
+						if (ImGui::BeginCombo("Fill Palette", vc[violinPlotDLAutoColorAssignFill])) {
+							for (int v = 0; v < vc.size(); ++v) {
+								if (ImGui::MenuItem(vc[v])) {
+									violinDrawlistPlots[i].colorPaletteManager->chosenAutoColorPaletteFill =
+										(*availablePalettes)[v];
+									violinPlotDLAutoColorAssignFill = v;
+								}
+							}
+							ImGui::EndCombo();
+						}
+					}
+					ImGui::EndMenu();
+				}
+
+
 				ImGui::NextColumn();
 				ImGui::Checkbox("Re-place constantly", &violinPlotDLReplaceNonStop);
 				ImGui::NextColumn();
