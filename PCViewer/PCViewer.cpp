@@ -788,6 +788,10 @@ static bool yScaleToCurrenMax = false;
 static bool violinPlotOverlayLines = true;
 static bool renderOrderBasedOnFirstAtt = true;
 static bool renderOrderBasedOnFirstDL = true;
+static bool renderOrderAttConsider = true;
+static bool renderOrderDLConsider = true;
+static bool renderOrderDLReverse = false;
+static bool logScaleDLGlobal = false;
 static ViolinYScale violinYScale = ViolinYScaleStandard;
 std::vector<ViolinPlot> violinAttributePlots;
 std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
@@ -796,6 +800,20 @@ AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
 
 
 //method declarations
+template <typename T,typename T2>
+static bool sortDescPair(std::pair<T, T2> a, std::pair<T, T2> b){ 
+	if (isnan(a.second)) { return false; }
+	if (isnan(b.second)) { return true; } 
+	return a.second > b.second; 
+}
+
+template <typename T, typename T2>
+static bool sortAscPair(std::pair<T, T2> a, std::pair<T, T2> b) {
+	if (isnan(a.second)) { return true; }
+	if (isnan(b.second)) { return false; }
+	return a.second < b.second;
+}
+
 static void updateDrawListIndexBuffer(DrawList& dl);
 static bool updateActiveIndices(DrawList& dl);
 /*static void check_vk_result(VkResult err)
@@ -5099,9 +5117,9 @@ inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst = false) {
 				area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
 			}
 
-			if ((drawL == 0) || (!renderOrderBasedOnFirst))
+			if (renderOrderDLConsider && ((drawL == 0) || (!renderOrderBasedOnFirst)))
 			{
-				std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+				std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
 				for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
 			}
 			else
@@ -5113,7 +5131,7 @@ inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst = false) {
 	}
 }
 
-static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist, ViolinDrawlistPlot& violinDrawlistPlot) {
+static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist, ViolinDrawlistPlot& violinDrawlistPlot, bool changeRenderOrder = true, bool reverseRenderOrder = false) {
 	std::vector<std::pair<uint32_t, float>> area;
 	for (unsigned int k = 0; k < hist.area.size(); ++k) {
 		float a = 0;
@@ -5141,7 +5159,16 @@ static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist, Vi
 
 		area.push_back({ k,a });
 	}
-	std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+
+	if (changeRenderOrder) {
+		if (!reverseRenderOrder) {
+			std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) { return sortDescPair(a, b); });
+		}
+		else
+		{
+			std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortAscPair(a, b); });
+		}
+	}
 	std::vector<uint32_t> ret(area.size());
 	for (int i = 0; i < area.size(); ++i) ret[i] = area[i].first;
 	return ret;
@@ -8438,9 +8465,9 @@ int main(int, char**)
 									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
 								}
 
-								if ((drawL == 0) || (!renderOrderBasedOnFirstAtt))
+								if (renderOrderAttConsider && ((drawL == 0) || (!renderOrderBasedOnFirstAtt)))
 								{
-									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) { return sortDescPair(a, b); });
 									for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
 								}
 								else
@@ -8472,9 +8499,9 @@ int main(int, char**)
 									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
 								}
 
-								if ((drawL == 0) || (!renderOrderBasedOnFirstAtt))
+								if (renderOrderAttConsider && ((drawL == 0) || (!renderOrderBasedOnFirstAtt)))
 								{
-									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
 									for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
 								}
 								else
@@ -8499,10 +8526,13 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					ImGui::Columns(2);
+					ImGui::Columns(3);
 					ImGui::Checkbox("Overlay lines", &violinPlotOverlayLines);
 					ImGui::NextColumn();
 					ImGui::Checkbox("Base render order on first attribute", &renderOrderBasedOnFirstAtt);
+					ImGui::NextColumn();
+					ImGui::Checkbox("Optimize render order", &renderOrderAttConsider);
+					
 					//ImGui::EndMenu();
 
 					ImGui::EndMenu();
@@ -8978,10 +9008,16 @@ int main(int, char**)
 								}
 
 								// Only sort the first drawlist. All others should have the same sorting (if option is taken)
-								if ((drawL == 0) || (!renderOrderBasedOnFirstDL))
+								if (renderOrderDLConsider && ((drawL == 0) || (!renderOrderBasedOnFirstDL)))
 								{
-									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-									for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+									if (!renderOrderDLReverse) {
+										std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
+										for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+									}
+									else {
+										std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortAscPair(a, b); });
+										for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
+									}
 								}
 								else
 								{
@@ -9009,11 +9045,75 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					ImGui::Columns(2);
+					ImGui::Columns(3);
 					ImGui::Checkbox("Overlay lines", &violinPlotOverlayLines);
 					ImGui::NextColumn();
 					ImGui::Checkbox("Base render order on first DL", &renderOrderBasedOnFirstDL);
+					ImGui::NextColumn();
+					ImGui::Checkbox("Optimize render order", &renderOrderDLConsider);
+					ImGui::Columns(1);
+					if (ImGui::Checkbox("Reverse render order", &renderOrderDLReverse)) {
+						for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
+							for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
+								(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+							}
+						}
+					}
+
+					// Option to change all attributes at once.
+					ImGui::Separator();
+					ImGui::Columns(3);
+
+					static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
+					if (ImGui::BeginCombo("ChangePosition", plotPositions[0])) {
+						for (int k = 0; k < 7; ++k) {
+							if (ImGui::MenuItem(plotPositions[k], nullptr)) {
+								for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
+									for (int j = 0; j < violinDrawlistPlots[i].attributeFillColors.size(); ++j)
+									{
+										violinDrawlistPlots[i].attributePlacements[j] = (ViolinPlacement)k;
+									}
+								}
+							}
+						}
+						ImGui::EndCombo();
+					}
+					ImGui::NextColumn();
+					static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
+					if (ImGui::BeginCombo("ChangeScale", violinScales[0])) {
+						for (int k = 0; k < 4; ++k) {
+							if (ImGui::MenuItem(violinScales[k], nullptr)) {
+								for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
+									for (int j = 0; j < violinDrawlistPlots[i].attributeFillColors.size(); ++j) {
+										violinDrawlistPlots[i].violinScalesX[j] = (ViolinScale)k;
+									}
+								}
+							}
+						}
+						ImGui::EndCombo();
+					}
+					ImGui::NextColumn();
+					if (ImGui::Checkbox("ChangeLogScale", &logScaleDLGlobal)) {
+						for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
+							for (int j = 0; j < violinDrawlistPlots[i].attributeFillColors.size(); ++j) {
+								//if (histogramManager->logScale[j]) {
+								(histogramManager->logScale[j]) = logScaleDLGlobal;
+								//}
+							}
+							histogramManager->updateSmoothedValues();
+							updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+							for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
+								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
+								(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+							}
+							
+						}
+					}
+
 					ImGui::EndMenu();
+
+					
 				}
 				ImGui::EndMenuBar();
 			}
@@ -9057,19 +9157,19 @@ int main(int, char**)
 					}
 					ImGui::NextColumn();
 					if (ImGui::SliderFloat(("##slider" + violinDrawlistPlots[i].attributeNames[j]).c_str(), &violinDrawlistPlots[i].attributeScalings[j], 0, 1)) {
-						for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
+						for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
 							std::vector<std::pair<uint32_t, float>> area;
-							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
-							((j == 0) || (!renderOrderBasedOnFirstDL)) ? violinDrawlistPlots[i].attributeOrder[j] = sortHistogram(hist, violinDrawlistPlots[i]) : violinDrawlistPlots[i].attributeOrder[j] = violinDrawlistPlots[i].attributeOrder[0];
+							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
+							(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 						}
 					}
 					ImGui::NextColumn();
 					if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
 						histogramManager->updateSmoothedValues();
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
-						for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
-							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
-							((j == 0) || (!renderOrderBasedOnFirstDL)) ? violinDrawlistPlots[i].attributeOrder[j] = sortHistogram(hist, violinDrawlistPlots[i]) : violinDrawlistPlots[i].attributeOrder[j] = violinDrawlistPlots[i].attributeOrder[0];
+						for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
+							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
+							(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 						}
 					};
 					ImGui::NextColumn();
@@ -9213,7 +9313,7 @@ int main(int, char**)
 										HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 										// ToDo:  Check, whether the ordering here should also be adjusted if  'renderOrderBasedOnFirstDL = true'
 										violinDrawlistPlots[i].attributeOrder.push_back({});
-										violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i]);
+										violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse);
 										//std::vector<std::pair<uint32_t, float>> area;
 										for (int j = 0; j < hist.maxCount.size(); ++j) {
 											if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
@@ -9562,7 +9662,15 @@ int main(int, char**)
 							violinDrawlistPlots[i].drawLists.push_back(dl->name);
 							//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
 							violinDrawlistPlots[i].attributeOrder.push_back({});
-							std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
+							if (renderOrderDLConsider) {
+								if (!renderOrderDLReverse) {
+									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
+								}
+								else
+								{
+									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortAscPair(a, b); });
+								}
+							}
 							for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
 						}
 					}
