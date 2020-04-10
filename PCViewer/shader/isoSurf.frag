@@ -119,6 +119,28 @@ void main() {
 		startPoint += curStepsize * d;
 	}
 
+	//if we stepped out of the cube and a iso surface was active add surface color
+	for(int i = 0;i<info.amtOfAxis;++i){
+		if(prevDensity[i] > isoVal){
+			vec4 brushColor = vec4(info.colors[i*4],info.colors[i*4+1],info.colors[i*4+2],info.colors[i*4+3]);
+			if(bool(info.shade)){
+				//find exact surface position for lighting
+				vec3 curPos = startPoint;
+				vec3 prevPos = startPoint - curStepsize * d;
+				float precDensity = prevDensity[i];
+				curPos = .5f * prevPos + .5f * curPos;
+
+				float xDir = texture(texSampler[i],curPos+vec3(stepsize * 2,0,0)).x, 
+					yDir = texture(texSampler[i],curPos+vec3(0,stepsize * 2,0)).x,
+					zDir = texture(texSampler[i],curPos+vec3(0,0,stepsize * 2)).x;
+				vec3 normal = -normalize(vec3(xDir - precDensity, yDir - precDensity, zDir - precDensity));
+				brushColor.xyz = .5f * brushColor.xyz + max(.5 * dot(normal,normalize(-ubo.lightDir)) * brushColor.xyz , vec3(0)) + max(.4 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),50) * vec3(1) , vec3(0));
+			}
+			outColor.xyz += (1-outColor.w) * brushColor.w * brushColor.xyz;
+			outColor.w += (1-outColor.w) * brushColor.w;
+		}
+	}
+
 	////for every axis/attribute here the last density is stored
 	//float prevDensity[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 	//uint brushBits[30] = uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
