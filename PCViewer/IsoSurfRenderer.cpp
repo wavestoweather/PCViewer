@@ -59,6 +59,7 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	fastFlyMultiplier = 2.5f;
 	rotationSpeed = .15f;
 	lightDir = glm::vec3(-1, -1, -1);
+	imageBackground = { .1f,.1f,.1f,1 };
 
 	VkPhysicalDeviceProperties devProp;
 	vkGetPhysicalDeviceProperties(physicalDevice, &devProp);
@@ -330,7 +331,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 		image3dOffsets.push_back(0);
 
 		image3dOffsets[i] = allocInfo.allocationSize;
-		VkUtil::create3dImage(device, w, d, h, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
+		VkUtil::create3dImage(device, w, h, d, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
 
 		vkGetImageMemoryRequirements(device, image3d[i], &memRequirements);
 
@@ -931,6 +932,35 @@ IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(uint
 	return IsoSurfRendererError_Success;
 }
 
+void IsoSurfRenderer::deleteBinaryVolume(uint32_t ind)
+{
+	vkDestroyImage(device, binaryImage[ind], nullptr);
+	vkDestroyImageView(device, binaryImageView[ind], nullptr);
+	vkDestroyImage(device, binarySmooth[ind], nullptr);
+	vkDestroyImageView(device, binarySmoothView[ind], nullptr);
+	vkFreeMemory(device, binaryImageMemory[ind], nullptr);
+	for (int i = ind; i < drawlistBrushes.size() - 1; ++i) {
+		drawlistBrushes[i] = drawlistBrushes[i + 1];
+		posIndices[i] = posIndices[i + 1];
+		binaryImage[i] = binaryImage[i + 1];
+		binaryImageView[i] = binaryImageView[i + 1];
+		binarySmooth[i] = binarySmooth[i + 1];
+		binarySmoothView[i] = binarySmoothView[i + 1];
+		binaryImageMemory[i] = binaryImageMemory[i + 1];
+	}
+	drawlistBrushes.pop_back();
+	posIndices.pop_back();
+	binaryImage.pop_back();
+	binaryImageView.pop_back();
+	binarySmooth.pop_back();
+	binarySmoothView.pop_back();
+	binaryImageMemory.pop_back();
+
+	if(drawlistBrushes.size())
+		updateDescriptorSet();
+	updateCommandBuffer();
+}
+
 void IsoSurfRenderer::getPosIndices(int index, uint32_t* ind)
 {
 	ind[0] = posIndices[index].x;
@@ -1192,6 +1222,11 @@ void IsoSurfRenderer::setBinarySmoothing(float stdDiv)
 	for (int i = 0; i < binaryImage.size(); ++i) {
 		smoothImage(i);
 	}
+}
+
+void IsoSurfRenderer::imageBackGroundUpdated()
+{
+	updateCommandBuffer();
 }
 
 void IsoSurfRenderer::smoothImage(int index)
@@ -1659,13 +1694,14 @@ void IsoSurfRenderer::updateBrushBuffer()
 
 void IsoSurfRenderer::updateCommandBuffer()
 {
+	vkQueueWaitIdle(queue);
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 
 	VkResult err;
 	VkUtil::createCommandBuffer(device, commandPool, &commandBuffer);
 	VkUtil::transitionImageLayout(commandBuffer, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	std::vector<VkClearValue> clearValues;
-	clearValues.push_back({ .1f,.1f,.1f,1 });
+	clearValues.push_back(imageBackground);
 	VkUtil::beginRenderPass(commandBuffer, clearValues, renderPass, frameBuffer, { imageWidth,imageHeight });
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);

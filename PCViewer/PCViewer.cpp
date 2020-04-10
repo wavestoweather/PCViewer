@@ -8116,6 +8116,10 @@ int main(int, char**)
 						isoSurfaceRenderer->setBinarySmoothing(stdDiv);
 						isoSurfaceRenderer->render();
 					}
+					if (ImGui::ColorEdit4("Image background", isoSurfaceRenderer->imageBackground.color.float32, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+						isoSurfaceRenderer->imageBackGroundUpdated();
+						isoSurfaceRenderer->render();
+					}
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Export")) {
@@ -8302,7 +8306,9 @@ int main(int, char**)
 			}
 			ImGui::Separator();
 			ImGui::Text("Active iso sufaces:");
-			ImGui::Columns(3);
+			ImGui::Columns(4);
+			int index = 0;
+			int del = -1;
 			for (IsoSurfRenderer::DrawlistBrush& db : isoSurfaceRenderer->drawlistBrushes) {
 				ImGui::Text(db.drawlist.c_str());
 				ImGui::NextColumn();
@@ -8312,6 +8318,15 @@ int main(int, char**)
 					isoSurfaceRenderer->render();
 				}
 				ImGui::NextColumn();
+				if (ImGui::Button(("X##" + std::to_string(index)).c_str())) {
+					del = index;
+				}
+				ImGui::NextColumn();
+				++index;
+			}
+			if (del != -1) {
+				isoSurfaceRenderer->deleteBinaryVolume(del);
+				isoSurfaceRenderer->render();
 			}
 			ImGui::Columns(1);
 
