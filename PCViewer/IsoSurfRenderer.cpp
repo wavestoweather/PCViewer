@@ -50,7 +50,7 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	activeIndComputePipelineLayout = VK_NULL_HANDLE;
 	activeIndComputeDescriptorSetLayout = VK_NULL_HANDLE;
 	brushByteSize = 0;
-	shade = false;
+	shade = true;
 	stepSize = .006f;
 
 	cameraPos = glm::vec3(1, 0, 1);
@@ -1202,17 +1202,45 @@ void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 	uint8_t* binaryData = new uint8_t[w * h * d];
 	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage[binaryIndex], w, h, d, binaryData, w * h * d);
 
-	std::ofstream file(path);
+	if (false) {
+		std::ofstream file(path);
 
-	//int count = 0;
-	for (int i = 0; i < w * h * d; ++i) {
-		//if (binaryData[i]) ++count;
-		file << std::to_string(binaryData[i]);
-		if (i < w * h * d - 1) file << ",";
+		//int count = 0;
+		for (int i = 0; i < w * h * d; ++i) {
+			//if (binaryData[i]) ++count;
+			// lat alt lon
+			// alt, lat, lon
+
+			// Order first all 500, then - 57- 700
+	//		int alt = (i / w) % h;
+	//		int lat = (i%w);
+	//		int lon = (i / (w*h));
+
+	//		file << alt /57.0 << "," << lat / 500.  << "," << lon / 700. << ",";
+			file << std::to_string(binaryData[i]);
+			//		if (i < w * h * d - 1) file << "\n";// ",";
+			if (i < w * h * d - 1) file << ",";
+
+
+
+
+
+
+		}
+		//std::cout << count << std::endl;
+
+		file.close();
 	}
-	//std::cout << count << std::endl;
 
-	file.close();
+	if (true) {
+		std::ofstream file(path);
+		for (int i = 0; i < w * h * d; ++i) {
+			file.write((char*)&binaryData[i], sizeof(binaryData[i]));
+			std::cout << (char*)&binaryData[i];
+		}
+	}
+
+
 	delete[] binaryData;
 }
 

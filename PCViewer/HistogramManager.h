@@ -14,6 +14,7 @@ class HistogramManager {
 public:
 	struct Histogram {
 		float maxGlobalCount;							//maximung value accross all attributes
+		float maxActiveCount = 0;
 		std::vector<float> area;						//area when scaling equals 1
 		std::vector<float> areaRendered;				//area of rendered violin
 		std::vector<float> maxCount;					//maximum histogramm value for each attribute

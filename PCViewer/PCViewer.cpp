@@ -787,8 +787,8 @@ static bool violinPlotDLReverseColorPallette = false;
 
 static int violinPlotAttrAutoColorAssignFill = 4;
 static int violinPlotDLAutoColorAssignFill = 4;
-static int violinPlotAttrAutoColorAssignLine = 5;
-static int violinPlotDLAutoColorAssignLine = 5;
+static int violinPlotAttrAutoColorAssignLine = 4;
+static int violinPlotDLAutoColorAssignLine = 4;
 
 static bool yScaleToCurrenMax = false;
 static bool violinPlotOverlayLines = true;
@@ -841,6 +841,31 @@ std::vector<const char*> convertStringVecToConstChar(std::vector<std::string> *s
 	return vc;
 }
 
+
+static float determineViolinScaleLocalDiv(std::vector<float>& maxCount, bool **active, std::vector<float> &attributeScalings)
+{
+	bool bscale = false;
+	if (attributeScalings.size() == maxCount.size())
+	{
+		bscale = true;
+	}
+
+	float div = 0;
+	for (int i = 0; i < maxCount.size(); ++i)
+	{
+		if ((*active)[i])
+		{
+			float currMaxCout = maxCount[i];
+			if (bscale) { currMaxCout *= attributeScalings[i]; }
+
+			if (currMaxCout > div)
+			{
+				div = currMaxCout;
+			}
+		}
+	}
+	return div;
+}
 
 
 static void updateDrawListIndexBuffer(DrawList& dl);
@@ -5170,6 +5195,7 @@ inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst = false) {
 
 static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist, ViolinDrawlistPlot& violinDrawlistPlot, bool changeRenderOrder = true, bool reverseRenderOrder = false) {
 	std::vector<std::pair<uint32_t, float>> area;
+	float div = determineViolinScaleLocalDiv(hist.maxCount, &(violinDrawlistPlot.activeAttributes), violinDrawlistPlot.attributeScalings);
 	for (unsigned int k = 0; k < hist.area.size(); ++k) {
 		float a = 0;
 		switch (violinDrawlistPlot.violinScalesX[k]) {
@@ -5177,7 +5203,8 @@ static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist, Vi
 			a = hist.area[k] / hist.maxCount[k];
 			break;
 		case ViolinScaleLocal:
-			a = hist.area[k] / hist.maxGlobalCount;
+			//a = hist.area[k] / hist.maxGlobalCount;
+			a = hist.area[k] / div;
 			break;
 		case ViolinScaleGlobal:
 			a = hist.area[k] / violinDrawlistPlot.maxGlobalValue;
@@ -6610,6 +6637,8 @@ int main(int, char**)
 				ImGui::SameLine();
 				ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
 				ImGui::Text("Brush statistics: Percentage of lines kept after brushing");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("The bar shows the percentage of points active in comparison to all points in the drawlist. Exception: For the index list which is the parent of the brush, the ratio of points active in the index list vs. its parent data set is shown.");
 				ImGui::Separator();
 				//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 				for (auto& brush : globalBrushes) {
@@ -6653,7 +6682,22 @@ int main(int, char**)
 								ds = &(*it);
 							}
 						}
-						ratios.back() /= ds->data.size();
+
+						// Todo: If this is the ratio for the first bar, then it should be divided by dl.indices.size() instead, since we want to know,
+						// how many lines of the DL are still active
+						// ratios.back() /= ds->data.size();
+						if (brush.parent->name == dl->name){
+							// This would be the ratio of points in the index list / points in the data set (not dependent on brush)
+							//ratios.back() = float(dl->indices.size()) / ds->data.size(); 
+
+							// This is the ratio  (active points in idx list(only this global brush considered)) / (points in data set)
+							ratios.back() /= ds->data.size();
+						}
+						else {
+							// This is the ratio of active points in the dl (only this global brush considered) vs. total points in the drawlist
+							ratios.back() /= dl->indices.size(); 
+						}
+						
 						//drawing the line ratios
 						ImGui::SetCursorPos(cursorPos);
 						if (brush.parent != nullptr && brush.lineRatios.find(brush.parent->name) != brush.lineRatios.end()) {
@@ -6661,7 +6705,10 @@ int main(int, char**)
 							ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]), ImGui::GetStyle().FrameRounding);
 							float linepos = width / 2;
 							if (brush.parent->name == dl->name) {	//identity dataset
-								linepos += (brush.lineRatios[brush.parent->name] / (float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name] / (float)ds->data.size()))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name] / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+								// It cannot move past the middle line, since once all points of the idx-list are contained, there are no more to add.
+								linepos += (brush.lineRatios[brush.parent->name] / (float)ds->data.size() > brush.parent->pointRatio) ? 
+									(1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name] / (float)ds->data.size()))) * linepos : 
+									-(1 - ((brush.lineRatios[brush.parent->name] / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 								//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.par ent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 								//linepos += (brush.lineRatios[brush.parent->name] > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name]))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name]) / brush.parent->pointRatio)) * linepos;
 							}
@@ -8920,7 +8967,8 @@ int main(int, char**)
 								div = hist.maxCount[j];
 								break;
 							case ViolinScaleLocal:
-								div = hist.maxGlobalCount;
+								div = determineViolinScaleLocalDiv(hist.maxCount, &(violinAttributePlots[i].activeAttributes), std::vector<float>({}));
+								//div = hist.maxGlobalCount;
 								break;
 							case ViolinScaleGlobal:
 								div = violinAttributePlots[i].maxGlobalValue;
@@ -9525,7 +9573,8 @@ int main(int, char**)
 									div = hist.maxCount[k];
 									break;
 								case ViolinScaleLocal:
-									div = hist.maxGlobalCount;
+									//div = hist.maxGlobalCount;
+									div = determineViolinScaleLocalDiv(hist.maxCount, &(violinDrawlistPlots[i].activeAttributes), violinDrawlistPlots[i].attributeScalings);
 									break;
 								case ViolinScaleGlobal:
 									div = violinDrawlistPlots[i].maxGlobalValue;
