@@ -3342,12 +3342,12 @@ void ImGui::ShowFontSelector(const char* label)
         }
         ImGui::EndCombo();
     }
-    ImGui::SameLine();
-    HelpMarker(
-        "- Load additional fonts with io.Fonts->AddFontFromFileTTF().\n"
-        "- The font atlas is built when calling io.Fonts->GetTexDataAsXXXX() or io.Fonts->Build().\n"
-        "- Read FAQ and docs/FONTS.txt for more details.\n"
-        "- If you need to add/remove fonts at runtime (e.g. for DPI change), do it before calling NewFrame().");
+    //ImGui::SameLine();
+    //HelpMarker(
+    //    "- Load additional fonts with io.Fonts->AddFontFromFileTTF().\n"
+    //    "- The font atlas is built when calling io.Fonts->GetTexDataAsXXXX() or io.Fonts->Build().\n"
+    //    "- Read FAQ and docs/FONTS.txt for more details.\n"
+    //    "- If you need to add/remove fonts at runtime (e.g. for DPI change), do it before calling NewFrame().");
 }
 
 void ImGui::ShowStyleEditor(ImGuiStyle* ref)

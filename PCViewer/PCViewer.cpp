@@ -5304,13 +5304,13 @@ int main(int, char**)
 	//std::cout << determinant << std::endl;
 
 	//test of eigen
-	Eigen::MatrixXd m(4,4);
-	for (int i = 0; i < X.size(); ++i) {
-		for (int j = 0; j < X[i].size(); ++j) {
-			m(i, j) = X[i][j];
-		}
-	}
-	std::cout << m.inverse() * m << std::endl;
+	//Eigen::MatrixXd m(4,4);
+	//for (int i = 0; i < X.size(); ++i) {
+	//	for (int j = 0; j < X[i].size(); ++j) {
+	//		m(i, j) = X[i][j];
+	//	}
+	//}
+	//std::cout << m.inverse() * m << std::endl;
 
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
@@ -5366,6 +5366,9 @@ int main(int, char**)
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 	io.ConfigViewportsNoDecoration = false;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;	// Enable Gamepad Controls
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 15.0f, NULL, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 10.0f, NULL, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 25.0f, NULL, io.Fonts->GetGlyphRangesDefault());
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
@@ -5714,6 +5717,10 @@ int main(int, char**)
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(83), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
+			if (ImGui::BeginMenu("Font")) {
+				ImGui::ShowFontSelector("Select font");
+				ImGui::EndMenu();
+			}
 			if (ImGui::BeginMenu("Maximize")) {
 				ImGui::DragInt("Max window Width", (int*)&windowWidth, 10, 200, 10000);
 				ImGui::DragInt("Max window Height", (int*)&windowHeight, 10, 200, 10000);
