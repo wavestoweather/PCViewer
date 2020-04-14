@@ -73,6 +73,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <sstream>
 #include <memory>
 #include <cctype>
+#include <Eigen/Dense>
 //#include <thrust/sort.h>
 
 #ifdef DETECTMEMLEAK
@@ -4247,17 +4248,18 @@ static bool updateActiveIndices(DrawList& dl) {
 							if (multvar.detCov < TINY) continue;
 					
 							//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
-							float s = 0;
+							Eigen::MatrixXd invCo = multvar.cov;
+							double s = 0;
 							for (int c = 0; c < multvar.invCov.size(); ++c) {
-								float m = 0;
+								double m = 0;
 								for (int c1 = 0; c1 < multvar.invCov[c].size(); ++c1) {
-									m += (x[c1] - multvar.mean[c1]) * multvar.invCov[c][c1];
+									m += (x[c1] - multvar.mean[c1]) * invCo(c, c1);//multvar.invCov[c][c1];
 								}
 					
 								s += (x[c] - multvar.mean[c]) * m;
 							}
 							//s = multvar.m[preFactorBase] * exp(-.5f * s);
-							float gaussMin = 4.0f * gb.attributes.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+							float gaussMin = 1 * gb.attributes.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 							//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
 							if (s <= gaussMin) {			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 								lineKeep = true;
@@ -5287,13 +5289,13 @@ int main(int, char**)
 
 	//test of multivariate gauss calculations
 	//float determinant;
-	//std::vector<std::vector<double>> X{ {10,0,-3,10}, {-2,-4,1,.5},{3,0,2,7},{-3,5,9,0} };
+	std::vector<std::vector<double>> X{ {10,0,-3,10}, {-2,-4,1,.5},{3,0,2,7},{-3,5,9,0} };
 	//std::vector<std::vector<double>> S(X[0].size(),std::vector<double>(X[0].size())), I(X[0].size(), std::vector<double>(X[0].size())), D(X[0].size(), std::vector<double>(X[0].size()));
 	//std::vector<double> mean(X[0].size());
 	//MultivariateGauss::compute_average_vector(X, mean);
 	//MultivariateGauss::compute_covariance_matrix(X, S);
-	//MultivariateGauss::compute_matrix_inverse(S, I);
-	//MultivariateGauss::compute_matrix_times_matrix(S, I, D);
+	//MultivariateGauss::compute_matrix_inverse(X, I);
+	//MultivariateGauss::compute_matrix_times_matrix(X, I, I);
 	//MultivariateGauss::compute_matrix_determinant(X, determinant);
 	//PCUtil::matrixdump(X);
 	//PCUtil::matrixdump(S);
@@ -5301,12 +5303,20 @@ int main(int, char**)
 	//PCUtil::matrixdump(D);
 	//std::cout << determinant << std::endl;
 
+	//test of eigen
+	Eigen::MatrixXd m(4,4);
+	for (int i = 0; i < X.size(); ++i) {
+		for (int j = 0; j < X[i].size(); ++j) {
+			m(i, j) = X[i][j];
+		}
+	}
+	std::cout << m.inverse() * m << std::endl;
+
 	//Section for variables
 	//float pcLinesAlpha = 1.0f;
 	//float pcLinesAlphaCpy = pcLinesAlpha;									//Contains alpha of last fram
 	char pcFilePath[200] = {};
 	char pcDrawListName[200] = {};
-
 
 	//std::vector<float*> pcData = std::vector<float*>();					//Contains all data
 	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
@@ -8962,12 +8972,13 @@ int main(int, char**)
 							float histYLineDiff = histYLineEnd - histYLineStart;
 
 							float div = 0;
+							std::vector<float> scals({});
 							switch (violinAttributePlots[i].violinScalesX[k]) {
 							case ViolinScaleSelf:
 								div = hist.maxCount[j];
 								break;
 							case ViolinScaleLocal:
-								div = determineViolinScaleLocalDiv(hist.maxCount, &(violinAttributePlots[i].activeAttributes), std::vector<float>({}));
+								div = determineViolinScaleLocalDiv(hist.maxCount, &(violinAttributePlots[i].activeAttributes), scals);
 								//div = hist.maxGlobalCount;
 								break;
 							case ViolinScaleGlobal:

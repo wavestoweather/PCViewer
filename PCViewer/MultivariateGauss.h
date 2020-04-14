@@ -3,6 +3,7 @@
 #include <vector>
 #include <cassert>
 #include <math.h>
+#include <Eigen/Dense>
 
 #define TINY 1.0e-100
 
@@ -11,6 +12,7 @@ public:
 	struct MultivariateBrush {
 		std::vector<float> mean;					//mean vector
 		std::vector<std::vector<float>> invCov;		//inverse matrix of covariance
+		Eigen::MatrixXd cov;
 		float	detCov;								//determinant of the covariance matrix
 	};
 

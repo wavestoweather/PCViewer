@@ -168,6 +168,7 @@ private:
 		std::vector<std::vector<double>> covariance(attributes.size(), std::vector<double>(attributes.size(), 0));
 		std::vector<std::vector<double>> invCov(attributes.size(), std::vector<double>(attributes.size(), 0));
 		std::vector<double> mean(attributes.size(), 0);
+		Eigen::MatrixXd cov(attributes.size(), attributes.size());
 		std::vector<float> brushDiff(attributes.size());
 		for (int i = 0; i < brushDiff.size(); ++i) brushDiff[i] = 1. / (origBounds[i].second - origBounds[i].first);
 		for (int i = 0; i < indices.size(); ++i) {
@@ -179,12 +180,16 @@ private:
 		MultivariateGauss::compute_average_vector(dataMatrix, mean);
 		MultivariateGauss::compute_covariance_matrix(dataMatrix, covariance);
 		for (int i = 0; i < covariance.size(); ++i) {
+			for (int j = 0; j < covariance[i].size(); ++j) {
+				cov(i, j) = covariance[i][j];
+			}
 			covariance[i][i] += TINY;
 		}
 		MultivariateGauss::compute_matrix_inverse(covariance, invCov);
 		MultivariateGauss::MultivariateBrush multBrush{};
 		multBrush.mean = std::vector<float>(mean.size());
 		multBrush.invCov = std::vector<std::vector<float>>(attributes.size(), std::vector<float>(attributes.size()));
+		multBrush.cov = cov.inverse();
 		for (int i = 0; i < mean.size(); ++i) multBrush.mean[i] = mean[i];
 		for (int i = 0; i < invCov.size(); ++i) {
 			for (int j = 0; j < invCov.size(); ++j) {
