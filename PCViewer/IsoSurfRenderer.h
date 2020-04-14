@@ -78,6 +78,7 @@ public:
 	float flySpeed;
 	float fastFlyMultiplier;
 	float rotationSpeed;
+	glm::vec3 lightDir;
 	VkClearValue imageBackground;
 private:
 	struct UniformBuffer {
@@ -230,7 +231,6 @@ private:
 	//camera variables
 	glm::vec3 cameraPos;		//camera position
 	glm::vec2 cameraRot;
-	glm::vec3 lightDir;
 	//variables for the brushes
 	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
 	std::map<std::string, float*> brushColors;												//each brush has its own colors

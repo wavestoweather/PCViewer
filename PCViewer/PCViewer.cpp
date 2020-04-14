@@ -8237,6 +8237,9 @@ int main(int, char**)
 						isoSurfaceRenderer->setBinarySmoothing(stdDiv);
 						isoSurfaceRenderer->render();
 					}
+					if (ImGui::DragFloat3("Ligt direction", &isoSurfaceRenderer->lightDir.x)) {
+						isoSurfaceRenderer->render();
+					}
 					if (ImGui::ColorEdit4("Image background", isoSurfaceRenderer->imageBackground.color.float32, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
 						isoSurfaceRenderer->imageBackGroundUpdated();
 						isoSurfaceRenderer->render();

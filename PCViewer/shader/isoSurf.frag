@@ -49,7 +49,7 @@ void main() {
 	float growth = 1.5f;
 	float maxStepsize = stepsize * 8;
 	const float isoVal = .5f;
-	const int refinmentSteps = 4;
+	const int refinmentSteps = 8;
 	
 	outColor = vec4(0,0,0,0);
 	d = endPos-startPoint;
@@ -94,9 +94,9 @@ void main() {
 					}
 					curPos = .5f * prevPos + .5f * curPos;
 
-					float xDir = texture(texSampler[brush],curPos+vec3(stepsize * 2,0,0)).x, 
-						yDir = texture(texSampler[brush],curPos+vec3(0,stepsize * 2,0)).x,
-						zDir = texture(texSampler[brush],curPos+vec3(0,0,stepsize * 2)).x;
+					float xDir = texture(texSampler[brush],curPos+vec3(stepsize * 4,0,0)).x, 
+						yDir = texture(texSampler[brush],curPos+vec3(0,stepsize * 4,0)).x,
+						zDir = texture(texSampler[brush],curPos+vec3(0,0,stepsize * 4)).x;
 					vec3 normal = -normalize(vec3(xDir - precDensity, yDir - precDensity, zDir - precDensity));
 					brushColor.xyz = .5f * brushColor.xyz + max(.5 * dot(normal,normalize(-ubo.lightDir)) * brushColor.xyz , vec3(0)) + max(.4 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),50) * vec3(1) , vec3(0));
 				}
