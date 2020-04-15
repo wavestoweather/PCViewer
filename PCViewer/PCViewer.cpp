@@ -8536,7 +8536,7 @@ int main(int, char**)
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
-					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 1000);
+					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 4000);
 					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 40);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
 					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
@@ -9114,8 +9114,8 @@ int main(int, char**)
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
-					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 1000);
-					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 20);
+					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 4000);
+					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 40);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
 					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					if (ImGui::Checkbox("Ignore zero values", &histogramManager->ignoreZeroValues)) {		//updating all histogramms if 0 values should be ignored
@@ -9508,7 +9508,11 @@ int main(int, char**)
 										//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
 										//for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
 									}
+									else {
+										updateMaxHistogramValues(violinDrawlistPlots[i]);
+									}
 									violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = violinDrawlistPlots[i].drawLists.size() - 1;
+									
 								}
 								ImGui::EndDragDropTarget();
 							}

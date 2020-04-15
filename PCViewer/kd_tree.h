@@ -133,7 +133,7 @@ private:
 	std::vector<Node> nodes;
 	std::vector<int> attributes;
 	std::vector<std::pair<float, float>> origBounds;
-	float minBoundsRatio = .1f;
+	float minBoundsRatio = .01f;
 	int root;								//root index
 	BoundsBehaviour adjustBounds;
 

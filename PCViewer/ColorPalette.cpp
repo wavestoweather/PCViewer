@@ -146,6 +146,7 @@ CPalette* ColorPalette::getPalletteWithName(std::string str)
             return &(this->palettes[i]);
         }
     }
+	return nullptr;
 }
 
 
@@ -202,6 +203,10 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
 		if (paletteName != "")
 		{
 			numberOfColors = 12;
+
+			auto it = std::find_if(palettes.begin(), palettes.end(), [&paletteName](const CPalette& obj) {return obj.cName == paletteName;});
+			numberOfColors = std::min((*it).maxcolors, (unsigned int) numberOfColors);
+
 
 			choosenColors = (brew<std::string>(paletteName, numberOfColors));
 		}
