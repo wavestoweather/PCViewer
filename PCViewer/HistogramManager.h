@@ -16,6 +16,7 @@ public:
 		float maxGlobalCount;							//maximung value accross all attributes
 		float maxActiveCount = 0;
 		std::vector<float> area;						//area when scaling equals 1
+		std::vector<float> areaShown;					//area when scaling equals 1, but scaled to visible bins
 		std::vector<float> areaRendered;				//area of rendered violin
 		std::vector<float> maxCount;					//maximum histogramm value for each attribute
 		std::vector<std::pair<float, float>> ranges;	//the value ranges for each attribute

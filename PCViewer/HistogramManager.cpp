@@ -156,6 +156,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 		histogram.originalBins.push_back({ });
 		histogram.maxCount.push_back({ });
 		histogram.area.push_back(0);
+		histogram.areaShown.push_back(0);
 		histogram.areaRendered.push_back(0);
 		for (int j = 0; j < numOfBins; ++j) {
 			float curVal = 0;
