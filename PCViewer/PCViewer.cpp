@@ -5366,8 +5366,11 @@ int main(int, char**)
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 	io.ConfigViewportsNoDecoration = false;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;	// Enable Gamepad Controls
+	ImFontConfig fontConf{};
+	fontConf.OversampleH = 4;
+	fontConf.OversampleV = 4;
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 15.0f, NULL, io.Fonts->GetGlyphRangesDefault());
-	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 10.0f, NULL, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 10.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 25.0f, NULL, io.Fonts->GetGlyphRangesDefault());
 
 	// Setup Dear ImGui style
@@ -5717,8 +5720,10 @@ int main(int, char**)
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(83), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
-			if (ImGui::BeginMenu("Font")) {
-				ImGui::ShowFontSelector("Select font");
+			if (ImGui::BeginMenu("Gui")) {
+				//ImGui::ShowFontSelector("Select font");
+				//ImGui::ShowStyleSelector("Select gui style");
+				ImGui::ShowStyleEditor();
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Maximize")) {
@@ -9094,9 +9099,10 @@ int main(int, char**)
 			//adding new Plots
 			ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - plusWidth / 2);
 			if (ImGui::Button("+", ImVec2(plusWidth, 0))) {
-				ViolinPlot *currVP = new ViolinPlot();
-				violinAttributePlots.emplace_back(*currVP);
-				currVP = nullptr;
+				//ViolinPlot *currVP = new ViolinPlot();
+				violinAttributePlots.emplace_back();// *currVP);
+				//operator delete(currVP);
+				//currVP = nullptr;
 			}
 
 			ImGui::End();
@@ -9855,9 +9861,9 @@ int main(int, char**)
 			//adding new Plots
 			ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - plusWidth / 2);
 			if (ImGui::Button("+", ImVec2(plusWidth, 0))) {
-				ViolinDrawlistPlot *currVPDLP = new ViolinDrawlistPlot();
-				violinDrawlistPlots.emplace_back(*currVPDLP);
-				currVPDLP = nullptr;
+				//ViolinDrawlistPlot *currVPDLP = new ViolinDrawlistPlot();
+				violinDrawlistPlots.emplace_back();//*currVPDLP);
+				//operator delete(currVPDLP);
 				violinDrawlistPlots.back().matrixSize = { 1,5 };
 				violinDrawlistPlots.back().drawListOrder = std::vector<uint32_t>(5, 0xffffffff);
 			}
