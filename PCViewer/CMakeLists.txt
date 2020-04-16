@@ -3,19 +3,23 @@
 #
 cmake_minimum_required (VERSION 3.7)
 
+add_subdirectory("imgui/glfw-3.3")
+add_subdirectory("eigen-master")
+add_subdirectory("glm")
+
+include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR} ; ${THRUST_INCLUDE_DIR}; ${EIGEN_INCLUDE_DIR})
+
 # Fügen Sie der ausführbaren Datei dieses Projekts eine Quelle hinzu.
 find_package(Vulkan REQUIRED)
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-add_subdirectory("imgui/glfw-3.3")
-add_subdirectory("eigen-3.3.7")
-add_subdirectory("glm")
 
-include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR} ; ${THRUST_INCLUDE_DIR}; ${EIGEN_INCLUDE_DIR})
+
+
 
 file(GLOB pcviewer_SRC
     "*.h"

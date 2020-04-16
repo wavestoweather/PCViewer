@@ -4,6 +4,13 @@ After acceptance of the paper, the final license will at least permit non-commer
 Additionally, the licenses of included 3rd party code apply:
 
 
+EigenLibrary
+The included EigenLibrary is licensed under MPL 2.0, which applies to all files contained in the folter eigen*/
+https://www.mozilla.org/en-US/MPL/2.0/
+http://eigen.tuxfamily.org/index.php?title=Licensing_FAQ
+
+
+
 This product includes color specifications and designs developed by Cynthia Brewer (http://colorbrewer.org/).
 ### Colorbrewer 2 #####
 
