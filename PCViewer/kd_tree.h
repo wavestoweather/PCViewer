@@ -178,6 +178,13 @@ private:
 			}
 		}
 		MultivariateGauss::compute_average_vector(dataMatrix, mean);
+		Eigen::MatrixXd dataMat(dataMatrix.size(), dataMatrix[0].size());
+		for (int i = 0; i < dataMatrix.size(); ++i) {
+			for (int j = 0; j < dataMatrix[i].size(); ++j) {
+				dataMat(i, j) = dataMatrix[i][j];
+			}
+		}
+		Eigen::BDCSVD<Eigen::MatrixXd> svd(dataMat, Eigen::ComputeThinU | Eigen::ComputeThinV);
 		MultivariateGauss::compute_covariance_matrix(dataMatrix, covariance);
 		for (int i = 0; i < covariance.size(); ++i) {
 			for (int j = 0; j < covariance[i].size(); ++j) {
@@ -190,6 +197,26 @@ private:
 		multBrush.mean = std::vector<float>(mean.size());
 		multBrush.invCov = std::vector<std::vector<float>>(attributes.size(), std::vector<float>(attributes.size()));
 		multBrush.cov = cov.inverse();
+		std::vector<uint32_t> pcInd;
+		for (int i = 0; i < svd.singularValues().size(); ++i) {
+			if (svd.singularValues()(i) > 1e-20) {
+				pcInd.push_back(i);
+			}
+			else {
+				std::pair<float, float> b(std::numeric_limits<float>::max(), std::numeric_limits<float>::min());
+				for (int j = 0; j < indices.size(); ++j) {
+					float v = 0;
+					for (int k = 0; k < svd.singularValues().size(); ++k) {
+						v += data[indices[j]][attributes[k]] * svd.singularValues()(k, i);
+					}
+					if (v < b.first)b.first = v;
+					if (v > b.second)b.second = v;
+				}
+				multBrush.pcBounds.push_back(b);
+			}
+		}
+		multBrush.pc = svd.matrixV();
+		multBrush.sv = svd.singularValues();
 		for (int i = 0; i < mean.size(); ++i) multBrush.mean[i] = mean[i];
 		for (int i = 0; i < invCov.size(); ++i) {
 			for (int j = 0; j < invCov.size(); ++j) {

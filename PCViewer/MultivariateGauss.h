@@ -13,7 +13,11 @@ public:
 		std::vector<float> mean;					//mean vector
 		std::vector<std::vector<float>> invCov;		//inverse matrix of covariance
 		Eigen::MatrixXd cov;
-		float	detCov;								//determinant of the covariance matrix
+		std::vector<uint32_t> pcInd;				//principal component indices which are above threshold
+		std::vector<std::pair<float, float>> pcBounds; //principal component bounds for axes where the singular values are too small
+		Eigen::MatrixXd pc;							//principal komponents
+		Eigen::VectorXd sv;							//singular values
+		float detCov;								//determinant of the covariance matrix
 	};
 
 	static void compute_covariance_matrix(const std::vector<std::vector<double>>& d, std::vector<std::vector<double>>& covar_matrix);
