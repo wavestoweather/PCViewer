@@ -12,8 +12,8 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 add_subdirectory("imgui/glfw-3.3")
-add_subdirectory("glm")
 add_subdirectory("eigen-3.3.7")
+add_subdirectory("glm")
 
 include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR} ; ${THRUST_INCLUDE_DIR}; ${EIGEN_INCLUDE_DIR})
 
