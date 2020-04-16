@@ -4,7 +4,14 @@
 cmake_minimum_required (VERSION 3.7)
 
 add_subdirectory("imgui/glfw-3.3")
-add_subdirectory("eigen-master")
+IF(EXISTS "eigen-master")
+    add_subdirectory("eigen-master")
+    else()
+        IF(EXISTS "eigen-3.3.7")
+            add_subdirectory("eigen-3.3.7")
+        endif()
+endif()
+
 add_subdirectory("glm")
 
 include_directories("imgui/glfw-3.3/include" ; ${Vulkan_INCLUDE_DIR} ; ${THRUST_INCLUDE_DIR}; ${EIGEN_INCLUDE_DIR})
