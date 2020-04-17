@@ -12,10 +12,16 @@ public:
 		KdTree_Bounds_Pull_In_Both_Borders	//pull in bot borders
 	};
 
+	enum SplitBehaviour {
+		KdTree_Split_Half,					//split the bounds in the middel
+		KdTree_Split_SAH					//split by using the Surface Area Heuristic
+	};
+
 	KdTree() {};
-	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::vector<std::pair<float, float>>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds) {
+	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::vector<std::pair<float, float>>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds, SplitBehaviour splitBounds) {
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
+		this->splitBounds = splitBounds;
 		this->attributes = attributes;
 		this->origBounds = std::vector<std::pair<float, float>>(attributes.size(), std::pair<float,float>( std::numeric_limits<float>::max(),std::numeric_limits<float>::min() ));
 		for (int i = 0; i < initialBounds.size();++i) {
@@ -136,6 +142,8 @@ private:
 	float minBoundsRatio = .01f;
 	int root;								//root index
 	BoundsBehaviour adjustBounds;
+	SplitBehaviour splitBounds;
+	std::vector<std::vector<uint32_t>> oderedIndices;
 
 	std::vector<uint32_t> getActiveIndices(std::vector<int>& attributes, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::pair<float, float>>& bounds) {
 		std::vector<uint32_t> res;
@@ -246,6 +254,9 @@ private:
 
 	int buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
 		if (!indices.size() || !recDepth) return -1;
+		std::vector<float*>* d = &data;
+		std::vector<int>* att = &attributes;
+		if (splitBounds == KdTree_Split_SAH) std::sort(indices.begin(), indices.end(), [d, split, att](uint32_t a, uint32_t b) { return (*d)[a][(*att)[split]] < (*d)[b][(*att)[split]]; });
 		Node n = {};
 		n.bounds = bounds;
 		n.split = split;
@@ -264,11 +275,29 @@ private:
 			return nodes.size() - 1;
 		}
 
-		//splitting the bounding box in the middle
+		//splitting the bounding box
 		std::vector<std::pair<float, float>> leftBounds(bounds), rightBounds(bounds);
-		float mid = (leftBounds[split].first + leftBounds[split].second) / 2;
+		float mid;
+		int splitIndex;
+		if (splitBounds == KdTree_Split_Half) {
+			mid = (leftBounds[split].first + leftBounds[split].second) / 2;
+		}
+		else if (splitBounds == KdTree_Split_SAH) {
+			float minCost = std::numeric_limits<float>::max();
+			float a = bounds[split].second - bounds[split].first;
+			for (int i = 0; i < indices.size(); ++i) {
+				float pFront = data[indices[i]][attributes[split]] - bounds[split].first, pBack = a - pFront;
+				float cost = pFront * (i + 1) + pBack * (indices.size() - i - 1);
+				if (cost < minCost) {
+					minCost = cost;
+					mid = data[indices[i]][attributes[split]];
+					splitIndex = i;
+				}
+			}
+		}
 		leftBounds[split].second = mid;
 		rightBounds[split].first = mid;
+
 		switch (adjustBounds) {
 		case KdTree_Bounds_Static: break;
 		case KdTree_Bounds_Pull_In_Outer_Border: 

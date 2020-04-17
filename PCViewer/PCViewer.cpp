@@ -750,6 +750,7 @@ static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
 static int maxFractionDepth = 20;
 static int outlierRank = 1;					//min rank(amount ofdatapoints in a kd tree node) needed to not be an outlier node
 static int boundsBehaviour = 2;
+static int splitBehaviour = 1;
 static int maxRenderDepth = 13;
 static float fractionBoxWidth = BRUSHWIDTH;
 static int fractionBoxLineWidth = 3;
@@ -6045,6 +6046,14 @@ int main(int, char**)
 					ImGui::EndCombo();
 				}
 
+				static char* splitTypes[] = { "Split half","SAH" };
+				if (ImGui::BeginCombo("Split behaviour", splitTypes[splitBehaviour])) {
+					for (int i = 0; i < 2; ++i) {
+						if (ImGui::MenuItem(splitTypes[i])) splitBehaviour = i;
+					}
+					ImGui::EndCombo();
+				}
+
 				ImGui::DragFloat("Fractionbox width", &fractionBoxWidth, 1, 0, 100);
 
 				if (ImGui::InputInt("Fractionbox linewidth", &fractionBoxLineWidth, 1, 1)) {
@@ -6618,9 +6627,9 @@ int main(int, char**)
 								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
 								if (globalBrushes[i].edited)
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
 								else
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
 #ifdef _DEBUG
 								std::cout << "Kd tree done." << std::endl;
 #endif
@@ -6647,9 +6656,9 @@ int main(int, char**)
 								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
 								if(globalBrushes[i].edited)
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
 								else
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
 #ifdef _DEBUG
 								std::cout << "Kd tree done." << std::endl;
 #endif
