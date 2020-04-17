@@ -754,6 +754,7 @@ static int splitBehaviour = 1;
 static int maxRenderDepth = 13;
 static float fractionBoxWidth = BRUSHWIDTH;
 static int fractionBoxLineWidth = 3;
+static float multivariateStdDivThresh = 1.0f;
 
 //variables for animation
 static float animationDuration = 2.0f;		//time for every active brush to show in seconds
@@ -4293,7 +4294,7 @@ static bool updateActiveIndices(DrawList& dl) {
 								assert(multvarBoundsInd == multvar.pcBounds.size() - 1);
 							}
 							//s = multvar.m[preFactorBase] * exp(-.5f * s);
-							float gaussMin = 1 * multvar.pcInd.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+							float gaussMin = std::pow(multivariateStdDivThresh,2) * multvar.pcInd.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 							//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
 							if (s <= gaussMin && !nope) {			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 								lineKeep = true;
@@ -4309,6 +4310,7 @@ static bool updateActiveIndices(DrawList& dl) {
 					}
 					VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, data.size(), actives);
 					delete[] actives;
+					res = { activeInd.size(),activeInd.size() };
 					//res = gpuBrusher->brushIndices(gb.multivariates, gb.kdTree->getOriginalBounds(), gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
 				}
 				else {
@@ -6059,6 +6061,12 @@ int main(int, char**)
 				if (ImGui::InputInt("Fractionbox linewidth", &fractionBoxLineWidth, 1, 1)) {
 					if (fractionBoxLineWidth < 1) maxFractionDepth = 1;
 					if (fractionBoxLineWidth > 30) maxFractionDepth = 30;
+				}
+				
+				ImGui::SliderFloat("Multivariate std dev thresh", &multivariateStdDivThresh, .01f, 5);
+				
+				if (ImGui::IsItemDeactivatedAfterEdit()) {
+					pcPlotRender = updateAllActiveIndices();
 				}
 
 				ImGui::EndMenu();
