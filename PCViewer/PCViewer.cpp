@@ -4289,6 +4289,7 @@ static bool updateActiveIndices(DrawList& dl) {
 										break;
 									}
 								}
+								assert(multvarBoundsInd == multvar.pcBounds.size() - 1);
 							}
 							//s = multvar.m[preFactorBase] * exp(-.5f * s);
 							float gaussMin = 1 * multvar.pcInd.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
@@ -5570,11 +5571,14 @@ int main(int, char**)
 	io.ConfigViewportsNoDecoration = false;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;	// Enable Gamepad Controls
 	ImFontConfig fontConf{};
-	fontConf.OversampleH = 4;
-	fontConf.OversampleV = 4;
-	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 15.0f, NULL, io.Fonts->GetGlyphRangesDefault());
+	fontConf.OversampleH = 2;
+	fontConf.OversampleV = 2;
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Regular.ttf", 15.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Regular.ttf", 10.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Regular.ttf", 25.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 10.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
-	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 25.0f, NULL, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 15.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 25.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();

@@ -208,7 +208,7 @@ private:
 				for (int j = 0; j < indices.size(); ++j) {
 					float v = 0;
 					for (int k = 0; k < singularVals.size(); ++k) {
-						v += data[indices[j]][attributes[k]] * singularVals(k, i);
+						v += data[indices[j]][attributes[k]] * svd.matrixV()(k, i);
 					}
 					if (v < b.first)b.first = v;
 					if (v > b.second)b.second = v;
@@ -216,6 +216,7 @@ private:
 				multBrush.pcBounds.push_back(b);
 			}
 		}
+		multBrush.pcInd = pcInd;
 		multBrush.pc = svd.matrixV();
 		multBrush.sv = singularVals;
 		for (int i = 0; i < mean.size(); ++i) multBrush.mean[i] = mean[i];
