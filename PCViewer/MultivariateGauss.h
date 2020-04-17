@@ -16,7 +16,7 @@ public:
 		std::vector<uint32_t> pcInd;				//principal component indices which are above threshold
 		std::vector<std::pair<float, float>> pcBounds; //principal component bounds for axes where the singular values are too small
 		Eigen::MatrixXd pc;							//principal komponents
-		Eigen::VectorXd sv;							//singular values
+		Eigen::VectorXd sv;							//singular values divided by sqrt(m-1) (this yields the standard deviations)
 		float detCov;								//determinant of the covariance matrix
 	};
 

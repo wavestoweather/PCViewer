@@ -198,16 +198,17 @@ private:
 		multBrush.invCov = std::vector<std::vector<float>>(attributes.size(), std::vector<float>(attributes.size()));
 		multBrush.cov = cov.inverse();
 		std::vector<uint32_t> pcInd;
-		for (int i = 0; i < svd.singularValues().size(); ++i) {
-			if (svd.singularValues()(i) > 1e-20) {
+		Eigen::VectorXd singularVals = svd.singularValues() / std::sqrt(indices.size() - 1);
+		for (int i = 0; i < singularVals.size(); ++i) {
+			if (singularVals(i) > 1e-20) {
 				pcInd.push_back(i);
 			}
 			else {
 				std::pair<float, float> b(std::numeric_limits<float>::max(), std::numeric_limits<float>::min());
 				for (int j = 0; j < indices.size(); ++j) {
 					float v = 0;
-					for (int k = 0; k < svd.singularValues().size(); ++k) {
-						v += data[indices[j]][attributes[k]] * svd.singularValues()(k, i);
+					for (int k = 0; k < singularVals.size(); ++k) {
+						v += data[indices[j]][attributes[k]] * singularVals(k, i);
 					}
 					if (v < b.first)b.first = v;
 					if (v > b.second)b.second = v;
@@ -216,7 +217,7 @@ private:
 			}
 		}
 		multBrush.pc = svd.matrixV();
-		multBrush.sv = svd.singularValues();
+		multBrush.sv = singularVals;
 		for (int i = 0; i < mean.size(); ++i) multBrush.mean[i] = mean[i];
 		for (int i = 0; i < invCov.size(); ++i) {
 			for (int j = 0; j < invCov.size(); ++j) {

@@ -4248,23 +4248,52 @@ static bool updateActiveIndices(DrawList& dl) {
 					
 						bool lineKeep = false;
 						for (auto& multvar:gb.multivariates) {
-							if (multvar.detCov < TINY) continue;
-					
-							//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
-							Eigen::MatrixXd invCo = multvar.cov;
+							//if (multvar.detCov < TINY) continue;
+							//
+							////doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
+							//Eigen::MatrixXd invCo = multvar.cov;
+							//double s = 0;
+							//for (int c = 0; c < multvar.invCov.size(); ++c) {
+							//	double m = 0;
+							//	for (int c1 = 0; c1 < multvar.invCov[c].size(); ++c1) {
+							//		m += (x[c1] - multvar.mean[c1]) * invCo(c, c1);//multvar.invCov[c][c1];
+							//	}
+							//
+							//	s += (x[c] - multvar.mean[c]) * m;
+							//}
+							////s = multvar.m[preFactorBase] * exp(-.5f * s);
+							//float gaussMin = 1 * gb.attributes.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+							////checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
+							//if (s <= gaussMin) {			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
+							//	lineKeep = true;
+							//	break;
+							//}
+
+							//doing the check via pca
+							Eigen::MatrixXd& pc = multvar.pc;
+							int multvarBoundsInd = -1;
 							double s = 0;
+							bool nope = false;
 							for (int c = 0; c < multvar.invCov.size(); ++c) {
 								double m = 0;
 								for (int c1 = 0; c1 < multvar.invCov[c].size(); ++c1) {
-									m += (x[c1] - multvar.mean[c1]) * invCo(c, c1);//multvar.invCov[c][c1];
+									m += (x[c1] - multvar.mean[c1]) * pc(c1, c);				//project point onto the pca axis
 								}
-					
-								s += (x[c] - multvar.mean[c]) * m;
+								if (multvar.sv(c) > 1e-20) {									//standard gaussian check
+									s += std::pow(m, 2) / std::pow(multvar.sv(c), 2);			//x^2 / sigma^2
+								}
+								else {
+									++multvarBoundsInd;
+									if (m<multvar.pcBounds[multvarBoundsInd].first || m > multvar.pcBounds[multvarBoundsInd].second) {
+										nope = true;
+										break;
+									}
+								}
 							}
 							//s = multvar.m[preFactorBase] * exp(-.5f * s);
-							float gaussMin = 1 * gb.attributes.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+							float gaussMin = 1 * multvar.pcInd.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 							//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
-							if (s <= gaussMin) {			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
+							if (s <= gaussMin && !nope) {			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
 								lineKeep = true;
 								break;
 							}
