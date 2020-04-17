@@ -4234,7 +4234,12 @@ static bool updateActiveIndices(DrawList& dl) {
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.fractureDepth > 0) { //fractured brush
 				if (!gb.active) continue;
-				globalBrushesActive = true;
+				for (auto& a : gb.brushes) {
+					if (a.second.size()) {
+						globalBrushesActive = true;
+						break;
+					}
+				}
 				std::pair<uint32_t, int> res;// = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
 				if (gb.useMultivariate) {
 					std::vector<std::pair<float, float>> origBounds = gb.kdTree->getOriginalBounds();
@@ -4323,7 +4328,12 @@ static bool updateActiveIndices(DrawList& dl) {
 			}
 			else {
 				if (!gb.active) continue;
-				globalBrushesActive = true;
+				for (auto& a : gb.brushes) {
+					if (a.second.size()) {
+						globalBrushesActive = true;
+						break;
+					}
+				}
 				brush.clear();
 				for (auto b : gb.brushes) {
 					for (auto br : b.second) {
@@ -6866,6 +6876,7 @@ int main(int, char**)
 						gb.parentDataset = ds;
 						for (int i = 0; i < dl->brushes.size(); ++i) {	//Attribute Index
 							bool first = true;
+							gb.brushes[i] = {};
 							for (Brush& b : dl->brushes[i]) {
 								gb.brushes[i].push_back(std::pair<unsigned int, std::pair<float, float>>(currentBrushId++, b.minMax));
 								if (first) {
@@ -6875,6 +6886,7 @@ int main(int, char**)
 							}
 						}
 						globalBrushes.push_back(gb);
+						pcPlotRender = true;
 					}
 					ImGui::EndDragDropTarget();
 				}
