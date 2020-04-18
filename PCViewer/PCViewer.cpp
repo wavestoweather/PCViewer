@@ -4296,8 +4296,8 @@ static bool updateActiveIndices(DrawList& dl) {
 										break;
 									}
 								}
-								assert(multvarBoundsInd == multvar.pcBounds.size() - 1);
 							}
+							assert(multvarBoundsInd == multvar.pcBounds.size() - 1);
 							//s = multvar.m[preFactorBase] * exp(-.5f * s);
 							float gaussMin = std::pow(multivariateStdDivThresh,2) * multvar.pcInd.size();	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
 							//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
