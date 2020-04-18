@@ -11,11 +11,12 @@ layout(std430, binding = 0) buffer Informations{
 	int globalLineCount;
 	uint first;
 	uint and;
+	float stdDev;
 	float attributeInd[];		//indices of the fracture attributes
 } info;
 
 layout(std430, binding = 1) buffer Multivariats{
-	float m[];					//mean vectors and inverse covariance matrices: preFactor1[1], mean1[amtOfMultvarAxes], covariance1[amtOfMultvarAxes^2], preFactor2[1], mean2 ...
+	float m[];					//mean vectors and inverse covariance matrices: mean1[amtOfMultvarAxes], singularValues1[amtOfMultvarAxes], pcBounds1[2*amtOfMultvarAxes], transposedPCA[amtOfMultvarAxes^2], mean1[amtOfMultvarAxes], ...
 }multvar;
 
 layout(std430, binding = 2) buffer Data{
@@ -45,29 +46,38 @@ void main(){
 
 	bool lineKeep = false;
 	for(int mulvar = 0; mulvar<info.amtOfMultvar;++mulvar){
-		uint preFactorBase =  mulvar * (1 + info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
-		if(multvar.m[preFactorBase] >= 1.0e-100){
-			uint meanBase = preFactorBase + 1;
-			uint covarBase = meanBase + info.amtOfMultvarAxes;
+		uint meanBase =  mulvar * (4 * info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
+		uint svBase = meanBase + info.amtOfMultvarAxes;
+		uint pcBoundsBase = svBase + info.amtOfMultvarAxes;
+		uint pcBase = pcBoundsBase + 2 * info.amtOfMultvarAxes;
 
-			//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
-			float s = 0;
-			for(int c = 0;c<info.amtOfMultvarAxes;++c){
-				float m = 0;
-				uint rowBase = c * info.amtOfMultvarAxes + covarBase;
-				for(int c1 = 0;c1<info.amtOfMultvarAxes;++c1){
-					m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
+		//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
+		float s = 0;
+		bool nope = false;
+		uint count = 0;
+		for(int c = 0;c<info.amtOfMultvarAxes;++c){
+			float m = 0;
+			uint rowBase = c * info.amtOfMultvarAxes + pcBase;
+			for(int c1 = 0;c1<info.amtOfMultvarAxes;++c1){
+				m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
+			}
+			if (multvar.m[svBase + c] > 1e-20) {									//standard gaussian check
+				++count;
+				s += pow(m, 2) / pow(multvar.m[svBase + c], 2);			//x^2 / sigma^2
+			}
+			else {
+				if (m<multvar.m[pcBoundsBase + 2 * c] || m > multvar.m[pcBoundsBase + 2 * c + 1]) {
+					nope = true;
+					break;
 				}
-				
-				s += (x[c] - multvar.m[meanBase + c]) * m;
 			}
-			//s = multvar.m[preFactorBase] * exp(-.5f * s);
-			float gaussMin = 4 * info.amtOfMultvarAxes;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
-			//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
-			if (s <= gaussMin){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
-				lineKeep = true;
-				break;
-			}
+		}
+		//s = multvar.m[preFactorBase] * exp(-.5f * s);
+		float gaussMin = pow(info.stdDev,2) * count;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+		//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
+		if (s <= gaussMin && !nope){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
+			lineKeep = true;
+			break;
 		}
 	}
 	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
