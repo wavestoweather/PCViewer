@@ -61,6 +61,7 @@ namespace VkUtil{
 	void updateStorageImageDescriptorSet(VkDevice device, VkImageView imageView, VkImageLayout imageLayout, uint32_t binding, VkDescriptorSet descriptorSet);
 	void updateStorageImageArrayDescriptorSet(VkDevice device, std::vector<VkSampler>& sampler, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet);
 	void copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, int32_t width, int32_t height, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout);
+	void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer src, VkBuffer dst, uint32_t byteSize, uint32_t srcOffset, uint32_t dstOffset);
 	void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 	void copyBufferTo3dImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth);
 	void copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth);

@@ -1717,27 +1717,35 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 	//creating the command buffer as its needed to do all the operations in here
 	//createPcPlotCommandBuffer();
 
-	Buffer vertexBuffer;
+	Buffer vertexBuffer, stagingBuffer;
 
 	uint32_t amtOfVertices = Attributes.size() * data.size();
 
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = sizeof(Vertex) * Attributes.size() * data.size();
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
 	check_vk_result(err);
+	VkUtil::createBuffer(g_Device, sizeof(Vertex)*amtOfVertices,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,&stagingBuffer.buffer);
 
 	VkMemoryRequirements memRequirements;
 	vkGetBufferMemoryRequirements(g_Device, vertexBuffer.buffer, &memRequirements);
+	vkGetBufferMemoryRequirements(g_Device, stagingBuffer.buffer, &memRequirements);
 
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &stagingBuffer.memory);
+	check_vk_result(err);
+
+	vkBindBufferMemory(g_Device, stagingBuffer.buffer, stagingBuffer.memory, 0);
+
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &vertexBuffer.memory);
 	check_vk_result(err);
 
@@ -1757,11 +1765,20 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	//filling the Vertex Buffer with all Datapoints
 	void* mem;
-	vkMapMemory(g_Device, vertexBuffer.memory, 0, sizeof(Vertex) * amtOfVertices, 0, &mem);
+	vkMapMemory(g_Device, stagingBuffer.memory, 0, sizeof(Vertex) * amtOfVertices, 0, &mem);
 	memcpy(mem, d, amtOfVertices * sizeof(Vertex));
-	vkUnmapMemory(g_Device, vertexBuffer.memory);
+	vkUnmapMemory(g_Device, stagingBuffer.memory);
 
 	delete[] d;
+
+	VkCommandBuffer copyComm;
+	VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &copyComm);
+	VkUtil::copyBuffer(copyComm, stagingBuffer.buffer, vertexBuffer.buffer, sizeof(Vertex) * amtOfVertices, 0, 0);
+	VkUtil::commitCommandBuffer(g_Queue, copyComm);
+	check_vk_result(vkQueueWaitIdle(g_Queue));
+	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &copyComm);
+	vkDestroyBuffer(g_Device, stagingBuffer.buffer, nullptr);
+	vkFreeMemory(g_Device, stagingBuffer.memory, nullptr);
 
 	g_PcPlotVertexBuffers.push_back(vertexBuffer);
 

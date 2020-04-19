@@ -765,6 +765,15 @@ void VkUtil::copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, int32_t 
 	vkCmdBlitImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, 1, &blit, VK_FILTER_LINEAR);
 }
 
+void VkUtil::copyBuffer(VkCommandBuffer commandBuffer, VkBuffer src, VkBuffer dst, uint32_t byteSize, uint32_t srcOffset, uint32_t dstOffset)
+{
+	VkBufferCopy bufCpy{};
+	bufCpy.srcOffset = srcOffset;
+	bufCpy.dstOffset = dstOffset;
+	bufCpy.size = byteSize;
+	vkCmdCopyBuffer(commandBuffer, src, dst, 1, &bufCpy);
+}
+
 void VkUtil::copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
 {
 	VkBufferImageCopy region = {};
