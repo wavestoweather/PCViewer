@@ -4261,7 +4261,6 @@ static bool updateActiveIndices(DrawList& dl) {
 				if (gb.useMultivariate) {
 					std::vector<std::pair<float, float>> origBounds = gb.kdTree->getOriginalBounds();
 					float x[30]{};
-					std::vector<float*>& data = gb.parentDataset->data;
 					std::vector<int> activeInd;
 					//for (uint32_t lineIndex : dl.indices) {
 					//	//fill x
@@ -4333,7 +4332,7 @@ static bool updateActiveIndices(DrawList& dl) {
 					//VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, data.size(), actives);
 					//delete[] actives;
 					//res = { activeInd.size(),activeInd.size() };
-					res = gpuBrusher->brushIndices(gb.multivariates, gb.kdTree->getOriginalBounds(), gb.attributes, data.size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size(), multivariateStdDivThresh);
+					res = gpuBrusher->brushIndices(gb.multivariates, gb.kdTree->getOriginalBounds(), gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size(), multivariateStdDivThresh);
 				}
 				else {
 					res = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
@@ -8502,6 +8501,9 @@ int main(int, char**)
 						isoSurfaceRenderer->render();
 					}
 					if (ImGui::Checkbox("Activate shading", &isoSurfaceRenderer->shade)) {
+						isoSurfaceRenderer->render();
+					}
+					if (ImGui::SliderFloat("Iso value", &isoSurfaceRenderer->isoValue, .01f, .99f)) {
 						isoSurfaceRenderer->render();
 					}
 					if (ImGui::SliderFloat("Ray march step size", &isoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {

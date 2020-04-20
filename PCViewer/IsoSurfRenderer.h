@@ -78,6 +78,7 @@ public:
 	float flySpeed;
 	float fastFlyMultiplier;
 	float rotationSpeed;
+	float isoValue = .5f;
 	glm::vec3 lightDir;
 	VkClearValue imageBackground;
 private:
@@ -128,7 +129,7 @@ private:
 		uint32_t amtOfAxis;
 		uint32_t shade;
 		float stepSize;
-		uint32_t padding;
+		float isoValue;
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 

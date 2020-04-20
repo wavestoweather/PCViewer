@@ -1149,6 +1149,7 @@ void IsoSurfRenderer::render()
 	brushInfos->amtOfAxis = binaryImage.size();
 	brushInfos->shade = shade;
 	brushInfos->stepSize = stepSize;
+	brushInfos->isoValue = isoValue;
 	float* brushColors = (float*)(brushInfos + 1);
 	for (int i = 0; i < drawlistBrushes.size(); ++i) {
 		brushColors[i * 4] = drawlistBrushes[i].brushSurfaceColor.x;

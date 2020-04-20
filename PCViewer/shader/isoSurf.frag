@@ -15,7 +15,7 @@ layout(std430 ,binding = 2) buffer brushInfos{
 	uint amtOfAxis;
 	uint shade;
 	float stepSize;
-	uint padding;
+	float isoValue;
 	float[] colors;
 	//float[] for the colors of the brushes:
 	//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
@@ -48,7 +48,7 @@ void main() {
 	float curStepsize = stepsize;
 	float growth = 1.5f;
 	float maxStepsize = stepsize * 8;
-	const float isoVal = .5f;
+	float isoVal = info.isoValue;
 	const int refinmentSteps = 8;
 	
 	outColor = vec4(0,0,0,0);
