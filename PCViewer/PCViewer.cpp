@@ -48,6 +48,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include "CameraNav.hpp"
 #include "HistogramManager.h"
 #include "IsoSurfRenderer.h"
+#include "BrushIsoSurfRenderer.h"
 #include "MultivariateGauss.h"
 
 #include "ColorPalette.h"
