@@ -8791,7 +8791,7 @@ int main(int, char**)
 
 		//brush iso surface window -----------------------------------------------------------------------
 		if (enableBrushIsoSurfaceWindow) {
-			ImGui::Begin("Isosurface Renderer", &enableBrushIsoSurfaceWindow, ImGuiWindowFlags_MenuBar);
+			ImGui::Begin("Brush Isosurface Renderer", &enableBrushIsoSurfaceWindow, ImGuiWindowFlags_MenuBar);
 			int dlbExport = -1;
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
