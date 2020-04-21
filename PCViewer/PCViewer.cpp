@@ -733,6 +733,7 @@ static bool enable3dView = false;
 static std::string active3dAttribute;
 static bool enableBubbleWindow = false;
 static bool enableIsoSurfaceWindow = false;
+static bool enableBrushIsoSurfaceWindow = false;
 static bool coupleBubbleWindow = true;
 static BubblePlotter* bubblePlotter;
 
@@ -743,6 +744,7 @@ static GpuBrusher* gpuBrusher;
 static HistogramManager* histogramManager;
 
 static IsoSurfRenderer* isoSurfaceRenderer;
+static BrushIsoSurfRenderer* brushIsoSurfaceRenderer;
 static bool coupleIsoSurfaceRenderer = true;
 static bool isoSurfaceRegularGrid = true;
 static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
@@ -5750,6 +5752,8 @@ int main(int, char**)
 	{//iso surface renderer
 		isoSurfaceRenderer = new IsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
 		isoSurfaceRenderer->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(isoSurfaceRenderer->getImageSampler(), isoSurfaceRenderer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
+		brushIsoSurfaceRenderer = new BrushIsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		brushIsoSurfaceRenderer->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(brushIsoSurfaceRenderer->getImageSampler(), brushIsoSurfaceRenderer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
 	}
 
 	{//creating the settngs manager
@@ -8776,7 +8780,104 @@ int main(int, char**)
 			//}
 			ImGui::End();
 		}
-		//end of so surface window -----------------------------------------------------------------------
+		//end of iso surface window -----------------------------------------------------------------------
+
+		//brush iso surface window -----------------------------------------------------------------------
+		if (enableBrushIsoSurfaceWindow) {
+			ImGui::Begin("Isosurface Renderer", &enableBrushIsoSurfaceWindow, ImGuiWindowFlags_MenuBar);
+			int dlbExport = -1;
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Settings")) {
+					ImGui::Checkbox("Couple to brush", &coupleIsoSurfaceRenderer);
+					ImGui::Checkbox("Regular grid", &isoSurfaceRegularGrid);
+					ImGui::InputInt3("Regular grid dimensions", isoSurfaceRegularGridDim);
+
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Rendering")) {
+					static float boxSize[3]{ 1.5f,1.f,1.5f };
+					if (ImGui::DragFloat3("Box dimensions", boxSize, .001f)) {
+						brushIsoSurfaceRenderer->resizeBox(boxSize[0], boxSize[1], boxSize[2]);
+						brushIsoSurfaceRenderer->render();
+					}
+					if (ImGui::Checkbox("Activate shading", &brushIsoSurfaceRenderer->shade)) {
+						brushIsoSurfaceRenderer->render();
+					}
+					if (ImGui::SliderFloat("Iso value", &brushIsoSurfaceRenderer->isoValue, .01f, .99f)) {
+						brushIsoSurfaceRenderer->render();
+					}
+					if (ImGui::SliderFloat("Ray march step size", &brushIsoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {
+						brushIsoSurfaceRenderer->render();
+					}
+					static float stdDiv = 1;
+					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, 0, 10)) {
+						brushIsoSurfaceRenderer->setBinarySmoothing(stdDiv);
+						brushIsoSurfaceRenderer->render();
+					}
+					if (ImGui::DragFloat3("Ligt direction", &brushIsoSurfaceRenderer->lightDir.x)) {
+						brushIsoSurfaceRenderer->render();
+					}
+					if (ImGui::ColorEdit4("Image background", brushIsoSurfaceRenderer->imageBackground.color.float32, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+						brushIsoSurfaceRenderer->imageBackGroundUpdated();
+						brushIsoSurfaceRenderer->render();
+					}
+					ImGui::EndMenu();
+				}
+
+				ImGui::EndMenuBar();
+			}
+
+			ImGui::Image((ImTextureID)brushIsoSurfaceRenderer->getImageDescriptorSet(), ImVec2{ 800,800 }, { 0,0 }, { 1,1 }, { 1,1,1,1 }, { 0,0,0,1 });
+			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel ||
+				ImGui::IsKeyDown(KEYA) || ImGui::IsKeyDown(KEYS) || ImGui::IsKeyDown(KEYD) || ImGui::IsKeyDown(KEYQ) || ImGui::IsKeyDown(KEYW) || ImGui::IsKeyDown(KEYE))) {
+				CamNav::NavigationInput nav = {};
+				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
+				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
+				nav.mouseScrollDelta = io.MouseWheel;
+				nav.w = io.KeysDown[KEYW];
+				nav.a = io.KeysDown[KEYA];
+				nav.s = io.KeysDown[KEYS];
+				nav.d = io.KeysDown[KEYD];
+				nav.q = io.KeysDown[KEYQ];
+				nav.e = io.KeysDown[KEYE];
+				nav.shift = io.KeyShift;
+				brushIsoSurfaceRenderer->updateCameraPos(nav, io.DeltaTime);
+				brushIsoSurfaceRenderer->render();
+				err = vkDeviceWaitIdle(g_Device);
+				check_vk_result(err);
+				ImGui::ResetMouseDragDelta();
+			}
+
+			//TODO:: add new iso surface
+
+			ImGui::Separator();
+			ImGui::Text("Active iso sufaces:");
+			ImGui::Columns(4);
+			int index = 0;
+			int del = -1;
+			for (IsoSurfRenderer::DrawlistBrush& db : isoSurfaceRenderer->drawlistBrushes) {
+				ImGui::Text(db.drawlist.c_str());
+				ImGui::NextColumn();
+				ImGui::Text(db.brush.c_str());
+				ImGui::NextColumn();
+				if (ImGui::ColorEdit4((std::string("##col") + db.drawlist + db.brush).c_str(), (float*)&db.brushSurfaceColor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+					isoSurfaceRenderer->render();
+				}
+				ImGui::NextColumn();
+				if (ImGui::Button(("X##" + std::to_string(index)).c_str())) {
+					del = index;
+				}
+				ImGui::NextColumn();
+				++index;
+			}
+			if (del != -1) {
+				isoSurfaceRenderer->deleteBinaryVolume(del);
+				isoSurfaceRenderer->render();
+			}
+			ImGui::Columns(1);
+			ImGui::End();
+		}
+		//end of brush iso surface window -----------------------------------------------------------------------
 		
 		//begin of violin plots attribute major ----------------------------------------------------------
 		std::vector<std::pair<float, float>> globalMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });

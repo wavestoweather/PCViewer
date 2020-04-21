@@ -3,8 +3,8 @@ IsoSurfRenderer is a class to support iso surface rendering of 3d multivariate g
 The iso surfaces are set by brushes.
 */
 #pragma once
-#ifndef IsoSurfRenderer_H
-#define	IsoSurfRenderer_H
+#ifndef BrushIsoSurfRenderer_H
+#define	BrushIsoSurfRenderer_H
 
 #include "VkUtil.h"
 #include "PCUtil.h"
