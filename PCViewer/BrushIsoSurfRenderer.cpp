@@ -266,7 +266,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		for (int i = 0; i < required3dImages; ++i) {
 			vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);
 
-			VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R32_SFLOAT, 1, &image3dView[i]);
+			VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R16_SFLOAT, 1, &image3dView[i]);
 
 			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 			vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
@@ -813,15 +813,15 @@ void BrushIsoSurfRenderer::createPipeline()
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(binding);
 
-	binding.binding = 2;								//indices buffer
+	binding.binding = 1;								//indices buffer
 	binding.descriptorCount = 1;
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(binding);
 
-	binding.binding = 3;								//data buffer
+	binding.binding = 2;								//data buffer
 	bindings.push_back(binding);
 
-	binding.binding = 4;								//densityImages
+	binding.binding = 3;								//densityImages
 	binding.descriptorCount = MAXAMTOF3DTEXTURES;
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	bindings.push_back(binding);
@@ -845,6 +845,8 @@ void BrushIsoSurfRenderer::createDescriptorSets()
 
 void BrushIsoSurfRenderer::updateDescriptorSet()
 {
+	if (!brushes.size())
+		return;
 	VkUtil::updateDescriptorSet(device, uniformBuffer, sizeof(UniformBuffer), 0, descriptorSet);
 	std::vector<VkImageLayout> layouts(image3d.size(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	//std::vector<VkSampler> samplers(image3d.size(), binaryImageSampler);

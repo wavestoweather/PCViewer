@@ -6112,7 +6112,11 @@ int main(int, char**)
 			if (ImGui::BeginMenu("Workbenches")) {
 				ImGui::MenuItem("Bubbleplot workbench", "", &enableBubbleWindow);
 				ImGui::MenuItem("3d View", "", &enable3dView);
-				ImGui::MenuItem("Iso surface workbench", "", &enableIsoSurfaceWindow);
+				if(ImGui::BeginMenu("Iso surface workbenches")) {
+					ImGui::MenuItem("Iso surface workbench", "", &enableIsoSurfaceWindow);
+					ImGui::MenuItem("Direct iso surface workbench", "", &enableBrushIsoSurfaceWindow);
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Violinplot workbenches")) {
 					ImGui::MenuItem("Violin attribute major", "", &enableAttributeViolinPlots);
 					ImGui::MenuItem("Violin drawlist major", "", &enableDrawlistViolinPlots);
@@ -8849,6 +8853,9 @@ int main(int, char**)
 			}
 
 			//TODO:: add new iso surface
+			ImGui::Text("To set the data for iso surface rendering, drag and drop a drawlist onto this window.\nTo Add a brush iso surface, darg and drop a global brush onto this window");
+			static uint32_t posIndices[3];
+			ImGui::DragInt3("Position indices(order: lat, alt, lon)", (int*)posIndices, 1, 0, pcAttributes.size());
 
 			ImGui::Separator();
 			ImGui::Text("Active iso sufaces:");
@@ -8875,6 +8882,42 @@ int main(int, char**)
 				isoSurfaceRenderer->render();
 			}
 			ImGui::Columns(1);
+
+			float pad = 10;
+			ImGui::SetCursorScreenPos(ImGui::GetWindowPos() + ImVec2{ pad,pad });
+			ImGui::Dummy(ImGui::GetWindowSize() - ImVec2{ 2 * pad,2 * pad });
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GlobalBrush")) {
+					GlobalBrush* brush = *((GlobalBrush**)payload->Data);
+
+					std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
+					for (auto& axis : brush->brushes) {
+						for (auto& m : axis.second) {
+							minMax[axis.first].push_back(m.second);
+						}
+					}
+					brushIsoSurfaceRenderer->updateBrush(brush->name, minMax);
+				}
+
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+					DrawList* dl = *((DrawList**)payload->Data);
+					DataSet* ds = nullptr;
+					for (DataSet& d : g_PcPlotDataSets) {
+						if (d.name == dl->parentDataSet) {
+							ds = &d;
+							break;
+						}
+					}
+					uint32_t w = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+					uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+					uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+					std::vector<uint32_t> densityInds(pcAttributes.size());
+					for (int i = 0; i < pcAttributes.size(); ++i) densityInds[i] = i;
+					std::vector<std::pair<float, float>> posBounds{ {pcAttributes[posIndices[0]].min,pcAttributes[posIndices[0]].max},{pcAttributes[posIndices[1]].min,pcAttributes[posIndices[1]].max}, {pcAttributes[posIndices[2]].min,pcAttributes[posIndices[2]].max} };
+					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, posBounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size());
+				}
+				ImGui::EndDragDropTarget();
+			}
 			ImGui::End();
 		}
 		//end of brush iso surface window -----------------------------------------------------------------------
@@ -9476,7 +9519,7 @@ int main(int, char**)
 				//currVP = nullptr;
 			}
 
-			ImGui::End();
+			ImGui::End(); 
 		}
 
 		//begin of violin plots drawlist major --------------------------------------------------------------------------
@@ -10309,6 +10352,7 @@ int main(int, char**)
 #ifdef BUBBLEVIEW
 		delete bubblePlotter;
 #endif
+		delete brushIsoSurfaceRenderer;
 		delete isoSurfaceRenderer;
 		delete settingsManager;
 		delete gpuBrusher;
