@@ -79,11 +79,12 @@ public:
 	float fastFlyMultiplier;
 	float rotationSpeed;
 	float isoValue = .5f;
+	float gridLineWidth = .005f;
 	glm::vec3 lightDir;
 	VkClearValue imageBackground;
 private:
 	struct UniformBuffer {
-		glm::vec3 camPos;				//cameraPosition in model space
+		glm::vec4 camPos;				//cameraPosition in model space
 		alignas(16) glm::vec3 faces;	//face positions for intersection tests
 		alignas(16) glm::vec3 lightDir;
 		alignas(16) glm::mat4 mvp;		//modelViewProjection Matrix

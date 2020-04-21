@@ -212,7 +212,9 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	uint32_t required3dImages = densityAttributes.size();
 
 	//destroying old resources
+	bool imagesUpdated = false;
 	if (image3dExtent[0] != width || image3dExtent[1] != height || image3dExtent[2] != depth) {
+		imagesUpdated = true;
 		if (image3dMemory) {
 			vkFreeMemory(device, image3dMemory, nullptr);
 		}
@@ -337,6 +339,11 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
 	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
+	if (!imagesUpdated) {
+		for (int i = 0; i < required3dImages; ++i) {
+			VkUtil::transitionImageLayout(computeCommands, image3d[i], VK_FORMAT_R16_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		}
+	}
 	
 	vkCmdBindPipeline(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCommands, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descSet, 0, { 0 });
@@ -381,10 +388,10 @@ void BrushIsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float 
 {
 	//first do the rotation, as the user has a more inert feeling when the fly direction matches the view direction instantly
 	if (input.mouseDeltaX) {
-		cameraRot.y -= rotationSpeed * input.mouseDeltaX * deltaT;
+		cameraRot.y -= rotationSpeed * input.mouseDeltaX * .02f;
 	}
 	if (input.mouseDeltaY) {
-		cameraRot.x -= rotationSpeed * input.mouseDeltaY * deltaT;
+		cameraRot.x -= rotationSpeed * input.mouseDeltaY * .02f;
 	}
 
 	glm::mat4 rot = glm::eulerAngleYX(cameraRot.y, cameraRot.x);
@@ -414,12 +421,12 @@ void BrushIsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float 
 
 bool BrushIsoSurfRenderer::updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
 {
-	if (brushes.find(name) == brushes.end()) return false;
-
+	if (brushes.find(name) == brushes.end()) brushColors[name] = new float[4]{ 1,0,0,1 };
 	brushes[name] = minMax;
 	
 	updateBrushBuffer();
 	updateDescriptorSet();
+	updateCommandBuffer();
 	render();
 
 	return true;
@@ -432,7 +439,7 @@ bool BrushIsoSurfRenderer::deleteBrush(std::string& name)
 
 void BrushIsoSurfRenderer::render()
 {
-	if (!drawlistBrushes.size())
+	if (brushes.empty() || image3d.empty())
 		return;
 
 	VkResult err;
@@ -478,6 +485,8 @@ void BrushIsoSurfRenderer::render()
 	
 	BrushInfos* brushInfos = (BrushInfos*)new char[brushByteSize];
 	brushInfos->amtOfAxis = gpuData.size();
+	brushInfos->shade = shade;
+	brushInfos->stepSize = stepSize;
 	float* brushI = (float*)(brushInfos + 1);
 	uint32_t curOffset = gpuData.size();		//the first offset is for axis 1, which is the size of the axis
 	for (int axis = 0; axis < gpuData.size(); ++axis) {
@@ -856,7 +865,7 @@ void BrushIsoSurfRenderer::updateDescriptorSet()
 
 void BrushIsoSurfRenderer::updateBrushBuffer()
 {
-	if (drawlistBrushes.empty()) return;
+	if (brushes.empty()) return;
 
 	//converting the map of brushes to the graphics data structure
 	std::vector<std::vector<std::vector<std::pair<float, float>>>> gpuData;

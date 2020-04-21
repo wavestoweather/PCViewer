@@ -1045,7 +1045,7 @@ void IsoSurfRenderer::render()
 	glm::mat4 view = glm::transpose(glm::eulerAngleY(cameraRot.y) * glm::eulerAngleX(cameraRot.x)) * glm::translate(glm::mat4(1.0), -cameraPos);;
 	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
 	ubo.mvp = ubo.mvp * view *scale;
-	ubo.camPos = glm::inverse(scale) * glm::vec4(cameraPos,1);
+	ubo.camPos = glm::inverse(scale) * glm::vec4(cameraPos, gridLineWidth);
 
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
 	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;

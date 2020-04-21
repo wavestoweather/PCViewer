@@ -8518,6 +8518,9 @@ int main(int, char**)
 					if (ImGui::SliderFloat("Ray march step size", &isoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {
 						isoSurfaceRenderer->render();
 					}
+					if (ImGui::SliderFloat("Wireframe width", &isoSurfaceRenderer->gridLineWidth, 0, .1f)) {
+						isoSurfaceRenderer->render();
+					}
 					static float stdDiv = 1;
 					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, 0, 10)) {
 						isoSurfaceRenderer->setBinarySmoothing(stdDiv);
@@ -8854,7 +8857,7 @@ int main(int, char**)
 
 			//TODO:: add new iso surface
 			ImGui::Text("To set the data for iso surface rendering, drag and drop a drawlist onto this window.\nTo Add a brush iso surface, darg and drop a global brush onto this window");
-			static uint32_t posIndices[3];
+			static uint32_t posIndices[3]{ 1,0,2 };
 			ImGui::DragInt3("Position indices(order: lat, alt, lon)", (int*)posIndices, 1, 0, pcAttributes.size());
 
 			ImGui::Separator();

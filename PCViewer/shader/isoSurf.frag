@@ -2,7 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 layout(binding = 0) uniform UniformBufferObject{
-	vec3 camPos;
+	vec4 camPos;			//the camPos also includes if grid lines shall be drawn(the float indicates the width of the lines)
 	vec3 cubeSides;
 	vec3 lightDir;
 	mat4 mvp;
@@ -30,18 +30,18 @@ float rand(vec3 co)
 }
 
 void main() {
-	vec3 d = endPos-ubo.camPos;
+	vec3 d = endPos-ubo.camPos.xyz;
 	vec3 dinv = 1/d;
 
 	//calculating the starting position
 	vec3 t;
-	t = (ubo.cubeSides-ubo.camPos)*dinv;
+	t = (ubo.cubeSides-ubo.camPos.xyz)*dinv;
 	t.x = (t.x>.999999)?-1.0/0:t.x;
 	t.y = (t.y>.999999)?-1.0/0:t.y;
 	t.z = (t.z>.999999)?-1.0/0:t.z;
 	
 	float tmax = max(t.x,max(t.y,t.z));
-	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1.0)*d;
+	vec3 startPoint = ubo.camPos.xyz+clamp(tmax,.05,1.0)*d;
 
 	const float alphaStop = .98f;
 	float stepsize = info.stepSize;			//.0013f;
@@ -58,6 +58,35 @@ void main() {
 	d = normalize(d);
 
 	startPoint += .5f;
+
+	//check for grid lines
+	if(bool(ubo.camPos.w)){
+		float distanceX = min(startPoint.x,1-startPoint.x);
+		float distanceY = min(startPoint.y,1-startPoint.y);
+		float distanceZ = min(startPoint.z,1-startPoint.z);
+		float sorted[3] = float[3](-1,-1,-1);
+		int xCount = 0;
+		if(distanceX>distanceY) xCount++;
+		if(distanceX>distanceZ) xCount++;
+		int yCount = 0;
+		if(distanceY>=distanceX) yCount++;
+		if(distanceY>distanceZ) yCount++;
+		int zCount = 0;
+		if(distanceZ>=distanceX) zCount++;
+		if(distanceZ>=distanceY) zCount++;
+		sorted[xCount] = distanceX;
+		sorted[yCount] = distanceY;
+		sorted[zCount] = distanceZ;
+
+		float radius = (sorted[0] * sorted[0] + sorted[1] * sorted[1]) / ( ubo.camPos.w * ubo.camPos.w);
+		if(radius <= 1)		//blend in grid line
+		{
+			vec4 brushColor = vec4(1,1,1,1 - radius);
+			outColor.xyz += (1-outColor.w) * brushColor.w * brushColor.xyz;
+			outColor.w += (1-outColor.w) * brushColor.w;
+			if(outColor.w>alphaStop) return;
+		}
+	}
 
 	vec3 step = d * stepsize;
 	//insert random displacement to startpositon (prevents bad visual effects)
@@ -138,6 +167,36 @@ void main() {
 			}
 			outColor.xyz += (1-outColor.w) * brushColor.w * brushColor.xyz;
 			outColor.w += (1-outColor.w) * brushColor.w;
+		}
+	}
+
+	//check for grid lines
+	startPoint = endPos +.5f;
+	if(bool(ubo.camPos.w)){
+		float distanceX = min(startPoint.x,1-startPoint.x);
+		float distanceY = min(startPoint.y,1-startPoint.y);
+		float distanceZ = min(startPoint.z,1-startPoint.z);
+		float sorted[3] = float[3](-1,-1,-1);
+		int xCount = 0;
+		if(distanceX>distanceY) xCount++;
+		if(distanceX>distanceZ) xCount++;
+		int yCount = 0;
+		if(distanceY>=distanceX) yCount++;
+		if(distanceY>distanceZ) yCount++;
+		int zCount = 0;
+		if(distanceZ>=distanceX) zCount++;
+		if(distanceZ>=distanceY) zCount++;
+		sorted[xCount] = distanceX;
+		sorted[yCount] = distanceY;
+		sorted[zCount] = distanceZ;
+
+		float radius = (sorted[0] * sorted[0] + sorted[1] * sorted[1]) / ( ubo.camPos.w * ubo.camPos.w);
+		if(radius <= 1)		//blend in grid line
+		{
+			vec4 brushColor = vec4(1,1,1,1 - radius);
+			outColor.xyz += (1-outColor.w) * brushColor.w * brushColor.xyz;
+			outColor.w += (1-outColor.w) * brushColor.w;
+			if(outColor.w>alphaStop) return;
 		}
 	}
 
