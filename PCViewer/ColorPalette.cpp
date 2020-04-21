@@ -270,8 +270,26 @@ ColorPaletteManager::~ColorPaletteManager()
 
 ColorPaletteManager::ColorPaletteManager(const ColorPaletteManager &obj)
 {
-	colorPalette = new ColorPalette();
-	*colorPalette = *obj.colorPalette;
+	auto currColorPalette = new ColorPalette(this);
+
+    this->useColorPalette = obj.useColorPalette;
+    this->chosenCategoryNr = obj.chosenCategoryNr;
+    this->chosenPaletteNr = obj.chosenPaletteNr;
+    this->chosenNrColorNr = obj.chosenNrColorNr;
+    this->chosenAutoColorPaletteLine = obj.chosenAutoColorPaletteLine;
+    this->chosenAutoColorPaletteFill = obj.chosenAutoColorPaletteFill;
+    this->skipFirstAttributes = obj.skipFirstAttributes;
+    this->alphaLines = obj.alphaLines;
+    this->alphaFill = obj.alphaFill;
+    this->applyToFillColor = obj.applyToFillColor;
+    this->applyToLineColor = obj.applyToLineColor;
+    this->backupLineColor = obj.backupLineColor;
+    this->backupFillColor = obj.backupFillColor;
+    this->bvaluesChanged = obj.bvaluesChanged;
+    this->bReverseColorOrder = obj.bReverseColorOrder;
+
+    colorPalette = currColorPalette;
+    *colorPalette = *obj.colorPalette;
 }
 
 void ColorPaletteManager::setChosenCategoryNr(unsigned int i)

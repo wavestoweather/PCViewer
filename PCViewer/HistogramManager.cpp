@@ -333,7 +333,10 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active, bool co
 	{
 		for (unsigned int j = 0; j < v.size(); ++j)
 		{
-			for (unsigned int k = 0; k < nrBins; ++k)
+			// The number of bins should be the same in order for this to work properly. However, there might be cases when the bins are not initialized completly yet,
+			// so prevent the program from crashing. 
+			int currNrBins = std::min(bins->at(v[i]).size(), bins->at(v[j]).size());
+			for (unsigned int k = 0; k < currNrBins; ++k)
 				{
 					// The overlap is the minimum of the bin size between the two bars.
 					histOverlaps[v[i]][v[j]] += std::fmin(bins->at(v[i])[k], bins->at(v[j])[k]);

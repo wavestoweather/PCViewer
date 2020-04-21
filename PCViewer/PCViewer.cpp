@@ -414,7 +414,15 @@ struct DrawListRef {
 	bool activated;
 };
 
-struct ViolinPlot {
+typedef struct ViolinPlot {
+	ViolinPlot() {
+		colorPaletteManager = new ColorPaletteManager();
+	}
+	ViolinPlot(const ViolinPlot& obj) {
+		colorPaletteManager = new ColorPaletteManager(*(obj.colorPaletteManager));
+	}
+	~ViolinPlot() { delete colorPaletteManager; }
+
 	std::vector<std::string> attributeNames;		//attribute names are used to identify whether a dataset can be added to this violin plot
 	std::vector<DrawListRef> drawLists;				//the name of the drawlists which are shown in the violin plot
 	std::vector<ViolinPlacement> violinPlacements;	//the placement of each histogram (defined per histogram)
@@ -427,10 +435,21 @@ struct ViolinPlot {
 	std::vector<float> maxValues;					//max value of all histogramms
 
     ColorPaletteManager *colorPaletteManager = new ColorPaletteManager();
-	~ViolinPlot() {delete colorPaletteManager;}
-};
+
+
+} ViolinPlot;
 
 struct ViolinDrawlistPlot {
+	ViolinDrawlistPlot() {
+		colorPaletteManager = new ColorPaletteManager();
+	}
+	ViolinDrawlistPlot(const ViolinDrawlistPlot& obj) {
+		colorPaletteManager = new ColorPaletteManager(*(obj.colorPaletteManager));
+	}
+	~ViolinDrawlistPlot() {
+		delete colorPaletteManager;
+	}
+
 	std::vector<std::string> attributeNames;
 	std::vector<float> attributeScalings;
 	std::vector<ViolinPlacement> attributePlacements;
@@ -445,9 +464,8 @@ struct ViolinDrawlistPlot {
 	float maxGlobalValue;
 	std::vector<float> maxValues;
 
-    ColorPaletteManager *colorPaletteManager = new ColorPaletteManager();
+	ColorPaletteManager* colorPaletteManager;
 
-	~ViolinDrawlistPlot() { delete colorPaletteManager; }
 //    std::unique_ptr<ColorPaletteManager> colorPaletteManager
 //        = ColorPaletteManager();
 };
@@ -750,8 +768,8 @@ static bool isoSurfaceRegularGrid = true;
 static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
 
 //variables for fractions
-static int maxFractionDepth = 20;
-static int outlierRank = 1;					//min rank(amount ofdatapoints in a kd tree node) needed to not be an outlier node
+static int maxFractionDepth = 24;
+static int outlierRank = 11;					//min rank(amount ofdatapoints in a kd tree node) needed to not be an outlier node
 static int boundsBehaviour = 2;
 static int splitBehaviour = 1;
 static int maxRenderDepth = 13;
@@ -5345,17 +5363,17 @@ static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist,
 	
 	for (unsigned int k = 0; k < hist.area.size(); ++k) {
 
-		float deltaBin = (hist.ranges[k].second - hist.ranges[k].first) / hist.bins.size();
+		float deltaBin = (hist.ranges[k].second - hist.ranges[k].first) / hist.bins[k].size();
 
 		// casting to int works as floor, since startBin is always positive. 
 		int startBin = std::max(0,(int)((violinMinMax[k].first - hist.ranges[k].first) / deltaBin));
-		int endBin = std::min((int)hist.bins.size()-1, (int)(std::ceil((violinMinMax[k].second - hist.ranges[k].first) / deltaBin) +0.0000001) );
+		int endBin = std::min((int)hist.bins[k].size()-1, (int)(std::ceil((violinMinMax[k].second - hist.ranges[k].first) / deltaBin) +0.0000001) );
 		hist.areaShown[k] = 0;
-		for (unsigned int i = startBin; i <= endBin; ++i) {
+		for (unsigned int i = startBin + int(histogramManager->ignoreZeroBins); i <= endBin; ++i) {
 			// If the minRange of the violin is within the current bin, it is used.
 			hist.areaShown[k] += hist.bins[k][i];
 		}
-		hist.areaShown[k] /= (endBin - startBin + 1);
+		hist.areaShown[k] /= (endBin - startBin + 1* int(histogramManager->ignoreZeroBins));
 
 
 		float a = 0;
@@ -10288,12 +10306,13 @@ int main(int, char**)
 					ImGui::EndDragDropTarget();
 				}
 			}
-
+			
 			//adding new Plots
 			ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - plusWidth / 2);
 			if (ImGui::Button("+", ImVec2(plusWidth, 0))) {
 				//ViolinDrawlistPlot *currVPDLP = new ViolinDrawlistPlot();
 				violinDrawlistPlots.emplace_back();//*currVPDLP);
+				//currVPDLP = nullptr;
 				//operator delete(currVPDLP);
 				violinDrawlistPlots.back().matrixSize = { 1,5 };
 				violinDrawlistPlots.back().drawListOrder = std::vector<uint32_t>(5, 0xffffffff);
