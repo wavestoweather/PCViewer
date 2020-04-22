@@ -148,9 +148,6 @@ BrushIsoSurfRenderer::~BrushIsoSurfRenderer()
 	if (brushMemory) {
 		vkFreeMemory(device, brushMemory, nullptr);
 	}
-	for (auto& col : brushColors) {
-		delete[] col.second;
-	}
 }
 
 void BrushIsoSurfRenderer::resize(uint32_t width, uint32_t height)
@@ -205,7 +202,7 @@ void BrushIsoSurfRenderer::resizeBox(float width, float height, float depth)
 	render();
 }
 
-bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float, float>>& posMinMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices)
+bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float, float>>& posMinMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid)
 {
 	VkResult err;
 
@@ -317,6 +314,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	infoBytes->yMax = posMinMax[1].second;
 	infoBytes->zMin = posMinMax[2].first;
 	infoBytes->zMax = posMinMax[2].second;
+	infoBytes->padding = regularGrid;
 	int* inf = (int*)(infoBytes + 1);
 	for (int i = 0; i < densityAttributes.size(); ++i) {
 		inf[i] = densityAttributes[i];
@@ -421,7 +419,12 @@ void BrushIsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float 
 
 bool BrushIsoSurfRenderer::updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
 {
-	if (brushes.find(name) == brushes.end()) brushColors[name] = new float[4]{ 1,0,0,1 };
+	if (brushes.find(name) == brushes.end()) {
+		brushColors[name] = std::array<float, 4>({ 1.0f, 0.0f, 0.0f, 1.0f });
+		for (int i = 0; i < minMax.size(); ++i) {
+			firstBrushColors.push_back({ 1.0f,0.0f,0.0f,1.0f });
+		}
+	}
 	brushes[name] = minMax;
 	
 	updateBrushBuffer();
@@ -478,7 +481,7 @@ void BrushIsoSurfRenderer::render()
 		}
 		++bId;
 	}
-	std::vector<float*> colors;
+	std::vector<std::array<float, 4>> colors;
 	for (auto& col : brushColors) {
 		colors.push_back(col.second);
 	}
@@ -498,10 +501,18 @@ void BrushIsoSurfRenderer::render()
 			brushI[brushOffset + brush] = curOffset;
 			brushI[curOffset++] = gpuData[axis][brush].bIndex;
 			brushI[curOffset++] = gpuData[axis][brush].minMax.size();
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][0];
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][1];
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][2];
-			brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][3];
+			if (brush == 0) {
+				brushI[curOffset++] = firstBrushColors[axis].at(0);
+				brushI[curOffset++] = firstBrushColors[axis].at(1);
+				brushI[curOffset++] = firstBrushColors[axis].at(2);
+				brushI[curOffset++] = firstBrushColors[axis].at(3);
+			}
+			else {
+				brushI[curOffset++] = colors[gpuData[axis][brush].bIndex].at(0);
+				brushI[curOffset++] = colors[gpuData[axis][brush].bIndex].at(1);
+				brushI[curOffset++] = colors[gpuData[axis][brush].bIndex].at(2);
+				brushI[curOffset++] = colors[gpuData[axis][brush].bIndex].at(3);
+			}
 			for (int minMax = 0; minMax < gpuData[axis][brush].minMax.size(); ++minMax) {
 				brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].first;
 				brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].second;
@@ -587,14 +598,6 @@ VkImageView BrushIsoSurfRenderer::getImageView()
 
 void BrushIsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 {
-	if (binaryIndex >= drawlistBrushes.size()) return;
-
-	uint32_t w = drawlistBrushes[binaryIndex].gridDimensions[0];
-	uint32_t h = drawlistBrushes[binaryIndex].gridDimensions[1];
-	uint32_t d = drawlistBrushes[binaryIndex].gridDimensions[2];
-	uint8_t* binaryData = new uint8_t[w * h * d];
-
-	delete[] binaryData;
 }
 
 void BrushIsoSurfRenderer::setBinarySmoothing(float stdDiv)

@@ -8828,15 +8828,7 @@ int main(int, char**)
 					if (ImGui::Checkbox("Activate shading", &brushIsoSurfaceRenderer->shade)) {
 						brushIsoSurfaceRenderer->render();
 					}
-					if (ImGui::SliderFloat("Iso value", &brushIsoSurfaceRenderer->isoValue, .01f, .99f)) {
-						brushIsoSurfaceRenderer->render();
-					}
 					if (ImGui::SliderFloat("Ray march step size", &brushIsoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {
-						brushIsoSurfaceRenderer->render();
-					}
-					static float stdDiv = 1;
-					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, 0, 10)) {
-						brushIsoSurfaceRenderer->setBinarySmoothing(stdDiv);
 						brushIsoSurfaceRenderer->render();
 					}
 					if (ImGui::DragFloat3("Ligt direction", &brushIsoSurfaceRenderer->lightDir.x)) {
@@ -8873,38 +8865,31 @@ int main(int, char**)
 				ImGui::ResetMouseDragDelta();
 			}
 
-			//TODO:: add new iso surface
 			ImGui::Text("To set the data for iso surface rendering, drag and drop a drawlist onto this window.\nTo Add a brush iso surface, darg and drop a global brush onto this window");
 			static uint32_t posIndices[3]{ 1,0,2 };
 			ImGui::DragInt3("Position indices(order: lat, alt, lon)", (int*)posIndices, 1, 0, pcAttributes.size());
 
 			ImGui::Separator();
-			ImGui::Text("Active iso sufaces:");
-			ImGui::Columns(4);
-			int index = 0;
-			int del = -1;
-			for (IsoSurfRenderer::DrawlistBrush& db : isoSurfaceRenderer->drawlistBrushes) {
-				ImGui::Text(db.drawlist.c_str());
-				ImGui::NextColumn();
-				ImGui::Text(db.brush.c_str());
-				ImGui::NextColumn();
-				if (ImGui::ColorEdit4((std::string("##col") + db.drawlist + db.brush).c_str(), (float*)&db.brushSurfaceColor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
-					isoSurfaceRenderer->render();
+			ImGui::Text("Selected drawlist: ");
+			ImGui::SameLine();
+			ImGui::Button(brushIsoSurfaceRenderer->activeDrawlist.c_str());
+			ImGui::Text("Brushes:");
+			if (brushIsoSurfaceRenderer->brushColors.size() > 1) {
+				for (auto& col : brushIsoSurfaceRenderer->brushColors) {
+					if (ImGui::ColorEdit4(col.first.c_str(), &col.second[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+						brushIsoSurfaceRenderer->render();
+					}
 				}
-				ImGui::NextColumn();
-				if (ImGui::Button(("X##" + std::to_string(index)).c_str())) {
-					del = index;
+			}
+			else if(brushIsoSurfaceRenderer->brushColors.size()){
+				for (int i = 0; i < pcAttributes.size(); ++i) {
+					if (ImGui::ColorEdit4(pcAttributes[i].name.c_str(), &brushIsoSurfaceRenderer->firstBrushColors[i][0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+						brushIsoSurfaceRenderer->render();
+					}
 				}
-				ImGui::NextColumn();
-				++index;
 			}
-			if (del != -1) {
-				isoSurfaceRenderer->deleteBinaryVolume(del);
-				isoSurfaceRenderer->render();
-			}
-			ImGui::Columns(1);
 
-			float pad = 10;
+			static float pad = 10;
 			ImGui::SetCursorScreenPos(ImGui::GetWindowPos() + ImVec2{ pad,pad });
 			ImGui::Dummy(ImGui::GetWindowSize() - ImVec2{ 2 * pad,2 * pad });
 			if (ImGui::BeginDragDropTarget()) {
@@ -8935,7 +8920,16 @@ int main(int, char**)
 					std::vector<uint32_t> densityInds(pcAttributes.size());
 					for (int i = 0; i < pcAttributes.size(); ++i) densityInds[i] = i;
 					std::vector<std::pair<float, float>> posBounds{ {pcAttributes[posIndices[0]].min,pcAttributes[posIndices[0]].max},{pcAttributes[posIndices[1]].min,pcAttributes[posIndices[1]].max}, {pcAttributes[posIndices[2]].min,pcAttributes[posIndices[2]].max} };
-					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, posBounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size());
+					if (isoSurfaceRegularGrid) {
+						posBounds[0].first = SpacialData::rlat[0];
+						posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
+						posBounds[1].first = SpacialData::altitude[0];
+						posBounds[1].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
+						posBounds[2].first = SpacialData::rlon[0];
+						posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
+					}
+					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, posBounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),isoSurfaceRegularGrid);
+					brushIsoSurfaceRenderer->activeDrawlist = dl->name;
 				}
 				ImGui::EndDragDropTarget();
 			}

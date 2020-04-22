@@ -17,6 +17,8 @@ The iso surfaces are set by brushes.
 #include <limits.h>
 #include <string.h>
 #include <map>
+#include <vector>
+#include <array>
 #include <numeric>
 #include <fstream>
 
@@ -54,7 +56,7 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	bool update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float,float>>& posMinMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices);
+	bool update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float,float>>& posMinMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid);
 	void getPosIndices(int index, uint32_t* ind);
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
 	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a brush.
@@ -68,7 +70,7 @@ public:
 	void setBinarySmoothing(float stdDiv);
 	void imageBackGroundUpdated();
 
-	std::vector<DrawlistBrush> drawlistBrushes;
+	std::string activeDrawlist;
 	bool shade;
 	float stepSize;
 	float flySpeed;
@@ -77,6 +79,8 @@ public:
 	float isoValue = .5f;
 	glm::vec3 lightDir;
 	VkClearValue imageBackground;
+	std::vector<std::array<float, 4>> firstBrushColors;													//the first brush has for each attribute one color
+	std::map<std::string, std::array<float, 4>> brushColors;											//each brush has its own colors
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;				//cameraPosition in model space
@@ -210,7 +214,6 @@ private:
 	glm::vec2 cameraRot;
 	//variables for the brushes
 	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
-	std::map<std::string, float*> brushColors;												//each brush has its own colors
 	std::vector<float*> attributeColors;													//if only one brush is active every attribute can be assigned a different color
 
 	float smoothStdDiv = 1;

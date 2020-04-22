@@ -95,10 +95,10 @@ void main() {
 	
 						//this are all the things i have to set to test if a surface has to be drawn
 						brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
-						brushOutside[brushIndex] = brushOutside[brushIndex] && (density>=mi&&density<=ma || stepInOut);//((uint((density<mi||density>ma)&&!brushBorder[brushIndex]) << axis) ^ 0xffffffff);
-						brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
-	
-						if(stepInOut){		//get the normal for shading
+						brushOutside[brushIndex] = brushOutside[brushIndex] || ((density<mi||density>ma) && !stepInOut);//((uint((density<mi||density>ma)&&!brushBorder[brushIndex]) << axis) ^ 0xffffffff);
+						if(stepInOut){
+							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
+							//get the normal for shading
 							float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 4,0,0)).x, 
 								yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 4,0)).x,
 								zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
