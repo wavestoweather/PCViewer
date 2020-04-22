@@ -421,7 +421,7 @@ bool BrushIsoSurfRenderer::updateBrush(std::string& name, std::vector<std::vecto
 	if (brushes.find(name) == brushes.end()) {
 		brushColors[name] = std::array<float, 4>({ 1.0f, 0.0f, 0.0f, 1.0f });
 		for (int i = 0; i < minMax.size(); ++i) {
-			firstBrushColors.push_back({ 1.0f,0.0f,0.0f,1.0f });
+			firstBrushColors.push_back({ 1.0f,1.0f,1.0f,.5f });
 		}
 	}
 	brushes[name] = minMax;

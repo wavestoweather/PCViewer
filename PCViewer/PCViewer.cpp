@@ -765,7 +765,7 @@ static IsoSurfRenderer* isoSurfaceRenderer;
 static BrushIsoSurfRenderer* brushIsoSurfaceRenderer;
 static bool coupleIsoSurfaceRenderer = true;
 static bool coupleBrushIsoSurfaceRenderer = true;
-static bool isoSurfaceRegularGrid = true;
+static bool isoSurfaceRegularGrid = false;
 static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
 
 //variables for fractions
@@ -3859,6 +3859,129 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 	}
 }
 
+
+//ToDo: To speed up the programm, this function could be called only once per renderloop.
+static void getLocalBrushLimits(DrawList* dl, std::vector<std::pair<float, float>>& localMinMax) {
+	//std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+
+	if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+		for (int k = 0; k < pcAttributes.size(); ++k) {
+			for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
+				if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
+				if (dl->brushes[k][mi].minMax.second > localMinMax[k].second) localMinMax[k].second = dl->brushes[k][mi].minMax.second;
+			}
+		}
+		for (int k = 0; k < pcAttributes.size(); ++k) {
+			if (localMinMax[k].first == std::numeric_limits<float>().max()) {
+				localMinMax[k].first = pcAttributes[k].min;
+				localMinMax[k].second = pcAttributes[k].max;
+			}
+		}
+	}
+	//return localMinMax;
+}
+
+
+//ToDo: To speed up the programm, this function could be called only once per renderloop.
+static void getGlobalBrushLimits(std::vector<std::pair<float, float>>& globalMinMax) {
+	//std::vector<std::pair<float, float>> globalMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+
+	if (violinYScale == ViolinYScaleGlobalBrush || violinYScale == ViolinYScaleBrushes) {
+		for (auto& brush : globalBrushes) {
+			if (!brush.active) { continue; }
+			for (auto& br : brush.brushes) {
+				for (auto& minMax : br.second) {
+					if (minMax.second.first < globalMinMax[br.first].first) globalMinMax[br.first].first = minMax.second.first;
+					if (minMax.second.second > globalMinMax[br.first].second) globalMinMax[br.first].second = minMax.second.second;
+				}
+			}
+		}
+		for (int in = 0; in < globalMinMax.size(); ++in) {
+			if (globalMinMax[in].first == std::numeric_limits<float>().max()) {
+				globalMinMax[in].first = pcAttributes[in].min;
+				globalMinMax[in].second = pcAttributes[in].max;
+			}
+		}
+	}
+	//return globalMinMax;
+}
+
+// Call this function for every attribute independently. Since the order is determined using the first drawlist in the violine plots,
+// this function only needs one drawlist.
+// Returns a pair of histogram Min and Max.
+static void getyScaleDL(unsigned int& dlNr,
+	ViolinDrawlistPlot& violinDrawlistPlot,
+	std::vector<std::pair<float, float>>& violinMinMax
+
+)
+{
+	//std::vector<std::pair<float, float>> violinMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+
+	if (violinYScale == ViolinYScaleStandard)
+	{
+		for (int k = 0; k < pcAttributes.size(); ++k) {
+			// Find the attribute in the PC plot to determine min and max values.
+			std::string currAttributeName = violinDrawlistPlot.attributeNames[k];
+			auto it = std::find_if(pcAttributes.begin(), pcAttributes.end(),
+				[&violinDrawlistPlot, k](const Attribute& currObj) {return currObj.name == violinDrawlistPlot.attributeNames[k];  });
+
+			violinMinMax[k] = std::pair(it->min, it->max);
+
+		}
+		return;
+		//return violinMinMax;
+	}
+
+
+	DrawList* dl = nullptr;
+	if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+		for (DrawList& draw : g_PcPlotDrawLists) {
+			if (draw.name == violinDrawlistPlot.drawLists[dlNr]) {
+				dl = &draw;
+			}
+		}
+	}
+
+	switch (violinYScale) {
+	case ViolinYScaleLocalBrush:
+		getLocalBrushLimits(dl, violinMinMax);
+		return;
+		break;
+	case ViolinYScaleGlobalBrush:
+		getGlobalBrushLimits(violinMinMax);
+		return;
+		break;
+	case ViolinYScaleBrushes:
+		getGlobalBrushLimits(violinMinMax);
+		getLocalBrushLimits(dl, violinMinMax);
+		return;
+		break;
+	}
+}
+
+static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations) {
+	if (histogramManager->adaptMinMaxToBrush) {
+		std::vector<std::pair<float, float>> violinMinMax(minMax.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+
+		unsigned int currDLNr = 0;
+		getyScaleDL(currDLNr, violinDrawlistPlots[0], violinMinMax);
+
+		float minimalRelativeRange = 0.1;
+		// Only use the new range if it is large enough to be computationally stable.
+		for (int i = 0; i < minMax.size(); ++i) {
+			if ((violinMinMax[i].second - violinMinMax[i].first) > minimalRelativeRange * (minMax[i].second - minMax[i].first)) {
+				minMax[i] = violinMinMax[i];
+			}
+			else {
+				minMax[i].first = violinMinMax[i].first;
+				minMax[i].second = minMax[i].first + minimalRelativeRange * (minMax[i].second - minMax[i].first);
+			}
+		}
+	}
+
+	histogramManager->computeHistogramm(name, minMax, data, amtOfData, indices, amtOfIndices, indicesActivations);
+}
+
 static void updateDrawListIndexBuffer(DrawList& dl) {
 	std::vector<std::pair<int, int>> order;
 	for (int i = 0; i < pcAttributes.size(); i++) {
@@ -4693,7 +4816,8 @@ static bool updateActiveIndices(DrawList& dl) {
 				break;
 			}
 		}
-		histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+		exeComputeHistogram(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+		//histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
 		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
 		for (int i = 0; i < violinDrawlistPlots.size(); ++i) {
 			bool contains = false;
@@ -5255,110 +5379,6 @@ static void includeColorbrewerToViolinPlot(ColorPaletteManager *cpm, std::vector
     ImGui::Columns(previousNrOfColumns);
 
 }
-
-
-
-
-//ToDo: To speed up the programm, this function could be called only once per renderloop.
-static void getLocalBrushLimits(DrawList* dl, std::vector<std::pair<float, float>>& localMinMax) {
-	//std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-
-	if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
-		for (int k = 0; k < pcAttributes.size(); ++k) {
-			for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
-				if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
-				if (dl->brushes[k][mi].minMax.second > localMinMax[k].second) localMinMax[k].second = dl->brushes[k][mi].minMax.second;
-			}
-		}
-		for (int k = 0; k < pcAttributes.size(); ++k) {
-			if (localMinMax[k].first == std::numeric_limits<float>().max()) {
-				localMinMax[k].first = pcAttributes[k].min;
-				localMinMax[k].second = pcAttributes[k].max;
-			}
-		}
-	}
-	//return localMinMax;
-}
-
-
-//ToDo: To speed up the programm, this function could be called only once per renderloop.
-static void getGlobalBrushLimits(std::vector<std::pair<float, float>> &globalMinMax) {
-	//std::vector<std::pair<float, float>> globalMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-
-	if (violinYScale == ViolinYScaleGlobalBrush || violinYScale == ViolinYScaleBrushes) {
-		for (auto& brush : globalBrushes) {
-			if (!brush.active) { continue; }
-			for (auto& br : brush.brushes) {
-				for (auto& minMax : br.second) {
-					if (minMax.second.first < globalMinMax[br.first].first) globalMinMax[br.first].first = minMax.second.first;
-					if (minMax.second.second > globalMinMax[br.first].second) globalMinMax[br.first].second = minMax.second.second;
-				}
-			}
-		}
-		for (int in = 0; in < globalMinMax.size(); ++in) {
-			if (globalMinMax[in].first == std::numeric_limits<float>().max()) {
-				globalMinMax[in].first = pcAttributes[in].min;
-				globalMinMax[in].second = pcAttributes[in].max;
-			}
-		}
-	}
-	//return globalMinMax;
-}
-
-// Call this function for every attribute independently. Since the order is determined using the first drawlist in the violine plots,
-// this function only needs one drawlist.
-// Returns a pair of histogram Min and Max.
-static void getyScaleDL(unsigned int& dlNr, 
-						ViolinDrawlistPlot& violinDrawlistPlot,
-						std::vector<std::pair<float, float>> &violinMinMax
-	
-	)
-{
-	//std::vector<std::pair<float, float>> violinMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-
-	if (violinYScale == ViolinYScaleStandard)
-	{
-		for (int k = 0; k < pcAttributes.size(); ++k) {
-			// Find the attribute in the PC plot to determine min and max values.
-			std::string currAttributeName = violinDrawlistPlot.attributeNames[k];
-			auto it = std::find_if(pcAttributes.begin(), pcAttributes.end(),
-				[&violinDrawlistPlot,k](const Attribute& currObj) {return currObj.name == violinDrawlistPlot.attributeNames[k];  });
-
-			violinMinMax[k] = std::pair(it->min, it->max);
-
-		}
-		return;
-		//return violinMinMax;
-	}
-
-
-	DrawList* dl = nullptr;
-	if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
-		for (DrawList& draw : g_PcPlotDrawLists) {
-			if (draw.name == violinDrawlistPlot.drawLists[dlNr]) {
-				dl = &draw;
-			}
-		}
-	}
-
-	switch (violinYScale) {
-	case ViolinYScaleLocalBrush:
-		getLocalBrushLimits(dl, violinMinMax);
-		return;
-		break;
-	case ViolinYScaleGlobalBrush:
-		getGlobalBrushLimits(violinMinMax);
-		return;
-		break;
-	case ViolinYScaleBrushes:
-		getGlobalBrushLimits(violinMinMax);
-		getLocalBrushLimits(dl, violinMinMax);
-		return;
-		break;
-	}
-}
-
-
 
 
 static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist, 
@@ -8999,7 +9019,8 @@ int main(int, char**)
 										break;
 									}
 								}
-								histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+								exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+								//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 								std::vector<std::pair<uint32_t, float>> area;
 								for (int j = 0; j < hist.maxCount.size(); ++j) {
@@ -9169,7 +9190,8 @@ int main(int, char**)
 								if (ds.name == k->parentDataSet)
 									parent = &ds;
 							}
-							histogramManager->computeHistogramm(k->name, minMax, k->buffer, parent->data.size(), k->indicesBuffer, k->indices.size(), k->activeIndicesBufferView);
+							exeComputeHistogram(k->name, minMax, k->buffer, parent->data.size(), k->indicesBuffer, k->indices.size(), k->activeIndicesBufferView);
+							//histogramManager->computeHistogramm(k->name, minMax, k->buffer, parent->data.size(), k->indicesBuffer, k->indices.size(), k->activeIndicesBufferView);
 							bool datasetIncluded = false;
 							for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
 								if (k->name == violinAttributePlots[i].drawLists[j].name) {
@@ -9580,7 +9602,8 @@ int main(int, char**)
 										break;
 									}
 								}
-								histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+								exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+								//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 								std::vector<std::pair<uint32_t, float>> area;
 								for (int j = 0; j < hist.maxCount.size(); ++j) {
@@ -9625,6 +9648,8 @@ int main(int, char**)
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
 					}
 					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
+
+					ImGui::Columns(2);
 					if (ImGui::BeginCombo("Y Scale", violinYs[violinYScale])) {
 						for (int v = 0; v < 4; ++v) {
 							if (ImGui::MenuItem(violinYs[v])) {
@@ -9633,6 +9658,13 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
+					ImGui::NextColumn();
+					if (ImGui::Checkbox("Fit bins for selected range", &histogramManager->adaptMinMaxToBrush)) {
+						//std::vector<std::pair<float, float>> violinMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+						//unsigned int currDLNr = 0;
+						//getyScaleDL(currDLNr, violinDrawlistPlots[0], violinMinMax);
+					}
+
 					ImGui::Columns(3);
 					ImGui::Checkbox("Overlay lines", &violinPlotOverlayLines);
 					ImGui::NextColumn();
@@ -9934,7 +9966,8 @@ int main(int, char**)
 												break;
 											}
 										}
-										histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+										exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+										//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 										HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 										// ToDo:  Check, whether the ordering here should also be adjusted if  'renderOrderBasedOnFirstDL = true'
 										violinDrawlistPlots[i].attributeOrder.push_back({});
@@ -10276,7 +10309,8 @@ int main(int, char**)
 									break;
 								}
 							}
-							histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+							exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+							//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 							std::vector<std::pair<uint32_t, float>> area;
 							for (int j = 0; j < hist.maxCount.size(); ++j) {

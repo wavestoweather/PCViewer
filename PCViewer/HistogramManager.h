@@ -45,6 +45,8 @@ public:
 	bool ignoreZeroBins;
 	bool* logScale;
 
+	bool adaptMinMaxToBrush;
+
 private:
 	VkDevice device;
 	VkPhysicalDevice physicalDevice;
