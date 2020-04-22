@@ -260,7 +260,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		check_vk_result(err);
 		VkCommandBuffer imageCommands;
 		VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
-		VkClearColorValue clear = {std::numeric_limits<float>::min(),0,0,0 };
+		VkClearColorValue clear = {-100,0,0,0 };
 		VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
 		for (int i = 0; i < required3dImages; ++i) {
 			vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);
@@ -363,8 +363,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 
 	//uploading the density values currently manual, as there is an error in the compute pipeline ----------------------------------------------------------
 
-	if (!descriptorSet) {
-		resize(1, 1);
+	if (brushColors.empty()) {
 		return true;
 	}
 
@@ -501,7 +500,7 @@ void BrushIsoSurfRenderer::render()
 			brushI[brushOffset + brush] = curOffset;
 			brushI[curOffset++] = gpuData[axis][brush].bIndex;
 			brushI[curOffset++] = gpuData[axis][brush].minMax.size();
-			if (brush == 0) {
+			if (brush == 0 && brushColors.size() == 1) {
 				brushI[curOffset++] = firstBrushColors[axis].at(0);
 				brushI[curOffset++] = firstBrushColors[axis].at(1);
 				brushI[curOffset++] = firstBrushColors[axis].at(2);
@@ -858,7 +857,7 @@ void BrushIsoSurfRenderer::createDescriptorSets()
 
 void BrushIsoSurfRenderer::updateDescriptorSet()
 {
-	if (!brushes.size())
+	if (!brushes.size()||image3d.empty())
 		return;
 	VkUtil::updateDescriptorSet(device, uniformBuffer, sizeof(UniformBuffer), 0, descriptorSet);
 	std::vector<VkImageLayout> layouts(image3d.size(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

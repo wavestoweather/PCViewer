@@ -8920,7 +8920,7 @@ int main(int, char**)
 					std::vector<uint32_t> densityInds(pcAttributes.size());
 					for (int i = 0; i < pcAttributes.size(); ++i) densityInds[i] = i;
 					std::vector<std::pair<float, float>> posBounds{ {pcAttributes[posIndices[0]].min,pcAttributes[posIndices[0]].max},{pcAttributes[posIndices[1]].min,pcAttributes[posIndices[1]].max}, {pcAttributes[posIndices[2]].min,pcAttributes[posIndices[2]].max} };
-					if (isoSurfaceRegularGrid) {
+					if (!isoSurfaceRegularGrid) {
 						posBounds[0].first = SpacialData::rlat[0];
 						posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
 						posBounds[1].first = SpacialData::altitude[0];

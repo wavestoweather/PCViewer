@@ -64,8 +64,9 @@ void main() {
 	startPoint += step * rand(startPoint);
 
 	//for every axis/attribute here the last density is stored
-	float prevDensity[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
-	bool brushOutside[30] = bool[30](false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);//uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
+	const float pD = -100;
+	float prevDensity[30] = float[30](pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD);
+	bool allInside[30] = bool[30](true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true);//uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
 	bool brushBorder[30] = bool[30](false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
 	vec4 brushColor[30] = vec4[30](vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0),vec4(0));
 	vec3 normal;
@@ -88,21 +89,20 @@ void main() {
 						int brushIndex = int(info.brushes[brushOffset]);
 						float mi = info.brushes[minMaxOffset];
 						float ma = info.brushes[minMaxOffset + 1];
-						bool stepInOut = prevDensity[axis] < mi && density >= mi ||
-							prevDensity[axis] > mi && density <= mi ||
-							prevDensity[axis] > ma && density <= ma ||
-							prevDensity[axis] < ma && density >= ma;
+						bool nowInside = density>=mi && density<=ma;
+						bool prevInside = (prevDensity[axis]>=mi)&&(prevDensity[axis]<=ma);
+						bool stepInOut = nowInside ^^ prevInside;
 	
 						//this are all the things i have to set to test if a surface has to be drawn
 						brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
-						brushOutside[brushIndex] = brushOutside[brushIndex] || ((density<mi||density>ma) && !stepInOut);//((uint((density<mi||density>ma)&&!brushBorder[brushIndex]) << axis) ^ 0xffffffff);
+						allInside[brushIndex] = allInside[brushIndex] && (nowInside || stepInOut);//((uint((density<mi||density>ma)&&!brushBorder[brushIndex]) << axis) ^ 0xffffffff);
 						if(stepInOut){
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading
-							float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 4,0,0)).x, 
-								yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 4,0)).x,
-								zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
-							normal = -normalize(vec3(xDir - density, yDir - density, zDir - density));
+							float xDir = texture(texSampler[axis],startPoint-vec3(stepsize * 4,0,0)).x, 
+								yDir = texture(texSampler[axis],startPoint-vec3(0,stepsize * 4,0)).x,
+								zDir = texture(texSampler[axis],startPoint-vec3(0,0,stepsize * 4)).x;
+							normal = normalize(vec3(xDir - density, yDir - density, zDir - density));
 						}
 					}
 				}
@@ -110,9 +110,9 @@ void main() {
 			}
 		}
 	
-		//surface rendering
+		//surface rendering 
 		for(int i = 0;i<30;++i){
-			if(brushBorder[i] && !brushOutside[i]){
+			if(brushBorder[i] && allInside[i]){
 				if(bool(info.shade)){
 					brushColor[i].xyz = .5f * brushColor[i].xyz + max(.5 * dot(normal,normalize(-ubo.lightDir)) * brushColor[i].xyz , vec3(0)) + max(.4 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),50) * vec3(1) , vec3(0));
 				}
@@ -122,7 +122,7 @@ void main() {
 			}
 			//resetting all brush things
 			brushBorder[i] = false;
-			brushOutside[i] = false;
+			allInside[i] = true;
 		}
 	
 		startPoint += step;
