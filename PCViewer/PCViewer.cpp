@@ -764,6 +764,7 @@ static HistogramManager* histogramManager;
 static IsoSurfRenderer* isoSurfaceRenderer;
 static BrushIsoSurfRenderer* brushIsoSurfaceRenderer;
 static bool coupleIsoSurfaceRenderer = true;
+static bool coupleBrushIsoSurfaceRenderer = true;
 static bool isoSurfaceRegularGrid = true;
 static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
 
@@ -4064,6 +4065,17 @@ static void updateIsoSurface(GlobalBrush& gb) {
 	int amtOfLines = 0;
 	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
 	if ((ImGui::IsMouseDown(0) && liveBrushThreshold < amtOfLines) || !coupleIsoSurfaceRenderer) return;
+	if (coupleBrushIsoSurfaceRenderer && enableBrushIsoSurfaceWindow) {
+		if (brushIsoSurfaceRenderer->brushColors.find(gb.name) != brushIsoSurfaceRenderer->brushColors.end()) {
+			std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
+			for (auto& axis : gb.brushes) {
+				for (auto& m : axis.second) {
+					minMax[axis.first].push_back(m.second);
+				}
+			}
+			brushIsoSurfaceRenderer->updateBrush(gb.name, minMax);
+		}
+	}
 	int index = -1;
 	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
 		++index;
@@ -8813,7 +8825,7 @@ int main(int, char**)
 			int dlbExport = -1;
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
-					ImGui::Checkbox("Couple to brush", &coupleIsoSurfaceRenderer);
+					ImGui::Checkbox("Couple to brush", &coupleBrushIsoSurfaceRenderer);
 					ImGui::Checkbox("Regular grid", &isoSurfaceRegularGrid);
 					ImGui::InputInt3("Regular grid dimensions", isoSurfaceRegularGridDim);
 
