@@ -510,6 +510,7 @@ void BrushIsoSurfRenderer::render()
 	}
 	
 	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
+	delete[] brushInfos;
 
 	//checking the brush infos
 	//for (int axis = 0; axis < brushInfos->amtOfAxis; ++axis) {
