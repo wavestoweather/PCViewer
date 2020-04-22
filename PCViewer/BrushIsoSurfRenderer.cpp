@@ -260,7 +260,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		check_vk_result(err);
 		VkCommandBuffer imageCommands;
 		VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
-		VkClearColorValue clear = {-100,0,0,0 };
+		VkClearColorValue clear = {0,0,0,0 };
 		VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
 		for (int i = 0; i < required3dImages; ++i) {
 			vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);

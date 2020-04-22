@@ -99,10 +99,10 @@ void main() {
 						if(stepInOut){
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading
-							float xDir = texture(texSampler[axis],startPoint-vec3(stepsize * 4,0,0)).x, 
-								yDir = texture(texSampler[axis],startPoint-vec3(0,stepsize * 4,0)).x,
-								zDir = texture(texSampler[axis],startPoint-vec3(0,0,stepsize * 4)).x;
-							normal = normalize(vec3(xDir - density, yDir - density, zDir - density));
+							float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 4,0,0)).x, 
+								yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 4,0)).x,
+								zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
+							normal = -normalize(vec3(xDir - density, yDir - density, zDir - density));
 						}
 					}
 				}
