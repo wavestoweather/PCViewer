@@ -16,6 +16,7 @@ layout(std430 ,binding = 2) buffer brushInfos{
 	uint shade;
 	float stepSize;
 	float isoValue;
+	uint amtOfBrushes;
 	float[] brushes;
 	//float[] for the colors of the brushes:
 	//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
@@ -83,10 +84,12 @@ void main() {
 				//for every brush
 				for(int brush = 0;brush<info.brushes[axisOffset] && !br;++brush){
 					int brushOffset = int(info.brushes[axisOffset + 1 + brush]);
+					int brushIndex = 0;
+					bool anyInside = false;
 					//for every MinMax
 					for(int minMax = 0;minMax<info.brushes[brushOffset + 1] && !br;++minMax){
 						int minMaxOffset = brushOffset + 6 + 2 * minMax;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
-						int brushIndex = int(info.brushes[brushOffset]);
+						brushIndex = int(info.brushes[brushOffset]);
 						float mi = info.brushes[minMaxOffset];
 						float ma = info.brushes[minMaxOffset + 1];
 						bool nowInside = density>=mi && density<=ma;
@@ -95,7 +98,7 @@ void main() {
 	
 						//this are all the things i have to set to test if a surface has to be drawn
 						brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
-						allInside[brushIndex] = allInside[brushIndex] && (nowInside || stepInOut);//((uint((density<mi||density>ma)&&!brushBorder[brushIndex]) << axis) ^ 0xffffffff);
+						anyInside = anyInside || nowInside || stepInOut;
 						if(stepInOut){
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
@@ -106,6 +109,7 @@ void main() {
 							normal = normalize(vec3(abs(xDir-mean) - abs(density-mean), abs(yDir-mean) - abs(density-mean), abs(zDir-mean) - abs(density-mean)));
 						}
 					}
+					allInside[brushIndex] = allInside[brushIndex] && anyInside;
 				}
 				prevDensity[axis] = density;
 			}
@@ -127,6 +131,33 @@ void main() {
 		}
 	
 		startPoint += step;
+	}
+
+	//if we stepped out of the cube and a iso surface was active add surface color
+	vec4 brushCol = brushColor[0];
+	bool inside = false;
+	for(int i = 0;i<info.amtOfBrushes;++i){
+		inside = inside && allInside[i];
+	}
+
+	if(inside){
+		if(bool(info.shade)){
+			//find exact surface position for lighting
+			vec3 curPos = startPoint;
+			vec3 prevPos = startPoint - curStepsize * d;
+			curPos = .5f * prevPos + .5f * curPos;
+
+			vec3 normal;
+			if(startPoint.x>=1) normal = vec3(1,0,0);
+			if(startPoint.x<=0) normal = vec3(-1,0,0);
+			if(startPoint.y>=1) normal = vec3(0,1,0);
+			if(startPoint.y<=0) normal = vec3(0,-1,0);
+			if(startPoint.z>=1) normal = vec3(0,0,1);
+			if(startPoint.z<=0) normal = vec3(0,0,-1);
+			brushCol.xyz = .5f * brushCol.xyz + max(.5 * dot(normal,normalize(-ubo.lightDir)) * brushCol.xyz , vec3(0)) + max(.4 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),50) * vec3(1) , vec3(0));
+		}
+		outColor.xyz += (1-outColor.w) * brushCol.w * brushCol.xyz;
+		outColor.w += (1-outColor.w) * brushCol.w;
 	}
 
 	//dividing the outColor by its w component to account for multiplication with w in the output merger
