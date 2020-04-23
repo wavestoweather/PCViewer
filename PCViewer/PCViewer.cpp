@@ -736,6 +736,7 @@ static unsigned int currentBrushId = 0;
 static bool* activeBrushAttributes = nullptr;
 static bool toggleGlobalBrushes = true;
 static int brushCombination = 0;				//How global brushes should be combined. 0->OR, 1->AND
+static float brushMuFactor = .001f;				//factor to add a mu to the bounds of a brush
 
 //variables for priority rendering
 static int priorityAttribute = -1;
@@ -6108,6 +6109,7 @@ int main(int, char**)
 
 					ImGui::EndMenu();
 				}
+				ImGui::InputFloat("Mu add factor", &brushMuFactor);
 
 				ImGui::EndMenu();
 			}
@@ -7268,6 +7270,18 @@ int main(int, char**)
 								if (ImGui::GetIO().MouseClicked[1] && hover) {
 									del = ind;
 									brushDragIds.clear();
+								}
+
+								//adjusting the bounds of the brush by a mu
+								if (brushHover && ImGui::GetIO().MouseWheel) {
+									if (ImGui::GetIO().MouseWheel > 0) {
+										br.second.first += ImGui::GetIO().MouseWheel * (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * brushMuFactor;
+									}
+									else {
+										br.second.second += ImGui::GetIO().MouseWheel * (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * brushMuFactor;
+									}
+									pcPlotRender = updateAllActiveIndices();
+									updateIsoSurface(globalBrushes[selectedGlobalBrush]);
 								}
 
 								//draw tooltip on hover for min and max value
