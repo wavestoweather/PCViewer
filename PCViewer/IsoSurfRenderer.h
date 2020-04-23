@@ -69,7 +69,7 @@ public:
 	VkSampler getImageSampler();
 	VkImageView getImageView();
 	void exportBinaryCsv(std::string path, uint32_t binaryIndex);
-	void setBinarySmoothing(float stdDiv);
+	void setBinarySmoothing(float stdDiv, bool keepOnes);
 	void imageBackGroundUpdated();
 
 	std::vector<DrawlistBrush> drawlistBrushes;
@@ -160,6 +160,7 @@ private:
 	static char activeIndComputePath[];
 	static char binaryComputePath[];
 	static char binarySmoothPath[];
+	static char binaryCopyOnesPath[];
 
 	//general information about the 3d view
 	uint32_t imageHeight;
@@ -227,6 +228,10 @@ private:
 	VkPipeline			binarySmoothPipeline;
 	VkPipelineLayout	binarySmoothPipelineLayout;
 	VkDescriptorSetLayout binarySmoothDescriptorSetLayout;
+	//vulkan resources for copying one entrys into the smoothed binary images
+	VkPipeline			binaryCopyOnesPipeline;
+	VkPipelineLayout	binaryCopyOnesPipelineLayout;
+	VkDescriptorSetLayout binaryCopyOnesDescriptorSetLayout;
 
 	std::vector<glm::uvec3> posIndices;
 
@@ -239,6 +244,7 @@ private:
 	std::vector<float*> attributeColors;													//if only one brush is active every attribute can be assigned a different color
 
 	float smoothStdDiv = 1;
+	bool keepOnes = false;
 
 	uint32_t uboAlignment;
 

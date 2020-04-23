@@ -6,6 +6,7 @@ char IsoSurfRenderer::computePath[] = "shader/isoSurfComp.spv";
 char IsoSurfRenderer::activeIndComputePath[] = "shader/isoSurfActiveIndComp.spv";
 char IsoSurfRenderer::binaryComputePath[] = "shader/isoSurfBinComp.spv";
 char IsoSurfRenderer::binarySmoothPath[] = "shader/isoSurfSmooth.spv";
+char IsoSurfRenderer::binaryCopyOnesPath[] = "shader/isoSurfCopyOnes.spv";
 
 IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool)
 {
@@ -49,6 +50,9 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	activeIndComputePipeline = VK_NULL_HANDLE;
 	activeIndComputePipelineLayout = VK_NULL_HANDLE;
 	activeIndComputeDescriptorSetLayout = VK_NULL_HANDLE;
+	binaryCopyOnesDescriptorSetLayout = VK_NULL_HANDLE;
+	binaryCopyOnesPipeline = VK_NULL_HANDLE;
+	binaryCopyOnesPipelineLayout = VK_NULL_HANDLE;
 	brushByteSize = 0;
 	shade = true;
 	stepSize = .006f;
@@ -212,6 +216,15 @@ IsoSurfRenderer::~IsoSurfRenderer()
 	}
 	if (activeIndComputeDescriptorSetLayout) {
 		vkDestroyDescriptorSetLayout(device, activeIndComputeDescriptorSetLayout, nullptr);
+	}
+	if (binaryCopyOnesDescriptorSetLayout) {
+		vkDestroyDescriptorSetLayout(device, binaryCopyOnesDescriptorSetLayout, nullptr);
+	}
+	if (binaryCopyOnesPipelineLayout) {
+		vkDestroyPipelineLayout(device, binaryCopyOnesPipelineLayout, nullptr);
+	}
+	if (binaryCopyOnesPipeline) {
+		vkDestroyPipeline(device, binaryCopyOnesPipeline, nullptr);
 	}
 	for (auto& col : brushColors) {
 		delete[] col.second;
@@ -1245,9 +1258,10 @@ void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 	delete[] binaryData;
 }
 
-void IsoSurfRenderer::setBinarySmoothing(float stdDiv)
+void IsoSurfRenderer::setBinarySmoothing(float stdDiv, bool keepOnes)
 {
 	smoothStdDiv = stdDiv;
+	this->keepOnes = keepOnes;
 	for (int i = 0; i < binaryImage.size(); ++i) {
 		smoothImage(i);
 	}
@@ -1296,8 +1310,9 @@ void IsoSurfRenderer::smoothImage(int index)
 	ubo.index = 2;
 	VkUtil::uploadData(device, uboMemory, 2 * uboSize, sizeof(SmoothUBO), &ubo);
 
-	VkDescriptorSet descSets[3];
+	VkDescriptorSet descSets[4];
 	std::vector<VkDescriptorSetLayout> layouts(3, binarySmoothDescriptorSetLayout);
+	layouts.push_back(binaryCopyOnesDescriptorSetLayout);
 	VkUtil::createDescriptorSets(device, layouts, descriptorPool, descSets);
 	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descSets[0]);
 	VkUtil::updateStorageImageDescriptorSet(device, binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 1, descSets[0]);
@@ -1308,6 +1323,9 @@ void IsoSurfRenderer::smoothImage(int index)
 	VkUtil::updateDescriptorSet(device, ubos, sizeof(SmoothUBO), 0, 2 * uboSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descSets[2]);
 	VkUtil::updateStorageImageDescriptorSet(device, tmpImageView, VK_IMAGE_LAYOUT_GENERAL, 1, descSets[2]);
 	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 2, descSets[2]);
+
+	VkUtil::updateStorageImageDescriptorSet(device, binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 0, descSets[3]);
+	VkUtil::updateStorageImageDescriptorSet(device, binarySmoothView[index], VK_IMAGE_LAYOUT_GENERAL, 1, descSets[3]);
 
 	uint32_t patchAmtX = drawlistBrushes[index].gridDimensions[0] / LOCALSIZE3D + ((drawlistBrushes[index].gridDimensions[0] % LOCALSIZE3D) ? 1 : 0);
 	uint32_t patchAmtY = drawlistBrushes[index].gridDimensions[1] / LOCALSIZE3D + ((drawlistBrushes[index].gridDimensions[1] % LOCALSIZE3D) ? 1 : 0);
@@ -1325,6 +1343,11 @@ void IsoSurfRenderer::smoothImage(int index)
 	vkCmdDispatch(commands, patchAmtX, patchAmtY, patchAmtZ);
 	vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, binarySmoothPipelineLayout, 0, 1, &descSets[2], 0, nullptr);
 	vkCmdDispatch(commands, patchAmtX, patchAmtY, patchAmtZ);
+	if (keepOnes) {
+		vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, binaryCopyOnesPipeline);
+		vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, binaryCopyOnesPipelineLayout, 0, 1, &descSets[3], 0, nullptr);
+		vkCmdDispatch(commands, patchAmtX, patchAmtY, patchAmtZ);
+	}
 	VkUtil::transitionImageLayout(commands, binarySmooth[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkUtil::transitionImageLayout(commands, binaryImage[index], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkUtil::commitCommandBuffer(queue, commands);
@@ -1336,7 +1359,7 @@ void IsoSurfRenderer::smoothImage(int index)
 	vkDestroyImage(device, tmpImage, nullptr);
 	vkDestroyImageView(device, tmpImageView, nullptr);
 	vkFreeMemory(device, tmpMemory, nullptr);
-	vkFreeDescriptorSets(device, descriptorPool, 3, descSets);
+	vkFreeDescriptorSets(device, descriptorPool, 4, descSets);
 }
 
 void IsoSurfRenderer::createPrepareImageCommandBuffer()
@@ -1653,6 +1676,24 @@ void IsoSurfRenderer::createPipeline()
 	layouts.push_back(activeIndComputeDescriptorSetLayout);
 
 	VkUtil::createComputePipeline(device, computeModule, layouts, &activeIndComputePipelineLayout, &activeIndComputePipeline);
+
+	//creating the compute pipeline to copy one entrys into the smoothed binary image ----------------------------------
+	computeModule = VkUtil::createShaderModule(device, PCUtil::readByteFile(binaryCopyOnesPath));
+
+	bindings.clear();
+
+	binding.binding = 0;								//src image
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	bindings.push_back(binding);
+
+	binding.binding = 1;								//dst image
+	bindings.push_back(binding);
+
+	VkUtil::createDescriptorSetLayout(device, bindings, &binaryCopyOnesDescriptorSetLayout);
+	layouts.clear();
+	layouts.push_back(binaryCopyOnesDescriptorSetLayout);
+
+	VkUtil::createComputePipeline(device, computeModule, layouts, &binaryCopyOnesPipelineLayout, &binaryCopyOnesPipeline);
 }
 
 void IsoSurfRenderer::createDescriptorSets()

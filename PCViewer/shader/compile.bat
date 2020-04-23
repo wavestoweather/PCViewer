@@ -27,6 +27,7 @@ E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfDirectComp.spv isoSu
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfActiveIndComp.spv isoSurfActiveInd.comp
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfBinComp.spv isoSurfBin.comp
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfSmooth.spv isoSurfSmooth.comp
+E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o isoSurfCopyOnes.spv isoSurfCopyOnes.comp
 
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o brushComp.spv brush.comp
 E:/Vulkan/1.1.106.0/Bin32/glslangValidator.exe -V -o brushFractureComp.spv brushFracture.comp

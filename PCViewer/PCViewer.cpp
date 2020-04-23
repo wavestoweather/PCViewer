@@ -8572,8 +8572,13 @@ int main(int, char**)
 						isoSurfaceRenderer->render();
 					}
 					static float stdDiv = 1;
+					static bool copyOnes = false;
 					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, 0, 10)) {
-						isoSurfaceRenderer->setBinarySmoothing(stdDiv);
+						isoSurfaceRenderer->setBinarySmoothing(stdDiv,copyOnes);
+						isoSurfaceRenderer->render();
+					}
+					if (ImGui::Checkbox("Copy 1 entries after smoothing", &copyOnes)) {
+						isoSurfaceRenderer->setBinarySmoothing(stdDiv, copyOnes);
 						isoSurfaceRenderer->render();
 					}
 					if (ImGui::DragFloat3("Ligt direction", &isoSurfaceRenderer->lightDir.x)) {

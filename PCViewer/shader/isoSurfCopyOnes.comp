@@ -1,0 +1,19 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_nonuniform_qualifier : enable
+
+//currently the maximum amount of density attributes is 30!
+layout( binding = 0, r8) uniform readonly image3D src;
+
+layout( binding = 1, r8) uniform writeonly image3D dst;
+
+layout (local_size_x = 8,local_size_y=8,local_size_z=8) in;
+
+void main(){
+	ivec3 imSize = imageSize(src);
+	if(gl_GlobalInvocationID.x >= imSize.x|| gl_GlobalInvocationID.y>=imSize.y || gl_GlobalInvocationID.z>=imSize.z) return;
+	float val = imageLoad(src,ivec3(gl_GlobalInvocationID)).x;
+	if(val == 1)
+		imageStore(dst,ivec3(gl_GlobalInvocationID),vec4(1));
+}
