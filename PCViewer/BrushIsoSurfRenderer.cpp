@@ -230,7 +230,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		image3dOffsets.clear();
 		for (int i = image3dSampler.size(); i < required3dImages; ++i) {
 			image3dSampler.push_back({});
-			VkUtil::createImageSampler(device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_LINEAR, 1, 1, &image3dSampler.back());
+			VkUtil::createImageSampler(device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FILTER_LINEAR, 1, 1, &image3dSampler.back());
 		}
 
 		//creating new resources
@@ -260,7 +260,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		check_vk_result(err);
 		VkCommandBuffer imageCommands;
 		VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
-		VkClearColorValue clear = {0,0,0,0 };
+		VkClearColorValue clear = {-std::numeric_limits<float>::infinity(),0,0,0 };
 		VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
 		for (int i = 0; i < required3dImages; ++i) {
 			vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);

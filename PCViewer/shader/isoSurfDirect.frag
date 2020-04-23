@@ -64,7 +64,7 @@ void main() {
 	startPoint += step * rand(startPoint);
 
 	//for every axis/attribute here the last density is stored
-	const float pD = -100;
+	const float pD = -1/0;
 	float prevDensity[30] = float[30](pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD);
 	bool allInside[30] = bool[30](true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true);//uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
 	bool brushBorder[30] = bool[30](false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
@@ -98,11 +98,12 @@ void main() {
 						allInside[brushIndex] = allInside[brushIndex] && (nowInside || stepInOut);//((uint((density<mi||density>ma)&&!brushBorder[brushIndex]) << axis) ^ 0xffffffff);
 						if(stepInOut){
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
-							//get the normal for shading
+							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
 							float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 4,0,0)).x, 
 								yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 4,0)).x,
 								zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
-							normal = -normalize(vec3(xDir - density, yDir - density, zDir - density));
+							float mean = .5f*mi + .5f*ma;
+							normal = normalize(vec3(abs(xDir-mean) - abs(density-mean), abs(yDir-mean) - abs(density-mean), abs(zDir-mean) - abs(density-mean)));
 						}
 					}
 				}
