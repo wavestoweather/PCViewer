@@ -65,7 +65,7 @@ void main() {
 	startPoint += step * rand(startPoint);
 
 	//for every axis/attribute here the last density is stored
-	const float pD = -1/0;
+	const float pD = -10;
 	float prevDensity[30] = float[30](pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD);
 	bool allInside[30] = bool[30](true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true);//uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
 	bool brushBorder[30] = bool[30](false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
@@ -78,7 +78,7 @@ void main() {
 		for(int axis = 0;axis<info.amtOfAxis && !br;++axis){
 			int axisOffset = int(info.brushes[axis]);
 			//check if there exists a brush on this axis
-			if(bool(info.brushes[axisOffset])){		//amtOfBrushes > 0
+			if(info.brushes[axisOffset] > 0){		//amtOfBrushes > 0
 				//as there exist brushes we get the density for this attribute
 				float density = texture(texSampler[axis],startPoint).x;
 				//for every brush
@@ -102,12 +102,24 @@ void main() {
 						if(stepInOut){
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
-							float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 4,0,0)).x, 
-								yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 4,0)).x,
-								zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
-							float mean = .5f*mi + .5f*ma;
-							normal = normalize(vec3(abs(xDir-mean) - abs(density-mean), abs(yDir-mean) - abs(density-mean), abs(zDir-mean) - abs(density-mean)));
-//							normal = normalize(vec3((xDir-mean) - (density-mean), (yDir-mean) - (density-mean), (zDir-mean) - (density-mean)));
+							if(bool(info.shade)){
+								float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 4,0,0)).x, 
+									yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 4,0)).x,
+									zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
+								//float mean = .5f*mi + .5f*ma;
+								//normal = normalize(vec3(abs(xDir-mean) - abs(density-mean), abs(yDir-mean) - abs(density-mean), abs(zDir-mean) - abs(density-mean)));
+								float inv = 1.f/max(max(max(xDir,yDir),zDir),density);
+								density *= inv;
+								xDir *= inv;
+								yDir *= inv;
+								zDir *= inv;
+								if(nowInside){
+									normal = normalize(vec3(density-xDir,density-yDir,density-zDir));
+								}
+								else{
+									normal = normalize(vec3(xDir-density,yDir-density,zDir-density));
+								}
+							}
 						}
 					}
 					allInside[brushIndex] = allInside[brushIndex] && anyInside;
@@ -124,6 +136,8 @@ void main() {
 				}
 				outColor.xyz += (1-outColor.w) * brushColor[i].w * brushColor[i].xyz;
 				outColor.w += (1-outColor.w) * brushColor[i].w;
+				//outColor.xyz = normal * .5f + 1;
+				//outColor.w = 1;
 				if(outColor.w>alphaStop) br = true;
 			}
 			//resetting all brush things

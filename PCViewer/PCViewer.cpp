@@ -7736,7 +7736,7 @@ int main(int, char**)
 			ImGui::Separator();
 			for (DataSet& ds : g_PcPlotDataSets) {
 				if (ImGui::TreeNode(ds.name.c_str())) {
-					static const TemplateList* convert = nullptr;
+					static TemplateList* convert = nullptr;
 					int c = 0;		//counter to reduce the amount of template lists being drawn
 					for (TemplateList& tl : ds.drawLists) {
 						if (c++ > 10000)break;
@@ -7803,6 +7803,8 @@ int main(int, char**)
 							brush.active = true;
 							brush.useMultivariate = false;
 							brush.edited = false;
+							brush.parent = convert;
+							brush.parentDataset = &ds;
 							for (int i = 0; i < pcAttributes.size(); i++) {
 								if (activeBrushAttributes[i]) {
 									brush.brushes[i].push_back(std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]));

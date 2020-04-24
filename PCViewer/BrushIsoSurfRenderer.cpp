@@ -247,7 +247,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 			image3dOffsets.push_back(0);
 
 			image3dOffsets[i] = allocInfo.allocationSize;
-			VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
+			VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
 
 			vkGetImageMemoryRequirements(device, image3d[i], &memRequirements);
 
@@ -260,16 +260,16 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		check_vk_result(err);
 		VkCommandBuffer imageCommands;
 		VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
-		VkClearColorValue clear = {-std::numeric_limits<float>::infinity(),0,0,0 };
+		VkClearColorValue clear = { -10,0,0,0 };
 		VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
 		for (int i = 0; i < required3dImages; ++i) {
 			vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);
 
-			VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R16_SFLOAT, 1, &image3dView[i]);
+			VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R32_SFLOAT, 1, &image3dView[i]);
 
-			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 			vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
-			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 		}
 		VkUtil::commitCommandBuffer(queue, imageCommands);
 		err = vkQueueWaitIdle(queue);
@@ -339,7 +339,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	VkUtil::createCommandBuffer(device, commandPool, &computeCommands);
 	if (!imagesUpdated) {
 		for (int i = 0; i < required3dImages; ++i) {
-			VkUtil::transitionImageLayout(computeCommands, image3d[i], VK_FORMAT_R16_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			VkUtil::transitionImageLayout(computeCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 		}
 	}
 	
@@ -349,7 +349,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	patchAmount += (amtOfIndices % LOCALSIZE) ? 1 : 0;
 	vkCmdDispatch(computeCommands, patchAmount, 1, 1);
 	for (int i = 0; i < required3dImages; ++i) {
-		VkUtil::transitionImageLayout(computeCommands, image3d[i], VK_FORMAT_R16_SFLOAT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(computeCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 	VkUtil::commitCommandBuffer(queue, computeCommands);
 	err = vkQueueWaitIdle(queue);
