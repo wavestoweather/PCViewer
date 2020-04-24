@@ -1016,6 +1016,19 @@ void IsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float delta
 	}
 }
 
+
+void IsoSurfRenderer::setCameraPos(glm::vec3& newCameraPos) {
+	cameraPos = newCameraPos;
+	return;
+}
+
+
+void IsoSurfRenderer::getCameraPos(glm::vec3& cameraPosReturn) {
+	cameraPosReturn = cameraPos;
+	return;
+}
+
+
 void IsoSurfRenderer::addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
 {
 	updateBrushBuffer();

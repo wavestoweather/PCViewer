@@ -107,6 +107,7 @@ void main() {
 								zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
 							float mean = .5f*mi + .5f*ma;
 							normal = normalize(vec3(abs(xDir-mean) - abs(density-mean), abs(yDir-mean) - abs(density-mean), abs(zDir-mean) - abs(density-mean)));
+//							normal = normalize(vec3((xDir-mean) - (density-mean), (yDir-mean) - (density-mean), (zDir-mean) - (density-mean)));
 						}
 					}
 					allInside[brushIndex] = allInside[brushIndex] && anyInside;

@@ -247,7 +247,7 @@ ColorPaletteManager::ColorPaletteManager():
     chosenCategoryNr(0),
     chosenPaletteNr(0),
     chosenNrColorNr(1),
-	chosenAutoColorPaletteLine(std::string("Dark2ReorderSplitYellowExtendedSaturated")),
+	chosenAutoColorPaletteLine(std::string("Dark2ReorderSplitYellowExtended")),
 	chosenAutoColorPaletteFill(std::string("Dark2ReorderSplitYellowExtended")),
     skipFirstAttributes(0),
     alphaLines(255),

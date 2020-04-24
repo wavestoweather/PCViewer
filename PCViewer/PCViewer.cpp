@@ -762,8 +762,8 @@ static GpuBrusher* gpuBrusher;
 
 static HistogramManager* histogramManager;
 
-static IsoSurfRenderer* isoSurfaceRenderer;
-static BrushIsoSurfRenderer* brushIsoSurfaceRenderer;
+static IsoSurfRenderer* isoSurfaceRenderer = nullptr;
+static BrushIsoSurfRenderer* brushIsoSurfaceRenderer = nullptr;
 static bool coupleIsoSurfaceRenderer = true;
 static bool coupleBrushIsoSurfaceRenderer = true;
 static bool isoSurfaceRegularGrid = false;
@@ -8604,6 +8604,48 @@ int main(int, char**)
 					}
 					ImGui::EndMenu();
 				}
+
+
+				if (ImGui::BeginMenu("Camera position")) {
+					ImGui::InputFloat3("Position", isoSurfaceRenderer->cameraPositionGUI, 3);
+					if (ImGui::Button("get current camera position"))
+					{
+						isoSurfaceRenderer->getCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI);
+						isoSurfaceRenderer->cameraPositionGUI[0] = isoSurfaceRenderer->cameraPositionGLMGUI.x;
+						isoSurfaceRenderer->cameraPositionGUI[1] = isoSurfaceRenderer->cameraPositionGLMGUI.y;
+						isoSurfaceRenderer->cameraPositionGUI[2] = isoSurfaceRenderer->cameraPositionGLMGUI.z;
+
+					}
+					if (ImGui::Button("set camera position"))
+					{
+						isoSurfaceRenderer->cameraPositionGLMGUI.x = isoSurfaceRenderer->cameraPositionGUI[0];
+						isoSurfaceRenderer->cameraPositionGLMGUI.y = isoSurfaceRenderer->cameraPositionGUI[1];
+						isoSurfaceRenderer->cameraPositionGLMGUI.z = isoSurfaceRenderer->cameraPositionGUI[2];
+						isoSurfaceRenderer->setCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI);
+						isoSurfaceRenderer->render();
+						err = vkDeviceWaitIdle(g_Device);
+						check_vk_result(err);
+						ImGui::ResetMouseDragDelta();
+					}
+					if (ImGui::Button("sync direct iso renderer's camera")) {
+						
+						if (brushIsoSurfaceRenderer)
+						{
+							brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.x = isoSurfaceRenderer->cameraPositionGUI[0];
+							brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.y = isoSurfaceRenderer->cameraPositionGUI[1];
+							brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.z = isoSurfaceRenderer->cameraPositionGUI[2];
+							brushIsoSurfaceRenderer->setCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM);
+							brushIsoSurfaceRenderer->render();
+							err = vkDeviceWaitIdle(g_Device);
+							check_vk_result(err);
+							ImGui::ResetMouseDragDelta();
+						}
+					}
+
+					ImGui::EndMenu();
+				}
+
+
 				if (ImGui::BeginMenu("Export")) {
 					int ind = 0;
 					for (auto& dlb : isoSurfaceRenderer->drawlistBrushes) {
@@ -8688,7 +8730,7 @@ int main(int, char**)
 			ImGui::PopItemWidth();
 
 			ImGui::PushItemWidth(300);
-			static glm::uvec3 posIndices{ 0,2,1 };
+			static glm::uvec3 posIndices{ 1,0,2 };
 			ImGui::DragInt3("Position indices (Order: lat, alt, lon)", (int*)&posIndices.x, 0.00000001f, 0, pcAttributes.size());
 			ImGui::PopItemWidth();
 
@@ -8889,6 +8931,47 @@ int main(int, char**)
 						brushIsoSurfaceRenderer->imageBackGroundUpdated();
 						brushIsoSurfaceRenderer->render();
 					}
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Camera position")) {
+					ImGui::InputFloat3("Position", brushIsoSurfaceRenderer->directIsoRendererCameraPosition, 3);
+					if (ImGui::Button("get current camera position"))
+					{
+						brushIsoSurfaceRenderer->getCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM);
+						brushIsoSurfaceRenderer->directIsoRendererCameraPosition[0] = brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.x;
+						brushIsoSurfaceRenderer->directIsoRendererCameraPosition[1] = brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.y;
+						brushIsoSurfaceRenderer->directIsoRendererCameraPosition[2] = brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.z;
+							
+					}
+					if (ImGui::Button("set camera position"))
+					{
+						brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.x = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[0];
+						brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.y = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[1];
+						brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.z = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[2];
+						brushIsoSurfaceRenderer->setCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM);
+						brushIsoSurfaceRenderer->render();
+						err = vkDeviceWaitIdle(g_Device);
+						check_vk_result(err);
+						ImGui::ResetMouseDragDelta();
+					}
+
+					if (ImGui::Button("sync iso renderer's camera")) {
+
+						if (brushIsoSurfaceRenderer)
+						{
+
+
+							isoSurfaceRenderer->cameraPositionGLMGUI.x = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[0];
+							isoSurfaceRenderer->cameraPositionGLMGUI.y = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[1];
+							isoSurfaceRenderer->cameraPositionGLMGUI.z = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[2];
+							isoSurfaceRenderer->setCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI);
+							isoSurfaceRenderer->render();
+							err = vkDeviceWaitIdle(g_Device);
+							check_vk_result(err);
+							ImGui::ResetMouseDragDelta();
+						}
+					}
+
 					ImGui::EndMenu();
 				}
 

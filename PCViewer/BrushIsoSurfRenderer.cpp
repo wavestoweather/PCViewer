@@ -416,6 +416,19 @@ void BrushIsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float 
 	}
 }
 
+
+void BrushIsoSurfRenderer::setCameraPos(glm::vec3& newCameraPos) {
+	cameraPos = newCameraPos;
+	return;
+}
+
+
+void BrushIsoSurfRenderer::getCameraPos(glm::vec3& cameraPosReturn) {
+	cameraPosReturn = cameraPos;
+	return;
+}
+
+
 bool BrushIsoSurfRenderer::updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax)
 {
 	if (brushes.find(name) == brushes.end()) {
