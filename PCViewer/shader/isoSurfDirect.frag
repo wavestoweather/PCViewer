@@ -103,22 +103,15 @@ void main() {
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
 							if(bool(info.shade)){
-								float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 4,0,0)).x, 
-									yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 4,0)).x,
-									zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 4)).x;
-								//float mean = .5f*mi + .5f*ma;
-								//normal = normalize(vec3(abs(xDir-mean) - abs(density-mean), abs(yDir-mean) - abs(density-mean), abs(zDir-mean) - abs(density-mean)));
-								float inv = 1.f/max(max(max(xDir,yDir),zDir),density);
-								density *= inv;
-								xDir *= inv;
-								yDir *= inv;
-								zDir *= inv;
-								if(nowInside){
-									normal = normalize(vec3(density-xDir,density-yDir,density-zDir));
-								}
-								else{
-									normal = normalize(vec3(xDir-density,yDir-density,zDir-density));
-								}
+								float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 2,0,0)).x, 
+									xDirr = texture(texSampler[axis],startPoint-vec3(stepsize * 2,0,0)).x, 
+									yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 2,0)).x,
+									yDirr = texture(texSampler[axis],startPoint-vec3(0,stepsize * 2,0)).x,
+									zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 2)).x,
+									zDirr = texture(texSampler[axis],startPoint-vec3(0,0,stepsize * 2)).x;
+									
+								float mean = .5f*mi + .5f*ma;
+								normal = normalize(vec3(abs(xDir-mean) - abs(xDirr-mean), abs(yDir-mean) - abs(yDirr-mean), abs(zDir-mean) - abs(zDirr-mean)));
 							}
 						}
 					}
@@ -136,7 +129,13 @@ void main() {
 				}
 				outColor.xyz += (1-outColor.w) * brushColor[i].w * brushColor[i].xyz;
 				outColor.w += (1-outColor.w) * brushColor[i].w;
-				//outColor.xyz = normal * .5f + 1;
+				//if(any(isnan(normal))||any(isinf(normal))){
+				//	outColor.xyz = vec3(1,0,0);
+				//}
+				//else{
+				//	outColor = vec4(0);
+				//}
+				//outColor.xyz = abs(normal);// * .5f + .5f;
 				//outColor.w = 1;
 				if(outColor.w>alphaStop) br = true;
 			}
