@@ -6109,7 +6109,7 @@ int main(int, char**)
 
 					ImGui::EndMenu();
 				}
-				ImGui::InputFloat("Mu add factor", &brushMuFactor);
+				ImGui::InputFloat("Mu add factor", &brushMuFactor, 0.000001, 0.001,10);
 
 				ImGui::EndMenu();
 			}
@@ -8610,20 +8610,24 @@ int main(int, char**)
 
 				if (ImGui::BeginMenu("Camera position")) {
 					ImGui::InputFloat3("Position", isoSurfaceRenderer->cameraPositionGUI, 3);
+					ImGui::InputFloat2("Rotation", isoSurfaceRenderer->cameraRotationGUI, 3);
 					if (ImGui::Button("get current camera position"))
 					{
-						isoSurfaceRenderer->getCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI);
+						float *p = isoSurfaceRenderer->cameraRotationGUI;
+						isoSurfaceRenderer->getCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI, &p);
 						isoSurfaceRenderer->cameraPositionGUI[0] = isoSurfaceRenderer->cameraPositionGLMGUI.x;
 						isoSurfaceRenderer->cameraPositionGUI[1] = isoSurfaceRenderer->cameraPositionGLMGUI.y;
 						isoSurfaceRenderer->cameraPositionGUI[2] = isoSurfaceRenderer->cameraPositionGLMGUI.z;
 
+
 					}
 					if (ImGui::Button("set camera position"))
 					{
+						float* p = isoSurfaceRenderer->cameraRotationGUI;
 						isoSurfaceRenderer->cameraPositionGLMGUI.x = isoSurfaceRenderer->cameraPositionGUI[0];
 						isoSurfaceRenderer->cameraPositionGLMGUI.y = isoSurfaceRenderer->cameraPositionGUI[1];
 						isoSurfaceRenderer->cameraPositionGLMGUI.z = isoSurfaceRenderer->cameraPositionGUI[2];
-						isoSurfaceRenderer->setCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI);
+						isoSurfaceRenderer->setCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI, &p);
 						isoSurfaceRenderer->render();
 						err = vkDeviceWaitIdle(g_Device);
 						check_vk_result(err);
@@ -8633,10 +8637,11 @@ int main(int, char**)
 						
 						if (brushIsoSurfaceRenderer)
 						{
+							float* p = isoSurfaceRenderer->cameraRotationGUI;
 							brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.x = isoSurfaceRenderer->cameraPositionGUI[0];
 							brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.y = isoSurfaceRenderer->cameraPositionGUI[1];
 							brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.z = isoSurfaceRenderer->cameraPositionGUI[2];
-							brushIsoSurfaceRenderer->setCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM);
+							brushIsoSurfaceRenderer->setCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM, &p);
 							brushIsoSurfaceRenderer->render();
 							err = vkDeviceWaitIdle(g_Device);
 							check_vk_result(err);
@@ -8937,9 +8942,11 @@ int main(int, char**)
 				}
 				if (ImGui::BeginMenu("Camera position")) {
 					ImGui::InputFloat3("Position", brushIsoSurfaceRenderer->directIsoRendererCameraPosition, 3);
+					ImGui::InputFloat2("Rotation", brushIsoSurfaceRenderer->cameraRotationGUI, 3);
 					if (ImGui::Button("get current camera position"))
 					{
-						brushIsoSurfaceRenderer->getCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM);
+						float* p = brushIsoSurfaceRenderer->cameraRotationGUI;
+						brushIsoSurfaceRenderer->getCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM, &p);
 						brushIsoSurfaceRenderer->directIsoRendererCameraPosition[0] = brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.x;
 						brushIsoSurfaceRenderer->directIsoRendererCameraPosition[1] = brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.y;
 						brushIsoSurfaceRenderer->directIsoRendererCameraPosition[2] = brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.z;
@@ -8947,10 +8954,11 @@ int main(int, char**)
 					}
 					if (ImGui::Button("set camera position"))
 					{
+						float* p = brushIsoSurfaceRenderer->cameraRotationGUI;
 						brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.x = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[0];
 						brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.y = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[1];
 						brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.z = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[2];
-						brushIsoSurfaceRenderer->setCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM);
+						brushIsoSurfaceRenderer->setCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM, &p);
 						brushIsoSurfaceRenderer->render();
 						err = vkDeviceWaitIdle(g_Device);
 						check_vk_result(err);
@@ -8959,14 +8967,14 @@ int main(int, char**)
 
 					if (ImGui::Button("sync iso renderer's camera")) {
 
-						if (brushIsoSurfaceRenderer)
+						if (isoSurfaceRenderer)
 						{
 
-
+							float* p = brushIsoSurfaceRenderer->cameraRotationGUI;
 							isoSurfaceRenderer->cameraPositionGLMGUI.x = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[0];
 							isoSurfaceRenderer->cameraPositionGLMGUI.y = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[1];
 							isoSurfaceRenderer->cameraPositionGLMGUI.z = brushIsoSurfaceRenderer->directIsoRendererCameraPosition[2];
-							isoSurfaceRenderer->setCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI);
+							isoSurfaceRenderer->setCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI, &p);
 							isoSurfaceRenderer->render();
 							err = vkDeviceWaitIdle(g_Device);
 							check_vk_result(err);

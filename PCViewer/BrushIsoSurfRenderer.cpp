@@ -417,14 +417,20 @@ void BrushIsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float 
 }
 
 
-void BrushIsoSurfRenderer::setCameraPos(glm::vec3& newCameraPos) {
+void BrushIsoSurfRenderer::setCameraPos(glm::vec3& newCameraPos, float **newRotation) {
 	cameraPos = newCameraPos;
+	cameraRot.x = (*newRotation)[0];
+	cameraRot.y = (*newRotation)[1];
+	cameraRotationGUI[0] = (*newRotation)[0];
+	cameraRotationGUI[1] = (*newRotation)[1];
 	return;
 }
 
 
-void BrushIsoSurfRenderer::getCameraPos(glm::vec3& cameraPosReturn) {
+void BrushIsoSurfRenderer::getCameraPos(glm::vec3& cameraPosReturn, float** rotationReturn) {
 	cameraPosReturn = cameraPos;
+	(*rotationReturn)[0] = cameraRot.x;
+	(*rotationReturn)[1] = cameraRot.y;
 	return;
 }
 

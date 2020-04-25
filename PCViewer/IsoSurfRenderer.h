@@ -60,8 +60,8 @@ public:
 	void deleteBinaryVolume(uint32_t ind);
 	void getPosIndices(int index, uint32_t* ind);
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
-	void setCameraPos(glm::vec3& cameraPosReturn);
-	void getCameraPos(glm::vec3& cameraPosReturn);
+	void setCameraPos(glm::vec3& cameraPosReturn, float** newRotation);
+	void getCameraPos(glm::vec3& cameraPosReturn, float** rotationReturn);
 	void addBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);				//minMax has to be a vector containing for each attribute an array of minMax values
 	bool updateBrush(std::string& name, std::vector<std::vector<std::pair<float, float>>> minMax);			//this method only updates a already added brush. Returns true if the brush was updated, else false
 	bool deleteBrush(std::string& name);
@@ -86,8 +86,10 @@ public:
 	VkClearValue imageBackground;
 
 	// camera variables for the GUI are stored here
-	glm::vec3 cameraPositionGLMGUI;
+	glm::vec3 cameraPositionGLMGUI{};
 	float cameraPositionGUI[3]{};
+	float cameraRotationGUI[2]{};
+
 private:
 	struct UniformBuffer {
 		glm::vec4 camPos;				//cameraPosition in model space

@@ -1017,14 +1017,20 @@ void IsoSurfRenderer::updateCameraPos(CamNav::NavigationInput input, float delta
 }
 
 
-void IsoSurfRenderer::setCameraPos(glm::vec3& newCameraPos) {
+void IsoSurfRenderer::setCameraPos(glm::vec3& newCameraPos, float** newRotation) {
 	cameraPos = newCameraPos;
+	cameraRot.x = (*newRotation)[0];
+	cameraRot.y = (*newRotation)[1];
+	cameraRotationGUI[0] = (*newRotation)[0];
+	cameraRotationGUI[1] = (*newRotation)[1];
 	return;
 }
 
 
-void IsoSurfRenderer::getCameraPos(glm::vec3& cameraPosReturn) {
+void IsoSurfRenderer::getCameraPos(glm::vec3& cameraPosReturn, float** rotationReturn) {
 	cameraPosReturn = cameraPos;
+	(*rotationReturn)[0] = cameraRot.x;
+	(*rotationReturn)[1] = cameraRot.y;
 	return;
 }
 
