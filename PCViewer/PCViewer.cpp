@@ -463,6 +463,7 @@ struct ViolinDrawlistPlot {
 	std::vector<std::vector<uint32_t>> attributeOrder;
 	float maxGlobalValue;
 	std::vector<float> maxValues;
+	std::set<uint32_t> selectedDrawlists;
 
 	ColorPaletteManager* colorPaletteManager;
 
@@ -768,6 +769,7 @@ static bool coupleIsoSurfaceRenderer = true;
 static bool coupleBrushIsoSurfaceRenderer = true;
 static bool isoSurfaceRegularGrid = false;
 static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
+static glm::uvec3 posIndices{ 1,0,2 };
 
 //variables for fractions
 static int maxFractionDepth = 24;
@@ -802,6 +804,7 @@ static float violinPlotThickness = 4;
 static float violinPlotBinsSize = 150;
 static ImVec4 violinBackgroundColor = { 1,1,1,1 };
 static bool coupleViolinPlots = true;
+static bool violinPlotDLSendToIso = true;
 static bool violinPlotDLInsertCustomColors = true;
 static bool violinPlotAttrInsertCustomColors = true;
 static bool violinPlotAttrReplaceNonStop = false;
@@ -8737,7 +8740,7 @@ int main(int, char**)
 			ImGui::PopItemWidth();
 
 			ImGui::PushItemWidth(300);
-			static glm::uvec3 posIndices{ 1,0,2 };
+			
 			ImGui::DragInt3("Position indices (Order: lat, alt, lon)", (int*)&posIndices.x, 0.00000001f, 0, pcAttributes.size());
 			ImGui::PopItemWidth();
 
@@ -9692,6 +9695,7 @@ int main(int, char**)
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
+					ImGui::Checkbox("Send to iso renderer on select", &violinPlotDLSendToIso);
 					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 4000);
 					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 40);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
@@ -10021,8 +10025,80 @@ int main(int, char**)
 							framePos.y += ImGui::GetFrameHeightWithSpacing();
 							if(drawState == ViolinDrawStateAll || drawState == ViolinDrawStateArea) ImGui::RenderFrame(framePos, framePos + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
 							ImGui::SetCursorScreenPos(framePos);
-							if (size.x > 0 && size.y > 0)	//safety check. ImGui crahes when button size is 0
-								ImGui::InvisibleButton(("invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size);
+							if (size.x > 0 && size.y > 0) {	//safety check. ImGui crahes when button size is 0
+								if (io.KeyCtrl) {
+									ImGui::PushStyleColor(ImGuiCol_Button, { 0,0,0,0 });
+									if (ImGui::Button(("##invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size) && j!= 0xffffffff) {
+										if (violinDrawlistPlots[i].selectedDrawlists.find(j) == violinDrawlistPlots[i].selectedDrawlists.end()) {
+											violinDrawlistPlots[i].selectedDrawlists.insert(j);
+											if (enableIsoSurfaceWindow && violinPlotDLSendToIso) {
+												uint32_t w = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+												uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+												uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+												std::vector<std::pair<float, float>> posBounds(3);
+												for (int i = 0; i < 3; ++i) {
+													posBounds[i].first = pcAttributes[posIndices[i]].min;
+													posBounds[i].second = pcAttributes[posIndices[i]].max;
+												}
+												if (!isoSurfaceRegularGrid) {
+													posBounds[0].first = SpacialData::rlat[0];
+													posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
+													posBounds[1].first = SpacialData::altitude[0];
+													posBounds[1].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
+													posBounds[2].first = SpacialData::rlon[0];
+													posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
+												}
+												DrawList* dl;
+												for (auto& draw : g_PcPlotDrawLists) {
+													if (violinDrawlistPlots[i].drawLists[j] == draw.name) {
+														dl = &draw;
+														break;
+													}
+												}
+												std::vector<float*>* data;
+												for (auto& ds : g_PcPlotDataSets) {
+													if (ds.name == dl->parentDataSet) {
+														data = &ds.data;
+													}
+												}
+												int index = -1;
+												for (int in = 0; in < isoSurfaceRenderer->drawlistBrushes.size(); ++in) {
+													if (isoSurfaceRenderer->drawlistBrushes[in].drawlist == dl->name && isoSurfaceRenderer->drawlistBrushes[in].brush == "") {
+														index = in;
+														break;
+													}
+												}
+												if (index == -1) {
+													uint32_t wi = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+													uint32_t he = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+													uint32_t de = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+													isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name, "",{ 1,0,0,1 }, {wi, he, de} });
+												}
+												isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfaceRegularGrid, index);
+												isoSurfaceRenderer->render();
+											}
+										}
+										else {
+											violinDrawlistPlots[i].selectedDrawlists.erase(j);
+											int index = -1;
+											for (int in = 0; in < isoSurfaceRenderer->drawlistBrushes.size(); ++in) {
+												if (isoSurfaceRenderer->drawlistBrushes[in].drawlist == violinDrawlistPlots[i].drawLists[j] && isoSurfaceRenderer->drawlistBrushes[in].brush == "") {
+													index = in;
+													break;
+												}
+											}
+											if (index != -1) {
+												isoSurfaceRenderer->deleteBinaryVolume(index);
+												isoSurfaceRenderer->render();
+											}
+										}
+									}
+									ImGui::PopStyleColor();
+								}
+								else {
+									ImGui::InvisibleButton(("invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size);
+								}
+							}
 							if (ImGui::IsItemClicked(1)) {
 								violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = 0xffffffff;
 								updateMaxHistogramValues(violinDrawlistPlots[i]);
@@ -10109,6 +10185,10 @@ int main(int, char**)
 									
 								}
 								ImGui::EndDragDropTarget();
+							}
+							// if the current violin plot is selected draw a rect around it
+							if (violinDrawlistPlots[i].selectedDrawlists.find(j) != violinDrawlistPlots[i].selectedDrawlists.end()) {
+								ImGui::GetWindowDrawList()->AddRect(framePos, framePos + size, IM_COL32(255,200,0,255), ImGui::GetStyle().FrameRounding,ImDrawCornerFlags_All,5);
 							}
 							if (j == 0xffffffff) {
 								leftUpperCorner.x += size.x + violinPlotXSpacing;
