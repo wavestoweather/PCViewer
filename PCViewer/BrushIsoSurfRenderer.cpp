@@ -46,7 +46,7 @@ BrushIsoSurfRenderer::BrushIsoSurfRenderer(uint32_t height, uint32_t width, VkDe
 	fastFlyMultiplier = 2.5f;
 	rotationSpeed = .15f;
 	lightDir = glm::vec3(-1, -1, -1);
-	imageBackground = { .1f,.1f,.1f,1 };
+	imageBackground = { .0f,.0f,.0f,1 };
 
 	VkPhysicalDeviceProperties devProp;
 	vkGetPhysicalDeviceProperties(physicalDevice, &devProp);

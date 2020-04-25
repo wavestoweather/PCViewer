@@ -6595,12 +6595,13 @@ int main(int, char**)
 							combo.brushes[br.first].insert(combo.brushes[br.first].end(), br.second.begin(), br.second.end());
 						}
 						brush.active = false;
-						combo.name += brush.name.substr(5) + "|";
+						combo.name += brush.name.substr(std::min(brush.name.length() ,(size_t)5)) + "|";
 					}
 					combo.active = true;
 					combo.edited = true;
 					combo.name += ")";
 					combo.parent = nullptr;
+					combo.kdTree = nullptr;
 
 					if (any) {
 						globalBrushes.push_back(combo);
@@ -6974,6 +6975,7 @@ int main(int, char**)
 						gb.useMultivariate = false;
 						gb.name = dl->name;
 						gb.parent = dl->parentTemplateList;
+						gb.kdTree = nullptr;
 						DataSet* ds = &(*std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [dl](auto d) {return d.name == dl->parentDataSet; }));
 						gb.parentDataset = ds;
 						for (int i = 0; i < dl->brushes.size(); ++i) {	//Attribute Index
@@ -7047,7 +7049,7 @@ int main(int, char**)
 						// Todo: If this is the ratio for the first bar, then it should be divided by dl.indices.size() instead, since we want to know,
 						// how many lines of the DL are still active
 						// ratios.back() /= ds->data.size();
-						if (brush.parent->name == dl->name){
+						if (brush.parent != nullptr && brush.parent->name == dl->name){
 							// This would be the ratio of points in the index list / points in the data set (not dependent on brush)
 							//ratios.back() = float(dl->indices.size()) / ds->data.size(); 
 
@@ -7846,6 +7848,7 @@ int main(int, char**)
 							brush.useMultivariate = false;
 							brush.edited = false;
 							brush.parent = convert;
+							brush.kdTree = nullptr;
 							brush.parentDataset = &ds;
 							for (int i = 0; i < pcAttributes.size(); i++) {
 								if (activeBrushAttributes[i]) {
