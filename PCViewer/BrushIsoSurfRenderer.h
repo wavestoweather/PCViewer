@@ -86,7 +86,7 @@ public:
 
 	// camera variables for the GUI are stored here
 	glm::vec3 directIsoRendererCameraPositionGLM;
-	float directIsoRendererCameraPosition[3];
+	float directIsoRendererCameraPosition[3]{};
 
 private:
 	struct UniformBuffer {
@@ -225,8 +225,11 @@ private:
 	//variables for the brushes
 	std::map<std::string, std::vector<std::vector<std::pair<float, float>>>> brushes;		//each brush has a vector of minMax values. Each entry in the vector corresponds to an attribute
 	std::vector<float*> attributeColors;													//if only one brush is active every attribute can be assigned a different color
+	std::vector<uint32_t> activeDensities;													//vector containing the needed 3d density pictures to reduce amt of density pictures bound to the pipeline
 
 	float smoothStdDiv = 1;
+
+	const uint32_t densityMipLevels = 5;
 
 	uint32_t uboAlignment;
 

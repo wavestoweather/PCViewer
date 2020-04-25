@@ -202,7 +202,7 @@ void BrushIsoSurfRenderer::resizeBox(float width, float height, float depth)
 	render();
 }
 
-bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float, float>>& posMinMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid)
+bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid)
 {
 	VkResult err;
 
@@ -247,7 +247,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 			image3dOffsets.push_back(0);
 
 			image3dOffsets[i] = allocInfo.allocationSize;
-			VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d[i]);
+			VkUtil::create3dImage(device, width, height, depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1, &image3d[i]);
 
 			vkGetImageMemoryRequirements(device, image3d[i], &memRequirements);
 
@@ -260,7 +260,6 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		check_vk_result(err);
 		VkCommandBuffer imageCommands;
 		VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
-		VkClearColorValue clear = { -10,-10,-10,-10 };
 		VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
 		for (int i = 0; i < required3dImages; ++i) {
 			vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);
@@ -268,6 +267,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 			VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R32_SFLOAT, 1, &image3dView[i]);
 
 			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			VkClearColorValue clear = { 2 * minMax[i].first - minMax[i].second,0,0,0 };
 			vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
 			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 		}
@@ -308,12 +308,12 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	infoBytes->xInd = positionIndices[0];
 	infoBytes->yInd = positionIndices[1];
 	infoBytes->zInd = positionIndices[2];
-	infoBytes->xMin = posMinMax[0].first;
-	infoBytes->xMax = posMinMax[0].second;
-	infoBytes->yMin = posMinMax[1].first;
-	infoBytes->yMax = posMinMax[1].second;
-	infoBytes->zMin = posMinMax[2].first;
-	infoBytes->zMax = posMinMax[2].second;
+	infoBytes->xMin = minMax[positionIndices[0]].first;
+	infoBytes->xMax = minMax[positionIndices[0]].second;
+	infoBytes->yMin = minMax[positionIndices[1]].first;
+	infoBytes->yMax = minMax[positionIndices[1]].second;
+	infoBytes->zMin = minMax[positionIndices[2]].first;
+	infoBytes->zMax = minMax[positionIndices[2]].second;
 	infoBytes->padding = regularGrid;
 	int* inf = (int*)(infoBytes + 1);
 	for (int i = 0; i < densityAttributes.size(); ++i) {
@@ -438,6 +438,17 @@ bool BrushIsoSurfRenderer::updateBrush(std::string& name, std::vector<std::vecto
 		}
 	}
 	brushes[name] = minMax;
+
+	std::vector<uint32_t> neededInd;						//getting all needed indices for rendering
+	for (int axis = 0; axis < minMax.size(); ++axis) {
+		for (auto& b : brushes) {
+			if (b.second[axis].size()) {
+				neededInd.push_back(axis);
+				break;
+			}
+		}
+	}
+	activeDensities = neededInd;
 	
 	updateBrushBuffer();
 	updateDescriptorSet();
@@ -876,7 +887,9 @@ void BrushIsoSurfRenderer::updateDescriptorSet()
 	VkUtil::updateDescriptorSet(device, uniformBuffer, sizeof(UniformBuffer), 0, descriptorSet);
 	std::vector<VkImageLayout> layouts(image3d.size(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	//std::vector<VkSampler> samplers(image3d.size(), binaryImageSampler);
-	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, image3dView, layouts, 1, descriptorSet);
+	std::vector<VkImageView> imViews(activeDensities.size());
+	for (int i = 0; i < activeDensities.size(); ++i)imViews[i] = image3dView[activeDensities[i]];
+	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, imViews, layouts, 1, descriptorSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 }
 
@@ -966,6 +979,6 @@ void BrushIsoSurfRenderer::updateCommandBuffer()
 	err = vkEndCommandBuffer(commandBuffer);
 	check_vk_result(err);
 
-	err = vkDeviceWaitIdle(device);
+	err = vkQueueWaitIdle(queue);
 	check_vk_result(err);
 }

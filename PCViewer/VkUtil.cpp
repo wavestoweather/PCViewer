@@ -70,6 +70,61 @@ void VkUtil::createMipMaps(VkCommandBuffer commandBuffer, VkImage image, uint32_
 	}
 }
 
+void VkUtil::createMipMaps(VkCommandBuffer commandBuffer, VkImage image, uint32_t mipLevels, uint32_t imageWidth, uint32_t imageHeight, uint32_t imageDepth, VkImageLayout oldLayout, VkAccessFlags oldAccess, VkPipelineStageFlags oldPipelineStage)
+{
+	VkImageMemoryBarrier use_barrier[1] = {};
+	use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].image = image;
+	use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	use_barrier[0].subresourceRange.baseArrayLayer = 0;
+	use_barrier[0].subresourceRange.levelCount = 1;
+	use_barrier[0].subresourceRange.layerCount = 1;
+
+	int32_t mipWidth = (int32_t)imageWidth;
+	int32_t mipHeight = (int32_t)imageHeight;
+	int32_t mipDepth = (int32_t)imageDepth;
+
+	for (uint32_t i = 1; i < mipLevels; i++) {
+		use_barrier[0].srcAccessMask = oldAccess;
+		use_barrier[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		use_barrier[0].oldLayout = oldLayout;
+		use_barrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		use_barrier[0].subresourceRange.baseMipLevel = i - 1;
+
+		vkCmdPipelineBarrier(commandBuffer, oldPipelineStage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+
+		VkImageBlit blit = {};
+		blit.srcOffsets[0] = { 0, 0, 0 };
+		blit.srcOffsets[1] = { mipWidth, mipHeight, mipDepth };
+		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.srcSubresource.mipLevel = i - 1;
+		blit.srcSubresource.baseArrayLayer = 0;
+		blit.srcSubresource.layerCount = 1;
+		blit.dstOffsets[0] = { 0, 0, 0 };
+		blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, mipDepth > 1 ? mipDepth / 2 : 1 };
+		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.dstSubresource.mipLevel = i;
+		blit.dstSubresource.baseArrayLayer = 0;
+		blit.dstSubresource.layerCount = 1;
+
+		vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+		use_barrier[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		use_barrier[0].dstAccessMask = oldAccess;
+		use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		use_barrier[0].newLayout = oldLayout;
+
+		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, oldPipelineStage, 0, 0, NULL, 0, NULL, 1, use_barrier);
+
+
+		if (mipWidth > 1) mipWidth /= 2;
+		if (mipHeight > 1) mipHeight /= 2;
+		if (mipDepth > 1) mipDepth /= 2;
+	}
+}
+
 void VkUtil::createCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBuffer* commandBuffer)
 {
 	VkResult err;
@@ -1001,7 +1056,6 @@ void VkUtil::create3dImage(VkDevice device, uint32_t width, uint32_t height, uin
 {
 	VkResult err;
 
-	//creating the VkImage for the PcPlot
 	VkImageCreateInfo imageInfo = {};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.imageType = VK_IMAGE_TYPE_3D;
@@ -1009,6 +1063,29 @@ void VkUtil::create3dImage(VkDevice device, uint32_t width, uint32_t height, uin
 	imageInfo.extent.height = height;
 	imageInfo.extent.depth = depth;
 	imageInfo.mipLevels = 1;
+	imageInfo.arrayLayers = 1;
+	imageInfo.format = imageFormat;
+	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageInfo.usage = usageFlags;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+	err = vkCreateImage(device, &imageInfo, nullptr, image);
+	check_vk_result(err);
+}
+
+void VkUtil::create3dImage(VkDevice device, uint32_t width, uint32_t height, uint32_t depth, VkFormat imageFormat, VkImageUsageFlags usageFlags, uint32_t mipLevel, VkImage* image)
+{
+	VkResult err;
+
+	VkImageCreateInfo imageInfo = {};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = VK_IMAGE_TYPE_3D;
+	imageInfo.extent.width = width;
+	imageInfo.extent.height = height;
+	imageInfo.extent.depth = depth;
+	imageInfo.mipLevels = mipLevel;
 	imageInfo.arrayLayers = 1;
 	imageInfo.format = imageFormat;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;

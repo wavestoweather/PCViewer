@@ -65,7 +65,7 @@ void main() {
 	startPoint += step * rand(startPoint);
 
 	//for every axis/attribute here the last density is stored
-	const float pD = -10;
+	const float pD = -3.402823466e+38F;
 	float prevDensity[30] = float[30](pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD);
 	bool allInside[30] = bool[30](true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true);//uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
 	bool brushBorder[30] = bool[30](false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
@@ -74,13 +74,14 @@ void main() {
 
 	bool br = false;		//bool to break early
 	while(startPoint.x >= 0 && startPoint.x <= 1 && startPoint.y >= 0 && startPoint.y <= 1 && startPoint.z >= 0 && startPoint.z <= 1 && !br){
+		uint densityIndex = 0;
 		//for every axis/attribute
 		for(int axis = 0;axis<info.amtOfAxis && !br;++axis){
 			int axisOffset = int(info.brushes[axis]);
 			//check if there exists a brush on this axis
-			if(info.brushes[axisOffset] > 0){		//amtOfBrushes > 0
+			if(info.brushes[axisOffset] >= 1){		//amtOfBrushes > 0
 				//as there exist brushes we get the density for this attribute
-				float density = texture(texSampler[axis],startPoint).x;
+				float density = texture(texSampler[densityIndex],startPoint).x;
 				//for every brush
 				for(int brush = 0;brush<info.brushes[axisOffset] && !br;++brush){
 					int brushOffset = int(info.brushes[axisOffset + 1 + brush]);
@@ -92,6 +93,16 @@ void main() {
 						brushIndex = int(info.brushes[brushOffset]);
 						float mi = info.brushes[minMaxOffset];
 						float ma = info.brushes[minMaxOffset + 1];
+						if(density>2*mi-ma && density<2*ma-mi){
+							if(curStepsize > stepsize){
+								startPoint += stepsize *d - d*curStepsize;
+								density = texture(texSampler[densityIndex],startPoint).x;
+								curStepsize = stepsize;
+							}
+						}
+						else{
+							curStepsize = clamp(curStepsize * growth,stepsize,maxStepsize);
+						}
 						bool nowInside = density>=mi && density<=ma;
 						bool prevInside = (prevDensity[axis]>=mi)&&(prevDensity[axis]<=ma);
 						bool stepInOut = nowInside ^^ prevInside;
@@ -103,12 +114,12 @@ void main() {
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
 							if(bool(info.shade)){
-								float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 2,0,0)).x, 
-									xDirr = texture(texSampler[axis],startPoint-vec3(stepsize * 2,0,0)).x, 
-									yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 2,0)).x,
-									yDirr = texture(texSampler[axis],startPoint-vec3(0,stepsize * 2,0)).x,
-									zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 2)).x,
-									zDirr = texture(texSampler[axis],startPoint-vec3(0,0,stepsize * 2)).x;
+								float xDir = texture(texSampler[densityIndex],startPoint+vec3(stepsize * 2,0,0)).x, 
+									xDirr = texture(texSampler[densityIndex],startPoint-vec3(stepsize * 2,0,0)).x, 
+									yDir = texture(texSampler[densityIndex],startPoint+vec3(0,stepsize * 2,0)).x,
+									yDirr = texture(texSampler[densityIndex],startPoint-vec3(0,stepsize * 2,0)).x,
+									zDir = texture(texSampler[densityIndex],startPoint+vec3(0,0,stepsize * 2)).x,
+									zDirr = texture(texSampler[densityIndex],startPoint-vec3(0,0,stepsize * 2)).x;
 									
 								float mean = .5f*mi + .5f*ma;
 								normal = normalize(vec3(abs(xDir-mean) - abs(xDirr-mean), abs(yDir-mean) - abs(yDirr-mean), abs(zDir-mean) - abs(zDirr-mean)));
@@ -118,6 +129,7 @@ void main() {
 					allInside[brushIndex] = allInside[brushIndex] && anyInside;
 				}
 				prevDensity[axis] = density;
+				++densityIndex;
 			}
 		}
 	
@@ -144,7 +156,7 @@ void main() {
 			allInside[i] = true;
 		}
 	
-		startPoint += step;
+		startPoint += d*curStepsize;
 	}
 
 	//if we stepped out of the cube and a iso surface was active add surface color

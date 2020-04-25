@@ -9055,16 +9055,19 @@ int main(int, char**)
 					uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
 					std::vector<uint32_t> densityInds(pcAttributes.size());
 					for (int i = 0; i < pcAttributes.size(); ++i) densityInds[i] = i;
-					std::vector<std::pair<float, float>> posBounds{ {pcAttributes[posIndices[0]].min,pcAttributes[posIndices[0]].max},{pcAttributes[posIndices[1]].min,pcAttributes[posIndices[1]].max}, {pcAttributes[posIndices[2]].min,pcAttributes[posIndices[2]].max} };
-					if (!isoSurfaceRegularGrid) {
-						posBounds[0].first = SpacialData::rlat[0];
-						posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
-						posBounds[1].first = SpacialData::altitude[0];
-						posBounds[1].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
-						posBounds[2].first = SpacialData::rlon[0];
-						posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
+					std::vector<std::pair<float, float>> bounds;// { {pcAttributes[posIndices[0]].min, pcAttributes[posIndices[0]].max}, { pcAttributes[posIndices[1]].min,pcAttributes[posIndices[1]].max }, { pcAttributes[posIndices[2]].min,pcAttributes[posIndices[2]].max } };
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						bounds.emplace_back(pcAttributes[i].min, pcAttributes[i].max);
 					}
-					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, posBounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),isoSurfaceRegularGrid);
+					if (!isoSurfaceRegularGrid) {
+						bounds[posIndices[0]].first = SpacialData::rlat[0];
+						bounds[posIndices[0]].second = SpacialData::rlat[SpacialData::rlatSize - 1];
+						bounds[posIndices[1]].first = SpacialData::altitude[0];
+						bounds[posIndices[1]].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
+						bounds[posIndices[2]].first = SpacialData::rlon[0];
+						bounds[posIndices[2]].second = SpacialData::rlon[SpacialData::rlonSize - 1];
+					}
+					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, bounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),isoSurfaceRegularGrid);
 					brushIsoSurfaceRenderer->activeDrawlist = dl->name;
 				}
 				ImGui::EndDragDropTarget();

@@ -87,7 +87,7 @@ public:
 
 	// camera variables for the GUI are stored here
 	glm::vec3 cameraPositionGLMGUI;
-	float cameraPositionGUI[3];
+	float cameraPositionGUI[3]{};
 private:
 	struct UniformBuffer {
 		glm::vec4 camPos;				//cameraPosition in model space
