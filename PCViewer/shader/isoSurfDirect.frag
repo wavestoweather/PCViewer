@@ -66,7 +66,7 @@ void main() {
 	startPoint += step * rand(startPoint);
 
 	//for every axis/attribute here the last density is stored
-	const float pD = -3.402823466e+38F;
+	const float pD = -1.0f/0;//-3.402823466e+38F;
 	float prevDensity[30] = float[30](pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD,pD);
 	bool allInside[30] = bool[30](true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true);//uint[30](0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff);
 	bool brushBorder[30] = bool[30](false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);

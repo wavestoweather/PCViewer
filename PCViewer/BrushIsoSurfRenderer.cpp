@@ -261,14 +261,15 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 		VkCommandBuffer imageCommands;
 		VkUtil::createCommandBuffer(device, commandPool, &imageCommands);
 		VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
+		std::vector<VkClearColorValue> clearvalues(required3dImages);
 		for (int i = 0; i < required3dImages; ++i) {
 			vkBindImageMemory(device, image3d[i], image3dMemory, image3dOffsets[i]);
 
 			VkUtil::create3dImageView(device, image3d[i], VK_FORMAT_R32_SFLOAT, 1, &image3dView[i]);
 
 			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-			VkClearColorValue clear = { 2 * minMax[i].first - minMax[i].second,0,0,0 };
-			vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+			clearvalues[i] = { 2 * minMax[i].first - minMax[i].second,0,0,0 };
+			vkCmdClearColorImage(imageCommands, image3d[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearvalues[i], 1, &range);
 			VkUtil::transitionImageLayout(imageCommands, image3d[i], VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 		}
 		VkUtil::commitCommandBuffer(queue, imageCommands);
