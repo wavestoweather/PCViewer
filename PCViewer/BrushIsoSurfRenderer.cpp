@@ -895,7 +895,7 @@ void BrushIsoSurfRenderer::updateDescriptorSet()
 	//std::vector<VkSampler> samplers(image3d.size(), binaryImageSampler);
 	std::vector<VkImageView> imViews(activeDensities.size());
 	for (int i = 0; i < activeDensities.size(); ++i)imViews[i] = image3dView[activeDensities[i]];
-	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, imViews, layouts, 1, descriptorSet);
+	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, image3dView, layouts, 1, descriptorSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 }
 

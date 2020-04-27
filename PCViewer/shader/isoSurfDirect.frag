@@ -79,9 +79,9 @@ void main() {
 		for(int axis = 0;axis<info.amtOfAxis && !br;++axis){
 			int axisOffset = int(info.brushes[axis]);
 			//check if there exists a brush on this axis
-			if(info.brushes[axisOffset] >= 1){		//amtOfBrushes > 0
+			if(info.brushes[axisOffset] > 0){		//amtOfBrushes > 0
 				//as there exist brushes we get the density for this attribute
-				float density = texture(texSampler[densityIndex],startPoint).x;
+				float density = texture(texSampler[axis],startPoint).x;
 				//for every brush
 				for(int brush = 0;brush<info.brushes[axisOffset] && !br;++brush){
 					int brushOffset = int(info.brushes[axisOffset + 1 + brush]);
@@ -114,12 +114,12 @@ void main() {
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
 							if(bool(info.shade)){
-								float xDir = texture(texSampler[densityIndex],startPoint+vec3(stepsize * 2,0,0)).x, 
-									xDirr = texture(texSampler[densityIndex],startPoint-vec3(stepsize * 2,0,0)).x, 
-									yDir = texture(texSampler[densityIndex],startPoint+vec3(0,stepsize * 2,0)).x,
-									yDirr = texture(texSampler[densityIndex],startPoint-vec3(0,stepsize * 2,0)).x,
-									zDir = texture(texSampler[densityIndex],startPoint+vec3(0,0,stepsize * 2)).x,
-									zDirr = texture(texSampler[densityIndex],startPoint-vec3(0,0,stepsize * 2)).x;
+								float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 2,0,0)).x, 
+									xDirr = texture(texSampler[axis],startPoint-vec3(stepsize * 2,0,0)).x, 
+									yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 2,0)).x,
+									yDirr = texture(texSampler[axis],startPoint-vec3(0,stepsize * 2,0)).x,
+									zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 2)).x,
+									zDirr = texture(texSampler[axis],startPoint-vec3(0,0,stepsize * 2)).x;
 									
 								float mean = .5f*mi + .5f*ma;
 								normal = normalize(vec3(abs(xDir-mean) - abs(xDirr-mean), abs(yDir-mean) - abs(yDirr-mean), abs(zDir-mean) - abs(zDirr-mean)));

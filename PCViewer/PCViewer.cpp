@@ -2522,7 +2522,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	VkResult err;
 
-	err = vkDeviceWaitIdle(g_Device);
+	err = vkQueueWaitIdle(g_Queue);
 	check_vk_result(err);
 
 	//beginning the command buffer
@@ -8632,7 +8632,7 @@ int main(int, char**)
 						isoSurfaceRenderer->cameraPositionGLMGUI.z = isoSurfaceRenderer->cameraPositionGUI[2];
 						isoSurfaceRenderer->setCameraPos(isoSurfaceRenderer->cameraPositionGLMGUI, &p);
 						isoSurfaceRenderer->render();
-						err = vkDeviceWaitIdle(g_Device);
+						err = vkQueueWaitIdle(g_Queue);
 						check_vk_result(err);
 						ImGui::ResetMouseDragDelta();
 					}
@@ -8646,7 +8646,7 @@ int main(int, char**)
 							brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM.z = isoSurfaceRenderer->cameraPositionGUI[2];
 							brushIsoSurfaceRenderer->setCameraPos(brushIsoSurfaceRenderer->directIsoRendererCameraPositionGLM, &p);
 							brushIsoSurfaceRenderer->render();
-							err = vkDeviceWaitIdle(g_Device);
+							err = vkQueueWaitIdle(g_Queue);
 							check_vk_result(err);
 							ImGui::ResetMouseDragDelta();
 						}
