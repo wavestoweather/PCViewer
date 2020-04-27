@@ -8587,6 +8587,9 @@ int main(int, char**)
 					if (ImGui::SliderFloat("Ray march step size", &isoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {
 						isoSurfaceRenderer->render();
 					}
+					if (ImGui::SliderFloat("Step size for normal calc", &isoSurfaceRenderer->shadingStep, .1f, 10)) {
+						isoSurfaceRenderer->render();
+					}
 					if (ImGui::SliderFloat("Wireframe width", &isoSurfaceRenderer->gridLineWidth, 0, .1f)) {
 						isoSurfaceRenderer->render();
 					}
@@ -8932,6 +8935,9 @@ int main(int, char**)
 						brushIsoSurfaceRenderer->render();
 					}
 					if (ImGui::SliderFloat("Ray march step size", &brushIsoSurfaceRenderer->stepSize, 0.0005f, .05f, "%.5f")) {
+						brushIsoSurfaceRenderer->render();
+					}
+					if (ImGui::SliderFloat("Step size for normal calc", &brushIsoSurfaceRenderer->shadingStep, .1f, 10)) {
 						brushIsoSurfaceRenderer->render();
 					}
 					if (ImGui::DragFloat3("Ligt direction", &brushIsoSurfaceRenderer->lightDir.x)) {

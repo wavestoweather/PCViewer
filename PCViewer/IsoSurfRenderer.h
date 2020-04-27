@@ -77,6 +77,7 @@ public:
 	std::vector<DrawlistBrush> drawlistBrushes;
 	bool shade;
 	float stepSize;
+	float shadingStep = 2;
 	float flySpeed;
 	float fastFlyMultiplier;
 	float rotationSpeed;
@@ -139,6 +140,7 @@ private:
 		uint32_t shade;
 		float stepSize;
 		float isoValue;
+		float shadingStep;
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 

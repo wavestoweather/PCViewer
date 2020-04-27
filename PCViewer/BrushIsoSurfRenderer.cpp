@@ -520,6 +520,7 @@ void BrushIsoSurfRenderer::render()
 	brushInfos->shade = shade;
 	brushInfos->stepSize = stepSize;
 	brushInfos->amtOfBrushes = brushes.size();
+	brushInfos->shadingStep = shadingStep;
 	float* brushI = (float*)(brushInfos + 1);
 	uint32_t curOffset = gpuData.size();		//the first offset is for axis 1, which is the size of the axis
 	for (int axis = 0; axis < gpuData.size(); ++axis) {

@@ -17,6 +17,7 @@ layout(std430 ,binding = 2) buffer brushInfos{
 	float stepSize;
 	float isoValue;
 	uint amtOfBrushes;
+	float shadingStep;
 	float[] brushes;
 	//float[] for the colors of the brushes:
 	//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
@@ -74,16 +75,18 @@ void main() {
 
 	bool br = false;		//bool to break early
 	while(startPoint.x >= 0 && startPoint.x <= 1 && startPoint.y >= 0 && startPoint.y <= 1 && startPoint.z >= 0 && startPoint.z <= 1 && !br){
-		uint densityIndex = 0;
+		//uint densityIndex = 0;
+		uint stepAdaption = 0; //0-> dont adapt, 1-> increase step, 2-> decrease step
+		bool firstAdapt = true;
 		//for every axis/attribute
-		for(int axis = 0;axis<info.amtOfAxis && !br;++axis){
+		for(int axis = 0;axis<info.amtOfAxis && !br && stepAdaption < 2;++axis){
 			int axisOffset = int(info.brushes[axis]);
 			//check if there exists a brush on this axis
 			if(info.brushes[axisOffset] > 0){		//amtOfBrushes > 0
 				//as there exist brushes we get the density for this attribute
 				float density = texture(texSampler[axis],startPoint).x;
 				//for every brush
-				for(int brush = 0;brush<info.brushes[axisOffset] && !br;++brush){
+				for(int brush = 0;brush<info.brushes[axisOffset] && !br && stepAdaption < 2;++brush){
 					int brushOffset = int(info.brushes[axisOffset + 1 + brush]);
 					int brushIndex = 0;
 					bool anyInside = false;
@@ -95,13 +98,18 @@ void main() {
 						float ma = info.brushes[minMaxOffset + 1];
 						if(density>2*mi-ma && density<2*ma-mi){
 							if(curStepsize > stepsize){
-								startPoint += stepsize *d - d*curStepsize;
-								density = texture(texSampler[densityIndex],startPoint).x;
-								curStepsize = stepsize;
+								stepAdaption = 2;
+								break;
 							}
 						}
 						else{
-							curStepsize = clamp(curStepsize * growth,stepsize,maxStepsize);
+							if(firstAdapt){
+								stepAdaption = 1;
+								firstAdapt = false;
+							}
+							else{
+								stepAdaption = stepAdaption & 1;
+							}
 						}
 						bool nowInside = density>=mi && density<=ma;
 						bool prevInside = (prevDensity[axis]>=mi)&&(prevDensity[axis]<=ma);
@@ -114,12 +122,12 @@ void main() {
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
 							if(bool(info.shade)){
-								float xDir = texture(texSampler[axis],startPoint+vec3(stepsize * 2,0,0)).x, 
-									xDirr = texture(texSampler[axis],startPoint-vec3(stepsize * 2,0,0)).x, 
-									yDir = texture(texSampler[axis],startPoint+vec3(0,stepsize * 2,0)).x,
-									yDirr = texture(texSampler[axis],startPoint-vec3(0,stepsize * 2,0)).x,
-									zDir = texture(texSampler[axis],startPoint+vec3(0,0,stepsize * 2)).x,
-									zDirr = texture(texSampler[axis],startPoint-vec3(0,0,stepsize * 2)).x;
+								float xDir = texture(texSampler[axis],startPoint+vec3(info.shadingStep * stepsize,0,0)).x, 
+									xDirr = texture(texSampler[axis],startPoint-vec3(info.shadingStep * stepsize,0,0)).x, 
+									yDir = texture(texSampler[axis],startPoint+vec3(0,info.shadingStep * stepsize,0)).x,
+									yDirr = texture(texSampler[axis],startPoint-vec3(0,info.shadingStep * stepsize,0)).x,
+									zDir = texture(texSampler[axis],startPoint+vec3(0,0,info.shadingStep * stepsize)).x,
+									zDirr = texture(texSampler[axis],startPoint-vec3(0,0,info.shadingStep * stepsize)).x;
 									
 								float mean = .5f*mi + .5f*ma;
 								normal = normalize(vec3(abs(xDir-mean) - abs(xDirr-mean), abs(yDir-mean) - abs(yDirr-mean), abs(zDir-mean) - abs(zDirr-mean)));
@@ -129,8 +137,19 @@ void main() {
 					allInside[brushIndex] = allInside[brushIndex] && anyInside;
 				}
 				prevDensity[axis] = density;
-				++densityIndex;
+				//++densityIndex;
 			}
+		}
+
+		//step adaption
+		if(stepAdaption == 1){
+			curStepsize = clamp(curStepsize * growth,stepsize,maxStepsize);
+		}
+		if(stepAdaption == 2){
+			startPoint -= d * curStepsize;
+			curStepsize = stepsize;
+			startPoint += d*curStepsize;
+			continue;
 		}
 	
 		//surface rendering 
@@ -165,14 +184,14 @@ void main() {
 	for(int i = 0;i<info.amtOfBrushes;++i){
 		inside = inside && allInside[i];
 	}
-
+	
 	if(inside){
 		if(bool(info.shade)){
 			//find exact surface position for lighting
 			vec3 curPos = startPoint;
 			vec3 prevPos = startPoint - curStepsize * d;
 			curPos = .5f * prevPos + .5f * curPos;
-
+	
 			vec3 normal;
 			if(startPoint.x>=1) normal = vec3(1,0,0);
 			if(startPoint.x<=0) normal = vec3(-1,0,0);

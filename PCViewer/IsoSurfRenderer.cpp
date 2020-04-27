@@ -1182,6 +1182,7 @@ void IsoSurfRenderer::render()
 	brushInfos->shade = shade;
 	brushInfos->stepSize = stepSize;
 	brushInfos->isoValue = isoValue;
+	brushInfos->shadingStep = shadingStep;
 	float* brushColors = (float*)(brushInfos + 1);
 	for (int i = 0; i < drawlistBrushes.size(); ++i) {
 		brushColors[i * 4] = drawlistBrushes[i].brushSurfaceColor.x;
@@ -1189,7 +1190,7 @@ void IsoSurfRenderer::render()
 		brushColors[i * 4 + 2] = drawlistBrushes[i].brushSurfaceColor.z;
 		brushColors[i * 4 + 3] = drawlistBrushes[i].brushSurfaceColor.w;
 	}
-	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
+	VkUtil::uploadData(device, brushMemory, 0, brushInfosSize, brushInfos);
 
 	delete[] brushInfos;
 

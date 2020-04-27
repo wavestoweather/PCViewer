@@ -75,6 +75,7 @@ public:
 	std::string activeDrawlist;
 	bool shade;
 	float stepSize;
+	float shadingStep = 2;
 	float flySpeed;
 	float fastFlyMultiplier;
 	float rotationSpeed;
@@ -139,6 +140,7 @@ private:
 		float stepSize;
 		float isoValue;
 		uint32_t amtOfBrushes;
+		float shadingStep;
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 
