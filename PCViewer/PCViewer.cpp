@@ -6966,7 +6966,8 @@ int main(int, char**)
 							}
 						}
 						globalBrushes.push_back(gb);
-						pcPlotRender = true;
+						//pcPlotRender = true;
+						pcPlotRender = updateAllActiveIndices();
 					}
 					ImGui::EndDragDropTarget();
 				}
@@ -7159,8 +7160,8 @@ int main(int, char**)
 
 							// x is the center of the axis. Now, the hist goes to the left and right, no matter how many are drawn. So, calculate the min_x, max_x, h*2 +1 axes, every second is the middle of a histogrm
 
-							std::cout << placeOfInd(i) << "\n";
-							std::cout << pcAttrOrd[i] << "\n";
+							//std::cout << placeOfInd(i) << "\n";
+							//std::cout << pcAttrOrd[i] << "\n";
 							
 							ImVec2 a(x, picPos.y + std::max(14.f, radius + 4.f));
 							ImGui::GetWindowDrawList()->AddPie(a, radius, IM_COL32(255, 255, 255, 255), currdl.brushedRatioToParent[pcAttrOrd[i]], -1,  pieBorder);
@@ -7532,10 +7533,10 @@ int main(int, char**)
 			}
 
 			// reorder Histograms in ViolinPlots if pcPlotRender==true and if requested.
-			if (pcPlotRender && renderOrderDLConsider && renderOrderDLConsiderNonStop) {
+			if (pcPlotRender && renderOrderDLConsider && renderOrderDLConsiderNonStop && enableDrawlistViolinPlots) {
 				sortAllHistograms(std::string("dl"));
 			}
-			if (pcPlotRender && renderOrderAttConsider && renderOrderAttConsiderNonStop) {
+			if (pcPlotRender && renderOrderAttConsider && renderOrderAttConsiderNonStop && enableAttributeViolinPlots) {
 				sortAllHistograms(std::string("attr"));
 			}
 
@@ -8594,7 +8595,7 @@ int main(int, char**)
 						isoSurfaceRenderer->render();
 					}
 					static float stdDiv = 1;
-					static bool copyOnes = false;
+					static bool copyOnes = true;
 					if (ImGui::SliderFloat("Smoothing kernel size", &stdDiv, 0, 10)) {
 						isoSurfaceRenderer->setBinarySmoothing(stdDiv,copyOnes);
 						isoSurfaceRenderer->render();

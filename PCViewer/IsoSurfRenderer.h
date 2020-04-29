@@ -81,7 +81,7 @@ public:
 	float flySpeed;
 	float fastFlyMultiplier;
 	float rotationSpeed;
-	float isoValue = .5f;
+	float isoValue = .1f;
 	float gridLineWidth = .005f;
 	glm::vec3 lightDir;
 	VkClearValue imageBackground;
