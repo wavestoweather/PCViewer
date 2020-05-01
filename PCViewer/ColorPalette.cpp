@@ -251,7 +251,7 @@ ColorPaletteManager::ColorPaletteManager():
 	chosenAutoColorPaletteFill(std::string("Dark2ReorderSplitYellowExtended")),
     skipFirstAttributes(0),
     alphaLines(255),
-    alphaFill(153),
+    alphaFill(102),
     applyToFillColor(true),
     applyToLineColor(true),
     backupLineColor(false),

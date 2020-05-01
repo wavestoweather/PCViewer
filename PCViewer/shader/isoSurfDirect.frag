@@ -122,12 +122,35 @@ void main() {
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
 							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
 							if(bool(info.shade)){
-								float xDir = texture(texSampler[axis],startPoint+vec3(info.shadingStep * stepsize,0,0)).x, 
-									xDirr = texture(texSampler[axis],startPoint-vec3(info.shadingStep * stepsize,0,0)).x, 
-									yDir = texture(texSampler[axis],startPoint+vec3(0,info.shadingStep * stepsize,0)).x,
-									yDirr = texture(texSampler[axis],startPoint-vec3(0,info.shadingStep * stepsize,0)).x,
-									zDir = texture(texSampler[axis],startPoint+vec3(0,0,info.shadingStep * stepsize)).x,
-									zDirr = texture(texSampler[axis],startPoint-vec3(0,0,info.shadingStep * stepsize)).x;
+								//find exact surface position for lighting
+								vec3 curPos = startPoint;
+								vec3 prevPos = startPoint - curStepsize * d;
+								float precDensity = density;
+								for(int i = 0;i< 8;++i){
+									vec3 tmpPoint = .5f * curPos + .5f * prevPos;
+									precDensity = texture(texSampler[brush], tmpPoint).x;
+									if(precDensity<isoVal){		//intersection is in interval[tmpPoint , curPos]
+										prevPos = tmpPoint;
+									}
+									else{						//intersection is in interval[prevPoint, tmpPoint]
+										curPos = tmpPoint;
+									}
+								}
+								curPos = .5f * prevPos + .5f * curPos;
+								float xDir = texture(texSampler[axis],curPos+vec3(info.shadingStep * stepsize,0,0)).x, 
+									xDirr = texture(texSampler[axis],curPos-vec3(info.shadingStep * stepsize,0,0)).x, 
+									yDir = texture(texSampler[axis],curPos+vec3(0,info.shadingStep * stepsize,0)).x,
+									yDirr = texture(texSampler[axis],curPos-vec3(0,info.shadingStep * stepsize,0)).x,
+									zDir = texture(texSampler[axis],curPos+vec3(0,0,info.shadingStep * stepsize)).x,
+									zDirr = texture(texSampler[axis],curPos-vec3(0,0,info.shadingStep * stepsize)).x;
+
+
+//								float xDir = texture(texSampler[axis],startPoint+vec3(info.shadingStep * stepsize,0,0)).x, 
+//									xDirr = texture(texSampler[axis],startPoint-vec3(info.shadingStep * stepsize,0,0)).x, 
+//									yDir = texture(texSampler[axis],startPoint+vec3(0,info.shadingStep * stepsize,0)).x,
+//									yDirr = texture(texSampler[axis],startPoint-vec3(0,info.shadingStep * stepsize,0)).x,
+//									zDir = texture(texSampler[axis],startPoint+vec3(0,0,info.shadingStep * stepsize)).x,
+//									zDirr = texture(texSampler[axis],startPoint-vec3(0,0,info.shadingStep * stepsize)).x;
 									
 								float mean = .5f*mi + .5f*ma;
 								normal = normalize(vec3(abs(xDir-mean) - abs(xDirr-mean), abs(yDir-mean) - abs(yDirr-mean), abs(zDir-mean) - abs(zDirr-mean)));

@@ -3970,7 +3970,7 @@ static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, 
 		unsigned int currDLNr = 0;
 		getyScaleDL(currDLNr, violinDrawlistPlots[0], violinMinMax);
 
-		float minimalRelativeRange = 0.1;
+		float minimalRelativeRange = 0.001;
 		// Only use the new range if it is large enough to be computationally stable.
 		for (int i = 0; i < minMax.size(); ++i) {
 			if ((violinMinMax[i].second - violinMinMax[i].first) > minimalRelativeRange * (minMax[i].second - minMax[i].first)) {
@@ -4590,9 +4590,17 @@ static bool updateActiveIndices(DrawList& dl) {
 
 		if (true) {
 			int parentCount = 0;
+			std::vector<bool> parentActive;
+			parentActive.clear();
+
 			for (auto& gb : globalBrushes) {
 				//for (int iax = 0; iax < dl.parentTemplateList->minMax.size(); iax++) {
 				if (gb.fractureDepth > 0) {
+					if (parentActive.size() == 0) {
+						parentActive.resize(parentDS->data.size());
+						for (int i = 0; i < parentActive.size(); ++i) { parentActive[i] = false; }
+					}
+
 					int iax = 0;
 					for (auto& ax : gb.attributes) {
 						// if (gb.fractureDepth > 0) {}if (gb.useMultivariate) {}gb.fractions
@@ -4603,19 +4611,32 @@ static bool updateActiveIndices(DrawList& dl) {
 							//}
 							//else {
 						for (std::vector<std::pair<float, float>>& currFr : gb.fractions) {
+							
 							float currBrMin = currFr[iax].first;
 							float currBrMax = currFr[iax].second;
+
+							int iVal = -1;
 							for (auto& val : parentDS->data)
 							{
+								iVal++;
 								if ((val[ax] >= currBrMin) && (val[ax] <= currBrMax))
 								{
+									parentActive[iVal] = true;
 									++parentCount;
 								}
 							}
 						}
 						if (parentCount != 0)
-						{
-							dl.brushedRatioToParent[ax] = float(globalRemainingLines) / parentCount;
+						{	
+							int nrActiveInParent = 0;
+							for (int i = 0; i < parentActive.size(); ++i) {
+								nrActiveInParent += int(parentActive[i]);
+							}
+
+							dl.brushedRatioToParent[ax] = float(globalRemainingLines) / nrActiveInParent;
+							for (int i = 0; i < parentActive.size(); ++i) {
+								parentActive[i] = false;
+							}
 						}
 						parentCount = 0;
 						//}
@@ -9450,7 +9471,15 @@ int main(int, char**)
 				ImGui::NextColumn();
 				if(ImGui::Checkbox("Reverse color pallette", &violinPlotAttrReverseColorPallette))
 				{
-					violinDrawlistPlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
+					violinAttributePlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
+				}
+				if (ImGui::Button("Fix order and colors"))
+				{
+					violinPlotAttrReplaceNonStop = false;
+					violinAttributePlots[i].colorPaletteManager->useColorPalette = false;
+					renderOrderAttConsiderNonStop = false;
+					renderOrderAttConsider = false;
+					//violinDrawlistPlots[i].colorPaletteManager->useColorPalette = false;				
 				}
 
 				ImGui::Columns(previousNrOfColumns);
@@ -10000,6 +10029,13 @@ int main(int, char**)
 				{
 					violinDrawlistPlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
 				}
+				if (ImGui::Button("Fix order and colors"))
+				{
+					violinPlotDLReplaceNonStop = false;
+					violinDrawlistPlots[i].colorPaletteManager->useColorPalette = false;
+					renderOrderDLConsiderNonStop = false;
+					renderOrderDLConsider = false;
+				}
 
 
 				ImGui::Columns(1);
@@ -10079,7 +10115,9 @@ int main(int, char**)
 													uint32_t wi = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
 													uint32_t he = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
 													uint32_t de = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
-													isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name, "",{ 1,0,0,1 }, {wi, he, de} });
+													glm::vec4 isoColor;
+													(isoSurfaceRenderer->drawlistBrushes.size() == 0) ? isoColor = { 0,1,0, 0.627 } : isoColor = { 1,0,1,0.627 };
+													isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name, "",isoColor, {wi, he, de} });
 												}
 												isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfaceRegularGrid, index);
 												isoSurfaceRenderer->render();
