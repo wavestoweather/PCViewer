@@ -32,6 +32,7 @@ float rand(vec3 co)
 }
 
 void main() {
+
 	vec3 d = endPos-ubo.camPos;
 	vec3 dinv = 1/d;
 
@@ -98,17 +99,17 @@ void main() {
 						float ma = info.brushes[minMaxOffset + 1];
 						if(density>2*mi-ma && density<2*ma-mi){
 							if(curStepsize > stepsize){
-								stepAdaption = 2;
+								stepAdaption = 2;stepAdaption=0; // DEBUG CHANGES MADE HERE
 								break;
 							}
 						}
 						else{
 							if(firstAdapt){
-								stepAdaption = 1;
+								stepAdaption = 1;stepAdaption=0; // DEBUG CHANGES MADE HERE
 								firstAdapt = false;
 							}
 							else{
-								stepAdaption = stepAdaption & 1;
+								stepAdaption = stepAdaption & 1;stepAdaption=0; // DEBUG CHANGES MADE HERE
 							}
 						}
 						bool nowInside = density>=mi && density<=ma;
@@ -120,13 +121,14 @@ void main() {
 						anyInside = anyInside || nowInside || stepInOut;
 						if(stepInOut){
 							brushColor[brushIndex] = vec4(info.brushes[brushOffset + 2],info.brushes[brushOffset + 3],info.brushes[brushOffset + 4],info.brushes[brushOffset + 5]);
-							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush as reference
+							//get the normal for shading. This has to be calculated a bit different than in the binary case, as we have to get the distance to the center of the brush 
+							//as reference
 							if(bool(info.shade)){
 								//find exact surface position for lighting
 								vec3 curPos = startPoint;
 								vec3 prevPos = startPoint - curStepsize * d;
 								float precDensity = density;
-								for(int i = 0;i< 8;++i){
+								for(int i = 0;i< refinmentSteps;++i){
 									vec3 tmpPoint = .5f * curPos + .5f * prevPos;
 									precDensity = texture(texSampler[brush], tmpPoint).x;
 									if(precDensity<isoVal){		//intersection is in interval[tmpPoint , curPos]
