@@ -88,6 +88,7 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #define KEYD 68
 #define KEYQ 81
 #define KEYE 69
+#define KEYP 80
 #define KEYENTER 257
 #define KEYESC 256
 
@@ -721,7 +722,7 @@ static bool updateBrushTemplates = false;
 static int selectedTemplateBrush = -1;
 static bool drawListForTemplateBrush = false;
 static std::vector<TemplateBrush> templateBrushes;
-static int liveBrushThreshold = 2e5;
+static int liveBrushThreshold = 2e6;
 
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
@@ -6231,7 +6232,7 @@ int main(int, char**)
 				settingsManager->deleteSetting(del);
 			}
 			ImGui::Separator();
-			if (ImGui::Button("Close")) {
+			if ((ImGui::Button("Close")) || ImGui::IsKeyPressed(KEYESC)) {
 				ImGui::CloseCurrentPopup();
 			}
 			ImGui::EndPopup();
@@ -6289,7 +6290,7 @@ int main(int, char**)
 		//popup for loading error
 		if (ImGui::BeginPopupModal("Load error")) {
 			ImGui::Text("Error at loading the current setting");
-			if (ImGui::Button("Close", ImVec2(120, 0))) {
+			if ((ImGui::Button("Close", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYESC)) {
 				ImGui::CloseCurrentPopup();
 			}
 			ImGui::EndPopup();
@@ -6312,7 +6313,7 @@ int main(int, char**)
 				ImGui::CloseCurrentPopup();
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			if ((ImGui::Button("Cancel", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYESC)) {
 				ImGui::CloseCurrentPopup();
 			}
 
@@ -6332,7 +6333,7 @@ int main(int, char**)
 				settingsManager->deleteSetting(del);
 			}
 			ImGui::Separator();
-			if (ImGui::Button("Close")) {
+			if ((ImGui::Button("Close")) || ImGui::IsKeyPressed(KEYESC)) {
 				ImGui::CloseCurrentPopup();
 			}
 
@@ -6369,7 +6370,7 @@ int main(int, char**)
 #ifdef _DEBUG
 		ImGui::ShowDemoWindow(NULL);
 #endif
-
+		
 		//Parallel coordinates plot ----------------------------------------------------------------------------------------
 		ImVec2 picPos;
 		bool picHovered;
@@ -6892,12 +6893,12 @@ int main(int, char**)
 					}
 					ImGui::EndChild();
 
-					if (ImGui::Button("Cancel")) {
+					if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 						openConvertToLokal = -1;
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::SameLine();
-					if (ImGui::Button("Create")) {
+					if ((ImGui::Button("Create")) || ImGui::IsKeyPressed(KEYENTER)) {
 						if (selected != -1) {
 							auto ds = g_PcPlotDataSets.begin();
 							for (int i = 0; i < selected; i++) {
@@ -6942,12 +6943,12 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					if (ImGui::Button("Cancel")) {
+					if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 						setParent = -1;
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::SameLine();
-					if (ImGui::Button("Confirm")) {
+					if ((ImGui::Button("Confirm")) || ImGui::IsKeyPressed(KEYENTER)) {
 						auto gb = globalBrushes.begin();
 						std::advance(gb, setParent);
 						auto ds = g_PcPlotDataSets.begin();
@@ -7687,7 +7688,21 @@ int main(int, char**)
 				ImGui::EndCombo();
 			}
 
+			if (ImGui::IsKeyPressed(KEYP)) {
+				if (prioritySelectAttribute) {
+					prioritySelectAttribute = false;
+				}
+				else {
+					prioritySelectAttribute = true;
+				}
+			}
+
+
 			if (ImGui::Button("Set Priority center")) {
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("or press 'P' to set a priority rendering center");
+				}
+
 				prioritySelectAttribute = true;
 			}
 
@@ -7779,7 +7794,8 @@ int main(int, char**)
 							ImGui::Separator();
 							ImGui::InputText("Drawlist Name", pcDrawListName, 200);
 
-							if (ImGui::Button("Create", ImVec2(120, 0))) {
+							if ((ImGui::Button("Create", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYENTER))
+							{
 								ImGui::CloseCurrentPopup();
 
 								createPcPlotDrawList(tl, ds, pcDrawListName);
@@ -7787,7 +7803,8 @@ int main(int, char**)
 							}
 							ImGui::SetItemDefaultFocus();
 							ImGui::SameLine();
-							if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+							if ((ImGui::Button("Cancel", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYESC)) 
+							{ ImGui::CloseCurrentPopup(); }
 							ImGui::EndPopup();
 						}
 					}
@@ -7822,7 +7839,7 @@ int main(int, char**)
 						}
 
 						ImGui::Separator();
-						if (ImGui::Button("Create")) {
+						if ((ImGui::Button("Create")) || ImGui::IsKeyPressed(KEYENTER)) {
 							GlobalBrush brush = {};
 							brush.name = std::string(n);
 							brush.active = true;
@@ -7844,7 +7861,7 @@ int main(int, char**)
 							ImGui::CloseCurrentPopup();
 						}
 						ImGui::SameLine();
-						if (ImGui::Button("Cancel")) {
+						if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 							ImGui::CloseCurrentPopup();
 						}
 						ImGui::EndPopup();
@@ -7866,7 +7883,7 @@ int main(int, char**)
 						}
 
 						ImGui::Separator();
-						if (ImGui::Button("Create")) {
+						if ((ImGui::Button("Create")) || ImGui::IsKeyPressed(KEYENTER)) {
 							createPcPlotDrawList(ds.drawLists.front(), ds, n);
 							DrawList& dl = g_PcPlotDrawLists.back();
 							for (int i = 0; i < pcAttributes.size(); i++) {
@@ -7881,7 +7898,7 @@ int main(int, char**)
 							ImGui::CloseCurrentPopup();
 						}
 						ImGui::SameLine();
-						if (ImGui::Button("Cancel")) {
+						if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 							ImGui::CloseCurrentPopup();
 						}
 
@@ -7930,7 +7947,7 @@ int main(int, char**)
 
 						ImGui::EndChild();
 
-						if (ImGui::Button("Add Indeces", ImVec2(120, 0))) {
+						if ((ImGui::Button("Add Indeces", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYENTER)) {
 							ImGui::CloseCurrentPopup();
 							if (droppedPaths.size() == 0)
 								addIndecesToDs(ds, pcFilePath);
@@ -7946,7 +7963,7 @@ int main(int, char**)
 						}
 						ImGui::SetItemDefaultFocus();
 						ImGui::SameLine();
-						if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+						if ((ImGui::Button("Cancel", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYESC)) {
 							ImGui::CloseCurrentPopup();
 							droppedPaths.clear();
 							delete[] createDLForDrop;
@@ -7975,7 +7992,8 @@ int main(int, char**)
 						}
 						ImGui::SetItemDefaultFocus();
 						ImGui::SameLine();
-						if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+						if ((ImGui::Button("Cancel", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYESC)) 
+						{ ImGui::CloseCurrentPopup(); }
 						ImGui::EndPopup();
 					}
 					ImGui::TreePop();
@@ -7993,7 +8011,7 @@ int main(int, char**)
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::SameLine();
-					if (ImGui::Button("Cancel")) {
+					if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 						ImGui::CloseCurrentPopup();
 					}
 
@@ -8364,7 +8382,7 @@ int main(int, char**)
 				}
 				ImGui::EndChild();
 
-				if (ImGui::Button("Close")) {
+				if ((ImGui::Button("Close")) || ImGui::IsKeyPressed(KEYESC)) {
 					ImGui::CloseCurrentPopup();
 				}
 
@@ -8377,7 +8395,7 @@ int main(int, char**)
 			if (ImGui::BeginPopupModal("Export Drawlist", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 				static char filepath[250];
 				ImGui::InputText("filepath", filepath, 250);
-				if (ImGui::Button("Cancel")) {
+				if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::SameLine();
@@ -8394,7 +8412,7 @@ int main(int, char**)
 			if (ImGui::BeginPopupModal("Export Drawlist to .csv", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 				static char filepath[250];
 				ImGui::InputText("filepath (has to include the filename with .csv ending)", filepath, 250);
-				if (ImGui::Button("Cancel")) {
+				if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::SameLine();
