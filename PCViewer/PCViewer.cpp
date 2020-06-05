@@ -3348,6 +3348,7 @@ static void openCsv(const char* filename) {
 	//creating the dataset to be drawable
 	DataSet ds;
 	std::string s(filename);
+    float minRangeEps = 0.00001;//10e-16;
 	int split = (s.find_last_of("\\") > s.find_last_of("/")) ? s.find_last_of("/") : s.find_last_of("\\");
 	ds.name = s.substr(split + 1);
 	//checking if the filename already exists
@@ -3431,7 +3432,6 @@ static void openCsv(const char* filename) {
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
-
 				//checking for an overrunning attribute counter
 				if (attr == pcAttributes.size()) {
 					std::cerr << "The dataset to open is not consitent!" << std::endl;
@@ -3466,6 +3466,14 @@ static void openCsv(const char* filename) {
 			ds.data.back()[permutation[attr]] = curF;
 		}
 	}
+
+    for (unsigned int k = 0; k < pcAttributes.size(); ++k){
+        if (pcAttributes[k].max == pcAttributes[k].min)   {
+            pcAttributes[k].max += minRangeEps;
+        }
+    }
+
+
 	f.close();
 
 	ds.reducedDataSetSize = ds.data.size();
@@ -5422,6 +5430,7 @@ static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist,
 	for (unsigned int k = 0; k < hist.area.size(); ++k) {
 
 		float deltaBin = (hist.ranges[k].second - hist.ranges[k].first) / hist.bins[k].size();
+        if (deltaBin == 0.0){deltaBin = 1;}
 
 		// casting to int works as floor, since startBin is always positive. 
 		int startBin = std::max(0,(int)((violinMinMax[k].first - hist.ranges[k].first) / deltaBin));
