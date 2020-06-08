@@ -3972,12 +3972,73 @@ static void getyScaleDL(unsigned int& dlNr,
 	}
 }
 
-static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations) {
+// Call this function for every attribute independently. Since the order is determined using the first drawlist in the violine plots,
+// this function only needs one drawlist.
+// Returns a pair of histogram Min and Max.
+static void getyScaleDLForAttributeViolins(unsigned int& dlNr,
+    ViolinPlot& violinAttrPlot,
+    std::vector<std::pair<float, float>>& violinMinMax
+
+)
+{
+    //std::vector<std::pair<float, float>> violinMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
+
+    if (violinYScale == ViolinYScaleStandard)
+    {
+        for (int k = 0; k < pcAttributes.size(); ++k) {
+            // Find the attribute in the PC plot to determine min and max values.
+            std::string currAttributeName = violinAttrPlot.attributeNames[k];
+            auto it = std::find_if(pcAttributes.begin(), pcAttributes.end(),
+                [&violinAttrPlot, k](const Attribute& currObj) {return currObj.name == violinAttrPlot.attributeNames[k];  });
+
+            violinMinMax[k] = std::pair(it->min, it->max);
+
+        }
+        return;
+        //return violinMinMax;
+    }
+
+
+    DrawList* dl = nullptr;
+    if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+        for (DrawList& draw : g_PcPlotDrawLists) {
+            if (draw.name == violinAttrPlot.drawLists[dlNr].name) {
+                dl = &draw;
+            }
+        }
+    }
+
+    switch (violinYScale) {
+    case ViolinYScaleLocalBrush:
+        getLocalBrushLimits(dl, violinMinMax);
+        return;
+        break;
+    case ViolinYScaleGlobalBrush:
+        getGlobalBrushLimits(violinMinMax);
+        return;
+        break;
+    case ViolinYScaleBrushes:
+        getGlobalBrushLimits(violinMinMax);
+        getLocalBrushLimits(dl, violinMinMax);
+        return;
+        break;
+    }
+}
+
+static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations, bool callForviolinAttributePlots = false) {
 	if (histogramManager->adaptMinMaxToBrush) {
 		std::vector<std::pair<float, float>> violinMinMax(minMax.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 
 		unsigned int currDLNr = 0;
-		getyScaleDL(currDLNr, violinDrawlistPlots[0], violinMinMax);
+        if (callForviolinAttributePlots || (violinDrawlistPlots.size() == 0))
+        {
+            getyScaleDLForAttributeViolins(currDLNr, violinAttributePlots[0], violinMinMax);
+        }
+        else
+        {
+            getyScaleDL(currDLNr, violinDrawlistPlots[0], violinMinMax);
+        }
+
 
 		float minimalRelativeRange = 0.001;
 		// Only use the new range if it is large enough to be computationally stable.
@@ -9195,7 +9256,7 @@ int main(int, char**)
 										break;
 									}
 								}
-								exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+                                exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView, true);
 								//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 								std::vector<std::pair<uint32_t, float>> area;
@@ -9263,6 +9324,7 @@ int main(int, char**)
 					}
 					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
 					if (ImGui::BeginCombo("Y Scale", violinYs[violinYScale])) {
+                        ImGui::SetTooltip("This only affects to which range the bins are fitted. The y min and max are the PCPlot axis borders.");
 						for (int v = 0; v < 4; ++v) {
 							if (ImGui::MenuItem(violinYs[v])) {
 								violinYScale =(ViolinYScale) v;
@@ -9366,7 +9428,7 @@ int main(int, char**)
 								if (ds.name == k->parentDataSet)
 									parent = &ds;
 							}
-							exeComputeHistogram(k->name, minMax, k->buffer, parent->data.size(), k->indicesBuffer, k->indices.size(), k->activeIndicesBufferView);
+                            exeComputeHistogram(k->name, minMax, k->buffer, parent->data.size(), k->indicesBuffer, k->indices.size(), k->activeIndicesBufferView, true);
 							//histogramManager->computeHistogramm(k->name, minMax, k->buffer, parent->data.size(), k->indicesBuffer, k->indices.size(), k->activeIndicesBufferView);
 							bool datasetIncluded = false;
 							for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
@@ -9564,7 +9626,7 @@ int main(int, char**)
 							if (!violinAttributePlots[i].drawLists[k].activated) continue;
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinAttributePlots[i].drawLists[k].name);
 							DrawList* dl = nullptr;
-							if (yScaleToCurrenMax) {
+                            if (true || yScaleToCurrenMax) {
 								for (DrawList& draw : g_PcPlotDrawLists) {
 									if (draw.name == violinAttributePlots[i].drawLists[k].name) {
 										dl = &draw;
