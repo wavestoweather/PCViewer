@@ -17,6 +17,9 @@ For some cmake versions, the cmakes clash. The branch master_ak solves this clas
 Comments to Linux version:
 The drag&drop between Drawlists in the PCViewer and the Violin Plots only works when they are in the same window. If they are in separate windows, first move the Violin Plots over the main PCViewer window or alternatively dock it into this window.
 
+The tool does not behave well with multiple screens under Linux, which might be fixable with a later ImGUI version. If you encounter device lost vulkan errors, it's probably one of the two causes: Not all windows were on the same display all the time or the watchdog killed the tool (TDR) since rendering took too long and the timeout was exceeded.
+
+
 License:
 Upon publication of the paper, our part of the code is avaiable under a permissive license (to be determined).
 Please be aware of the licenses of included 3rd party code!
