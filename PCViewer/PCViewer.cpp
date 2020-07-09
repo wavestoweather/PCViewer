@@ -859,6 +859,25 @@ static bool sortAscPair(std::pair<T, T2> a, std::pair<T, T2> b) {
 	return a.second < b.second;
 }
 
+template <typename T, typename T2>
+static bool sortAscFloatBasedOnOther(T a, T b, T2 vala, T2 valb) {
+    if (isnan(vala)) { return true; }
+    if (isnan(valb)) { return false; }
+
+    return vala < valb;
+
+
+}
+
+template <typename T>
+static bool sortMPVPWHistMeasure(T a, T b, std::vector<float> &dists ){
+    if (a >= dists.size()) {return false;}
+    if (b >= dists.size()) {return true;}
+
+    return sortAscFloatBasedOnOther(a,b, dists[a], dists[b]);
+
+}
+
 // For converting std::vector<std::string>> to char array
 char *convertToChar(const std::string & s)
 {
@@ -9578,8 +9597,8 @@ int main(int, char**)
 								}
 							}
 							ImGui::EndCombo();
-						}
-					}
+                        }
+                    }
 					ImGui::EndMenu();
 				}
 				
@@ -9594,6 +9613,7 @@ int main(int, char**)
 				{
 					violinAttributePlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
 				}
+
 				if (ImGui::Button("Fix order and colors"))
 				{
 					violinPlotAttrReplaceNonStop = false;
@@ -9602,6 +9622,7 @@ int main(int, char**)
 					renderOrderAttConsider = false;
 					//violinDrawlistPlots[i].colorPaletteManager->useColorPalette = false;				
 				}
+
 
 				ImGui::Columns(previousNrOfColumns);
 
@@ -9882,7 +9903,7 @@ int main(int, char**)
 									}
 								}
 								exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
-                                updateHistogramComparisonDL(currViolinDrawlistPlotIdx);
+
 								//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 								std::vector<std::pair<uint32_t, float>> area;
@@ -9915,6 +9936,8 @@ int main(int, char**)
 									drawListPlot.attributeOrder[drawL] = drawListPlot.attributeOrder[0];
 								}
 								++drawL;
+
+                                updateHistogramComparisonDL(currViolinDrawlistPlotIdx);
 							}
                             ++currViolinDrawlistPlotIdx;
 						}
@@ -9922,11 +9945,13 @@ int main(int, char**)
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
 						histogramManager->updateSmoothedValues();
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+                        for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 					static float stdDev = 1.5;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+                        for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
 
@@ -9944,6 +9969,7 @@ int main(int, char**)
 						//std::vector<std::pair<float, float>> violinMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 						//unsigned int currDLNr = 0;
 						//getyScaleDL(currDLNr, violinDrawlistPlots[0], violinMinMax);
+                        for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 
 					ImGui::Columns(3);
@@ -10003,6 +10029,7 @@ int main(int, char**)
 							}
 						}
 						ImGui::EndCombo();
+                        for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 					ImGui::NextColumn();
 					if (ImGui::Checkbox("ChangeLogScale", &logScaleDLGlobal)) {
@@ -10020,6 +10047,7 @@ int main(int, char**)
 							}
 							
 						}
+                        for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 
 					ImGui::EndMenu();
@@ -10068,6 +10096,7 @@ int main(int, char**)
 							}
 						}
 						ImGui::EndCombo();
+                        updateHistogramComparisonDL(i);
 					}
 					ImGui::NextColumn();
 					if (ImGui::SliderFloat(("##slider" + violinDrawlistPlots[i].attributeNames[j]).c_str(), &violinDrawlistPlots[i].attributeScalings[j], 0, 1)) {
@@ -10076,6 +10105,7 @@ int main(int, char**)
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
 							(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 						}
+                        updateHistogramComparisonDL(i);
 					}
 					ImGui::NextColumn();
 					if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
@@ -10085,7 +10115,8 @@ int main(int, char**)
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
 							(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 						}
-					};
+                        updateHistogramComparisonDL(i);
+                    }
 					ImGui::NextColumn();
 					ImGui::ColorEdit4(("##Line Col" + std::to_string(j)).c_str(), &violinDrawlistPlots[i].attributeLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					ImGui::NextColumn();
@@ -10165,6 +10196,7 @@ int main(int, char**)
 				{
 					violinDrawlistPlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
 				}
+                ImGui::Columns(2);
 				if (ImGui::Button("Fix order and colors"))
 				{
 					violinPlotDLReplaceNonStop = false;
@@ -10172,6 +10204,17 @@ int main(int, char**)
 					renderOrderDLConsiderNonStop = false;
                     renderOrderDLConsider = false;
 				}
+                ImGui::NextColumn();
+
+                if (ImGui::Button("Order MPVPs according wrt HistDist")){
+                    if (violinPlotDLIdxInListForHistComparison[i] != -1){
+                        std::sort(violinDrawlistPlots[i].drawListOrder.begin(), violinDrawlistPlots[i].drawListOrder.end(),
+                                  [&]//[&(violinDrawlistPlots[i])]
+                                  (uint32_t &a, uint32_t &b)
+                        {return sortMPVPWHistMeasure(a, b, violinDrawlistPlots[i].histDistToRepresentative);});
+
+                    }
+                }
 
 
 				ImGui::Columns(1);
