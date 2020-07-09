@@ -466,6 +466,8 @@ struct ViolinDrawlistPlot {
 	std::vector<float> maxValues;
 	std::set<uint32_t> selectedDrawlists;
 
+    std::vector<float> histDistToRepresentative;
+
 	ColorPaletteManager* colorPaletteManager;
 
 //    std::unique_ptr<ColorPaletteManager> colorPaletteManager
@@ -814,6 +816,10 @@ static bool violinPlotDLConsiderBlendingOrder = true;
 static bool violinPlotDLReplaceNonStop = false;
 static bool violinPlotAttrReverseColorPallette = false;
 static bool violinPlotDLReverseColorPallette = false;
+
+static std::vector<int> violinPlotDLIdxInListForHistComparison;
+static bool violinPlotDLUseRenderedBinsForHistComp = false;
+static std::string ttempStr = "abc";
 
 static int violinPlotAttrAutoColorAssignFill = 4;
 static int violinPlotDLAutoColorAssignFill = 4;
@@ -4025,6 +4031,7 @@ static void getyScaleDLForAttributeViolins(unsigned int& dlNr,
     }
 }
 
+/** Computes histogram values for one single Drawlist. */
 static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations, bool callForviolinAttributePlots = false) {
 	if (histogramManager->adaptMinMaxToBrush) {
 		std::vector<std::pair<float, float>> violinMinMax(minMax.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
@@ -4054,6 +4061,25 @@ static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, 
 	}
 
 	histogramManager->computeHistogramm(name, minMax, data, amtOfData, indices, amtOfIndices, indicesActivations);
+
+}
+
+
+static void updateHistogramComparisonDL(unsigned int& idVioDLPlts)
+{
+    if (violinPlotDLIdxInListForHistComparison[idVioDLPlts] == -1) {return;}
+    std::string nameRep = violinDrawlistPlots[idVioDLPlts].drawLists[violinPlotDLIdxInListForHistComparison[idVioDLPlts]];
+    for (unsigned int i = 0; i < violinDrawlistPlots[idVioDLPlts].drawLists.size(); ++i)
+    {
+        if (violinDrawlistPlots[idVioDLPlts].histDistToRepresentative.size() <= i){violinDrawlistPlots[idVioDLPlts].histDistToRepresentative.push_back(0);}
+        std::string name =  violinDrawlistPlots[idVioDLPlts].drawLists[i];
+        float dist = histogramManager->computeHistogramDistance(nameRep, name, &(violinDrawlistPlots[idVioDLPlts].activeAttributes) ,(int) violinPlotDLUseRenderedBinsForHistComp);
+
+
+        violinDrawlistPlots[idVioDLPlts].histDistToRepresentative[i] = dist;//(float)((int)(dist * 100 + .5));
+
+        std::cout << std::to_string(violinDrawlistPlots[idVioDLPlts].histDistToRepresentative[i]) << std::endl;
+    }
 }
 
 static void updateDrawListIndexBuffer(DrawList& dl) {
@@ -4912,9 +4938,10 @@ static bool updateActiveIndices(DrawList& dl) {
 			}
 		}
 		exeComputeHistogram(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+
 		//histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
 		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
-		for (int i = 0; i < violinDrawlistPlots.size(); ++i) {
+        for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 			bool contains = false;
 			for (auto& s : violinDrawlistPlots[i].drawLists) {
 				if (s == dl.name) {
@@ -4925,6 +4952,7 @@ static bool updateActiveIndices(DrawList& dl) {
 			if (!contains) continue;
 
 			updateMaxHistogramValues(violinDrawlistPlots[i]);
+            updateHistogramComparisonDL(i);
 		}
 	}
 
@@ -9350,7 +9378,7 @@ int main(int, char**)
 			}
 
 			const static int plusWidth = 100;
-			for (int i = 0; i < violinAttributePlots.size(); ++i) {
+            for (unsigned int i = 0; i < violinAttributePlots.size(); ++i) {
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
 				ImGui::PushItemWidth(150);
 				//listing all histograms available
@@ -9470,7 +9498,8 @@ int main(int, char**)
 				int amtOfAttributes = 0;
 				for (int j = 0; j < violinAttributePlots[i].maxValues.size(); ++j) {
 					if (j != 0)ImGui::SameLine();
-					ImGui::Checkbox(pcAttributes[j].name.c_str(), violinAttributePlots[i].activeAttributes + j);
+                    ImGui::Checkbox(pcAttributes[j].name.c_str(), violinAttributePlots[i].activeAttributes + j);
+
 					if (violinAttributePlots[i].activeAttributes[j]) ++amtOfAttributes;
 				}
 
@@ -9606,6 +9635,7 @@ int main(int, char**)
 						}
 						ImGui::EndDragDropTarget();
 					}
+
 					c++;
 					c1++;
 				}
@@ -9829,7 +9859,9 @@ int main(int, char**)
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
 					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					if (ImGui::Checkbox("Ignore zero values", &histogramManager->ignoreZeroValues)) {		//updating all histogramms if 0 values should be ignored
-						for (auto& drawListPlot : violinDrawlistPlots) {
+                        unsigned int currViolinDrawlistPlotIdx = 0;
+                        for (auto& drawListPlot : violinDrawlistPlots) {
+
 							int drawL = 0;
 							drawListPlot.maxGlobalValue = 0;
 							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
@@ -9850,6 +9882,7 @@ int main(int, char**)
 									}
 								}
 								exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+                                updateHistogramComparisonDL(currViolinDrawlistPlotIdx);
 								//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 								std::vector<std::pair<uint32_t, float>> area;
@@ -9883,6 +9916,7 @@ int main(int, char**)
 								}
 								++drawL;
 							}
+                            ++currViolinDrawlistPlotIdx;
 						}
 					}
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
@@ -9929,7 +9963,14 @@ int main(int, char**)
 					}
 					ImGui::NextColumn();
 					ImGui::Checkbox("Optimize non-stop", &renderOrderDLConsiderNonStop);
-						
+
+                    ImGui::Separator();
+                    ImGui::Columns(1);
+                    if(ImGui::Checkbox("Use rendered bins for Hist Comparison", &violinPlotDLUseRenderedBinsForHistComp)){
+                        for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i){
+                            updateHistogramComparisonDL(i);
+                        }
+                    }
 
 					// Option to change all attributes at once.
 					ImGui::Separator();
@@ -10004,7 +10045,10 @@ int main(int, char**)
 				ImGui::Separator();
 				//settings for the attributes
 				for (unsigned int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
-					ImGui::Checkbox(violinDrawlistPlots[i].attributeNames[j].c_str(), &violinDrawlistPlots[i].activeAttributes[j]);
+                    if (ImGui::Checkbox(violinDrawlistPlots[i].attributeNames[j].c_str(), &violinDrawlistPlots[i].activeAttributes[j]))
+                    {
+                        updateHistogramComparisonDL(i);
+                    }
 					static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
 					ImGui::NextColumn();
 					if (ImGui::BeginCombo(("##Position" + std::to_string(j)).c_str(), plotPositions[violinDrawlistPlots[i].attributePlacements[j]])) {
@@ -10126,7 +10170,7 @@ int main(int, char**)
 					violinPlotDLReplaceNonStop = false;
 					violinDrawlistPlots[i].colorPaletteManager->useColorPalette = false;
 					renderOrderDLConsiderNonStop = false;
-					renderOrderDLConsider = false;
+                    renderOrderDLConsider = false;
 				}
 
 
@@ -10134,14 +10178,33 @@ int main(int, char**)
 
 				//drawing the setttings for the drawlists
 				for (int j = 0; j < violinDrawlistPlots[i].drawLists.size(); ++j) {
-					if (j != 0)ImGui::SameLine();
-					ImGui::Button(violinDrawlistPlots[i].drawLists[j].c_str());
+                    if (j != 0)ImGui::SameLine();
+                    // String of the draggable button to drag in a dl into one position of the violin matrix
+                    ImGui::Button(violinDrawlistPlots[i].drawLists[j].c_str());
 					if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
 						int p[] = { -1,j };		//holding the index in the pcAttriOrd array and the value of it
 						ImGui::SetDragDropPayload("ViolinDrawlist", p, sizeof(p));
-						ImGui::Text("%s", violinDrawlistPlots[i].drawLists[j].c_str());
+                        // Name shown during drag&drop event
+                        ImGui::Text("%s", violinDrawlistPlots[i].drawLists[j].c_str());
 						ImGui::EndDragDropSource();
 					}
+
+                    // Rightclick on the name to set it as representative to compare the histograms to
+                    if (ImGui::IsItemClicked(1))
+                    {
+                        (violinPlotDLIdxInListForHistComparison[i] == j) ? violinPlotDLIdxInListForHistComparison[i] = -1 : violinPlotDLIdxInListForHistComparison[i] = j;
+                        updateHistogramComparisonDL(i);
+
+                        if (false){
+                            std::string currDlDist = "TODOO";
+                            // Only draw the histogram distance measure if it is computed
+                            if (violinPlotDLIdxInListForHistComparison[i] >= -1){
+                                ImGui::Text("TODOOO");
+                                         //violinDrawlistPlots[i].histDistToRepresentative
+                            }
+                        }
+                    }
+
 				}
 
 				// Drawing the violin plots
@@ -10243,7 +10306,7 @@ int main(int, char**)
 							if ((drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) && j != 0xffffffff && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
 								int p[] = { (int)(x * violinDrawlistPlots[i].matrixSize.second + y),j };		//holding the index in the pcAttriOrd array and the value of it
 								ImGui::SetDragDropPayload("ViolinDrawlist", p, sizeof(p));
-								ImGui::Text("%s", violinDrawlistPlots[i].drawLists[j].c_str());
+                                ImGui::Text("%s", violinDrawlistPlots[i].drawLists[j].c_str());
 								ImGui::EndDragDropSource();
 							}
 							if ((drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) && ImGui::BeginDragDropTarget()) {
@@ -10295,13 +10358,14 @@ int main(int, char**)
 											}
 										}
 										exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+                                        updateHistogramComparisonDL(i);
 										//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 										HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 										// ToDo:  Check, whether the ordering here should also be adjusted if  'renderOrderBasedOnFirstDL = true'
 										violinDrawlistPlots[i].attributeOrder.push_back({});
 										violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse);
 										//std::vector<std::pair<uint32_t, float>> area;
-										for (int j = 0; j < hist.maxCount.size(); ++j) {
+                                        for (int j = 0; j < hist.maxCount.size(); ++j) {
 											if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
 												violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
 											}
@@ -10317,12 +10381,14 @@ int main(int, char**)
 									}
 									else {
 										updateMaxHistogramValues(violinDrawlistPlots[i]);
+                                        updateHistogramComparisonDL(i);
 									}
 									violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = violinDrawlistPlots[i].drawLists.size() - 1;
 									
 								}
 								ImGui::EndDragDropTarget();
 							}
+
 							// if the current violin plot is selected draw a rect around it
 							if (violinDrawlistPlots[i].selectedDrawlists.find(j) != violinDrawlistPlots[i].selectedDrawlists.end()) {
 								ImGui::GetWindowDrawList()->AddRect(framePos, framePos + size, IM_COL32(255,200,0,255), ImGui::GetStyle().FrameRounding,ImDrawCornerFlags_All,5);
@@ -10333,8 +10399,20 @@ int main(int, char**)
 							}
 							ImVec2 textPos = framePos;
 							textPos.y -= ImGui::GetTextLineHeight();
+                            if (violinPlotDLIdxInListForHistComparison[i] != -1){textPos.y -= 1.1*ImGui::GetTextLineHeight();}
 							ImGui::SetCursorScreenPos(textPos);
+
+                            // Here, the text above each MPVP is written.
+
+
 							ImGui::Text(violinDrawlistPlots[i].drawLists[j].c_str());
+                            if (violinPlotDLIdxInListForHistComparison[i] != -1){
+                                ImVec2 textPosCurr = textPos;
+                                textPosCurr.y += 1.1*ImGui::GetTextLineHeight();
+                                ImGui::SetCursorScreenPos(textPosCurr);
+                                ImGui::Text(std::to_string(violinDrawlistPlots[i].histDistToRepresentative[j]).c_str());
+                            }
+
 							ImGui::PushClipRect(framePos, framePos + size, false);
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
 							DrawList* dl = nullptr;
@@ -10642,6 +10720,7 @@ int main(int, char**)
 								}
 							}
 							exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+                            updateHistogramComparisonDL(i);
 							//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
 							std::vector<std::pair<uint32_t, float>> area;
@@ -10688,6 +10767,7 @@ int main(int, char**)
 				//operator delete(currVPDLP);
 				violinDrawlistPlots.back().matrixSize = { 1,5 };
 				violinDrawlistPlots.back().drawListOrder = std::vector<uint32_t>(5, 0xffffffff);
+                violinPlotDLIdxInListForHistComparison.push_back(-1);
 			}
 			ImGui::End();
 		}

@@ -202,6 +202,56 @@ bool HistogramManager::containsHistogram(std::string& name)
 	return histograms.find(name) != histograms.end();
 }
 
+float HistogramManager::computeHistogramDistance(std::string& nameRep, std::string& name, bool **active,  int mode)
+{
+    std::map<std::string, Histogram>::iterator histRep = histograms.find(nameRep);
+    std::map<std::string, Histogram>::iterator hist = histograms.find(name);
+
+    //std::vector<float> chiSquared;
+    float chiSquaredSum = 0;
+    float sumOfBinsInRep = 0;
+
+    if (mode == 0){
+        // Loop over attributes
+        for (unsigned int i = 0; i < histRep->second.originalBins.size(); ++i)
+        {
+            if (!((*active)[i])){continue;}
+            //chiSquared.push_back(0);        // Loop over bins
+            for (unsigned int j = 0; j < histRep->second.originalBins.at(i).size(); ++j)
+            {
+                float valRep = histRep->second.originalBins.at(i).at(j);
+                sumOfBinsInRep += valRep;
+                float val = hist->second.originalBins.at(i).at(j);
+                if (val + valRep > 0){
+                chiSquaredSum += (val-valRep)*(val-valRep) / (val + valRep);}
+                //chiSquared[i] += (val-valRep)*(val-valRep) / (val + valRep);
+            }
+        }
+    }
+    else if (mode == 1){
+        // Loop over attributes
+        for (unsigned int i = 0; i < histRep->second.binsRendered.size(); ++i)
+        {
+            if (!((*active)[i])){continue;}
+            //chiSquared.push_back(0);        // Loop over bins
+            for (unsigned int j = 0; j < histRep->second.binsRendered.at(i).size(); ++j)
+            {
+                float valRep = histRep->second.binsRendered.at(i).at(j);
+                sumOfBinsInRep += valRep;
+                float val = hist->second.binsRendered.at(i).at(j);
+                if (val + valRep > 0){
+                chiSquaredSum += (val-valRep)*(val-valRep) / (val + valRep);}
+                //chiSquared[i] += (val-valRep)*(val-valRep) / (val + valRep);
+            }
+        }
+    }
+
+    // Scale by sum of bins in representative member
+    chiSquaredSum /= sumOfBinsInRep;
+
+    return chiSquaredSum / 2.0 ;
+}
+
 void HistogramManager::setNumberOfBins(uint32_t n)
 {
 	numOfBins = n;

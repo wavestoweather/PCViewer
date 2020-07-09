@@ -34,6 +34,12 @@ public:
 	void computeHistogramm(std::string& name, std::vector<std::pair<float,float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations);
 	Histogram& getHistogram(std::string name);
 	bool containsHistogram(std::string& name);
+
+    /** Uses the chi-squared distance measure to compare all single attribute histograms
+    and sums over all attributes. Mode = 0 -> originalBins, Mode = 1 -> binsRendered.
+    */
+    float computeHistogramDistance(std::string& nameRep, std::string& name, bool **active, int mode = 0);
+
 	void setNumberOfBins(uint32_t n);
 	//setting stdDev to a negative number leads to automatic choose of kernel size
 	void setSmoothingKernelSize(float stdDev);
