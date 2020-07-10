@@ -292,6 +292,7 @@ struct TemplateList {
 	std::vector<uint32_t> indices;
 	std::vector<std::pair<float, float>> minMax;
 	float pointRatio;		//ratio of points in the datasaet(reduced)
+    std::string parentDataSetName = ""; // This only gets set for template lists used to generate brushes to identify the parent dataset correctly but only once.
 };
 
 struct Buffer {
@@ -7186,28 +7187,67 @@ int main(int, char**)
 							float linepos = width / 2;
 							if (brush.parent->name == dl->name) {	//identity dataset
 								// It cannot move past the middle line, since once all points of the idx-list are contained, there are no more to add.
+                                // Ratio: if (br/ds2 > cl/ds)  -> ( 1 -  (cl/ds) // (br/ds))  otherwise -(1 - (br/ds)//(cl/ds)). Since ds1 =ds2, it's basically if br > cl (which is never the case), then move br/cl to the left
 								linepos += (brush.lineRatios[brush.parent->name] / (float)ds->data.size() > brush.parent->pointRatio) ? 
 									(1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name] / (float)ds->data.size()))) * linepos : 
 									-(1 - ((brush.lineRatios[brush.parent->name] / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 								//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.par ent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 								//linepos += (brush.lineRatios[brush.parent->name] > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name]))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name]) / brush.parent->pointRatio)) * linepos;
 							}
-							else {
-								//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
-								//linepos += (ratio.second > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / ratio.second)) * linepos : -(1 - (ratio.second / brush.lineRatios[brush.parent->name])) * linepos;
-								//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.lineRatios[brush.parent->name])) * linepos;
-								linepos += (ratio.second / (float)ds->data.size() > (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size())) ? (1 - ((brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()) / (ratio.second / (float)ds->data.size()))) * linepos : -(1 - ((ratio.second / (float)ds->data.size()) / (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()))) * linepos;
-							}
+                            else{
+
+
+                                if (brush.parent->parentDataSetName == ""){
+                                    DataSet* parentDS = nullptr;
+                                    // DataSet* currParentDataSet = nullptr;
+                                    // Determine parent drawlist
+                                    for (auto& ds : g_PcPlotDataSets)
+                                    {
+                                        for (auto& currdl : ds.drawLists)
+                                        {
+                                            // Checking the buffer Reference should be enough, nevertheless, we check all 3 conditions.
+                                            if ((currdl.name == brush.parent->name) && (currdl.indices.size() == brush.parent->indices.size())  && (&currdl.buffer == &(brush.parent->buffer) ) )
+                                            {
+                                                parentDS = &ds;
+                                                brush.parent->parentDataSetName = ds.name;
+                                                std::cout << "setting brush parent data set name to: " << brush.parent->parentDataSetName << "\n";
+                                                break;
+
+                                            }
+                                        }
+                                        if (parentDS != nullptr) { break; }
+                                    }
+                                }
+
+                                if (brush.parent->parentDataSetName  == dl->name)
+                                {
+                                    //linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+                                    //linepos += (ratio.second > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / ratio.second)) * linepos : -(1 - (ratio.second / brush.lineRatios[brush.parent->name])) * linepos;
+                                    //linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.lineRatios[brush.parent->name]) ? (1 - (brush.lineRatios[brush.parent->name] / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.lineRatios[brush.parent->name])) * linepos;
+                                    // Ratio: if ( br2 / ds2 > br/ds ) -> 1- (br/ds)//(br2/ds2) otherwise the other way round
+                                    //
+                                    linepos += (ratio.second / (float)ds->data.size() > (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size())) ? (1 - ((brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()) / (ratio.second / (float)ds->data.size()))) * linepos : -(1 - ((ratio.second / (float)ds->data.size()) / (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()))) * linepos;
+
+                                }
+                                else{
+                                    float brRatioRep = brush.lineRatios[brush.parent->parentDataSetName] /  (float)brush.parentDataset->data.size();
+                                    float brRatioCurrentMember = ratio.second /  (float)ds->data.size();
+                                    linepos += (brRatioCurrentMember < brRatioRep) ? (1 - (brRatioCurrentMember / brRatioRep))* linepos : (-(1 - (brRatioRep/brRatioCurrentMember))) * linepos;
+                                    //linepos += (ratio.second / (float)ds->data.size() > (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size())) ? (1 - ((brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()) / (ratio.second / (float)ds->data.size()))) * linepos : -(1 - ((ratio.second / (float)ds->data.size()) / (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()))) * linepos;
+                                }
+                            }
+
+
 							ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + linepos, screenCursorPos.y + lineHeight - 1), IM_COL32(255, 0, 0, 255), 5);
 							ImGui::GetWindowDrawList()->AddLine(ImVec2(screenCursorPos.x + xOffset + width / 2, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width / 2, screenCursorPos.y + lineHeight - 1), IM_COL32(255, 255, 255, 255));
 
 							if (ImGui::IsMouseHoveringRect(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1))) {
 								ImGui::BeginTooltip();
-								if (linepos < width / 2) {
+                                if (linepos < width / 2) { // y = w/2 - (1-x)*(w/2)
 									ImGui::Text("Ratio is  %2.1f%%", ((linepos / (width / 2))) * 100);
 								}
-								else {
-									ImGui::Text("Ratio is  %2.1f%%", (1 - ((linepos - width / 2) / width)) * 100);
+                                else {// y = w/2 - (1-x)*w/2
+                                    ImGui::Text("Ratio is  %2.1f%%", (1 - ((linepos - width / 2) / (width / 2))) * 100);
 								}
 								ImGui::EndTooltip();
 							}
