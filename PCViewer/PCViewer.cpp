@@ -76,6 +76,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 #include <cctype>
 #include <Eigen/Dense>
 //#include <thrust/sort.h>
+#include <iomanip>
+#include <sstream>
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -7181,6 +7183,8 @@ int main(int, char**)
 						
 						//drawing the line ratios
 						ImGui::SetCursorPos(cursorPos);
+                        // This variable is used to generate individual tooltips.
+                        int brushCase = -1;
 						if (brush.parent != nullptr && brush.lineRatios.find(brush.parent->name) != brush.lineRatios.end()) {
 							static const float width = 180;
 							ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1), ImGui::ColorConvertFloat4ToU32(ImGui::GetStyle().Colors[ImGuiCol_FrameBg]), ImGui::GetStyle().FrameRounding);
@@ -7191,6 +7195,8 @@ int main(int, char**)
 								linepos += (brush.lineRatios[brush.parent->name] / (float)ds->data.size() > brush.parent->pointRatio) ? 
 									(1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name] / (float)ds->data.size()))) * linepos : 
 									-(1 - ((brush.lineRatios[brush.parent->name] / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
+
+                                brushCase = 0;
 								//linepos += (dl->activeInd.size()/(float)ds->data.size() > brush.parent->pointRatio) ? (1 - (brush.par ent->pointRatio / (dl->activeInd.size() / (float)ds->data.size()))) * linepos : -(1 - ((dl->activeInd.size() / (float)ds->data.size()) / brush.parent->pointRatio)) * linepos;
 								//linepos += (brush.lineRatios[brush.parent->name] > brush.parent->pointRatio) ? (1 - (brush.parent->pointRatio / (brush.lineRatios[brush.parent->name]))) * linepos : -(1 - ((brush.lineRatios[brush.parent->name]) / brush.parent->pointRatio)) * linepos;
 							}
@@ -7228,11 +7234,15 @@ int main(int, char**)
                                     //
                                     linepos += (ratio.second / (float)ds->data.size() > (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size())) ? (1 - ((brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()) / (ratio.second / (float)ds->data.size()))) * linepos : -(1 - ((ratio.second / (float)ds->data.size()) / (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()))) * linepos;
 
+                                    brushCase = 1;
+
                                 }
                                 else{
                                     float brRatioRep = brush.lineRatios[brush.parent->parentDataSetName] /  (float)brush.parentDataset->data.size();
                                     float brRatioCurrentMember = ratio.second /  (float)ds->data.size();
                                     linepos += (brRatioCurrentMember < brRatioRep) ? (1 - (brRatioCurrentMember / brRatioRep))* linepos : (-(1 - (brRatioRep/brRatioCurrentMember))) * linepos;
+
+                                    brushCase = 2;
                                     //linepos += (ratio.second / (float)ds->data.size() > (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size())) ? (1 - ((brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()) / (ratio.second / (float)ds->data.size()))) * linepos : -(1 - ((ratio.second / (float)ds->data.size()) / (brush.lineRatios[brush.parent->name] / (float)brush.parentDataset->data.size()))) * linepos;
                                 }
                             }
@@ -7243,11 +7253,38 @@ int main(int, char**)
 
 							if (ImGui::IsMouseHoveringRect(ImVec2(screenCursorPos.x + xOffset, screenCursorPos.y), ImVec2(screenCursorPos.x + xOffset + width, screenCursorPos.y + lineHeight - 1))) {
 								ImGui::BeginTooltip();
+                                std::string caseDependentString = "";
+                                switch(brushCase){
+                                case 0:
+                                    caseDependentString = "Remaining lines in cluster after brush (in percent)\n";
+                                    break;
+                                case 1:
+                                    caseDependentString = "Ratio #br/#cl\n";
+                                    break;
+                                case 2:
+                                    caseDependentString = "Ratio (% brushed in Rep) / (% brushed in this data set) \n";
+                                    break;
+                                }
+
+
+
                                 if (linepos < width / 2) { // y = w/2 - (1-x)*(w/2)
-									ImGui::Text("Ratio is  %2.1f%%", ((linepos / (width / 2))) * 100);
+                                    std::stringstream sstr;
+                                    sstr << std::fixed << std::setprecision(2) << (((linepos / (width / 2))) * 100);
+                                    caseDependentString +=  "Ratio is  " + sstr.str() + "%. Less points were selected.";
+
+//                                    ImGui::Text(std::strcat(caseDependentString.c_str(), "Ratio is  %2.1f%%. Less points were selected", ((linepos / (width / 2))) * 100));
+                                    ImGui::Text(caseDependentString.c_str());
 								}
                                 else {// y = w/2 - (1-x)*w/2
-                                    ImGui::Text("Ratio is  %2.1f%%", (1 - ((linepos - width / 2) / (width / 2))) * 100);
+
+                                    std::stringstream sstr;
+                                    sstr << std::fixed << std::setprecision(2) << (1.0/ ((1 - ((linepos - width / 2) / (width / 2)))));
+                                    caseDependentString +=  "Ratio is  " + sstr.str() + ".  More points were selected.";
+
+//                                    ImGui::Text(cDS + "Ratio is  %2.1f% to 1. More points were selected.", 1.0/ ((1 - ((linepos - width / 2) / (width / 2)))));
+
+                                    ImGui::Text(caseDependentString.c_str());
 								}
 								ImGui::EndTooltip();
 							}
@@ -7398,7 +7435,11 @@ int main(int, char**)
 								int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
 								edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
 								int r = (brushDragIds.find(br.first) != brushDragIds.end()) ? 200 : 30;
-								ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(r, 0, 200, 255), 1, ImDrawCornerFlags_All, 5);
+                                // Determine color for brush box highlight etc.
+                                ImU32 brushBoxColor = IM_COL32(r, 0, 200, 255);
+                                if (r == 30){brushBoxColor = IM_COL32(r, 230, 100, 255);}
+
+                                ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), brushBoxColor, 1, ImDrawCornerFlags_All, 5);
 								brushHover |= hover || edgeHover;
 								//set mouse cursor
 								if (edgeHover || brushDragIds.size()) {
