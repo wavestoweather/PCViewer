@@ -1,10 +1,8 @@
 ﻿/*
-This program is written and maintained by Josef Stumpfegger (josefstumpfegger@outlook.de).
-For everyone who wants to read and understand this code. I'm sorry.
-This code was written under time pressure and was not intended to be published in the first place.
-Well if you still want to find out how this precious application works, go ahead.
-Should you find errors, problems, speed up ideas or anything else, dont be shy and contact me!
-Other than that, i wish you a beautiful day and a lot of fun with this program.
+This program is written and maintained by Josef Stumpfegger (josefstumpfegger@outlook.de) and Alexander Kumpf (alexander.kumpf@tum.de)
+As this program originally was not written with the intend of being published, the code-basis is not the most beautiful one, we are sorry.
+Should you find errors, problems, speed up ideas or anything else, dont be shy and contact either of us!
+Other than that, we wish you a beautiful day and a lot of fun with this program.
 */
 
 //memory leak detection

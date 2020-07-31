@@ -38,7 +38,7 @@
       "name": "x64-Release",
       "generator": "Ninja",
       "configurationType": "Release",
-      "buildRoot": "E:\\Bachelorarbeit\\git\\Viewer\\PCViewer\\build\\${name}",
+      "buildRoot": "D:\\F\\projects\\PCViewerStandAlone\\build\\x64-Release_master\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
       "cmakeCommandArgs": "",
       "buildCommandArgs": "-v",
