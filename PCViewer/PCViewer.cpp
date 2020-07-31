@@ -78,6 +78,8 @@ Other than that, i wish you a beautiful day and a lot of fun with this program.
 //#include <thrust/sort.h>
 #include <iomanip>
 #include <sstream>
+#include <utility>
+	
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -3966,7 +3968,7 @@ static void getyScaleDL(unsigned int& dlNr,
 			auto it = std::find_if(pcAttributes.begin(), pcAttributes.end(),
 				[&violinDrawlistPlot, k](const Attribute& currObj) {return currObj.name == violinDrawlistPlot.attributeNames[k];  });
 
-			violinMinMax[k] = std::pair(it->min, it->max);
+			violinMinMax[k] = std::pair<float,float>(it->min, it->max);
 
 		}
 		return;
@@ -4019,7 +4021,7 @@ static void getyScaleDLForAttributeViolins(unsigned int& dlNr,
             auto it = std::find_if(pcAttributes.begin(), pcAttributes.end(),
                 [&violinAttrPlot, k](const Attribute& currObj) {return currObj.name == violinAttrPlot.attributeNames[k];  });
 
-            violinMinMax[k] = std::pair(it->min, it->max);
+            violinMinMax[k] = std::pair<float, float>(it->min, it->max);
 
         }
         return;
