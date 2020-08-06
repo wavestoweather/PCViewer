@@ -5986,7 +5986,7 @@ int main(int, char**)
 		// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 		glfwPollEvents();
 
-		if (g_SwapChainRebuild)
+		if (g_SwapChainRebuild && g_SwapChainResizeWidth > 0 && g_SwapChainResizeHeight > 0)
 		{
 			g_SwapChainRebuild = false;
 			ImGui_ImplVulkan_SetMinImageCount(g_MinImageCount);
@@ -9724,7 +9724,7 @@ int main(int, char**)
 					}
 					ImGui::Button((violinAttributePlots[i].attributeNames[j] + "##violinattr").c_str());
 					if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-						int p[] = { c,i };		//holding the index in the pcAttriOrd array and the value of it
+						int p[] = { c,int(i) };		//holding the index in the pcAttriOrd array and the value of it
 						ImGui::SetDragDropPayload("ViolinATTRIBUTE", p, sizeof(p));
 						ImGui::Text("Swap %s", violinAttributePlots[i].attributeNames[j].c_str());
 						ImGui::EndDragDropSource();
@@ -10906,7 +10906,10 @@ int main(int, char**)
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
 		memcpy(&wd->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
-		FrameRender(wd);
+		ImDrawData* draw_data = ImGui::GetDrawData();
+		const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
+		if(!is_minimized)
+			FrameRender(wd);
 
 		//FramePresent(wd);
 		rescaleTableColumns = false;
