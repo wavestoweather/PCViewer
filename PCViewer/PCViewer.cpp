@@ -3338,18 +3338,14 @@ static void CleanupVulkanWindow()
 	ImGui_ImplVulkanH_DestroyWindow(g_Instance, g_Device, &g_MainWindowData, g_Allocator);
 }
 
-static void FrameRender(ImGui_ImplVulkanH_Window* wd)
+static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
 {
 	VkResult err;
 
 	VkSemaphore image_acquired_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].ImageAcquiredSemaphore;
 	VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
 	err = vkAcquireNextImageKHR(g_Device, wd->Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
-	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-		return;
-	}
-	else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR)
-		check_vk_result(err);
+	check_vk_result(err);
 
 	ImGui_ImplVulkanH_Frame* fd = &wd->Frames[wd->FrameIndex];
 	{
@@ -3380,9 +3376,8 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd)
 		vkCmdBeginRenderPass(fd->CommandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	// Record Imgui Draw Data and draw funcs into command buffer
-	ImDrawData* dd = ImGui::GetDrawData();
-	ImGui_ImplVulkan_RenderDrawData(dd, fd->CommandBuffer);
+	// Record dear imgui primitives into command buffer
+	ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
 
 	// Submit command buffer
 	vkCmdEndRenderPass(fd->CommandBuffer);
@@ -3403,22 +3398,6 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd)
 		err = vkQueueSubmit(g_Queue, 1, &info, fd->Fence);
 		check_vk_result(err);
 	}
-
-	render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
-	VkPresentInfoKHR info = {};
-	info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	info.waitSemaphoreCount = 1;
-	info.pWaitSemaphores = &render_complete_semaphore;
-	info.swapchainCount = 1;
-	info.pSwapchains = &wd->Swapchain;
-	info.pImageIndices = &wd->FrameIndex;
-	err = vkQueuePresentKHR(g_Queue, &info);
-	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-		return;
-	}
-	else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR)
-		check_vk_result(err);
-	wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->ImageCount; // Now we can use the next set of semaphores
 }
 
 static void FramePresent(ImGui_ImplVulkanH_Window* wd)
@@ -3432,11 +3411,7 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd)
 	info.pSwapchains = &wd->Swapchain;
 	info.pImageIndices = &wd->FrameIndex;
 	VkResult err = vkQueuePresentKHR(g_Queue, &info);
-	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-		return;
-	}
-	else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR)
-		check_vk_result(err);
+	check_vk_result(err);
 	wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->ImageCount; // Now we can use the next set of semaphores
 }
 
@@ -11056,18 +11031,26 @@ int main(int, char**)
 			animationItemsDisabled = false;
 		}
 
+		rescaleTableColumns = false;
+
 		// Rendering
 		ImGui::Render();
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
+		ImDrawData* main_draw_data = ImGui::GetDrawData();
+		const bool main_is_minimized = (main_draw_data->DisplaySize.x <= 0.0f || main_draw_data->DisplaySize.y <= 0.0f);
 		memcpy(&wd->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
-		ImDrawData* draw_data = ImGui::GetDrawData();
-		const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
-		if(!is_minimized)
-			FrameRender(wd);
+		if (!main_is_minimized)
+			FrameRender(wd, main_draw_data);
 
-		//FramePresent(wd);
-		rescaleTableColumns = false;
+		// Update and Render additional Platform Windows
+		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		{
+			ImGui::UpdatePlatformWindows();
+			ImGui::RenderPlatformWindowsDefault();
+		}
+
+		// Present Main Platform Window
+		if (!main_is_minimized)
+			FramePresent(wd);
 	}
 
 	// Cleanup
