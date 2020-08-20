@@ -479,6 +479,7 @@ struct ViolinDrawlistPlot {
 
 struct Attribute {
 	std::string name;
+	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.
 	float min;			//min value of all values
 	float max;			//max value of all values
 };
@@ -3539,12 +3540,12 @@ static void openCsv(const char* filename) {
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
-				tmp.push_back({ cur,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+				tmp.push_back({ cur,{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
 				attributes.push_back(tmp.back().name);
 			}
 			//adding the last item which wasn't recognized
 			line = line.substr(0, line.find("\r"));
-			tmp.push_back({ line,std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+			tmp.push_back({ line,{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
 			attributes.push_back(tmp.back().name);
 
 			//checking if the Attributes are correct
@@ -3584,7 +3585,7 @@ static void openCsv(const char* filename) {
 		else {
 			ds.data.push_back(new float[pcAttributes.size()]);
 			size_t attr = 0;
-			float curF = 0;
+			float curF = 0, categorieFloat = 0;
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
@@ -3595,7 +3596,20 @@ static void openCsv(const char* filename) {
 					return;
 				}
 
-				curF = std::stof(cur);
+				if (cur.empty()) curF = 0;
+				else {
+					char* ptr;
+					curF = strtof(cur.c_str(), &ptr);
+					if ((*ptr) != '\0') {	//cur is not a number
+						if (pcAttributes[attr].categories.find(cur) != pcAttributes[attr].categories.end()) {	//the categorie is already in the set
+							curF = pcAttributes[attr].categories[cur];
+						}
+						else {																					//add new categorie with a new float for this categorie
+							curF = ++categorieFloat;
+							pcAttributes[attr].categories[cur] = curF;
+						}
+					}
+				}
 
 				//updating the bounds if a new highest value was found in the current data.
 				if (curF > pcAttributes[permutation[attr]].max)
@@ -3612,7 +3626,20 @@ static void openCsv(const char* filename) {
 			}
 
 			//adding the last item which wasn't recognized
-			curF = std::stof(line);
+			if (cur.empty()) curF = 0;
+			else {
+				char* ptr;
+				curF = strtof(cur.c_str(), &ptr);
+				if ((*ptr) != '\0') {	//cur is not a number
+					if (pcAttributes[attr].categories.find(cur) != pcAttributes[attr].categories.end()) {	//the categorie is already in the set
+						curF = pcAttributes[attr].categories[cur];
+					}
+					else {																					//add new categorie with a new float for this categorie
+						curF = ++categorieFloat;
+						pcAttributes[attr].categories[cur] = curF;
+					}
+				}
+			}
 
 			//updating the bounds if a new highest value was found in the current data.
 			if (curF > pcAttributes[permutation[attr]].max)
@@ -3775,7 +3802,7 @@ static void openDlf(const char* filename) {
 				//reading in new values
 				else {
 					for (int i = 0; i < attributes.size(); i++) {
-						pcAttributes.push_back({ attributes[i],std::numeric_limits<float>::max(),std::numeric_limits<float>::min() - 1 });
+						pcAttributes.push_back({ attributes[i],{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() - 1 });
 					}
 
 					//check for attributes overflow
