@@ -6325,7 +6325,6 @@ int main(int, char**)
 								savedAttr.push_back(a);
 								if (pcAttributes[i].name != savedAttr[i].name) {
 									openLoad = true;
-									//goto end;
 									cont = true;
 								}
 							}
@@ -6339,9 +6338,8 @@ int main(int, char**)
 								pcAttrOrd[i] = o[i];
 								pcAttributeEnabled[i] = act[i];
 							}
+							updateAllDrawListIndexBuffer();
 							pcPlotRender = true;
-
-						end:;
 						}
 					}
 					ImGui::EndMenu();
