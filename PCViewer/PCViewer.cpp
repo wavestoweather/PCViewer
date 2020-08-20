@@ -3525,6 +3525,7 @@ static void openCsv(const char* filename) {
 	}
 
 	std::vector<int> permutation;
+	std::vector<float> categorieFloats;
 	for (std::string line; std::getline(input, line); )
 	{
 		std::string delimiter = ",";
@@ -3578,6 +3579,7 @@ static void openCsv(const char* filename) {
 				}
 			}
 
+			categorieFloats.resize(pcAttributes.size(), 0);
 			firstLine = false;
 		}
 
@@ -3585,7 +3587,7 @@ static void openCsv(const char* filename) {
 		else {
 			ds.data.push_back(new float[pcAttributes.size()]);
 			size_t attr = 0;
-			float curF = 0, categorieFloat = 0;
+			float curF = 0;
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
@@ -3604,8 +3606,9 @@ static void openCsv(const char* filename) {
 						if (pcAttributes[attr].categories.find(cur) != pcAttributes[attr].categories.end()) {	//the categorie is already in the set
 							curF = pcAttributes[attr].categories[cur];
 						}
-						else {																					//add new categorie with a new float for this categorie
-							curF = ++categorieFloat;
+						else {	//add new categorie with a new float for this categorie
+							curF = categorieFloats[attr];
+							categorieFloats[attr] = categorieFloats[attr] + 1;
 							pcAttributes[attr].categories[cur] = curF;
 						}
 					}
@@ -3635,7 +3638,8 @@ static void openCsv(const char* filename) {
 						curF = pcAttributes[attr].categories[cur];
 					}
 					else {																					//add new categorie with a new float for this categorie
-						curF = ++categorieFloat;
+						curF = categorieFloats[attr];
+						categorieFloats[attr] = categorieFloats[attr] + 1;
 						pcAttributes[attr].categories[cur] = curF;
 					}
 				}
@@ -3654,8 +3658,12 @@ static void openCsv(const char* filename) {
         if (pcAttributes[k].max == pcAttributes[k].min)   {
             pcAttributes[k].max += minRangeEps;
         }
+		if (pcAttributes[k].categories.size()) {
+			float diff = (pcAttributes[k].max - pcAttributes[k].min) * 0.05f;
+			pcAttributes[k].min -= diff;
+			pcAttributes[k].max += diff;
+		}	
     }
-
 
 	f.close();
 
@@ -6647,11 +6655,11 @@ int main(int, char**)
 		//Parallel coordinates plot ----------------------------------------------------------------------------------------
 		ImVec2 picPos;
 		bool picHovered;
+		size_t amtOfLabels = 0;
 		if (ImGui::Begin("Parallel coordinates", NULL)) {
 			float windowW = ImGui::GetWindowWidth();
 			// Labels for the titels of the attributes
 			// Position calculation for each of the Label
-			size_t amtOfLabels = 0;
 			for (int i = 0; i < pcAttributes.size(); i++)
 				if (pcAttributeEnabled[i])
 					amtOfLabels++;
@@ -6661,7 +6669,7 @@ int main(int, char**)
 			ImVec2 buttonSize = ImVec2(70, 20);
 			size_t offset = 0;
 
-			//drawing the buttons which can be changed via drag and drop
+			//drawing the buttons which can be changed via drag and drop + showing labels for categorie data
 			int c = 0;		//describing the position of the element in the AttrOrd vector
 			int c1 = 0;
 			for (auto i : pcAttrOrd) {
@@ -7542,6 +7550,35 @@ int main(int, char**)
 						}
 						xoffset = 0;
 					}
+				}
+
+				//drawing the categorie boxes
+				int ind = 0;
+				for (int i : pcAttrOrd) {
+					if (!pcAttributeEnabled[i]) continue;
+					float x = picPos.x + float(ind) / (amtOfLabels - 1) * picSize.x; 
+
+					if (pcAttributes[i].categories.size()) {
+						int amtOfCats = 0;
+						for (auto categorie : pcAttributes[i].categories) {
+							float xAnchor = .5f;
+							if (ind == 0) xAnchor = 0;
+							if (ind == amtOfLabels - 1) xAnchor = 1;
+							float y = (categorie.second - pcAttributes[i].min) / (pcAttributes[i].max - pcAttributes[i].min);
+							if (y < 0 || y > 1) continue;		//label not seeable
+							if (amtOfCats++ > 50) break;
+							y = picPos.y + (1 - y) * picSize.y;
+							
+							ImVec2 textSize = ImGui::CalcTextSize(categorie.first.c_str());
+							ImGui::SetNextWindowPos({ x ,y }, 0, { xAnchor,.5f });
+							ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
+							ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
+							ImGui::Begin(("Tooltip Categorie" + categorie.first).c_str(), NULL, flags);
+							ImGui::Text(categorie.first.c_str());
+							ImGui::End();		
+						}
+					}
+					ind++;
 				}
 
 				//clearing the dragged brushes if ctrl key is released
