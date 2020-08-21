@@ -33,7 +33,7 @@ private:
 	VkBuffer uboBuffer;
 	VkDeviceMemory uboMemory;
 
-	char shaderPath[];
+	const char shaderPath[23];
 
 public:
 	PriorityColorUpdater(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool): queue(queue), device(device), physicalDevice(physicalDevice), commandPool(commandPool), descriptorPool(descriptorPool), shaderPath("shader/colorUpdate.spv") {

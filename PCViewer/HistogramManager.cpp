@@ -328,7 +328,7 @@ void HistogramManager::determineSideHist(Histogram& hist, bool **active, bool co
 			for (unsigned int i = 0; i < area->size(); ++i)
 			{
 				// If less than one pixel is occupied, set the area to plain 0.
-				if ((area->at(i) < 1) || isnan(area->at(i)))
+				if ((area->at(i) < 1) || std::isnan(area->at(i)))
 				{
 					(*area)[i] = 0;
 				}
