@@ -116,18 +116,16 @@ void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button, int acti
         g_PrevUserCallbackMousebutton(window, button, action, mods);
 
     ImGuiIO& io = ImGui::GetIO();
-    for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); i++)
+    // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+    if (button >= IM_ARRAYSIZE(g_MouseJustPressed)) return;
+    if (action == GLFW_PRESS)
     {
-        // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
-        if (action == GLFW_PRESS)
-        {
-            io.MouseDown[i] = true;
-            g_MouseJustPressed[i] = true;
-            g_MouseJustPressedFrame = ImGui::GetFrameCount();
-        }
-        else if (!g_MouseJustPressed[i])
-            io.MouseDown[i] = false;
+        io.MouseDown[button] = true;
+        g_MouseJustPressed[button] = true;
+        g_MouseJustPressedFrame = ImGui::GetFrameCount();
     }
+    else if (!g_MouseJustPressed[button])
+        io.MouseDown[button] = false;
 }
 
 void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
