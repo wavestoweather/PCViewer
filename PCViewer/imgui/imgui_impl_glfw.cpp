@@ -549,6 +549,8 @@ static void ImGui_ImplGlfw_WindowSizeCallback(GLFWwindow* window, int, int)
                 return;
         }
         viewport->PlatformRequestResize = true;
+        viewport->PlatformRequestMove = true;
+        //glfwGetWindowPos(window, &viewport->Pos.x, &viewport->Pos.y);
     }
 }
 

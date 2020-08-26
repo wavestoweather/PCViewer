@@ -120,6 +120,8 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
 
+#define IMGUI_VULKAN_DEBUG_REPORT
+
 static VkAllocationCallbacks* g_Allocator = NULL;
 static VkInstance               g_Instance = VK_NULL_HANDLE;
 static VkPhysicalDevice         g_PhysicalDevice = VK_NULL_HANDLE;
