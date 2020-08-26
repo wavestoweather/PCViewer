@@ -30,7 +30,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 
 #include "PCViewer.h"
 #include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_sdl.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
 #include "Color.h"
@@ -53,9 +53,8 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
-#define GLFW_INCLUDE_NONE
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <SDL.h>
+#include <SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 
 #include <vector>
@@ -3402,7 +3401,7 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
 	}
 }
 
-static void FramePresent(ImGui_ImplVulkanH_Window* wd, GLFWwindow* window)
+static void FramePresent(ImGui_ImplVulkanH_Window* wd, SDL_Window* window)
 {
 	VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
     VkPresentInfoKHR info = {};
@@ -3415,25 +3414,12 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd, GLFWwindow* window)
     VkResult err = vkQueuePresentKHR(g_Queue, &info);
     if (err == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        glfwGetFramebufferSize(window, &g_SwapChainResizeWidth, &g_SwapChainResizeHeight);
+        SDL_GetWindowSize(window, &g_SwapChainResizeWidth, &g_SwapChainResizeHeight);;
         g_SwapChainRebuild = true;
         return;
     }
     check_vk_result(err);
     wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->ImageCount; // Now we can use the next set of semaphores
-}
-
-static void glfw_error_callback(int error, const char* description)
-{
-	fprintf(stderr, "Glfw Error %d: %s\n", error, description);
-}
-
-static void glfw_resize_callback(GLFWwindow*, int w, int h)
-{
-	g_SwapChainRebuild = true;
-	g_SwapChainResizeWidth = w;
-	g_SwapChainResizeHeight = h;
-	rescaleTableColumns = true;
 }
 
 //checks if the attributes a are the same as the ones in pcAttributes and are giving back a permutation to order the new data correctly
@@ -5167,19 +5153,6 @@ static bool updateAllActiveIndices() {
 	return ret;
 }
 
-void drop_callback(GLFWwindow* window, int count, const char** paths) {
-#ifdef _DEBUG
-	std::cout << "Amount of files drag and dropped: " << count << std::endl;
-#endif
-	createDLForDrop = new bool[count];
-
-	for (int i = 0; i < count; i++) {
-		droppedPaths.push_back(std::string(paths[i]));
-		createDLForDrop[i] = true;
-	}
-	pathDropped = true;
-}
-
 static void uploadDensityUiformBuffer() {
 	DensityUniformBuffer ubo = {};
 	ubo.enableMapping = enableDensityMapping | ((uint8_t)(histogrammDensity && enableDensityMapping)) * 2 | uint32_t(enableDensityGreyscale)<<2;
@@ -5926,38 +5899,41 @@ int main(int, char**)
 	int pcPlotPreviousSlectedDrawList = -1;									//Index of the previously selected drawlist
 	bool addIndeces = false;
 
-	// Setup GLFW window
-	glfwSetErrorCallback(glfw_error_callback);
-	if (!glfwInit())
-		return 1;
-
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "Parallel Coordinates Viewer", NULL, NULL);
+    // Setup SDL
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
+    {
+        printf("Error: %s\n", SDL_GetError());
+        return -1;
+    }
+    // Setup window
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_Window* window = SDL_CreateWindow("PCViewer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
 
 	// Setup Drag and drop callback
-	glfwSetDropCallback(window, drop_callback);
+	SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
 
 	// Setup Vulkan
-	if (!glfwVulkanSupported())
-	{
-		printf("GLFW: Vulkan Not Supported\n");
-		return 1;
-	}
 	uint32_t extensions_count = 0;
-	const char** extensions = glfwGetRequiredInstanceExtensions(&extensions_count);
-	SetupVulkan(extensions, extensions_count);
+    SDL_Vulkan_GetInstanceExtensions(window, &extensions_count, NULL);
+    const char** extensions = new const char*[extensions_count];
+    SDL_Vulkan_GetInstanceExtensions(window, &extensions_count, extensions);
+    SetupVulkan(extensions, extensions_count);
+    delete[] extensions;
 
 	// Create Window Surface
-	VkSurfaceKHR surface;
-	VkResult err = glfwCreateWindowSurface(g_Instance, window, g_Allocator, &surface);
-	check_vk_result(err);
+    VkSurfaceKHR surface;
+    VkResult err;
+    if (SDL_Vulkan_CreateSurface(window, g_Instance, &surface) == 0)
+    {
+        printf("Failed to create Vulkan surface.\n");
+        return 1;
+    }
 
-	// Create Framebuffers
-	int w, h;
-	glfwGetFramebufferSize(window, &w, &h);
-	glfwSetFramebufferSizeCallback(window, glfw_resize_callback);
-	ImGui_ImplVulkanH_Window* wd = &g_MainWindowData;
-	SetupVulkanWindow(wd, surface, w, h);
+    // Create Framebuffers
+    int w, h;
+    SDL_GetWindowSize(window, &w, &h);
+    ImGui_ImplVulkanH_Window* wd = &g_MainWindowData;
+    SetupVulkanWindow(wd, surface, w, h);
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -5983,7 +5959,7 @@ int main(int, char**)
 	//ImGui::StyleColorsClassic();
 
 	// Setup Platform/Renderer bindings
-	ImGui_ImplGlfw_InitForVulkan(window, true);
+	ImGui_ImplSDL2_InitForVulkan(window);
 	ImGui_ImplVulkan_InitInfo init_info = {};
 	init_info.Instance = g_Instance;
 	init_info.PhysicalDevice = g_PhysicalDevice;
@@ -6147,14 +6123,30 @@ int main(int, char**)
 	}
 
 	// Main loop
-	while (!glfwWindowShouldClose(window))
+    bool done = false;
+	while (!done)
 	{
 		// Poll and handle events (inputs, window resize, etc.)
 		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
 		// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
 		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
 		// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-		glfwPollEvents();
+		SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT)
+                done = true;
+            else if(event.type == SDL_DROPFILE) {       // In case if dropped file
+                droppedPaths.push_back(std::string(event.drop.file));
+                pathDropped = true;
+                SDL_free(event.drop.file);              // Free dropped_filedir memory;
+            }
+        }
+        if(droppedPaths.size() && !createDLForDrop){
+            createDLForDrop = new bool[droppedPaths.size()];
+            for(int i = 0 ; i< droppedPaths.size(); ++i) createDLForDrop[i] = true;
+        }
 
 		if (g_SwapChainRebuild && g_SwapChainResizeWidth > 0 && g_SwapChainResizeHeight > 0)
 		{
@@ -6166,7 +6158,7 @@ int main(int, char**)
 
 		// Start the Dear ImGui frame
 		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
+		ImGui_ImplSDL2_NewFrame(window);
 		ImGui::NewFrame();
 
 		if (animationStart != std::chrono::steady_clock::time_point(std::chrono::duration<int>(0))) {
@@ -6337,7 +6329,7 @@ int main(int, char**)
 				ImGui::DragInt("Max window Width", (int*)&windowWidth, 10, 200, 10000);
 				ImGui::DragInt("Max window Height", (int*)&windowHeight, 10, 200, 10000);
 				if (ImGui::MenuItem("Maximize!")) {
-					glfwSetWindowSize(window, windowWidth, windowHeight);
+					SDL_SetWindowSize(window, windowWidth, windowHeight);
 				}
 				ImGui::EndMenu();
 			}
@@ -11172,14 +11164,14 @@ int main(int, char**)
 	}
 
 	ImGui_ImplVulkan_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
+	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
 
 	CleanupVulkanWindow();
 	CleanupVulkan();
 
-	glfwDestroyWindow(window);
-	glfwTerminate();
+	SDL_DestroyWindow(window);
+    SDL_Quit();
 
 	return 0;
 }
