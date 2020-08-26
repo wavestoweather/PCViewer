@@ -116,11 +116,10 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
+#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
-
-#define IMGUI_VULKAN_DEBUG_REPORT
 
 static VkAllocationCallbacks* g_Allocator = NULL;
 static VkInstance               g_Instance = VK_NULL_HANDLE;
@@ -11184,13 +11183,3 @@ int main(int, char**)
 
 	return 0;
 }
-
-/*
-using namespace std;
-
-int main()
-{
-	cout << "Hello CMake." << endl;
-	return 0;
-}
-*/
