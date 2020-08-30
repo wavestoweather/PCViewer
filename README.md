@@ -22,23 +22,10 @@ For Linux SDL2 can be installed via
 ```
 
 For windows head over to the [SDL-Website](https://www.libsdl.org/download-2.0.php) and download the developement package `SDL2-devel-xxx-VC.zip`
-and extract it to some location on your hard disk. To build we recommend using CMake GUI.
-On first try the CMake build will fail. To resolve simply point the `SDL2_DIR` variable to the location where SDL2 was extracted.
-Before reconfiguring a file `sdl2-config.cmake` has to be created in the folder where the extracted devolepment librariers are put with the following content:
-```cmake
-set(SDL2_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/include")
-
-# Support both 32 and 64 bit builds
-if (${CMAKE_SIZEOF_VOID_P} MATCHES 8)
-  set(SDL2_LIBRARIES "${CMAKE_CURRENT_LIST_DIR}/lib/x64/SDL2.lib;${CMAKE_CURRENT_LIST_DIR}/lib/x64/SDL2main.lib")
-else ()
-  set(SDL2_LIBRARIES "${CMAKE_CURRENT_LIST_DIR}/lib/x86/SDL2.lib;${CMAKE_CURRENT_LIST_DIR}/lib/x86/SDL2main.lib")
-endif ()
-
-string(STRIP "${SDL2_LIBRARIES}" SDL2_LIBRARIES)
-```
-after this everything should be set to compile.
-For an alternative solution using a `FindSDL2.cmake` visit [Trenki's Dev Blog](https://trenki2.github.io/blog/2017/06/02/using-sdl2-with-cmake/).
+and extract it to some location on your hard disk.
+The so downloaded SDL2 library is readyly compiled and has only to be found by the FindSDL2.cmake file which comes with this project and is automatically used if windows is active.
+In order for the cmake module to find SDL2 one has to create an environment variable called SDL2DIR which holds the directory where SDL2 was saved to.
+---
 
 Compile notes:
 Some things seem to work differently for Windows and Linux, which is why there are separate Branches for every OS.
