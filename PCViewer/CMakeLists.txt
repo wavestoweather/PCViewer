@@ -24,8 +24,10 @@ IF( NOT Eigen3_DIR )
 ENDIF()
 INCLUDE_DIRECTORIES ( "${Eigen3_DIR}" )
 
-
-
+IF (WIN32)
+    message("Using custom FindSDL2.cmake for windows")
+    set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/PCViewer/cmake/")
+ENDIF ()
 
 add_subdirectory("glm")
 
@@ -33,6 +35,7 @@ add_subdirectory("glm")
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+message("include dirs: ${SDL2_INCLUDE_DIRS}")
 
 include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR})
 #include_directories(${Eigen3_DIR})
@@ -51,7 +54,7 @@ file(GLOB imgui_SRC
 
 add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC})
 
-target_link_libraries(PCViewer Vulkan::Vulkan ${SDL2_LIBRARIES} glm)# Eigen3::Eigen
+target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm)# Eigen3::Eigen
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS
