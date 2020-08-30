@@ -25,6 +25,7 @@ For windows head over to the [SDL-Website](https://www.libsdl.org/download-2.0.p
 and extract it to some location on your hard disk.
 The so downloaded SDL2 library is readyly compiled and has only to be found by the FindSDL2.cmake file which comes with this project and is automatically used if windows is active.
 In order for the cmake module to find SDL2 one has to create an environment variable called SDL2DIR which holds the directory where SDL2 was saved to.
+
 ---
 
 Compile notes:
