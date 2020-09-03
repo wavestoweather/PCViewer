@@ -7558,15 +7558,15 @@ int main(int, char**)
 					float x = picPos.x + float(ind) / (amtOfLabels - 1) * picSize.x; 
 
 					if (pcAttributes[i].categories.size()) {
-						int amtOfCats = 0;
+                        float prev_y = picPos.y + 1.2f * picSize.y;
 						for (auto categorie : pcAttributes[i].categories) {
 							float xAnchor = .5f;
 							if (ind == 0) xAnchor = 0;
 							if (ind == amtOfLabels - 1) xAnchor = 1;
 							float y = (categorie.second - pcAttributes[i].min) / (pcAttributes[i].max - pcAttributes[i].min);
 							if (y < 0 || y > 1) continue;		//label not seeable
-							if (amtOfCats++ > 50) break;
 							y = picPos.y + (1 - y) * picSize.y;
+                            if (y + 1.2f * ImGui::GetTextLineHeightWithSpacing() > prev_y) continue;
 							
 							ImVec2 textSize = ImGui::CalcTextSize(categorie.first.c_str());
 							ImGui::SetNextWindowPos({ x ,y }, 0, { xAnchor,.5f });
@@ -7574,7 +7574,8 @@ int main(int, char**)
 							ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
 							ImGui::Begin(("Tooltip Categorie" + categorie.first).c_str(), NULL, flags);
 							ImGui::Text(categorie.first.c_str());
-							ImGui::End();		
+							ImGui::End();
+                            prev_y = y;
 						}
 					}
 					ind++;
