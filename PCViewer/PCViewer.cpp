@@ -103,6 +103,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #define EDGEHOVERDIST 5
 #define DRAGTHRESH .02f
 
+#define SCROLLSPEED .04f
 
 //defines the amount of fractures per axis
 #define FRACTUREDEPTH 15
@@ -6319,7 +6320,7 @@ int main(int, char**)
 		auto id = ImGui::DockBuilderGetNode(dockspace_id)->SelectedTabId;
 		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(83), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
+		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("Gui")) {
@@ -7497,11 +7498,11 @@ int main(int, char**)
 
 				ImGui::EndChild();
 
-				gap = (picSize.x - ((drawHistogramm) ? histogrammWidth / 2.0f * picSize.x : 0)) / (amtOfLabels - 1);
+				gap = (picSize.x - ((drawHistogramm) ? histogrammWidth / 2.0f * picSize.x : 0)) - 4;
 				//drawing axis lines
 				if (enableAxisLines) {
 					for (int i = 0; i < amtOfLabels; i++) {
-						float x = picPos.x + i * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+						float x = picPos.x + i * gap / (amtOfLabels - 1) + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 						ImVec2 a(x, picPos.y);
 						ImVec2 b(x, picPos.y + picSize.y - 1);
 						ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
@@ -7554,12 +7555,29 @@ int main(int, char**)
 					}
 				}
 
-				//drawing the categorie boxes
 				int ind = 0;
+				ImVec2 mousePos = ImGui::GetMousePos();
 				for (int i : pcAttrOrd) {
 					if (!pcAttributeEnabled[i]) continue;
 					float x = picPos.x + float(ind) / (amtOfLabels - 1) * picSize.x; 
+					//enable zoom + scroll on attribute axes
+					bool hover_axis = mousePos.y >= picPos.y && mousePos.y <= picPos.y + picSize.y && mousePos.x >= x - BRUSHWIDTH / 2 && mousePos.x <= x + BRUSHWIDTH / 2;
+					// axis zoom
+					if (hover_axis && ImGui::GetIO().KeyCtrl && ImGui::GetIO().MouseWheel) {
+						float diff = pcAttributes[i].max - pcAttributes[i].min;
+						pcAttributes[i].max -= ImGui::GetIO().MouseWheel * diff * SCROLLSPEED;
+						pcAttributes[i].min += ImGui::GetIO().MouseWheel * diff * SCROLLSPEED;
+						pcPlotRender = true;
+					}
+					// axis scroll
+					if (hover_axis && ImGui::GetIO().KeyAlt && ImGui::GetIO().MouseWheel) {
+						float diff = pcAttributes[i].max - pcAttributes[i].min;
+						pcAttributes[i].max -= ImGui::GetIO().MouseWheel * diff * SCROLLSPEED;
+						pcAttributes[i].min -= ImGui::GetIO().MouseWheel * diff * SCROLLSPEED;
+						pcPlotRender = true;
+					}
 
+					//drawing the categorie boxes
 					if (pcAttributes[i].categories.size()) {
                         float prev_y = picPos.y + 1.2f * picSize.y;
 						for (auto categorie : pcAttributes[i].categories_ordered) {

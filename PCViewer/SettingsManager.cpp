@@ -24,15 +24,19 @@ bool SettingsManager::addSetting(Setting s)
 	memcpy(data, s.data, s.byteLength);
 
 	s.data = data;
+	bool exists = false;
 	if (settings.find(s.id) != settings.end()) {
 		delete settings[s.id].data;
+		exists = true;
 	}
 	settings[s.id] = s;
 
 	if (settingsType.find(s.type) == settingsType.end()) {
 		settingsType[s.type] = std::vector<Setting*>();
 	}
-	settingsType[s.type].push_back(&settings[s.id]);
+
+	if(!exists)
+		settingsType[s.type].push_back(&settings[s.id]);
 
 	storeSettings(settingsFile);
 
