@@ -480,6 +480,7 @@ struct ViolinDrawlistPlot {
 struct Attribute {
 	std::string name;
 	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.
+	std::vector<std::pair<std::string, float>> categories_ordered; // used to show the categories not cluttered
 	float min;			//min value of all values
 	float max;			//max value of all values
 };
@@ -3534,12 +3535,12 @@ static void openCsv(const char* filename) {
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
-				tmp.push_back({ cur,{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+				tmp.push_back({ cur,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
 				attributes.push_back(tmp.back().name);
 			}
 			//adding the last item which wasn't recognized
 			line = line.substr(0, line.find("\r"));
-			tmp.push_back({ line,{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+			tmp.push_back({ line,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
 			attributes.push_back(tmp.back().name);
 
 			//checking if the Attributes are correct
@@ -3655,6 +3656,8 @@ static void openCsv(const char* filename) {
 			float diff = (pcAttributes[k].max - pcAttributes[k].min) * 0.05f;
 			pcAttributes[k].min -= diff;
 			pcAttributes[k].max += diff;
+			pcAttributes[k].categories_ordered = std::vector<std::pair<std::string, float>>(pcAttributes[k].categories.begin(), pcAttributes[k].categories.end());
+			std::sort(pcAttributes[k].categories_ordered.begin(), pcAttributes[k].categories_ordered.end(), [](auto& first, auto& second) {return first.second <= second.second; });
 		}	
     }
 
@@ -3803,7 +3806,7 @@ static void openDlf(const char* filename) {
 				//reading in new values
 				else {
 					for (int i = 0; i < attributes.size(); i++) {
-						pcAttributes.push_back({ attributes[i],{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() - 1 });
+						pcAttributes.push_back({ attributes[i],{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() - 1 });
 					}
 
 					//check for attributes overflow
@@ -7559,7 +7562,7 @@ int main(int, char**)
 
 					if (pcAttributes[i].categories.size()) {
                         float prev_y = picPos.y + 1.2f * picSize.y;
-						for (auto categorie : pcAttributes[i].categories) {
+						for (auto categorie : pcAttributes[i].categories_ordered) {
 							float xAnchor = .5f;
 							if (ind == 0) xAnchor = 0;
 							if (ind == amtOfLabels - 1) xAnchor = 1;
