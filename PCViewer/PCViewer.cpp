@@ -7615,7 +7615,7 @@ int main(int, char**)
 						for (int i = 0; i < globalBrush.fractions.size(); i++) {
 							for (int j = 0; j < globalBrush.fractions[i].size(); j++) {
 								int axis = globalBrush.attributes[j];
-								float x = gap * placeOfInd(axis) + picPos.x - fractionBoxWidth / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+								float x = gap * placeOfInd(axis) / (amtOfLabels - 1) + picPos.x - fractionBoxWidth / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 								float width = fractionBoxWidth;
 								float y = ((globalBrush.fractions[i][j].second - pcAttributes[axis].max) / (pcAttributes[axis].min - pcAttributes[axis].max)) * picSize.y + picPos.y;
 								float height = (globalBrush.fractions[i][j].second - globalBrush.fractions[i][j].first) / (pcAttributes[axis].max - pcAttributes[axis].min) * picSize.y;
@@ -7630,7 +7630,7 @@ int main(int, char**)
 								continue;
 
 							ImVec2 mousePos = ImGui::GetIO().MousePos;
-							float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+							float x = gap * placeOfInd(brush.first) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 							float width = BRUSHWIDTH;
 
 							int del = -1;
@@ -7779,7 +7779,7 @@ int main(int, char**)
 						if (!pcAttributeEnabled[brush.first] || !brush.second.size())
 							continue;
 
-						float x = gap * placeOfInd(brush.first) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+						float x = gap * placeOfInd(brush.first) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 						float y = ((brush.second[0].second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 						float width = BRUSHWIDTH;
 						float height = (brush.second[0].second.second - brush.second[0].second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -7810,7 +7810,7 @@ int main(int, char**)
 					bool brushHover = false;
 
 					ImVec2 mousePos = ImGui::GetIO().MousePos;
-					float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+					float x = gap * placeOfInd(i) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 					//drawing the brushes
 					for (Brush& b : dl->brushes[i]) {
 						float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
@@ -7948,7 +7948,7 @@ int main(int, char**)
 					bool brushHover = false;
 
 					ImVec2 mousePos = ImGui::GetIO().MousePos;
-					float x = gap * placeOfInd(i) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+					float x = gap * placeOfInd(i) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 					bool axisHover = mousePos.x > x&& mousePos.x < x + BRUSHWIDTH && mousePos.y > picPos.y&& mousePos.y < picPos.y + picSize.y;
 
 					if (axisHover) {
