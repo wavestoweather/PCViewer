@@ -11,7 +11,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #endif
 
 //enable this define to print the time needed to render the pc Plot
-#define PRINTRENDERTIME
+//#define PRINTRENDERTIME
 //enable this define to print the time since the last fram
 //#define PRINTFRAMETIME
 //enable to use gpu sorting (Not implemented yet)
@@ -116,7 +116,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-#define _DEBUG
+//#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -708,6 +708,7 @@ static Vec4 PcPlotBackCol = { 0,0,0,1 };
 static bool enableAxisLines = true;
 static bool createDefaultOnLoad = true;
 static bool rescaleTableColumns = true;
+static std::vector<int> pcPlotSelectedDrawList;									//Contains the index of the drawlist that is currently selected
 
 //variables for the histogramm
 static float histogrammWidth = .1f;
@@ -5858,6 +5859,73 @@ static void optimizeViolinSidesAndAssignCustColors() {
 	}
 }
 
+void violinDrawListPlotAddDrawList(ViolinDrawlistPlot& drawPlot, DrawList& dl, uint32_t i) {
+	//check if the drawlist was already added to this plot
+	if (std::find(drawPlot.drawLists.begin(), drawPlot.drawLists.end(), dl.name) == drawPlot.drawLists.end()) {
+		if (!drawPlot.attributeNames.size()) {	//creating all needed resources e.g. attribute components
+			drawPlot.activeAttributes = new bool[pcAttributes.size()];
+			drawPlot.maxGlobalValue = 0;
+			int j = 0;
+			for (Attribute& a : pcAttributes) {
+				drawPlot.attributeNames.push_back(a.name);
+				drawPlot.activeAttributes[j] = true;
+				drawPlot.attributeLineColors.push_back({ 0,0,0,1 });
+				drawPlot.attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
+				drawPlot.attributePlacements.push_back((j % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
+				drawPlot.attributeScalings.push_back(1);
+				drawPlot.violinScalesX.push_back(ViolinScaleGlobalAttribute);
+				drawPlot.maxValues.push_back(0);
+				++j;
+			}
+		}
+
+		std::vector<std::pair<float, float>> minMax;
+		for (Attribute& a : pcAttributes) {
+			minMax.push_back({ a.min,a.max });
+		}
+		DataSet* ds;
+		for (DataSet& d : g_PcPlotDataSets) {
+			if (d.name == dl.parentDataSet) {
+				ds = &d;
+				break;
+			}
+		}
+		exeComputeHistogram(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+		updateHistogramComparisonDL(i);
+		//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
+		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
+		std::vector<std::pair<uint32_t, float>> area;
+		for (int j = 0; j < hist.maxCount.size(); ++j) {
+			if (hist.maxCount[j] > drawPlot.maxValues[j]) {
+				drawPlot.maxValues[j] = hist.maxCount[j];
+			}
+			if (hist.maxCount[j] > drawPlot.maxGlobalValue) {
+				drawPlot.maxGlobalValue = hist.maxCount[j];
+			}
+			area.push_back({ j, drawPlot.attributeScalings[j] / hist.maxCount[j] });
+		}
+
+		drawPlot.drawLists.push_back(dl.name);
+		//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
+		drawPlot.attributeOrder.push_back({});
+		if (renderOrderDLConsider) {
+
+			drawPlot.attributeOrder.back() = sortHistogram(hist, drawPlot, renderOrderDLConsider, renderOrderDLReverse);
+
+			/*if (!renderOrderDLReverse) {
+				std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
+			}
+			else
+			{
+				std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortAscPair(a, b); });
+			}*/
+		}
+		else {
+			for (int j = 0; j < pcAttributes.size(); ++j)drawPlot.attributeOrder.back().push_back(area[j].first);
+		}
+	}
+}
+
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
@@ -5899,7 +5967,6 @@ int main(int, char**)
 
 	//std::vector<float*> pcData = std::vector<float*>();					//Contains all data
 	bool pcPlotRender = false;												//If this is true, the pc Plot is rendered in the next frame
-	int pcPlotSelectedDrawList = -1;										//Contains the index of the drawlist that is currently selected
 	int pcPlotPreviousSlectedDrawList = -1;									//Index of the previously selected drawlist
 	bool addIndeces = false;
 
@@ -6915,7 +6982,7 @@ int main(int, char**)
 				for (int i = 0; i < templateBrushes.size(); i++) {
 					if (ImGui::Selectable(templateBrushes[i].name.c_str(), selectedTemplateBrush == i)) {
 						selectedGlobalBrush = -1;
-						pcPlotSelectedDrawList = -1;
+						pcPlotSelectedDrawList.clear();
 						if (selectedTemplateBrush != i) {
 							if (selectedTemplateBrush != -1) {
 								if (drawListForTemplateBrush) {
@@ -6979,7 +7046,7 @@ int main(int, char**)
 				static int openConvertToLokal = -1, setParent = -1;
 				for (int i = 0; i < globalBrushes.size(); i++) {
 					if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i, ImGuiSelectableFlags_None, ImVec2(350, 0))) {
-						pcPlotSelectedDrawList = -1;
+						pcPlotSelectedDrawList.clear();
 						if (selectedGlobalBrush != i) {
 							selectedGlobalBrush = i;
 						}
@@ -7789,12 +7856,12 @@ int main(int, char**)
 			}
 
 			//drawing the brush windows
-			if (pcPlotSelectedDrawList != -1) {
+			if (pcPlotSelectedDrawList.size()) {
 				//getting the drawlist;
 				DrawList* dl = 0;
 				uint32_t c = 0;
 				for (DrawList& d : g_PcPlotDrawLists) {
-					if (c == pcPlotSelectedDrawList) {
+					if (c == pcPlotSelectedDrawList[0]) {
 						dl = &d;
 						break;
 					}
@@ -7932,7 +7999,7 @@ int main(int, char**)
 
 			//handling priority selection
 			if (prioritySelectAttribute) {
-				pcPlotSelectedDrawList = -1;
+				pcPlotSelectedDrawList.clear();
 				selectedGlobalBrush = -1;
 				ImGui::GetWindowDrawList()->AddRect(picPos, ImVec2(picPos.x + picSize.x, picPos.y + picSize.y), IM_COL32(255, 255, 0, 255), 0, 15, 5);
 				if ((ImGui::GetIO().MousePos.x<picPos.x || ImGui::GetIO().MousePos.x>picPos.x + picSize.x || ImGui::GetIO().MousePos.y<picPos.y || ImGui::GetIO().MousePos.y>picPos.y + picSize.y) && ImGui::GetIO().MouseClicked[0]) {
@@ -8490,17 +8557,40 @@ int main(int, char**)
 			bool exportCsv = false;
 			static DrawList* exportDl;
 			for (DrawList& dl : g_PcPlotDrawLists) {
-				if (ImGui::Selectable(dl.name.c_str(), count == pcPlotSelectedDrawList)) {
+				bool contained = pcPlotSelectedDrawList.end() != std::find(pcPlotSelectedDrawList.begin(), pcPlotSelectedDrawList.end(), count);
+				if (ImGui::Selectable(dl.name.c_str(), contained)) {
 					selectedGlobalBrush = -1;
-					if (count == pcPlotSelectedDrawList)
-						pcPlotSelectedDrawList = -1;
-					else
-						pcPlotSelectedDrawList = count;
+					if (contained && io.KeyCtrl) {
+						int place = 0;
+						for (; place < pcPlotSelectedDrawList.size(); ++place) if (count == pcPlotSelectedDrawList[place]) break;
+						pcPlotSelectedDrawList[place] = pcPlotSelectedDrawList.size() > 1 ? pcPlotSelectedDrawList[pcPlotSelectedDrawList.size() - 1] : 0;
+						pcPlotSelectedDrawList.pop_back();
+					}
+					else if (contained)
+						pcPlotSelectedDrawList.clear();
+					else if (io.KeyShift) {
+						if (pcPlotSelectedDrawList.back() < count)
+							for (int addition = pcPlotSelectedDrawList.back() + 1; addition <= count; ++addition) pcPlotSelectedDrawList.push_back(addition);
+						else
+							for (int addition = pcPlotSelectedDrawList.back() - 1; addition >= count; --addition) pcPlotSelectedDrawList.push_back(addition);
+					}
+					else if (io.KeyCtrl)
+						pcPlotSelectedDrawList.push_back(count);
+					else {
+						pcPlotSelectedDrawList.clear();
+						pcPlotSelectedDrawList.push_back(count);
+					}
 				}
 				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
 					DrawList* point = &dl;
+					if (!contained) pcPlotSelectedDrawList.push_back(count);
 					ImGui::SetDragDropPayload("Drawlist", &point, sizeof(DrawList*));
-					ImGui::Text("%s", dl.name.c_str());
+					auto cur_draw = g_PcPlotDrawLists.begin();
+					for (int cur_d = 0; cur_d < g_PcPlotDrawLists.size(); ++cur_d, ++cur_draw) {
+						if (pcPlotSelectedDrawList.end() != std::find(pcPlotSelectedDrawList.begin(), pcPlotSelectedDrawList.end(), cur_d)) {
+							ImGui::Text("%s", cur_draw->name.c_str());
+						}
+					}
 					ImGui::EndDragDropSource();
 				}
 				if (ImGui::IsItemHovered() && io.MouseClicked[1]) {
@@ -8641,12 +8731,7 @@ int main(int, char**)
 				ImGui::NextColumn();
 
 				if (ImGui::Button((std::string("X##") + dl.name).c_str())) {
-					if (count == pcPlotSelectedDrawList) {
-						pcPlotSelectedDrawList = -1;
-					}
-					else if (count < pcPlotSelectedDrawList) {
-						pcPlotSelectedDrawList--;
-					}
+					pcPlotSelectedDrawList.clear();
 					changeList = &dl;
 					destroy = true;
 					pcPlotRender = true;
@@ -10663,64 +10748,15 @@ int main(int, char**)
 							// we also support to drop a drawlist directly into a gridspace
 							if ((drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) && ImGui::BeginDragDropTarget()) {
 								if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
-									DrawList* dl = *((DrawList**)payload->Data);
-									//check if the drawlist was already added to this plot
-									if (std::find(violinDrawlistPlots[i].drawLists.begin(), violinDrawlistPlots[i].drawLists.end(), dl->name) == violinDrawlistPlots[i].drawLists.end()) {
-										if (!violinDrawlistPlots[i].attributeNames.size()) {	//creating all needed resources e.g. attribute components
-											violinDrawlistPlots[i].activeAttributes = new bool[pcAttributes.size()];
-											violinDrawlistPlots[i].maxGlobalValue = 0;
-											int j = 0;
-											for (Attribute& a : pcAttributes) {
-												violinDrawlistPlots[i].attributeNames.push_back(a.name);
-												violinDrawlistPlots[i].activeAttributes[j] = true;
-												violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
-												violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
-												violinDrawlistPlots[i].attributePlacements.push_back((j % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
-												violinDrawlistPlots[i].attributeScalings.push_back(1);
-												violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
-												violinDrawlistPlots[i].maxValues.push_back(0);
-												++j;
-											}
-										}
-
-										std::vector<std::pair<float, float>> minMax;
-										for (Attribute& a : pcAttributes) {
-											minMax.push_back({ a.min,a.max });
-										}
-										DataSet* ds;
-										for (DataSet& d : g_PcPlotDataSets) {
-											if (d.name == dl->parentDataSet) {
-												ds = &d;
-												break;
-											}
-										}
-										exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
-                                        updateHistogramComparisonDL(i);
-										//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
-										HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
-										// ToDo:  Check, whether the ordering here should also be adjusted if  'renderOrderBasedOnFirstDL = true'
-										violinDrawlistPlots[i].attributeOrder.push_back({});
-										violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse);
-										//std::vector<std::pair<uint32_t, float>> area;
-                                        for (int j = 0; j < hist.maxCount.size(); ++j) {
-											if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
-												violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
-											}
-											if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
-												violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
-											}
-										}
-
-										violinDrawlistPlots[i].drawLists.push_back(dl->name);
-										//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
-										//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return a.second > b.second; });
-										//for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
+									for (int drawIndex : pcPlotSelectedDrawList) {
+										auto dl = g_PcPlotDrawLists.begin();
+										for (int iter = 0; iter < drawIndex; ++iter) ++dl;
+										violinDrawListPlotAddDrawList(violinDrawlistPlots[i], *dl, i);
 									}
-									else {
-										updateMaxHistogramValues(violinDrawlistPlots[i]);
-                                        updateHistogramComparisonDL(i);
+									for (int selectIndex = 0; selectIndex < pcPlotSelectedDrawList.size(); ++selectIndex) {
+										if (x * violinDrawlistPlots[i].matrixSize.second + y + selectIndex >= violinDrawlistPlots[i].drawListOrder.size()) break;
+										violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y + selectIndex] = violinDrawlistPlots[i].drawLists.size() + selectIndex - pcPlotSelectedDrawList.size();
 									}
-									violinDrawlistPlots[i].drawListOrder[x * violinDrawlistPlots[i].matrixSize.second + y] = violinDrawlistPlots[i].drawLists.size() - 1;
 									
 								}
 								ImGui::EndDragDropTarget();
@@ -11025,70 +11061,10 @@ int main(int, char**)
 				//drag and drop drawlists onto this plot child to add it to this violin plot
 				if (ImGui::BeginDragDropTarget()) {
 					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
-						DrawList* dl = *((DrawList**)payload->Data);
-						//check if the drawlist was already added to this plot
-						if (std::find(violinDrawlistPlots[i].drawLists.begin(), violinDrawlistPlots[i].drawLists.end(), dl->name) == violinDrawlistPlots[i].drawLists.end()) {
-							if (!violinDrawlistPlots[i].attributeNames.size()) {	//creating all needed resources e.g. attribute components
-								violinDrawlistPlots[i].activeAttributes = new bool[pcAttributes.size()];
-								violinDrawlistPlots[i].maxGlobalValue = 0;
-								int j = 0;
-								for (Attribute& a : pcAttributes) {
-									violinDrawlistPlots[i].attributeNames.push_back(a.name);
-									violinDrawlistPlots[i].activeAttributes[j] = true;
-									violinDrawlistPlots[i].attributeLineColors.push_back({ 0,0,0,1 });
-									violinDrawlistPlots[i].attributeFillColors.push_back({ .5f,.5f,.5f,.5f });
-									violinDrawlistPlots[i].attributePlacements.push_back((j % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
-									violinDrawlistPlots[i].attributeScalings.push_back(1);
-									violinDrawlistPlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
-									violinDrawlistPlots[i].maxValues.push_back(0);
-									++j;
-								}
-							}
-
-							std::vector<std::pair<float, float>> minMax;
-							for (Attribute& a : pcAttributes) {
-								minMax.push_back({ a.min,a.max });
-							}
-							DataSet* ds;
-							for (DataSet& d : g_PcPlotDataSets) {
-								if (d.name == dl->parentDataSet) {
-									ds = &d;
-									break;
-								}
-							}
-							exeComputeHistogram(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
-                            updateHistogramComparisonDL(i);
-							//histogramManager->computeHistogramm(dl->name, minMax, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(), dl->activeIndicesBufferView);
-							HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
-							std::vector<std::pair<uint32_t, float>> area;
-							for (int j = 0; j < hist.maxCount.size(); ++j) {
-								if (hist.maxCount[j] > violinDrawlistPlots[i].maxValues[j]) {
-									violinDrawlistPlots[i].maxValues[j] = hist.maxCount[j];
-								}
-								if (hist.maxCount[j] > violinDrawlistPlots[i].maxGlobalValue) {
-									violinDrawlistPlots[i].maxGlobalValue = hist.maxCount[j];
-								}
-								area.push_back({ j, violinDrawlistPlots[i].attributeScalings[j] / hist.maxCount[j] });
-							}
-
-							violinDrawlistPlots[i].drawLists.push_back(dl->name);
-							//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
-							violinDrawlistPlots[i].attributeOrder.push_back({});
-							if (renderOrderDLConsider) {
-
-								violinDrawlistPlots[i].attributeOrder.back() = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse);
-
-								/*if (!renderOrderDLReverse) {
-									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
-								}
-								else
-								{
-									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortAscPair(a, b); });
-								}*/
-							}
-							else {
-								for (int j = 0; j < pcAttributes.size(); ++j)violinDrawlistPlots[i].attributeOrder.back().push_back(area[j].first);
-							}
+						for (int drawIndex : pcPlotSelectedDrawList) {
+							auto dl = g_PcPlotDrawLists.begin();
+							for (int iter = 0; iter < drawIndex; ++iter) ++dl;
+							violinDrawListPlotAddDrawList(violinDrawlistPlots[i], *dl, i);
 						}
 					}
 					ImGui::EndDragDropTarget();
