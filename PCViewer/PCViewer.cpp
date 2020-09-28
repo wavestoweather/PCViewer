@@ -703,6 +703,7 @@ static bool* createDLForDrop = NULL;
 static bool pathDropped = false;
 static std::default_random_engine engine;
 static std::uniform_int_distribution<int> distribution(0, 35);
+static bool autoAlpha = true;
 static float alphaDrawLists = .5f;
 static Vec4 PcPlotBackCol = { 0,0,0,1 };
 static bool enableAxisLines = true;
@@ -2340,7 +2341,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
-	dl.color = { (float)col.r,(float)col.g,(float)col.b,alphaDrawLists };
+	dl.color = { (float)col.r,(float)col.g,(float)col.b,autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, 1.f) : alphaDrawLists };
 	dl.prefColor = dl.color;
 	dl.show = true;
 	dl.showHistogramm = true;
@@ -7604,7 +7605,7 @@ int main(int, char**)
 
 
 
-							float x = picPos.x + iActAttr * gap + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+							float x = picPos.x + iActAttr * gap / (amtOfLabels - 1) + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
 							x += xStartOffset + xoffset;
 
 							// x is the center of the axis. Now, the hist goes to the left and right, no matter how many are drawn. So, calculate the min_x, max_x, h*2 +1 axes, every second is the middle of a histogrm
