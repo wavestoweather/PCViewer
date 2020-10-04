@@ -6321,6 +6321,35 @@ int main(int, char**)
 			pcPlotRender = true;
 		}
 
+
+		//Main docking window including the main menu
+		ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(viewport->GetWorkPos());
+		ImGui::SetNextWindowSize(viewport->GetWorkSize());
+		ImGui::SetNextWindowViewport(viewport->ID);
+		ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus;
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+		ImGui::Begin("DockSpace", NULL, dockingWindow_flags);
+
+		ImGui::PopStyleVar(3);
+		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+		if (ImGui::DockBuilderGetNode(dockspace_id) == NULL) {
+			ImGui::DockBuilderRemoveNode(dockspace_id);
+			ImGuiDockNodeFlags dockSpaceFlags = 0;
+			dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
+			ImGui::DockBuilderAddNode(dockspace_id, dockSpaceFlags);
+
+#ifdef _DEBUG
+			ImGui::DockBuilderDockWindow("Dear ImGui Demo", dockspace_id);
+#endif
+			ImGui::DockBuilderDockWindow("Parallel coordinates", dockspace_id);
+		}
+		auto id = ImGui::DockBuilderGetNode(dockspace_id)->SelectedTabId;
+		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+
 		//check if a path was dropped in the application
 		if (pathDropped && !addIndeces) {
 			ImGui::OpenPopup("OPENDATASET");
@@ -6359,34 +6388,6 @@ int main(int, char**)
 				ImGui::EndPopup();
 			}
 		}
-
-		//Main docking window including the main menu
-		ImGuiViewport* viewport = ImGui::GetMainViewport();
-		ImGui::SetNextWindowPos(viewport->GetWorkPos());
-		ImGui::SetNextWindowSize(viewport->GetWorkSize());
-		ImGui::SetNextWindowViewport(viewport->ID);
-		ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus;
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-		ImGui::Begin("DockSpace", NULL, dockingWindow_flags);
-
-		ImGui::PopStyleVar(3);
-		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-		if (ImGui::DockBuilderGetNode(dockspace_id) == NULL) {
-			ImGui::DockBuilderRemoveNode(dockspace_id);
-			ImGuiDockNodeFlags dockSpaceFlags = 0;
-			dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
-			ImGui::DockBuilderAddNode(dockspace_id, dockSpaceFlags);
-
-#ifdef _DEBUG
-			ImGui::DockBuilderDockWindow("Dear ImGui Demo", dockspace_id);
-#endif
-			ImGui::DockBuilderDockWindow("Parallel coordinates", dockspace_id);
-		}
-		auto id = ImGui::DockBuilderGetNode(dockspace_id)->SelectedTabId;
-		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
