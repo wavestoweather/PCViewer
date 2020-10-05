@@ -3626,6 +3626,7 @@ static void openCsv(const char* filename) {
 			}
 
 			//adding the last item which wasn't recognized
+			cur = line.substr(0, line.size() - 1);
 			if (cur.empty()) curF = 0;
 			else {
 				char* ptr;
