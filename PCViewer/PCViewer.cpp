@@ -2580,7 +2580,6 @@ static int placeOfInd(int ind) {
 
 static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const ImGui_ImplVulkanH_Window* wd) {
 #ifdef PRINTRENDERTIME
-	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 	uint32_t amtOfLines = 0;
 #endif
 
@@ -3105,6 +3104,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces * 6, 1, 0, 0, 0);
 		}
 	}
+#ifdef PRINTRENDERTIME
+	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+#endif
 
 	//when cleaning up the command buffer all data is drawn
 	cleanupPcPlotCommandBuffer();
@@ -3657,11 +3659,11 @@ static void openCsv(const char* filename) {
             pcAttributes[k].max += minRangeEps;
         }
 		if (pcAttributes[k].categories.size()) {
-			float diff = (pcAttributes[k].max - pcAttributes[k].min) * 0.05f;
-			pcAttributes[k].min -= diff;
-			pcAttributes[k].max += diff;
 			pcAttributes[k].categories_ordered = std::vector<std::pair<std::string, float>>(pcAttributes[k].categories.begin(), pcAttributes[k].categories.end());
 			std::sort(pcAttributes[k].categories_ordered.begin(), pcAttributes[k].categories_ordered.end(), [](auto& first, auto& second) {return first.second <= second.second; });
+			float diff = (pcAttributes[k].categories_ordered.back().second - pcAttributes[k].categories_ordered.front().second) * 0.05f;
+			pcAttributes[k].min = pcAttributes[k].categories_ordered.front().second - diff;
+			pcAttributes[k].max = pcAttributes[k].categories_ordered.back().second + diff;
 		}	
     }
 
@@ -8518,7 +8520,14 @@ int main(int, char**)
 			ImGui::BeginChild("DrawLists", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
 
 			ImGui::Text("Draw lists");
-			ImGui::Separator();
+			ImGui::SameLine();
+			static float uniform_alpha = .5f;
+			if (ImGui::SliderFloat("Set uniform alpha", &uniform_alpha, 0.003f, 1.0f)) {	//when changed set alpha for each dl
+				for (DrawList& dl : g_PcPlotDrawLists) {
+					dl.color.w = uniform_alpha;
+				}
+				pcPlotRender = true;
+			}
 			int count = 0;
 
 			ImGui::Columns(9, "Columns", true);
@@ -8533,6 +8542,7 @@ int main(int, char**)
 				ImGui::SetColumnWidth(7, 100);
 				ImGui::SetColumnWidth(8, 25);
 			}
+			ImGui::Separator();
 
 			//showing texts to describe whats in the corresponding column
 			ImGui::Text("Drawlist Name");
