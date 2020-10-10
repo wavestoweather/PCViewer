@@ -1073,7 +1073,7 @@ static void createPcPlotHistoPipeline() {
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(g_PcPlotHistoDescriptorSetLayout);
 
-	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
 
 	shaderModules[3] = nullptr;
 
@@ -1104,7 +1104,7 @@ static void createPcPlotHistoPipeline() {
 	blendInfo.blendAttachment = colorBlendAttachment;
 	blendInfo.createInfo = colorBlending;
 
-	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineAdditiveLayout, &g_PcPlotHistoAdditivePipeline);
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineAdditiveLayout, &g_PcPlotHistoAdditivePipeline);
 
 	shaderModules[3] = nullptr;
 
