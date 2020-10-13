@@ -3655,9 +3655,6 @@ static void openCsv(const char* filename) {
 	}
 
     for (unsigned int k = 0; k < pcAttributes.size(); ++k){
-        if (pcAttributes[k].max == pcAttributes[k].min)   {
-            pcAttributes[k].max += minRangeEps;
-        }
 		if (pcAttributes[k].categories.size()) {
 			pcAttributes[k].categories_ordered = std::vector<std::pair<std::string, float>>(pcAttributes[k].categories.begin(), pcAttributes[k].categories.end());
 			std::sort(pcAttributes[k].categories_ordered.begin(), pcAttributes[k].categories_ordered.end(), [](auto& first, auto& second) {return first.second <= second.second; });
@@ -3665,6 +3662,10 @@ static void openCsv(const char* filename) {
 			pcAttributes[k].min = pcAttributes[k].categories_ordered.front().second - diff;
 			pcAttributes[k].max = pcAttributes[k].categories_ordered.back().second + diff;
 		}	
+        if (pcAttributes[k].max == pcAttributes[k].min)   {
+            pcAttributes[k].max += minRangeEps;
+			pcAttributes[k].min -= minRangeEps;
+        }
     }
 
 	f.close();
