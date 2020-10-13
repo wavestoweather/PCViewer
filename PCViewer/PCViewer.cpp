@@ -7219,6 +7219,17 @@ int main(int, char**)
 						pcPlotRender = updateAllActiveIndices();
 					}
 				}
+				
+				static int globalBrushCreateCount = 0;
+				if (ImGui::Button("+##globalBrush", {100,0})) {
+					globalBrushes.push_back({});
+					globalBrushes.back().active = true;
+					globalBrushes.back().name = std::to_string(globalBrushCreateCount++);
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						globalBrushes.back().brushes[i] = {};
+					}
+				}
+
 				if (popEnd) {
 					if (drawListForTemplateBrush) {
 						removePcPlotDrawList(g_PcPlotDrawLists.back());
