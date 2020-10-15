@@ -83,15 +83,15 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #endif
 
 //defines for key ids
-#define KEYW 87
-#define KEYA 65
-#define KEYS 83
-#define KEYD 68
-#define KEYQ 81
-#define KEYE 69
-#define KEYP 80
-#define KEYENTER 257
-#define KEYESC 256
+#define KEYW 26
+#define KEYA 4
+#define KEYS 22
+#define KEYD 7
+#define KEYQ 20
+#define KEYE 8
+#define KEYP 19
+#define KEYENTER 40
+#define KEYESC 41
 
 //defines for the medians
 #define MEDIANCOUNT 3
