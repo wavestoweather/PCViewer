@@ -177,11 +177,11 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 		}
 	}
 	histogram.ranges = minMax;
-	updateSmoothedValues(histogram);
 
 	// determineSideHist(histogram);
 
 	histograms[name] = histogram;
+	updateSmoothedValues();
 
 	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
@@ -261,15 +261,27 @@ void HistogramManager::setSmoothingKernelSize(float stdDev)
 {
 	this->stdDev = stdDev;
 	
-	for (auto& hist : histograms) {
-		updateSmoothedValues(hist.second);
-	}
+	updateSmoothedValues();
 }
 
 void HistogramManager::updateSmoothedValues()
 {
 	for (auto& hist : histograms) {
 		updateSmoothedValues(hist.second);
+	}
+
+	//updating summed histograms
+	summedBins = std::vector<std::vector<float>>(histograms.begin()->second.originalBins.size(), std::vector<float>(numOfBins));	//nulling summed array
+	for (auto& histogram: histograms) {
+		for (int attribute = 0; attribute < histogram.second.bins.size(); ++attribute) {
+			for (int bin = 0; bin < numOfBins; ++bin) {
+				summedBins[attribute][bin] += histogram.second.bins[attribute][bin];
+			}
+		}
+	}
+	summedBinsMaxVals.resize(summedBins.size());
+	for (int attribute = 0; attribute < summedBins.size(); ++attribute) {
+		summedBinsMaxVals[attribute] = *std::max_element(summedBins[attribute].begin(), summedBins[attribute].end());
 	}
 }
 
