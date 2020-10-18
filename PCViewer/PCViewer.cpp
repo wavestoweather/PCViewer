@@ -438,6 +438,8 @@ struct ViolinPlot {
 	std::vector<uint32_t> attributeOrder;			//the first index in this vector corresponds to the first attribute to draw
 	float maxGlobalValue;							//max global value accross all histograms
 	std::vector<float> maxValues;					//max value of all histogramms
+	std::vector<std::vector<float>> summedBins;		//summed bin values
+	std::vector<float> maxSummedValues;				//max value for summed bins
 
     ColorPaletteManager *colorPaletteManager;
 };
@@ -5788,6 +5790,24 @@ static void sortAllHistograms(std::string option)
 
 }
 
+static void updateSummedBins(ViolinPlot& plot) {
+	//updating summed histograms
+	plot.summedBins = std::vector<std::vector<float>>(plot.maxValues.size(), std::vector<float>(violinPlotBinsSize));	//nulling summed array
+	plot.maxSummedValues.resize(plot.summedBins.size());
+	for (auto& dl : plot.drawLists) {
+		if (!dl.activated) continue;
+		HistogramManager::Histogram& histogram = histogramManager->getHistogram(dl.name);
+		for (int attribute = 0; attribute < histogram.bins.size(); ++attribute) {
+			for (int bin = 0; bin < violinPlotBinsSize; ++bin) {
+				plot.summedBins[attribute][bin] += histogram.bins[attribute][bin];
+			}
+		}
+		for (int attribute = 0; attribute < plot.summedBins.size(); ++attribute) {
+			plot.maxSummedValues[attribute] = *std::max_element(plot.summedBins[attribute].begin(), plot.summedBins[attribute].end());
+		}
+	}
+}
+
 inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst = false) {
 	for (auto& drawListPlot : violinDrawlistPlots) {
 		drawListPlot.maxGlobalValue = 0;
@@ -5927,6 +5947,7 @@ void violinAttributePlotAddDrawList(ViolinPlot& plot, DrawList& dl, uint32_t i) 
 	if (h.maxGlobalCount > violinAttributePlots[i].maxGlobalValue) {
 		violinAttributePlots[i].maxGlobalValue = h.maxGlobalCount;
 	}
+	updateSummedBins(violinAttributePlots[i]);
 }
 
 void violinDrawListPlotAddDrawList(ViolinDrawlistPlot& drawPlot, DrawList& dl, uint32_t i) {
@@ -9837,6 +9858,7 @@ int main(int, char**)
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+						for(auto& plot: violinAttributePlots) updateSummedBins(plot);
 					}
 					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
 					if (ImGui::BeginCombo("Y Scale", violinYs[violinYScale])) {
@@ -9871,7 +9893,10 @@ int main(int, char**)
 				ImGui::PushItemWidth(150);
 				//listing all histograms available
 				for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
-					ImGui::Checkbox(violinAttributePlots[i].drawLists[j].name.c_str(), &violinAttributePlots[i].drawLists[j].activated);
+					if (ImGui::Checkbox(violinAttributePlots[i].drawLists[j].name.c_str(), &violinAttributePlots[i].drawLists[j].activated)) {
+						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+						updateSummedBins(violinAttributePlots[i]);
+					}
 					static char* plotPositions[] = { "Left","Right","Middle" };
 					ImGui::SameLine(200);
 					if (ImGui::BeginCombo(("Position##" + std::to_string(j)).c_str(), plotPositions[violinAttributePlots[i].violinPlacements[j]])) {
@@ -9900,6 +9925,7 @@ int main(int, char**)
 					if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
 						histogramManager->updateSmoothedValues();
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+						updateSummedBins(violinAttributePlots[i]);
 					};
 				}
 				static char choose[] = "Choose drawlist";
@@ -10259,7 +10285,7 @@ int main(int, char**)
 						}
 						else if (violinAttributePlots[i].drawLists.size()) {
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinAttributePlots[i].drawLists[0].name);
-							auto& summedBins = histogramManager->summedBins;
+							auto& summedBins = violinAttributePlots[i].summedBins;
 							float histYStart;
 							float histYEnd;
 							histYStart = 0;
@@ -10272,7 +10298,7 @@ int main(int, char**)
 
 							float div = 0;
 							std::vector<float> scals({});
-							div = histogramManager->summedBinsMaxVals[j];//violinAttributePlots[i].maxValues[k];
+							div = violinAttributePlots[i].maxSummedValues[j];//violinAttributePlots[i].maxValues[k];
 
 							switch (violinAttributePlots[i].violinPlacements[0]) {
 							case ViolinLeft:

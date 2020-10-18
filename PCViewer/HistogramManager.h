@@ -53,9 +53,6 @@ public:
 
 	bool adaptMinMaxToBrush;
 
-	std::vector<std::vector<float>> summedBins;
-	std::vector<float> summedBinsMaxVals;
-
 private:
 	VkDevice device;
 	VkPhysicalDevice physicalDevice;
