@@ -3669,6 +3669,29 @@ static void openCsv(const char* filename) {
 		}
 	}
 
+	//lexicografically ordering labeled data
+	std::vector<std::vector<std::pair<int,int>>> lexicon;	//first has the index of the categorie, second has its corresponding numeric value
+	//building the lexicon
+	for (uint32_t k = 0; k < pcAttributes.size(); ++k) {
+		lexicon.push_back({});
+		if (pcAttributes[k].categories.size()) {
+			int c = 0;
+			for (auto& categorie : pcAttributes[k].categories) {
+				lexicon[k].push_back({ c, int(categorie.second) });
+				categorie.second = c++;
+			}
+			std::sort(lexicon[k].begin(), lexicon[k].end(), [](auto& a, auto& b) {return a.second < b.second; });	//after sorting the seconds are ordererd and first then corresponds to the index which should be written instead of second
+		}
+	}
+	//now ordering
+	for (float* d : ds.data) {
+		for (int k = 0; k < pcAttributes.size(); ++k) {
+			if (lexicon[k].size()) {
+				d[k] = lexicon[k][int(d[k])].first;
+			}
+		}
+	}
+
     for (unsigned int k = 0; k < pcAttributes.size(); ++k){
 		if (pcAttributes[k].categories.size()) {
 			pcAttributes[k].categories_ordered = std::vector<std::pair<std::string, float>>(pcAttributes[k].categories.begin(), pcAttributes[k].categories.end());
