@@ -707,6 +707,9 @@ static bool autoAlpha = true;
 static float alphaDrawLists = .5f;
 static Vec4 PcPlotBackCol = { 0,0,0,1 };
 static bool enableAxisLines = true;
+static bool enableZeroTick = true;
+static int axisTickAmount = 10;
+static int axisTickWidth = 5;
 static bool createDefaultOnLoad = true;
 static bool rescaleTableColumns = true;
 static std::vector<int> pcPlotSelectedDrawList;									//Contains the index of the drawlist that is currently selected
@@ -2577,6 +2580,17 @@ static int placeOfInd(int ind) {
 			place++;
 	}
 	return place;
+}
+
+//returns the attribute index corresponding to the n-ths place in the plot
+static int attributeOfPlace(int place) {
+	int ind = 0;
+	for (int i = 0; i < pcAttrOrd.size(); ++i) {
+		ind = pcAttrOrd[i];
+		if (pcAttributeEnabled[pcAttrOrd[i]]) --place;
+		if (place < 0) break;
+	}
+	return ind;
 }
 
 static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vector<int>& attributeOrder, const bool* attributeEnabled, const ImGui_ImplVulkanH_Window* wd) {
@@ -7676,6 +7690,47 @@ int main(int, char**)
 						ImVec2 a(x, picPos.y);
 						ImVec2 b(x, picPos.y + picSize.y - 1);
 						ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+						//drawing axis sections
+						int attrib = attributeOfPlace(i);
+						if (axisTickAmount > 0 && pcAttributes[attrib].categories.empty()) {
+							float lineHeight = ImGui::GetTextLineHeight() / 2;
+							ImVec2 oldCoursor = ImGui::GetCursorPos();
+							int ticksAmount = axisTickAmount;
+							if (enableZeroTick) {
+								--ticksAmount;
+								Vec2 bounds{ std::min(pcAttributes[attrib].min, pcAttributes[attrib].max), std::max(pcAttributes[attrib].min, pcAttributes[attrib].max) };
+								if (bounds.u <= 0 && bounds.v > 0) {	//only draw the 0 tick if 0 is in the range
+									float y = picPos.y + picSize.y - picSize.y * (-pcAttributes[attrib].min / (pcAttributes[attrib].max - pcAttributes[attrib].min)) - 1;
+									a = ImVec2(x, y);
+									if (i == amtOfLabels - 1) b = ImVec2(x - axisTickWidth, y);
+									else b = ImVec2(x + axisTickWidth, y);
+									ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+									b.y -= lineHeight;
+									if (i == amtOfLabels - 1) b.x -= ImGui::CalcTextSize("0").x;
+									ImGui::SetCursorScreenPos(b);
+									ImGui::Text("0");
+								}
+							}
+							//if (ticksAmount == 1) ++ticksAmount;
+
+							for (int tick = 0; tick < ticksAmount; ++tick) {
+								float y = (tick + 1) / float(ticksAmount + 1);
+								float yval = y * (pcAttributes[attrib].max - pcAttributes[attrib].min) + pcAttributes[attrib].min;
+								y *= picSize.y;
+								y = picPos.y + picSize.y - y - 1;
+								a = ImVec2(x, y);
+								b = (i == amtOfLabels - 1) ? ImVec2(x - axisTickWidth, y): ImVec2(x + axisTickWidth, y);
+								ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+								static char str[20];
+								sprintf(str, "%g", yval);
+								b.y -= lineHeight;
+								if (i == amtOfLabels - 1) b.x -= ImGui::CalcTextSize(str).x;
+								ImGui::SetCursorScreenPos(b);
+								ImGui::Text(str);
+							}
+
+							ImGui::SetCursorPos(oldCoursor);
+						}
 					}
 				}
 
@@ -8242,6 +8297,10 @@ int main(int, char**)
 
 			if (ImGui::Checkbox("Enable Axis Lines", &enableAxisLines)) {
 			}
+
+			if (ImGui::Checkbox("Always show 0 tick", &enableZeroTick)){}
+
+			if (ImGui::DragInt("Amout of ticks", &axisTickAmount,1, 0, 100)){}
 
 			if (ImGui::InputInt("Priority draw list index", &priorityListIndex, 1, 1) && priorityAttribute != -1) {
 				if (priorityListIndex < 0)priorityListIndex = 0;
