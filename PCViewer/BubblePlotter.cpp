@@ -72,7 +72,7 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	dataActivations = VK_NULL_HANDLE;
 
 	cameraPos = glm::vec3(2, 2, 2);
-	cameraRot = glm::vec3(0, 0, 0);
+	cameraRot = glm::vec3(0, .78f, 0);
 	setupBuffer();
 	setupRenderPipeline();
 	resizeImage(width, height);
@@ -359,6 +359,7 @@ void BubblePlotter::setBubbleData(glm::uvec3& pos, std::vector<uint32_t> indices
 
 	setupUbo();
 	recordRenderCommands();
+	render();
 }
 
 void BubblePlotter::render()
