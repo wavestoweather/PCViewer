@@ -3243,8 +3243,8 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 
 	// Create Logical Device (with 2 queues)
 	{
-		int device_extension_count = 1;
-		const char* device_extensions[] = { "VK_KHR_swapchain" };
+		int device_extension_count = 3;
+		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing" };
 
 		VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexingFeatures{};
 		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
@@ -6114,9 +6114,10 @@ int main(int, char**)
 	// Setup Vulkan
 	uint32_t extensions_count = 0;
     SDL_Vulkan_GetInstanceExtensions(window, &extensions_count, NULL);
-    const char** extensions = new const char*[extensions_count];
+    const char** extensions = new const char*[extensions_count + 1];
     SDL_Vulkan_GetInstanceExtensions(window, &extensions_count, extensions);
-    SetupVulkan(extensions, extensions_count);
+    extensions[extensions_count] = "VK_KHR_get_physical_device_properties2";
+    SetupVulkan(extensions, extensions_count + 1);
     delete[] extensions;
 
 	// Create Window Surface
