@@ -76,6 +76,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include <iomanip>
 #include <sstream>
 #include <utility>
+#include <netcdf>
 	
 
 #ifdef DETECTMEMLEAK
@@ -3988,6 +3989,72 @@ static void openDlf(const char* filename) {
 	}
 }
 
+static void openNetCDF(const char* filename){
+    try{
+        netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+        
+        //in netcdf files every data point is a variable, thus getting the variable list contains all information axes
+    auto vars = dataFile.getVars();
+    for(auto& var : vars){
+        std::cout << var.first << std::endl;
+    }
+    std::vector<std::vector<float>> data(vars.size());
+    //getting all dimensions to distinguish the size for the data arrays
+    uint32_t data_size = 0;
+    for(auto dim: dataFile.getDims()){
+        if(data_size = 0) data_size = dim.second.getSize();
+        else data_size *= dim.second.getSize();
+    }
+    std::cout<< "netCDF data size: " << data_size << std::endl;
+    for(int i = 0; i < data.size(); ++i){
+        data[i].resize(data_size);
+    }
+    //attribute check
+	std::vector<Attribute> tmp;
+	std::vector<std::string> attributes;
+    
+    for(auto var : vars){
+        tmp.push_back({ var.first,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+        attributes.push_back(tmp.back().name);
+    }
+
+	//checking if the Attributes are correct
+	std::vector<int> permutation = checkAttriubtes(attributes);
+    if (pcAttributes.size() != 0) {
+	if (tmp.size() != pcAttributes.size()) {
+		std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
+		return;
+	}
+
+	if (!permutation.size()) {
+		std::cout << "The attributes of the .csv data are not the same as the ones already loaded in the program." << std::endl;
+		return;
+	}
+	}
+	//if this is the first Dataset to be loaded, fill the pcAttributes vector
+	else {
+		for (Attribute& a : tmp) {
+			pcAttributes.push_back(a);
+		}
+
+		//setting up the boolarray and setting all the attributes to true
+		pcAttributeEnabled = new bool[pcAttributes.size()];
+		activeBrushAttributes = new bool[pcAttributes.size()];
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			pcAttributeEnabled[i] = true;
+			activeBrushAttributes[i] = false;
+			pcAttrOrd.push_back(i);
+		}
+	}
+
+    std::vector<float> categorieFloats(pcAttributes.size(), 0);
+    
+    }
+    catch(netCDF::exceptions::NcException e){
+        std::cout << e.what() << "File " << filename << " was not opened." << std::endl;
+    }
+}
+
 static void openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
@@ -3997,6 +4064,9 @@ static void openDataset(const char* filename) {
 	else if (file.substr(file.find_last_of(".") + 1) == "dlf") {
 		openDlf(filename);
 	}
+    else if (file.substr(file.find_last_of(".") + 1) == "nc"){
+        openNetCDF(filename);
+    }
 	else {
 		std::cout << "The given type of the file is not supported by this programm" << std::endl;
 		return;

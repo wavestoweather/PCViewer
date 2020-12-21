@@ -34,10 +34,11 @@ add_subdirectory("glm")
 # Fügen Sie der ausführbaren Datei dieses Projekts eine Quelle hinzu.
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
+find_package(netCDF REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 message("include dirs: ${SDL2_INCLUDE_DIRS}")
 
-include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR})
+include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}, ${netCDF_INCLUDE_DIR})
 #include_directories(${Eigen3_DIR})
 
 file(GLOB pcviewer_SRC
@@ -54,7 +55,9 @@ file(GLOB imgui_SRC
 
 add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC})
 
-target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm)# Eigen3::Eigen
+message("netcdf libraries: ${netCDF_LIBRARIES}")
+target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES})# Eigen3::Eigen
+target_link_libraries(PCViewer PUBLIC netCDF::netcdf)
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS
