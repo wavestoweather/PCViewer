@@ -4046,12 +4046,16 @@ static bool openNetCDF(const char* filename){
             return false;
         }
         attribute_dims.push_back(std::vector<int>(ndims));
-        if((retval = nc_inq_vardims(fileId, i, attribute_dims.back().data()))){
+        if((retval = nc_inq_vardimid(fileId, i, attribute_dims.back().data()))){
             std::cout << "Error at getting variable dimension array" << std::endl;
             nc_close(fileId);
             return false;
         }
-        std::cout << vName << std::endl;
+        //std::cout << vName << "(";
+        //for(int dim: attribute_dims.back()){
+        //    std::cout << dim << ", ";
+        //}
+        //std::cout << "\b\b)" << std::endl;
     }
     
     //reading out all data from the netCDF file
@@ -4131,9 +4135,9 @@ static bool openNetCDF(const char* filename){
             float datum = 0;
             int d_index = 0;
             for(int dim = 0; dim < attribute_dims[att].size(); ++dim){
-                int index_add = iter_indices[attribute_dims[dim]];
+                int index_add = iter_indices[attribute_dims[att][dim]];
                 for(int add = dim; add < attribute_dims[att].size() - 1; ++add){
-                    index_add *= iter_stops[attribute_dims[add]];
+                    index_add *= iter_stops[attribute_dims[att][add]];
                 }
                 d_index += index_add;
             }
@@ -4152,7 +4156,7 @@ static bool openNetCDF(const char* filename){
     //assigning the data array into the DataSet struct
     ds.data = std::vector<float*>(data_size);
 	for (int i = 0; i < data_size; i++) {
-		ds.data[i] = &d[i * n_vars];
+		ds.data[i] = &d[i * nvars];
 	}
     
     ds.reducedDataSetSize = ds.data.size();
@@ -4184,16 +4188,38 @@ static bool openNetCDF(const char* filename){
                 pcAttributes[j].min = tl.minMax[j].first;
             if(tl.minMax[j].second > pcAttributes[j].max)
                 pcAttributes[j].max = tl.minMax[j].second;
+            if(pcAttributes[j].min == pcAttributes[j].max){
+                pcAttributes[j].min -= .1;
+                pcAttributes[j].max += .1;
+            }
 		}
 	}
 
 	ds.drawLists.push_back(tl);
 
 	g_PcPlotDataSets.push_back(ds);
+    #ifdef _DEBUG
+	//printing out the loaded attributes for debug reasons
+	std::cout << "Attributes: " << std::endl;
+	for (auto attribute : pcAttributes) {
+		std::cout << attribute.name << ", MinVal: " << attribute.min << ", MaxVal: " << attribute.max << std::endl;
+	}
+
+	int dc = 0;
+	std::cout << std::endl << "Data:" << std::endl;
+	for (auto d : ds.data) {
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			std::cout << d[i] << " , ";
+		}
+		std::cout << std::endl;
+		if (dc++ > 10)
+			break;
+	}
+    #endif
     return true;
 }
 
-bool void openDataset(const char* filename) {
+static bool openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
     bool opened = false;
