@@ -76,7 +76,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include <iomanip>
 #include <sstream>
 #include <utility>
-#include <netcdf>
+#include <netcdf.h>
 	
 
 #ifdef DETECTMEMLEAK
@@ -3504,7 +3504,7 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 	return std::vector<int>();
 }
 
-static void openCsv(const char* filename) {
+static bool openCsv(const char* filename) {
 
 	std::ifstream f(filename, std::ios::in | std::ios::binary);
 	std::stringstream input;
@@ -3512,7 +3512,7 @@ static void openCsv(const char* filename) {
 
 	if (!f.is_open()) {
 		std::cout << "The given file was not found" << std::endl;
-		return;
+		return false;
 	}
 
 	bool firstLine = true;
@@ -3570,12 +3570,12 @@ static void openCsv(const char* filename) {
 				if (tmp.size() != pcAttributes.size()) {
 					std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
 					f.close();
-					return;
+					return false;
 				}
 
 				if (!permutation.size()) {
 					std::cout << "The attributes of the .csv data are not the same as the ones already loaded in the program." << std::endl;
-					return;
+					return false;
 				}
 			}
 			//if this is the first Dataset to be loaded, fill the pcAttributes vector
@@ -3610,7 +3610,7 @@ static void openCsv(const char* filename) {
 				if (attr == pcAttributes.size()) {
 					std::cerr << "The dataset to open is not consitent!" << std::endl;
 					f.close();
-					return;
+					return false;
 				}
 
 				if (cur.empty()) curF = 0;
@@ -3640,7 +3640,7 @@ static void openCsv(const char* filename) {
 			if (attr == pcAttributes.size()) {
 				std::cerr << "The dataset to open is not consitent!" << std::endl;
 				f.close();
-				return;
+				return false;
 			}
 
 			//adding the last item which wasn't recognized
@@ -3758,6 +3758,7 @@ static void openCsv(const char* filename) {
 			break;
 	}
 #endif
+    return true;
 }
 
 //ind1 is the index to which ind2 should be switched
@@ -3805,7 +3806,7 @@ static void switchViolinAttributes(int ind1, int ind2, bool ctrPressed, std::vec
 	}
 }
 
-static void openDlf(const char* filename) {
+static bool openDlf(const char* filename) {
 	std::ifstream f(filename, std::ios::in | std::ios::binary);
 	std::stringstream file;
 	file << f.rdbuf();
@@ -3819,7 +3820,7 @@ static void openDlf(const char* filename) {
 			file >> tmp;
 			if (tmp != std::string("AmtOfPoints:")) {
 				std::cout << "AmtOfPoints is missing in the dlf file. Got " << tmp << " instead." << std::endl;
-				return;
+				return false;
 			}
 			else {
 				file >> amtOfPoints;
@@ -3828,7 +3829,7 @@ static void openDlf(const char* filename) {
 			//checking for the variables section
 			if (tmp != std::string("Attributes:")) {
 				std::cout << "Attributes section not found. Got " << tmp << " instead" << std::endl;
-				return;
+				return false;
 			}
 			else {
 				file >> tmp;
@@ -3841,7 +3842,7 @@ static void openDlf(const char* filename) {
 				if (pcAttributes.size() > 0) {
 					if (!permutation.size()) {
 						std::cout << "The attributes of the dataset to be loaded are not the same as the attributes already used by other datasets" << std::endl;
-						return;
+						return false;
 					}
 
 #ifdef _DEBUG
@@ -3859,7 +3860,7 @@ static void openDlf(const char* filename) {
 					if (pcAttributes.size() == 100) {
 						std::cout << "Too much attributes found, or Datablock not detected." << std::endl;
 						pcAttributes.clear();
-						return;
+						return false;
 					}
 					newAttr = true;
 				}
@@ -3880,7 +3881,7 @@ static void openDlf(const char* filename) {
 			if (tmp != std::string("Data:")) {
 				std::cout << "Data Section not found. Got " << tmp << " instead." << std::endl;
 				pcAttributes.clear();
-				return;
+				return false;
 			}
 			//reading the data
 			else {
@@ -3941,7 +3942,7 @@ static void openDlf(const char* filename) {
 				pcAttributes.clear();
 				delete[] ds.data[0];
 				ds.data.clear();
-				return;
+				return false;
 			}
 			//beginnin to read the drawlists
 			else {
@@ -3983,53 +3984,121 @@ static void openDlf(const char* filename) {
 		}
 
 		f.close();
+        return true;
 	}
 	else {
 		std::cout << "The dlf File could not be opened." << std::endl;
+        return false;
 	}
 }
 
-static void openNetCDF(const char* filename){
-    try{
-        netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
-        
-        //in netcdf files every data point is a variable, thus getting the variable list contains all information axes
-    auto vars = dataFile.getVars();
-    for(auto& var : vars){
-        std::cout << var.first << std::endl;
+static bool openNetCDF(const char* filename){
+    int fileId, retval;
+    if((retval = nc_open(filename, NC_NOWRITE,&fileId))){
+        std::cout << "Error at opening the file" << std::endl;
+        nc_close(fileId);
+        return false;
     }
-    std::vector<std::vector<float>> data(vars.size());
+    
+    int ndims, nvars, ngatts, unlimdimid;
+    if((retval = nc_inq(fileId, &ndims, &nvars, &ngatts, &unlimdimid))){
+        std::cout << "Error at reading out viariable information" << std::endl;
+        nc_close(fileId);
+        return false;
+    }
+    
+    std::vector<std::vector<float>> data(nvars);
     //getting all dimensions to distinguish the size for the data arrays
     uint32_t data_size = 0;
-    for(auto dim: dataFile.getDims()){
-        if(data_size = 0) data_size = dim.second.getSize();
-        else data_size *= dim.second.getSize();
+    for(int i = 0; i < ndims; ++i){
+        size_t dim_size;
+        if((retval = nc_inq_dimlen(fileId, i, &dim_size))){
+            std::cout << "Error at reading out dimension size" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
+        if(data_size == 0) data_size = dim_size;
+        else data_size *= dim_size;
     }
     std::cout<< "netCDF data size: " << data_size << std::endl;
     for(int i = 0; i < data.size(); ++i){
         data[i].resize(data_size);
     }
-    //attribute check
-	std::vector<Attribute> tmp;
-	std::vector<std::string> attributes;
     
-    for(auto var : vars){
-        tmp.push_back({ var.first,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+    //attribute check
+    std::vector<Attribute> tmp;
+    std::vector<std::string> attributes;
+    std::vector<std::vector<int>> attribute_dims;
+    
+    char vName[NC_MAX_NAME];
+    for(int i = 0; i < nvars; ++i){
+        if((retval = nc_inq_varname(fileId, i, vName))){
+            std::cout << "Error at reading variables" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
+        tmp.push_back({ vName,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
         attributes.push_back(tmp.back().name);
+        int ndims;
+        if((retval = nc_inq_varndims(fileId, i, &ndims))){
+            std::cout << "Error at getting variable dimensions" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
+        attribute_dims.push_back(std::vector<int>(ndims));
+        if((retval = nc_inq_vardims(fileId, i, attribute_dims.back().data()))){
+            std::cout << "Error at getting variable dimension array" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
+        std::cout << vName << std::endl;
     }
+    
+    //reading out all data from the netCDF file
+    for(int i = 0; i < nvars; ++i){
+        if((retval = nc_get_var_float(fileId, i, data[i].data()))){
+            std::cout << "Error at reading data" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
+    }
+    
+    //creating the indices of the dimensions. Fastest varying is the last of the dimmensions
+    std::vector<size_t> iter_indices(ndims), iter_stops(ndims);
+    std::vector<int> dimension_variable_indices(ndims);
+    for(int i = 0; i < ndims; ++i){
+        char dimName[NC_MAX_NAME];
+        if((retval = nc_inq_dim(fileId, i, dimName, &iter_stops[i]))){
+            std::cout << "Error at reading dimensions 2" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
+        if((retval = nc_inq_varid(fileId, dimName, &dimension_variable_indices[i]))){
+            std::cout << "Error at getting variable id of dimension" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
+        //std:: cout << "Dimension " << dimName << " at index " << dimension_variable_indices[i] << " with lenght" << iter_stops[i] << std::endl;
+    }
+    
+    //everything needed was red, so colosing the file
+    nc_close(fileId);
 
+    //attribute check
 	//checking if the Attributes are correct
 	std::vector<int> permutation = checkAttriubtes(attributes);
     if (pcAttributes.size() != 0) {
-	if (tmp.size() != pcAttributes.size()) {
-		std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
-		return;
-	}
+        if (tmp.size() != pcAttributes.size()) {
+            std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
+            nc_close(fileId);
+            return false;
+        }
 
-	if (!permutation.size()) {
-		std::cout << "The attributes of the .csv data are not the same as the ones already loaded in the program." << std::endl;
-		return;
-	}
+        if (!permutation.size()) {
+            std::cout << "The attributes of the .csv data are not the same as the ones already loaded in the program." << std::endl;
+            nc_close(fileId);
+            return false;
+        }
 	}
 	//if this is the first Dataset to be loaded, fill the pcAttributes vector
 	else {
@@ -4048,29 +4117,100 @@ static void openNetCDF(const char* filename){
 	}
 
     std::vector<float> categorieFloats(pcAttributes.size(), 0);
+    //creating the data array and parsing the input data
+    DataSet ds{};
+    ds.oneData = true;
+	std::string fname(filename);
+	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
+	ds.name = fname.substr(offset + 1);
+    float* d = new float[data_size * nvars];
+    int array_index = 0;
+    while(iter_indices[0] < iter_stops[0]){
+        int d_array_index = array_index * nvars;
+        for(int att = 0; att < nvars; ++att){
+            float datum = 0;
+            int d_index = 0;
+            for(int dim = 0; dim < attribute_dims[att].size(); ++dim){
+                int index_add = iter_indices[attribute_dims[dim]];
+                for(int add = dim; add < attribute_dims[att].size() - 1; ++add){
+                    index_add *= iter_stops[attribute_dims[add]];
+                }
+                d_index += index_add;
+            }
+            d[d_array_index + permutation[att]] = data[att][d_index];
+        }
+        //increasing ther iteration counters
+        array_index += 1;
+        iter_indices.back() += 1;
+        for(int dim = ndims - 2; dim >= 0; --dim){
+            if(iter_indices[dim + 1] >= iter_stops[dim + 1]){
+                iter_indices[dim] += 1;
+                iter_indices[dim + 1] = 0; 
+            }
+        }
+    }
+    //assigning the data array into the DataSet struct
+    ds.data = std::vector<float*>(data_size);
+	for (int i = 0; i < data_size; i++) {
+		ds.data[i] = &d[i * n_vars];
+	}
     
-    }
-    catch(netCDF::exceptions::NcException e){
-        std::cout << e.what() << "File " << filename << " was not opened." << std::endl;
-    }
+    ds.reducedDataSetSize = ds.data.size();
+
+	createPcPlotVertexBuffer(pcAttributes, ds.data);
+
+	ds.buffer = g_PcPlotVertexBuffers.back();
+
+	TemplateList tl = {};
+	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
+	tl.name = "Default Drawlist";
+	for (int i = 0; i < ds.data.size(); i++) {
+		tl.indices.push_back(i);
+	}
+	tl.pointRatio = tl.indices.size() / (float)ds.data.size();
+
+	//getting the minimum and maximum values for all attributes. This will later be used for brush creation
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		tl.minMax.push_back(std::pair<float, float>(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()));
+	}
+	for (int i : tl.indices) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			if (ds.data[i][j] < tl.minMax[j].first)
+				tl.minMax[j].first = ds.data[i][j];
+			if (ds.data[i][j] > tl.minMax[j].second)
+				tl.minMax[j].second = ds.data[i][j];
+            //updating pcAttributes minmax if needed
+            if(tl.minMax[j].first < pcAttributes[j].min)
+                pcAttributes[j].min = tl.minMax[j].first;
+            if(tl.minMax[j].second > pcAttributes[j].max)
+                pcAttributes[j].max = tl.minMax[j].second;
+		}
+	}
+
+	ds.drawLists.push_back(tl);
+
+	g_PcPlotDataSets.push_back(ds);
+    return true;
 }
 
-static void openDataset(const char* filename) {
+bool void openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
+    bool opened = false;
 	if (file.substr(file.find_last_of(".") + 1) == "csv") {
-		openCsv(filename);
+		opened = openCsv(filename);
 	}
 	else if (file.substr(file.find_last_of(".") + 1) == "dlf") {
-		openDlf(filename);
+		opened = openDlf(filename);
 	}
     else if (file.substr(file.find_last_of(".") + 1) == "nc"){
-        openNetCDF(filename);
+        opened = openNetCDF(filename);
     }
 	else {
 		std::cout << "The given type of the file is not supported by this programm" << std::endl;
-		return;
+		return false;
 	}
+    if(!opened) return false;
 	//printing Amount of data loaded
 	std::cout << "Amount of data loaded: " << g_PcPlotDataSets.back().data.size() << std::endl;
 
@@ -4112,6 +4252,7 @@ static void openDataset(const char* filename) {
 	settingsManager->addSetting(s);
 
 	delete[] s.data;
+    return true;
 }
 
 static void addIndecesToDs(DataSet& ds, const char* filepath) {
@@ -6562,8 +6703,8 @@ int main(int, char**)
 				if (ImGui::Button("Open", ImVec2(120, 0)) || ImGui::IsKeyPressed(KEYENTER)) {
 					ImGui::CloseCurrentPopup();
 					for (std::string& s : droppedPaths) {
-						openDataset(s.c_str());
-						if (createDefaultOnLoad) {
+						bool success = openDataset(s.c_str());
+						if (success && createDefaultOnLoad) {
 							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
 							updateActiveIndices(g_PcPlotDrawLists.back());
 							pcPlotRender = true;
@@ -8491,8 +8632,8 @@ int main(int, char**)
 
 			//Opening a new Dataset into the Viewer
 			if (ImGui::Button("Open")) {
-				openDataset(pcFilePath);
-				if (createDefaultOnLoad) {
+				bool success = openDataset(pcFilePath);
+				if (success && createDefaultOnLoad) {
 					//pcPlotRender = true;
 					createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
