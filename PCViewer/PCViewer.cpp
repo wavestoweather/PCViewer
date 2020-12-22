@@ -3556,12 +3556,12 @@ static bool openCsv(const char* filename) {
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
-				tmp.push_back({ cur,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+				tmp.push_back({ cur,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
 				attributes.push_back(tmp.back().name);
 			}
 			//adding the last item which wasn't recognized
 			line = line.substr(0, line.find("\r"));
-			tmp.push_back({ line,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+			tmp.push_back({ line,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
 			attributes.push_back(tmp.back().name);
 
 			//checking if the Attributes are correct
@@ -3644,7 +3644,7 @@ static bool openCsv(const char* filename) {
 			}
 
 			//adding the last item which wasn't recognized
-			cur = line.substr(0, line.size() - 1);
+			cur = line;//.substr(0, line.size() - 1);
 			if (cur.empty()) curF = 0;
 			else {
 				char* ptr;
@@ -4037,7 +4037,7 @@ static bool openNetCDF(const char* filename){
             nc_close(fileId);
             return false;
         }
-        tmp.push_back({ vName,{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() });
+        tmp.push_back({ vName,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
         attributes.push_back(tmp.back().name);
         int ndims;
         if((retval = nc_inq_varndims(fileId, i, &ndims))){
@@ -4136,7 +4136,7 @@ static bool openNetCDF(const char* filename){
             int d_index = 0;
             for(int dim = 0; dim < attribute_dims[att].size(); ++dim){
                 int index_add = iter_indices[attribute_dims[att][dim]];
-                for(int add = dim; add < attribute_dims[att].size() - 1; ++add){
+                for(int add = dim + 1; add < attribute_dims[att].size(); ++add){
                     index_add *= iter_stops[attribute_dims[att][add]];
                 }
                 d_index += index_add;
