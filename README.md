@@ -4,27 +4,45 @@ https://arxiv.org/abs/2007.15446
 This tool imports .csv files and displays them via Parallel Coordinates, Violin Plots and Isocontours.
 
 # Compilation notes
-The program uses the Vulkan API as render back end and the SDL2 API as platform independent window back end.
-Both of these have to be installed and findable by cmake with `find_package()`
+The program uses the Vulkan API as render back end, the SDL2 API as platform independent window back end and NetCDF API to open .nc files.
+All of these packages have to be installed before compiliation and have to be found by cmake with `find_package()`. We advise to use package managers: For Linux use the preinstalled managers, for windows vcpkg can be used and chained to the PCViewer cmake project via cmake toolchain. For more information head over to [install vcpkg](https://vcpkg.readthedocs.io/en/latest/examples/installing-and-using-packages/).
 ### Vulkan
-For Linux Vulkan can be installed via
+On Ubuntu based distributions Vulkan can be installed via
 ```
     sudo apt update
     sudo apt install vulkan-sdk
 ```
 
-For Windows head over to the [Vulkan-Website](https://vulkan.lunarg.com/sdk/home), download the latest installer and execute the installer.
+For Windows using vcpkg Vulkan can be installed via
+```
+    vcpkg install vulkan:x64-windows
+```
+If no package manager is used head over to the [Vulkan-Website](https://vulkan.lunarg.com/sdk/home), download the latest installer and execute the installer.
 ### SDL2
-For Linux SDL2 can be installed via
+For Ubuntu based distributions SDL2 can be installed via
 ```
     sudo apt install cmake libsdl2-dev g++
 ```
 
-For windows head over to the [SDL-Website](https://www.libsdl.org/download-2.0.php) and download the developement package `SDL2-devel-xxx-VC.zip`
+For windows use the package manager
+```
+    vcpkg install sdl2:x64-windows
+```
+or head over to the [SDL-Website](https://www.libsdl.org/download-2.0.php) and download the developement package `SDL2-devel-xxx-VC.zip`
 and extract it to some location on your hard disk.
 The so downloaded SDL2 library is readily compiled and has only to be found by the FindSDL2.cmake file which comes with this project and is automatically used if windows is active.
 In order for the cmake module to find SDL2 one has to create an environment variable called SDL2DIR which holds the directory where SDL2 was extracted.
 
+### NetCDF
+For Ubunut based distributions do
+```
+    sudo apt install libnetcdf-dev
+```
+
+For Windows using vcpkg do
+```
+    vcpkg install netcdf-c:x64-windows
+```
 ### Small problems
 
 It might be necessary to set the variable "Eigen2_DIR" to the directory of the eigen library in the folder (currently eigen-3.3.7). Further, a link to the Vulkan-SDK has to be set. 
