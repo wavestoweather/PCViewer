@@ -7,7 +7,7 @@ This tool imports .csv files and displays them via Parallel Coordinates, Violin 
 The program uses the Vulkan API as render back end, the SDL2 API as platform independent window back end and NetCDF API to open .nc files.
 All of these packages have to be installed before compiliation and have to be found by cmake with `find_package()`. We advise to use package managers: For Linux use the preinstalled managers, for windows vcpkg can be used and chained to the PCViewer cmake project via cmake toolchain. For more information head over to [install vcpkg](https://vcpkg.readthedocs.io/en/latest/examples/installing-and-using-packages/).
 ### Vulkan
-On Ubuntu based distributions Vulkan can be installed via
+On Debian based distributions Vulkan can be installed via
 ```
     sudo apt update
     sudo apt install vulkan-sdk
@@ -19,7 +19,7 @@ For Windows using vcpkg Vulkan can be installed via
 ```
 If no package manager is used head over to the [Vulkan-Website](https://vulkan.lunarg.com/sdk/home), download the latest installer and execute the installer.
 ### SDL2
-For Ubuntu based distributions SDL2 can be installed via
+For Debian based distributions SDL2 can be installed via
 ```
     sudo apt install cmake libsdl2-dev g++
 ```
@@ -34,7 +34,7 @@ The so downloaded SDL2 library is readily compiled and has only to be found by t
 In order for the cmake module to find SDL2 one has to create an environment variable called SDL2DIR which holds the directory where SDL2 was extracted.
 
 ### NetCDF
-For Ubunut based distributions do
+For Debian based distributions do
 ```
     sudo apt install libnetcdf-dev
 ```
