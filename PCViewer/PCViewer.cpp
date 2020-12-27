@@ -8877,6 +8877,57 @@ int main(int, char**)
 						}
 						ImGui::EndPopup();
 					}
+                    
+                    //Popup for member split
+                    if(ImGui::Button("Split members")){
+                        ImGui::OpenPopup("SPLITDATASET");
+                    }
+                    if(ImGui::BeginPopupModal("SPLITDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize)){
+                        static int selectedAtt = 0;
+                        if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
+                            for(int att = 0; att < pcAttributes.size(); ++att){
+                                if(ImGui::MenuItem(pcAttributes[att].name.c_str())) selectedAtt = att;
+                            }
+                            ImGui::EndCombo();
+                        }
+                        static int amtOfGroups = 100;
+                        ImGui::InputInt("Amount of split groups", &amtOfGroups);
+                        if(ImGui::Button("Split")){
+                            std::vector<std::vector<uint32_t>> indices(amtOfGroups);
+                            
+                            //assigning each datum to one of the groups
+                            float attMin = pcAttributes[selectedAtt].min, attMax = pcAttributes[selectedAtt].max;
+                            float attDiff = attMax - attMin;
+                            for(int datum = 0; datum < ds.data.size(); ++datum){
+                                float da = ds.data[datum][selectedAtt];
+                                int index = int(((da - attMin) / attDiff) * (amtOfGroups - 1) + .5f);
+                                indices[index].push_back(datum);
+                            }
+                            
+                            //creating a drawlist for each group
+                            std::vector<std::pair<float,float>>minMax;
+                            for(auto& at: pcAttributes) minMax.push_back({at.min, at.max});
+                            TemplateList curTl{};
+                            curTl.buffer = ds.buffer.buffer;
+                            curTl.minMax = minMax;
+                            curTl.pointRatio = 1;
+                            curTl.parentDataSetName = ds.name;
+                            for(int group = 0; group < amtOfGroups; ++group){
+                                curTl.name = ds.name + "_" + std::to_string(group);
+                                curTl.indices = indices[group];
+                                ds.drawLists.push_back(curTl);
+                                createPcPlotDrawList(ds.drawLists.back(), ds, curTl.name.c_str());
+                                //renderPcPlot = true;
+                            }
+                            
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if(ImGui::Button("Cancel")){
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::EndPopup();
+                    }
 
 					//Popup for delete menu
 					ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 255));
