@@ -8904,21 +8904,15 @@ int main(int, char**)
                                 indices[index].push_back(datum);
                             }
                             
-                            //creating a drawlist for each group
-                            std::vector<std::pair<float,float>>minMax;
-                            for(auto& at: pcAttributes) minMax.push_back({at.min, at.max});
-                            TemplateList curTl{};
-                            curTl.buffer = ds.buffer.buffer;
-                            curTl.minMax = minMax;
-                            curTl.pointRatio = 1;
-                            curTl.parentDataSetName = ds.name;
+                            //safe standard indexlist of default list
+                            std::vector<uint32_t> sta = ds.drawLists.front().indices;
                             for(int group = 0; group < amtOfGroups; ++group){
-                                curTl.name = ds.name + "_" + std::to_string(group);
-                                curTl.indices = indices[group];
-                                ds.drawLists.push_back(curTl);
-                                createPcPlotDrawList(ds.drawLists.back(), ds, curTl.name.c_str());
-                                //renderPcPlot = true;
+                                std::string t_name = ds.name + "_" + std::to_string(group);
+                                ds.drawLists.front().indices = indices[group];;
+                                createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+                                pcPlotRender = true;
                             }
+                            ds.drawLists.front().indices = sta;
                             
                             ImGui::CloseCurrentPopup();
                         }
