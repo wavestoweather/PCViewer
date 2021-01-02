@@ -4,6 +4,7 @@
 cmake_minimum_required (VERSION 3.7)
 set (CMAKE_CXX_STANDARD 17)
 project ("PCViewer")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 /bigobj" )
 
 # Schließen Sie Unterprojekte ein.
 add_subdirectory ("PCViewer")
@@ -12,7 +13,6 @@ include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 /bigobj" )
 
 if(COMPILER_SUPPORTS_CXX17)
      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")

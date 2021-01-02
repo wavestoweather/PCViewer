@@ -136,7 +136,7 @@ endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-option(EIGEN_SPLIT_LARGE_TESTS "Split large tests into smaller executables" ON)
+option(EIGEN_SPLIT_LARGE_TESTS "Split large tests into smaller executables" OFF)
 
 option(EIGEN_DEFAULT_TO_ROW_MAJOR "Use row-major as default matrix storage order" OFF)
 if(EIGEN_DEFAULT_TO_ROW_MAJOR)
@@ -435,7 +435,7 @@ add_subdirectory(Eigen)
 
 add_subdirectory(doc EXCLUDE_FROM_ALL)
 
-option(BUILD_TESTING "Enable creation of Eigen tests." ON)
+option(BUILD_TESTING "Enable creation of Eigen tests." OFF)
 if(BUILD_TESTING)
   include(EigenConfigureTesting)
 

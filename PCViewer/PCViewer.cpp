@@ -4094,13 +4094,11 @@ static bool openNetCDF(const char* filename){
     if (pcAttributes.size() != 0) {
         if (tmp.size() != pcAttributes.size()) {
             std::cout << "The Amount of Attributes of the .csv file is not compatible with the currently loaded datasets" << std::endl;
-            nc_close(fileId);
             return false;
         }
 
         if (!permutation.size()) {
             std::cout << "The attributes of the .csv data are not the same as the ones already loaded in the program." << std::endl;
-            nc_close(fileId);
             return false;
         }
 	}
@@ -8910,8 +8908,9 @@ int main(int, char**)
                                 std::string t_name = ds.name + "_" + std::to_string(group);
                                 ds.drawLists.front().indices = indices[group];;
                                 createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
-                                pcPlotRender = true;
+								updateActiveIndices(g_PcPlotDrawLists.back());
                             }
+                            pcPlotRender = true;
                             ds.drawLists.front().indices = sta;
                             
                             ImGui::CloseCurrentPopup();
