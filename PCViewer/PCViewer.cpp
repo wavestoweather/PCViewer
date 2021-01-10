@@ -4186,10 +4186,13 @@ static bool openNetCDF(const char* filename){
                 pcAttributes[j].min = tl.minMax[j].first;
             if(tl.minMax[j].second > pcAttributes[j].max)
                 pcAttributes[j].max = tl.minMax[j].second;
-            if(pcAttributes[j].min == pcAttributes[j].max){
-                pcAttributes[j].min -= .1;
-                pcAttributes[j].max += .1;
-            }
+		}
+	}
+
+	for (int j = 0; j < pcAttributes.size(); ++j) {
+		if (pcAttributes[j].min == pcAttributes[j].max) {
+			pcAttributes[j].min -= .1;
+			pcAttributes[j].max += .1;
 		}
 	}
 
@@ -5402,6 +5405,7 @@ static bool updateActiveIndices(DrawList& dl) {
 
 		//histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
 		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
+		updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
         for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 			bool contains = false;
 			for (auto& s : violinDrawlistPlots[i].drawLists) {
@@ -6080,7 +6084,7 @@ static void updateSummedBins(ViolinPlot& plot) {
 	}
 }
 
-inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst = false) {
+inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst) {
 	for (auto& drawListPlot : violinDrawlistPlots) {
 		drawListPlot.maxGlobalValue = 0;
 		for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
@@ -6111,6 +6115,25 @@ inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst = false) {
 				drawListPlot.attributeOrder[drawL] = drawListPlot.attributeOrder[0];
 			}
 			++drawL;
+		}
+	}
+	for (auto& drawListPlot : violinAttributePlots) {
+		updateSummedBins(drawListPlot);
+		drawListPlot.maxGlobalValue = 0;
+		for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
+			drawListPlot.maxValues[j] = 0;
+		}
+		int drawL = 0;
+		for (auto& drawList : drawListPlot.drawLists) {
+			HistogramManager::Histogram& hist = histogramManager->getHistogram(drawList.name);
+			for (int j = 0; j < hist.maxCount.size(); ++j) {
+				if (hist.maxCount[j] > drawListPlot.maxValues[j]) {
+					drawListPlot.maxValues[j] = hist.maxCount[j];
+				}
+				if (hist.maxCount[j] > drawListPlot.maxGlobalValue) {
+					drawListPlot.maxGlobalValue = hist.maxCount[j];
+				}
+			}
 		}
 	}
 }
@@ -6208,7 +6231,7 @@ void violinAttributePlotAddDrawList(ViolinPlot& plot, DrawList& dl, uint32_t i) 
 		violinAttributePlots[i].violinPlacements.push_back(ViolinLeft);
 		violinAttributePlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
 		violinAttributePlots[i].drawListLineColors.push_back({ 0,0,0,1 });
-		violinAttributePlots[i].drawListFillColors.push_back({ 0,0,0,.1f });
+		violinAttributePlots[i].drawListFillColors.push_back({ 0,0,0,0 });
 	}
 	HistogramManager::Histogram& h = histogramManager->getHistogram(dl.name);
 	for (int l = 0; l < h.maxCount.size(); ++l) {
@@ -10186,6 +10209,7 @@ int main(int, char**)
 					}
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
 						histogramManager->updateSmoothedValues();
+						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
 						for (auto& drawListPlot : violinDrawlistPlots) {
 							drawListPlot.maxGlobalValue = 0;
 							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
@@ -10285,12 +10309,12 @@ int main(int, char**)
 					ImGui::ColorEdit4(("Line Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					ImGui::SameLine(900);
 					ImGui::ColorEdit4(("Fill Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-					ImGui::SameLine(1200);
-					if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
-						histogramManager->updateSmoothedValues();
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
-						updateSummedBins(violinAttributePlots[i]);
-					};
+					//ImGui::SameLine(1200);
+					//if (ImGui::Checkbox(("log##" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
+					//	histogramManager->updateSmoothedValues();
+					//	updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+					//	updateSummedBins(violinAttributePlots[i]);
+					//};
 				}
 				static char choose[] = "Choose drawlist";
 				if (ImGui::BeginCombo("Add drawlistdata", choose)) {
