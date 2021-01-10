@@ -825,6 +825,7 @@ static float violinPlotThickness = 4;
 static float violinPlotBinsSize = 150;
 static ImVec4 violinBackgroundColor = { 1,1,1,1 };
 static bool coupleViolinPlots = true;
+static bool showViolinPlotsMinMax = true;
 static bool violinPlotDLSendToIso = true;
 static bool violinPlotDLInsertCustomColors = true;
 static bool violinPlotAttrInsertCustomColors = true;
@@ -10154,6 +10155,7 @@ int main(int, char**)
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
+					ImGui::Checkbox("Show Attribute min/max", &showViolinPlotsMinMax);
 					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 4000);
 					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 40);
 					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
@@ -10487,10 +10489,31 @@ int main(int, char**)
 					c1++;
 				}
 
+				// axis min max values
+				if (showViolinPlotsMinMax) {
+					int c = 0;
+					int c1 = 0;
+					float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes + violinPlotXSpacing;
+					for (uint32_t j : violinAttributePlots[i].attributeOrder) {
+						if (!violinAttributePlots[i].activeAttributes[j]) {
+							c++;
+							continue;
+						}
+
+						if (c1 != 0) {
+							ImGui::SameLine(c1 * xGap + 10);
+						}
+						ImGui::Text((std::to_string(pcAttributes[j].max)).c_str());
+
+						c++;
+						c1++;
+					}
+				}
+
 				// Drawing the violin plots
 				ImVec2 leftUpperCorner = ImGui::GetCursorScreenPos();
 				ImVec2 origLeftUpper = leftUpperCorner;
-				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y);
+				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - (showViolinPlotsMinMax ? ImGui::GetTextLineHeight(): 0));
 				ViolinDrawState drawState = (violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
 				bool done = false;
 				while (!done) {
@@ -10773,6 +10796,28 @@ int main(int, char**)
 					if (drawState == ViolinDrawStateArea) drawState = ViolinDrawStateLine;
 				}
 				ImGui::PopItemWidth();
+				
+				//drawing min texts
+				if (showViolinPlotsMinMax) {
+					ImGui::SetCursorPosY(leftUpperCorner.y + size.y);
+					int c = 0;
+					int c1 = 0;
+					float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes + violinPlotXSpacing;
+					for (uint32_t j : violinAttributePlots[i].attributeOrder) {
+						if (!violinAttributePlots[i].activeAttributes[j]) {
+							c++;
+							continue;
+						}
+
+						if (c1 != 0) {
+							ImGui::SameLine(c1 * xGap + 10);
+						}
+						ImGui::Text((std::to_string(pcAttributes[j].min)).c_str());
+
+						c++;
+						c1++;
+					}
+				}
 				ImGui::EndChild();
 				//drag and drop drawlists onto this plot child to add it to this violin plot
 				if (ImGui::BeginDragDropTarget()) {
