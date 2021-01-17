@@ -54,6 +54,7 @@ public:
 	//public Attributes
 	glm::uvec3 posIndices;
 	float maxPointSize;
+	float farClip;
 	float Fov;
 	float fovSpeed;
 	float flySpeed;

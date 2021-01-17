@@ -481,6 +481,7 @@ struct ViolinDrawlistPlot {
 
 struct Attribute {
 	std::string name;
+	std::string originalName;
 	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.
 	std::vector<std::pair<std::string, float>> categories_ordered; // used to show the categories not cluttered
 	float min;			//min value of all values
@@ -3557,12 +3558,12 @@ static bool openCsv(const char* filename) {
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
-				tmp.push_back({ cur,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
+				tmp.push_back({ cur, cur,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
 				attributes.push_back(tmp.back().name);
 			}
 			//adding the last item which wasn't recognized
 			line = line.substr(0, line.find("\r"));
-			tmp.push_back({ line,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
+			tmp.push_back({ line, line,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
 			attributes.push_back(tmp.back().name);
 
 			//checking if the Attributes are correct
@@ -3854,7 +3855,7 @@ static bool openDlf(const char* filename) {
 				//reading in new values
 				else {
 					for (int i = 0; i < attributes.size(); i++) {
-						pcAttributes.push_back({ attributes[i],{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() - 1 });
+						pcAttributes.push_back({ attributes[i], attributes[i],{},{},std::numeric_limits<float>::max(),std::numeric_limits<float>::min() - 1 });
 					}
 
 					//check for attributes overflow
@@ -4038,7 +4039,7 @@ static bool openNetCDF(const char* filename){
             nc_close(fileId);
             return false;
         }
-        tmp.push_back({ vName,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
+        tmp.push_back({ vName, vName,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
         attributes.push_back(tmp.back().name);
         int ndims;
         if((retval = nc_inq_varndims(fileId, i, &ndims))){
@@ -7139,9 +7140,45 @@ int main(int, char**)
 				}
 
 				std::string name = pcAttributes[i].name;
+				static int editAttributeName = -1;
+				static char newAttributeName[256];
 				if (c1 != 0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				ImGui::Button(name.c_str(), buttonSize);
+				if (editAttributeName == i) {
+					ImGui::SetNextItemWidth(100);
+					ImGui::InputText("##newName", newAttributeName, ImGuiInputTextFlags_AutoSelectAll);
+					if ((ImGui::IsKeyPressedMap(ImGuiKey_Enter) || ImGui::IsKeyPressedMap(ImGuiKey_KeyPadEnter))) {
+						pcAttributes[i].name = std::string(newAttributeName);
+						editAttributeName = -1;
+					}
+					if (!ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+						editAttributeName = -1;
+					}
+				}
+				else {
+					int textSize = ImGui::CalcTextSize(name.c_str()).x;
+					if (textSize >= buttonSize.x) {
+						//add ellipsis at the end of the text
+						bool tooLong = true;
+						std::string curSubstring = name.substr(0, name.size() - 4) + "...";
+						while (tooLong) {
+							textSize = ImGui::CalcTextSize(curSubstring.c_str()).x;
+							tooLong = textSize > buttonSize.x;
+							curSubstring = curSubstring.substr(0, curSubstring.size() - 4) + "...";
+						}
+						name = curSubstring;
+					}
+					ImGui::Button(name.c_str(), buttonSize);
+					if (name != pcAttributes[i].originalName && ImGui::IsItemHovered()) {
+						ImGui::BeginTooltip();
+						ImGui::Text(pcAttributes[i].originalName.c_str());
+						ImGui::EndTooltip();
+					}
+					if (ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered()) {
+						editAttributeName = i;
+						strcpy(newAttributeName, pcAttributes[i].originalName.c_str());
+					}
+				}
 
 				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
 					int p[] = { c,i };		//holding the index in the pcAttriOrd array and the value of it
@@ -7181,7 +7218,7 @@ int main(int, char**)
 				if (c1 != 0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
 
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f, 0.0f, 0.0f, "%.05f")) {
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f, 0.0f, 0.0f, "%6.4g")) {
 					pcPlotRender = true;
 					pcPlotPreviousSlectedDrawList = -1;
 				}
@@ -7217,7 +7254,7 @@ int main(int, char**)
 				ImGui::PushItemWidth(buttonSize.x);
 				if (c1 != 0)
 					ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f, .0f, .0f, "%.05f")) {
+				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].min, (pcAttributes[i].max - pcAttributes[i].min) * .001f, .0f, .0f, "%6.4g")) {
 					pcPlotRender = true;
 					pcPlotPreviousSlectedDrawList = -1;
 				}
@@ -9472,6 +9509,7 @@ int main(int, char**)
 					ImGui::SliderFloat("fast fly multiplier", &bubblePlotter->fastFlyMultiplier, 1, 10);
 					ImGui::SliderFloat("rotation speed", &bubblePlotter->rotationSpeed, 0.01, 5);
 					ImGui::SliderFloat("fov speed", &bubblePlotter->fovSpeed, 1, 100);
+					if (ImGui::SliderFloat("far clip", &bubblePlotter->farClip, 10, 10000)) bubblePlotter->render();
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Visualization")) {
@@ -9484,9 +9522,48 @@ int main(int, char**)
 					if (ImGui::DragFloat("Spacing", &bubblePlotter->layerSpacing, bubblePlotter->layerSpacing / 100.0f, 0.0001, 100)) {
 						bubblePlotter->render();
 					}
-					if (ImGui::DragInt3("Position indices", (int*)&bubblePlotter->posIndices.x, .05f, 0, pcAttributes.size())) {
-						bubblePlotter->render();
+					if (pcAttributes.size()) {
+						ImGui::PushItemWidth(ImGui::CalcItemWidth() / 3);
+						if (ImGui::BeginCombo("X", pcAttributes[bubblePlotter->posIndices.x].name.c_str())) {
+							for (int i = 0; i < pcAttributes.size(); ++i) {
+								if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+									bubblePlotter->posIndices.x = i;
+									bubblePlotter->boundingRectMin.x = pcAttributes[i].min;
+									bubblePlotter->boundingRectMax.x = pcAttributes[i].max;
+									bubblePlotter->render();
+								}
+							}
+							ImGui::EndCombo();
+						}
+						ImGui::SameLine();
+						if (ImGui::BeginCombo("Y", pcAttributes[bubblePlotter->posIndices.y].name.c_str())) {
+							for (int i = 0; i < pcAttributes.size(); ++i) {
+								if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+									bubblePlotter->posIndices.y = i;
+									bubblePlotter->boundingRectMin.y = pcAttributes[i].min;
+									bubblePlotter->boundingRectMax.y = pcAttributes[i].max;
+									bubblePlotter->render();
+								}
+							}
+							ImGui::EndCombo();
+						}
+						ImGui::SameLine();
+						if (ImGui::BeginCombo("Z", pcAttributes[bubblePlotter->posIndices.z].name.c_str())) {
+							for (int i = 0; i < pcAttributes.size(); ++i) {
+								if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+									bubblePlotter->posIndices.z = i;
+									bubblePlotter->boundingRectMin.z = pcAttributes[i].min;
+									bubblePlotter->boundingRectMax.z = pcAttributes[i].max;
+									bubblePlotter->render();
+								}
+							}
+							ImGui::EndCombo();
+						}
+						ImGui::PopItemWidth();
 					}
+					//if (ImGui::DragInt3("Position indices", (int*)&bubblePlotter->posIndices.x, .05f, 0, pcAttributes.size())) {
+					//	bubblePlotter->render();
+					//}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -9522,20 +9599,20 @@ int main(int, char**)
 			ImGui::Text("Color"); ImGui::NextColumn();
 			ImGui::Separator();
 			for (int i = 0; i < bubblePlotter->attributeNames.size(); ++i) {
-				if (i == bubblePlotter->posIndices.x || i == bubblePlotter->posIndices.y || i == bubblePlotter->posIndices.z)
-					continue;
+				//if (i == bubblePlotter->posIndices.x || i == bubblePlotter->posIndices.y || i == bubblePlotter->posIndices.z)
+				//	continue;
 				if (ImGui::Checkbox((bubblePlotter->attributeNames[i] + "##cb").c_str(), &bubblePlotter->attributeActivations[i])) {		//redistribute the remaining variales over the free layer space
 					float count = 0;
 					for (int j = 0; j < bubblePlotter->attributeNames.size(); ++j) {
-						if (bubblePlotter->attributeActivations[j] && j != bubblePlotter->posIndices.x && j != bubblePlotter->posIndices.y && j != bubblePlotter->posIndices.z)
+						if (bubblePlotter->attributeActivations[j])//&& j != bubblePlotter->posIndices.x && j != bubblePlotter->posIndices.y && j != bubblePlotter->posIndices.z)
 							count += 1;
 					}
 					count = 1 / (count - 1); //converting count to the percentage step
 					float curP = 0;
 					for (int j = 0; j < bubblePlotter->attributeNames.size(); ++j) {
-						if (!bubblePlotter->attributeActivations[j] || j == bubblePlotter->posIndices.x || j == bubblePlotter->posIndices.y || j == bubblePlotter->posIndices.z) {
-							continue;
-						}
+						//if (!bubblePlotter->attributeActivations[j] || j == bubblePlotter->posIndices.x || j == bubblePlotter->posIndices.y || j == bubblePlotter->posIndices.z) {
+						//	continue;
+						//}
 						bubblePlotter->attributeTopOffsets[j] = curP;
 						curP += count;
 					}
@@ -10245,7 +10322,7 @@ int main(int, char**)
 						}
 					}
 					static float stdDev = 1.5;
-					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
+					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, 0, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
 						for(auto& plot: violinAttributePlots) updateSummedBins(plot);
@@ -10279,44 +10356,91 @@ int main(int, char**)
 
 			const static int plusWidth = 100;
             for (unsigned int i = 0; i < violinAttributePlots.size(); ++i) {
-				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true);
+				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+				//ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(0, 0), true, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
 				ImGui::PushItemWidth(150);
-				//listing all histograms available
-				for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
-					if (ImGui::Checkbox(violinAttributePlots[i].drawLists[j].name.c_str(), &violinAttributePlots[i].drawLists[j].activated)) {
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
-						updateSummedBins(violinAttributePlots[i]);
-					}
-					static char* plotPositions[] = { "Left","Right","Middle" };
-					ImGui::SameLine(200);
-					if (ImGui::BeginCombo(("Position##" + std::to_string(j)).c_str(), plotPositions[violinAttributePlots[i].violinPlacements[j]])) {
-						for (int k = 0; k < 3; ++k) {
-							if (ImGui::MenuItem(plotPositions[k], nullptr)) {
+				//drawing uniform settings
+				ImGui::Text("Uniform Settings");
+				ImGui::SameLine(200);
+				static char* plotPositions[] = { "Left","Right","Middle" };
+				static int uniformPlotPosition = 0;
+				if (ImGui::BeginCombo("Position##uniform", plotPositions[uniformPlotPosition])) {
+					for (int k = 0; k < 3; ++k) {
+						if (ImGui::MenuItem(plotPositions[k])) {
+							uniformPlotPosition = k;
+							for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
 								violinAttributePlots[i].violinPlacements[j] = (ViolinPlacement)k;
 							}
 						}
-						ImGui::EndCombo();
 					}
-					static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
-					ImGui::SameLine(480);
-					if (ImGui::BeginCombo(("Scale##" + std::to_string(j)).c_str(), violinScales[violinAttributePlots[i].violinScalesX[j]])) {
-						for (int k = 0; k < 4; ++k) {
-							if (ImGui::MenuItem(violinScales[k], nullptr)) {
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine(480);
+				static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
+				static int uniformPlotScale = 3;
+				if (ImGui::BeginCombo("Scale##uniform", violinScales[uniformPlotScale])) {
+					for (int k = 0; k < 4; ++k) {
+						if (ImGui::MenuItem(violinScales[k])) {
+							uniformPlotScale = k;
+							for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
 								violinAttributePlots[i].violinScalesX[j] = (ViolinScale)k;
 							}
 						}
-						ImGui::EndCombo();
 					}
-					ImGui::SameLine(730);
-					ImGui::ColorEdit4(("Line Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-					ImGui::SameLine(900);
-					ImGui::ColorEdit4(("Fill Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-					//ImGui::SameLine(1200);
-					//if (ImGui::Checkbox(("log##" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
-					//	histogramManager->updateSmoothedValues();
-					//	updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
-					//	updateSummedBins(violinAttributePlots[i]);
-					//};
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine(730);
+				static ImVec4 uniformLineColor = { 0,0,0,1 };
+				if (ImGui::ColorEdit4("Line Col##uniform", &uniformLineColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
+					for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
+						violinAttributePlots[i].drawListLineColors[j] = uniformLineColor;
+					}
+				}
+				ImGui::SameLine(900);
+				static ImVec4 uniformFillColor = { 0,0,0,.1 };
+				if (ImGui::ColorEdit4("Fill Col##uniform", &uniformFillColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
+					for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
+						violinAttributePlots[i].drawListFillColors[j] = uniformFillColor;
+					}
+				}
+				//listing all histograms available
+				if (ImGui::CollapsingHeader("Added Drawlists")) {
+					for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
+						if (ImGui::Checkbox(violinAttributePlots[i].drawLists[j].name.c_str(), &violinAttributePlots[i].drawLists[j].activated)) {
+							updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+							updateSummedBins(violinAttributePlots[i]);
+						}
+
+						ImGui::SameLine(200);
+						if (ImGui::BeginCombo(("Position##" + std::to_string(j)).c_str(), plotPositions[violinAttributePlots[i].violinPlacements[j]])) {
+							for (int k = 0; k < 3; ++k) {
+								if (ImGui::MenuItem(plotPositions[k], nullptr)) {
+									violinAttributePlots[i].violinPlacements[j] = (ViolinPlacement)k;
+								}
+							}
+							ImGui::EndCombo();
+						}
+
+						ImGui::SameLine(480);
+						if (ImGui::BeginCombo(("Scale##" + std::to_string(j)).c_str(), violinScales[violinAttributePlots[i].violinScalesX[j]])) {
+							for (int k = 0; k < 4; ++k) {
+								if (ImGui::MenuItem(violinScales[k], nullptr)) {
+									violinAttributePlots[i].violinScalesX[j] = (ViolinScale)k;
+								}
+							}
+							ImGui::EndCombo();
+						}
+						ImGui::SameLine(730);
+						ImGui::ColorEdit4(("Line Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListLineColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+						ImGui::SameLine(900);
+						ImGui::ColorEdit4(("Fill Col" + std::to_string(j)).c_str(), &violinAttributePlots[i].drawListFillColors[j].x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+						//ImGui::SameLine(1200);
+						//if (ImGui::Checkbox(("log##" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
+						//	histogramManager->updateSmoothedValues();
+						//	updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+						//	updateSummedBins(violinAttributePlots[i]);
+						//};
+					}
 				}
 				static char choose[] = "Choose drawlist";
 				if (ImGui::BeginCombo("Add drawlistdata", choose)) {
@@ -10329,16 +10453,20 @@ int main(int, char**)
 				}
 
                 // Draw everything to load Colorbrewer Colorpalettes
-                if (violinAttributePlots[i].attributeNames.size() > 0){
-                    includeColorbrewerToViolinPlot((violinAttributePlots[i].colorPaletteManager),
-                                                   &(violinAttributePlots[i].drawListLineColors),
-                                                   &(violinAttributePlots[i].drawListFillColors));
-                }
+                //if (violinAttributePlots[i].attributeNames.size() > 0){
+                //    includeColorbrewerToViolinPlot((violinAttributePlots[i].colorPaletteManager),
+                //                                   &(violinAttributePlots[i].drawListLineColors),
+                //                                   &(violinAttributePlots[i].drawListFillColors));
+                //}
 
 				int amtOfAttributes = 0;
 				for (int j = 0; j < violinAttributePlots[i].maxValues.size(); ++j) {
-					if (j != 0)ImGui::SameLine();
                     ImGui::Checkbox(pcAttributes[j].name.c_str(), violinAttributePlots[i].activeAttributes + j);
+					ImGui::SameLine(200);
+					if (ImGui::Checkbox(("Log##" + pcAttributes[j].name).c_str(), &histogramManager->logScale[j])) {
+						histogramManager->updateSmoothedValues();
+						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+					}
 
 					if (violinAttributePlots[i].activeAttributes[j]) ++amtOfAttributes;
 				}
@@ -10513,7 +10641,8 @@ int main(int, char**)
 				// Drawing the violin plots
 				ImVec2 leftUpperCorner = ImGui::GetCursorScreenPos();
 				ImVec2 origLeftUpper = leftUpperCorner;
-				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - (showViolinPlotsMinMax ? ImGui::GetTextLineHeight(): 0));
+				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - (showViolinPlotsMinMax ? ImGui::GetTextLineHeightWithSpacing(): 0));
+				//ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, violinPlotHeight);
 				ViolinDrawState drawState = (violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
 				bool done = false;
 				while (!done) {
@@ -10818,6 +10947,8 @@ int main(int, char**)
 						c1++;
 					}
 				}
+				//else
+				//	ImGui::SetCursorPosY(leftUpperCorner.y + size.y);
 				ImGui::EndChild();
 				//drag and drop drawlists onto this plot child to add it to this violin plot
 				if (ImGui::BeginDragDropTarget()) {
@@ -10925,7 +11056,7 @@ int main(int, char**)
                         for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 					static float stdDev = 1.5;
-					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, -1, 25)) {
+					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, 0, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
 						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
                         for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}

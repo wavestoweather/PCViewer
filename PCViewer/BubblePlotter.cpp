@@ -10,6 +10,7 @@ BubblePlotter::BubblePlotter(uint32_t width, uint32_t height, VkDevice device, V
 	imageHeight = 0;
 	bubbleIndexSize = 0;
 	maxPointSize = 10;
+	farClip = 100;
 	Fov = 45;
 	fovSpeed = 25;
 	flySpeed = .5f;
@@ -372,7 +373,7 @@ void BubblePlotter::render()
 	unsigned char* uboBytes = new unsigned char[uboByteSize];
 	Ubo& ubo = *((Ubo*)uboBytes);
 	ubo.cameraPos = glm::vec4(cameraPos, maxPointSize);
-	glm::mat4 proj = glm::perspective(glm::radians(Fov), (float)imageWidth / (float)imageHeight, 0.001f, 100.0f);
+	glm::mat4 proj = glm::perspective(glm::radians(Fov), (float)imageWidth / (float)imageHeight, 0.001f, farClip);
 	proj[1][1] *= -1;
 	glm::mat4 view = glm::transpose(glm::eulerAngleY(cameraRot.y)*glm::eulerAngleX(cameraRot.x)) * glm::translate(glm::mat4(1.0),-cameraPos);
 	ubo.mvp = proj * view;
