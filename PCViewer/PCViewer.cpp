@@ -797,7 +797,7 @@ static IsoSurfRenderer* isoSurfaceRenderer = nullptr;
 static BrushIsoSurfRenderer* brushIsoSurfaceRenderer = nullptr;
 static bool coupleIsoSurfaceRenderer = true;
 static bool coupleBrushIsoSurfaceRenderer = true;
-static bool isoSurfaceRegularGrid = false;
+static bool isoSurfaceRegularGrid = true;
 static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
 static glm::uvec3 posIndices{ 1,0,2 };
 
@@ -9959,6 +9959,8 @@ int main(int, char**)
 			}
 			ImGui::PopItemWidth();
 
+			ImGui::Checkbox("Dataset has regular grid", &isoSurfaceRegularGrid);
+
 			ImGui::PushItemWidth(100);
 			//setting the position variables
 			if (pcAttributes.size()) {
@@ -10274,7 +10276,49 @@ int main(int, char**)
 
 			ImGui::Text("To set the data for iso surface rendering, drag and drop a drawlist onto this window.\nTo Add a brush iso surface, darg and drop a global brush onto this window");
 			static uint32_t posIndices[3]{ 1,0,2 };
-			ImGui::DragInt3("Position indices(order: lat, alt, lon)", (int*)posIndices, 1, 0, pcAttributes.size());
+			//ImGui::DragInt3("Position indices(order: lat, alt, lon)", (int*)posIndices, 1, 0, pcAttributes.size());
+			ImGui::Checkbox("Dataset has regular grid", &isoSurfaceRegularGrid);
+
+			ImGui::PushItemWidth(100);
+			//setting the position variables
+			if (pcAttributes.size()) {
+				if (ImGui::BeginCombo("##xdim", pcAttributes[posIndices[0]].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							posIndices[0] = i;
+							if (queryAttributes[i].dimensionSize > 0)
+								isoSurfaceRegularGridDim[0] = queryAttributes[i].dimensionSize;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine();
+				if (ImGui::BeginCombo("##ydim", pcAttributes[posIndices[1]].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							posIndices[1] = i;
+							if (queryAttributes[i].dimensionSize > 0)
+								isoSurfaceRegularGridDim[1] = queryAttributes[i].dimensionSize;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine();
+				if (ImGui::BeginCombo("Position indices (Order: lat, alt, lon)##zdim", pcAttributes[posIndices[2]].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							posIndices[2] = i;
+							if (queryAttributes[i].dimensionSize > 0)
+								isoSurfaceRegularGridDim[2] = queryAttributes[i].dimensionSize;
+						}
+					}
+					ImGui::EndCombo();
+				}
+			}
+			else {
+				ImGui::Text("Placeholder for position indices settings (Settings appear when Attributes are available)");
+			}
+			ImGui::PopItemWidth();
 
 			ImGui::Separator();
 			ImGui::Text("Selected drawlist: ");
