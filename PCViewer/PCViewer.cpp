@@ -214,6 +214,15 @@ std::vector<double> divide(float* arr, float num, int size) {
 	return result;
 }
 
+struct QueryAttribute {
+	std::string name;
+	int dimensionSize;	//size of the dimension, 0 if not a dimension
+	int dimensionality; //amt of dimensions the attribute is dependant on
+	bool active;
+};
+
+static std::vector<QueryAttribute> queryAttributes;
+
 struct Vec4 {
 	float x;
 	float y;
@@ -3994,6 +4003,85 @@ static bool openDlf(const char* filename) {
 	}
 }
 
+static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
+	int fileId, retval;
+	if ((retval = nc_open(filename, NC_NOWRITE, &fileId))) {
+		std::cout << "Error at opening the file" << std::endl;
+		nc_close(fileId);
+		return {};
+	}
+
+	int ndims, nvars, ngatts, unlimdimid;
+	if ((retval = nc_inq(fileId, &ndims, &nvars, &ngatts, &unlimdimid))) {
+		std::cout << "Error at reading out viariable information" << std::endl;
+		nc_close(fileId);
+		return {};
+	}
+
+	std::vector<QueryAttribute> out;
+	std::vector<std::vector<float>> data(nvars);
+	//getting all dimensions to distinguish the size for the data arrays
+	uint32_t data_size = 0;
+	for (int i = 0; i < ndims; ++i) {
+		size_t dim_size;
+		if ((retval = nc_inq_dimlen(fileId, i, &dim_size))) {
+			std::cout << "Error at reading out dimension size" << std::endl;
+			nc_close(fileId);
+			return {};
+		}
+		if (data_size == 0) data_size = dim_size;
+		else data_size *= dim_size;
+	}
+	std::cout << "netCDF data size: " << data_size << std::endl;
+	for (int i = 0; i < data.size(); ++i) {
+		data[i].resize(data_size);
+	}
+
+	std::vector<std::vector<int>> attribute_dims;
+
+	char vName[NC_MAX_NAME];
+	for (int i = 0; i < nvars; ++i) {
+		if ((retval = nc_inq_varname(fileId, i, vName))) {
+			std::cout << "Error at reading variables" << std::endl;
+			nc_close(fileId);
+			return {};
+		}
+		out.push_back({ std::string(vName), false, 1, true });
+		if ((retval = nc_inq_varndims(fileId, i, &out.back().dimensionality))) {
+			std::cout << "Error at getting variable dimensions" << std::endl;
+			nc_close(fileId);
+			return {};
+		}
+	}
+
+	//creating the indices of the dimensions. Fastest varying is the last of the dimmensions
+	std::vector<size_t> iter_indices(ndims), iter_stops(ndims);
+	std::vector<int> dimension_variable_indices(ndims);
+	for (int i = 0; i < ndims; ++i) {
+		char dimName[NC_MAX_NAME];
+		if ((retval = nc_inq_dim(fileId, i, dimName, &iter_stops[i]))) {
+			std::cout << "Error at reading dimensions 2" << std::endl;
+			nc_close(fileId);
+			return {};
+		}
+		if ((retval = nc_inq_varid(fileId, dimName, &dimension_variable_indices[i]))) {
+			std::cout << "Error at getting variable id of dimension" << std::endl;
+			nc_close(fileId);
+			return {};
+		}
+		//std:: cout << "Dimension " << dimName << " at index " << dimension_variable_indices[i] << " with lenght" << iter_stops[i] << std::endl;
+	}
+	int c = 0;
+	for (int i : dimension_variable_indices) {
+		out[i].dimensionSize = iter_stops[c++];
+	}
+
+	//everything needed was red, so colosing the file
+	nc_close(fileId);
+
+	return out;
+}
+
 static bool openNetCDF(const char* filename){
     int fileId, retval;
     if((retval = nc_open(filename, NC_NOWRITE,&fileId))){
@@ -6600,6 +6688,10 @@ int main(int, char**)
             else if(event.type == SDL_DROPFILE) {       // In case if dropped file
                 droppedPaths.push_back(std::string(event.drop.file));
                 pathDropped = true;
+				std::string file(event.drop.file);
+				if (droppedPaths.size() == 1 && file.substr(file.find_last_of(".") + 1) == "nc") {
+					queryAttributes = queryNetCDF(event.drop.file);
+				}
                 SDL_free(event.drop.file);              // Free dropped_filedir memory;
             }
         }
@@ -6743,6 +6835,16 @@ int main(int, char**)
 			ImGui::OpenPopup("OPENDATASET");
 			if (ImGui::BeginPopupModal("OPENDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 			{
+				if (ImGui::CollapsingHeader("Attribute activations")) {
+					ImGui::Text("Attribute Query");
+					for (auto& a : queryAttributes) {
+						ImGui::Text(a.name.c_str());
+						ImGui::SameLine(100);
+						ImGui::Text("%d, %s", a.dimensionality, ((a.dimensionSize > 0) ? "Dim" : " "));
+						ImGui::SameLine(150);
+						ImGui::Checkbox(("active##" + a.name).c_str(), &a.active);
+					}
+				}
 				ImGui::Text("Do you really want to open these Datasets?");
 				for (std::string& s : droppedPaths) {
 					ImGui::Text(s.c_str());
@@ -9857,9 +9959,46 @@ int main(int, char**)
 			}
 			ImGui::PopItemWidth();
 
-			ImGui::PushItemWidth(300);
-			
-			ImGui::DragInt3("Position indices (Order: lat, alt, lon)", (int*)&posIndices.x, 0.00000001f, 0, pcAttributes.size());
+			ImGui::PushItemWidth(100);
+			//setting the position variables
+			if (pcAttributes.size()) {
+				if (ImGui::BeginCombo("##xdim", pcAttributes[posIndices.x].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							posIndices.x = i;
+							if (queryAttributes[i].dimensionSize > 0)
+								isoSurfaceRegularGridDim[0] = queryAttributes[i].dimensionSize;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine();
+				if (ImGui::BeginCombo("##ydim", pcAttributes[posIndices.y].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							posIndices.y = i;
+							if (queryAttributes[i].dimensionSize > 0)
+								isoSurfaceRegularGridDim[1] = queryAttributes[i].dimensionSize;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine();
+				if (ImGui::BeginCombo("Position indices (Order: lat, alt, lon)##zdim", pcAttributes[posIndices.z].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							posIndices.z = i;
+							if (queryAttributes[i].dimensionSize > 0)
+								isoSurfaceRegularGridDim[2] = queryAttributes[i].dimensionSize;
+						}
+					}
+					ImGui::EndCombo();
+				}
+			}
+			else {
+				ImGui::Text("Placeholder for position indices settings (Settings appear when Attributes are available)");
+			}
+			//ImGui::DragInt3("Position indices (Order: lat, alt, lon)", (int*)&posIndices.x, 0.00000001f, 0, pcAttributes.size());
 			ImGui::PopItemWidth();
 
 			static bool showError = false;
@@ -11179,13 +11318,91 @@ int main(int, char**)
 				ImGui::Text("Line Color"); ImGui::NextColumn();
 				ImGui::Text("Fill Color"); ImGui::NextColumn();
 				ImGui::Separator();
+				//general settings
+				static bool all_active = true;
+				if (ImGui::Checkbox("General Settings", &all_active)) {
+					for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j)
+						violinDrawlistPlots[i].activeAttributes[j] = all_active;
+					updateHistogramComparisonDL(i);
+				}
+				ImGui::NextColumn();
+				static int general_plot_pos = 0;
+				static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
+				if (ImGui::BeginCombo("##generalpos", plotPositions[general_plot_pos])) {
+					for (int k = 0; k < 7; ++k) {
+						if (ImGui::MenuItem(plotPositions[k])) {
+							general_plot_pos = k;
+							for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+								violinDrawlistPlots[i].attributePlacements[j] = (ViolinPlacement)general_plot_pos;
+							}
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::NextColumn();
+				static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
+				static int general_plot_scale = 0;
+				if (ImGui::BeginCombo("##generalscale", violinScales[general_plot_scale])) {
+					for (int k = 0; k < 4; ++k) {
+						if (ImGui::MenuItem(violinScales[k])) {
+							general_plot_scale = k;
+							for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+								violinDrawlistPlots[i].violinScalesX[j] = (ViolinScale)general_plot_scale;
+							}
+							updateHistogramComparisonDL(i);
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::NextColumn();
+				static float general_plot_multiplier = 1;
+				if (ImGui::SliderFloat("##generalmultiplier", &general_plot_multiplier, 0, 1)) {
+					for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+						violinDrawlistPlots[i].attributeScalings[j] = general_plot_multiplier;
+						for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
+							std::vector<std::pair<uint32_t, float>> area;
+							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
+							(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+						}
+					}
+					updateHistogramComparisonDL(i);
+				}
+				ImGui::NextColumn();
+				static bool general_log = false;
+				if (ImGui::Checkbox("##generallog", &general_log)) {
+					for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+						histogramManager->logScale[j] = general_log;
+					}
+					histogramManager->updateSmoothedValues();
+					updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+					for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
+						HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
+						(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+					}
+					updateHistogramComparisonDL(i);
+				}
+				ImGui::NextColumn();
+				static ImVec4 general_col = { 0,0,0,1 };
+				if (ImGui::ColorEdit4("##general_linecol", &general_col.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
+					for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+						violinDrawlistPlots[i].attributeLineColors[j] = general_col;
+					}
+				}
+				ImGui::NextColumn();
+				static ImVec4 general_col_fill = { 0,0,0,.1 };
+				if (ImGui::ColorEdit4("##general_fillcol", &general_col_fill.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
+					for (int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
+						violinDrawlistPlots[i].attributeFillColors[j] = general_col_fill;
+					}
+				}
+				ImGui::NextColumn();
+				ImGui::Separator();
 				//settings for the attributes
 				for (unsigned int j = 0; j < violinDrawlistPlots[i].attributeNames.size(); ++j) {
                     if (ImGui::Checkbox(violinDrawlistPlots[i].attributeNames[j].c_str(), &violinDrawlistPlots[i].activeAttributes[j]))
                     {
                         updateHistogramComparisonDL(i);
                     }
-					static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
 					ImGui::NextColumn();
 					if (ImGui::BeginCombo(("##Position" + std::to_string(j)).c_str(), plotPositions[violinDrawlistPlots[i].attributePlacements[j]])) {
 						for (int k = 0; k < 7; ++k) {
@@ -11195,7 +11412,7 @@ int main(int, char**)
 						}
 						ImGui::EndCombo();
 					}
-					static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
+					
 					ImGui::NextColumn();
 					if (ImGui::BeginCombo(("##Scale" + std::to_string(j)).c_str(), violinScales[violinDrawlistPlots[i].violinScalesX[j]])) {
 						for (int k = 0; k < 4; ++k) {
