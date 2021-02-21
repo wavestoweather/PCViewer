@@ -5657,8 +5657,9 @@ bool ImGui::CollapsingHeader(const char* label, bool* p_open, ImGuiTreeNodeFlags
     if (window->SkipItems)
         return false;
 
-    if (p_open && !*p_open)
-        return false;
+    // Note: behaviour changed from standard dear imgui
+    //if (p_open && !*p_open)
+    //    return false;
 
     ImGuiID id = window->GetID(label);
     flags |= ImGuiTreeNodeFlags_CollapsingHeader;
@@ -5679,6 +5680,7 @@ bool ImGui::CollapsingHeader(const char* label, bool* p_open, ImGuiTreeNodeFlags
             *p_open = false;
         last_item_backup.Restore();
     }
+    *p_open = is_open;
 
     return is_open;
 }
