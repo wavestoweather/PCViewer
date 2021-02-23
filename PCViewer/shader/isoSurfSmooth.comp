@@ -26,7 +26,7 @@ void main(){
 	case 0:
 		for(int i = -k;i<=k;++i){
 			ivec3 picPos = ivec3(gl_GlobalInvocationID + vec3(i,0,0));
-			if(picPos.x>0&&picPos.x<=imSize.x){
+			if(picPos.x>=0&&picPos.x<imSize.x){
 				float gaussFac = exp(pow(i,2)/(-2.0f * (info.stdDev + .001f)));
 				div += gaussFac;
 				sum += gaussFac * imageLoad(src,picPos).x;
@@ -36,7 +36,7 @@ void main(){
 	case 1:
 		for(int i = -k;i<=k;++i){
 			ivec3 picPos = ivec3(gl_GlobalInvocationID + vec3(0,i,0));
-			if(picPos.y>0&&picPos.y<=imSize.y){
+			if(picPos.y>=0&&picPos.y<imSize.y){
 				float gaussFac = exp(pow(i,2)/(-2.0f * (info.stdDev + .001f)));
 				div += gaussFac;
 				sum += gaussFac * imageLoad(src,picPos).x;
@@ -46,7 +46,7 @@ void main(){
 	case 2:
 		for(int i = -k;i<=k;++i){
 			ivec3 picPos = ivec3(gl_GlobalInvocationID + vec3(0,0,i));
-			if(picPos.z>0&&picPos.z<=imSize.z){
+			if(picPos.z>=0&&picPos.z<imSize.z){
 				float gaussFac = exp(pow(i,2)/(-2.0f * (info.stdDev + .001f)));
 				div += gaussFac;
 				sum += gaussFac * imageLoad(src,picPos).x;

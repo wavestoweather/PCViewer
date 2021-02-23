@@ -18,7 +18,7 @@ SettingsManager::~SettingsManager()
 	}
 }
 
-bool SettingsManager::addSetting(Setting s)
+bool SettingsManager::addSetting(Setting s, bool autostore)
 {
 	void* data = new char[s.byteLength];
 	memcpy(data, s.data, s.byteLength);
@@ -38,7 +38,8 @@ bool SettingsManager::addSetting(Setting s)
 	if(!exists)
 		settingsType[s.type].push_back(&settings[s.id]);
 
-	storeSettings(settingsFile);
+	if(autostore)
+		storeSettings(settingsFile);
 
 	return true;
 }
@@ -73,7 +74,7 @@ std::vector<SettingsManager::Setting*>* SettingsManager::getSettingsType(std::st
 
 void SettingsManager::storeSettings(const char* filename)
 {
-	std::ofstream file(filename);
+	std::ofstream file(filename, std::ifstream::binary);
 	for (auto& s : settings) {
 		file << "\"" << s.second.id << "\"" << ' ' << "\"" << s.second.type << "\"" << ' ' << s.second.byteLength << ' ';
 		for (int i = 0; i < s.second.byteLength; i++) {
@@ -86,7 +87,7 @@ void SettingsManager::storeSettings(const char* filename)
 
 void SettingsManager::loadSettings(const char* filename)
 {
-	std::ifstream file(filename);
+	std::ifstream file(filename, std::ifstream::binary);
 
 	if (!file.is_open()) {
 		std::cout << "Settingsfile was not found or no settings exist." << std::endl;
@@ -133,13 +134,15 @@ void SettingsManager::loadSettings(const char* filename)
 		}
 
 		file >> s.byteLength;
-		std::string shadyshittishit;
 		s.data = new char[s.byteLength];
 		file.get();
 		file.read((char*)s.data,s.byteLength);
 		file.get();
 		if (s.id.size() != 0)
-			addSetting(s);
+			addSetting(s, false);
+
+		//for (int i = 0; i < s.byteLength; ++i)
+		//	std::cout << (int)((char*)s.data)[i];
 		
 		delete[] s.data;
 	}

@@ -330,7 +330,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	image3dOffsets.clear();
 	for (int i = image3dSampler.size(); i < required3dImages; ++i) {
 		image3dSampler.push_back({});
-		VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_LINEAR,1,1,&image3dSampler.back());
+		VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,VK_FILTER_LINEAR,1,1,&image3dSampler.back());
 	}
 
 	//creating new resources
@@ -1236,7 +1236,7 @@ void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 	uint8_t* binaryData = new uint8_t[w * h * d];
 	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage[binaryIndex], w, h, d, binaryData, w * h * d);
 
-	if (false) {
+	if (true) {
 		std::ofstream file(path);
 
 		//int count = 0;
@@ -1266,7 +1266,7 @@ void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 		file.close();
 	}
 
-	if (true) {
+	if (false) {
 		std::ofstream file(path);
 		for (int i = 0; i < w * h * d; ++i) {
 			file.write((char*)&binaryData[i], sizeof(binaryData[i]));

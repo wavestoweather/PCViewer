@@ -19,7 +19,7 @@ public:
 	SettingsManager();
 	~SettingsManager();
 
-	bool addSetting(Setting s);
+	bool addSetting(Setting s, bool autostore = true);
 	bool deleteSetting(std::string id);
 	Setting getSetting(std::string id);
 	std::vector<Setting*>* getSettingsType(std::string type);
