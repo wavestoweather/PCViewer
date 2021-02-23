@@ -752,7 +752,7 @@ static bool updateBrushTemplates = false;
 static int selectedTemplateBrush = -1;
 static bool drawListForTemplateBrush = false;
 static std::vector<TemplateBrush> templateBrushes;
-static int liveBrushThreshold = 1e5;
+static int liveBrushThreshold = 1e4;
 static int lineBatchSize = 2e6;
 
 //variables for global brushes
@@ -11362,7 +11362,7 @@ int main(int, char**)
 				if(settingsOpen) absHeight += (violinDrawlistPlots[i].attributeNames.size() + 2) * (ImGui::GetTextLineHeightWithSpacing());
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, absHeight), true);
 				ImGui::PushItemWidth(150);
-				if (ImGui::CollapsingHeader("Drawlist settings", &settingsOpen)) {
+				if (ImGui::CollapsingHeader("Attribute settings", &settingsOpen)) {
 					ImGui::Columns(7);
 					ImGui::Separator();
 					ImGui::Text("Attributes"); ImGui::NextColumn();
