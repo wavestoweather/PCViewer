@@ -10,7 +10,7 @@ layout(std430, binding = 0) buffer Informations{
 	uint lineCount;
 	int globalLineCount;
 	uint first;
-	uint and;
+	uint aand;
 	float stdDev;
 	float attributeInd[];		//indices of the fracture attributes
 } info;
@@ -86,7 +86,7 @@ void main(){
 		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
 	}
 	else{
-		if(bool(info.and)){
+		if(bool(info.aand)){
 			a = a && lineKeep;
 		}
 		else{
