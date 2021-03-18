@@ -4160,6 +4160,7 @@ static bool openNetCDF(const char* filename){
 		iter_increments[i] = queryAttributes[dimension_variable_indices[i]].dimensionSubsample;
 		iter_starts[i] = queryAttributes[dimension_variable_indices[i]].trimIndices[0];
 		iter_stops[i] = queryAttributes[dimension_variable_indices[i]].trimIndices[1];
+		iter_indices[i] = iter_starts[i];
 		if (!queryAttributes[dimension_variable_indices[i]].active) {
 			iter_indices[i] = queryAttributes[dimension_variable_indices[i]].dimensionSlice;
 			iter_starts[i] = iter_indices[i];
@@ -4183,7 +4184,7 @@ static bool openNetCDF(const char* filename){
 		else data_size *= dim_size;
 		if (queryAttributes[dimension_variable_indices[i]].active) {
 			dim_size = queryAttributes[dimension_variable_indices[i]].trimIndices[1] - queryAttributes[dimension_variable_indices[i]].trimIndices[0];
-			dim_size = dim_size / queryAttributes[dimension_variable_indices[i]].dimensionSubsample + ((dim_size % queryAttributes[dimension_variable_indices[i]].dimensionSubsample) ? 1 : 1);
+			dim_size = dim_size / queryAttributes[dimension_variable_indices[i]].dimensionSubsample + ((dim_size % queryAttributes[dimension_variable_indices[i]].dimensionSubsample) ? 1 : 0);
 			reduced_data_size *= dim_size;
 		}
 	}
@@ -4238,7 +4239,7 @@ static bool openNetCDF(const char* filename){
 			float minimum = data[i][0];
 			float maximum = data[i][queryAttributes[i].dimensionSize - 1];
 			for (int j = 0; j < queryAttributes[i].dimensionSize; ++j) {
-				float alpha = i / float(queryAttributes[i].dimensionSize - 1);
+				float alpha = j / float(queryAttributes[i].dimensionSize - 1);
 				data[i][j] = (1 - alpha) * minimum + alpha * maximum;
 			}
 		}
@@ -4252,8 +4253,6 @@ static bool openNetCDF(const char* filename){
 	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
 	ds.name = fname.substr(offset + 1);
     float* d = new float[reduced_data_size * pcAttributes.size()];
-	int theoreticalMax = reduced_data_size * pcAttributes.size() - 1;
-	int maxIndex = 0;
     int array_index = 0;
     while(iter_indices[0] < iter_stops[0]){
         int d_array_index = array_index * pcAttributes.size();
@@ -4268,7 +4267,6 @@ static bool openNetCDF(const char* filename){
                 d_index += index_add;
             }
 			int a = d_array_index + permutation[att], b = reduced_data_size * pcAttributes.size();
-			if (a > maxIndex) maxIndex = a;
 			assert( a< b); //safety check for debugging that we do not overflow the data array
             d[d_array_index + permutation[att]] = data[attr_to_var[att]][d_index];
         }
@@ -6890,16 +6888,20 @@ int main(int, char**)
 						ImGui::Checkbox(("active##" + a.name).c_str(), &a.active);
 						if (a.dimensionSize > 0) {
 							ImGui::PushItemWidth(100);
-							ImGui::SameLine();
-							ImGui::InputInt(("sampleFrequency##" + a.name).c_str(), &a.dimensionSubsample);
-							if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
-							ImGui::SameLine();
-							ImGui::InputInt(("slice Index##" + a.name).c_str(), &a.dimensionSlice);
-							a.dimensionSlice = std::clamp(a.dimensionSlice, 0, a.dimensionSize - 1);
-							ImGui::SameLine();
-							ImGui::InputInt2(("Trim Indices##" + a.name).c_str(), a.trimIndices);
-							ImGui::SameLine();
-							ImGui::Checkbox(("Linearize##" + a.name).c_str(), &a.linearize);
+							if (a.active) {
+								ImGui::SameLine();
+								ImGui::InputInt(("sampleFrequency##" + a.name).c_str(), &a.dimensionSubsample);
+								if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
+								ImGui::SameLine();
+								ImGui::InputInt2(("Trim Indices##" + a.name).c_str(), a.trimIndices);
+								ImGui::SameLine();
+								ImGui::Checkbox(("Linearize##" + a.name).c_str(), &a.linearize);
+							}
+							else {
+								ImGui::SameLine();
+								ImGui::InputInt(("slice Index##" + a.name).c_str(), &a.dimensionSlice);
+								a.dimensionSlice = std::clamp(a.dimensionSlice, 0, a.dimensionSize - 1);
+							}
 							ImGui::PopItemWidth();
 						}
 					}
