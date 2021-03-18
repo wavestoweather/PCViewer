@@ -220,7 +220,9 @@ struct QueryAttribute {
 	int dimensionality; //amt of dimensions the attribute is dependant on
 	int dimensionSubsample; //sampling rate of the dimension to reduce its size
 	int dimensionSlice; //if < 0 the whole dimension should be taken, otherwise the dimension is disabled and sliced at the index indicated here
+	int trimIndices[2];
 	bool active;
+	bool linearize;
 };
 
 static std::vector<QueryAttribute> queryAttributes;
@@ -4050,7 +4052,7 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 			nc_close(fileId);
 			return {};
 		}
-		out.push_back({ std::string(vName), false, 1, 1, -1, true });
+		out.push_back({ std::string(vName), false, 1, 1, -1, 0, 0, true, false });
 		if ((retval = nc_inq_varndims(fileId, i, &out.back().dimensionality))) {
 			std::cout << "Error at getting variable dimensions" << std::endl;
 			nc_close(fileId);
@@ -4078,6 +4080,7 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 	int c = 0;
 	for (int i : dimension_variable_indices) {
 		out[i].dimensionSize = iter_stops[c++];
+		out[i].trimIndices[1] = out[i].dimensionSize;
 	}
 
 	//everything needed was red, so colosing the file
@@ -4139,11 +4142,12 @@ static bool openNetCDF(const char* filename){
     }
     
     //creating the indices of the dimensions. Fastest varying is the last of the dimmensions
-    std::vector<size_t> iter_indices(ndims), iter_stops(ndims), iter_increments(ndims, 1);
+    std::vector<size_t> iter_indices(ndims), iter_stops(ndims), iter_increments(ndims, 1), iter_starts(ndims, 0);
+	std::vector<size_t> dim_sizes(ndims);
     std::vector<int> dimension_variable_indices(ndims);
     for(int i = 0; i < ndims; ++i){
         char dimName[NC_MAX_NAME];
-        if((retval = nc_inq_dim(fileId, i, dimName, &iter_stops[i]))){
+        if((retval = nc_inq_dim(fileId, i, dimName, &dim_sizes[i]))){
             std::cout << "Error at reading dimensions 2" << std::endl;
             nc_close(fileId);
             return false;
@@ -4154,8 +4158,11 @@ static bool openNetCDF(const char* filename){
             return false;
         }
 		iter_increments[i] = queryAttributes[dimension_variable_indices[i]].dimensionSubsample;
+		iter_starts[i] = queryAttributes[dimension_variable_indices[i]].trimIndices[0];
+		iter_stops[i] = queryAttributes[dimension_variable_indices[i]].trimIndices[1];
 		if (!queryAttributes[dimension_variable_indices[i]].active) {
 			iter_indices[i] = queryAttributes[dimension_variable_indices[i]].dimensionSlice;
+			iter_starts[i] = iter_indices[i];
 			iter_stops[i] = iter_indices[i] + 1;
 		}
         //std:: cout << "Dimension " << dimName << " at index " << dimension_variable_indices[i] << " with lenght" << iter_stops[i] << std::endl;
@@ -4175,7 +4182,8 @@ static bool openNetCDF(const char* filename){
 		if (data_size == 0) data_size = dim_size;
 		else data_size *= dim_size;
 		if (queryAttributes[dimension_variable_indices[i]].active) {
-			dim_size = dim_size / queryAttributes[dimension_variable_indices[i]].dimensionSubsample + ((dim_size % queryAttributes[dimension_variable_indices[i]].dimensionSubsample) ? 1 : 0);
+			dim_size = queryAttributes[dimension_variable_indices[i]].trimIndices[1] - queryAttributes[dimension_variable_indices[i]].trimIndices[0];
+			dim_size = dim_size / queryAttributes[dimension_variable_indices[i]].dimensionSubsample + ((dim_size % queryAttributes[dimension_variable_indices[i]].dimensionSubsample) ? 1 : 1);
 			reduced_data_size *= dim_size;
 		}
 	}
@@ -4224,6 +4232,18 @@ static bool openNetCDF(const char* filename){
 		}
 	}
 
+	//linearizing a dimension if needed
+	for (int i = 0; i < queryAttributes.size(); ++i) {
+		if (queryAttributes[i].linearize) {
+			float minimum = data[i][0];
+			float maximum = data[i][queryAttributes[i].dimensionSize - 1];
+			for (int j = 0; j < queryAttributes[i].dimensionSize; ++j) {
+				float alpha = i / float(queryAttributes[i].dimensionSize - 1);
+				data[i][j] = (1 - alpha) * minimum + alpha * maximum;
+			}
+		}
+	}
+
     std::vector<float> categorieFloats(pcAttributes.size(), 0);
     //creating the data array and parsing the input data
     DataSet ds{};
@@ -4232,6 +4252,8 @@ static bool openNetCDF(const char* filename){
 	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
 	ds.name = fname.substr(offset + 1);
     float* d = new float[reduced_data_size * pcAttributes.size()];
+	int theoreticalMax = reduced_data_size * pcAttributes.size() - 1;
+	int maxIndex = 0;
     int array_index = 0;
     while(iter_indices[0] < iter_stops[0]){
         int d_array_index = array_index * pcAttributes.size();
@@ -4241,11 +4263,12 @@ static bool openNetCDF(const char* filename){
             for(int dim = 0; dim < attribute_dims[att].size(); ++dim){
                 int index_add = iter_indices[attribute_dims[att][dim]];
                 for(int add = dim + 1; add < attribute_dims[att].size(); ++add){
-                    index_add *= iter_stops[attribute_dims[att][add]];
+                    index_add *= dim_sizes[attribute_dims[att][add]];
                 }
                 d_index += index_add;
             }
 			int a = d_array_index + permutation[att], b = reduced_data_size * pcAttributes.size();
+			if (a > maxIndex) maxIndex = a;
 			assert( a< b); //safety check for debugging that we do not overflow the data array
             d[d_array_index + permutation[att]] = data[attr_to_var[att]][d_index];
         }
@@ -4255,9 +4278,9 @@ static bool openNetCDF(const char* filename){
         for(int dim = ndims - 2; dim >= 0; --dim){
             if(iter_indices[dim + 1] >= iter_stops[dim + 1]){
                 iter_indices[dim] += iter_increments[dim];
-                iter_indices[dim + 1] = 0;
-				if (!queryAttributes[dimension_variable_indices[dim + 1]].active)
-					iter_indices[dim + 1] = queryAttributes[dimension_variable_indices[dim + 1]].dimensionSlice;
+                iter_indices[dim + 1] = iter_starts[dim + 1];
+				//if (!queryAttributes[dimension_variable_indices[dim + 1]].active)
+				//	iter_indices[dim + 1] = queryAttributes[dimension_variable_indices[dim + 1]].dimensionSlice;
             }
         }
     }
@@ -6866,12 +6889,18 @@ int main(int, char**)
 						ImGui::SameLine(150);
 						ImGui::Checkbox(("active##" + a.name).c_str(), &a.active);
 						if (a.dimensionSize > 0) {
+							ImGui::PushItemWidth(100);
 							ImGui::SameLine();
 							ImGui::InputInt(("sampleFrequency##" + a.name).c_str(), &a.dimensionSubsample);
 							if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
 							ImGui::SameLine();
 							ImGui::InputInt(("slice Index##" + a.name).c_str(), &a.dimensionSlice);
 							a.dimensionSlice = std::clamp(a.dimensionSlice, 0, a.dimensionSize - 1);
+							ImGui::SameLine();
+							ImGui::InputInt2(("Trim Indices##" + a.name).c_str(), a.trimIndices);
+							ImGui::SameLine();
+							ImGui::Checkbox(("Linearize##" + a.name).c_str(), &a.linearize);
+							ImGui::PopItemWidth();
 						}
 					}
 				}
