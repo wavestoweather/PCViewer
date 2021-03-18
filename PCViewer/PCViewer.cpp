@@ -218,6 +218,8 @@ struct QueryAttribute {
 	std::string name;
 	int dimensionSize;	//size of the dimension, 0 if not a dimension
 	int dimensionality; //amt of dimensions the attribute is dependant on
+	int dimensionSubsample; //sampling rate of the dimension to reduce its size
+	int dimensionSlice; //if < 0 the whole dimension should be taken, otherwise the dimension is disabled and sliced at the index indicated here
 	bool active;
 };
 
@@ -4022,7 +4024,6 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 	}
 
 	std::vector<QueryAttribute> out;
-	std::vector<std::vector<float>> data(nvars);
 	//getting all dimensions to distinguish the size for the data arrays
 	uint32_t data_size = 0;
 	for (int i = 0; i < ndims; ++i) {
@@ -4036,9 +4037,9 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 		else data_size *= dim_size;
 	}
 	//std::cout << "netCDF data size: " << data_size << std::endl;
-	for (int i = 0; i < data.size(); ++i) {
-		data[i].resize(data_size);
-	}
+	//for (int i = 0; i < data.size(); ++i) {
+	//	data[i].resize(data_size);
+	//}
 
 	std::vector<std::vector<int>> attribute_dims;
 
@@ -4049,7 +4050,7 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 			nc_close(fileId);
 			return {};
 		}
-		out.push_back({ std::string(vName), false, 1, true });
+		out.push_back({ std::string(vName), false, 1, 1, -1, true });
 		if ((retval = nc_inq_varndims(fileId, i, &out.back().dimensionality))) {
 			std::cout << "Error at getting variable dimensions" << std::endl;
 			nc_close(fileId);
@@ -4100,28 +4101,11 @@ static bool openNetCDF(const char* filename){
         return false;
     }
     
-    std::vector<std::vector<float>> data(nvars);
-    //getting all dimensions to distinguish the size for the data arrays
-    uint32_t data_size = 0;
-    for(int i = 0; i < ndims; ++i){
-        size_t dim_size;
-        if((retval = nc_inq_dimlen(fileId, i, &dim_size))){
-            std::cout << "Error at reading out dimension size" << std::endl;
-            nc_close(fileId);
-            return false;
-        }
-        if(data_size == 0) data_size = dim_size;
-        else data_size *= dim_size;
-    }
-    //std::cout<< "netCDF data size: " << data_size << std::endl;
-    for(int i = 0; i < data.size(); ++i){
-        data[i].resize(data_size);
-    }
-    
     //attribute check
     std::vector<Attribute> tmp;
     std::vector<std::string> attributes;
     std::vector<std::vector<int>> attribute_dims;
+	std::vector<int> attr_to_var;
     
     char vName[NC_MAX_NAME];
     for(int i = 0; i < nvars; ++i){
@@ -4130,8 +4114,11 @@ static bool openNetCDF(const char* filename){
             nc_close(fileId);
             return false;
         }
-        tmp.push_back({ vName, vName,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
-        attributes.push_back(tmp.back().name);
+		if (queryAttributes[i].active) {
+			tmp.push_back({ vName, vName,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
+			attributes.push_back(tmp.back().name);
+			attr_to_var.push_back(i);
+		}
         int ndims;
         if((retval = nc_inq_varndims(fileId, i, &ndims))){
             std::cout << "Error at getting variable dimensions" << std::endl;
@@ -4151,17 +4138,8 @@ static bool openNetCDF(const char* filename){
         //std::cout << "\b\b)" << std::endl;
     }
     
-    //reading out all data from the netCDF file
-    for(int i = 0; i < nvars; ++i){
-        if((retval = nc_get_var_float(fileId, i, data[i].data()))){
-            std::cout << "Error at reading data" << std::endl;
-            nc_close(fileId);
-            return false;
-        }
-    }
-    
     //creating the indices of the dimensions. Fastest varying is the last of the dimmensions
-    std::vector<size_t> iter_indices(ndims), iter_stops(ndims);
+    std::vector<size_t> iter_indices(ndims), iter_stops(ndims), iter_increments(ndims, 1);
     std::vector<int> dimension_variable_indices(ndims);
     for(int i = 0; i < ndims; ++i){
         char dimName[NC_MAX_NAME];
@@ -4175,8 +4153,45 @@ static bool openNetCDF(const char* filename){
             nc_close(fileId);
             return false;
         }
+		iter_increments[i] = queryAttributes[dimension_variable_indices[i]].dimensionSubsample;
+		if (!queryAttributes[dimension_variable_indices[i]].active) {
+			iter_indices[i] = queryAttributes[dimension_variable_indices[i]].dimensionSlice;
+			iter_stops[i] = iter_indices[i] + 1;
+		}
         //std:: cout << "Dimension " << dimName << " at index " << dimension_variable_indices[i] << " with lenght" << iter_stops[i] << std::endl;
     }
+
+	std::vector<std::vector<float>> data(nvars);
+	//getting all dimensions to distinguish the size for the data arrays
+	uint32_t data_size = 0;
+	uint32_t reduced_data_size = 1;
+	for (int i = 0; i < ndims; ++i) {
+		size_t dim_size;
+		if ((retval = nc_inq_dimlen(fileId, i, &dim_size))) {
+			std::cout << "Error at reading out dimension size" << std::endl;
+			nc_close(fileId);
+			return false;
+		}
+		if (data_size == 0) data_size = dim_size;
+		else data_size *= dim_size;
+		if (queryAttributes[dimension_variable_indices[i]].active) {
+			dim_size = dim_size / queryAttributes[dimension_variable_indices[i]].dimensionSubsample + ((dim_size % queryAttributes[dimension_variable_indices[i]].dimensionSubsample) ? 1 : 0);
+			reduced_data_size *= dim_size;
+		}
+	}
+	//std::cout<< "netCDF data size: " << data_size << std::endl;
+	for (int i = 0; i < data.size(); ++i) {
+		data[i].resize(data_size);
+	}
+
+	//reading out all data from the netCDF file
+	for (int i = 0; i < nvars; ++i) {
+		if ((retval = nc_get_var_float(fileId, i, data[i].data()))) {
+			std::cout << "Error at reading data" << std::endl;
+			nc_close(fileId);
+			return false;
+		}
+	}
     
     //everything needed was red, so colosing the file
     nc_close(fileId);
@@ -4197,9 +4212,7 @@ static bool openNetCDF(const char* filename){
 	}
 	//if this is the first Dataset to be loaded, fill the pcAttributes vector
 	else {
-		for (Attribute& a : tmp) {
-			pcAttributes.push_back(a);
-		}
+		pcAttributes = tmp;
 
 		//setting up the boolarray and setting all the attributes to true
 		pcAttributeEnabled = new bool[pcAttributes.size()];
@@ -4218,11 +4231,11 @@ static bool openNetCDF(const char* filename){
 	std::string fname(filename);
 	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
 	ds.name = fname.substr(offset + 1);
-    float* d = new float[data_size * nvars];
+    float* d = new float[reduced_data_size * pcAttributes.size()];
     int array_index = 0;
     while(iter_indices[0] < iter_stops[0]){
-        int d_array_index = array_index * nvars;
-        for(int att = 0; att < nvars; ++att){
+        int d_array_index = array_index * pcAttributes.size();
+        for(int att = 0; att < pcAttributes.size(); ++att){
             float datum = 0;
             int d_index = 0;
             for(int dim = 0; dim < attribute_dims[att].size(); ++dim){
@@ -4232,22 +4245,26 @@ static bool openNetCDF(const char* filename){
                 }
                 d_index += index_add;
             }
-            d[d_array_index + permutation[att]] = data[att][d_index];
+			int a = d_array_index + permutation[att], b = reduced_data_size * pcAttributes.size();
+			assert( a< b); //safety check for debugging that we do not overflow the data array
+            d[d_array_index + permutation[att]] = data[attr_to_var[att]][d_index];
         }
-        //increasing ther iteration counters
+        //increasing the iteration counters
         array_index += 1;
-        iter_indices.back() += 1;
+        iter_indices.back() += iter_increments.back();
         for(int dim = ndims - 2; dim >= 0; --dim){
             if(iter_indices[dim + 1] >= iter_stops[dim + 1]){
-                iter_indices[dim] += 1;
-                iter_indices[dim + 1] = 0; 
+                iter_indices[dim] += iter_increments[dim];
+                iter_indices[dim + 1] = 0;
+				if (!queryAttributes[dimension_variable_indices[dim + 1]].active)
+					iter_indices[dim + 1] = queryAttributes[dimension_variable_indices[dim + 1]].dimensionSlice;
             }
         }
     }
     //assigning the data array into the DataSet struct
-    ds.data = std::vector<float*>(data_size);
-	for (int i = 0; i < data_size; i++) {
-		ds.data[i] = &d[i * nvars];
+    ds.data = std::vector<float*>(reduced_data_size);
+	for (int i = 0; i < reduced_data_size; i++) {
+		ds.data[i] = &d[i * pcAttributes.size()];
 	}
     
     ds.reducedDataSetSize = ds.data.size();
@@ -6848,6 +6865,14 @@ int main(int, char**)
 						ImGui::Text("%d, %s", a.dimensionality, ((a.dimensionSize > 0) ? "Dim" : " "));
 						ImGui::SameLine(150);
 						ImGui::Checkbox(("active##" + a.name).c_str(), &a.active);
+						if (a.dimensionSize > 0) {
+							ImGui::SameLine();
+							ImGui::InputInt(("sampleFrequency##" + a.name).c_str(), &a.dimensionSubsample);
+							if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
+							ImGui::SameLine();
+							ImGui::InputInt(("slice Index##" + a.name).c_str(), &a.dimensionSlice);
+							a.dimensionSlice = std::clamp(a.dimensionSlice, 0, a.dimensionSize - 1);
+						}
 					}
 				}
 				ImGui::Text("Do you really want to open these Datasets?");
