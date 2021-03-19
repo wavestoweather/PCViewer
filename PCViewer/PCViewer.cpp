@@ -33,6 +33,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "imgui/imgui_impl_sdl.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
+#include "cimg/CImg.h"
 #include "Color.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
@@ -134,10 +135,15 @@ static VkPipelineCache          g_PipelineCache = VK_NULL_HANDLE;
 static VkDescriptorPool         g_DescriptorPool = VK_NULL_HANDLE;
 
 static ImGui_ImplVulkanH_Window g_MainWindowData;
+static ImGui_ImplVulkanH_Window g_ExportWindowData;
 static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
+static int						g_ExportImageWidth = 1280;
+static int						g_ExportImageHeight = 720;
+static int						g_ExportCountDown = 1;
+static int						g_ExportViewportNumber = 0;
 
 template <typename T>
 std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b) {
@@ -3377,6 +3383,7 @@ static void CleanupVulkan()
 static void CleanupVulkanWindow()
 {
 	ImGui_ImplVulkanH_DestroyWindow(g_Instance, g_Device, &g_MainWindowData, g_Allocator);
+	ImGui_ImplVulkanH_DestroyWindow(g_Instance, g_Device, &g_ExportWindowData, g_Allocator);
 }
 
 static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
@@ -6524,6 +6531,12 @@ int main(int, char**)
     ImGui_ImplVulkanH_Window* wd = &g_MainWindowData;
     SetupVulkanWindow(wd, surface, w, h);
 
+	// Setup image exportbuffer
+	g_ExportWindowData.SurfaceFormat = wd->SurfaceFormat;
+	g_ExportWindowData.PresentMode = wd->PresentMode;
+	g_ExportWindowData.Surface = surface;
+	ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_ExportWindowData, g_QueueFamily, g_Allocator, g_ExportImageWidth, g_ExportImageHeight, 1);
+
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -6746,7 +6759,9 @@ int main(int, char**)
 			g_SwapChainRebuild = false;
 			ImGui_ImplVulkan_SetMinImageCount(g_MinImageCount);
 			ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_MainWindowData, g_QueueFamily, g_Allocator, g_SwapChainResizeWidth, g_SwapChainResizeHeight, g_MinImageCount);
+			ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_ExportWindowData, g_QueueFamily, g_Allocator, g_ExportImageWidth, g_ExportImageHeight, 1);
 			g_MainWindowData.FrameIndex = 0;
+			g_ExportWindowData.FrameIndex = 0;
 		}
 
 		// Start the Dear ImGui frame
@@ -12154,6 +12169,20 @@ int main(int, char**)
 
 		// Rendering
 		ImGui::Render();
+
+		// Image export
+		if (g_ExportCountDown >= 0) {
+			if (g_ExportCountDown == 0) {
+				ImDrawData* exportDrawData = ImGui::GetCurrentContext()->Viewports[g_ExportViewportNumber]->DrawData;
+				memcpy(g_ExportWindowData.ClearValue.color.float32, &clear_color, 4 * sizeof(float));
+				//FrameRender(&g_ExportWindowData, exportDrawData);
+				//creating the image and copying the frame data to the image
+				cimg_library::CImg<unsigned char> res(g_ExportImageWidth, g_ExportImageHeight, 1, 4, 255);
+				res.save_png("testimageblack.png");
+			}
+			--g_ExportCountDown;
+		}
+
 		ImDrawData* main_draw_data = ImGui::GetDrawData();
 		const bool main_is_minimized = (main_draw_data->DisplaySize.x <= 0.0f || main_draw_data->DisplaySize.y <= 0.0f);
 		memcpy(&wd->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
