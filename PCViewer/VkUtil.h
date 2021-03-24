@@ -24,6 +24,7 @@ namespace VkUtil{
 
 	enum PassType {
 		PASS_TYPE_COLOR_OFFLINE,
+		PASS_TYPE_COLOR_EXPORT,
 		PASS_TYPE_COLOR_OFFLINE_NO_CLEAR,
 		PASS_TYPE_COLOR16_OFFLINE,
 		PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR,
@@ -65,7 +66,7 @@ namespace VkUtil{
 	void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer src, VkBuffer dst, uint32_t byteSize, uint32_t srcOffset, uint32_t dstOffset);
 	void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 	void copyBufferTo3dImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth);
-	void copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth);
+	void copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, VkImageLayout imageLayout, uint32_t width, uint32_t height, uint32_t depth);
 	void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 	void createImage(VkDevice device, uint32_t width, uint32_t height, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);
 	void create3dImage(VkDevice device, uint32_t width, uint32_t height, uint32_t depth, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);
@@ -76,7 +77,7 @@ namespace VkUtil{
 	void uploadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize, void* data);
 	void downloadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize, void* data);
 	void uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout imageLayout, VkFormat imageFormat, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize);
-	void downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize);
+	void downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout imageLayout, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize);
 	VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
 };
 

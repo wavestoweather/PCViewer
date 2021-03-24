@@ -407,6 +407,25 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType,VkRende
 		subpass.pColorAttachments = &colorAttachmentRef;
 
 		break;
+	case VkUtil::PASS_TYPE_COLOR_EXPORT:
+		attachment.format = VK_FORMAT_B8G8R8A8_UNORM;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		colorAttachments.push_back(attachment);
+
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+
+		break;
 	case VkUtil::PASS_TYPE_COLOR_OFFLINE_NO_CLEAR:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -873,7 +892,7 @@ void VkUtil::copyBufferTo3dImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-void VkUtil::copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth)
+void VkUtil::copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, VkImageLayout imageLayout, uint32_t width, uint32_t height, uint32_t depth)
 {
 	VkBufferImageCopy region = {};
 	region.bufferOffset = 0;
@@ -892,7 +911,7 @@ void VkUtil::copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer,
 		depth
 	};
 
-	vkCmdCopyImageToBuffer(commandBuffer, image, VK_IMAGE_LAYOUT_GENERAL, buffer, 1, &region);
+	vkCmdCopyImageToBuffer(commandBuffer, image, imageLayout, buffer, 1, &region);
 }
 
 void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
@@ -1212,7 +1231,7 @@ void VkUtil::uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, V
 	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 }
 
-void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
+void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout imageLayout, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
 {
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
@@ -1228,7 +1247,7 @@ void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice,
 
 	VkCommandBuffer commands;
 	createCommandBuffer(device, commandPool, &commands);
-	copy3dImageToBuffer(commands, stagingBuffer, image, x, y, z);
+	copy3dImageToBuffer(commands, stagingBuffer, image, imageLayout, x, y, z);
 	commitCommandBuffer(queue, commands);
 	check_vk_result(vkQueueWaitIdle(queue));
 	downloadData(device, stagingMemory, 0, byteSize, data);

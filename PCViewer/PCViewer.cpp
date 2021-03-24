@@ -135,14 +135,16 @@ static VkPipelineCache          g_PipelineCache = VK_NULL_HANDLE;
 static VkDescriptorPool         g_DescriptorPool = VK_NULL_HANDLE;
 
 static ImGui_ImplVulkanH_Window g_MainWindowData;
-static ImGui_ImplVulkanH_Window g_ExportWindowData;
+static ImGui_ImplVulkanH_Frame  g_ExportWindowFrame;
+static VkRenderPass				g_ExportWindowRenderPass;
+static VkDeviceMemory			g_ExportWindowMemory;
 static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
-static int						g_ExportImageWidth = 1280;
-static int						g_ExportImageHeight = 720;
-static int						g_ExportCountDown = 1;
+static int						g_ExportImageWidth = 1280 * 2;
+static int						g_ExportImageHeight = 720 * 2;
+static int						g_ExportCountDown = 2;
 static int						g_ExportViewportNumber = 0;
 
 template <typename T>
@@ -1399,6 +1401,58 @@ static void cleanupPcPlotImageView() {
 	vkDestroyImage(g_Device, g_PcPlotDensityIronMap, nullptr);
 	vkDestroySampler(g_Device, g_PcPlotDensityIronMapSampler, nullptr);
 	vkFreeMemory(g_Device, g_PcPlotMem, nullptr);
+}
+
+static void cleanupExportWindow() {
+	ImGui_ImplVulkanH_DestroyFrame(g_Device, &g_ExportWindowFrame, g_Allocator);
+	vkFreeMemory(g_Device, g_ExportWindowMemory, g_Allocator);
+	vkFreeCommandBuffers(g_Device, g_ExportWindowFrame.CommandPool, 1, &g_ExportWindowFrame.CommandBuffer);
+	vkDestroyCommandPool(g_Device, g_ExportWindowFrame.CommandPool, g_Allocator);
+
+	vkDestroyImageView(g_Device, g_ExportWindowFrame.BackbufferView, g_Allocator);
+	vkDestroyFramebuffer(g_Device, g_ExportWindowFrame.Framebuffer, g_Allocator);
+	vkDestroyRenderPass(g_Device, g_ExportWindowRenderPass, g_Allocator);
+}
+
+static void recreateExportWindow() {
+	if (g_ExportWindowFrame.Backbuffer) {	//destroy old resources
+		cleanupExportWindow();
+	}
+
+	VkUtil::createRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR_EXPORT, &g_ExportWindowRenderPass);
+
+	VkUtil::createImage(g_Device, g_ExportImageWidth, g_ExportImageHeight, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &g_ExportWindowFrame.Backbuffer);
+	VkMemoryRequirements memReq{};
+	vkGetImageMemoryRequirements(g_Device, g_ExportWindowFrame.Backbuffer, &memReq);
+	VkMemoryAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, 0);
+	vkAllocateMemory(g_Device, &allocInfo, g_Allocator, &g_ExportWindowMemory);
+	vkBindImageMemory(g_Device, g_ExportWindowFrame.Backbuffer, g_ExportWindowMemory, 0);
+
+	VkUtil::createImageView(g_Device, g_ExportWindowFrame.Backbuffer, VK_FORMAT_B8G8R8A8_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_ExportWindowFrame.BackbufferView);
+
+	std::vector<VkImageView> views{ g_ExportWindowFrame.BackbufferView };
+	VkUtil::createFrameBuffer(g_Device, g_ExportWindowRenderPass, views, g_ExportImageWidth, g_ExportImageHeight, &g_ExportWindowFrame.Framebuffer);
+
+	VkResult err;
+	{
+		VkCommandPoolCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		info.queueFamilyIndex = g_QueueFamily;
+		err = vkCreateCommandPool(g_Device, &info, g_Allocator, &g_ExportWindowFrame.CommandPool);
+		check_vk_result(err);
+	}
+	{
+		VkCommandBufferAllocateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		info.commandPool = g_ExportWindowFrame.CommandPool;
+		info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		info.commandBufferCount = 1;
+		err = vkAllocateCommandBuffers(g_Device, &info, &g_ExportWindowFrame.CommandBuffer);
+		check_vk_result(err);
+	}
 }
 
 static std::vector<char> readFile(const std::string& filename) {
@@ -3383,7 +3437,6 @@ static void CleanupVulkan()
 static void CleanupVulkanWindow()
 {
 	ImGui_ImplVulkanH_DestroyWindow(g_Instance, g_Device, &g_MainWindowData, g_Allocator);
-	ImGui_ImplVulkanH_DestroyWindow(g_Instance, g_Device, &g_ExportWindowData, g_Allocator);
 }
 
 static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
@@ -3444,6 +3497,53 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
 		err = vkEndCommandBuffer(fd->CommandBuffer);
 		check_vk_result(err);
 		err = vkQueueSubmit(g_Queue, 1, &info, fd->Fence);
+		check_vk_result(err);
+	}
+}
+
+static void FrameRenderExport(ImGui_ImplVulkanH_Frame* fd, ImDrawData* draw_data, const VkClearValue& clearColor) {
+	VkResult err;
+	{
+		err = vkResetCommandPool(g_Device, fd->CommandPool, 0);
+		check_vk_result(err);
+		VkCommandBufferBeginInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		err = vkBeginCommandBuffer(fd->CommandBuffer, &info);
+		check_vk_result(err);
+	}
+	{
+		VkRenderPassBeginInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		info.renderPass = g_ExportWindowRenderPass;
+		info.framebuffer = fd->Framebuffer;
+		info.renderArea.extent.width = g_ExportImageWidth;
+		info.renderArea.extent.height = g_ExportImageHeight;
+		info.clearValueCount = 1;
+		info.pClearValues = &clearColor;
+		vkCmdBeginRenderPass(fd->CommandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	// Record dear imgui primitives into command buffer
+	ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
+
+	// Submit command buffer
+	vkCmdEndRenderPass(fd->CommandBuffer);
+	{
+		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		VkSubmitInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		info.waitSemaphoreCount = 0;
+		info.pWaitSemaphores = NULL;
+		info.pWaitDstStageMask = &wait_stage;
+		info.commandBufferCount = 1;
+		info.pCommandBuffers = &fd->CommandBuffer;
+		info.signalSemaphoreCount = 0;
+		info.pSignalSemaphores = NULL;
+
+		err = vkEndCommandBuffer(fd->CommandBuffer);
+		check_vk_result(err);
+		err = vkQueueSubmit(g_Queue, 1, &info, VK_NULL_HANDLE);
 		check_vk_result(err);
 	}
 }
@@ -6532,10 +6632,7 @@ int main(int, char**)
     SetupVulkanWindow(wd, surface, w, h);
 
 	// Setup image exportbuffer
-	g_ExportWindowData.SurfaceFormat = wd->SurfaceFormat;
-	g_ExportWindowData.PresentMode = wd->PresentMode;
-	g_ExportWindowData.Surface = surface;
-	ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_ExportWindowData, g_QueueFamily, g_Allocator, g_ExportImageWidth, g_ExportImageHeight, 1);
+	recreateExportWindow();
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -6759,9 +6856,7 @@ int main(int, char**)
 			g_SwapChainRebuild = false;
 			ImGui_ImplVulkan_SetMinImageCount(g_MinImageCount);
 			ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_MainWindowData, g_QueueFamily, g_Allocator, g_SwapChainResizeWidth, g_SwapChainResizeHeight, g_MinImageCount);
-			ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_ExportWindowData, g_QueueFamily, g_Allocator, g_ExportImageWidth, g_ExportImageHeight, 1);
 			g_MainWindowData.FrameIndex = 0;
-			g_ExportWindowData.FrameIndex = 0;
 		}
 
 		// Start the Dear ImGui frame
@@ -12174,11 +12269,35 @@ int main(int, char**)
 		if (g_ExportCountDown >= 0) {
 			if (g_ExportCountDown == 0) {
 				ImDrawData* exportDrawData = ImGui::GetCurrentContext()->Viewports[g_ExportViewportNumber]->DrawData;
-				memcpy(g_ExportWindowData.ClearValue.color.float32, &clear_color, 4 * sizeof(float));
-				//FrameRender(&g_ExportWindowData, exportDrawData);
+				VkClearValue clear;
+				memcpy(clear.color.float32, &clear_color, 4 * sizeof(float));
+				check_vk_result(vkQueueWaitIdle(g_Queue)); // the previous frame draw has to be done
+				FrameRenderExport(&g_ExportWindowFrame, exportDrawData, clear);
 				//creating the image and copying the frame data to the image
-				cimg_library::CImg<unsigned char> res(g_ExportImageWidth, g_ExportImageHeight, 1, 4, 255);
-				res.save_png("testimageblack.png");
+				cimg_library::CImg<unsigned char> res(g_ExportImageWidth, g_ExportImageHeight, 1, 4);
+				check_vk_result(vkQueueWaitIdle(g_Queue));
+				unsigned char* img = new unsigned char[g_ExportImageWidth * g_ExportImageHeight * 4];
+				VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_ExportWindowFrame.Backbuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_ExportImageWidth, g_ExportImageHeight, 1, img, g_ExportImageWidth* g_ExportImageHeight * 4 * sizeof(unsigned char));
+				//transforming the downloaded image to the correct image coordinates
+				for (int x = 0; x < g_ExportImageWidth; ++x) {
+					for (int y = 0; y < g_ExportImageHeight; ++y) {
+						for (int c = 0; c < 4; ++c) {
+							int cc = (c + 1) % 4;
+							//if (c != 3) cc = c - 2;
+							int oldIndex = x * g_ExportImageHeight * 4 + y * 4 + c;
+							int newIndex = (cc) * g_ExportImageHeight * g_ExportImageWidth + x * g_ExportImageHeight + y;
+							assert(oldIndex < g_ExportImageWidth* g_ExportImageHeight * 4);
+							assert(newIndex < g_ExportImageWidth* g_ExportImageHeight * 4);
+							
+							if(c == 3) res.data()[newIndex] = 255;
+							else res.data()[newIndex] = img[oldIndex];
+						}
+					}
+				}
+				delete[] img;
+				
+				res.save_png("test.png");
+				res.save_jpeg("test.jpeg");
 			}
 			--g_ExportCountDown;
 		}
@@ -12248,6 +12367,10 @@ int main(int, char**)
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.kdTree) delete gb.kdTree;
 		}
+	}
+
+	{//other cleanups
+		cleanupExportWindow();
 	}
 
 	ImGui_ImplVulkan_Shutdown();
