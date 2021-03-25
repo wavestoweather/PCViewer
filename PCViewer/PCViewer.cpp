@@ -142,8 +142,8 @@ static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
-static int						g_ExportImageWidth = 1280 * 2;
-static int						g_ExportImageHeight = 720 * 2;
+static int						g_ExportImageWidth = 1280 * 4;
+static int						g_ExportImageHeight = 720 * 4;
 static int						g_ExportCountDown = 2;
 static int						g_ExportViewportNumber = 0;
 
@@ -1410,6 +1410,7 @@ static void cleanupExportWindow() {
 	vkDestroyCommandPool(g_Device, g_ExportWindowFrame.CommandPool, g_Allocator);
 
 	vkDestroyImageView(g_Device, g_ExportWindowFrame.BackbufferView, g_Allocator);
+	vkDestroyImage(g_Device, g_ExportWindowFrame.Backbuffer, g_Allocator);
 	vkDestroyFramebuffer(g_Device, g_ExportWindowFrame.Framebuffer, g_Allocator);
 	vkDestroyRenderPass(g_Device, g_ExportWindowRenderPass, g_Allocator);
 }
@@ -12269,16 +12270,16 @@ int main(int, char**)
 		if (g_ExportCountDown >= 0) {
 			if (g_ExportCountDown == 0) {
 				ImDrawData* exportDrawData = ImGui::GetCurrentContext()->Viewports[g_ExportViewportNumber]->DrawData;
-				ImVec2 old_width = exportDrawData->DisplaySize;
-				exportDrawData->DisplaySize = { (float)g_ExportImageWidth, (float)g_ExportImageHeight };
+				ImVec2 old_scale = exportDrawData->FramebufferScale;
+				exportDrawData->FramebufferScale = { (float)g_ExportImageWidth / exportDrawData->DisplaySize.x, (float)g_ExportImageHeight / exportDrawData->DisplaySize.y };
 				VkClearValue clear;
 				memcpy(clear.color.float32, &clear_color, 4 * sizeof(float));
 				check_vk_result(vkQueueWaitIdle(g_Queue)); // the previous frame draw has to be done
 				FrameRenderExport(&g_ExportWindowFrame, exportDrawData, clear);
-				exportDrawData->DisplaySize = old_width;
 				//creating the image and copying the frame data to the image
 				cimg_library::CImg<unsigned char> res(g_ExportImageWidth, g_ExportImageHeight, 1, 4);
 				check_vk_result(vkQueueWaitIdle(g_Queue));
+				exportDrawData->FramebufferScale = old_scale;
 				unsigned char* img = new unsigned char[g_ExportImageWidth * g_ExportImageHeight * 4];
 				VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_ExportWindowFrame.Backbuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_ExportImageWidth, g_ExportImageHeight, 1, img, g_ExportImageWidth* g_ExportImageHeight * 4 * sizeof(unsigned char));
 				//transforming the downloaded image to the correct image coordinates
@@ -12299,7 +12300,7 @@ int main(int, char**)
 				}
 				delete[] img;
 				
-				res.save_png("test.png");
+				res.save_png("4k.png");
 			}
 			--g_ExportCountDown;
 		}
