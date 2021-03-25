@@ -1404,7 +1404,7 @@ static void cleanupPcPlotImageView() {
 }
 
 static void cleanupExportWindow() {
-	ImGui_ImplVulkanH_DestroyFrame(g_Device, &g_ExportWindowFrame, g_Allocator);
+	//ImGui_ImplVulkanH_DestroyFrame(g_Device, &g_ExportWindowFrame, g_Allocator);
 	vkFreeMemory(g_Device, g_ExportWindowMemory, g_Allocator);
 	vkFreeCommandBuffers(g_Device, g_ExportWindowFrame.CommandPool, 1, &g_ExportWindowFrame.CommandBuffer);
 	vkDestroyCommandPool(g_Device, g_ExportWindowFrame.CommandPool, g_Allocator);
@@ -12269,10 +12269,13 @@ int main(int, char**)
 		if (g_ExportCountDown >= 0) {
 			if (g_ExportCountDown == 0) {
 				ImDrawData* exportDrawData = ImGui::GetCurrentContext()->Viewports[g_ExportViewportNumber]->DrawData;
+				ImVec2 old_width = exportDrawData->DisplaySize;
+				exportDrawData->DisplaySize = { (float)g_ExportImageWidth, (float)g_ExportImageHeight };
 				VkClearValue clear;
 				memcpy(clear.color.float32, &clear_color, 4 * sizeof(float));
 				check_vk_result(vkQueueWaitIdle(g_Queue)); // the previous frame draw has to be done
 				FrameRenderExport(&g_ExportWindowFrame, exportDrawData, clear);
+				exportDrawData->DisplaySize = old_width;
 				//creating the image and copying the frame data to the image
 				cimg_library::CImg<unsigned char> res(g_ExportImageWidth, g_ExportImageHeight, 1, 4);
 				check_vk_result(vkQueueWaitIdle(g_Queue));
@@ -12282,8 +12285,8 @@ int main(int, char**)
 				for (int x = 0; x < g_ExportImageWidth; ++x) {
 					for (int y = 0; y < g_ExportImageHeight; ++y) {
 						for (int c = 0; c < 4; ++c) {
-							int cc = (c + 1) % 4;
-							//if (c != 3) cc = c - 2;
+							int cc = c;
+							if (c != 3) cc = std::abs(c - 2);
 							int oldIndex = x * g_ExportImageHeight * 4 + y * 4 + c;
 							int newIndex = (cc) * g_ExportImageHeight * g_ExportImageWidth + x * g_ExportImageHeight + y;
 							assert(oldIndex < g_ExportImageWidth* g_ExportImageHeight * 4);
@@ -12297,7 +12300,6 @@ int main(int, char**)
 				delete[] img;
 				
 				res.save_png("test.png");
-				res.save_jpeg("test.jpeg");
 			}
 			--g_ExportCountDown;
 		}
