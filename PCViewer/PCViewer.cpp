@@ -142,10 +142,12 @@ static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
 static int                      g_SwapChainResizeWidth = 0;
 static int                      g_SwapChainResizeHeight = 0;
-static int						g_ExportImageWidth = 1280 * 4;
-static int						g_ExportImageHeight = 720 * 4;
-static int						g_ExportCountDown = 2;
+static float					g_ExportScale = 2.0f;
+static int						g_ExportImageWidth = 1280 * g_ExportScale;
+static int						g_ExportImageHeight = 720 * g_ExportScale;
+static int						g_ExportCountDown = -1;
 static int						g_ExportViewportNumber = 0;
+static char						g_ExportPath[200] = "export.png";
 
 template <typename T>
 std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b) {
@@ -6551,6 +6553,31 @@ void violinDrawListPlotAddDrawList(ViolinDrawlistPlot& drawPlot, DrawList& dl, u
 	}
 }
 
+void addExportMenu() {
+	if (ImGui::BeginMenu("Export Image")) {
+		ImGui::DragFloat("Size muliplicator", &g_ExportScale, .5f, .5f, 20);
+		ImVec2 size = ImGui::GetWindowViewport()->GetWorkSize();
+		ImGui::Text("Resulting size: {%d, %d}", (int)(size.x * g_ExportScale), (int)(size.y * g_ExportScale));
+		ImGui::InputText("Export file(including filepath)", g_ExportPath, 200);
+		if (ImGui::MenuItem("Export")) {
+			ImGuiID id = ImGui::GetWindowViewport()->ID;
+			for (int i = 0; i < ImGui::GetCurrentContext()->Viewports.Size; i++) {
+				if (ImGui::GetCurrentContext()->Viewports[i]->ID == id) {
+					g_ExportViewportNumber = i;
+					break;
+				}
+			}
+			if (g_ExportImageWidth != (int)size.x * g_ExportScale || g_ExportImageHeight != (int)size.y * g_ExportScale) {
+				g_ExportImageWidth = (int)size.x * g_ExportScale;
+				g_ExportImageHeight = (int)size.y * g_ExportScale;
+				recreateExportWindow();
+			}
+			g_ExportCountDown = 1;
+		}
+		ImGui::EndMenu();
+	}
+}
+
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
@@ -6604,6 +6631,8 @@ int main(int, char**)
     // Setup window
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     SDL_Window* window = SDL_CreateWindow("PCViewer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+	g_SwapChainResizeWidth = 1280;
+	g_SwapChainResizeHeight = 720;
 
 	// Setup Drag and drop callback
 	SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
@@ -7216,6 +7245,7 @@ int main(int, char**)
 				}
 				ImGui::EndMenu();
 			}
+			addExportMenu();
 			ImGui::EndMenuBar();
 		}
 		//popup for saving a new Attribute Setting
@@ -9842,6 +9872,7 @@ int main(int, char**)
 					//}
 					ImGui::EndMenu();
 				}
+				addExportMenu();
 				ImGui::EndMenuBar();
 			}
 
@@ -10061,6 +10092,7 @@ int main(int, char**)
 					ImGui::EndMenu();
 				}
 
+				addExportMenu();
 				ImGui::EndMenuBar();
 			}
 
@@ -10423,6 +10455,7 @@ int main(int, char**)
 
 					ImGui::EndMenu();
 				}
+				addExportMenu();
 
 				ImGui::EndMenuBar();
 			}
@@ -10708,6 +10741,7 @@ int main(int, char**)
 
 					ImGui::EndMenu();
 				}
+				addExportMenu();
 				ImGui::EndMenuBar();
 			}
 
@@ -11519,6 +11553,7 @@ int main(int, char**)
 
 					
 				}
+				addExportMenu();
 				ImGui::EndMenuBar();
 			}
 
@@ -12300,7 +12335,7 @@ int main(int, char**)
 				}
 				delete[] img;
 				
-				res.save_png("4k.png");
+				res.save_png(g_ExportPath);
 			}
 			--g_ExportCountDown;
 		}

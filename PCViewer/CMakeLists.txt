@@ -30,7 +30,7 @@ IF (WIN32)
 ENDIF ()
 
 # enable jpeg and png support for CImg library
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_jpeg -Dcimg_use_png")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_png")
 
 add_subdirectory("glm")
 
@@ -38,12 +38,11 @@ add_subdirectory("glm")
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(netCDF CONFIG REQUIRED)
-FIND_PACKAGE(JPEG REQUIRED)
 FIND_PACKAGE(PNG REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 message("include dirs: ${netCDF_INCLUDE_DIR}")
 
-include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${JPEG_INCLUDE_DIR}; ${PNG_INCLUDE_DIR})
+include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR})
 #include_directories(${Eigen3_DIR})
 
 file(GLOB pcviewer_SRC
@@ -64,7 +63,7 @@ file(GLOB cimg_SRC
 
 add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC})
 
-target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm netCDF::netcdf ${JPEG_LIBRARIES} ${PNG_LIBRARIES})# Eigen3::Eigen
+target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm netCDF::netcdf ${PNG_LIBRARIES})# Eigen3::Eigen
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS
