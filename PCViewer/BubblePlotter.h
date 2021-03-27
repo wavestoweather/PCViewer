@@ -42,7 +42,8 @@ public:
 	//activeAttributes: Buffer view for the bool buffer with the activations
 	//amtOfAttributes:	amount of attributes
 	//amtOfData:		amount of data
-	void setBubbleData(glm::uvec3& pos,std::vector<uint32_t> indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, std::vector<float*>& data, VkBuffer gData,VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData);
+	void setBubbleData(std::vector<uint32_t>& indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, std::vector<float*>& data, VkBuffer gData,VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData);
+	void updateRenderOrder();
 	void render();
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
 	void setPointScale(Scale scale);
@@ -189,6 +190,9 @@ private:
 	uint32_t amtOfIdxSphere;
 	std::vector<gCylinder> cylinders;
 	uint32_t amtOfIdxCylinder;
+
+	std::vector<uint32_t>* indices;
+	std::vector<float*>* data;
 
 	//mehtods
 	void setupRenderPipeline();
