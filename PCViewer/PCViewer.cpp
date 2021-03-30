@@ -34,6 +34,9 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
 #include "cimg/CImg.h"
+#ifdef Success
+#undef Success
+#endif
 #include "Color.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
