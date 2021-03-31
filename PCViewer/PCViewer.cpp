@@ -537,7 +537,6 @@ static VkPipelineLayout			g_PcPlotSplinePipelineLayout = VK_NULL_HANDLE;
 static VkPipeline				g_PcPlotSplinePipeline = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotSplinePipelineLayout_noClear = VK_NULL_HANDLE;
 static VkPipeline				g_PcPlotSplinePipeline_noClear = VK_NULL_HANDLE;
-static bool						g_RenderSplines = true;
 //variables for the histogramm pipeline
 static VkPipelineLayout			g_PcPlotHistoPipelineLayout = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotHistoPipelineAdditiveLayout = VK_NULL_HANDLE;
@@ -735,46 +734,68 @@ static bool* createDLForDrop = NULL;
 static bool pathDropped = false;
 static std::default_random_engine engine;
 static std::uniform_int_distribution<int> distribution(0, 35);
-static bool autoAlpha = true;
-static float alphaDrawLists = .5f;
-static Vec4 PcPlotBackCol = { 0,0,0,1 };
-static bool enableAxisLines = true;
-static bool enableZeroTick = true;
-static int axisTickAmount = 10;
-static int axisTickWidth = 5;
-static bool createDefaultOnLoad = true;
-static bool rescaleTableColumns = true;
 static std::vector<int> pcPlotSelectedDrawList;									//Contains the index of the drawlist that is currently selected
 
-//variables for the histogramm
-static float histogrammWidth = .1f;
-static bool drawHistogramm = false;
-static bool normaliseHistogramm = false;
-static bool adustHistogrammByActiveLines = true;
-static bool computeRatioPtsInDLvsIn1axbrushedParent = false;
-static bool histogrammDensity = true;
-static bool pcPlotDensity = false;
-static float densityRadius = .05f;
-static bool enableDensityMapping = true;
-static bool enableDensityGreyscale = false;
-static bool calculateMedians = true;
-static bool mapDensity = true;
-static int histogrammDrawListComparison = -1;
-static Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
-static Vec4 densityBackCol = { 0,0,0,1 };
-static float medianLineWidth = 1.0f;
-static bool enableBrushing = false;
+struct PCSettings {
+	bool autoAlpha = true;
+	float alphaDrawLists = .5f;
+	Vec4 PcPlotBackCol = { 0,0,0,1 };
+	bool enableAxisLines = true;
+	bool enableZeroTick = true;
+	int axisTickAmount = 10;
+	int axisTickWidth = 5;
+	bool createDefaultOnLoad = true;
+	bool rescaleTableColumns = true;
+
+	//variables for the histogramm
+	float histogrammWidth = .1f;
+	bool drawHistogramm = false;
+	bool normaliseHistogramm = false;
+	bool adustHistogrammByActiveLines = true;
+	bool computeRatioPtsInDLvsIn1axbrushedParent = false;
+	bool histogrammDensity = true;
+	bool pcPlotDensity = false;
+	float densityRadius = .05f;
+	bool enableDensityMapping = true;
+	bool enableDensityGreyscale = false;
+	bool calculateMedians = true;
+	bool mapDensity = true;
+	int histogrammDrawListComparison = -1;
+	Vec4 histogrammBackCol = { .2f,.2f,.2,1 };
+	Vec4 densityBackCol = { 0,0,0,1 };
+	float medianLineWidth = 1.0f;
+	bool enableBrushing = false;
+
+	//variables for brush templates
+	bool brushTemplatesEnabled = true;
+	bool showCsvTemplates = false;
+	bool updateBrushTemplates = false;
+	bool drawListForTemplateBrush = false;
+	int liveBrushThreshold = 1e4;
+	int lineBatchSize = 2e6;
+
+	//variables for global brushes
+	bool toggleGlobalBrushes = true;
+	int brushCombination = 0;				//How global brushes should be combined. 0->OR, 1->AND
+	float brushMuFactor = .001f;				//factor to add a mu to the bounds of a brush
+
+	//variables for fractions
+	int maxFractionDepth = 24;
+	int outlierRank = 11;					//min rank(amount ofdatapoints in a kd tree node) needed to not be an outlier node
+	int boundsBehaviour = 2;
+	int splitBehaviour = 1;
+	int maxRenderDepth = 13;
+	float fractionBoxWidth = BRUSHWIDTH;
+	int fractionBoxLineWidth = 3;
+	float multivariateStdDivThresh = 1.0f;
+
+	bool renderSplines = true;
+}static pcSettings;
 
 //variables for brush templates
-static bool brushTemplatesEnabled = true;
 static bool* brushTemplateAttrEnabled = NULL;
-static bool showCsvTemplates = false;
-static bool updateBrushTemplates = false;
 static int selectedTemplateBrush = -1;
-static bool drawListForTemplateBrush = false;
 static std::vector<TemplateBrush> templateBrushes;
-static int liveBrushThreshold = 1e4;
-static int lineBatchSize = 2e6;
 
 //variables for global brushes
 static int selectedGlobalBrush = -1;			//The global brushes are shown in a list where each brush is clickable to then be adaptable.
@@ -788,9 +809,6 @@ static std::set<int> brushDragIds;
 static int brushDragMode = 0;
 static unsigned int currentBrushId = 0;
 static bool* activeBrushAttributes = nullptr;
-static bool toggleGlobalBrushes = true;
-static int brushCombination = 0;				//How global brushes should be combined. 0->OR, 1->AND
-static float brushMuFactor = .001f;				//factor to add a mu to the bounds of a brush
 
 //variables for priority rendering
 static int priorityAttribute = -1;
@@ -800,14 +818,19 @@ static bool priorityReorder = false;
 static int priorityListIndex = 0;
 
 //variables for the 3d views
+struct View3dSettings {
+	bool enabled = false;
+	int activeAttribute = -1;
+}static view3dSettings;
 static View3d* view3d;
-static bool view3dAlwaysOnTop = false;
-static bool enable3dView = false;
-static std::string active3dAttribute;
-static bool enableBubbleWindow = false;
-static bool enableIsoSurfaceWindow = false;
-static bool enableBrushIsoSurfaceWindow = false;
-static bool coupleBubbleWindow = true;
+
+struct BubbleWindowSettings {
+	bool enabled = false;
+	bool coupleToBrushing = true;
+	int regularGridDim[3]{ 51,30,81 };
+	glm::uvec3 posIndices{ 1,0,2 };
+}static bubbleWindowSettings;
+
 static BubblePlotter* bubblePlotter;
 
 static SettingsManager* settingsManager;
@@ -818,21 +841,15 @@ static HistogramManager* histogramManager;
 
 static IsoSurfRenderer* isoSurfaceRenderer = nullptr;
 static BrushIsoSurfRenderer* brushIsoSurfaceRenderer = nullptr;
-static bool coupleIsoSurfaceRenderer = true;
-static bool coupleBrushIsoSurfaceRenderer = true;
-static bool isoSurfaceRegularGrid = true;
-static int isoSurfaceRegularGridDim[3]{ 51,30,81 };
-static glm::uvec3 posIndices{ 1,0,2 };
-
-//variables for fractions
-static int maxFractionDepth = 24;
-static int outlierRank = 11;					//min rank(amount ofdatapoints in a kd tree node) needed to not be an outlier node
-static int boundsBehaviour = 2;
-static int splitBehaviour = 1;
-static int maxRenderDepth = 13;
-static float fractionBoxWidth = BRUSHWIDTH;
-static int fractionBoxLineWidth = 3;
-static float multivariateStdDivThresh = 1.0f;
+struct IsoSettings {
+	bool enabled = false;
+	bool coupleIsoSurfaceRenderer = true;
+	bool coupleBrushIsoSurfaceRenderer = true;
+	bool isoSurfaceRegularGrid = true;
+	int isoSurfaceRegularGridDim[3]{ 51,30,81 };
+	glm::uvec3 posIndices{ 1,0,2 };
+}static brushIsoSurfSettings;
+static IsoSettings isoSurfSettings;
 
 //variables for animation
 static float animationDuration = 2.0f;		//time for every active brush to show in seconds
@@ -849,52 +866,50 @@ typedef struct {
 } AdaptViolinSidesAutoStruct;
 
 //variables for violin plots
-static int violinPlotHeight = 1000;//550;
-static int violinPlotXSpacing = 15;
-static int violinPlotAttrStacking = 0;
-static bool enableAttributeViolinPlots = false;
-static bool enableDrawlistViolinPlots = false;
-static float violinPlotThickness = 1;
-static float violinPlotBinsSize = 150;
-static ImVec4 violinBackgroundColor = { 1,1,1,1 };
-static bool coupleViolinPlots = true;
-static bool showViolinPlotsMinMax = true;
-static bool violinPlotDLSendToIso = true;
-static bool violinPlotDLInsertCustomColors = true;
-static bool violinPlotAttrInsertCustomColors = true;
-static bool violinPlotAttrReplaceNonStop = false;
-static bool violinPlotAttrConsiderBlendingOrder = true;
-static bool violinPlotDLConsiderBlendingOrder = true;
-static bool violinPlotDLReplaceNonStop = false;
-static bool violinPlotAttrReverseColorPallette = false;
-static bool violinPlotDLReverseColorPallette = false;
+struct ViolinSettings {
+	int violinPlotHeight = 1000;//550;
+	int violinPlotXSpacing = 15;
+	int violinPlotAttrStacking = 0;
+	bool enabled = false;
+	float violinPlotThickness = 1;
+	float violinPlotBinsSize = 150;
+	ImVec4 violinBackgroundColor = { 1,1,1,1 };
+	bool coupleViolinPlots = true;
+	bool showViolinPlotsMinMax = true;
+	bool violinPlotDLSendToIso = true;
+	bool violinPlotDLInsertCustomColors = true;
+	bool violinPlotAttrInsertCustomColors = true;
+	bool violinPlotAttrReplaceNonStop = false;
+	bool violinPlotAttrConsiderBlendingOrder = true;
+	bool violinPlotDLConsiderBlendingOrder = true;
+	bool violinPlotDLReplaceNonStop = false;
+	bool violinPlotAttrReverseColorPallette = false;
+	bool violinPlotDLReverseColorPallette = false;
+	int autoColorAssingFill = 4;
+	int autoColorAssingLine = 4;
+
+	bool yScaleToCurrenMax = false;
+	bool violinPlotOverlayLines = true;
+	bool renderOrderBasedOnFirstAtt = true;
+	bool renderOrderBasedOnFirstDL = true;
+	bool renderOrderAttConsider = true;
+	bool renderOrderDLConsider = true;
+	bool renderOrderAttConsiderNonStop = true;
+	bool renderOrderDLConsiderNonStop = true;
+
+	bool renderOrderDLReverse = false;
+	bool logScaleDLGlobal = false;
+	ViolinYScale violinYScale = ViolinYScaleStandard;
+}static violinPlotAttributeSettings;
+static ViolinSettings violinPlotDrawlistSettings;
 
 static std::vector<int> violinPlotDLIdxInListForHistComparison;
 static bool violinPlotDLUseRenderedBinsForHistComp = false;
 static std::string ttempStr = "abc";
 
-static int violinPlotAttrAutoColorAssignFill = 4;
-static int violinPlotDLAutoColorAssignFill = 4;
-static int violinPlotAttrAutoColorAssignLine = 4;
-static int violinPlotDLAutoColorAssignLine = 4;
-
-static bool yScaleToCurrenMax = false;
-static bool violinPlotOverlayLines = true;
-static bool renderOrderBasedOnFirstAtt = true;
-static bool renderOrderBasedOnFirstDL = true;
-static bool renderOrderAttConsider = true;
-static bool renderOrderDLConsider = true;
-static bool renderOrderAttConsiderNonStop = true;
-static bool renderOrderDLConsiderNonStop = true;
-
-static bool renderOrderDLReverse = false;
-static bool logScaleDLGlobal = false;
-static ViolinYScale violinYScale = ViolinYScaleStandard;
 std::vector<ViolinPlot> violinAttributePlots;
 std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
-
-
 
 //method declarations
 template <typename T,typename T2>
@@ -5724,7 +5739,7 @@ static void uploadDensityUiformBuffer() {
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 }
 
-static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::string width, std::string depth, std::string height) {
+static void uploadDrawListTo3dView(DrawList& dl, int attribute, std::string width, std::string depth, std::string height) {
 	int w = SpacialData::rlatSize;
 	int d = SpacialData::rlonSize;
 	int h = SpacialData::altitudeSize + 22;	//the top 22 layer of the dataset are twice the size of the rest
@@ -5737,15 +5752,7 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 		}
 	}
 
-	Attribute a;
-	int attributeIndex = 0;
-	for (Attribute& at : pcAttributes) {
-		if (at.name == attribute) {
-			a = at;
-			break;
-		}
-		attributeIndex++;
-	}
+	Attribute a = pcAttributes[attribute];
 	float* dat = new float[w * d * h * 4];
 	memset(dat, 0, w * d * h * 4 * sizeof(float));
 	for (int i : dl.indices) {
@@ -5758,7 +5765,7 @@ static void uploadDrawListTo3dView(DrawList& dl, std::string attribute, std::str
 		assert(y >= 0);
 		assert(z >= 0);
 		Vec4 col = dl.color;
-		col.w = (parent->data[i][attributeIndex] - a.min) / (a.max - a.min);
+		col.w = (parent->data[i][attribute] - a.min) / (a.max - a.min);
 #ifdef _DEBUG
 		//std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
 #endif
@@ -6585,6 +6592,63 @@ void addExportMenu() {
 	}
 }
 
+template<typename T>
+void addSaveSettingsMenu(T* settingStruct, const std::string& settingName, const std::string& settingType) {
+	if (ImGui::BeginMenu(("Load " + settingName).c_str())) {
+		if (MenuItem("Default")) { 
+			*settingStruct = T; 
+		}
+		for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType(settingType)) {
+			if (ImGui::MenuItem(savedStyle->id.c_str())) {
+				memcpy(settingStruct, savedStyle->data, sizeof(T));
+			}
+		}
+		ImGui::EndMenu();
+		}
+	if (ImGui::BeginMenu(("Save/Remove " + settingName).c_str())) {
+		static char styleName[200]{};
+		ImGui::InputText((settingName + "name").c_str(), styleName, 200);
+		if (ImGui::MenuItem("Save")) {
+			SettingsManager::Setting s{};
+			s.id = styleName;
+			s.type = settingType;
+			s.byteLength = sizeof(T);
+			s.data = settingsStruct;
+			settingsManager->addSetting(s);
+		}
+		ImGui::Separator();
+		ImGui::Text("Click to delete:");
+		std::string del;
+		for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType(settingType)) {
+			if (ImGui::MenuItem(savedStyle->id.c_str())) {
+				del = savedStyle->id;
+			}
+		}
+		if (del.size()) settingsManager->deleteSetting(del);
+		ImGui::EndMenu();
+	}
+	if (ImGui::BeginMenu(("Set Default " + settingName).c_str())) {
+		int selection = -1;
+		if (settingsManager->getSetting(("default" + settingName).c_str()).id != "settingnotfound")
+			selection = *((int*)settingsManager->getSetting(("default" + settingName).c_str()).data);
+		if (ImGui::MenuItem("Default", "", selection == -1)) settingsManager->deleteSetting("defaultstyle");
+		int c = 0;
+		for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType(settingType)) {
+
+			if (ImGui::MenuItem(savedStyle->id.c_str(), "", selection == c)) {
+				SettingsManager::Setting s{};
+				s.id = "default" + settingName;
+				s.data = &c;
+				s.byteLength = sizeof(c);
+				s.type = "default" + settingType;
+				settingsManager->addSetting(s);
+			}
+			c++;
+		}
+		ImGui::EndMenu();
+	}
+}
+
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
@@ -6595,7 +6659,7 @@ int main(int, char**)
 
 	//test of multivariate gauss calculations
 	//float determinant;
-	std::vector<std::vector<double>> X{ {10,0,-3,10}, {-2,-4,1,.5},{3,0,2,7},{-3,5,9,0} };
+	//std::vector<std::vector<double>> X{ {10,0,-3,10}, {-2,-4,1,.5},{3,0,2,7},{-3,5,9,0} };
 	//std::vector<std::vector<double>> S(X[0].size(),std::vector<double>(X[0].size())), I(X[0].size(), std::vector<double>(X[0].size())), D(X[0].size(), std::vector<double>(X[0].size()));
 	//std::vector<double> mean(X[0].size());
 	//MultivariateGauss::compute_average_vector(X, mean);
@@ -7068,7 +7132,7 @@ int main(int, char**)
 					ImGui::CloseCurrentPopup();
 					for (std::string& s : droppedPaths) {
 						bool success = openDataset(s.c_str());
-						if (success && createDefaultOnLoad) {
+						if (success && pcSettings.createDefaultOnLoad) {
 							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
 							updateActiveIndices(g_PcPlotDrawLists.back());
 							pcPlotRender = true;
@@ -7118,7 +7182,7 @@ int main(int, char**)
 						settingsManager->addSetting(s);
 					}
 					ImGui::Separator();
-					ImGui::Text("Click to delete");
+					ImGui::Text("Click to delete:");
 					std::string del;
 					for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType("style")) {
 						if (ImGui::MenuItem(savedStyle->id.c_str())) {
@@ -7228,56 +7292,56 @@ int main(int, char**)
 			}
 
 			if (ImGui::BeginMenu("Global brush")) {
-				if (ImGui::MenuItem("Activate Global Brushing", "", &toggleGlobalBrushes) && !toggleGlobalBrushes) {
+				if (ImGui::MenuItem("Activate Global Brushing", "", &pcSettings.toggleGlobalBrushes) && !pcSettings.toggleGlobalBrushes) {
 					pcPlotRender = updateAllActiveIndices();
 				}
 
 				if (ImGui::BeginMenu("Brush Combination")) {
 					static char* const combinations[] = { "OR","AND" };
-					if (ImGui::Combo("brushCombination", &brushCombination, combinations, sizeof(combinations) / sizeof(*combinations))) {
+					if (ImGui::Combo("brushCombination", &pcSettings.brushCombination, combinations, sizeof(combinations) / sizeof(*combinations))) {
 						pcPlotRender = updateAllActiveIndices();
 					}
 
 					ImGui::EndMenu();
 				}
-				ImGui::InputFloat("Mu add factor", &brushMuFactor, 0.000001, 0.001,10);
+				ImGui::InputFloat("Mu add factor", &pcSettings.brushMuFactor, 0.000001, 0.001,10);
 
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Fractioning")) {
-				if (ImGui::InputInt("Max fraction depth", &maxFractionDepth, 1, 1)) {
-					if (maxFractionDepth < 1) maxFractionDepth = 1;
-					if (maxFractionDepth > 30) maxFractionDepth = 30;
+				if (ImGui::InputInt("Max fraction depth", &pcSettings.maxFractionDepth, 1, 1)) {
+					if (pcSettings.maxFractionDepth < 1) pcSettings.maxFractionDepth = 1;
+					if (pcSettings.maxFractionDepth > 30)pcSettings.maxFractionDepth = 30;
 				}
 
-				if (ImGui::InputInt("Outlier rank", &outlierRank, 1, 1)) {
-					if (outlierRank < 1) outlierRank = 1;
+				if (ImGui::InputInt("Outlier rank", &pcSettings.outlierRank, 1, 1)) {
+					if (pcSettings.outlierRank < 1) pcSettings.outlierRank = 1;
 				}
 
 				static char* boundsTypes[] = { "No adjustment","Pull in outside", "Pull in both sides" };
-				if (ImGui::BeginCombo("Bounds behaviour", boundsTypes[boundsBehaviour])) {
+				if (ImGui::BeginCombo("Bounds behaviour", boundsTypes[pcSettings.boundsBehaviour])) {
 					for (int i = 0; i < 3; i++) {
-						if (ImGui::MenuItem(boundsTypes[i])) boundsBehaviour = i;
+						if (ImGui::MenuItem(boundsTypes[i])) pcSettings.boundsBehaviour = i;
 					}
 					ImGui::EndCombo();
 				}
 
 				static char* splitTypes[] = { "Split half","SAH" };
-				if (ImGui::BeginCombo("Split behaviour", splitTypes[splitBehaviour])) {
+				if (ImGui::BeginCombo("Split behaviour", splitTypes[pcSettings.splitBehaviour])) {
 					for (int i = 0; i < 2; ++i) {
-						if (ImGui::MenuItem(splitTypes[i])) splitBehaviour = i;
+						if (ImGui::MenuItem(splitTypes[i])) pcSettings.splitBehaviour = i;
 					}
 					ImGui::EndCombo();
 				}
 
-				ImGui::DragFloat("Fractionbox width", &fractionBoxWidth, 1, 0, 100);
+				ImGui::DragFloat("Fractionbox width", &pcSettings.fractionBoxWidth, 1, 0, 100);
 
-				if (ImGui::InputInt("Fractionbox linewidth", &fractionBoxLineWidth, 1, 1)) {
-					if (fractionBoxLineWidth < 1) maxFractionDepth = 1;
-					if (fractionBoxLineWidth > 30) maxFractionDepth = 30;
+				if (ImGui::InputInt("Fractionbox linewidth", &pcSettings.fractionBoxLineWidth, 1, 1)) {
+					if (pcSettings.fractionBoxLineWidth < 1) pcSettings.maxFractionDepth = 1;
+					if (pcSettings.fractionBoxLineWidth > 30) pcSettings.maxFractionDepth = 30;
 				}
 				
-				ImGui::SliderFloat("Multivariate std dev thresh", &multivariateStdDivThresh, .01f, 5);
+				ImGui::SliderFloat("Multivariate std dev thresh", &pcSettings.multivariateStdDivThresh, .01f, 5);
 				
 				if (ImGui::IsItemDeactivatedAfterEdit()) {
 					pcPlotRender = updateAllActiveIndices();
@@ -7293,16 +7357,16 @@ int main(int, char**)
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Workbenches")) {
-				ImGui::MenuItem("Bubbleplot workbench", "", &enableBubbleWindow);
-				ImGui::MenuItem("3d View", "", &enable3dView);
+				ImGui::MenuItem("Bubbleplot workbench", "", &bubbleWindowSettings.enabled);
+				ImGui::MenuItem("3d View", "", &view3dSettings.enabled);
 				if(ImGui::BeginMenu("Iso surface workbenches")) {
-					ImGui::MenuItem("Iso surface workbench", "", &enableIsoSurfaceWindow);
-					ImGui::MenuItem("Direct iso surface workbench", "", &enableBrushIsoSurfaceWindow);
+					ImGui::MenuItem("Iso surface workbench", "", &isoSurfSettings.enabled);
+					ImGui::MenuItem("Direct iso surface workbench", "", &brushIsoSurfSettings.enabled);
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Violinplot workbenches")) {
-					ImGui::MenuItem("Violin attribute major", "", &enableAttributeViolinPlots);
-					ImGui::MenuItem("Violin drawlist major", "", &enableDrawlistViolinPlots);
+					ImGui::MenuItem("Violin attribute major", "", &violinPlotAttributeSettings.enabled);
+					ImGui::MenuItem("Violin drawlist major", "", &violinPlotDrawlistSettings.enabled);
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenu();
@@ -7452,8 +7516,8 @@ int main(int, char**)
 #ifdef RENDER3D
 		//testwindow for the 3d renderer
 		ImGui::SetNextWindowSize(ImVec2(800, 800));
-		if (enable3dView) {
-			ImGui::Begin("3dview", &enable3dView, ImGuiWindowFlags_NoSavedSettings);
+		if (view3dSettings.enabled) {
+			ImGui::Begin("3dview", &view3dSettings.enabled, ImGuiWindowFlags_NoSavedSettings);
 			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(ImGui::GetWindowContentRegionWidth(), ImGui::GetWindowContentRegionMax().y), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 
 			//if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseReleased[0]);
@@ -7632,7 +7696,7 @@ int main(int, char**)
 			}
 
 			ImVec2 picSize(ImGui::GetWindowWidth() - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
-			if (toggleGlobalBrushes) {
+			if (pcSettings.toggleGlobalBrushes) {
 				//drawing checkboxes for activating brush templates
 				ImGui::Separator();
 				ImGui::Text("Brush templates (Check attributes to create subspace for which brush templates should be shown)");
@@ -7649,12 +7713,12 @@ int main(int, char**)
 					name = pcAttributes[i].name + name;
 					if (c1 != 0)
 						ImGui::SameLine(offset - c1 * (buttonSize.x / amtOfLabels));
-					if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i]) || updateBrushTemplates) {
-						updateBrushTemplates = false;
+					if (ImGui::Checkbox(name.c_str(), &brushTemplateAttrEnabled[i]) || pcSettings.updateBrushTemplates) {
+						pcSettings.updateBrushTemplates = false;
 						if (selectedTemplateBrush != -1) {
-							if (drawListForTemplateBrush) {
+							if (pcSettings.drawListForTemplateBrush) {
 								removePcPlotDrawList(g_PcPlotDrawLists.back());
-								drawListForTemplateBrush = false;
+								pcSettings.drawListForTemplateBrush = false;
 							}
 							if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 							globalBrushes.pop_back();
@@ -7698,7 +7762,7 @@ int main(int, char**)
 									}
 								}
 							}
-							else if (showCsvTemplates && !ds.oneData) {
+							else if (pcSettings.showCsvTemplates && !ds.oneData) {
 								auto tl = ++ds.drawLists.begin();
 								for (; tl != ds.drawLists.end(); ++tl) {
 									TemplateBrush t = {};
@@ -7720,8 +7784,8 @@ int main(int, char**)
 					c1++;
 					offset += gap;
 				}
-				if (ImGui::Checkbox("Show .idxf brush templates", &showCsvTemplates)) {
-					updateBrushTemplates = true;
+				if (ImGui::Checkbox("Show .idxf brush templates", &pcSettings.showCsvTemplates)) {
+					pcSettings.updateBrushTemplates = true;
 				}
 
 				ImGui::SameLine(250);
@@ -7764,7 +7828,7 @@ int main(int, char**)
 						}
 						(activate) ? brushTemplateAttrEnabled[i] = true :brushTemplateAttrEnabled[i] = false;
 					}
-					updateBrushTemplates = true;
+					pcSettings.updateBrushTemplates = true;
 				}
 
 				//drawing the list for brush templates
@@ -7777,7 +7841,7 @@ int main(int, char**)
 						pcPlotSelectedDrawList.clear();
 						if (selectedTemplateBrush != i) {
 							if (selectedTemplateBrush != -1) {
-								if (drawListForTemplateBrush) {
+								if (pcSettings.drawListForTemplateBrush) {
 									removePcPlotDrawList(g_PcPlotDrawLists.back());
 									drawListForTemplateBrush = false;
 								}
@@ -7802,24 +7866,24 @@ int main(int, char**)
 							preview.fractureDepth = 0;
 							globalBrushes.push_back(preview);
 							if (std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [preview](DrawList& dl) {return dl.name == preview.parent->name; }) == g_PcPlotDrawLists.end()) {
-								drawListForTemplateBrush = true;
+								pcSettings.drawListForTemplateBrush = true;
 								createPcPlotDrawList(preview.parentDataset->drawLists.front(), *templateBrushes[i].parentDataSet, preview.parent->name.c_str());
 							}
 							pcPlotRender = updateAllActiveIndices();
-							if (active3dAttribute.size())
-								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), active3dAttribute, "a", "b", "c");
+							if (view3dSettings.activeAttribute >= 0)
+								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), view3dSettings.activeAttribute, "a", "b", "c");
 						}
 						else {
 							selectedTemplateBrush = -1;
-							if (drawListForTemplateBrush) {
+							if (pcSettings.drawListForTemplateBrush) {
 								removePcPlotDrawList(g_PcPlotDrawLists.back());
-								drawListForTemplateBrush = false;
+								pcSettings.drawListForTemplateBrush = false;
 							}
 							if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 							globalBrushes.pop_back();
 							pcPlotRender = updateAllActiveIndices();
-							if (active3dAttribute.size())
-								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), active3dAttribute, "a", "b", "c");
+							if (view3dSettings.activeAttribute >= 0)
+								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), view3dSettings.activeAttribute, "a", "b", "c");
 						}
 					}
 					if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
@@ -7862,10 +7926,10 @@ int main(int, char**)
 					if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
 						if (globalBrushes[i].kdTree) {
 							if (ImGui::BeginCombo("Fracture depth", std::to_string(globalBrushes[i].fractureDepth).c_str())) {
-								for (int j = 0; j < maxFractionDepth; j++) {
+								for (int j = 0; j < pcSettings.maxFractionDepth; j++) {
 									if (ImGui::Selectable(std::to_string(j).c_str())) {
 										globalBrushes[i].fractureDepth = j;
-										globalBrushes[i].fractions = globalBrushes[i].kdTree->getBounds(j, outlierRank);
+										globalBrushes[i].fractions = globalBrushes[i].kdTree->getBounds(j, pcSettings.outlierRank);
 										globalBrushes[i].multivariates = globalBrushes[i].kdTree->getMultivariates(j);
 										pcPlotRender = updateAllActiveIndices();
 									}
@@ -7891,9 +7955,9 @@ int main(int, char**)
 								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
 								if (globalBrushes[i].edited)
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour) pcSettings.boundsBehaviour, (KdTree::SplitBehaviour)pcSettings.splitBehaviour);
 								else
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour) pcSettings.boundsBehaviour, (KdTree::SplitBehaviour) pcSettings.splitBehaviour);
 #ifdef _DEBUG
 								std::cout << "Kd tree done." << std::endl;
 #endif
@@ -7920,9 +7984,9 @@ int main(int, char**)
 								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
 								if(globalBrushes[i].edited)
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour)pcSettings.boundsBehaviour, (KdTree::SplitBehaviour)pcSettings.splitBehaviour);
 								else
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, maxFractionDepth, (KdTree::BoundsBehaviour) boundsBehaviour, (KdTree::SplitBehaviour) splitBehaviour);
+									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour)pcSettings.boundsBehaviour, (KdTree::SplitBehaviour)pcSettings.splitBehaviour);
 #ifdef _DEBUG
 								std::cout << "Kd tree done." << std::endl;
 #endif
@@ -7962,9 +8026,9 @@ int main(int, char**)
 							if (popEnd) {
 								if (globalBrushes.size() == 2) {
 									globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
-									if (drawListForTemplateBrush) {
+									if (pcSettings.drawListForTemplateBrush) {
 										removePcPlotDrawList(g_PcPlotDrawLists.back());
-										drawListForTemplateBrush = false;
+										pcSettings.drawListForTemplateBrush = false;
 									}
 									if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 									globalBrushes.pop_back();
@@ -7972,9 +8036,9 @@ int main(int, char**)
 								else {
 									globalBrushes[i] = globalBrushes[globalBrushes.size() - 2];
 									globalBrushes[globalBrushes.size() - 2] = globalBrushes[globalBrushes.size() - 1];
-									if (drawListForTemplateBrush) {
+									if (pcSettings.drawListForTemplateBrush) {
 										removePcPlotDrawList(g_PcPlotDrawLists.back());
-										drawListForTemplateBrush = false;
+										pcSettings.drawListForTemplateBrush = false;
 									}
 									if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 									globalBrushes.pop_back();
@@ -7982,9 +8046,9 @@ int main(int, char**)
 							}
 							else {
 								globalBrushes[i] = globalBrushes[globalBrushes.size() - 1];
-								if (drawListForTemplateBrush) {
+								if (pcSettings.drawListForTemplateBrush) {
 									removePcPlotDrawList(g_PcPlotDrawLists.back());
-									drawListForTemplateBrush = false;
+									pcSettings.drawListForTemplateBrush = false;
 								}
 								if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 								globalBrushes.pop_back();
@@ -8017,9 +8081,9 @@ int main(int, char**)
 				}
 
 				if (popEnd) {
-					if (drawListForTemplateBrush) {
+					if (pcSettings.drawListForTemplateBrush) {
 						removePcPlotDrawList(g_PcPlotDrawLists.back());
-						drawListForTemplateBrush = false;
+						pcSettings.drawListForTemplateBrush = false;
 					}
 					if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 					globalBrushes.pop_back();
@@ -8368,28 +8432,28 @@ int main(int, char**)
 
 				ImGui::EndChild();
 
-				gap = (picSize.x - ((drawHistogramm) ? histogrammWidth / 2.0f * picSize.x : 0)) - 4;
+				gap = (picSize.x - ((pcSettings.drawHistogramm) ? pcSettings.histogrammWidth / 2.0f * picSize.x : 0)) - 4;
 				//drawing axis lines
-				if (enableAxisLines) {
+				if (pcSettings.enableAxisLines) {
 					for (int i = 0; i < amtOfLabels; i++) {
-						float x = picPos.x + i * gap / (amtOfLabels - 1) + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+						float x = picPos.x + i * gap / (amtOfLabels - 1) + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 						ImVec2 a(x, picPos.y);
 						ImVec2 b(x, picPos.y + picSize.y - 1);
 						ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
 						//drawing axis sections
 						int attrib = attributeOfPlace(i);
-						if (axisTickAmount > 0 && pcAttributes[attrib].categories.empty()) {
+						if (pcSettings.axisTickAmount > 0 && pcAttributes[attrib].categories.empty()) {
 							float lineHeight = ImGui::GetTextLineHeight() / 2;
 							ImVec2 oldCoursor = ImGui::GetCursorPos();
-							int ticksAmount = axisTickAmount;
-							if (enableZeroTick) {
+							int ticksAmount = pcSettings.axisTickAmount;
+							if (pcSettings.enableZeroTick) {
 								--ticksAmount;
 								Vec2 bounds{ std::min(pcAttributes[attrib].min, pcAttributes[attrib].max), std::max(pcAttributes[attrib].min, pcAttributes[attrib].max) };
 								if (bounds.u <= 0 && bounds.v > 0) {	//only draw the 0 tick if 0 is in the range
 									float y = picPos.y + picSize.y - picSize.y * (-pcAttributes[attrib].min / (pcAttributes[attrib].max - pcAttributes[attrib].min)) - 1;
 									a = ImVec2(x, y);
-									if (i == amtOfLabels - 1) b = ImVec2(x - axisTickWidth, y);
-									else b = ImVec2(x + axisTickWidth, y);
+									if (i == amtOfLabels - 1) b = ImVec2(x - pcSettings.axisTickWidth, y);
+									else b = ImVec2(x + pcSettings.axisTickWidth, y);
 									ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
 									b.y -= lineHeight;
 									if (i == amtOfLabels - 1) b.x -= ImGui::CalcTextSize("0").x;
@@ -8405,7 +8469,7 @@ int main(int, char**)
 								y *= picSize.y;
 								y = picPos.y + picSize.y - y - 1;
 								a = ImVec2(x, y);
-								b = (i == amtOfLabels - 1) ? ImVec2(x - axisTickWidth, y): ImVec2(x + axisTickWidth, y);
+								b = (i == amtOfLabels - 1) ? ImVec2(x - pcSettings.axisTickWidth, y): ImVec2(x + pcSettings.axisTickWidth, y);
 								ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
 								static char str[20];
 								sprintf(str, "%g", yval);
@@ -8421,15 +8485,15 @@ int main(int, char**)
 				}
 
 				//drawing pie chart for the first drawlist
-				if (computeRatioPtsInDLvsIn1axbrushedParent && drawHistogramm) {
+				if (pcSettings.computeRatioPtsInDLvsIn1axbrushedParent && pcSettings.drawHistogramm) {
 					// Count, how many histograms are drawn
 					int nrActiveHists = 0;
 					for (auto &currdl : g_PcPlotDrawLists)
 					{
 						nrActiveHists += int(currdl.showHistogramm);
 					}
-					float xStartOffset = -histogrammWidth / 4.0 * picSize.x;
-					float xOffsetPerAttr = (histogrammWidth * picSize.x) / (2 * nrActiveHists);
+					float xStartOffset = -pcSettings.histogrammWidth / 4.0 * picSize.x;
+					float xOffsetPerAttr = (pcSettings.histogrammWidth * picSize.x) / (2 * nrActiveHists);
 					float xoffset = 0;
 					xStartOffset +=  0.5 * xOffsetPerAttr;
 					float pieBorder = 3;
@@ -8448,7 +8512,7 @@ int main(int, char**)
 
 
 
-							float x = picPos.x + iActAttr * gap / (amtOfLabels - 1) + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+							float x = picPos.x + iActAttr * gap / (amtOfLabels - 1) + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 							x += xStartOffset + xoffset;
 
 							// x is the center of the axis. Now, the hist goes to the left and right, no matter how many are drawn. So, calculate the min_x, max_x, h*2 +1 axes, every second is the middle of a histogrm
@@ -8526,12 +8590,12 @@ int main(int, char**)
 						for (int i = 0; i < globalBrush.fractions.size(); i++) {
 							for (int j = 0; j < globalBrush.fractions[i].size(); j++) {
 								int axis = globalBrush.attributes[j];
-								float x = gap * placeOfInd(axis) / (amtOfLabels - 1) + picPos.x - fractionBoxWidth / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
-								float width = fractionBoxWidth;
+								float x = gap * placeOfInd(axis) / (amtOfLabels - 1) + picPos.x - pcSettings.fractionBoxWidth / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
+								float width = pcSettings.fractionBoxWidth;
 								float y = ((globalBrush.fractions[i][j].second - pcAttributes[axis].max) / (pcAttributes[axis].min - pcAttributes[axis].max)) * picSize.y + picPos.y;
 								float height = (globalBrush.fractions[i][j].second - globalBrush.fractions[i][j].first) / (pcAttributes[axis].max - pcAttributes[axis].min) * picSize.y;
-								if (i < pow(2, maxRenderDepth))
-									ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(0, 230, 100, 255), 2, ImDrawCornerFlags_All, fractionBoxLineWidth);
+								if (i < pow(2, pcSettings.maxRenderDepth))
+									ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), IM_COL32(0, 230, 100, 255), 2, ImDrawCornerFlags_All, pcSettings.fractionBoxLineWidth);
 							}
 						}
 					}
@@ -8541,7 +8605,7 @@ int main(int, char**)
 								continue;
 
 							ImVec2 mousePos = ImGui::GetIO().MousePos;
-							float x = gap * placeOfInd(brush.first) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+							float x = gap * placeOfInd(brush.first) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 							float width = BRUSHWIDTH;
 
 							int del = -1;
@@ -8690,7 +8754,7 @@ int main(int, char**)
 						if (!pcAttributeEnabled[brush.first] || !brush.second.size())
 							continue;
 
-						float x = gap * placeOfInd(brush.first) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+						float x = gap * placeOfInd(brush.first) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 						float y = ((brush.second[0].second.second - pcAttributes[brush.first].max) / (pcAttributes[brush.first].min - pcAttributes[brush.first].max)) * picSize.y + picPos.y;
 						float width = BRUSHWIDTH;
 						float height = (brush.second[0].second.second - brush.second[0].second.first) / (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * picSize.y;
@@ -8721,7 +8785,7 @@ int main(int, char**)
 					bool brushHover = false;
 
 					ImVec2 mousePos = ImGui::GetIO().MousePos;
-					float x = gap * placeOfInd(i) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+					float x = gap * placeOfInd(i) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 					//drawing the brushes
 					for (Brush& b : dl->brushes[i]) {
 						float y = ((b.minMax.second - pcAttributes[i].max) / (pcAttributes[i].min - pcAttributes[i].max)) * picSize.y + picPos.y;
@@ -8859,7 +8923,7 @@ int main(int, char**)
 					bool brushHover = false;
 
 					ImVec2 mousePos = ImGui::GetIO().MousePos;
-					float x = gap * placeOfInd(i) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((drawHistogramm) ? (histogrammWidth / 4.0 * picSize.x) : 0);
+					float x = gap * placeOfInd(i) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 					bool axisHover = mousePos.x > x&& mousePos.x < x + BRUSHWIDTH && mousePos.y > picPos.y&& mousePos.y < picPos.y + picSize.y;
 
 					if (axisHover) {
@@ -8877,10 +8941,10 @@ int main(int, char**)
 			}
 
 			// reorder Histograms in ViolinPlots if pcPlotRender==true and if requested.
-			if (pcPlotRender && renderOrderDLConsider && renderOrderDLConsiderNonStop && enableDrawlistViolinPlots) {
+			if (pcPlotRender && violinPlotDrawlistSettings.renderOrderDLConsider && violinPlotDrawlistSettings.renderOrderDLConsiderNonStop && violinPlotDrawlistSettings.enabled) {
 				sortAllHistograms(std::string("dl"));
 			}
-			if (pcPlotRender && renderOrderAttConsider && renderOrderAttConsiderNonStop && enableAttributeViolinPlots) {
+			if (pcPlotRender && violinPlotAttributeSettings.renderOrderAttConsider && violinPlotAttributeSettings.renderOrderAttConsiderNonStop && violinPlotAttributeSettings.enabled) {
 				sortAllHistograms(std::string("attr"));
 			}
 
@@ -8893,60 +8957,60 @@ int main(int, char**)
 
 			ImGui::Text("Histogram Settings:");
 			ImGui::Columns(2);
-			if (ImGui::Checkbox("Draw Histogram", &drawHistogramm)) {
+			if (ImGui::Checkbox("Draw Histogram", &pcSettings.drawHistogramm)) {
 				pcPlotRender = true;
-				if (computeRatioPtsInDLvsIn1axbrushedParent)
+				if (pcSettings.computeRatioPtsInDLvsIn1axbrushedParent)
 				{
 					pcPlotRender = updateAllActiveIndices();
 				}
 			}
 			ImGui::NextColumn();
-			if (ImGui::Checkbox("Draw Pie-Ratio", &computeRatioPtsInDLvsIn1axbrushedParent)) {
-				if (drawHistogramm) {
+			if (ImGui::Checkbox("Draw Pie-Ratio", &pcSettings.computeRatioPtsInDLvsIn1axbrushedParent)) {
+				if (pcSettings.drawHistogramm) {
 					pcPlotRender = updateAllActiveIndices();
 				}
 			}
 
 
 			ImGui::Columns(1);
-			if (ImGui::SliderFloat("Histogram Width", &histogrammWidth, 0, .5) && drawHistogramm) {
-				if (histogrammDrawListComparison != -1) {
+			if (ImGui::SliderFloat("Histogram Width", &pcSettings.histogrammWidth, 0, .5) && pcSettings.drawHistogramm) {
+				if (pcSettings.histogrammDrawListComparison != -1) {
 					uploadDensityUiformBuffer();
 				}
 				pcPlotRender = true;
 			}
-			if (ImGui::ColorEdit4("Histogram Background", &histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && drawHistogramm) {
+			if (ImGui::ColorEdit4("Histogram Background", &pcSettings.histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && pcSettings.drawHistogramm) {
 				pcPlotRender = true;
 			}
-			if (ImGui::Checkbox("Show Density", &histogrammDensity) && drawHistogramm) {
+			if (ImGui::Checkbox("Show Density", &pcSettings.histogrammDensity) && pcSettings.drawHistogramm) {
 				pcPlotRender = true;
 			}
-			if (ImGui::ColorEdit4("Density Background", &densityBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && drawHistogramm) {
+			if (ImGui::ColorEdit4("Density Background", &pcSettings.densityBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && pcSettings.drawHistogramm) {
 				pcPlotRender = true;
 			}
-			if (ImGui::SliderFloat("Blur radius", &densityRadius, .001f, .5f)) {
+			if (ImGui::SliderFloat("Blur radius", &pcSettings.densityRadius, .001f, .5f)) {
 				uploadDensityUiformBuffer();
 				pcPlotRender = true;
 			}
-			if (ImGui::Checkbox("Adjust density by active lines", &adustHistogrammByActiveLines)) {
+			if (ImGui::Checkbox("Adjust density by active lines", &pcSettings.adustHistogrammByActiveLines)) {
 				pcPlotRender = true;
 			}
 			ImGui::Separator();
 
 			ImGui::Text("Parallel Coordinates Settings:");
 
-			if (ImGui::Checkbox("Show PcPlot Density", &pcPlotDensity)) {
+			if (ImGui::Checkbox("Show PcPlot Density", &pcSettings.pcPlotDensity)) {
 				pcPlotRender = true;
 			}
 
-			if (ImGui::Checkbox("Enable density mapping", &enableDensityMapping)) {
+			if (ImGui::Checkbox("Enable density mapping", &pcSettings.enableDensityMapping)) {
 				if (pcAttributes.size()) {
 					uploadDensityUiformBuffer();
 					pcPlotRender = true;
 				}
 			}
 
-			if (ImGui::Checkbox("Enable grayscale density", &enableDensityGreyscale)) {
+			if (ImGui::Checkbox("Enable grayscale density", &pcSettings.enableDensityGreyscale)) {
 				if (pcAttributes.size()) {
 					uploadDensityUiformBuffer();
 					pcPlotRender = true;
@@ -8960,35 +9024,35 @@ int main(int, char**)
 			//	}
 			//}
 
-			if (ImGui::Checkbox("Enable median calc", &calculateMedians)) {
+			if (ImGui::Checkbox("Enable median calc", &pcSettings.calculateMedians)) {
 				for (DrawList& dl : g_PcPlotDrawLists) {
 					dl.activeMedian = 0;
 				}
 			}
 
-			if (ImGui::Checkbox("Enable brushing", &enableBrushing)) {
+			if (ImGui::Checkbox("Enable brushing", &pcSettings.enableBrushing)) {
 				pcPlotRender = updateAllActiveIndices();
 			}
 
-			if (ImGui::SliderFloat("Median line width", &medianLineWidth, .5f, 20.0f)) {
+			if (ImGui::SliderFloat("Median line width", &pcSettings.medianLineWidth, .5f, 20.0f)) {
 				pcPlotRender = true;
 			}
 
-			if (ImGui::ColorEdit4("Plot Background Color", &PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+			if (ImGui::ColorEdit4("Plot Background Color", &pcSettings.PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
 				pcPlotRender = true;
 			}
 
-			if (ImGui::Checkbox("Render Splines", &g_RenderSplines)) {
+			if (ImGui::Checkbox("Render Splines", &pcSettings.renderSplines)) {
 				updateAllDrawListIndexBuffer();
 				pcPlotRender = true;
 			}
 
-			if (ImGui::Checkbox("Enable Axis Lines", &enableAxisLines)) {
+			if (ImGui::Checkbox("Enable Axis Lines", &pcSettings.enableAxisLines)) {
 			}
 
-			if (ImGui::Checkbox("Always show 0 tick", &enableZeroTick)){}
+			if (ImGui::Checkbox("Always show 0 tick", &pcSettings.enableZeroTick)){}
 
-			if (ImGui::DragInt("Amout of ticks", &axisTickAmount,1, 0, 100)){}
+			if (ImGui::DragInt("Amout of ticks", &pcSettings.axisTickAmount,1, 0, 100)){}
 
 			if (ImGui::InputInt("Priority draw list index", &priorityListIndex, 1, 1) && priorityAttribute != -1) {
 				if (priorityListIndex < 0)priorityListIndex = 0;
@@ -9034,26 +9098,26 @@ int main(int, char**)
 				prioritySelectAttribute = true;
 			}
 
-			if (ImGui::Checkbox("Put 3d view always in focus", &view3dAlwaysOnTop)) {
+			if (ImGui::Checkbox("Put 3d view always in focus", nullptr)) {
 
 			}
 
 			auto histComp = g_PcPlotDrawLists.begin();
-			if (histogrammDrawListComparison != -1) std::advance(histComp, histogrammDrawListComparison);
-			if (ImGui::BeginCombo("Histogramm Comparison", (histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
+			if (pcSettings.histogrammDrawListComparison != -1) std::advance(histComp, pcSettings.histogrammDrawListComparison);
+			if (ImGui::BeginCombo("Histogramm Comparison", (pcSettings.histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
 				if (ImGui::MenuItem("Off")) {
-					histogrammDrawListComparison = -1;
+					pcSettings.histogrammDrawListComparison = -1;
 					uploadDensityUiformBuffer();
-					if (drawHistogramm) {
+					if (pcSettings.drawHistogramm) {
 						pcPlotRender = true;
 					}
 				}
 				auto it = g_PcPlotDrawLists.begin();
 				for (int i = 0; i < g_PcPlotDrawLists.size(); i++, ++it) {
 					if (ImGui::MenuItem(it->name.c_str())) {
-						histogrammDrawListComparison = i;
+						pcSettings.histogrammDrawListComparison = i;
 						uploadDensityUiformBuffer();
-						if (drawHistogramm) {
+						if (pcSettings.drawHistogramm) {
 							pcPlotRender = true;
 						}
 					}
@@ -9062,11 +9126,11 @@ int main(int, char**)
 				ImGui::EndCombo();
 			}
 
-			ImGui::Checkbox("Create default drawlist on load", &createDefaultOnLoad);
+			ImGui::Checkbox("Create default drawlist on load", &pcSettings.createDefaultOnLoad);
 
-			ImGui::DragInt("Live brush threshold", &liveBrushThreshold, 1000);
+			ImGui::DragInt("Live brush threshold", &pcSettings.liveBrushThreshold, 1000);
 
-			ImGui::SliderInt("Max line batch size", &lineBatchSize, 30000, 1e7);
+			ImGui::SliderInt("Max line batch size", &pcSettings.lineBatchSize, 30000, 1e7);
 
 			ImGui::Separator();
 
@@ -9086,7 +9150,7 @@ int main(int, char**)
 			//Opening a new Dataset into the Viewer
 			if (ImGui::Button("Open")) {
 				bool success = openDataset(pcFilePath);
-				if (success && createDefaultOnLoad) {
+				if (success && pcSettings.createDefaultOnLoad) {
 					//pcPlotRender = true;
 					createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
@@ -9267,7 +9331,7 @@ int main(int, char**)
 							ImGui::Text("Drag and drop indexlists here to open them.");
 						}
 						else {
-							ImGui::SliderFloat("Default Alpha Value", &alphaDrawLists, .0f, 1.0f);
+							ImGui::SliderFloat("Default Alpha Value", &pcSettings.alphaDrawLists, .0f, 1.0f);
 						}
 
 						for (int i = 0; i < droppedPaths.size(); i++) {
@@ -9422,7 +9486,7 @@ int main(int, char**)
 			int count = 0;
 
 			ImGui::Columns(9, "Columns", true);
-			if (rescaleTableColumns) {
+			if (pcSettings.rescaleTableColumns) {
 				ImGui::SetColumnWidth(0, ImGui::GetWindowContentRegionWidth() - 275);
 				ImGui::SetColumnWidth(1, 25);
 				ImGui::SetColumnWidth(2, 25);
@@ -9831,7 +9895,7 @@ int main(int, char**)
 			//main window now closed -----------------------------------------------------------------------
 			if (destroy) {
 				removePcPlotDrawList(*changeList);
-				updateBrushTemplates = true;
+				pcSettings.updateBrushTemplates = true;
 				if (!pcAttributes.size()) {
 					globalBrushes.clear();
 				}
