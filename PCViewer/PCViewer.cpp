@@ -6636,7 +6636,7 @@ int main(int, char**)
         return -1;
     }
     // Setup window
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_MAXIMIZED);
     SDL_Window* window = SDL_CreateWindow("PCViewer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
 	g_SwapChainResizeWidth = 1280;
 	g_SwapChainResizeHeight = 720;
@@ -6689,10 +6689,6 @@ int main(int, char**)
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 10.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 15.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 25.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
-
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsClassic();
 
 	// Setup Platform/Renderer bindings
 	ImGui_ImplSDL2_InitForVulkan(window);
@@ -6850,12 +6846,21 @@ int main(int, char**)
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	{//Set imgui style
-		ImGuiStyle& style = ImGui::GetStyle();
-		style.ChildRounding = 5;
-		style.FrameRounding = 3;
-		style.GrabRounding = 3;
-		style.WindowRounding = 0;
-		style.PopupRounding = 3;
+		// Setup Dear ImGui style
+		if (settingsManager->getSetting("defaultstyle").id != "settingnotfound") {
+			auto styles = settingsManager->getSettingsType("style");
+			int index = *((int*)settingsManager->getSetting("defaultstyle").data);
+			memcpy(&ImGui::GetStyle(), (*styles)[index]->data, sizeof(ImGuiStyle));
+		}
+		else {
+			ImGui::StyleColorsDark();
+			ImGuiStyle& style = ImGui::GetStyle();
+			style.ChildRounding = 5;
+			style.FrameRounding = 3;
+			style.GrabRounding = 3;
+			style.WindowRounding = 0;
+			style.PopupRounding = 3;
+		}
 	}
 
 	// Main loop
@@ -7093,6 +7098,56 @@ int main(int, char**)
 			if (ImGui::BeginMenu("Gui")) {
 				//ImGui::ShowFontSelector("Select font");
 				//ImGui::ShowStyleSelector("Select gui style");
+				if (ImGui::BeginMenu("Load style")) {
+					for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType("style")) {
+						if (ImGui::MenuItem(savedStyle->id.c_str())) {
+							memcpy(&ImGui::GetStyle(), savedStyle->data, sizeof(ImGuiStyle));
+						}
+					}
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Save/Remove style")) {
+					static char styleName[200]{};
+					ImGui::InputText("Stylename", styleName, 200);
+					if (ImGui::MenuItem("Save")) {
+						SettingsManager::Setting s{};
+						s.id = styleName;
+						s.type = "style";
+						s.byteLength = sizeof(ImGuiStyle);
+						s.data = &ImGui::GetStyle();
+						settingsManager->addSetting(s);
+					}
+					ImGui::Separator();
+					ImGui::Text("Click to delete");
+					std::string del;
+					for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType("style")) {
+						if (ImGui::MenuItem(savedStyle->id.c_str())) {
+							del = savedStyle->id;
+						}
+					}
+					if (del.size()) settingsManager->deleteSetting(del);
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Set Default style")) {
+					int selection = -1;
+					if (settingsManager->getSetting("defaultstyle").id != "settingnotfound")
+						selection = *((int*)settingsManager->getSetting("defaultstyle").data);
+					if (ImGui::MenuItem("Default","", selection == -1)) settingsManager->deleteSetting("defaultstyle");
+					int c = 0;
+					for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType("style")) {
+						
+						if (ImGui::MenuItem(savedStyle->id.c_str(), "", selection == c)) {
+							SettingsManager::Setting s{};
+							s.id = "defaultstyle";
+							s.data = &c;
+							s.byteLength = sizeof(c);
+							s.type = "defaultstyle";
+							settingsManager->addSetting(s);
+						}
+						c++;
+					}
+					ImGui::EndMenu();
+				}
 				ImGui::ShowStyleEditor();
 				ImGui::EndMenu();
 			}
