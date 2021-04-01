@@ -415,6 +415,14 @@ struct DrawList {
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 };
 
+enum PCViewerState {
+	Normal,
+	AnimateDrawlists,
+	AnimateDrawlistsExport,
+	AnimateGlobalBrush,
+	AnimateGlobalBrushExport
+};
+
 enum ViolinPlacement {
 	ViolinLeft,
 	ViolinRight,
@@ -736,6 +744,7 @@ static std::default_random_engine engine;
 static std::uniform_int_distribution<int> distribution(0, 35);
 static std::vector<int> pcPlotSelectedDrawList;									//Contains the index of the drawlist that is currently selected
 
+static PCViewerState pcViewerState = PCViewerState::Normal;
 struct PCSettings {
 	bool autoAlpha = true;
 	float alphaDrawLists = .5f;
@@ -790,6 +799,11 @@ struct PCSettings {
 	float multivariateStdDivThresh = 1.0f;
 
 	bool renderSplines = true;
+
+	//variables for animation
+	float animationDuration = 2.0f;		//time for every active brush to show in seconds
+	bool animationExport = true;
+	int animationSteps = false;
 }static pcSettings;
 
 //variables for brush templates
@@ -852,11 +866,14 @@ struct IsoSettings {
 static IsoSettings isoSurfSettings;
 
 //variables for animation
-static float animationDuration = 2.0f;		//time for every active brush to show in seconds
 static std::chrono::steady_clock::time_point animationStart(std::chrono::duration<int>(0));
 static bool* animationActiveDatasets = nullptr;
 static bool animationItemsDisabled = false;
 static int animationCurrentDrawList = -1;
+static char animationExportPath[200]{};
+static int animationBrush = -1;
+static int animaitonSteps = -1;
+static int animationAttribute = -1;
 
 typedef struct {
 	bool optimizeSidesNowAttr = false;
@@ -7015,7 +7032,7 @@ int main(int, char**)
 				}
 			}
 			//rendering a new drawlist if current drawlist to show changed
-			if (animationCurrentDrawList != (int)(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count() / animationDuration)) {
+			if (animationCurrentDrawList != (int)(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count() / pcSettings.animationDuration)) {
 				//disabling current drawlist
 				auto it = g_PcPlotDrawLists.begin();
 				int c = -1, i = 0;
@@ -7385,8 +7402,34 @@ int main(int, char**)
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Animation")) {
-				ImGui::SliderFloat("Animation duration per drawlist", &animationDuration, .1f, 10);
+				ImGui::SliderFloat("Animation duration per step", &pcSettings.animationDuration, .1f, 10);
+				ImGui::Checkbox("Export animation steps", &pcSettings.animationExport);
+				ImGui::InputText("Export path(including file-name/ending)", animationExportPath, 200);
+				ImGui::Separator();
 				if (ImGui::MenuItem("Start drawlist animation")) {
+					pcViewerState = pcSettings.animationSteps ? PCViewerState::AnimateDrawlistsExport : PCViewerState::AnimateDrawlists;
+					animationStart = std::chrono::steady_clock::now();
+				}
+				ImGui::Separator();
+				if (ImGui::BeginCombo("Brush to animate", animationBrush == -1 ? "Select" : globalBrushes[animationBrush].name.c_str())) {
+					for (int i = 0; i < globalBrushes.size(); ++i) {
+						if (ImGui::MenuItem(globalBrushes[i].name.c_str())) {
+							animationBrush = i;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				if (ImGui::BeginCombo("Attribute to animate", animationAttribute == -1 ? "Select" : pcAttributes[animationAttribute].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							animationAttribute = i;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::DragInt("Steps amount", &pcSettings.animationSteps, 1, 2, 0);
+				if (ImGui::MenuItem("Start global brush animation")) {
+					pcViewerState = pcSettings.animationSteps ? PCViewerState::AnimateGlobalBrushExport : PCViewerState::AnimateGlobalBrush;
 					animationStart = std::chrono::steady_clock::now();
 				}
 				ImGui::EndMenu();
@@ -12537,7 +12580,7 @@ int main(int, char**)
 					if (drawState == ViolinDrawStateArea) drawState = ViolinDrawStateLine;
 				}
 				ImGui::PopItemWidth();
-				ImGui::EndChild();
+				ImGui::EndChild() ;
 				//drag and drop drawlists onto this plot child to add it to this violin plot
 				if (ImGui::BeginDragDropTarget()) {
 					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
