@@ -6595,8 +6595,9 @@ void addExportMenu() {
 template<typename T>
 void addSaveSettingsMenu(T* settingStruct, const std::string& settingName, const std::string& settingType) {
 	if (ImGui::BeginMenu(("Load " + settingName).c_str())) {
-		if (MenuItem("Default")) { 
-			*settingStruct = T; 
+		if (ImGui:: MenuItem("Default")) {
+			T def;
+			*settingStruct = def; 
 		}
 		for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType(settingType)) {
 			if (ImGui::MenuItem(savedStyle->id.c_str())) {
@@ -6613,7 +6614,7 @@ void addSaveSettingsMenu(T* settingStruct, const std::string& settingName, const
 			s.id = styleName;
 			s.type = settingType;
 			s.byteLength = sizeof(T);
-			s.data = settingsStruct;
+			s.data = settingStruct;
 			settingsManager->addSetting(s);
 		}
 		ImGui::Separator();
@@ -6631,7 +6632,7 @@ void addSaveSettingsMenu(T* settingStruct, const std::string& settingName, const
 		int selection = -1;
 		if (settingsManager->getSetting(("default" + settingName).c_str()).id != "settingnotfound")
 			selection = *((int*)settingsManager->getSetting(("default" + settingName).c_str()).data);
-		if (ImGui::MenuItem("Default", "", selection == -1)) settingsManager->deleteSetting("defaultstyle");
+		if (ImGui::MenuItem("Default", "", selection == -1)) settingsManager->deleteSetting("default" + settingName);
 		int c = 0;
 		for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType(settingType)) {
 
@@ -6909,7 +6910,7 @@ int main(int, char**)
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-	{//Set imgui style
+	{//Set imgui style and load all settings
 		// Setup Dear ImGui style
 		if (settingsManager->getSetting("defaultstyle").id != "settingnotfound") {
 			auto styles = settingsManager->getSettingsType("style");
@@ -6924,6 +6925,36 @@ int main(int, char**)
 			style.GrabRounding = 3;
 			style.WindowRounding = 0;
 			style.PopupRounding = 3;
+		}
+		if (settingsManager->getSetting("defaultPCSettings").id != "settingnotfound") {
+			auto set = settingsManager->getSettingsType("pcsettings");
+			int index = *((int*)settingsManager->getSetting("defaultPCSettings").data);
+			memcpy(&pcSettings, (*set)[index]->data, sizeof(PCSettings));
+		}
+		if (settingsManager->getSetting("defaultBubbleSettings").id != "settingnotfound") {
+			auto set = settingsManager->getSettingsType("bubblesettings");
+			int index = *((int*)settingsManager->getSetting("defaultBubbleSettings").data);
+			memcpy(&bubbleWindowSettings, (*set)[index]->data, sizeof(BubbleWindowSettings));
+		}
+		if (settingsManager->getSetting("defaultIsoSettings").id != "settingnotfound") {
+			auto set = settingsManager->getSettingsType("isosettingss");
+			int index = *((int*)settingsManager->getSetting("defaultIsoSettings").data);
+			memcpy(&isoSurfSettings, (*set)[index]->data, sizeof(IsoSettings));
+		}
+		if (settingsManager->getSetting("defaultBrushIsoSettings").id != "settingnotfound") {
+			auto set = settingsManager->getSettingsType("brushisosettingss");
+			int index = *((int*)settingsManager->getSetting("defaultBrushIsoSettings").data);
+			memcpy(&brushIsoSurfSettings, (*set)[index]->data, sizeof(IsoSettings));
+		}
+		if (settingsManager->getSetting("defaultViolinAttribute").id != "settingnotfound") {
+			auto set = settingsManager->getSettingsType("violinattribute");
+			int index = *((int*)settingsManager->getSetting("defaultViolinAttribute").data);
+			memcpy(&violinPlotAttributeSettings, (*set)[index]->data, sizeof(ViolinSettings));
+		}
+		if (settingsManager->getSetting("defaultViolinDrawlist").id != "settingnotfound") {
+			auto set = settingsManager->getSettingsType("violidrawlist");
+			int index = *((int*)settingsManager->getSetting("defaultViolinDrawlist").data);
+			memcpy(&violinPlotAttributeSettings, (*set)[index]->data, sizeof(ViolinSettings));
 		}
 	}
 
@@ -7213,6 +7244,10 @@ int main(int, char**)
 					ImGui::EndMenu();
 				}
 				ImGui::ShowStyleEditor();
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Settings")) {
+				addSaveSettingsMenu<PCSettings>(&pcSettings, "PCSettings", "pcsettings");
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Maximize")) {
@@ -9931,6 +9966,10 @@ int main(int, char**)
 			bubbleWindowSize = ImGui::GetWindowSize().y;
 
 			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Save Settings")) {
+					addSaveSettingsMenu<BubbleWindowSettings>(&bubbleWindowSettings, "BubbleSettings", "bubblesettings");
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Coupling")) {
 					ImGui::MenuItem("Couple to Parallel Coordinates", "", &bubbleWindowSettings.coupleToBrushing);
 					ImGui::EndMenu();
@@ -10121,6 +10160,10 @@ int main(int, char**)
 			ImGui::Begin("Isosurface Renderer",&isoSurfSettings.enabled,ImGuiWindowFlags_MenuBar);
 			int dlbExport = -1;
 			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Save Settings")) {
+					addSaveSettingsMenu<IsoSettings>(&isoSurfSettings, "IsoSettings", "isosettings");
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to brush", &isoSurfSettings.coupleIsoSurfaceRenderer);
 					ImGui::Checkbox("Regular grid", &isoSurfSettings.isoSurfaceRegularGrid);
@@ -10514,6 +10557,10 @@ int main(int, char**)
 			ImGui::Begin("Brush Isosurface Renderer", &brushIsoSurfSettings.enabled, ImGuiWindowFlags_MenuBar);
 			int dlbExport = -1;
 			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Save Settings")) {
+					addSaveSettingsMenu<IsoSettings>(&brushIsoSurfSettings, "BrushIsoSettings", "brushisosettings");
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to brush", &brushIsoSurfSettings.coupleBrushIsoSurfaceRenderer);
 					ImGui::Checkbox("Regular grid", &brushIsoSurfSettings.isoSurfaceRegularGrid);
@@ -10754,6 +10801,10 @@ int main(int, char**)
 		if (violinPlotAttributeSettings.enabled) {
 			ImGui::Begin("Violin attribute window", &violinPlotAttributeSettings.enabled, ImGuiWindowFlags_MenuBar);
 			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Save Settings")) {
+					addSaveSettingsMenu<ViolinSettings>(&violinPlotAttributeSettings, "ViolinAttribute", "violinattribute");
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to Brushing", &violinPlotAttributeSettings.coupleViolinPlots);
 					ImGui::Checkbox("Show Attribute min/max", &violinPlotAttributeSettings.showViolinPlotsMinMax);
@@ -11505,6 +11556,10 @@ int main(int, char**)
 		if (violinPlotDrawlistSettings.enabled) {
 			ImGui::Begin("Violin drawlist window", &violinPlotDrawlistSettings.enabled, ImGuiWindowFlags_MenuBar);
 			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Save Settings")) {
+					addSaveSettingsMenu<ViolinSettings>(&violinPlotDrawlistSettings, "ViolinDrawlist", "violidrawlist");
+					ImGui::EndMenu();
+				}
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to Brushing", &violinPlotDrawlistSettings.coupleViolinPlots);
 					ImGui::Checkbox("Send to iso renderer on select", &violinPlotDrawlistSettings.violinPlotDLSendToIso);
@@ -12590,7 +12645,7 @@ int main(int, char**)
 		if (vp.activeAttributes) delete[] vp.activeAttributes;
 	}
 	for (ViolinDrawlistPlot& vp : violinDrawlistPlots) {
-		if (vp.activeAttributes) delete[] vp.activeAttributes;
+		if (vp.attributeNames.size()) delete[] vp.activeAttributes;
 	}
 
 
