@@ -866,13 +866,13 @@ typedef struct {
 } AdaptViolinSidesAutoStruct;
 
 //variables for violin plots
+static float violinPlotBinsSize = 150;
 struct ViolinSettings {
 	int violinPlotHeight = 1000;//550;
 	int violinPlotXSpacing = 15;
 	int violinPlotAttrStacking = 0;
 	bool enabled = false;
 	float violinPlotThickness = 1;
-	float violinPlotBinsSize = 150;
 	ImVec4 violinBackgroundColor = { 1,1,1,1 };
 	bool coupleViolinPlots = true;
 	bool showViolinPlotsMinMax = true;
@@ -2448,7 +2448,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
-	dl.color = { (float)col.r,(float)col.g,(float)col.b,autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, 1.f) : alphaDrawLists };
+	dl.color = { (float)col.r,(float)col.g,(float)col.b,pcSettings.autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, 1.f) : pcSettings.alphaDrawLists };
 	dl.prefColor = dl.color;
 	dl.show = true;
 	dl.showHistogramm = true;
@@ -2546,7 +2546,7 @@ static void destroyPcPlotDataSet(DataSet& dataSet) {
 		}
 	}
 
-	updateBrushTemplates = true;
+	pcSettings.updateBrushTemplates = true;
 
 	g_PcPlotDataSets.erase(it);
 
@@ -2619,7 +2619,7 @@ static void createPcPlotCommandBuffer(bool batching) {
 	renderPassInfo.renderArea.offset = { 0,0 };
 	renderPassInfo.renderArea.extent = { g_PcPlotWidth,g_PcPlotHeight };
 
-	VkClearValue clearColor = { PcPlotBackCol.x,PcPlotBackCol.y,PcPlotBackCol.z,PcPlotBackCol.w };//{ 0.0f,0.0f,0.0f,1.0f };
+	VkClearValue clearColor = { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w };//{ 0.0f,0.0f,0.0f,1.0f };
 
 	renderPassInfo.clearValueCount = !batching;
 	renderPassInfo.pClearValues = &clearColor;
@@ -2630,7 +2630,7 @@ static void createPcPlotCommandBuffer(bool batching) {
 		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline_noClear);
 		return;
 	}
-	if (g_RenderSplines)
+	if (pcSettings.renderSplines)
 		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
 	else
 		vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
@@ -2761,8 +2761,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	ubo.amtOfAttributes = attributes.size();
 	ubo.color = { 1,1,1,1 };
 	ubo.VertexTransormations[0].w = (priorityAttribute != -1) ? 1.f : 0;
-	if (drawHistogramm) {
-		ubo.padding = histogrammWidth / 2;
+	if (pcSettings.drawHistogramm) {
+		ubo.padding = pcSettings.histogrammWidth / 2;
 	}
 	else {
 		ubo.padding = 0;
@@ -2788,11 +2788,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
 
 	//filling the indexbuffer with the used indeces
-	uint16_t* ind = new uint16_t[amtOfIndeces + ((g_RenderSplines) ? 2 : 0)];			//contains all indeces to copy
+	uint16_t* ind = new uint16_t[amtOfIndeces + ((pcSettings.renderSplines) ? 2 : 0)];			//contains all indeces to copy
 	for (int i = 0; i < order.size(); i++) {
-		ind[i + ((g_RenderSplines) ? 1 : 0)] = order[i].first;
+		ind[i + ((pcSettings.renderSplines) ? 1 : 0)] = order[i].first;
 	}
-	if (g_RenderSplines && pcAttributes.size()) {
+	if (pcSettings.renderSplines && pcAttributes.size()) {
 		ind[0] = order[0].first;
 		ind[order.size()] = order[order.size() - 1].first;
 	}
@@ -2807,7 +2807,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	void* d;
 	//copying the indexbuffer
 	if (pcAttributes.size()) {
-		int copyAmount = sizeof(uint16_t) * (attributes.size() + ((g_RenderSplines) ? 2 : 0));
+		int copyAmount = sizeof(uint16_t) * (attributes.size() + ((pcSettings.renderSplines) ? 2 : 0));
 		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, 0, copyAmount, 0, &d);
 		memcpy(d, ind, copyAmount);
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
@@ -2846,9 +2846,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		if(drawList->show)
 			max_amt_of_lines += drawList->indices.size();
 	}
-	bool batching = max_amt_of_lines > lineBatchSize && g_RenderSplines;		//if more lines could be rendererd than the set batch size use batched rendering(only activated for spline rendering)
+	bool batching = max_amt_of_lines > pcSettings.lineBatchSize && pcSettings.renderSplines;		//if more lines could be rendererd than the set batch size use batched rendering(only activated for spline rendering)
 	int curIndex = 0;
-	int batchSizeLeft = lineBatchSize;
+	int batchSizeLeft = pcSettings.lineBatchSize;
 
 	//starting the pcPlotCommandBuffer
 	createPcPlotCommandBuffer(batching);
@@ -2861,7 +2861,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		//creating the standard batch command buffer
 		line_batch_commands.push_back({});
 		VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &line_batch_commands[0]);
-		std::vector<VkClearValue> clearValues{ { PcPlotBackCol.x,PcPlotBackCol.y,PcPlotBackCol.z,PcPlotBackCol.w } };
+		std::vector<VkClearValue> clearValues{ { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w } };
 		VkUtil::beginRenderPass(line_batch_commands[0], clearValues, g_PcPlotRenderPass, g_PcPlotFramebuffer, { g_PcPlotWidth, g_PcPlotHeight });
 		vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
 
@@ -2880,7 +2880,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				vkCmdBindIndexBuffer(line_batch_commands.back(), drawList->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 				//binding the right ubo
-				if (g_RenderSplines)
+				if (pcSettings.renderSplines)
 					vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
 				else
 					vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
@@ -2897,24 +2897,24 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					indices_count = batchSizeLeft;
 					batchSizeLeft = 0;
 				}
-				uint32_t amtOfI = indices_count * (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
-				uint32_t iOffset = curIndex * (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
+				uint32_t amtOfI = indices_count * (order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
+				uint32_t iOffset = curIndex * (order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
 				vkCmdDrawIndexed(line_batch_commands.back(), amtOfI, 1, iOffset, 0, 0);
 
 				curIndex += indices_count;
 
 				//draw the Median Line
 				if (drawList->activeMedian != 0 && curIndex == drawList->indices.size()) {
-					vkCmdSetLineWidth(line_batch_commands.back(), medianLineWidth);
+					vkCmdSetLineWidth(line_batch_commands.back(), pcSettings.medianLineWidth);
 					vkCmdBindVertexBuffers(line_batch_commands.back(), 0, 1, &drawList->medianBuffer, offsets);
 					vkCmdBindIndexBuffer(line_batch_commands.back(), g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-					if (g_RenderSplines)
+					if (pcSettings.renderSplines)
 						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 					else
 						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 
-					vkCmdDrawIndexed(line_batch_commands.back(), amtOfIndeces + ((g_RenderSplines) ? 2 : 0), 1, 0, (drawList->activeMedian - 1) * pcAttributes.size(), 0);
+					vkCmdDrawIndexed(line_batch_commands.back(), amtOfIndeces + ((pcSettings.renderSplines) ? 2 : 0), 1, 0, (drawList->activeMedian - 1) * pcAttributes.size(), 0);
 
 #ifdef PRINTRENDERTIME
 					amtOfLines++;
@@ -2953,7 +2953,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					if (pcAttributes.size())
 						vkCmdBindIndexBuffer(line_batch_commands.back(), g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-					batchSizeLeft = lineBatchSize;
+					batchSizeLeft = pcSettings.lineBatchSize;
 				}
 			} while (curIndex < drawList->indices.size());
 			curIndex = 0;
@@ -2969,7 +2969,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	}
 	else {
 		//binding the all needed things
-		if (g_RenderSplines)
+		if (pcSettings.renderSplines)
 			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
 		else
 			vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
@@ -2986,7 +2986,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 			//binding the right ubo
-			if (g_RenderSplines)
+			if (pcSettings.renderSplines)
 				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
 			else
 				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
@@ -2994,21 +2994,21 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
 
 			//ready to draw with draw indexed
-			uint32_t amtOfI = drawList->indices.size() * (order.size() + 1 + ((g_RenderSplines) ? 2 : 0));
+			uint32_t amtOfI = drawList->indices.size() * (order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfI, 1, 0, 0, 0);
 
 			//draw the Median Line
 			if (drawList->activeMedian != 0) {
-				vkCmdSetLineWidth(g_PcPlotCommandBuffer, medianLineWidth);
+				vkCmdSetLineWidth(g_PcPlotCommandBuffer, pcSettings.medianLineWidth);
 				vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->medianBuffer, offsets);
 				vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-				if (g_RenderSplines)
+				if (pcSettings.renderSplines)
 					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 				else
 					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
 
-				vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces + ((g_RenderSplines) ? 2 : 0), 1, 0, (drawList->activeMedian - 1) * pcAttributes.size(), 0);
+				vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces + ((pcSettings.renderSplines) ? 2 : 0), 1, 0, (drawList->activeMedian - 1) * pcAttributes.size(), 0);
 
 #ifdef PRINTRENDERTIME
 				amtOfLines++;
@@ -3036,7 +3036,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	delete[] ind;
 
-	if (pcPlotDensity && pcAttributes.size() > 0) {
+	if (pcSettings.pcPlotDensity && pcAttributes.size() > 0) {
 		//ending the pass to blit the image
 		vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 
@@ -3064,7 +3064,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, 6, 1, 0, 0, 0);
 	}
 
-	if (drawHistogramm && pcAttributes.size() > 0) {
+	if (pcSettings.drawHistogramm && pcAttributes.size() > 0) {
 		//drawing the histogramm background
 		RectVertex* rects = new RectVertex[pcAttributes.size() * 4];
 		float x = -1;
@@ -3072,20 +3072,20 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			if (pcAttributeEnabled[i]) {
 				RectVertex vert;
 				vert.pos = { x,1,0,0 };
-				vert.col = histogrammDensity ? densityBackCol : histogrammBackCol;
+				vert.col = pcSettings.histogrammDensity ? pcSettings.densityBackCol : pcSettings.histogrammBackCol;
 				rects[i * 4] = vert;
 				vert.pos.y = -1;
 				rects[i * 4 + 1] = vert;
-				vert.pos.x += histogrammWidth;
+				vert.pos.x += pcSettings.histogrammWidth;
 				rects[i * 4 + 2] = vert;
 				vert.pos.y = 1;
 				rects[i * 4 + 3] = vert;
-				x += (2 - histogrammWidth) / (amtOfIndeces - 1);
+				x += (2 - pcSettings.histogrammWidth) / (amtOfIndeces - 1);
 			}
 			else {
 				RectVertex vert;
 				vert.pos = { -2,-2,0,0 };
-				vert.col = histogrammBackCol;
+				vert.col = pcSettings.histogrammBackCol;
 				rects[i * 4] = vert;
 				rects[i * 4 + 1] = vert;
 				rects[i * 4 + 2] = vert;
@@ -3110,7 +3110,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdDrawIndexed(g_PcPlotCommandBuffer, pcAttributes.size() * 6, 1, 0, 0, 0);
 
 		//starting to draw the histogramm lines
-		if (histogrammDensity && enableDensityMapping) {
+		if (pcSettings.histogrammDensity && pcSettings.enableDensityMapping) {
 			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoAdditivePipeline);
 		}
 		else {
@@ -3125,9 +3125,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 		if (amtOfHisto != 0) {
 			HistogramUniformBuffer hubo = {};
-			float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
+			float gap = (2 - pcSettings.histogrammWidth) / (amtOfIndeces - 1);
 			float xOffset = .0f;
-			float width = histogrammWidth / amtOfHisto;
+			float width = pcSettings.histogrammWidth / amtOfHisto;
 			for (auto drawList = g_PcPlotDrawLists.begin(); g_PcPlotDrawLists.end() != drawList; ++drawList) {
 				//ignore drawLists which are disabled
 				if (!drawList->showHistogramm)
@@ -3135,7 +3135,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 				//setting the color in the hubo to copy
 				hubo.color = drawList->color;
-				if (adustHistogrammByActiveLines && histogrammDensity && enableDensityMapping) hubo.color.w /= activeBrushRatios[drawList->name] + FLT_EPSILON;
+				if (pcSettings.adustHistogrammByActiveLines && pcSettings.histogrammDensity && pcSettings.enableDensityMapping) hubo.color.w /= activeBrushRatios[drawList->name] + FLT_EPSILON;
 				hubo.width = width;
 
 				//binding the correct vertex and indexbuffer
@@ -3164,7 +3164,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					vkUnmapMemory(g_Device, drawList->dlMem);
 
 					//binding the descriptor set
-					if (histogrammDensity && enableDensityMapping) {
+					if (pcSettings.histogrammDensity && pcSettings.enableDensityMapping) {
 						vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipelineAdditiveLayout, 0, 1, &drawList->histogrammDescSets[i], 0, nullptr);
 					}
 					else {
@@ -3180,7 +3180,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			}
 		}
 
-		if (histogrammDensity) {
+		if (pcSettings.histogrammDensity) {
 			//ending the pass to blit the image
 			vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 
@@ -3201,12 +3201,12 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotDensityPipeline);
 
 			Vec4* verts = new Vec4[amtOfIndeces * 4];
-			float gap = (2 - histogrammWidth) / (amtOfIndeces - 1);
+			float gap = (2 - pcSettings.histogrammWidth) / (amtOfIndeces - 1);
 			for (int i = 0; i < amtOfIndeces; i++) {
 				verts[i * 4] = { gap * i - 1,1,0,0 };
 				verts[i * 4 + 1] = { gap * i - 1,-1,0,0 };
-				verts[i * 4 + 2] = { gap * i + histogrammWidth - 1,-1,0,0 };
-				verts[i * 4 + 3] = { gap * i + histogrammWidth - 1,1,0,0 };
+				verts[i * 4 + 2] = { gap * i + pcSettings.histogrammWidth - 1,-1,0,0 };
+				verts[i * 4 + 3] = { gap * i + pcSettings.histogrammWidth - 1,1,0,0 };
 			}
 
 			vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset + sizeof(Vec4) * 4, sizeof(Vec4) * amtOfIndeces * 4, 0, &d);
@@ -4506,7 +4506,7 @@ static bool openDataset(const char* filename) {
 
 	//standard things which should be done on loading of a dataset
 	//adding a standard attributes saving
-	histogrammWidth = 1.0f / (pcAttributes.size() * 5);
+	pcSettings.histogrammWidth = 1.0f / (pcAttributes.size() * 5);
 	uint32_t attributesSize = 2 * sizeof(float) * pcAttributes.size();
 	for (Attribute& a : pcAttributes) {
 		attributesSize += a.name.size() + 1;
@@ -4610,7 +4610,7 @@ static void addMultipleIndicesToDs(DataSet& ds) {
 static void getLocalBrushLimits(DrawList* dl, std::vector<std::pair<float, float>>& localMinMax) {
 	//std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 
-	if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+	if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleLocalBrush || violinPlotDrawlistSettings.violinYScale == ViolinYScaleBrushes) {
 		for (int k = 0; k < pcAttributes.size(); ++k) {
 			for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
 				if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
@@ -4632,7 +4632,7 @@ static void getLocalBrushLimits(DrawList* dl, std::vector<std::pair<float, float
 static void getGlobalBrushLimits(std::vector<std::pair<float, float>>& globalMinMax) {
 	//std::vector<std::pair<float, float>> globalMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 
-	if (violinYScale == ViolinYScaleGlobalBrush || violinYScale == ViolinYScaleBrushes) {
+	if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleGlobalBrush || violinPlotDrawlistSettings.violinYScale == ViolinYScaleBrushes) {
 		for (auto& brush : globalBrushes) {
 			if (!brush.active) { continue; }
 			for (auto& br : brush.brushes) {
@@ -4663,7 +4663,7 @@ static void getyScaleDL(unsigned int& dlNr,
 {
 	//std::vector<std::pair<float, float>> violinMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 
-	if (violinYScale == ViolinYScaleStandard)
+	if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleStandard)
 	{
 		for (int k = 0; k < pcAttributes.size(); ++k) {
 			// Find the attribute in the PC plot to determine min and max values.
@@ -4680,7 +4680,7 @@ static void getyScaleDL(unsigned int& dlNr,
 
 
 	DrawList* dl = nullptr;
-	if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+	if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleLocalBrush || violinPlotDrawlistSettings.violinYScale == ViolinYScaleBrushes) {
 		for (DrawList& draw : g_PcPlotDrawLists) {
 			if (draw.name == violinDrawlistPlot.drawLists[dlNr]) {
 				dl = &draw;
@@ -4688,7 +4688,7 @@ static void getyScaleDL(unsigned int& dlNr,
 		}
 	}
 
-	switch (violinYScale) {
+	switch (violinPlotDrawlistSettings.violinYScale) {
 	case ViolinYScaleLocalBrush:
 		getLocalBrushLimits(dl, violinMinMax);
 		return;
@@ -4716,7 +4716,7 @@ static void getyScaleDLForAttributeViolins(unsigned int& dlNr,
 {
     //std::vector<std::pair<float, float>> violinMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 
-    if (violinYScale == ViolinYScaleStandard)
+    if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleStandard)
     {
         for (int k = 0; k < pcAttributes.size(); ++k) {
             // Find the attribute in the PC plot to determine min and max values.
@@ -4733,7 +4733,7 @@ static void getyScaleDLForAttributeViolins(unsigned int& dlNr,
 
 
     DrawList* dl = nullptr;
-    if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+    if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleLocalBrush || violinPlotDrawlistSettings.violinYScale == ViolinYScaleBrushes) {
         for (DrawList& draw : g_PcPlotDrawLists) {
             if (draw.name == violinAttrPlot.drawLists[dlNr].name) {
                 dl = &draw;
@@ -4741,7 +4741,7 @@ static void getyScaleDLForAttributeViolins(unsigned int& dlNr,
         }
     }
 
-    switch (violinYScale) {
+    switch (violinPlotDrawlistSettings.violinYScale) {
     case ViolinYScaleLocalBrush:
         getLocalBrushLimits(dl, violinMinMax);
         return;
@@ -5014,8 +5014,8 @@ static void updateMaxHistogramValues(ViolinDrawlistPlot& plot) {
 static void updateIsoSurface(GlobalBrush& gb) {
 	int amtOfLines = 0;
 	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
-	if ((ImGui::IsMouseDown(0) && liveBrushThreshold < amtOfLines) || !coupleIsoSurfaceRenderer) return;
-	if (coupleBrushIsoSurfaceRenderer && enableBrushIsoSurfaceWindow) {
+	if ((ImGui::IsMouseDown(0) && pcSettings.liveBrushThreshold < amtOfLines) || !isoSurfSettings.coupleIsoSurfaceRenderer) return;
+	if (brushIsoSurfSettings.coupleBrushIsoSurfaceRenderer && brushIsoSurfSettings.enabled) {
 		if (brushIsoSurfaceRenderer->brushColors.find(gb.name) != brushIsoSurfaceRenderer->brushColors.end()) {
 			std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
 			for (auto& axis : gb.brushes) {
@@ -5063,8 +5063,8 @@ static void updateIsoSurface(GlobalBrush& gb) {
 
 		glm::uvec3 posIndices{ 0,2,1 };
 
-		if (isoSurfaceRegularGrid) {
-			isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
+		if (isoSurfSettings.isoSurfaceRegularGrid) {
+			isoSurfaceRenderer->update3dBinaryVolume(isoSurfSettings.isoSurfaceRegularGridDim[0], isoSurfSettings.isoSurfaceRegularGridDim[1], isoSurfSettings.isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 		}
 		else {
 			if (!ImGui::IsMouseDown(0))
@@ -5076,7 +5076,7 @@ static void updateIsoSurface(GlobalBrush& gb) {
 static void updateIsoSurface(DrawList& dl) {
 	int amtOfLines = 0;
 	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
-	if ((ImGui::IsMouseDown(0) && liveBrushThreshold < amtOfLines) || !coupleIsoSurfaceRenderer) return;
+	if ((ImGui::IsMouseDown(0) && pcSettings.liveBrushThreshold < amtOfLines) || !isoSurfSettings.coupleIsoSurfaceRenderer) return;
 
 	int index = -1;
 	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
@@ -5092,7 +5092,7 @@ static void updateIsoSurface(DrawList& dl) {
 			posBounds[i].first = pcAttributes[posIndices[i]].min;
 			posBounds[i].second = pcAttributes[posIndices[i]].max;
 		}
-		if (!isoSurfaceRegularGrid) {
+		if (!isoSurfSettings.isoSurfaceRegularGrid) {
 			posBounds[0].first = SpacialData::rlat[0];
 			posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
 			posBounds[1].first = SpacialData::altitude[0];
@@ -5107,13 +5107,13 @@ static void updateIsoSurface(DrawList& dl) {
 				break;
 			}
 		}
-		isoSurfaceRenderer->update3dBinaryVolume(w, h, d, posIndices, posBounds, pcAttributes.size(), data->size(), dl.buffer, dl.activeIndicesBufferView, dl.indices.size(), dl.indicesBuffer, isoSurfaceRegularGrid, index);
+		isoSurfaceRenderer->update3dBinaryVolume(w, h, d, posIndices, posBounds, pcAttributes.size(), data->size(), dl.buffer, dl.activeIndicesBufferView, dl.indices.size(), dl.indicesBuffer, isoSurfSettings.isoSurfaceRegularGrid, index);
 	}
 }
 
 static bool updateActiveIndices(DrawList& dl) {
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
-	if (dl.indices.size() > liveBrushThreshold) {
+	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
 		if (ImGui::GetIO().MouseDown[0]) return false;
 	}
 
@@ -5221,7 +5221,7 @@ static bool updateActiveIndices(DrawList& dl) {
 		}
 	}
 	if (brush.size()) {
-		std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), true, brushCombination == 1, globalBrushes.size() == 0);
+		std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), true, pcSettings.brushCombination == 1, globalBrushes.size() == 0);
 		globalRemainingLines = res.second;
 		firstBrush = false;
 	}
@@ -5229,7 +5229,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	//apply global brushes
 	std::vector<int> globalIndices;
 	bool globalBrushesActive = false;
-	if (toggleGlobalBrushes && !dl.immuneToGlobalBrushes) {
+	if (pcSettings.toggleGlobalBrushes && !dl.immuneToGlobalBrushes) {
 		int c = 1;
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.fractureDepth > 0) { //fractured brush
@@ -5315,10 +5315,10 @@ static bool updateActiveIndices(DrawList& dl) {
 					//VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, data.size(), actives);
 					//delete[] actives;
 					//res = { activeInd.size(),activeInd.size() };
-					res = gpuBrusher->brushIndices(gb.multivariates, gb.kdTree->getOriginalBounds(), gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size(), multivariateStdDivThresh);
+					res = gpuBrusher->brushIndices(gb.multivariates, gb.kdTree->getOriginalBounds(), gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, c == globalBrushes.size(), pcSettings.multivariateStdDivThresh);
 				}
 				else {
-					res = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+					res = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, c == globalBrushes.size());
 				}
 				gb.lineRatios[dl.name] = res.first;
 				globalRemainingLines = res.second;
@@ -5340,7 +5340,7 @@ static bool updateActiveIndices(DrawList& dl) {
 					}
 				}
 				if (!brush.size()) continue;
-				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, c == globalBrushes.size());
 				gb.lineRatios[dl.name] = res.first;
 				globalRemainingLines = res.second;
 				firstBrush = false;
@@ -5368,7 +5368,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	activeBrushRatios[dl.name] = globalRemainingLines;
 
 	// Computing ratios for the pie charts
-	if (computeRatioPtsInDLvsIn1axbrushedParent && drawHistogramm) {
+	if (pcSettings.computeRatioPtsInDLvsIn1axbrushedParent && pcSettings.drawHistogramm) {
 		//Todo: dl.indices,size() of parent!
 		//dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), (float)globalRemainingLines/dl.indices.size());			//instantiate with the standard active lines
 
@@ -5648,11 +5648,11 @@ static bool updateActiveIndices(DrawList& dl) {
 	updateDrawListIndexBuffer(dl);
 
 	//rendering the updated active points in the bubble plotter
-	if (coupleBubbleWindow) {
+	if (bubbleWindowSettings.coupleToBrushing) {
 		bubblePlotter->render();
 	}
 
-	if (coupleViolinPlots && histogramManager->containsHistogram(dl.name)) {
+	if ((violinPlotDrawlistSettings.coupleViolinPlots || violinPlotAttributeSettings.coupleViolinPlots) && histogramManager->containsHistogram(dl.name)) {
 		std::vector<std::pair<float, float>> minMax;
 		for (Attribute& a : pcAttributes) {
 			minMax.push_back({ a.min,a.max });
@@ -5668,7 +5668,7 @@ static bool updateActiveIndices(DrawList& dl) {
 
 		//histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
 		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
-		updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+		updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
         for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 			bool contains = false;
 			for (auto& s : violinDrawlistPlots[i].drawLists) {
@@ -5684,7 +5684,7 @@ static bool updateActiveIndices(DrawList& dl) {
 		}
 	}
 
-	if (coupleIsoSurfaceRenderer && enableIsoSurfaceWindow) {
+	if (isoSurfSettings.coupleIsoSurfaceRenderer && isoSurfSettings.enabled) {
 		updateIsoSurface(dl);
 	}
 
@@ -5705,30 +5705,30 @@ static bool updateAllActiveIndices() {
 
 static void uploadDensityUiformBuffer() {
 	DensityUniformBuffer ubo = {};
-	ubo.enableMapping = enableDensityMapping | ((uint8_t)(histogrammDensity && enableDensityMapping)) * 2 | uint32_t(enableDensityGreyscale)<<2;
-	ubo.gaussRange = densityRadius;
+	ubo.enableMapping = pcSettings.enableDensityMapping | ((uint8_t)(pcSettings.histogrammDensity && pcSettings.enableDensityMapping)) * 2 | uint32_t(pcSettings.enableDensityGreyscale)<<2;
+	ubo.gaussRange = pcSettings.densityRadius;
 	ubo.imageHeight = g_PcPlotHeight;
 	int amtOfIndices = 0;
 	for (int i = 0; i < pcAttributes.size(); i++) {
 		if (pcAttributeEnabled[i]) amtOfIndices++;
 	}
-	ubo.gap = (1 - histogrammWidth / 2) / (amtOfIndices - 1);
-	if (histogrammDrawListComparison != -1) {
+	ubo.gap = (1 - pcSettings.histogrammWidth / 2) / (amtOfIndices - 1);
+	if (pcSettings.histogrammDrawListComparison != -1) {
 		float offset = 0;
 		int activeHists = 0;
 		int c = 0;
 		for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it, c++) {
 			if (it->showHistogramm) {
 				activeHists++;
-				if (c == histogrammDrawListComparison) {
+				if (c == pcSettings.histogrammDrawListComparison) {
 					offset = activeHists;
 				}
 			}
-			else if (c == histogrammDrawListComparison) {
+			else if (c == pcSettings.histogrammDrawListComparison) {
 				std::cout << "Histogramm to compare to is not active." << std::endl;
 			}
 		}
-		ubo.compare = (offset / activeHists - (1 / (2.0f * activeHists))) * histogrammWidth / 2;
+		ubo.compare = (offset / activeHists - (1 / (2.0f * activeHists))) * pcSettings.histogrammWidth / 2;
 	}
 	else {
 		ubo.compare = -1;
@@ -5905,7 +5905,7 @@ static void invertGlobalBrush(GlobalBrush& b) {
 }
 
 static void calculateDrawListMedians(DrawList& dl) {
-	if (!calculateMedians)
+	if (!pcSettings.calculateMedians)
 		return;
 
 	float* medianArr = new float[pcAttributes.size() * MEDIANCOUNT];
@@ -6284,7 +6284,7 @@ static std::vector<uint32_t> sortHistogram(HistogramManager::Histogram& hist,
 static void sortAllHistograms(std::string option)
 {
 	if (option == "dl") {
-		if (!renderOrderDLConsider) {
+		if (!violinPlotDrawlistSettings.renderOrderDLConsider) {
 			return;
 		}
 
@@ -6301,14 +6301,14 @@ static void sortAllHistograms(std::string option)
 					}
 				}
 				HistogramManager::Histogram& hist = histogramManager->getHistogram(dl->name);
-				if (renderOrderDLConsider && ((drawL == 0) || (!renderOrderBasedOnFirstDL))) {
-					drawListPlot.attributeOrder[drawL] = sortHistogram(hist, drawListPlot, renderOrderDLConsider, renderOrderDLReverse);
+				if (violinPlotDrawlistSettings.renderOrderDLConsider && ((drawL == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL))) {
+					drawListPlot.attributeOrder[drawL] = sortHistogram(hist, drawListPlot, violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse);
 				}
-				else if ((renderOrderBasedOnFirstDL && drawL > 0)) {
+				else if ((violinPlotDrawlistSettings.renderOrderBasedOnFirstDL && drawL > 0)) {
 					break;
 				}
 			}
-			if ((renderOrderBasedOnFirstDL && drawL > 0)) {
+			if ((violinPlotDrawlistSettings.renderOrderBasedOnFirstDL && drawL > 0)) {
 				break;
 			}
 		}
@@ -6359,9 +6359,9 @@ inline void updateAllViolinPlotMaxValues(bool renderOrderBasedOnFirst) {
 				area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
 			}
 
-			if (renderOrderDLConsider && ((drawL == 0) || (!renderOrderBasedOnFirst)))
+			if (violinPlotDrawlistSettings.renderOrderDLConsider && ((drawL == 0) || (!renderOrderBasedOnFirst)))
 			{
-				drawListPlot.attributeOrder[drawL] = sortHistogram(hist, drawListPlot, renderOrderDLConsider, renderOrderDLReverse);
+				drawListPlot.attributeOrder[drawL] = sortHistogram(hist, drawListPlot, violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse);
 				//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
 				//for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
 			}
@@ -6398,7 +6398,7 @@ static void optimizeViolinSidesAndAssignCustColors() {
 	if (violinAdaptSidesAutoObj.optimizeSidesNowAttr)
 	{
 		auto& hist = histogramManager->getHistogram(violinAdaptSidesAutoObj.vp->drawLists[0].name);
-		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vp->activeAttributes), violinPlotAttrConsiderBlendingOrder);
+		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vp->activeAttributes), violinPlotAttributeSettings.violinPlotAttrConsiderBlendingOrder);
 
 		violinAdaptSidesAutoObj.vp->violinPlacements.clear();
 		for (int j = 0; j < violinAdaptSidesAutoObj.vp->attributeNames.size(); ++j) {
@@ -6406,9 +6406,9 @@ static void optimizeViolinSidesAndAssignCustColors() {
 
 
 		}
-		if (violinPlotAttrInsertCustomColors || violinPlotAttrConsiderBlendingOrder) {
+		if (violinPlotAttributeSettings.violinPlotAttrInsertCustomColors || violinPlotAttributeSettings.violinPlotAttrConsiderBlendingOrder) {
 			changeColorsToCustomAlternatingColors((violinAdaptSidesAutoObj.vp->colorPaletteManager), violinAdaptSidesAutoObj.vp->attributeNames.size(), &(violinAdaptSidesAutoObj.vp->drawListLineColors), &(violinAdaptSidesAutoObj.vp->drawListFillColors),
-				hist, &(violinAdaptSidesAutoObj.vp->activeAttributes), violinPlotAttrInsertCustomColors);
+				hist, &(violinAdaptSidesAutoObj.vp->activeAttributes), violinPlotAttributeSettings.violinPlotAttrInsertCustomColors);
 		}
 		violinAdaptSidesAutoObj.optimizeSidesNowAttr = false;
 	}
@@ -6418,16 +6418,16 @@ static void optimizeViolinSidesAndAssignCustColors() {
 	if (violinAdaptSidesAutoObj.optimizeSidesNowDL)
 	{
 		auto& hist = histogramManager->getHistogram(violinAdaptSidesAutoObj.vdlp->drawLists[0]);
-		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes), violinPlotDLConsiderBlendingOrder);
+		histogramManager->determineSideHist(hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes), violinPlotDrawlistSettings.violinPlotDLConsiderBlendingOrder);
 
 		violinAdaptSidesAutoObj.vdlp->attributePlacements.clear();
 		for (int j = 0; j < violinAdaptSidesAutoObj.vdlp->attributeNames.size(); ++j) {
 			violinAdaptSidesAutoObj.vdlp->attributePlacements.push_back((hist.side[j] % 2) ? ViolinMiddleLeft : ViolinMiddleRight);
 		}
 
-		if (violinPlotDLInsertCustomColors || violinPlotDLConsiderBlendingOrder) {
+		if (violinPlotDrawlistSettings.violinPlotDLInsertCustomColors || violinPlotDrawlistSettings.violinPlotDLConsiderBlendingOrder) {
 			changeColorsToCustomAlternatingColors((violinAdaptSidesAutoObj.vdlp->colorPaletteManager), violinAdaptSidesAutoObj.vdlp->attributeNames.size(), &(violinAdaptSidesAutoObj.vdlp->attributeLineColors), &(violinAdaptSidesAutoObj.vdlp->attributeFillColors),
-				hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes), violinPlotDLInsertCustomColors);
+				hist, &(violinAdaptSidesAutoObj.vdlp->activeAttributes), violinPlotDrawlistSettings.violinPlotDLInsertCustomColors);
 		}
 		violinAdaptSidesAutoObj.optimizeSidesNowDL = false;
 	}
@@ -6549,9 +6549,9 @@ void violinDrawListPlotAddDrawList(ViolinDrawlistPlot& drawPlot, DrawList& dl, u
 		drawPlot.drawLists.push_back(dl.name);
 		//violinDrawlistPlots[i].drawListOrder.push_back(violinDrawlistPlots[i].drawListOrder.size());
 		drawPlot.attributeOrder.push_back({});
-		if (renderOrderDLConsider) {
+		if (violinPlotDrawlistSettings.renderOrderDLConsider) {
 
-			drawPlot.attributeOrder.back() = sortHistogram(hist, drawPlot, renderOrderDLConsider, renderOrderDLReverse);
+			drawPlot.attributeOrder.back() = sortHistogram(hist, drawPlot, violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse);
 
 			/*if (!renderOrderDLReverse) {
 				std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
@@ -7843,7 +7843,7 @@ int main(int, char**)
 							if (selectedTemplateBrush != -1) {
 								if (pcSettings.drawListForTemplateBrush) {
 									removePcPlotDrawList(g_PcPlotDrawLists.back());
-									drawListForTemplateBrush = false;
+									pcSettings.drawListForTemplateBrush = false;
 								}
 								if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 								globalBrushes.pop_back();
@@ -8439,7 +8439,7 @@ int main(int, char**)
 						float x = picPos.x + i * gap / (amtOfLabels - 1) + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 						ImVec2 a(x, picPos.y);
 						ImVec2 b(x, picPos.y + picSize.y - 1);
-						ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+						ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - pcSettings.PcPlotBackCol.x) * 255, (1 - pcSettings.PcPlotBackCol.y) * 255, (1 - pcSettings.PcPlotBackCol.z) * 255, 255), 1);
 						//drawing axis sections
 						int attrib = attributeOfPlace(i);
 						if (pcSettings.axisTickAmount > 0 && pcAttributes[attrib].categories.empty()) {
@@ -8454,7 +8454,7 @@ int main(int, char**)
 									a = ImVec2(x, y);
 									if (i == amtOfLabels - 1) b = ImVec2(x - pcSettings.axisTickWidth, y);
 									else b = ImVec2(x + pcSettings.axisTickWidth, y);
-									ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+									ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - pcSettings.PcPlotBackCol.x) * 255, (1 - pcSettings.PcPlotBackCol.y) * 255, (1 - pcSettings.PcPlotBackCol.z) * 255, 255), 1);
 									b.y -= lineHeight;
 									if (i == amtOfLabels - 1) b.x -= ImGui::CalcTextSize("0").x;
 									ImGui::SetCursorScreenPos(b);
@@ -8470,7 +8470,7 @@ int main(int, char**)
 								y = picPos.y + picSize.y - y - 1;
 								a = ImVec2(x, y);
 								b = (i == amtOfLabels - 1) ? ImVec2(x - pcSettings.axisTickWidth, y): ImVec2(x + pcSettings.axisTickWidth, y);
-								ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - PcPlotBackCol.x) * 255, (1 - PcPlotBackCol.y) * 255, (1 - PcPlotBackCol.z) * 255, 255), 1);
+								ImGui::GetWindowDrawList()->AddLine(a, b, IM_COL32((1 - pcSettings.PcPlotBackCol.x) * 255, (1 - pcSettings.PcPlotBackCol.y) * 255, (1 - pcSettings.PcPlotBackCol.z) * 255, 255), 1);
 								static char str[20];
 								sprintf(str, "%g", yval);
 								b.y -= lineHeight;
@@ -8687,10 +8687,10 @@ int main(int, char**)
 								//adjusting the bounds of the brush by a mu
 								if (brushHover && ImGui::GetIO().MouseWheel) {
 									if (ImGui::GetIO().MouseWheel > 0) {
-										br.second.first += ImGui::GetIO().MouseWheel * (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * brushMuFactor;
+										br.second.first += ImGui::GetIO().MouseWheel * (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * pcSettings.brushMuFactor;
 									}
 									else {
-										br.second.second += ImGui::GetIO().MouseWheel * (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * brushMuFactor;
+										br.second.second += ImGui::GetIO().MouseWheel * (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * pcSettings.brushMuFactor;
 									}
 									pcPlotRender = updateAllActiveIndices();
 									updateIsoSurface(globalBrushes[selectedGlobalBrush]);
@@ -9668,8 +9668,8 @@ int main(int, char**)
 							continue;
 						if (ImGui::MenuItem(("Render " + pcAttributes[i].name).c_str())) {
 							ImGui::CloseCurrentPopup();
-							uploadDrawListTo3dView(dl, pcAttributes[i].name, "a", "b", "c");
-							active3dAttribute = pcAttributes[i].name;
+							uploadDrawListTo3dView(dl, i, "a", "b", "c");
+							view3dSettings.activeAttribute = i;
 						}
 					}
 
@@ -9711,7 +9711,7 @@ int main(int, char**)
 				}
 				ImGui::NextColumn();
 
-				if (ImGui::Checkbox((std::string("##dh") + dl.name).c_str(), &dl.showHistogramm) && drawHistogramm) {
+				if (ImGui::Checkbox((std::string("##dh") + dl.name).c_str(), &dl.showHistogramm) && pcSettings.drawHistogramm) {
 					pcPlotRender = true;
 				}
 				ImGui::NextColumn();
@@ -9925,14 +9925,14 @@ int main(int, char**)
 
 		//bubble window ----------------------------------------------------------------------------------
 		int bubbleWindowSize = 0;
-		if (enableBubbleWindow) {
-			ImGui::Begin("Bubble window", &enableBubbleWindow, ImGuiWindowFlags_MenuBar);
+		if (bubbleWindowSettings.enabled) {
+			ImGui::Begin("Bubble window", &bubbleWindowSettings.enabled, ImGuiWindowFlags_MenuBar);
 
 			bubbleWindowSize = ImGui::GetWindowSize().y;
 
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Coupling")) {
-					ImGui::MenuItem("Couple to Parallel Coordinates", "", &coupleBubbleWindow);
+					ImGui::MenuItem("Couple to Parallel Coordinates", "", &bubbleWindowSettings.coupleToBrushing);
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Navigation")) {
@@ -9958,7 +9958,7 @@ int main(int, char**)
 						if (ImGui::BeginCombo("X", pcAttributes[bubblePlotter->posIndices.x].name.c_str())) {
 							for (int i = 0; i < pcAttributes.size(); ++i) {
 								if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-									bubblePlotter->attributeActivations[posIndices.x] = true;
+									bubblePlotter->attributeActivations[bubbleWindowSettings.posIndices.x] = true;
 									bubblePlotter->attributeActivations[i] = false;
 									bubblePlotter->posIndices.x = i;
 									bubblePlotter->boundingRectMin.x = pcAttributes[i].min;
@@ -9973,7 +9973,7 @@ int main(int, char**)
 						if (ImGui::BeginCombo("Y", pcAttributes[bubblePlotter->posIndices.y].name.c_str())) {
 							for (int i = 0; i < pcAttributes.size(); ++i) {
 								if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-									bubblePlotter->attributeActivations[posIndices.y] = true;
+									bubblePlotter->attributeActivations[bubbleWindowSettings.posIndices.y] = true;
 									bubblePlotter->attributeActivations[i] = false;
 									bubblePlotter->posIndices.y = i;
 									bubblePlotter->boundingRectMin.y = pcAttributes[i].min;
@@ -9988,7 +9988,7 @@ int main(int, char**)
 						if (ImGui::BeginCombo("Z", pcAttributes[bubblePlotter->posIndices.z].name.c_str())) {
 							for (int i = 0; i < pcAttributes.size(); ++i) {
 								if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-									bubblePlotter->attributeActivations[posIndices.z] = true;
+									bubblePlotter->attributeActivations[bubbleWindowSettings.posIndices.z] = true;
 									bubblePlotter->attributeActivations[i] = false;
 									bubblePlotter->posIndices.z = i;
 									bubblePlotter->boundingRectMin.z = pcAttributes[i].min;
@@ -10117,14 +10117,14 @@ int main(int, char**)
 		//end of bubble window ---------------------------------------------------------------------------
 
 		//begin of iso surface window --------------------------------------------------------------------
-		if (enableIsoSurfaceWindow) {
-			ImGui::Begin("Isosurface Renderer",&enableIsoSurfaceWindow,ImGuiWindowFlags_MenuBar);
+		if (isoSurfSettings.enabled) {
+			ImGui::Begin("Isosurface Renderer",&isoSurfSettings.enabled,ImGuiWindowFlags_MenuBar);
 			int dlbExport = -1;
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
-					ImGui::Checkbox("Couple to brush", &coupleIsoSurfaceRenderer);
-					ImGui::Checkbox("Regular grid", &isoSurfaceRegularGrid);
-					ImGui::InputInt3("Regular grid dimensions", isoSurfaceRegularGridDim);
+					ImGui::Checkbox("Couple to brush", &isoSurfSettings.coupleIsoSurfaceRenderer);
+					ImGui::Checkbox("Regular grid", &isoSurfSettings.isoSurfaceRegularGrid);
+					ImGui::InputInt3("Regular grid dimensions", isoSurfSettings.isoSurfaceRegularGridDim);
 					
 					ImGui::EndMenu();
 				}
@@ -10299,39 +10299,39 @@ int main(int, char**)
 			}
 			ImGui::PopItemWidth();
 
-			ImGui::Checkbox("Dataset has regular grid", &isoSurfaceRegularGrid);
+			ImGui::Checkbox("Dataset has regular grid", &isoSurfSettings.isoSurfaceRegularGrid);
 
 			ImGui::PushItemWidth(100);
 			//setting the position variables
 			if (pcAttributes.size()) {
-				if (ImGui::BeginCombo("##xdim", pcAttributes[posIndices.x].name.c_str())) {
+				if (ImGui::BeginCombo("##xdim", pcAttributes[isoSurfSettings.posIndices.x].name.c_str())) {
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-							posIndices.x = i;
+							isoSurfSettings.posIndices.x = i;
 							if (queryAttributes[i].dimensionSize > 0)
-								isoSurfaceRegularGridDim[0] = queryAttributes[i].dimensionSize;
+								isoSurfSettings.isoSurfaceRegularGridDim[0] = queryAttributes[i].dimensionSize;
 						}
 					}
 					ImGui::EndCombo();
 				}
 				ImGui::SameLine();
-				if (ImGui::BeginCombo("##ydim", pcAttributes[posIndices.y].name.c_str())) {
+				if (ImGui::BeginCombo("##ydim", pcAttributes[isoSurfSettings.posIndices.y].name.c_str())) {
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-							posIndices.y = i;
+							isoSurfSettings.posIndices.y = i;
 							if (queryAttributes[i].dimensionSize > 0)
-								isoSurfaceRegularGridDim[1] = queryAttributes[i].dimensionSize;
+								isoSurfSettings.isoSurfaceRegularGridDim[1] = queryAttributes[i].dimensionSize;
 						}
 					}
 					ImGui::EndCombo();
 				}
 				ImGui::SameLine();
-				if (ImGui::BeginCombo("Position indices (Order: lat, alt, lon)##zdim", pcAttributes[posIndices.z].name.c_str())) {
+				if (ImGui::BeginCombo("Position indices (Order: lat, alt, lon)##zdim", pcAttributes[isoSurfSettings.posIndices.z].name.c_str())) {
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-							posIndices.z = i;
+							isoSurfSettings.posIndices.z = i;
 							if (queryAttributes[i].dimensionSize > 0)
-								isoSurfaceRegularGridDim[2] = queryAttributes[i].dimensionSize;
+								isoSurfSettings.isoSurfaceRegularGridDim[2] = queryAttributes[i].dimensionSize;
 						}
 					}
 					ImGui::EndCombo();
@@ -10346,7 +10346,7 @@ int main(int, char**)
 			static bool showError = false;
 			static bool positionError = false;
 			if (ImGui::Button("Add new iso surface")) {
-				if (selectedDrawlist == -1 || posIndices.x==posIndices.y || posIndices.y==posIndices.z || posIndices.x==posIndices.z) {
+				if (selectedDrawlist == -1 || isoSurfSettings.posIndices.x== isoSurfSettings.posIndices.y || isoSurfSettings.posIndices.y== isoSurfSettings.posIndices.z || isoSurfSettings.posIndices.x== isoSurfSettings.posIndices.z) {
 					showError = true;
 				}
 				else {
@@ -10390,21 +10390,21 @@ int main(int, char**)
 						}
 					}
 					if (index == -1) {
-						uint32_t wi = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
-						uint32_t he = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
-						uint32_t de = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+						uint32_t wi = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+						uint32_t he = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+						uint32_t de = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
 						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,(selectedGlobalBrush == -1) ? "" : globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {wi, he, de} });
 					}
 					if (selectedGlobalBrush == -1) {
-						uint32_t w = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
-						uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
-						uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+						uint32_t w = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+						uint32_t h = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+						uint32_t d = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
 						std::vector<std::pair<float, float>> posBounds(3);
 						for (int i = 0; i < 3; ++i) {
-							posBounds[i].first = pcAttributes[posIndices[i]].min;
-							posBounds[i].second = pcAttributes[posIndices[i]].max;
+							posBounds[i].first = pcAttributes[isoSurfSettings.posIndices[i]].min;
+							posBounds[i].second = pcAttributes[isoSurfSettings.posIndices[i]].max;
 						}
-						if (!isoSurfaceRegularGrid) {
+						if (!isoSurfSettings.isoSurfaceRegularGrid) {
 							posBounds[0].first = SpacialData::rlat[0];
 							posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
 							posBounds[1].first = SpacialData::altitude[0];
@@ -10412,14 +10412,14 @@ int main(int, char**)
 							posBounds[2].first = SpacialData::rlon[0];
 							posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
 						}
-						isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfaceRegularGrid, index);
+						isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &isoSurfSettings.posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfSettings.isoSurfaceRegularGrid, index);
 					}
 					else {
-						if (isoSurfaceRegularGrid) {
-							isoSurfaceRenderer->update3dBinaryVolume(isoSurfaceRegularGridDim[0], isoSurfaceRegularGridDim[1], isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
+						if (isoSurfSettings.isoSurfaceRegularGrid) {
+							isoSurfaceRenderer->update3dBinaryVolume(isoSurfSettings.isoSurfaceRegularGridDim[0], isoSurfSettings.isoSurfaceRegularGridDim[1], isoSurfSettings.isoSurfaceRegularGridDim[2], pcAttributes.size(), brushIndices, minMax, isoSurfSettings.posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 						}
 						else {
-							if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index) && index == -1) {
+							if (!isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, isoSurfSettings.posIndices, *data, dl->indices, miMa, index) && index == -1) {
 								isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {uint32_t(SpacialData::rlatSize), uint32_t(SpacialData::altitudeSize), uint32_t(SpacialData::rlonSize)} });
 								positionError = true;
 							}
@@ -10510,14 +10510,14 @@ int main(int, char**)
 		//end of iso surface window -----------------------------------------------------------------------
 
 		//brush iso surface window -----------------------------------------------------------------------
-		if (enableBrushIsoSurfaceWindow) {
-			ImGui::Begin("Brush Isosurface Renderer", &enableBrushIsoSurfaceWindow, ImGuiWindowFlags_MenuBar);
+		if (brushIsoSurfSettings.enabled) {
+			ImGui::Begin("Brush Isosurface Renderer", &brushIsoSurfSettings.enabled, ImGuiWindowFlags_MenuBar);
 			int dlbExport = -1;
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
-					ImGui::Checkbox("Couple to brush", &coupleBrushIsoSurfaceRenderer);
-					ImGui::Checkbox("Regular grid", &isoSurfaceRegularGrid);
-					ImGui::InputInt3("Regular grid dimensions", isoSurfaceRegularGridDim);
+					ImGui::Checkbox("Couple to brush", &brushIsoSurfSettings.coupleBrushIsoSurfaceRenderer);
+					ImGui::Checkbox("Regular grid", &brushIsoSurfSettings.isoSurfaceRegularGrid);
+					ImGui::InputInt3("Regular grid dimensions", brushIsoSurfSettings.isoSurfaceRegularGridDim);
 
 					ImGui::EndMenu();
 				}
@@ -10618,7 +10618,7 @@ int main(int, char**)
 			ImGui::Text("To set the data for iso surface rendering, drag and drop a drawlist onto this window.\nTo Add a brush iso surface, darg and drop a global brush onto this window");
 			static uint32_t posIndices[3]{ 1,0,2 };
 			//ImGui::DragInt3("Position indices(order: lat, alt, lon)", (int*)posIndices, 1, 0, pcAttributes.size());
-			ImGui::Checkbox("Dataset has regular grid", &isoSurfaceRegularGrid);
+			ImGui::Checkbox("Dataset has regular grid", &brushIsoSurfSettings.isoSurfaceRegularGrid);
 
 			ImGui::PushItemWidth(100);
 			//setting the position variables
@@ -10628,7 +10628,7 @@ int main(int, char**)
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
 							posIndices[0] = i;
 							if (queryAttributes[i].dimensionSize > 0)
-								isoSurfaceRegularGridDim[0] = queryAttributes[i].dimensionSize;
+								brushIsoSurfSettings.isoSurfaceRegularGridDim[0] = queryAttributes[i].dimensionSize;
 						}
 					}
 					ImGui::EndCombo();
@@ -10639,7 +10639,7 @@ int main(int, char**)
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
 							posIndices[1] = i;
 							if (queryAttributes[i].dimensionSize > 0)
-								isoSurfaceRegularGridDim[1] = queryAttributes[i].dimensionSize;
+								brushIsoSurfSettings.isoSurfaceRegularGridDim[1] = queryAttributes[i].dimensionSize;
 						}
 					}
 					ImGui::EndCombo();
@@ -10650,7 +10650,7 @@ int main(int, char**)
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
 							posIndices[2] = i;
 							if (queryAttributes[i].dimensionSize > 0)
-								isoSurfaceRegularGridDim[2] = queryAttributes[i].dimensionSize;
+								brushIsoSurfSettings.isoSurfaceRegularGridDim[2] = queryAttributes[i].dimensionSize;
 						}
 					}
 					ImGui::EndCombo();
@@ -10706,16 +10706,16 @@ int main(int, char**)
 							break;
 						}
 					}
-					uint32_t w = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
-					uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
-					uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+					uint32_t w = (brushIsoSurfSettings.isoSurfaceRegularGrid) ? brushIsoSurfSettings.isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+					uint32_t h = (brushIsoSurfSettings.isoSurfaceRegularGrid) ? brushIsoSurfSettings.isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+					uint32_t d = (brushIsoSurfSettings.isoSurfaceRegularGrid) ? brushIsoSurfSettings.isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
 					std::vector<uint32_t> densityInds(pcAttributes.size());
 					for (int i = 0; i < pcAttributes.size(); ++i) densityInds[i] = i;
 					std::vector<std::pair<float, float>> bounds;// { {pcAttributes[posIndices[0]].min, pcAttributes[posIndices[0]].max}, { pcAttributes[posIndices[1]].min,pcAttributes[posIndices[1]].max }, { pcAttributes[posIndices[2]].min,pcAttributes[posIndices[2]].max } };
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						bounds.emplace_back(pcAttributes[i].min, pcAttributes[i].max);
 					}
-					if (!isoSurfaceRegularGrid) {
+					if (!brushIsoSurfSettings.isoSurfaceRegularGrid) {
 						bounds[posIndices[0]].first = SpacialData::rlat[0];
 						bounds[posIndices[0]].second = SpacialData::rlat[SpacialData::rlatSize - 1];
 						bounds[posIndices[1]].first = SpacialData::altitude[0];
@@ -10723,7 +10723,7 @@ int main(int, char**)
 						bounds[posIndices[2]].first = SpacialData::rlon[0];
 						bounds[posIndices[2]].second = SpacialData::rlon[SpacialData::rlonSize - 1];
 					}
-					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, bounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),isoSurfaceRegularGrid);
+					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, bounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),brushIsoSurfSettings.isoSurfaceRegularGrid);
 					brushIsoSurfaceRenderer->activeDrawlist = dl->name;
 				}
 				ImGui::EndDragDropTarget(); 
@@ -10735,7 +10735,7 @@ int main(int, char**)
 		//begin of violin plots attribute major ----------------------------------------------------------
 		std::vector<std::pair<float, float>> globalMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 		std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-		if (violinYScale == ViolinYScaleGlobalBrush || violinYScale == ViolinYScaleBrushes) {
+		if (violinPlotAttributeSettings.violinYScale == ViolinYScaleGlobalBrush || violinPlotAttributeSettings.violinYScale == ViolinYScaleBrushes) {
 			for (auto& brush : globalBrushes) {
 				for (auto& br : brush.brushes) {
 					for (auto& minMax : br.second) {
@@ -10751,16 +10751,16 @@ int main(int, char**)
 				}
 			}
 		}
-		if (enableAttributeViolinPlots) {
-			ImGui::Begin("Violin attribute window", &enableAttributeViolinPlots, ImGuiWindowFlags_MenuBar);
+		if (violinPlotAttributeSettings.enabled) {
+			ImGui::Begin("Violin attribute window", &violinPlotAttributeSettings.enabled, ImGuiWindowFlags_MenuBar);
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
-					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
-					ImGui::Checkbox("Show Attribute min/max", &showViolinPlotsMinMax);
-					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 4000);
-					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 40);
-					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
-					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					ImGui::Checkbox("Couple to Brushing", &violinPlotAttributeSettings.coupleViolinPlots);
+					ImGui::Checkbox("Show Attribute min/max", &violinPlotAttributeSettings.showViolinPlotsMinMax);
+					ImGui::SliderInt("Violin plots height", &violinPlotAttributeSettings.violinPlotHeight, 1, 4000);
+					ImGui::SliderInt("Violin plots x spacing", &violinPlotAttributeSettings.violinPlotXSpacing, 0, 40);
+					ImGui::SliderFloat("Violin plots line thickness", &violinPlotAttributeSettings.violinPlotThickness, 0, 10);
+					ImGui::ColorEdit4("Violin plots background", &violinPlotAttributeSettings.violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					if (ImGui::Checkbox("Ignore zero values",&histogramManager->ignoreZeroValues)) {
 // ToDo: Check whether violinPlots vs violinDrawlistPlots. This here is for the attributes, not the drawlists...
 						for (auto& drawListPlot : violinDrawlistPlots) {
@@ -10797,7 +10797,7 @@ int main(int, char**)
 									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
 								}
 
-								if (renderOrderAttConsider && ((drawL == 0) || (!renderOrderBasedOnFirstAtt)))
+								if (violinPlotAttributeSettings.renderOrderAttConsider && ((drawL == 0) || (!violinPlotAttributeSettings.renderOrderBasedOnFirstAtt)))
 								{
 									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) { return sortDescPair(a, b); });
 									for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
@@ -10812,7 +10812,7 @@ int main(int, char**)
 					}
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
 						histogramManager->updateSmoothedValues();
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+						updateAllViolinPlotMaxValues(violinPlotAttributeSettings.renderOrderBasedOnFirstDL);
 						for (auto& drawListPlot : violinDrawlistPlots) {
 							drawListPlot.maxGlobalValue = 0;
 							for (int j = 0; j < drawListPlot.maxValues.size(); ++j) {
@@ -10832,7 +10832,7 @@ int main(int, char**)
 									area.push_back({ j, drawListPlot.attributeScalings[j] / hist.maxCount[j] });
 								}
 
-								if (renderOrderAttConsider && ((drawL == 0) || (!renderOrderBasedOnFirstAtt)))
+								if (violinPlotAttributeSettings.renderOrderAttConsider && ((drawL == 0) || (!violinPlotAttributeSettings.renderOrderBasedOnFirstAtt)))
 								{
 									std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
 									for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
@@ -10848,28 +10848,28 @@ int main(int, char**)
 					static float stdDev = 1.5;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, 0, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+						updateAllViolinPlotMaxValues(violinPlotAttributeSettings.renderOrderBasedOnFirstAtt);
 						for(auto& plot: violinAttributePlots) updateSummedBins(plot);
 					}
 					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
-					if (ImGui::BeginCombo("Y Scale", violinYs[violinYScale])) {
+					if (ImGui::BeginCombo("Y Scale", violinYs[violinPlotAttributeSettings.violinYScale])) {
                         ImGui::SetTooltip("This only affects to which range the bins are fitted. The y min and max are the PCPlot axis borders.");
 						for (int v = 0; v < 4; ++v) {
 							if (ImGui::MenuItem(violinYs[v])) {
-								violinYScale =(ViolinYScale) v;
+								violinPlotAttributeSettings.violinYScale =(ViolinYScale) v;
 							}
 						}
 						ImGui::EndCombo();
 					}
 					ImGui::Columns(3);
-					ImGui::Checkbox("Overlay lines", &violinPlotOverlayLines);
+					ImGui::Checkbox("Overlay lines", &violinPlotAttributeSettings.violinPlotOverlayLines);
 					ImGui::NextColumn();
-					ImGui::Checkbox("Base render order on first attribute", &renderOrderBasedOnFirstAtt);
+					ImGui::Checkbox("Base render order on first attribute", &violinPlotAttributeSettings.renderOrderBasedOnFirstAtt);
 					ImGui::NextColumn();
-					ImGui::Checkbox("Optimize render order", &renderOrderAttConsider);
+					ImGui::Checkbox("Optimize render order", &violinPlotAttributeSettings.renderOrderAttConsider);
 					ImGui::Separator();
 
-					ImGui::Checkbox("Optimize non-stop", &renderOrderAttConsiderNonStop);
+					ImGui::Checkbox("Optimize non-stop", &violinPlotAttributeSettings.renderOrderAttConsiderNonStop);
 					
 					//ImGui::EndMenu();
 
@@ -10881,7 +10881,7 @@ int main(int, char**)
 
 			const static int plusWidth = 100;
             for (unsigned int i = 0; i < violinAttributePlots.size(); ++i) {
-				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, violinPlotAttributeSettings.violinPlotHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 				//ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(0, 0), true, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
 				ImGui::PushItemWidth(150);
 				//drawing uniform settings
@@ -10932,7 +10932,7 @@ int main(int, char**)
 				if (ImGui::CollapsingHeader("Added Drawlists")) {
 					for (int j = 0; j < violinAttributePlots[i].drawLists.size(); ++j) {
 						if (ImGui::Checkbox(violinAttributePlots[i].drawLists[j].name.c_str(), &violinAttributePlots[i].drawLists[j].activated)) {
-							updateAllViolinPlotMaxValues(renderOrderBasedOnFirstAtt);
+							updateAllViolinPlotMaxValues(violinPlotAttributeSettings.renderOrderBasedOnFirstAtt);
 							updateSummedBins(violinAttributePlots[i]);
 						}
 
@@ -10990,7 +10990,7 @@ int main(int, char**)
 					ImGui::SameLine(200);
 					if (ImGui::Checkbox(("Log##" + pcAttributes[j].name).c_str(), &histogramManager->logScale[j])) {
 						histogramManager->updateSmoothedValues();
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+						updateAllViolinPlotMaxValues(violinPlotAttributeSettings.renderOrderBasedOnFirstDL);
 					}
 
 					if (violinAttributePlots[i].activeAttributes[j]) ++amtOfAttributes;
@@ -11003,7 +11003,7 @@ int main(int, char**)
 				ImGui::Columns(5);
 
 
-				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotAttrReplaceNonStop)) {
+				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotAttributeSettings.violinPlotAttrReplaceNonStop)) {
 					if (violinAttributePlots[i].drawLists.size() != 0) {
 						violinAdaptSidesAutoObj.vp = &(violinAttributePlots[i]);
 						violinAdaptSidesAutoObj.optimizeSidesNowAttr = true;
@@ -11042,7 +11042,7 @@ int main(int, char**)
 					}
 				}
 				ImGui::NextColumn();
-				ImGui::Checkbox("", &violinPlotAttrInsertCustomColors);
+				ImGui::Checkbox("", &violinPlotAttributeSettings.violinPlotAttrInsertCustomColors);
 				ImGui::SameLine(50);
 				if (ImGui::BeginCombo("##appcolattr", "Apply colors of Dark2YellowSplit")) {
 					std::vector<std::string> *availablePalettes = 
@@ -11052,22 +11052,22 @@ int main(int, char**)
 				
 					if (vc.size() > 0) {
 						//static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
-						if (ImGui::BeginCombo("Line Palette", vc[violinPlotAttrAutoColorAssignLine])) {
+						if (ImGui::BeginCombo("Line Palette", vc[violinPlotAttributeSettings.autoColorAssingLine])) {
 							for (int v = 0; v < vc.size(); ++v) {
 								if (ImGui::MenuItem(vc[v])) {
 									violinAttributePlots[i].colorPaletteManager->chosenAutoColorPaletteLine =
 										(*availablePalettes)[v];
-									violinPlotAttrAutoColorAssignFill = v;
+									violinPlotAttributeSettings.autoColorAssingLine = v;
 								}
 							}
 							ImGui::EndCombo();
 						}
-						if (ImGui::BeginCombo("Fill Palette", vc[violinPlotAttrAutoColorAssignFill])) {
+						if (ImGui::BeginCombo("Fill Palette", vc[violinPlotAttributeSettings.autoColorAssingFill])) {
 							for (int v = 0; v < vc.size(); ++v) {
 								if (ImGui::MenuItem(vc[v])) {
 									violinAttributePlots[i].colorPaletteManager->chosenAutoColorPaletteFill =
 										(*availablePalettes)[v];
-									violinPlotAttrAutoColorAssignFill = v;
+									violinPlotAttributeSettings.autoColorAssingFill = v;
 								}
 							}
 							ImGui::EndCombo();
@@ -11078,22 +11078,22 @@ int main(int, char**)
 				
 
 				ImGui::NextColumn();
-				ImGui::Checkbox("Re-place constantly", &violinPlotAttrReplaceNonStop);
+				ImGui::Checkbox("Re-place constantly", &violinPlotAttributeSettings.violinPlotAttrReplaceNonStop);
 
 				ImGui::NextColumn();
-				ImGui::Checkbox("Consider blending order", &violinPlotAttrConsiderBlendingOrder);
+				ImGui::Checkbox("Consider blending order", &violinPlotAttributeSettings.violinPlotAttrConsiderBlendingOrder);
 				ImGui::NextColumn();
-				if(ImGui::Checkbox("Reverse color pallette", &violinPlotAttrReverseColorPallette))
+				if(ImGui::Checkbox("Reverse color pallette", &violinPlotAttributeSettings.violinPlotAttrReverseColorPallette))
 				{
-					violinAttributePlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
+					violinAttributePlots[i].colorPaletteManager->setReverseColorOrder(violinPlotAttributeSettings.violinPlotDLReverseColorPallette);
 				}
 
 				if (ImGui::Button("Fix order and colors"))
 				{
-					violinPlotAttrReplaceNonStop = false;
+					violinPlotAttributeSettings.violinPlotAttrReplaceNonStop = false;
 					violinAttributePlots[i].colorPaletteManager->useColorPalette = false;
-					renderOrderAttConsiderNonStop = false;
-					renderOrderAttConsider = false;
+					violinPlotAttributeSettings.renderOrderAttConsiderNonStop = false;
+					violinPlotAttributeSettings.renderOrderAttConsider = false;
 					//violinDrawlistPlots[i].colorPaletteManager->useColorPalette = false;				
 				}
 
@@ -11101,9 +11101,9 @@ int main(int, char**)
 				ImGui::Columns(previousNrOfColumns);
 
 				const char* plotCombinations[2] = { "stacked", "sum" };
-				if(ImGui::BeginCombo("Violin plot combination", plotCombinations[violinPlotAttrStacking])) {
+				if(ImGui::BeginCombo("Violin plot combination", plotCombinations[violinPlotAttributeSettings.violinPlotAttrStacking])) {
 					for (int comp = 0; comp < 2; ++comp) {
-						if (ImGui::MenuItem(plotCombinations[comp])) violinPlotAttrStacking = comp;
+						if (ImGui::MenuItem(plotCombinations[comp])) violinPlotAttributeSettings.violinPlotAttrStacking = comp;
 					}
 					ImGui::EndCombo();
 				}
@@ -11112,7 +11112,7 @@ int main(int, char**)
 				ImGui::Separator();
 				int c = 0;
 				int c1 = 0;
-				float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes + violinPlotXSpacing;
+				float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotAttributeSettings.violinPlotXSpacing) / amtOfAttributes + violinPlotAttributeSettings.violinPlotXSpacing;
 				for (uint32_t j : violinAttributePlots[i].attributeOrder) {
 					if (!violinAttributePlots[i].activeAttributes[j]) {
 						c++;
@@ -11143,10 +11143,10 @@ int main(int, char**)
 				}
 
 				// axis min max values
-				if (showViolinPlotsMinMax) {
+				if (violinPlotAttributeSettings.showViolinPlotsMinMax) {
 					int c = 0;
 					int c1 = 0;
-					float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes + violinPlotXSpacing;
+					float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotAttributeSettings.violinPlotXSpacing) / amtOfAttributes + violinPlotAttributeSettings.violinPlotXSpacing;
 					for (uint32_t j : violinAttributePlots[i].attributeOrder) {
 						if (!violinAttributePlots[i].activeAttributes[j]) {
 							c++;
@@ -11166,22 +11166,22 @@ int main(int, char**)
 				// Drawing the violin plots
 				ImVec2 leftUpperCorner = ImGui::GetCursorScreenPos();
 				ImVec2 origLeftUpper = leftUpperCorner;
-				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - (showViolinPlotsMinMax ? ImGui::GetTextLineHeightWithSpacing(): 0));
+				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotAttributeSettings.violinPlotXSpacing) / amtOfAttributes, ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - (violinPlotAttributeSettings.showViolinPlotsMinMax ? ImGui::GetTextLineHeightWithSpacing(): 0));
 				//ImVec2 size((ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes, violinPlotHeight);
-				ViolinDrawState drawState = (violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
+				ViolinDrawState drawState = (violinPlotAttributeSettings.violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
 				bool done = false;
 				while (!done) {
 					leftUpperCorner = origLeftUpper;
 					for (int j : violinAttributePlots[i].attributeOrder) {		//Drawing the plots per Attribute
 						if (!violinAttributePlots[i].activeAttributes[j]) continue;
-						if (drawState == ViolinDrawStateAll || drawState == ViolinDrawStateArea) ImGui::RenderFrame(leftUpperCorner, leftUpperCorner + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
+						if (drawState == ViolinDrawStateAll || drawState == ViolinDrawStateArea) ImGui::RenderFrame(leftUpperCorner, leftUpperCorner + size, ImGui::GetColorU32(violinPlotAttributeSettings.violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
 						ImGui::PushClipRect(leftUpperCorner, leftUpperCorner + size + ImVec2{ 1,1 }, false);
-						if (violinPlotAttrStacking == 0) {
+						if (violinPlotAttributeSettings.violinPlotAttrStacking == 0) {
 							for (int k = 0; k < violinAttributePlots[i].drawLists.size(); ++k) {
 								if (!violinAttributePlots[i].drawLists[k].activated) continue;
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinAttributePlots[i].drawLists[k].name);
 								DrawList* dl = nullptr;
-								if (true || yScaleToCurrenMax) {
+								if (true || violinPlotAttributeSettings.yScaleToCurrenMax) {
 									for (DrawList& draw : g_PcPlotDrawLists) {
 										if (draw.name == violinAttributePlots[i].drawLists[k].name) {
 											dl = &draw;
@@ -11189,7 +11189,7 @@ int main(int, char**)
 									}
 								}
 								//std::vector<std::pair<float, float>> localMinMax(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-								if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+								if (violinPlotAttributeSettings.violinYScale == ViolinYScaleLocalBrush || violinPlotAttributeSettings.violinYScale == ViolinYScaleBrushes) {
 									for (int j = 0; j < pcAttributes.size(); ++j) {
 										for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
 											if (dl->brushes[j][mi].minMax.first < localMinMax[j].first) localMinMax[j].first = dl->brushes[j][mi].minMax.first;
@@ -11206,7 +11206,7 @@ int main(int, char**)
 
 								float histYStart;
 								float histYEnd;
-								switch (violinYScale) {
+								switch (violinPlotAttributeSettings.violinYScale) {
 								case ViolinYScaleStandard:
 									histYStart = 0;
 									histYEnd = size.y;
@@ -11289,7 +11289,7 @@ int main(int, char**)
 									if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
 										for (int l = 1; l < hist.bins[j].size(); ++l) {
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[j].size() - 1) * histYLineDiff),
-												ImVec2(leftUpperCorner.x + hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+												ImVec2(leftUpperCorner.x + hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotAttributeSettings.violinPlotThickness);
 										}
 									}
 									break;
@@ -11312,7 +11312,7 @@ int main(int, char**)
 									if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
 										for (int l = 1; l < hist.bins[j].size(); ++l) {
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + size.x - hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[j].size() - 1) * histYLineDiff),
-												ImVec2(leftUpperCorner.x + size.x - hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+												ImVec2(leftUpperCorner.x + size.x - hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotAttributeSettings.violinPlotThickness);
 										}
 									}
 									break;
@@ -11336,10 +11336,10 @@ int main(int, char**)
 										for (int l = 1; l < hist.bins[j].size(); ++l) {
 											//left Line
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[j].size() - 1) * histYLineDiff),
-												ImVec2(xBase - .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+												ImVec2(xBase - .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotAttributeSettings.violinPlotThickness);
 											//right Line
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[j].size() - 1) * histYLineDiff),
-												ImVec2(xBase + .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotThickness);
+												ImVec2(xBase + .5f * hist.bins[j][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[k]), violinPlotAttributeSettings.violinPlotThickness);
 										}
 									}
 
@@ -11385,7 +11385,7 @@ int main(int, char**)
 								if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
 									for (int l = 1; l < summedBins[j].size(); ++l) {
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + summedBins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (summedBins[j].size() - 1) * histYLineDiff),
-											ImVec2(leftUpperCorner.x + summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotThickness);
+											ImVec2(leftUpperCorner.x + summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotAttributeSettings.violinPlotThickness);
 									}
 								}
 								break;
@@ -11408,7 +11408,7 @@ int main(int, char**)
 								if (drawState == ViolinDrawStateLine || drawState == ViolinDrawStateAll) {
 									for (int l = 1; l < summedBins[j].size(); ++l) {
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(leftUpperCorner.x + size.x - summedBins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (summedBins[j].size() - 1) * histYLineDiff),
-											ImVec2(leftUpperCorner.x + size.x - summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotThickness);
+											ImVec2(leftUpperCorner.x + size.x - summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotAttributeSettings.violinPlotThickness);
 									}
 								}
 								break;
@@ -11432,10 +11432,10 @@ int main(int, char**)
 									for (int l = 1; l < summedBins[j].size(); ++l) {
 										//left Line
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * summedBins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (summedBins[j].size() - 1) * histYLineDiff),
-											ImVec2(xBase - .5f * summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotThickness);
+											ImVec2(xBase - .5f * summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotAttributeSettings.violinPlotThickness);
 										//right Line
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * summedBins[j][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (summedBins[j].size() - 1) * histYLineDiff),
-											ImVec2(xBase + .5f * summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotThickness);
+											ImVec2(xBase + .5f * summedBins[j][l] / div * size.x, histYLineEnd - ((float)l) / (summedBins[j].size() - 1) * histYLineDiff), ImColor(violinAttributePlots[i].drawListLineColors[0]), violinPlotAttributeSettings.violinPlotThickness);
 									}
 								}
 							}
@@ -11443,7 +11443,7 @@ int main(int, char**)
 						//optimizeViolinSidesAndAssignCustColors();
 
 						ImGui::PopClipRect();
-						leftUpperCorner.x += size.x + violinPlotXSpacing;
+						leftUpperCorner.x += size.x + violinPlotAttributeSettings.violinPlotXSpacing;
 					}
 
 					if (drawState == ViolinDrawStateAll || drawState == ViolinDrawStateLine) done = true;
@@ -11452,11 +11452,11 @@ int main(int, char**)
 				ImGui::PopItemWidth();
 				
 				//drawing min texts
-				if (showViolinPlotsMinMax) {
+				if (violinPlotAttributeSettings.showViolinPlotsMinMax) {
 					ImGui::SetCursorPosY(leftUpperCorner.y + size.y);
 					int c = 0;
 					int c1 = 0;
-					float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotXSpacing) / amtOfAttributes + violinPlotXSpacing;
+					float xGap = (ImGui::GetWindowContentRegionWidth() - (amtOfAttributes - 1) * violinPlotAttributeSettings.violinPlotXSpacing) / amtOfAttributes + violinPlotAttributeSettings.violinPlotXSpacing;
 					for (uint32_t j : violinAttributePlots[i].attributeOrder) {
 						if (!violinAttributePlots[i].activeAttributes[j]) {
 							c++;
@@ -11502,16 +11502,16 @@ int main(int, char**)
 		}
 
 		//begin of violin plots drawlist major --------------------------------------------------------------------------
-		if (enableDrawlistViolinPlots) {
-			ImGui::Begin("Violin drawlist window", &enableDrawlistViolinPlots, ImGuiWindowFlags_MenuBar);
+		if (violinPlotDrawlistSettings.enabled) {
+			ImGui::Begin("Violin drawlist window", &violinPlotDrawlistSettings.enabled, ImGuiWindowFlags_MenuBar);
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Settings")) {
-					ImGui::Checkbox("Couple to Brushing", &coupleViolinPlots);
-					ImGui::Checkbox("Send to iso renderer on select", &violinPlotDLSendToIso);
-					ImGui::SliderInt("Violin plots height", &violinPlotHeight, 1, 4000);
-					ImGui::SliderInt("Violin plots x spacing", &violinPlotXSpacing, 0, 40);
-					ImGui::SliderFloat("Violin plots line thickness", &violinPlotThickness, 0, 10);
-					ImGui::ColorEdit4("Violin plots background", &violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					ImGui::Checkbox("Couple to Brushing", &violinPlotDrawlistSettings.coupleViolinPlots);
+					ImGui::Checkbox("Send to iso renderer on select", &violinPlotDrawlistSettings.violinPlotDLSendToIso);
+					ImGui::SliderInt("Violin plots height", &violinPlotDrawlistSettings.violinPlotHeight, 1, 4000);
+					ImGui::SliderInt("Violin plots x spacing", &violinPlotDrawlistSettings.violinPlotXSpacing, 0, 40);
+					ImGui::SliderFloat("Violin plots line thickness", &violinPlotDrawlistSettings.violinPlotThickness, 0, 10);
+					ImGui::ColorEdit4("Violin plots background", &violinPlotDrawlistSettings.violinBackgroundColor.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 					if (ImGui::Checkbox("Ignore zero values", &histogramManager->ignoreZeroValues)) {		//updating all histogramms if 0 values should be ignored
                         unsigned int currViolinDrawlistPlotIdx = 0;
                         for (auto& drawListPlot : violinDrawlistPlots) {
@@ -11551,10 +11551,10 @@ int main(int, char**)
 								}
 
 								// Only sort the first drawlist. All others should have the same sorting (if option is taken)
-								if (renderOrderDLConsider && ((drawL == 0) || (!renderOrderBasedOnFirstDL)))
+								if (violinPlotDrawlistSettings.renderOrderDLConsider && ((drawL == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL)))
 								{
 									//if (!renderOrderDLReverse) {
-										drawListPlot.attributeOrder[drawL] = sortHistogram(hist, drawListPlot, renderOrderDLConsider, renderOrderDLReverse);
+										drawListPlot.attributeOrder[drawL] = sortHistogram(hist, drawListPlot, violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse);
 
 										//std::sort(area.begin(), area.end(), [](std::pair<uint32_t, float>& a, std::pair<uint32_t, float>& b) {return sortDescPair(a, b); });
 										//for (int j = 0; j < pcAttributes.size(); ++j)drawListPlot.attributeOrder[drawL][j] = area[j].first;
@@ -11577,22 +11577,22 @@ int main(int, char**)
 					}
 					if (ImGui::Checkbox("Ignore zero bins", &histogramManager->ignoreZeroBins)) {
 						histogramManager->updateSmoothedValues();
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+						updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
                         for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 					static float stdDev = 1.5;
 					if (ImGui::SliderFloat("Smoothing kernel stdDev", &stdDev, 0, 25)) {
 						histogramManager->setSmoothingKernelSize(stdDev);
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+						updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
                         for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
 
 					ImGui::Columns(2);
-					if (ImGui::BeginCombo("Y Scale", violinYs[violinYScale])) {
+					if (ImGui::BeginCombo("Y Scale", violinYs[violinPlotDrawlistSettings.violinYScale])) {
 						for (int v = 0; v < 4; ++v) {
 							if (ImGui::MenuItem(violinYs[v])) {
-								violinYScale = (ViolinYScale)v;
+								violinPlotDrawlistSettings.violinYScale = (ViolinYScale)v;
 							}
 						}
 						ImGui::EndCombo();
@@ -11606,22 +11606,22 @@ int main(int, char**)
 					}
 
 					ImGui::Columns(3);
-					ImGui::Checkbox("Overlay lines", &violinPlotOverlayLines);
+					ImGui::Checkbox("Overlay lines", &violinPlotDrawlistSettings.violinPlotOverlayLines);
 					ImGui::NextColumn();
-					ImGui::Checkbox("Base render order on first DL", &renderOrderBasedOnFirstDL);
+					ImGui::Checkbox("Base render order on first DL", &violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
 					ImGui::NextColumn();
-					ImGui::Checkbox("Optimize render order", &renderOrderDLConsider);
+					ImGui::Checkbox("Optimize render order", &violinPlotDrawlistSettings.renderOrderDLConsider);
 					ImGui::Columns(2);
-					if (ImGui::Checkbox("Reverse render order", &renderOrderDLReverse)) {
+					if (ImGui::Checkbox("Reverse render order", &violinPlotDrawlistSettings.renderOrderDLReverse)) {
 						for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 							for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
-								(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+								(violinPlotDrawlistSettings.renderOrderDLConsider && ((jj == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 							}
 						}
 					}
 					ImGui::NextColumn();
-					ImGui::Checkbox("Optimize non-stop", &renderOrderDLConsiderNonStop);
+					ImGui::Checkbox("Optimize non-stop", &violinPlotDrawlistSettings.renderOrderDLConsiderNonStop);
 
                     ImGui::Separator();
                     ImGui::Columns(1);
@@ -11665,18 +11665,18 @@ int main(int, char**)
                         for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
 					ImGui::NextColumn();
-					if (ImGui::Checkbox("ChangeLogScale", &logScaleDLGlobal)) {
+					if (ImGui::Checkbox("ChangeLogScale", &violinPlotDrawlistSettings.logScaleDLGlobal)) {
 						for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
 							for (int j = 0; j < violinDrawlistPlots[i].attributeFillColors.size(); ++j) {
 								//if (histogramManager->logScale[j]) {
-								(histogramManager->logScale[j]) = logScaleDLGlobal;
+								(histogramManager->logScale[j]) = violinPlotDrawlistSettings.logScaleDLGlobal;
 								//}
 							}
 							histogramManager->updateSmoothedValues();
-							updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+							updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
 							for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
-								(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+								(violinPlotDrawlistSettings.renderOrderDLConsider && ((jj == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 							}
 							
 						}
@@ -11693,7 +11693,7 @@ int main(int, char**)
 
 			const static int plusWidth = 100;
 			for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
-				float absHeight = violinPlotHeight;
+				float absHeight = violinPlotDrawlistSettings.violinPlotHeight;
 				static bool settingsOpen = false;
 				if(settingsOpen) absHeight += (violinDrawlistPlots[i].attributeNames.size() + 2) * (ImGui::GetTextLineHeightWithSpacing());
 				ImGui::BeginChild(std::to_string(i).c_str(), ImVec2(-1, absHeight), true);
@@ -11755,7 +11755,7 @@ int main(int, char**)
 							for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
 								std::vector<std::pair<uint32_t, float>> area;
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
-								(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+								(violinPlotDrawlistSettings.renderOrderDLConsider && ((jj == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 							}
 						}
 						updateHistogramComparisonDL(i);
@@ -11767,10 +11767,10 @@ int main(int, char**)
 							histogramManager->logScale[j] = general_log;
 						}
 						histogramManager->updateSmoothedValues();
-						updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+						updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
 						for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
-							(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+							(violinPlotDrawlistSettings.renderOrderDLConsider && ((jj == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 						}
 						updateHistogramComparisonDL(i);
 					}
@@ -11821,17 +11821,17 @@ int main(int, char**)
 							for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
 								std::vector<std::pair<uint32_t, float>> area;
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
-								(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+								(violinPlotDrawlistSettings.renderOrderDLConsider && ((jj == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 							}
 							updateHistogramComparisonDL(i);
 						}
 						ImGui::NextColumn();
 						if (ImGui::Checkbox(("##log" + std::to_string(j)).c_str(), &histogramManager->logScale[j])) {
 							histogramManager->updateSmoothedValues();
-							updateAllViolinPlotMaxValues(renderOrderBasedOnFirstDL);
+							updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
 							for (int jj = 0; jj < violinDrawlistPlots[i].drawLists.size(); ++jj) {
 								HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[jj]);
-								(renderOrderDLConsider && ((jj == 0) || (!renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], renderOrderDLConsider, renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
+								(violinPlotDrawlistSettings.renderOrderDLConsider && ((jj == 0) || (!violinPlotDrawlistSettings.renderOrderBasedOnFirstDL))) ? violinDrawlistPlots[i].attributeOrder[jj] = sortHistogram(hist, violinDrawlistPlots[i], violinPlotDrawlistSettings.renderOrderDLConsider, violinPlotDrawlistSettings.renderOrderDLReverse) : violinDrawlistPlots[i].attributeOrder[jj] = violinDrawlistPlots[i].attributeOrder[0];
 							}
 							updateHistogramComparisonDL(i);
 						}
@@ -11863,7 +11863,7 @@ int main(int, char**)
 				}
 				ImGui::NextColumn();
 
-				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotDLReplaceNonStop)) {
+				if ((ImGui::Button("Optimize sides <right/left>")) || (violinPlotDrawlistSettings.violinPlotDLReplaceNonStop)) {
 					if (violinDrawlistPlots[i].drawLists.size() != 0) {
 						// Only compute the order for the first histogram in the list (the first one in the matrix. Is that the same?)
 						violinAdaptSidesAutoObj.vdlp = &(violinDrawlistPlots[i]);
@@ -11871,7 +11871,7 @@ int main(int, char**)
 					}
 				}
 				ImGui::NextColumn();
-				ImGui::Checkbox("", &violinPlotDLInsertCustomColors);
+				ImGui::Checkbox("", &violinPlotDrawlistSettings.violinPlotDLInsertCustomColors);
 				ImGui::SameLine(50);
 				if (ImGui::BeginCombo("##appcoldraw" ,"Apply colors of Dark2YellowSplit")) {
 					std::vector<std::string> *availablePalettes =
@@ -11881,22 +11881,22 @@ int main(int, char**)
 
 					if (vc.size() > 0) {
 						//static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
-						if (ImGui::BeginCombo("Line Palette", vc[violinPlotDLAutoColorAssignLine])) {
+						if (ImGui::BeginCombo("Line Palette", vc[violinPlotDrawlistSettings.autoColorAssingLine])) {
 							for (int v = 0; v < vc.size(); ++v) {
 								if (ImGui::MenuItem(vc[v])) {
 									violinDrawlistPlots[i].colorPaletteManager->chosenAutoColorPaletteLine =
 										(*availablePalettes)[v];
-									violinPlotDLAutoColorAssignLine = v;
+									violinPlotDrawlistSettings.autoColorAssingLine = v;
 								}
 							}
 							ImGui::EndCombo();
 						}
-						if (ImGui::BeginCombo("Fill Palette", vc[violinPlotDLAutoColorAssignFill])) {
+						if (ImGui::BeginCombo("Fill Palette", vc[violinPlotDrawlistSettings.autoColorAssingFill])) {
 							for (int v = 0; v < vc.size(); ++v) {
 								if (ImGui::MenuItem(vc[v])) {
 									violinDrawlistPlots[i].colorPaletteManager->chosenAutoColorPaletteFill =
 										(*availablePalettes)[v];
-									violinPlotDLAutoColorAssignFill = v;
+									violinPlotDrawlistSettings.autoColorAssingFill = v;
 								}
 							}
 							ImGui::EndCombo();
@@ -11907,21 +11907,21 @@ int main(int, char**)
 
 
 				ImGui::NextColumn();
-				ImGui::Checkbox("Re-place constantly", &violinPlotDLReplaceNonStop);
+				ImGui::Checkbox("Re-place constantly", &violinPlotDrawlistSettings.violinPlotDLReplaceNonStop);
 				ImGui::NextColumn();
-				ImGui::Checkbox("Consider blending order", &violinPlotDLConsiderBlendingOrder);
+				ImGui::Checkbox("Consider blending order", &violinPlotDrawlistSettings.violinPlotDLConsiderBlendingOrder);
 				ImGui::NextColumn();
-				if (ImGui::Checkbox("Reverse color pallette", &violinPlotDLReverseColorPallette))
+				if (ImGui::Checkbox("Reverse color pallette", &violinPlotDrawlistSettings.violinPlotDLReverseColorPallette))
 				{
-					violinDrawlistPlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDLReverseColorPallette);
+					violinDrawlistPlots[i].colorPaletteManager->setReverseColorOrder(violinPlotDrawlistSettings.violinPlotDLReverseColorPallette);
 				}
                 ImGui::Columns(2);
 				if (ImGui::Button("Fix order and colors"))
 				{
-					violinPlotDLReplaceNonStop = false;
+					violinPlotDrawlistSettings.violinPlotDLReplaceNonStop = false;
 					violinDrawlistPlots[i].colorPaletteManager->useColorPalette = false;
-					renderOrderDLConsiderNonStop = false;
-                    renderOrderDLConsider = false;
+					violinPlotDrawlistSettings.renderOrderDLConsiderNonStop = false;
+					violinPlotDrawlistSettings.renderOrderDLConsider = false;
 				}
                 ImGui::NextColumn();
 
@@ -11978,8 +11978,8 @@ int main(int, char**)
 				// Drawing the violin plots
 				ImVec2 leftUpperCorner = ImGui::GetCursorScreenPos();
 				ImVec2 leftUpperCornerStart = leftUpperCorner;
-				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (violinDrawlistPlots[i].matrixSize.second - 1) * violinPlotXSpacing) / violinDrawlistPlots[i].matrixSize.second, (ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - violinDrawlistPlots[i].matrixSize.first * ImGui::GetFrameHeightWithSpacing()) / (float)violinDrawlistPlots[i].matrixSize.first);
-				ViolinDrawState drawState = (violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
+				ImVec2 size((ImGui::GetWindowContentRegionWidth() - (violinDrawlistPlots[i].matrixSize.second - 1) * violinPlotDrawlistSettings.violinPlotXSpacing) / violinDrawlistPlots[i].matrixSize.second, (ImGui::GetWindowContentRegionMax().y - leftUpperCorner.y + ImGui::GetWindowPos().y - violinDrawlistPlots[i].matrixSize.first * ImGui::GetFrameHeightWithSpacing()) / (float)violinDrawlistPlots[i].matrixSize.first);
+				ViolinDrawState drawState = (violinPlotDrawlistSettings.violinPlotOverlayLines) ? ViolinDrawStateArea : ViolinDrawStateAll;
 				bool done = false;
 				while (!done) {
 					leftUpperCorner = leftUpperCornerStart;
@@ -11989,7 +11989,7 @@ int main(int, char**)
 
 							ImVec2 framePos = leftUpperCorner;
 							framePos.y += ImGui::GetFrameHeightWithSpacing();
-							if(drawState == ViolinDrawStateAll || drawState == ViolinDrawStateArea) ImGui::RenderFrame(framePos, framePos + size, ImGui::GetColorU32(violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
+							if(drawState == ViolinDrawStateAll || drawState == ViolinDrawStateArea) ImGui::RenderFrame(framePos, framePos + size, ImGui::GetColorU32(violinPlotDrawlistSettings.violinBackgroundColor), true, ImGui::GetStyle().FrameRounding);
 							ImGui::SetCursorScreenPos(framePos);
 							if (size.x > 0 && size.y > 0) {	//safety check. ImGui crahes when button size is 0
 								if (io.KeyCtrl) {
@@ -11997,16 +11997,16 @@ int main(int, char**)
 									if (ImGui::Button(("##invBut" + std::to_string(x * violinDrawlistPlots[i].matrixSize.second + y)).c_str(), size) && j!= 0xffffffff) {
 										if (violinDrawlistPlots[i].selectedDrawlists.find(j) == violinDrawlistPlots[i].selectedDrawlists.end()) {
 											violinDrawlistPlots[i].selectedDrawlists.insert(j);
-											if (enableIsoSurfaceWindow && violinPlotDLSendToIso) {
-												uint32_t w = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
-												uint32_t h = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
-												uint32_t d = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+											if (isoSurfSettings.enabled && violinPlotDrawlistSettings.violinPlotDLSendToIso) {
+												uint32_t w = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+												uint32_t h = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+												uint32_t d = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
 												std::vector<std::pair<float, float>> posBounds(3);
 												for (int i = 0; i < 3; ++i) {
-													posBounds[i].first = pcAttributes[posIndices[i]].min;
-													posBounds[i].second = pcAttributes[posIndices[i]].max;
+													posBounds[i].first = pcAttributes[isoSurfSettings.posIndices[i]].min;
+													posBounds[i].second = pcAttributes[isoSurfSettings.posIndices[i]].max;
 												}
-												if (!isoSurfaceRegularGrid) {
+												if (!isoSurfSettings.isoSurfaceRegularGrid) {
 													posBounds[0].first = SpacialData::rlat[0];
 													posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
 													posBounds[1].first = SpacialData::altitude[0];
@@ -12035,14 +12035,14 @@ int main(int, char**)
 													}
 												}
 												if (index == -1) {
-													uint32_t wi = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
-													uint32_t he = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
-													uint32_t de = (isoSurfaceRegularGrid) ? isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
+													uint32_t wi = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[0] : SpacialData::rlatSize;
+													uint32_t he = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[1] : SpacialData::altitudeSize + 22;
+													uint32_t de = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceRegularGridDim[2] : SpacialData::rlonSize;
 													glm::vec4 isoColor;
 													(isoSurfaceRenderer->drawlistBrushes.size() == 0) ? isoColor = { 0,1,0, 0.627 } : isoColor = { 1,0,1,0.627 };
 													isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name, "",isoColor, {wi, he, de} });
 												}
-												isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfaceRegularGrid, index);
+												isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &isoSurfSettings.posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfSettings.isoSurfaceRegularGrid, index);
 												isoSurfaceRenderer->render();
 											}
 										}
@@ -12113,7 +12113,7 @@ int main(int, char**)
 								ImGui::GetWindowDrawList()->AddRect(framePos, framePos + size, IM_COL32(255,200,0,255), ImGui::GetStyle().FrameRounding,ImDrawCornerFlags_All,5);
 							}
 							if (j == 0xffffffff) {
-								leftUpperCorner.x += size.x + violinPlotXSpacing;
+								leftUpperCorner.x += size.x + violinPlotDrawlistSettings.violinPlotXSpacing;
 								continue;
 							}
 							ImVec2 textPos = framePos;
@@ -12135,7 +12135,7 @@ int main(int, char**)
 							ImGui::PushClipRect(framePos, framePos + size, false);
 							HistogramManager::Histogram& hist = histogramManager->getHistogram(violinDrawlistPlots[i].drawLists[j]);
 							DrawList* dl = nullptr;
-							if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+							if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleLocalBrush || violinPlotDrawlistSettings.violinYScale == ViolinYScaleBrushes) {
 								for (DrawList& draw : g_PcPlotDrawLists) {
 									if (draw.name == violinDrawlistPlots[i].drawLists[j]) {
 										dl = &draw;
@@ -12143,7 +12143,7 @@ int main(int, char**)
 								}
 							}
 							//std::vector<std::pair<float, float>> localMinMax = std::vector<std::pair<float,float>>(pcAttributes.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
-							if (violinYScale == ViolinYScaleLocalBrush || violinYScale == ViolinYScaleBrushes) {
+							if (violinPlotDrawlistSettings.violinYScale == ViolinYScaleLocalBrush || violinPlotDrawlistSettings.violinYScale == ViolinYScaleBrushes) {
 								for (int k = 0; k < pcAttributes.size(); ++k) {
 									for (int mi = 0; mi < dl->brushes[k].size(); ++mi) {
 										if (dl->brushes[k][mi].minMax.first < localMinMax[k].first) localMinMax[k].first = dl->brushes[k][mi].minMax.first;
@@ -12164,7 +12164,7 @@ int main(int, char**)
 
 								float histYStart;
 								float histYEnd;
-								switch (violinYScale) {
+								switch (violinPlotDrawlistSettings.violinYScale) {
 								case ViolinYScaleStandard:
 									histYStart = 0;
 									histYEnd = size.y;
@@ -12266,13 +12266,13 @@ int main(int, char**)
 											}
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd),
-											ImVec2(framePos.x + hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+											ImVec2(framePos.x + hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										for (int l = 1; l < hist.bins[k].size(); ++l) {
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-												ImVec2(framePos.x + hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+												ImVec2(framePos.x + hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness * lineMultiplier);
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x, histYLineEnd - histYLineDiff),
-											ImVec2(framePos.x + hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+											ImVec2(framePos.x + hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										lineMultiplier = 1;
 									}
 									break;
@@ -12314,13 +12314,13 @@ int main(int, char**)
 											}
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd),
-											ImVec2(framePos.x + size.x - hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(framePos.x + size.x - hist.bins[k][0] / div * size.x, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										for (int l = 1; l < hist.bins[k].size(); ++l) {
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x - hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-												ImVec2(framePos.x + size.x - hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+												ImVec2(framePos.x + size.x - hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness * lineMultiplier);
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(framePos.x + size.x, histYLineEnd - histYLineDiff),
-											ImVec2(framePos.x + size.x - hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(framePos.x + size.x - hist.bins[k][hist.bins[k].size() - 1] / div * size.x, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										lineMultiplier = 1;
 									}
 									break;
@@ -12359,17 +12359,17 @@ int main(int, char**)
 											}
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
-											ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										for (int l = 1; l < hist.bins[k].size(); ++l) {
 											//left Line
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-												ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+												ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness * lineMultiplier);
 											//right Line
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-												ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+												ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness * lineMultiplier);
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
-											ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										lineMultiplier = 1;
 									}
 									break;
@@ -12407,16 +12407,16 @@ int main(int, char**)
 											}
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd),
-											ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(xBase - hist.bins[k][0] / div * size.x / 2, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										for (int l = 1; l < hist.bins[k].size(); ++l) {
 											//left Line
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase - .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-												ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+												ImVec2(xBase - .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness * lineMultiplier);
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, histYLineEnd - histYLineDiff),
-											ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(xBase - hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										//right Line
-										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										lineMultiplier = 1;
 									}
 									break;
@@ -12454,16 +12454,16 @@ int main(int, char**)
 											}
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][0] / div * size.x / 2, histYLineEnd),
-											ImVec2(xBase, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(xBase, histYLineEnd), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										for (int l = 1; l < hist.bins[k].size(); ++l) {
 											//right Line
 											ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + .5f * hist.bins[k][l - 1] / div * size.x, histYLineEnd - (l - 1.0f) / (hist.bins[k].size() - 1) * histYLineDiff),
-												ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness * lineMultiplier);
+												ImVec2(xBase + .5f * hist.bins[k][l] / div * size.x, histYLineEnd - ((float)l) / (hist.bins[k].size() - 1) * histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness * lineMultiplier);
 										}
 										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase + hist.bins[k][hist.bins[k].size() - 1] / div * size.x / 2, histYLineEnd - histYLineDiff),
-											ImVec2(xBase, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+											ImVec2(xBase, histYLineEnd - histYLineDiff), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										//left Line
-										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotThickness);
+										ImGui::GetWindowDrawList()->AddLine(ImVec2(xBase, framePos.y), ImVec2(xBase, framePos.y + size.y), ImColor(violinDrawlistPlots[i].attributeLineColors[k]), violinPlotDrawlistSettings.violinPlotThickness);
 										lineMultiplier = 1;
 									}
 									break;
@@ -12471,7 +12471,7 @@ int main(int, char**)
 								}
 							}
 							optimizeViolinSidesAndAssignCustColors();
-							leftUpperCorner.x += size.x + violinPlotXSpacing;
+							leftUpperCorner.x += size.x + violinPlotDrawlistSettings.violinPlotXSpacing;
 							ImGui::PopClipRect();
 						}
 						leftUpperCorner.x = leftUpperCornerStart.x;
@@ -12515,7 +12515,7 @@ int main(int, char**)
 			animationItemsDisabled = false;
 		}
 
-		rescaleTableColumns = false;
+		pcSettings.rescaleTableColumns = false;
 
 		// Rendering
 		ImGui::Render();
