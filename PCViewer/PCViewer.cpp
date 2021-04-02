@@ -4271,19 +4271,19 @@ static bool openNetCDF(const char* filename){
 			tmp.push_back({ vName, vName,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
 			attributes.push_back(tmp.back().name);
 			attr_to_var.push_back(i);
+			int ndims;
+			if ((retval = nc_inq_varndims(fileId, i, &ndims))) {
+				std::cout << "Error at getting variable dimensions" << std::endl;
+				nc_close(fileId);
+				return false;
+			}
+			attribute_dims.push_back(std::vector<int>(ndims));
+			if ((retval = nc_inq_vardimid(fileId, i, attribute_dims.back().data()))) {
+				std::cout << "Error at getting variable dimension array" << std::endl;
+				nc_close(fileId);
+				return false;
+			}
 		}
-        int ndims;
-        if((retval = nc_inq_varndims(fileId, i, &ndims))){
-            std::cout << "Error at getting variable dimensions" << std::endl;
-            nc_close(fileId);
-            return false;
-        }
-        attribute_dims.push_back(std::vector<int>(ndims));
-        if((retval = nc_inq_vardimid(fileId, i, attribute_dims.back().data()))){
-            std::cout << "Error at getting variable dimension array" << std::endl;
-            nc_close(fileId);
-            return false;
-        }
         //std::cout << vName << "(";
         //for(int dim: attribute_dims.back()){
         //    std::cout << dim << ", ";
@@ -7022,7 +7022,6 @@ int main(int, char**)
 
 		if (pcViewerState >= PCViewerState::AnimateDrawlists && pcViewerState <= PCViewerState::AnimateGlobalBrushExport) {
 			//disabling inputs when animating
-			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 			animationItemsDisabled = true;
 			switch (pcViewerState)
 			{
@@ -7242,6 +7241,10 @@ int main(int, char**)
 				}
 				ImGui::EndPopup();
 			}
+		}
+
+		if (animationItemsDisabled) {
+			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 		}
 
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
@@ -10043,6 +10046,12 @@ int main(int, char**)
 				}
 			}
 		}
+
+		if (animationItemsDisabled) {
+			ImGui::PopItemFlag();
+			animationItemsDisabled = false;
+		}
+
 		ImGui::End();
 
 		//bubble window ----------------------------------------------------------------------------------
@@ -12650,11 +12659,6 @@ int main(int, char**)
                 violinPlotDLIdxInListForHistComparison.push_back(-1);
 			}
 			ImGui::End();
-		}
-
-		if (animationItemsDisabled) {
-			ImGui::PopItemFlag();
-			animationItemsDisabled = false;
 		}
 
 		pcSettings.rescaleTableColumns = false;
