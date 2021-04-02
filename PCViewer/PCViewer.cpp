@@ -152,7 +152,7 @@ static int                      g_SwapChainResizeHeight = 0;
 static float					g_ExportScale = 2.0f;
 static int						g_ExportImageWidth = 1280 * g_ExportScale;
 static int						g_ExportImageHeight = 720 * g_ExportScale;
-static int						g_ExportCountDown = -1;
+static int						g_ExportCountDown = -1;					//amount of frames until export is done (used to let menu bars close, plots render ...), -1 when disabled
 static int						g_ExportViewportNumber = 0;
 static char						g_ExportPath[200] = "export.png";
 
@@ -803,7 +803,7 @@ struct PCSettings {
 	//variables for animation
 	float animationDuration = 2.0f;		//time for every active brush to show in seconds
 	bool animationExport = true;
-	int animationSteps = false;
+	int animationSteps = 2;
 }static pcSettings;
 
 //variables for brush templates
@@ -870,10 +870,11 @@ static std::chrono::steady_clock::time_point animationStart(std::chrono::duratio
 static bool* animationActiveDatasets = nullptr;
 static bool animationItemsDisabled = false;
 static int animationCurrentDrawList = -1;
-static char animationExportPath[200]{};
+static char animationExportPath[200] = "export/test%d.png";
 static int animationBrush = -1;
-static int animaitonSteps = -1;
+static int animationCurrentStep = -1;
 static int animationAttribute = -1;
+static std::vector<std::pair<unsigned int, std::pair<float, float>>> animationAttributeBrush;
 
 typedef struct {
 	bool optimizeSidesNowAttr = false;
@@ -5712,6 +5713,7 @@ static bool updateActiveIndices(DrawList& dl) {
 
 //This method does the same as updataActiveIndices, only for ALL drawlists
 //whenever possible use updataActiveIndices, not updateAllActiveIndicess
+//The return value indicates if brushing was performed (The method checks for live update)
 static bool updateAllActiveIndices() {
 	bool ret = false;
 	for (DrawList& dl : g_PcPlotDrawLists) {
@@ -7018,53 +7020,91 @@ int main(int, char**)
 		ImGui_ImplSDL2_NewFrame(window);
 		ImGui::NewFrame();
 
-		if (animationStart != std::chrono::steady_clock::time_point(std::chrono::duration<int>(0))) {
+		if (pcViewerState >= PCViewerState::AnimateDrawlists && pcViewerState <= PCViewerState::AnimateGlobalBrushExport) {
 			//disabling inputs when animating
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 			animationItemsDisabled = true;
-			//remembering the original show flags for every drawlist
-			if (!animationActiveDatasets) {
-				animationActiveDatasets = new bool[g_PcPlotDrawLists.size()];
-				int i = 0;
-				for (DrawList& dl : g_PcPlotDrawLists) {
-					animationActiveDatasets[i++] = dl.show;
-					dl.show = false;
+			switch (pcViewerState)
+			{
+			case PCViewerState::AnimateDrawlists:
+			case PCViewerState::AnimateDrawlistsExport:
+				//remembering the original show flags for every drawlist
+				if (!animationActiveDatasets) {
+					animationActiveDatasets = new bool[g_PcPlotDrawLists.size()];
+					int i = 0;
+					for (DrawList& dl : g_PcPlotDrawLists) {
+						animationActiveDatasets[i++] = dl.show;
+						dl.show = false;
+					}
 				}
-			}
-			//rendering a new drawlist if current drawlist to show changed
-			if (animationCurrentDrawList != (int)(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count() / pcSettings.animationDuration)) {
-				//disabling current drawlist
-				auto it = g_PcPlotDrawLists.begin();
-				int c = -1, i = 0;
-				for (; c < animationCurrentDrawList && it != g_PcPlotDrawLists.end(); i++) {
-					if (animationActiveDatasets[i]) c++;
-					if (c != 0) ++it;
-				}
+				//rendering a new drawlist if current drawlist to show changed
+				if (animationCurrentDrawList != (int)(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count() / pcSettings.animationDuration)) {
+					//disabling current drawlist
+					auto it = g_PcPlotDrawLists.begin();
+					int c = -1, i = 0;
+					for (; c < animationCurrentDrawList && it != g_PcPlotDrawLists.end(); i++) {
+						if (animationActiveDatasets[i]) c++;
+						if (c != 0) ++it;
+					}
 
-				if (it == g_PcPlotDrawLists.end()) {
-					animationStart = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
-					animationCurrentDrawList = -1;
-				}
-				else {
-					if (c != -1) {
-						it->show = false;
-						it++;
-						i++;
-					}
-					while (!animationActiveDatasets[i] && it != g_PcPlotDrawLists.end()) {
-						i++;
-						++it;
-					}
-					if (it != g_PcPlotDrawLists.end()) {
-						it->show = true;
-						animationCurrentDrawList = c + 1;
-						pcPlotRender = true;
-					}
-					else {
+					if (it == g_PcPlotDrawLists.end()) {
 						animationStart = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
 						animationCurrentDrawList = -1;
 					}
+					else {
+						if (c != -1) {
+							it->show = false;
+							it++;
+							i++;
+						}
+						while (!animationActiveDatasets[i] && it != g_PcPlotDrawLists.end()) {
+							i++;
+							++it;
+						}
+						if (it != g_PcPlotDrawLists.end()) {
+							it->show = true;
+							animationCurrentDrawList = c + 1;
+							pcPlotRender = true;
+						}
+						else {
+							animationStart = std::chrono::steady_clock::time_point(std::chrono::duration<int>(0));
+							animationCurrentDrawList = -1;
+						}
+					}
 				}
+				break;
+
+			case PCViewerState::AnimateGlobalBrush:
+			case PCViewerState::AnimateGlobalBrushExport:
+				//advance global brush
+				if (animationCurrentStep != (int)(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - animationStart).count() / pcSettings.animationDuration) && g_ExportCountDown < 0) { //also waits for image export
+					++animationCurrentStep;
+					if (animationCurrentStep >= pcSettings.animationSteps) {
+						//reset brush on axis
+						globalBrushes[animationBrush].brushes[animationAttribute] = animationAttributeBrush;
+						updateAllActiveIndices();
+						pcPlotRender = true;
+
+						//reset PCViewer state
+						pcViewerState = PCViewerState::Normal;
+					}
+					else {
+						//advancing the brush
+						float d = (pcAttributes[animationAttribute].max - pcAttributes[animationAttribute].min) / pcSettings.animationSteps / 2;
+						float a = float(animationCurrentStep) / (pcSettings.animationSteps - 1);
+						float v = a * pcAttributes[animationAttribute].max + (1 - a) * pcAttributes[animationAttribute].min;
+						globalBrushes[animationBrush].brushes[animationAttribute][0].second = { v - d, v + d };
+						pcPlotRender = true;
+						updateAllActiveIndices();
+						if (pcViewerState == PCViewerState::AnimateGlobalBrushExport) {
+							//enable animation export (wait one frame for drawlist rendering)
+							sprintf(g_ExportPath, animationExportPath, animationCurrentStep);
+							g_ExportViewportNumber = 0;
+							g_ExportCountDown = 1;
+						}
+					}
+				}
+				break;
 			}
 		}
 		else {
@@ -7427,10 +7467,14 @@ int main(int, char**)
 					}
 					ImGui::EndCombo();
 				}
-				ImGui::DragInt("Steps amount", &pcSettings.animationSteps, 1, 2, 0);
-				if (ImGui::MenuItem("Start global brush animation")) {
-					pcViewerState = pcSettings.animationSteps ? PCViewerState::AnimateGlobalBrushExport : PCViewerState::AnimateGlobalBrush;
+				ImGui::DragInt("Steps amount", &pcSettings.animationSteps, 1, 2, 1e6);
+				if (ImGui::MenuItem("Start global brush animation") && animationBrush >= 0 && animationAttribute >= 0) {
+					pcViewerState = pcSettings.animationExport ? PCViewerState::AnimateGlobalBrushExport : PCViewerState::AnimateGlobalBrush;
 					animationStart = std::chrono::steady_clock::now();
+					animationAttributeBrush = globalBrushes[animationBrush].brushes[animationAttribute];
+					float d = (pcAttributes[animationAttribute].max - pcAttributes[animationAttribute].min) / pcSettings.animationSteps / 2;
+					globalBrushes[animationBrush].brushes[animationAttribute] = { { currentBrushId++,{pcAttributes[animationAttribute].min - d, pcAttributes[animationAttribute].min + d} } };
+					animationCurrentStep = -1;
 				}
 				ImGui::EndMenu();
 			}
