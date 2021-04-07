@@ -743,6 +743,7 @@ static bool pathDropped = false;
 static std::default_random_engine engine;
 static std::uniform_int_distribution<int> distribution(0, 35);
 static std::vector<int> pcPlotSelectedDrawList;									//Contains the index of the drawlist that is currently selected
+static std::map<std::string, std::vector<float>> dimensionValues;				//Contains the dimension values for each dimension
 
 static PCViewerState pcViewerState = PCViewerState::Normal;
 struct PCSettings {
@@ -2689,6 +2690,37 @@ static void cleanupPcPlotCommandBuffer() {
 	check_vk_result(err);
 
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
+}
+
+//getting the dimension values array. Creates the dimensin values array if it is not yet created
+static std::map<std::string, std::vector<float>> getDimensionValues(const DataSet& ds, const std::vector<int>& dimensions) {
+	// checking for the dimension values array and creating it if it doesnt exist
+	bool arraysExist = true;
+	for (int i : dimensions) {
+		if (dimensionValues.find(pcAttributes[dimensions[i]].name) == dimensionValues.end()) {
+			arraysExist = false;
+			break;
+		}
+	}
+	if (!arraysExist) {
+		for (int i : dimensions) {
+			dimensionValues[pcAttributes[dimensions[i]].name] = {};
+			std::set<float> used;
+			for (float* datum : ds.data) {
+				float d = datum[dimensions[i]];
+				if (used.find(d) == used.end()) {
+					dimensionValues[pcAttributes[i].name].push_back(d);
+					used.insert(d);
+				}
+			}
+		}
+	}
+	std::map<std::string, std::vector<float>> ret;
+	for (int i : dimensions) {
+		std::string& att = pcAttributes[dimensions[i]].name;
+		ret[att] = dimensionValues[att];
+	}
+	return ret;
 }
 
 // This function assumes that only indices of active attributes are passed. 
