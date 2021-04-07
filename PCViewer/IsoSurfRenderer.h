@@ -1,6 +1,9 @@
 /*
 IsoSurfRenderer is a class to support iso surface rendering of 3d multivariate grid data.
 The iso surfaces are set by brushes.
+The iso surfaces are extracted via ray marching through a binary 3d field. The binary 3d field is constructed by setting grid locations to true where an active datum recides.
+The 3d binary volume is realized via a 3d 8 bit texture, which can be smoothed to obtain smoother iso surfaces. Care: Smoothing can erode or merge surfaces/volumes.
+The iso surface renderer is able to handel 3d cartesian grids with non linear dimension axis of varying sizes.
 */
 #pragma once
 #ifndef IsoSurfRenderer_H
@@ -55,8 +58,10 @@ public:
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
 	bool update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes,std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::vector<std::pair<float, float>>>& brush, int index);
-	bool update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& brushAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t amtOfIndices, std::vector<std::vector<std::pair<float, float>>>& brush, int index);
-	IsoSurfRendererError update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t posIndices[3], std::vector<std::pair<float, float>>& posBounds, uint32_t amtOfAttributes, uint32_t dataSize, VkBuffer data, VkBufferView activeIndices, uint32_t indicesSize, VkBuffer indices, bool regularGrid, int index);
+	//update iso surface for specific global brush
+	bool update3dBinaryVolume(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, uint32_t amtOfAttributes, const std::vector<uint32_t>& brushAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t amtOfIndices, std::vector<std::vector<std::pair<float, float>>>& brush, int index);
+	//update general iso surface
+	IsoSurfRendererError update3dBinaryVolume(const std::vector<float>&  xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, uint32_t posIndices[3], std::vector<std::pair<float, float>>& posBounds, uint32_t amtOfAttributes, uint32_t dataSize, VkBuffer data, VkBufferView activeIndices, uint32_t indicesSize, VkBuffer indices, bool regularGrid[3], int index);
 	void deleteBinaryVolume(uint32_t ind);
 	void getPosIndices(int index, uint32_t* ind);
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
@@ -215,6 +220,8 @@ private:
 	VkBuffer			brushBuffer;
 	VkDeviceMemory		brushMemory;
 	uint32_t			brushByteSize;
+	VkDeviceMemory		dimensionCorrectionMemory;
+	VkImage				dimensionCorrectionImages[3];
 
 	VkSampler					binaryImageSampler;
 	std::vector<VkImage>		binaryImage;

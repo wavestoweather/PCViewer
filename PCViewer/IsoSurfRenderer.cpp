@@ -654,9 +654,10 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	return true;
 }
 
-bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& brushAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t amtOfIndices, std::vector<std::vector<std::pair<float, float>>>& brush, int index)
+bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, uint32_t amtOfAttributes, const std::vector<uint32_t>& brushAttributes, const std::vector<std::pair<float, float>>& densityAttributesMinMax, glm::uvec3& positionIndices, VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t amtOfIndices, std::vector<std::vector<std::pair<float, float>>>& brush, int index)
 {
-	if(binaryImage.size() && index != -1 && (drawlistBrushes[index].gridDimensions[0] != width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return false;
+	if(binaryImage.size() && index != -1 && (drawlistBrushes[index].gridDimensions[0] != xDim.size() || drawlistBrushes[index].gridDimensions[1] != yDim.size() || drawlistBrushes[index].gridDimensions[2] != zDim.size())) return false;
+	int width = xDim.size(), height = yDim.size(), depth = zDim.size();
 
 	VkResult err;
 
@@ -815,7 +816,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint
 	return true;
 }
 
-IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t posIndices[3], std::vector<std::pair<float, float>>& posBounds, uint32_t amtOfAttributes, uint32_t dataSize, VkBuffer data, VkBufferView activeIndices, uint32_t indicesSize, VkBuffer indices, bool regularGrid, int index)
+IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, uint32_t posIndices[3], std::vector<std::pair<float, float>>& posBounds, uint32_t amtOfAttributes, uint32_t dataSize, VkBuffer data, VkBufferView activeIndices, uint32_t indicesSize, VkBuffer indices, bool regularGrid[3], int index)
 {
 
 	if (index != -1 && (drawlistBrushes[index].gridDimensions[0]!= width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return IsoSurfRendererError_GridDimensionMissmatch;
