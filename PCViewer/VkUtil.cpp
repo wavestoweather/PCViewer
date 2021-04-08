@@ -1222,7 +1222,11 @@ void VkUtil::uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, V
 	uploadData(device, stagingMemory, 0, byteSize, data);
 	VkCommandBuffer commands;
 	createCommandBuffer(device, commandPool, &commands);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		transitionImageLayout(commands, image, imageFormat, imageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	copyBufferTo3dImage(commands, stagingBuffer, image, x, y, z);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		transitionImageLayout(commands, image, imageFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, imageLayout);
 	commitCommandBuffer(queue, commands);
 	check_vk_result(vkQueueWaitIdle(queue));
 

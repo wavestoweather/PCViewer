@@ -1921,7 +1921,7 @@ void IsoSurfRenderer::updateCommandBuffer()
 	check_vk_result(err);
 }
 
-void IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim)
+bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim)
 {
 	if (!dimensionCorrectionMemory) {
 		VkUtil::createImage(device, dimensionCorrectionSize, 1, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages);
@@ -1930,7 +1930,7 @@ void IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 		VkMemoryRequirements memReq;
 		VkMemoryAllocateInfo alloc{};
 		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[0], &memReq);
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		alloc.allocationSize += memReq.size;
 		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[1], &memReq);
 		alloc.allocationSize += memReq.size;
@@ -1942,15 +1942,24 @@ void IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 		vkBindImageMemory(device, dimensionCorrectionImages[1], dimensionCorrectionMemory, alloc.allocationSize / 3);
 		vkBindImageMemory(device, dimensionCorrectionImages[2], dimensionCorrectionMemory, alloc.allocationSize / 3 * 2);
 		VkUtil::createImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews);
-		VkUtil::createImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 1);
-		VkUtil::createImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 2);
+		VkUtil::createImageView(device, dimensionCorrectionImages[1], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 1);
+		VkUtil::createImageView(device, dimensionCorrectionImages[2], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 2);
+
+		VkCommandBuffer command;
+		VkUtil::createCommandBuffer(device, commandPool, &command);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[0], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[1], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[2], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::commitCommandBuffer(queue, command);
+		vkQueueWaitIdle(queue);
+		vkFreeCommandBuffers(device, commandPool, 1, &command);
 	}
 
 
-	if (xDim != dimensionCorrectionArrays[0] || yDim != dimensionCorrectionArrays[1] || zDim != dimensionCorrectionArrays[2]) {
-		dimensionCorrectionArrays[0] = xDim;
-		dimensionCorrectionArrays[1] = yDim;
-		dimensionCorrectionArrays[2] = zDim;
+	if (!vectorComp(xDim, dimensionCorrectionArrays[0]) || !vectorComp(yDim, dimensionCorrectionArrays[1]) || !vectorComp(zDim, dimensionCorrectionArrays[2])) {
+		dimensionCorrectionArrays[0] = std::vector<float>(xDim);
+		dimensionCorrectionArrays[1] = std::vector<float>(yDim);
+		dimensionCorrectionArrays[2] = std::vector<float>(zDim);
 		std::vector<float> correction(dimensionCorrectionSize);
 		float alpha = 0;
 		if (!dimensionCorrectionLinearDim[0]) {
@@ -1959,7 +1968,7 @@ void IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 				float axisVal = alpha * xDim.back() + (1 - alpha) * xDim.front();
 				correction[i] = PCUtil::getVectorIndex(xDim, axisVal) / (xDim.size() - 1);
 			}
-			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[0], VK_IMAGE_LAYOUT_UNDEFINED, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
 		}
 		if (!dimensionCorrectionLinearDim[1]) {
 			for (int i = 0; i < dimensionCorrectionSize; ++i) {
@@ -1967,7 +1976,7 @@ void IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 				float axisVal = alpha * yDim.back() + (1 - alpha) * yDim.front();
 				correction[i] = PCUtil::getVectorIndex(yDim, axisVal) / (yDim.size() - 1);
 			}
-			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[1], VK_IMAGE_LAYOUT_UNDEFINED, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
 		}
 		if (!dimensionCorrectionLinearDim[2]) {
 			for (int i = 0; i < dimensionCorrectionSize; ++i) {
@@ -1975,7 +1984,18 @@ void IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 				float axisVal = alpha * zDim.back() + (1 - alpha) * zDim.front();
 				correction[i] = PCUtil::getVectorIndex(zDim, axisVal) / (zDim.size() - 1);
 			}
-			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[2], VK_IMAGE_LAYOUT_UNDEFINED, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[2], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
 		}
 	}
+
+	return true;
+}
+
+bool IsoSurfRenderer::vectorComp(const std::vector<float>& a, const std::vector<float>& b)
+{
+	if (a.size() != b.size()) return false;
+	for (int i = 0; i < a.size(); ++i)
+		if (a[i] != b[i])
+			return false;
+	return true;
 }

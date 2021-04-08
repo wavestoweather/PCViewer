@@ -284,6 +284,8 @@ private:
 	void updateDescriptorSet();
 	void updateBrushBuffer();
 	void updateCommandBuffer();
-	void updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim);
+	//returns true if the dimension images were updated
+	bool updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim);
+	bool vectorComp(const std::vector<float>& a, const std::vector<float>& b);
 };
 #endif 
