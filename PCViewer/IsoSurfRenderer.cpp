@@ -57,6 +57,7 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	dimensionCorrectionImages[0] = VK_NULL_HANDLE;
 	dimensionCorrectionImages[1] = VK_NULL_HANDLE;
 	dimensionCorrectionImages[2] = VK_NULL_HANDLE;
+	dimensionCorrectionViews = std::vector<VkImageView>(3, VK_NULL_HANDLE);
 	brushByteSize = 0;
 	shade = true;
 	stepSize = .006f;
@@ -1177,93 +1178,6 @@ void IsoSurfRenderer::render()
 	memcpy(d, &ubo, sizeof(UniformBuffer));
 	vkUnmapMemory(device, constantMemory);
 
-	//uploading the storage buffer with bruhs infos -----------------------------------
-
-	//converting the map of brushes to the graphics data structure
-	//std::vector<std::vector<Brush>> gpuData;
-	//uint32_t bId = 0;
-	//for (auto& brush : brushes) {
-	//	for (int axis = 0; axis < brush.second.size(); ++axis) {
-	//		if (gpuData.size() <= axis) gpuData.push_back({});
-	//		if (brush.second[axis].size()) gpuData[axis].push_back({bId});
-	//		for (auto& minMax : brush.second[axis]) {
-	//			gpuData[axis].back().minMax.push_back(minMax);
-	//		}
-	//	}
-	//	++bId;
-	//}
-	//std::vector<float*> colors;
-	//for (auto& col : brushColors) {
-	//	colors.push_back(col.second);
-	//}
-	//
-	//BrushInfos* brushInfos = (BrushInfos*)new char[brushByteSize];
-	//brushInfos->amtOfAxis = gpuData.size();
-	//float* brushI = (float*)(brushInfos + 1);
-	//uint32_t curOffset = gpuData.size();		//the first offset is for axis 1, which is the size of the axis
-	//for (int axis = 0; axis < gpuData.size(); ++axis) {
-	//	brushI[axis] = curOffset;
-	//	brushI[curOffset++] = gpuData[axis].size();
-	//	int brushOffset = curOffset;
-	//	curOffset += gpuData[axis].size();
-	//	for (int brush = 0; brush < gpuData[axis].size(); ++brush) {
-	//		brushI[brushOffset + brush] = curOffset;
-	//		brushI[curOffset++] = gpuData[axis][brush].bIndex;
-	//		brushI[curOffset++] = gpuData[axis][brush].minMax.size();
-	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][0];
-	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][1];
-	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][2];
-	//		brushI[curOffset++] = colors[gpuData[axis][brush].bIndex][3];
-	//		for (int minMax = 0; minMax < gpuData[axis][brush].minMax.size(); ++minMax) {
-	//			brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].first;
-	//			brushI[curOffset++] = gpuData[axis][brush].minMax[minMax].second;
-	//		}
-	//	}
-	//}
-	//
-	//VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
-	//
-	//checking the brush infos
-	//for (int axis = 0; axis < brushInfos->amtOfAxis; ++axis) {
-	//	int axisOffset = int(brushI[axis]);
-	//	//check if there exists a brush on this axis
-	//	if (bool(brushI[axisOffset])) {		//amtOfBrushes > 0
-	//		//as there exist brushes we get the density for this attribute
-	//		//float density = texture(texSampler[axis], startPoint).x;
-	//		//for every brush
-	//		for (int brush = 0; brush < brushI[axisOffset]; ++brush) {
-	//			int brushOffset = int(brushI[axisOffset + 1 + brush]);
-	//			//for every MinMax
-	//			for (int minMax = 0; minMax < brushI[brushOffset + 1]; ++minMax) {
-	//				int minMaxOffset = brushOffset + 6 + 2 * minMax;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
-	//				int brushIndex = int(brushI[brushOffset]);
-	//				float mi = brushI[minMaxOffset];
-	//				float ma = brushI[minMaxOffset + 1];
-	//				std::cout << "Axis: " << axis << ", brush index: " << brushIndex << ", Min: " << mi << ", Max: " << ma << "Color: " << brushI[brushOffset + 2]<< " " << brushI[brushOffset + 3] << " " << brushI[brushOffset + 4] << " " << brushI[brushOffset + 5] << std::endl;
-	//				//bool stepInOut = prevDensity[axis] < mi && density >= mi ||
-	//				//	prevDensity[axis] > mi&& density <= mi ||
-	//				//	prevDensity[axis] > ma&& density <= ma ||
-	//				//	prevDensity[axis] < ma && density >= ma;
-	//				//
-	//				////this are all the things i have to set to test if a surface has to be drawn
-	//				//brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
-	//				//brushBits[brushIndex] &= (uint((density<mi || density>ma) && !brushBorder[brushIndex]) << axis) ^ 0xffffffff;
-	//				//brushColor[brushIndex] = vec4(bInfo.brushes[brushOffset + 2, brushOffset + 3, brushOffset + 4, brushOffset + 5]);
-	//
-	//				//the surface calculation is moved to the end of the for loop, as we have to check for every attribute of the brush if it is inside it
-	//				//if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
-	//				//	vec4 surfColor = vec4(bInfo.brushes[brushOffset + 1,brushOffset + 2,brushOffset + 3,brushOffset + 4]);
-	//				//	outColor.xyz += (1-outColor.w) * surfColor.w * surfColor.xyz;
-	//				//	outColor.w += (1-outColor.w) * surfColor.w;
-	//				//	//check for alphaStop
-	//				//	if(outColor.w > alphaStop) br = true;
-	//				//}
-	//			}
-	//		}
-	//		//prevDensity[axis] = density;
-	//	}
-	//}
-
 	uint32_t brushInfosSize = sizeof(BrushInfos) + 4 * sizeof(float) * drawlistBrushes.size();
 	BrushInfos* brushInfos = (BrushInfos*)new char[brushInfosSize];
 	brushInfos->amtOfAxis = binaryImage.size();
@@ -1271,6 +1185,7 @@ void IsoSurfRenderer::render()
 	brushInfos->stepSize = stepSize;
 	brushInfos->isoValue = isoValue;
 	brushInfos->shadingStep = shadingStep;
+	brushInfos->linearDims = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
 	float* brushColors = (float*)(brushInfos + 1);
 	for (int i = 0; i < drawlistBrushes.size(); ++i) {
 		brushColors[i * 4] = drawlistBrushes[i].brushSurfaceColor.x;
@@ -1662,7 +1577,12 @@ void IsoSurfRenderer::createPipeline()
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
-	std::vector<bool> valid{ true,false,true };
+	uboLayoutBinding.binding = 3;
+	uboLayoutBinding.descriptorCount = 3;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	bindings.push_back(uboLayoutBinding);
+
+	std::vector<bool> valid{ true,false,true, true };
 	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, valid, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
@@ -1828,6 +1748,9 @@ void IsoSurfRenderer::updateDescriptorSet()
 	std::vector<VkSampler> samplers(binaryImageView.size(), binaryImageSampler);
 	VkUtil::updateImageArrayDescriptorSet(device, samplers, binarySmoothView, layouts, 1, descriptorSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+	layouts = std::vector<VkImageLayout>(3, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	samplers = std::vector<VkSampler>(3, binaryImageSampler);
+	VkUtil::updateImageArrayDescriptorSet(device, samplers, dimensionCorrectionViews, layouts, 3, descriptorSet);
 }
 
 void IsoSurfRenderer::updateBrushBuffer()
@@ -1924,9 +1847,9 @@ void IsoSurfRenderer::updateCommandBuffer()
 bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim)
 {
 	if (!dimensionCorrectionMemory) {
-		VkUtil::createImage(device, dimensionCorrectionSize, 1, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages);
-		VkUtil::createImage(device, dimensionCorrectionSize, 1, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 1);
-		VkUtil::createImage(device, dimensionCorrectionSize, 1, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 2);
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages);
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 1);
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 2);
 		VkMemoryRequirements memReq;
 		VkMemoryAllocateInfo alloc{};
 		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[0], &memReq);
@@ -1941,9 +1864,9 @@ bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 		vkBindImageMemory(device, dimensionCorrectionImages[0], dimensionCorrectionMemory, 0);
 		vkBindImageMemory(device, dimensionCorrectionImages[1], dimensionCorrectionMemory, alloc.allocationSize / 3);
 		vkBindImageMemory(device, dimensionCorrectionImages[2], dimensionCorrectionMemory, alloc.allocationSize / 3 * 2);
-		VkUtil::createImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews);
-		VkUtil::createImageView(device, dimensionCorrectionImages[1], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 1);
-		VkUtil::createImageView(device, dimensionCorrectionImages[2], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 2);
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data());
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[1], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data() + 1);
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[2], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data() + 2);
 
 		VkCommandBuffer command;
 		VkUtil::createCommandBuffer(device, commandPool, &command);
@@ -1964,7 +1887,7 @@ bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 		float alpha = 0;
 		if (!dimensionCorrectionLinearDim[0]) {
 			for (int i = 0; i < dimensionCorrectionSize; ++i) {
-				alpha = i / float(xDim.size() - 1);
+				alpha = i / float(dimensionCorrectionSize - 1);
 				float axisVal = alpha * xDim.back() + (1 - alpha) * xDim.front();
 				correction[i] = PCUtil::getVectorIndex(xDim, axisVal) / (xDim.size() - 1);
 			}
@@ -1972,7 +1895,7 @@ bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 		}
 		if (!dimensionCorrectionLinearDim[1]) {
 			for (int i = 0; i < dimensionCorrectionSize; ++i) {
-				alpha = i / float(yDim.size() - 1);
+				alpha = i / float(dimensionCorrectionSize - 1);
 				float axisVal = alpha * yDim.back() + (1 - alpha) * yDim.front();
 				correction[i] = PCUtil::getVectorIndex(yDim, axisVal) / (yDim.size() - 1);
 			}
@@ -1980,7 +1903,7 @@ bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 		}
 		if (!dimensionCorrectionLinearDim[2]) {
 			for (int i = 0; i < dimensionCorrectionSize; ++i) {
-				alpha = i / float(zDim.size() - 1);
+				alpha = i / float(dimensionCorrectionSize - 1);
 				float axisVal = alpha * zDim.back() + (1 - alpha) * zDim.front();
 				correction[i] = PCUtil::getVectorIndex(zDim, axisVal) / (zDim.size() - 1);
 			}

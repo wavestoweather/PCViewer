@@ -1,5 +1,8 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
+#define DIMXBIT 1
+#define DIMYBIT 2
+#define DIMZBIT 4
 
 layout(binding = 0) uniform UniformBufferObject{
 	vec4 camPos;			//the camPos also includes if grid lines shall be drawn(the float indicates the width of the lines)
@@ -17,10 +20,13 @@ layout(std430 ,binding = 2) buffer brushInfos{
 	float stepSize;
 	float isoValue;
 	float shadingStep;
+	uint linearDims;
 	float[] colors;
 	//float[] for the colors of the brushes:
 	//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 }info;
+
+layout(binding = 3) uniform sampler1D dimCor[3];
 
 layout(location = 0) in vec3 endPos;
 layout(location = 0) out vec4 outColor;
@@ -31,6 +37,9 @@ float rand(vec3 co)
 }
 
 void main() {
+	bool xLin = bool(info.linearDims & DIMXBIT);
+	bool yLin = bool(info.linearDims & DIMYBIT);
+	bool zLin = bool(info.linearDims & DIMZBIT);
 	vec3 d = endPos-ubo.camPos.xyz;
 	vec3 dinv = 1/d;
 
@@ -99,7 +108,14 @@ void main() {
 	while(startPoint.x >= 0 && startPoint.x <= 1 && startPoint.y >= 0 && startPoint.y <= 1 && startPoint.z >= 0 && startPoint.z <= 1){
 		bool density = false;
 		for(int brush = 0; brush<info.amtOfAxis;++brush){
-			float curDensity = texture(texSampler[brush],startPoint).x;
+			vec3 sampleLoc = startPoint;
+			if(!xLin)
+				sampleLoc.x = texture(dimCor[0], sampleLoc.x).x;
+			if(!yLin)
+				sampleLoc.y = texture(dimCor[1], sampleLoc.y).x;
+			if(!zLin)
+				sampleLoc.z = texture(dimCor[2], sampleLoc.z).x;
+			float curDensity = texture(texSampler[brush],sampleLoc).x;
 			if(bool(curDensity)){
 				density = true;
 				if(curStepsize > stepsize)

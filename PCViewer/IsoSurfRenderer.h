@@ -146,6 +146,7 @@ private:
 		float stepSize;
 		float isoValue;
 		float shadingStep;
+		uint32_t linearDims;
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 
@@ -228,7 +229,7 @@ private:
 	bool				dimensionCorrectionLinearDim[3];
 	VkDeviceMemory		dimensionCorrectionMemory;
 	VkImage				dimensionCorrectionImages[3];
-	VkImageView			dimensionCorrectionViews[3];
+	std::vector<VkImageView> dimensionCorrectionViews;
 
 	VkSampler					binaryImageSampler;
 	std::vector<VkImage>		binaryImage;
