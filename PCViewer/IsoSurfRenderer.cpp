@@ -1956,7 +1956,7 @@ bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 	}
 
 
-	if (!vectorComp(xDim, dimensionCorrectionArrays[0]) || !vectorComp(yDim, dimensionCorrectionArrays[1]) || !vectorComp(zDim, dimensionCorrectionArrays[2])) {
+	if (!PCUtil::vectorEqual(xDim, dimensionCorrectionArrays[0]) || !PCUtil::vectorEqual(yDim, dimensionCorrectionArrays[1]) || !PCUtil::vectorEqual(zDim, dimensionCorrectionArrays[2])) {
 		dimensionCorrectionArrays[0] = std::vector<float>(xDim);
 		dimensionCorrectionArrays[1] = std::vector<float>(yDim);
 		dimensionCorrectionArrays[2] = std::vector<float>(zDim);
@@ -1988,14 +1988,5 @@ bool IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, cons
 		}
 	}
 
-	return true;
-}
-
-bool IsoSurfRenderer::vectorComp(const std::vector<float>& a, const std::vector<float>& b)
-{
-	if (a.size() != b.size()) return false;
-	for (int i = 0; i < a.size(); ++i)
-		if (a[i] != b[i])
-			return false;
 	return true;
 }
