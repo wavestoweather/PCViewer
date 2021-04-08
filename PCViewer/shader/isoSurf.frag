@@ -36,10 +36,26 @@ float rand(vec3 co)
     return fract(sin(dot(co ,vec3(12.9898,78.233, 122.3617))) * 43758.5453);
 }
 
+bool xLin;
+bool yLin;
+bool zLin;
+
+vec3 cubePosToSamplePos(vec3 pos){
+	vec3 sampleLoc = pos;
+	if(!xLin)
+		sampleLoc.x = texture(dimCor[0], sampleLoc.x).x;
+	if(!yLin)
+		sampleLoc.y = texture(dimCor[1], sampleLoc.y).x;
+	if(!zLin)
+		sampleLoc.z = texture(dimCor[2], sampleLoc.z).x;
+	return sampleLoc;
+}
+
 void main() {
-	bool xLin = bool(info.linearDims & DIMXBIT);
-	bool yLin = bool(info.linearDims & DIMYBIT);
-	bool zLin = bool(info.linearDims & DIMZBIT);
+	xLin = bool(info.linearDims & DIMXBIT);
+	yLin = bool(info.linearDims & DIMYBIT);
+	zLin = bool(info.linearDims & DIMZBIT);
+	
 	vec3 d = endPos-ubo.camPos.xyz;
 	vec3 dinv = 1/d;
 
@@ -108,14 +124,7 @@ void main() {
 	while(startPoint.x >= 0 && startPoint.x <= 1 && startPoint.y >= 0 && startPoint.y <= 1 && startPoint.z >= 0 && startPoint.z <= 1){
 		bool density = false;
 		for(int brush = 0; brush<info.amtOfAxis;++brush){
-			vec3 sampleLoc = startPoint;
-			if(!xLin)
-				sampleLoc.x = texture(dimCor[0], sampleLoc.x).x;
-			if(!yLin)
-				sampleLoc.y = texture(dimCor[1], sampleLoc.y).x;
-			if(!zLin)
-				sampleLoc.z = texture(dimCor[2], sampleLoc.z).x;
-			float curDensity = texture(texSampler[brush],sampleLoc).x;
+			float curDensity = texture(texSampler[brush],cubePosToSamplePos(startPoint)).x;
 			if(bool(curDensity)){
 				density = true;
 				if(curStepsize > stepsize)
@@ -130,7 +139,7 @@ void main() {
 					float precDensity = curDensity;
 					for(int i = 0;i<refinmentSteps;++i){
 						vec3 tmpPoint = .5f * curPos + .5f * prevPos;
-						precDensity = texture(texSampler[brush], tmpPoint).x;
+						precDensity = texture(texSampler[brush], cubePosToSamplePos(tmpPoint)).x;
 						if(precDensity<isoVal){		//intersection is in interval[tmpPoint , curPos]
 							prevPos = tmpPoint;
 						}
@@ -140,9 +149,9 @@ void main() {
 					}
 					curPos = .5f * prevPos + .5f * curPos;
 
-					float xDir = texture(texSampler[brush],curPos+vec3(info.shadingStep * stepsize * 2,0,0)).x, 
-						yDir = texture(texSampler[brush],curPos+vec3(0,info.shadingStep * stepsize * 2,0)).x,
-						zDir = texture(texSampler[brush],curPos+vec3(0,0,info.shadingStep * stepsize * 2)).x;
+					float xDir = texture(texSampler[brush],cubePosToSamplePos(curPos+vec3(info.shadingStep * stepsize * 2,0,0))).x, 
+						yDir = texture(texSampler[brush],cubePosToSamplePos(curPos+vec3(0,info.shadingStep * stepsize * 2,0))).x,
+						zDir = texture(texSampler[brush],cubePosToSamplePos(curPos+vec3(0,0,info.shadingStep * stepsize * 2))).x;
 					vec3 normal = -normalize(vec3(xDir - precDensity, yDir - precDensity, zDir - precDensity));
 					brushColor.xyz = .5f * brushColor.xyz + max(.5 * dot(normal,normalize(-ubo.lightDir)) * brushColor.xyz , vec3(0)) + max(.4 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),50) * vec3(1) , vec3(0));
 				}
@@ -176,9 +185,9 @@ void main() {
 				float precDensity = prevDensity[i];
 				curPos = .5f * prevPos + .5f * curPos;
 
-				float xDir = texture(texSampler[i],curPos+vec3(stepsize * 2,0,0)).x, 
-					yDir = texture(texSampler[i],curPos+vec3(0,stepsize * 2,0)).x,
-					zDir = texture(texSampler[i],curPos+vec3(0,0,stepsize * 2)).x;
+				float xDir = texture(texSampler[i],cubePosToSamplePos(curPos+vec3(stepsize * 2,0,0))).x, 
+					yDir = texture(texSampler[i],cubePosToSamplePos(curPos+vec3(0,stepsize * 2,0))).x,
+					zDir = texture(texSampler[i],cubePosToSamplePos(curPos+vec3(0,0,stepsize * 2))).x;
 				vec3 normal = -normalize(vec3(xDir - precDensity, yDir - precDensity, zDir - precDensity));
 				brushColor.xyz = .5f * brushColor.xyz + max(.5 * dot(normal,normalize(-ubo.lightDir)) * brushColor.xyz , vec3(0)) + max(.4 * pow(dot(normal,normalize(.5*normalize(ubo.camPos.xyz) + .5*normalize(-ubo.lightDir))),50) * vec3(1) , vec3(0));
 			}
