@@ -120,7 +120,7 @@ private:
 		float yMax;
 		float zMin;
 		float zMax;
-		uint32_t padding;				//if used with active ind padding is used to indicate if regular grid should be used
+		uint32_t regularGrid;				//if used with active ind padding is used to indicate if regular grid should be used
 		//int array containing attribute infos:
 		//index attr 1, amtOfBrushes 1, offset brush1
 		//index attr 2, amtOfBrushes 2, offset brush2
@@ -168,6 +168,10 @@ private:
 		uint32_t padding[2];
 	};
 	
+	//constants
+	const int			dimensionCorrectionSize = 256;
+	const VkFormat		dimensionCorrectionFormat = VK_FORMAT_R32_SFLOAT;
+
 	//shaderpaths
 	static char vertPath[];
 	static char fragPath[];
@@ -220,8 +224,11 @@ private:
 	VkBuffer			brushBuffer;
 	VkDeviceMemory		brushMemory;
 	uint32_t			brushByteSize;
+	std::vector<float>	dimensionCorrectionArrays[3];
+	bool				dimensionCorrectionLinearDim[3];
 	VkDeviceMemory		dimensionCorrectionMemory;
 	VkImage				dimensionCorrectionImages[3];
+	VkImageView			dimensionCorrectionViews[3];
 
 	VkSampler					binaryImageSampler;
 	std::vector<VkImage>		binaryImage;
@@ -277,5 +284,6 @@ private:
 	void updateDescriptorSet();
 	void updateBrushBuffer();
 	void updateCommandBuffer();
+	void updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim);
 };
 #endif 

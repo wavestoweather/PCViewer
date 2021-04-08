@@ -14,6 +14,7 @@ public:
 	static void numdump(const int* ptr, int len);
 	static void matrixdump(const std::vector<std::vector<int>>& matrix);
 	static void matrixdump(const std::vector<std::vector<double>>& matrix);
+	static float getVectorIndex(const std::vector<float>& values, float v);
 };
 
 #endif

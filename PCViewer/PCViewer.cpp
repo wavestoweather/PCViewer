@@ -2716,7 +2716,7 @@ static std::pair<bool,std::vector<float>>& getDimensionValues(const DataSet& ds,
 			float d = std::abs(ref[i] - ref[i - 1] - diff);
 			//check if the stepdifference is larger than 1%
 			if (d / diff > .01f) {
-				dimensionValues[pcAttributes[dimension]].first = false;
+				dimensionValues[pcAttributes[dimension].name].first = false;
 				break;
 			}
 		}
@@ -5089,10 +5089,10 @@ static void updateIsoSurface(GlobalBrush& gb) {
 			}
 		}
 		if (!dl) continue;
-		std::vector<float*>* data = nullptr;
-		for (DataSet& ds : g_PcPlotDataSets) {
-			if (dl->parentDataSet == ds.name) {
-				data = &ds.data;
+		DataSet* ds = nullptr;
+		for (DataSet& d : g_PcPlotDataSets) {
+			if (dl->parentDataSet == d.name) {
+				ds = &d;
 				break;
 			}
 		}
@@ -5114,13 +5114,13 @@ static void updateIsoSurface(GlobalBrush& gb) {
 
 		glm::uvec3 posIndices{ 0,2,1 };
 
-		if (isoSurfSettings.isoSurfaceRegularGrid) {
-			isoSurfaceRenderer->update3dBinaryVolume(isoSurfSettings.isoSurfaceGridDim[0], isoSurfSettings.isoSurfaceGridDim[1], isoSurfSettings.isoSurfaceGridDim[2], pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
-		}
-		else {
-			if (!ImGui::IsMouseDown(0))
-				isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, posIndices, *data, dl->indices, miMa, index);
-		}
+		auto& xDim = getDimensionValues(*ds, isoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, isoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, isoSurfSettings.posIndices.z);
+		uint32_t w = xDim.second.size();
+		uint32_t h = yDim.second.size();
+		uint32_t d = zDim.second.size();
+		bool regularGrid[4]{ xDim.first, yDim.first, zDim.first };
+
+		isoSurfaceRenderer->update3dBinaryVolume(xDim.second, yDim.second, zDim.second, pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, ds->data.size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 	}
 }
 
@@ -5133,9 +5133,6 @@ static void updateIsoSurface(DrawList& dl) {
 	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
 		++index;
 		if (dl.name != db.drawlist || db.brush.size()) continue;
-		uint32_t w = db.gridDimensions[0];
-		uint32_t h = db.gridDimensions[1];
-		uint32_t d = db.gridDimensions[2];
 		uint32_t posIndices[3];
 		isoSurfaceRenderer->getPosIndices(index, posIndices);
 		std::vector<std::pair<float, float>> posBounds(3);
@@ -5143,22 +5140,19 @@ static void updateIsoSurface(DrawList& dl) {
 			posBounds[i].first = pcAttributes[posIndices[i]].min;
 			posBounds[i].second = pcAttributes[posIndices[i]].max;
 		}
-		if (!isoSurfSettings.isoSurfaceRegularGrid) {
-			posBounds[0].first = SpacialData::rlat[0];
-			posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
-			posBounds[1].first = SpacialData::altitude[0];
-			posBounds[1].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
-			posBounds[2].first = SpacialData::rlon[0];
-			posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
-		}
-		std::vector<float*>* data;
-		for (DataSet& ds : g_PcPlotDataSets) {
-			if (ds.name == dl.parentDataSet) {
-				data = &ds.data;
+		DataSet* ds;
+		for (DataSet& d : g_PcPlotDataSets) {
+			if (d.name == dl.parentDataSet) {
+				ds = &d;
 				break;
 			}
 		}
-		isoSurfaceRenderer->update3dBinaryVolume(w, h, d, posIndices, posBounds, pcAttributes.size(), data->size(), dl.buffer, dl.activeIndicesBufferView, dl.indices.size(), dl.indicesBuffer, isoSurfSettings.isoSurfaceRegularGrid, index);
+		auto& xDim = getDimensionValues(*ds, isoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, isoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, isoSurfSettings.posIndices.z);
+		uint32_t w = xDim.second.size();
+		uint32_t h = yDim.second.size();
+		uint32_t d = zDim.second.size();
+		bool regularGrid[4]{ xDim.first, yDim.first, zDim.first };
+		isoSurfaceRenderer->update3dBinaryVolume(xDim.second, yDim.second, zDim.second, posIndices, posBounds, pcAttributes.size(), ds->data.size(), dl.buffer, dl.activeIndicesBufferView, dl.indices.size(), dl.indicesBuffer, regularGrid, index);
 	}
 }
 
@@ -10295,8 +10289,6 @@ int main(int, char**)
 				}
 				if (ImGui::BeginMenu("Settings")) {
 					ImGui::Checkbox("Couple to brush", &isoSurfSettings.coupleIsoSurfaceRenderer);
-					ImGui::Checkbox("Regular grid", &isoSurfSettings.isoSurfaceRegularGrid);
-					ImGui::InputInt3("Regular grid dimensions", isoSurfSettings.isoSurfaceGridDim);
 					
 					ImGui::EndMenu();
 				}
@@ -10471,8 +10463,6 @@ int main(int, char**)
 			}
 			ImGui::PopItemWidth();
 
-			ImGui::Checkbox("Dataset has regular grid", &isoSurfSettings.isoSurfaceRegularGrid);
-
 			ImGui::PushItemWidth(100);
 			//setting the position variables
 			if (pcAttributes.size()) {
@@ -10555,10 +10545,11 @@ int main(int, char**)
 							}
 						}
 					}
-					auto& xDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.z);
+					auto& xDim = getDimensionValues(*ds, isoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, isoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, isoSurfSettings.posIndices.z);
 					uint32_t w = xDim.second.size();
 					uint32_t h = yDim.second.size();
 					uint32_t d = zDim.second.size();
+					bool regularGrid[3]{ xDim.first, yDim.first, zDim.first };
 					if (index == -1) {
 						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,(selectedGlobalBrush == -1) ? "" : globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {w, h, d} });
 					}
@@ -10568,10 +10559,10 @@ int main(int, char**)
 							posBounds[i].first = pcAttributes[isoSurfSettings.posIndices[i]].min;
 							posBounds[i].second = pcAttributes[isoSurfSettings.posIndices[i]].max;
 						}
-						isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &isoSurfSettings.posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfSettings.isoSurfaceRegularGrid, index);
+						isoSurfaceRenderer->update3dBinaryVolume(xDim.second, yDim.second, zDim.second, &isoSurfSettings.posIndices.x, posBounds, pcAttributes.size(), ds->data.size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, regularGrid, index);
 					}
 					else {
-						isoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), brushIndices, minMax, isoSurfSettings.posIndices, dl->buffer, data->size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
+						isoSurfaceRenderer->update3dBinaryVolume(xDim.second, yDim.second, zDim.second, pcAttributes.size(), brushIndices, minMax, isoSurfSettings.posIndices, dl->buffer, ds->data.size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 					}
 				}
 			}
@@ -10846,25 +10837,17 @@ int main(int, char**)
 							break;
 						}
 					}
-					std::vector<float> xDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.z);
-					uint32_t w = xDim.size();
-					uint32_t h = yDim.size();
-					uint32_t d = zDim.size();
+					std::pair<bool,std::vector<float>> xDim = getDimensionValues(*ds, isoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, isoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, isoSurfSettings.posIndices.z);
+					uint32_t w = xDim.second.size();
+					uint32_t h = yDim.second.size();
+					uint32_t d = zDim.second.size();
 					std::vector<uint32_t> densityInds(pcAttributes.size());
 					for (int i = 0; i < pcAttributes.size(); ++i) densityInds[i] = i;
 					std::vector<std::pair<float, float>> bounds;// { {pcAttributes[posIndices[0]].min, pcAttributes[posIndices[0]].max}, { pcAttributes[posIndices[1]].min,pcAttributes[posIndices[1]].max }, { pcAttributes[posIndices[2]].min,pcAttributes[posIndices[2]].max } };
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						bounds.emplace_back(pcAttributes[i].min, pcAttributes[i].max);
 					}
-					if (!brushIsoSurfSettings.isoSurfaceRegularGrid) {
-						bounds[posIndices[0]].first = SpacialData::rlat[0];
-						bounds[posIndices[0]].second = SpacialData::rlat[SpacialData::rlatSize - 1];
-						bounds[posIndices[1]].first = SpacialData::altitude[0];
-						bounds[posIndices[1]].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
-						bounds[posIndices[2]].first = SpacialData::rlon[0];
-						bounds[posIndices[2]].second = SpacialData::rlon[SpacialData::rlonSize - 1];
-					}
-					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, bounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),brushIsoSurfSettings.isoSurfaceRegularGrid);
+					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, bounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),xDim.first);
 					brushIsoSurfaceRenderer->activeDrawlist = dl->name;
 				}
 				ImGui::EndDragDropTarget(); 
@@ -12147,21 +12130,10 @@ int main(int, char**)
 										if (violinDrawlistPlots[i].selectedDrawlists.find(j) == violinDrawlistPlots[i].selectedDrawlists.end()) {
 											violinDrawlistPlots[i].selectedDrawlists.insert(j);
 											if (isoSurfSettings.enabled && violinPlotDrawlistSettings.violinPlotDLSendToIso) {
-												uint32_t w = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceGridDim[0] : SpacialData::rlatSize;
-												uint32_t h = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceGridDim[1] : SpacialData::altitudeSize + 22;
-												uint32_t d = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceGridDim[2] : SpacialData::rlonSize;
 												std::vector<std::pair<float, float>> posBounds(3);
 												for (int i = 0; i < 3; ++i) {
 													posBounds[i].first = pcAttributes[isoSurfSettings.posIndices[i]].min;
 													posBounds[i].second = pcAttributes[isoSurfSettings.posIndices[i]].max;
-												}
-												if (!isoSurfSettings.isoSurfaceRegularGrid) {
-													posBounds[0].first = SpacialData::rlat[0];
-													posBounds[0].second = SpacialData::rlat[SpacialData::rlatSize - 1];
-													posBounds[1].first = SpacialData::altitude[0];
-													posBounds[1].second = SpacialData::altitude[SpacialData::altitudeSize - 1];
-													posBounds[2].first = SpacialData::rlon[0];
-													posBounds[2].second = SpacialData::rlon[SpacialData::rlonSize - 1];
 												}
 												DrawList* dl;
 												for (auto& draw : g_PcPlotDrawLists) {
@@ -12170,12 +12142,17 @@ int main(int, char**)
 														break;
 													}
 												}
-												std::vector<float*>* data;
-												for (auto& ds : g_PcPlotDataSets) {
-													if (ds.name == dl->parentDataSet) {
-														data = &ds.data;
+												DataSet* ds;
+												for (auto& d : g_PcPlotDataSets) {
+													if (d.name == dl->parentDataSet) {
+														ds = &d;
 													}
 												}
+												auto& xDim = getDimensionValues(*ds, isoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, isoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, isoSurfSettings.posIndices.z);
+												uint32_t w = xDim.second.size();
+												uint32_t h = yDim.second.size();
+												uint32_t d = zDim.second.size();;
+												bool regularDim[3]{ xDim.first, yDim.first, zDim.first };
 												int index = -1;
 												for (int in = 0; in < isoSurfaceRenderer->drawlistBrushes.size(); ++in) {
 													if (isoSurfaceRenderer->drawlistBrushes[in].drawlist == dl->name && isoSurfaceRenderer->drawlistBrushes[in].brush == "") {
@@ -12184,14 +12161,11 @@ int main(int, char**)
 													}
 												}
 												if (index == -1) {
-													uint32_t wi = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceGridDim[0] : SpacialData::rlatSize;
-													uint32_t he = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceGridDim[1] : SpacialData::altitudeSize + 22;
-													uint32_t de = (isoSurfSettings.isoSurfaceRegularGrid) ? isoSurfSettings.isoSurfaceGridDim[2] : SpacialData::rlonSize;
 													glm::vec4 isoColor;
 													(isoSurfaceRenderer->drawlistBrushes.size() == 0) ? isoColor = { 0,1,0, 0.627 } : isoColor = { 1,0,1,0.627 };
-													isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name, "",isoColor, {wi, he, de} });
+													isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name, "",isoColor, {w, h, d} });
 												}
-												isoSurfaceRenderer->update3dBinaryVolume(w, h, d, &isoSurfSettings.posIndices.x, posBounds, pcAttributes.size(), data->size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, isoSurfSettings.isoSurfaceRegularGrid, index);
+												isoSurfaceRenderer->update3dBinaryVolume(xDim.second, yDim.second, zDim.second, &isoSurfSettings.posIndices.x, posBounds, pcAttributes.size(), ds->data.size(), dl->buffer, dl->activeIndicesBufferView, dl->indices.size(), dl->indicesBuffer, regularDim, index);
 												isoSurfaceRenderer->render();
 											}
 										}

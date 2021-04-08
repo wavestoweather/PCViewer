@@ -52,7 +52,11 @@ IsoSurfRenderer::IsoSurfRenderer(uint32_t height, uint32_t width, VkDevice devic
 	activeIndComputeDescriptorSetLayout = VK_NULL_HANDLE;
 	binaryCopyOnesDescriptorSetLayout = VK_NULL_HANDLE;
 	binaryCopyOnesPipeline = VK_NULL_HANDLE;
+	dimensionCorrectionMemory = VK_NULL_HANDLE;
 	binaryCopyOnesPipelineLayout = VK_NULL_HANDLE;
+	dimensionCorrectionImages[0] = VK_NULL_HANDLE;
+	dimensionCorrectionImages[1] = VK_NULL_HANDLE;
+	dimensionCorrectionImages[2] = VK_NULL_HANDLE;
 	brushByteSize = 0;
 	shade = true;
 	stepSize = .006f;
@@ -228,6 +232,17 @@ IsoSurfRenderer::~IsoSurfRenderer()
 	}
 	for (auto& col : brushColors) {
 		delete[] col.second;
+	}
+	if (dimensionCorrectionMemory) {
+		vkFreeMemory(device, dimensionCorrectionMemory, nullptr);
+	}
+	if (dimensionCorrectionImages[0]) {
+		vkDestroyImage(device, dimensionCorrectionImages[0], nullptr);
+		vkDestroyImage(device, dimensionCorrectionImages[1], nullptr);
+		vkDestroyImage(device, dimensionCorrectionImages[2], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[0], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[1], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[2], nullptr);
 	}
 }
 
@@ -665,6 +680,8 @@ bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const
 		VkUtil::createImageSampler(device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_LINEAR, 1, 1, &binaryImageSampler);
 	}
 
+	updateDimensionImages(xDim, yDim, zDim);
+
 	if (index == -1)
 		posIndices.push_back(positionIndices);
 	else {
@@ -729,6 +746,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const
 	infoBytes->yMax = densityAttributesMinMax[positionIndices.y].second;
 	infoBytes->zMin = densityAttributesMinMax[positionIndices.z].first;
 	infoBytes->zMax = densityAttributesMinMax[positionIndices.z].second;
+	infoBytes->regularGrid = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
 	int* inf = (int*)(infoBytes + 1);
 	int offset = 0;
 	for (int i = 0; i < brushAttributes.size(); ++i) {
@@ -759,11 +777,40 @@ bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const
 			brushBytes[offset++] = minMax.second;
 		}
 	}
-	PCUtil::numdump(brushBytes, offset);
+	//PCUtil::numdump(brushBytes, offset);
 	assert(offset * sizeof(float) == brushByteSize);
 	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushBytes);
 	delete[] brushBytes;
-	
+
+	//create graphics buffer for dimension values
+	uint32_t dimValsByteSize = (4 + xDim.size() + yDim.size() + zDim.size()) * sizeof(float);
+	float* dimValsBytes = new float[dimValsByteSize];
+	VkBuffer dimValsBuffer;
+	VkDeviceMemory dimValsMemory;
+	VkUtil::createBuffer(device, dimValsByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dimValsBuffer);
+	vkGetBufferMemoryRequirements(device, dimValsBuffer, &memReq);
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &dimValsMemory);
+	vkBindBufferMemory(device, dimValsBuffer, dimValsMemory, 0);
+	offset = 0;
+	dimValsBytes[offset++] = xDim.size();
+	dimValsBytes[offset++] = yDim.size();
+	dimValsBytes[offset++] = zDim.size();
+	dimValsBytes[offset++] = 0; //padding
+	for (float f : xDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : yDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : zDim) {
+		dimValsBytes[offset++] = f;
+	}
+	assert(offset * sizeof(float) == dimValsByteSize);
+	VkUtil::uploadData(device, dimValsMemory, 0, dimValsByteSize, dimValsBytes);
+	delete[] dimValsBytes;
+
 	//create descriptor set and update all need things
 	VkDescriptorSet descSet;
 	std::vector<VkDescriptorSetLayout> sets;
@@ -771,9 +818,10 @@ bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const
 	VkUtil::createDescriptorSets(device, sets, descriptorPool, &descSet);
 	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, data, dataByteSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 4, descSet);
+	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, dataByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 5, descSet);
 	
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
@@ -801,6 +849,8 @@ bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const
 	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
 	vkFreeMemory(device, infosMem, nullptr);
 	vkDestroyBuffer(device, infos, nullptr);
+	vkFreeMemory(device, dimValsMemory, nullptr);
+	vkDestroyBuffer(device, dimValsBuffer, nullptr);
 	delete[] infoBytes;
 
 	if (!descriptorSet) {
@@ -818,9 +868,14 @@ bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const
 
 IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, uint32_t posIndices[3], std::vector<std::pair<float, float>>& posBounds, uint32_t amtOfAttributes, uint32_t dataSize, VkBuffer data, VkBufferView activeIndices, uint32_t indicesSize, VkBuffer indices, bool regularGrid[3], int index)
 {
-
+	int width = xDim.size(), height = yDim.size(), depth = zDim.size();
 	if (index != -1 && (drawlistBrushes[index].gridDimensions[0]!= width || drawlistBrushes[index].gridDimensions[1] != height || drawlistBrushes[index].gridDimensions[2] != depth)) return IsoSurfRendererError_GridDimensionMissmatch;
 	
+	dimensionCorrectionLinearDim[0] = regularGrid[0];
+	dimensionCorrectionLinearDim[1] = regularGrid[1];
+	dimensionCorrectionLinearDim[2] = regularGrid[2];
+	updateDimensionImages(xDim, yDim, zDim);
+
 	VkResult err;
 
 	if (!binaryImageSampler) {
@@ -893,8 +948,37 @@ IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(cons
 	infoBytes->yMax = posBounds[1].second;
 	infoBytes->zMin = posBounds[2].first;
 	infoBytes->zMax = posBounds[2].second;
-	infoBytes->padding = regularGrid;
+	infoBytes->regularGrid = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
 	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
+
+	//create graphics buffer for dimension values
+	uint32_t dimValsByteSize = (4 + xDim.size() + yDim.size() + zDim.size()) * sizeof(float);
+	float* dimValsBytes = new float[dimValsByteSize];
+	VkBuffer dimValsBuffer;
+	VkDeviceMemory dimValsMemory;
+	VkUtil::createBuffer(device, dimValsByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dimValsBuffer);
+	vkGetBufferMemoryRequirements(device, dimValsBuffer, &memReq);
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &dimValsMemory);
+	vkBindBufferMemory(device, dimValsBuffer, dimValsMemory, 0);
+	int offset = 0;
+	dimValsBytes[offset++] = xDim.size();
+	dimValsBytes[offset++] = yDim.size();
+	dimValsBytes[offset++] = zDim.size();
+	dimValsBytes[offset++] = 0; //padding
+	for (float f : xDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : yDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : zDim) {
+		dimValsBytes[offset++] = f;
+	}
+	assert(offset * sizeof(float) == dimValsByteSize);
+	VkUtil::uploadData(device, dimValsMemory, 0, dimValsByteSize, dimValsBytes);
+	delete[] dimValsBytes;
 
 	//create descriptor set and update all need things
 	VkDescriptorSet descSet;
@@ -905,7 +989,8 @@ IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(cons
 	VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 1, descSet);
 	VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 4, descSet);
+	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 5, descSet);
 
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
@@ -931,6 +1016,8 @@ IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(cons
 	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
 	vkFreeMemory(device, infosMem, nullptr);
 	vkDestroyBuffer(device, infos, nullptr);
+	vkFreeMemory(device, dimValsMemory, nullptr);
+	vkDestroyBuffer(device, dimValsBuffer, nullptr);
 	delete[] infoBytes;
 
 	if (!descriptorSet) {
@@ -1599,15 +1686,18 @@ void IsoSurfRenderer::createPipeline()
 	binding.binding = 1;								//brushes
 	bindings.push_back(binding);
 
-	binding.binding = 2;								//indices buffer
+	binding.binding = 2;								//axisvalues
+	bindings.push_back(binding);
+
+	binding.binding = 3;								//indices buffer
 	binding.descriptorCount = 1;
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(binding);
 
-	binding.binding = 3;								//data buffer
+	binding.binding = 4;								//data buffer
 	bindings.push_back(binding);
 
-	binding.binding = 4;								//binary image
+	binding.binding = 5;								//binary image
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	bindings.push_back(binding);
 
@@ -1688,7 +1778,10 @@ void IsoSurfRenderer::createPipeline()
 	binding.binding = 3;								//data buffer
 	bindings.push_back(binding);
 
-	binding.binding = 4;								//binary image
+	binding.binding = 4;								//dimension arrays
+	bindings.push_back(binding);
+
+	binding.binding = 5;								//binary image
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	bindings.push_back(binding);
 
@@ -1826,4 +1919,63 @@ void IsoSurfRenderer::updateCommandBuffer()
 
 	err = vkDeviceWaitIdle(device);
 	check_vk_result(err);
+}
+
+void IsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim)
+{
+	if (!dimensionCorrectionMemory) {
+		VkUtil::createImage(device, dimensionCorrectionSize, 1, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages);
+		VkUtil::createImage(device, dimensionCorrectionSize, 1, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 1);
+		VkUtil::createImage(device, dimensionCorrectionSize, 1, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 2);
+		VkMemoryRequirements memReq;
+		VkMemoryAllocateInfo alloc{};
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[0], &memReq);
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+		alloc.allocationSize += memReq.size;
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[1], &memReq);
+		alloc.allocationSize += memReq.size;
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[2], &memReq);
+		alloc.allocationSize += memReq.size;
+		alloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, 0);
+		check_vk_result(vkAllocateMemory(device, &alloc, nullptr, &dimensionCorrectionMemory));
+		vkBindImageMemory(device, dimensionCorrectionImages[0], dimensionCorrectionMemory, 0);
+		vkBindImageMemory(device, dimensionCorrectionImages[1], dimensionCorrectionMemory, alloc.allocationSize / 3);
+		vkBindImageMemory(device, dimensionCorrectionImages[2], dimensionCorrectionMemory, alloc.allocationSize / 3 * 2);
+		VkUtil::createImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews);
+		VkUtil::createImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 1);
+		VkUtil::createImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, dimensionCorrectionViews + 2);
+	}
+
+
+	if (xDim != dimensionCorrectionArrays[0] || yDim != dimensionCorrectionArrays[1] || zDim != dimensionCorrectionArrays[2]) {
+		dimensionCorrectionArrays[0] = xDim;
+		dimensionCorrectionArrays[1] = yDim;
+		dimensionCorrectionArrays[2] = zDim;
+		std::vector<float> correction(dimensionCorrectionSize);
+		float alpha = 0;
+		if (!dimensionCorrectionLinearDim[0]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(xDim.size() - 1);
+				float axisVal = alpha * xDim.back() + (1 - alpha) * xDim.front();
+				correction[i] = PCUtil::getVectorIndex(xDim, axisVal) / (xDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[0], VK_IMAGE_LAYOUT_UNDEFINED, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+		if (!dimensionCorrectionLinearDim[1]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(yDim.size() - 1);
+				float axisVal = alpha * yDim.back() + (1 - alpha) * yDim.front();
+				correction[i] = PCUtil::getVectorIndex(yDim, axisVal) / (yDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[1], VK_IMAGE_LAYOUT_UNDEFINED, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+		if (!dimensionCorrectionLinearDim[2]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(zDim.size() - 1);
+				float axisVal = alpha * zDim.back() + (1 - alpha) * zDim.front();
+				correction[i] = PCUtil::getVectorIndex(zDim, axisVal) / (zDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[2], VK_IMAGE_LAYOUT_UNDEFINED, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+	}
 }
