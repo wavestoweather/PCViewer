@@ -1,16 +1,37 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
+#define DIMXBIT 1
+#define DIMYBIT 2
+#define DIMZBIT 4
 
 layout(binding = 0) uniform UniformBufferObject{
 	vec3 camPos;
 	vec3 cubeSides;
 	vec3 lightDir;
 	mat4 mvp;
+	uint linearDims;
+	uint padding[3];
 } ubo;
 layout(binding = 1) uniform sampler3D texSampler;
+layout(binding = 2) uniform sampler1D dimCor[3];
 
 layout(location = 0) in vec3 endPos;
 layout(location = 0) out vec4 outColor;
+
+bool xLin;
+bool yLin;
+bool zLin;
+
+vec3 cubePosToSamplePos(vec3 pos){
+	vec3 sampleLoc = pos;
+	if(!xLin)
+		sampleLoc.x = texture(dimCor[0], sampleLoc.x).x;
+	if(!yLin)
+		sampleLoc.y = texture(dimCor[1], sampleLoc.y).x;
+	if(!zLin)
+		sampleLoc.z = texture(dimCor[2], sampleLoc.z).x;
+	return sampleLoc;
+}
 
 float rand(vec3 co)
 {
@@ -18,6 +39,9 @@ float rand(vec3 co)
 }
 
 void main() {
+	xLin = bool(ubo.linearDims & DIMXBIT);
+	yLin = bool(ubo.linearDims & DIMYBIT);
+	zLin = bool(ubo.linearDims & DIMZBIT);
 	vec3 d = endPos-ubo.camPos;
 	vec3 dinv = 1/d;
 
@@ -29,7 +53,7 @@ void main() {
 	t.z = (t.z>.999999)?-1.0/0:t.z;
 	
 	float tmax = max(t.x,max(t.y,t.z));
-	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1)*d;
+	vec3 startPoint = ubo.camPos+clamp(tmax,.05,1.0)*d;
 
 	const float alphaStop = .98f;
 	const float stepsize = .0013f;
@@ -53,7 +77,7 @@ void main() {
 	float transmittance = 1;
 	for(int i = 0; i < iterations; i++){
 
-		vec4 tex = texture(texSampler,startPoint);
+		vec4 tex = texture(texSampler,cubePosToSamplePos(startPoint));
 		if(false) {
 			//computing lighting
 			float lightDens = 0;
@@ -62,7 +86,7 @@ void main() {
 				if(lightPos.x>1.0f||lightPos.y>1.0f||lightPos.z>1.0f||lightPos.x<0.0f||lightPos.y<0.0f||lightPos.z<0.0f){
 					break;
 				}
-				lightDens += texture(texSampler,lightPos).a * length(lightStep) * densityMultiplier;
+				lightDens += texture(texSampler,cubePosToSamplePos(lightPos)).a * length(lightStep) * densityMultiplier;
 				lightStep += lightStepIncrease;
 				lightPos += lightStep;
 			}
