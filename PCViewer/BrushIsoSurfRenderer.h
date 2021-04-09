@@ -96,6 +96,8 @@ private:
 		alignas(16) glm::vec3 faces;	//face positions for intersection tests
 		alignas(16) glm::vec3 lightDir;
 		alignas(16) glm::mat4 mvp;		//modelViewProjection Matrix
+		uint32_t linearDims;
+		uint32_t padding[3];
 	};
 
 	struct ComputeInfos {
@@ -141,7 +143,6 @@ private:
 		float isoValue;
 		uint32_t amtOfBrushes;
 		float shadingStep;
-		uint32_t linearDims;
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 

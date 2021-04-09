@@ -538,6 +538,7 @@ void BrushIsoSurfRenderer::render()
 	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
 	ubo.mvp = ubo.mvp * view *scale;
 	ubo.camPos = glm::inverse(scale) * glm::vec4(cameraPos,1);
+	ubo.linearDims = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
 
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
 	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;
@@ -607,47 +608,6 @@ void BrushIsoSurfRenderer::render()
 	
 	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
 	delete[] brushInfos;
-
-	//checking the brush infos
-	//for (int axis = 0; axis < brushInfos->amtOfAxis; ++axis) {
-	//	int axisOffset = int(brushI[axis]);
-	//	//check if there exists a brush on this axis
-	//	if (bool(brushI[axisOffset])) {		//amtOfBrushes > 0
-	//		//as there exist brushes we get the density for this attribute
-	//		//float density = texture(texSampler[axis], startPoint).x;
-	//		//for every brush
-	//		for (int brush = 0; brush < brushI[axisOffset]; ++brush) {
-	//			int brushOffset = int(brushI[axisOffset + 1 + brush]);
-	//			//for every MinMax
-	//			for (int minMax = 0; minMax < brushI[brushOffset + 1]; ++minMax) {
-	//				int minMaxOffset = brushOffset + 6 + 2 * minMax;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
-	//				int brushIndex = int(brushI[brushOffset]);
-	//				float mi = brushI[minMaxOffset];
-	//				float ma = brushI[minMaxOffset + 1];
-	//				std::cout << "Axis: " << axis << ", brush index: " << brushIndex << ", Min: " << mi << ", Max: " << ma << "Color: " << brushI[brushOffset + 2]<< " " << brushI[brushOffset + 3] << " " << brushI[brushOffset + 4] << " " << brushI[brushOffset + 5] << std::endl;
-	//				//bool stepInOut = prevDensity[axis] < mi && density >= mi ||
-	//				//	prevDensity[axis] > mi&& density <= mi ||
-	//				//	prevDensity[axis] > ma&& density <= ma ||
-	//				//	prevDensity[axis] < ma && density >= ma;
-	//				//
-	//				////this are all the things i have to set to test if a surface has to be drawn
-	//				//brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
-	//				//brushBits[brushIndex] &= (uint((density<mi || density>ma) && !brushBorder[brushIndex]) << axis) ^ 0xffffffff;
-	//				//brushColor[brushIndex] = vec4(bInfo.brushes[brushOffset + 2, brushOffset + 3, brushOffset + 4, brushOffset + 5]);
-	//
-	//				//the surface calculation is moved to the end of the for loop, as we have to check for every attribute of the brush if it is inside it
-	//				//if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
-	//				//	vec4 surfColor = vec4(bInfo.brushes[brushOffset + 1,brushOffset + 2,brushOffset + 3,brushOffset + 4]);
-	//				//	outColor.xyz += (1-outColor.w) * surfColor.w * surfColor.xyz;
-	//				//	outColor.w += (1-outColor.w) * surfColor.w;
-	//				//	//check for alphaStop
-	//				//	if(outColor.w > alphaStop) br = true;
-	//				//}
-	//			}
-	//		}
-	//		//prevDensity[axis] = density;
-	//	}
-	//}
 
 	//submitting the command buffer
 	VkSubmitInfo submitInfo = {};
@@ -890,7 +850,12 @@ void BrushIsoSurfRenderer::createPipeline()
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
-	std::vector<bool> valid{ true,false,true };
+	uboLayoutBinding.binding = 3;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	uboLayoutBinding.descriptorCount = 3;
+	bindings.push_back(uboLayoutBinding);
+
+	std::vector<bool> valid{ true,false,true,true };
 	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, valid, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
@@ -955,6 +920,9 @@ void BrushIsoSurfRenderer::updateDescriptorSet()
 	for (int i = 0; i < activeDensities.size(); ++i)imViews[i] = image3dView[activeDensities[i]];
 	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, image3dView, layouts, 1, descriptorSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+	std::vector<VkSampler> samplers(3, sampler);
+	layouts = std::vector<VkImageLayout>(3, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::updateImageArrayDescriptorSet(device, samplers, dimensionCorrectionViews, layouts, 3, descriptorSet);
 }
 
 void BrushIsoSurfRenderer::updateBrushBuffer()
