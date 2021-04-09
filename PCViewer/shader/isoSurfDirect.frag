@@ -18,6 +18,7 @@ layout(std430 ,binding = 2) buffer brushInfos{
 	float isoValue;
 	uint amtOfBrushes;
 	float shadingStep;
+	uint linearDims;
 	float[] brushes;
 	//float[] for the colors of the brushes:
 	//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
