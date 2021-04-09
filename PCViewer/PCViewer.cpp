@@ -10754,34 +10754,33 @@ int main(int, char**)
 			}
 
 			ImGui::Text("To set the data for iso surface rendering, drag and drop a drawlist onto this window.\nTo Add a brush iso surface, darg and drop a global brush onto this window");
-			static uint32_t posIndices[3]{ 1,0,2 };
 			//ImGui::DragInt3("Position indices(order: lat, alt, lon)", (int*)posIndices, 1, 0, pcAttributes.size());
 
 			ImGui::PushItemWidth(100);
 			//setting the position variables
 			if (pcAttributes.size()) {
-				if (ImGui::BeginCombo("##xdim", pcAttributes[posIndices[0]].name.c_str())) {
+				if (ImGui::BeginCombo("##xdim", pcAttributes[brushIsoSurfSettings.posIndices[0]].name.c_str())) {
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-							posIndices[0] = i;
+							brushIsoSurfSettings.posIndices[0] = i;
 						}
 					}
 					ImGui::EndCombo();
 				}
 				ImGui::SameLine();
-				if (ImGui::BeginCombo("##ydim", pcAttributes[posIndices[1]].name.c_str())) {
+				if (ImGui::BeginCombo("##ydim", pcAttributes[brushIsoSurfSettings.posIndices[1]].name.c_str())) {
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-							posIndices[1] = i;
+							brushIsoSurfSettings.posIndices[1] = i;
 						}
 					}
 					ImGui::EndCombo();
 				}
 				ImGui::SameLine();
-				if (ImGui::BeginCombo("Position indices (Order: lat, alt, lon)##zdim", pcAttributes[posIndices[2]].name.c_str())) {
+				if (ImGui::BeginCombo("Position indices (Order: lat, alt, lon)##zdim", pcAttributes[brushIsoSurfSettings.posIndices[2]].name.c_str())) {
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
-							posIndices[2] = i;
+							brushIsoSurfSettings.posIndices[2] = i;
 						}
 					}
 					ImGui::EndCombo();
@@ -10837,7 +10836,8 @@ int main(int, char**)
 							break;
 						}
 					}
-					std::pair<bool,std::vector<float>> xDim = getDimensionValues(*ds, isoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, isoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, isoSurfSettings.posIndices.z);
+					std::pair<bool,std::vector<float>> xDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.x), yDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.y), zDim = getDimensionValues(*ds, brushIsoSurfSettings.posIndices.z);
+					bool regularGrid[3]{ xDim.first, yDim.first, zDim.first };
 					uint32_t w = xDim.second.size();
 					uint32_t h = yDim.second.size();
 					uint32_t d = zDim.second.size();
@@ -10847,7 +10847,7 @@ int main(int, char**)
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						bounds.emplace_back(pcAttributes[i].min, pcAttributes[i].max);
 					}
-					brushIsoSurfaceRenderer->update3dBinaryVolume(w, h, d, pcAttributes.size(), densityInds, posIndices, bounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),xDim.first);
+					brushIsoSurfaceRenderer->update3dBinaryVolume(xDim.second, yDim.second, zDim.second, pcAttributes.size(), densityInds, &brushIsoSurfSettings.posIndices.x, bounds, dl->buffer, ds->data.size(), dl->indicesBuffer, dl->indices.size(),regularGrid);
 					brushIsoSurfaceRenderer->activeDrawlist = dl->name;
 				}
 				ImGui::EndDragDropTarget(); 

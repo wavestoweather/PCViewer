@@ -56,7 +56,7 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	bool update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float,float>>& posMinMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid);
+	bool update3dBinaryVolume(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float,float>>& posMinMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid[3]);
 	void getPosIndices(int index, uint32_t* ind);
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
 	void setCameraPos(glm::vec3& newCameraPos, float **newRotation);
@@ -114,7 +114,7 @@ private:
 		float yMax;
 		float zMin;
 		float zMax;
-		uint32_t padding;				//if used with active ind padding is used to indicate if regular grid should be used
+		uint32_t regularGrid;				//if used with active ind padding is used to indicate if regular grid should be used
 		//int array containing attribute infos:
 		//index attr 1, amtOfBrushes 1, offset brush1
 		//index attr 2, amtOfBrushes 2, offset brush2
@@ -141,6 +141,7 @@ private:
 		float isoValue;
 		uint32_t amtOfBrushes;
 		float shadingStep;
+		uint32_t linearDims;
 		//float[] colors for the brushes:
 		//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 
@@ -162,6 +163,10 @@ private:
 		float stdDev;			//standard deviation
 		uint32_t padding[2];
 	};
+
+	//constants
+	const int			dimensionCorrectionSize = 256;
+	const VkFormat		dimensionCorrectionFormat = VK_FORMAT_R32_SFLOAT;
 	
 	//shaderpaths
 	static char vertPath[];
@@ -211,6 +216,11 @@ private:
 	VkBuffer			brushBuffer;
 	VkDeviceMemory		brushMemory;
 	uint32_t			brushByteSize;
+	std::vector<float>	dimensionCorrectionArrays[3];
+	bool				dimensionCorrectionLinearDim[3];
+	VkDeviceMemory		dimensionCorrectionMemory;
+	VkImage				dimensionCorrectionImages[3];
+	std::vector<VkImageView> dimensionCorrectionViews;
 
 	//vulkan resources for the compute pipeline
 	VkPipeline			computePipeline;
@@ -248,5 +258,6 @@ private:
 	void updateDescriptorSet();
 	void updateBrushBuffer();
 	void updateCommandBuffer();
+	bool updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim);
 };
 #endif 
