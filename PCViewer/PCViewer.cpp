@@ -836,6 +836,7 @@ static int priorityListIndex = 0;
 struct View3dSettings {
 	bool enabled = false;
 	int activeAttribute = -1;
+	uint32_t posIndices[3]{ 1,0,2 };
 }static view3dSettings;
 static View3d* view3d;
 
@@ -5785,7 +5786,7 @@ static void uploadDensityUiformBuffer() {
 	vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
 }
 
-static void uploadDrawListTo3dView(DrawList& dl, int attribute, std::string width, std::string depth, std::string height) {
+static void uploadDrawListTo3dView(DrawList& dl, int attribute) {
 	int w = SpacialData::rlatSize;
 	int d = SpacialData::rlonSize;
 	int h = SpacialData::altitudeSize + 22;	//the top 22 layer of the dataset are twice the size of the rest
@@ -5798,31 +5799,11 @@ static void uploadDrawListTo3dView(DrawList& dl, int attribute, std::string widt
 		}
 	}
 
-	Attribute a = pcAttributes[attribute];
-	float* dat = new float[w * d * h * 4];
-	memset(dat, 0, w * d * h * 4 * sizeof(float));
-	for (int i : dl.indices) {
-		int x = SpacialData::getRlatIndex(parent->data[i][0]);
-		int y = SpacialData::getAltitudeIndex(parent->data[i][2]);
-		if (y > h - 44)
-			y = (y - h + 44) * 2 + (h - 44);
-		int z = SpacialData::getRlonIndex(parent->data[i][1]);
-		assert(x >= 0);
-		assert(y >= 0);
-		assert(z >= 0);
-		Vec4 col = dl.color;
-		col.w = (parent->data[i][attribute] - a.min) / (a.max - a.min);
-#ifdef _DEBUG
-		//std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
-#endif
+	auto& xDim = getDimensionValues(*parent, view3dSettings.posIndices[0]), yDim = getDimensionValues(*parent, view3dSettings.posIndices[1]), zDim = getDimensionValues(*parent, view3dSettings.posIndices[2]);
+	bool linDims[3]{ xDim.first, yDim.first, zDim.first };
+	float minMax[2]{ pcAttributes[attribute].min, pcAttributes[attribute].max };
 
-		memcpy(&dat[4 * IDX3D(x, y, z, w, h)], &col.x, sizeof(Vec4));
-		if (y >= h - 44)
-			memcpy(&dat[4 * IDX3D(x, y + 1, z, w, h)], &col.x, sizeof(Vec4));
-	}
-
-	view3d->update3dImage(w, h, d, dat);
-	delete[] dat;
+	view3d->update3dImage(xDim.second, yDim.second, zDim.second, linDims, view3dSettings.posIndices, attribute, minMax, parent->buffer.buffer, parent->data.size() * pcAttributes.size() * sizeof(float), dl.indexBuffer, dl.indices.size(), pcAttributes.size());
 }
 
 static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
@@ -7665,31 +7646,6 @@ int main(int, char**)
 
 		ImGui::End();
 
-#ifdef RENDER3D
-		//testwindow for the 3d renderer
-		ImGui::SetNextWindowSize(ImVec2(800, 800));
-		if (view3dSettings.enabled) {
-			ImGui::Begin("3dview", &view3dSettings.enabled, ImGuiWindowFlags_NoSavedSettings);
-			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(ImGui::GetWindowContentRegionWidth(), ImGui::GetWindowContentRegionMax().y), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
-
-			//if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseReleased[0]);
-			//	view3d->resize(ImGui::GetWindowContentRegionWidth(), ImGui::GetWindowHeight());
-
-			if ((ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel) && ImGui::IsItemHovered()) {
-				float mousemovement[3];
-				mousemovement[0] = -ImGui::GetMouseDragDelta().x;
-				mousemovement[1] = ImGui::GetMouseDragDelta().y;
-				mousemovement[2] = io.MouseWheel;
-				view3d->updateCameraPos(mousemovement);
-				view3d->render();
-				err = vkDeviceWaitIdle(g_Device);
-				check_vk_result(err);
-				ImGui::ResetMouseDragDelta();
-			}
-			ImGui::End();
-		}
-#endif
-
 #ifdef _DEBUG
 		ImGui::ShowDemoWindow(NULL);
 #endif
@@ -8022,8 +7978,6 @@ int main(int, char**)
 								createPcPlotDrawList(preview.parentDataset->drawLists.front(), *templateBrushes[i].parentDataSet, preview.parent->name.c_str());
 							}
 							pcPlotRender = updateAllActiveIndices();
-							if (view3dSettings.activeAttribute >= 0)
-								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), view3dSettings.activeAttribute, "a", "b", "c");
 						}
 						else {
 							selectedTemplateBrush = -1;
@@ -8034,8 +7988,6 @@ int main(int, char**)
 							if (globalBrushes.back().kdTree) delete globalBrushes.back().kdTree;
 							globalBrushes.pop_back();
 							pcPlotRender = updateAllActiveIndices();
-							if (view3dSettings.activeAttribute >= 0)
-								uploadDrawListTo3dView(g_PcPlotDrawLists.front(), view3dSettings.activeAttribute, "a", "b", "c");
 						}
 					}
 					if (ImGui::IsItemClicked(2) && selectedTemplateBrush == i) {//creating a permanent Global Brush
@@ -9814,17 +9766,6 @@ int main(int, char**)
 						//}
 					}
 
-					ImGui::Separator();
-					for (int i = 0; i < pcAttributes.size(); i++) {
-						if (!pcAttributeEnabled[i])
-							continue;
-						if (ImGui::MenuItem(("Render " + pcAttributes[i].name).c_str())) {
-							ImGui::CloseCurrentPopup();
-							uploadDrawListTo3dView(dl, i, "a", "b", "c");
-							view3dSettings.activeAttribute = i;
-						}
-					}
-
 					ImGui::EndPopup();
 				}
 				ImGui::NextColumn();
@@ -10598,52 +10539,145 @@ int main(int, char**)
 				isoSurfaceRenderer->render();
 			}
 			ImGui::Columns(1);
-
-			//ImGui::SetCursorPos(ImGui::GetWindowContentRegionMin() + ImVec2(ImGui::GetScrollX(), 2 * ImGui::GetScrollY()));
-			//ImGui::Dummy(ImGui::GetWindowContentRegionMax() - ImGui::GetWindowContentRegionMin());
-			////set drawlist data via drag and drop
-			//if (ImGui::BeginDragDropTarget()) {
-			//	if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
-			//		DrawList* dl = *((DrawList**)payload->Data);
-			//		std::vector<float*>* data = nullptr;
-			//		for (DataSet& ds : g_PcPlotDataSets) {
-			//			if (dl->parentDataSet == ds.name) {
-			//				data = &ds.data;
-			//			}
-			//		}
-			//		
-			//		std::vector<unsigned int> attr;
-			//		std::vector<std::pair<float, float>> minMax;
-			//		for (int i = 0; i < pcAttributes.size(); ++i) {
-			//			attr.push_back(i);
-			//			minMax.push_back({ pcAttributes[i].min, pcAttributes[i].max });
-			//		}
-			//		minMax[0] = { SpacialData::rlat[0],SpacialData::altitude[SpacialData::rlatSize - 1] };
-			//		minMax[1] = { SpacialData::rlon[0],SpacialData::altitude[SpacialData::rlonSize - 1] };
-			//		minMax[2] = { SpacialData::altitude[0],SpacialData::altitude[SpacialData::altitudeSize - 1] };
-			//		//isoSurfaceRenderer->update3dBinaryVolume(SpacialData::rlatSize, SpacialData::altitudeSize, SpacialData::rlonSize, pcAttributes.size(), attr, minMax, glm::uvec3{ 0,2,1 }, *data, dl->indices);
-			//	}
-			//	ImGui::EndDragDropTarget();
-			//}
-			//
-			//if (ImGui::BeginDragDropTarget()) {
-			//	if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GlobalBrush")) {
-			//		GlobalBrush* brush = *((GlobalBrush**)payload->Data);
-			//
-			//		std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
-			//		for (auto& axis : brush->brushes) {
-			//			for (auto& m : axis.second) {
-			//				minMax[axis.first].push_back(m.second);
-			//			}
-			//		}
-			//		isoSurfaceRenderer->addBrush(brush->name, minMax);
-			//	}
-			//
-			//	ImGui::EndDragDropTarget();
-			//}
 			ImGui::End();
 		}
 		//end of iso surface window -----------------------------------------------------------------------
+
+#ifdef RENDER3D
+		//begin view 3d window      ----------------------------------------------------------------------
+		if (view3dSettings.enabled) {
+			ImGui::Begin("3dview", &view3dSettings.enabled);
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("Save Settings")) {
+					addSaveSettingsMenu<View3dSettings>(&view3dSettings, "View3dSettings", "view3dsettings");
+					ImGui::EndMenu();
+				}
+				//if (ImGui::BeginMenu("Settings")) {
+				//	ImGui::Checkbox("Couple to brush", &isoSurfSettings.coupleIsoSurfaceRenderer);
+				//
+				//	ImGui::EndMenu();
+				//}
+				if (ImGui::BeginMenu("Rendering")) {
+					static float boxSize[3]{ 1.5f,1.f,1.5f };
+					if (ImGui::DragFloat3("Box dimensions", boxSize, .001f)) {
+						view3d->resizeBox(boxSize[0], boxSize[1], boxSize[2]);
+						view3d->render();
+					}
+					//if (ImGui::Checkbox("Activate shading", &view3d->shade)) {
+					//	view3d->render();
+					//}
+					//if (ImGui::SliderFloat("Ray march step size", &view3d->stepSize, 0.0005f, .05f, "%.5f")) {
+					//	view3d->render();
+					//}
+					//if (ImGui::SliderFloat("Step size for normal calc", &view3d->shadingStep, .1f, 10)) {
+					//	view3d->render();
+					//}
+					//if (ImGui::SliderFloat("Wireframe width", &view3d->gridLineWidth, 0, .1f)) {
+					//	view3d->render();
+					//}
+					if (ImGui::DragFloat3("Ligt direction", &isoSurfaceRenderer->lightDir.x)) {
+						view3d->render();
+					}
+					//if (ImGui::ColorEdit4("Image background", isoSurfaceRenderer->imageBackground.color.float32, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+					//	view3d->imageBackGroundUpdated();
+					//	view3d->render();
+					//}
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenu();
+			}
+
+			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(800, 800));
+
+			//if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseReleased[0]);
+			//	view3d->resize(ImGui::GetWindowContentRegionWidth(), ImGui::GetWindowHeight());
+
+			if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left) || io.MouseWheel ||
+				ImGui::IsKeyDown(KEYA) || ImGui::IsKeyDown(KEYS) || ImGui::IsKeyDown(KEYD) || ImGui::IsKeyDown(KEYQ) || ImGui::IsKeyDown(KEYW) || ImGui::IsKeyDown(KEYE))) {
+				CamNav::NavigationInput nav = {};
+				nav.mouseDeltaX = ImGui::GetMouseDragDelta().x;
+				nav.mouseDeltaY = ImGui::GetMouseDragDelta().y;
+				nav.mouseScrollDelta = io.MouseWheel;
+				nav.w = io.KeysDown[KEYW];
+				nav.a = io.KeysDown[KEYA];
+				nav.s = io.KeysDown[KEYS];
+				nav.d = io.KeysDown[KEYD];
+				nav.q = io.KeysDown[KEYQ];
+				nav.e = io.KeysDown[KEYE];
+				nav.shift = io.KeyShift;
+				view3d->updateCameraPos(nav, io.DeltaTime);
+				view3d->render();
+				err = vkQueueWaitIdle(g_Queue);
+				check_vk_result(err);
+				ImGui::ResetMouseDragDelta();
+			}
+
+			ImGui::PushItemWidth(100);
+			//setting the position variables
+			if (pcAttributes.size()) {
+				if (ImGui::BeginCombo("##xdim", pcAttributes[view3dSettings.posIndices[0]].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							view3dSettings.posIndices[0] = i;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine();
+				if (ImGui::BeginCombo("##ydim", pcAttributes[view3dSettings.posIndices[1]].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							view3dSettings.posIndices[1] = i;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine();
+				if (ImGui::BeginCombo("Position indices (Order: lat, alt, lon)##zdim", pcAttributes[view3dSettings.posIndices[2]].name.c_str())) {
+					for (int i = 0; i < pcAttributes.size(); ++i) {
+						if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+							view3dSettings.posIndices[2] = i;
+						}
+					}
+					ImGui::EndCombo();
+				}
+			}
+			else {
+				ImGui::Text("Placeholder for position indices settings (Settings appear when Attributes are available)");
+			}
+			ImGui::PopItemWidth();
+
+			static int densityAttribute = -1;
+			if (ImGui::BeginCombo("Select Density Attribute", (densityAttribute == -1) ? "Select" : pcAttributes[densityAttribute].name.c_str())) {
+				for (int i = 0; i < pcAttributes.size(); ++i) {
+					if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+						densityAttribute = i;
+					}
+				}
+				ImGui::EndCombo();
+			}
+			static int drawList = -1;
+			if (ImGui::BeginCombo("Select Density Drawlist", (drawList == -1) ? "Select" : std::next(g_PcPlotDrawLists.begin(), drawList)->name.c_str())) {
+				for (int i = 0; i < g_PcPlotDrawLists.size(); ++i) {
+					if (ImGui::MenuItem(std::next(g_PcPlotDrawLists.begin(), i)->name.c_str())) {
+						drawList = i;
+					}
+				}
+				ImGui::EndCombo();
+			}
+
+			if (ImGui::Button("Set density")) {
+				if (densityAttribute == -1 || drawList == -1) {
+					std::cout << "Density attribute and draw list has to be selected";
+				}
+				else {
+					uploadDrawListTo3dView(*std::next(g_PcPlotDrawLists.begin(), drawList), densityAttribute);
+				}
+			}
+			ImGui::End();
+		}
+		//end view 3d window        ----------------------------------------------------------------------
+#endif
 
 		//brush iso surface window -----------------------------------------------------------------------
 		if (brushIsoSurfSettings.enabled) {

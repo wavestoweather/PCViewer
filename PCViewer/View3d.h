@@ -12,6 +12,8 @@ the backside of the cube are raymarched.
 #include <vulkan/vulkan.h>
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/euler_angles.hpp"
+#include "CameraNav.hpp"
 #include <limits.h>
 #include <string.h>
 
@@ -30,12 +32,16 @@ public:
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
 	void update3dImage(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, bool linAxis[3], const uint32_t posIndices[3], uint32_t densityIndex, const float minMax[2], VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t indicesSize, uint32_t amtOfAttributes);
-	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
+	void updateCameraPos(const CamNav::NavigationInput& input, float deltaT);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void render();
 	void setImageDescriptorSet(VkDescriptorSet descriptor);
 	VkDescriptorSet getImageDescriptorSet();
 	VkSampler getImageSampler();
 	VkImageView getImageView();
+
+	float flySpeed;
+	float fastFlyMultiplier;
+	float rotationSpeed;
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;	//cameraPosition in model space
@@ -129,6 +135,7 @@ private:
 
 	//camera variables
 	glm::vec3 camPos;		//camera position
+	glm::vec2 camRot;
 	glm::vec3 lightDir;
 
 	//methods to instatiate vulkan resources

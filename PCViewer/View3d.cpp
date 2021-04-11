@@ -38,8 +38,6 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	frameBuffer = VK_NULL_HANDLE;
 	imageDescriptorSet = VK_NULL_HANDLE;
 	densityFillPipeline = VK_NULL_HANDLE;
-	densityFillPipelineLayout;
-	densityFillDescriptorLayout;
 	dimensionCorrectionMemory = VK_NULL_HANDLE;
 	dimensionCorrectionImages[0] = VK_NULL_HANDLE;
 	dimensionCorrectionImages[1] = VK_NULL_HANDLE;
@@ -47,7 +45,12 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	dimensionCorrectionViews = std::vector<VkImageView>(3, VK_NULL_HANDLE);
 
 
-	camPos = glm::vec3(2, 2, 2);
+	camPos = glm::vec3(1, 0, 1);
+	camRot = glm::vec2(0, .78f);
+	flySpeed = .5f;
+	fastFlyMultiplier = 2.5f;
+	rotationSpeed = .15f;
+	lightDir = glm::vec3(-1, -1, -1);
 	lightDir = glm::vec3(-1, -1, -1);
 
 	//setting up graphic resources
@@ -57,22 +60,6 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	createDescriptorSets();
 	resize(width, height);
 
-	
-	const int w = 100, h = 5, de = 1;
-	glm::vec4 d[w * h * de] = {};
-	d[0] = glm::vec4(1, 0, 0, 1);
-	d[1] = glm::vec4(1, 0, 0, 1);
-	d[2] = glm::vec4(1, 0, 0, 1);
-	d[3] = glm::vec4(1, 0, 0, 1);
-	d[8] = glm::vec4(0, 1, 0, .5f);
-	d[26] = glm::vec4(0, 0, 1, .1f);
-	/*for (int i = 1; i < 27; i+=3) {
-		d[4 * i] = i / 27.0f;
-		d[4 * i + 1] = 1 - (i / 27.0f);
-		d[4 * i + 2] = 0;
-		d[4 * i + 3] = .1f;
-	}*/
-	update3dImage(w, h, de, (float*)d);
 	resizeBox(1.5f, 1, 1.5f);
 }
 
@@ -318,10 +305,10 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	std::vector<VkDescriptorSetLayout> sets{densityFillDescriptorLayout};
 	VkUtil::createDescriptorSets(device, sets, descriptorPool, &commandSet);
 	VkUtil::updateDescriptorSet(device, buffer, sizeof(ComputeUBO), 0, commandSet);
-	VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 1, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, commandSet);
-	VkUtil::updateDescriptorSet(device, data, dataByteSize, 2, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, commandSet);
+	VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
+	VkUtil::updateDescriptorSet(device, data, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
 	VkUtil::updateStorageImageDescriptorSet(device, image3dView, VK_IMAGE_LAYOUT_GENERAL, 3, commandSet);
-	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, commandSet);
+	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
 
 	VkCommandBuffer commands;
 	VkUtil::createCommandBuffer(device, commandPool, &commands);
@@ -356,35 +343,53 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	render();
 }
 
-void View3d::updateCameraPos(float* mouseMovement)
+void View3d::updateCameraPos(const CamNav::NavigationInput& input, float deltaT)
 {
-	//rotation matrix for height adjustment
-	glm::mat4 vertical;
-	vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALPANSPEED, glm::normalize(glm::cross(camPos, glm::vec3(0, 1, 0))));
-	glm::vec3 temp = vertical * glm::vec4(camPos, 1);
-	if (dot(temp, glm::vec3(1, 0, 0)) * dot(camPos, glm::vec3(1, 0, 0)) < 0 || dot(temp, glm::vec3(0, 0, 1)) * dot(camPos, glm::vec3(0, 0, 1)) < 0)
-		vertical = glm::mat4(1.0f);
-	//rotation matrix for horizontal adjustment
-	glm::mat4 horizontal = glm::rotate(glm::mat4(1.0f), mouseMovement[0] * HORIZONTALPANSPEED, glm::vec3(0, 1, 0));
-	camPos = horizontal * vertical * glm::vec4(camPos,1);
+	//first do the rotation, as the user has a more inert feeling when the fly direction matches the view direction instantly
+	if (input.mouseDeltaX) {
+		camRot.y -= rotationSpeed * input.mouseDeltaX * .02f;
+	}
+	if (input.mouseDeltaY) {
+		camRot.x -= rotationSpeed * input.mouseDeltaY * .02f;
+	}
 
-	//adding zooming
-	glm::vec3 zoomDir = -camPos;
-	camPos += ZOOMSPEED * zoomDir * mouseMovement[2];
+	glm::mat4 rot = glm::eulerAngleYX(camRot.y, camRot.x);
+	if (input.a) {	//fly left
+		glm::vec4 left = rot * glm::vec4(-1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(left.x, left.y, left.z);
+	}
+	if (input.d) {	//fly right
+		glm::vec4 right = rot * glm::vec4(1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(right.x, right.y, right.z);
+	}
+	if (input.s) {	//fly backward
+		glm::vec4 back = rot * glm::vec4(0, 0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(back.x, back.y, back.z);
+	}
+	if (input.w) {	//fly forward
+		glm::vec4 front = rot * glm::vec4(0, 0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(front.x, front.y, front.z);
+	}
+	if (input.q) {	//fly down
+		camPos += glm::vec3(0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
+	if (input.e) {	//fly up
+		camPos += glm::vec3(0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
 }
 
 void View3d::render()
 {
+	if (commandBuffer == VK_NULL_HANDLE) return;
 	VkResult err;
 
 	//uploading the uniformBuffer
 	UniformBuffer ubo;
 	ubo.mvp = glm::perspective(glm::radians(45.0f), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);;
 	ubo.mvp[1][1] *= -1;
-	glm::mat4 look = glm::lookAt(camPos, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
-	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
-	ubo.mvp = ubo.mvp * look *scale;
+	glm::mat4 view = glm::transpose(glm::eulerAngleY(camRot.y) * glm::eulerAngleX(camRot.x)) * glm::translate(glm::mat4(1.0), -camPos);;
+	glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(boxWidth, boxHeight, boxDepth));
+	ubo.mvp = ubo.mvp * view * scale;
 	ubo.camPos = glm::inverse(scale) * glm::vec4(camPos,1);
 
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
@@ -786,7 +791,7 @@ bool View3d::updateDimensionImages(const std::vector<float>& xDim, const std::ve
 		}
 		std::vector<VkSampler> samplers(3, sampler);
 		std::vector<VkImageLayout> layouts = std::vector<VkImageLayout>(3, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		VkUtil::updateImageArrayDescriptorSet(device, samplers, dimensionCorrectionViews, layouts, 3, descriptorSet);
+		VkUtil::updateImageArrayDescriptorSet(device, samplers, dimensionCorrectionViews, layouts, 2, descriptorSet);
 	}
 
 	return true;
