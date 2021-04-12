@@ -1004,6 +1004,13 @@ void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
 		sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
 		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 		barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1024,6 +1031,13 @@ void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
 
 		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -1282,7 +1296,7 @@ void VkUtil::uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, V
 	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 }
 
-void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout imageLayout, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
+void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkFormat format, VkImageLayout imageLayout, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
 {
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
@@ -1298,7 +1312,11 @@ void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice,
 
 	VkCommandBuffer commands;
 	createCommandBuffer(device, commandPool, &commands);
-	copy3dImageToBuffer(commands, stagingBuffer, image, imageLayout, x, y, z);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+		transitionImageLayout(commands, image, format, imageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	copy3dImageToBuffer(commands, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, x, y, z);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+		transitionImageLayout(commands, image, format, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageLayout);
 	commitCommandBuffer(queue, commands);
 	check_vk_result(vkQueueWaitIdle(queue));
 	downloadData(device, stagingMemory, 0, byteSize, data);

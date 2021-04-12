@@ -77,7 +77,8 @@ void main() {
 	float transmittance = 1;
 	for(int i = 0; i < iterations; i++){
 
-		vec4 tex = texture(texSampler,cubePosToSamplePos(startPoint));
+		vec4 tex = vec4(texture(texSampler,cubePosToSamplePos(startPoint)).x);
+		outColor += tex;
 		if(false) {
 			//computing lighting
 			float lightDens = 0;
@@ -86,7 +87,7 @@ void main() {
 				if(lightPos.x>1.0f||lightPos.y>1.0f||lightPos.z>1.0f||lightPos.x<0.0f||lightPos.y<0.0f||lightPos.z<0.0f){
 					break;
 				}
-				lightDens += texture(texSampler,cubePosToSamplePos(lightPos)).a * length(lightStep) * densityMultiplier;
+				lightDens += texture(texSampler,cubePosToSamplePos(lightPos)).x * length(lightStep) * densityMultiplier;
 				lightStep += lightStepIncrease;
 				lightPos += lightStep;
 			}
@@ -111,5 +112,6 @@ void main() {
 		}
 		startPoint += step;
 	}
-	outColor.a = 1 - transmittance;
+	//outColor.a = 1 - transmittance;
+	outColor.a = 1;
 }

@@ -86,6 +86,6 @@ void main(){
 	if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
 
 	float da = data[i*info.amtOfAttributes + info.densityAttribute];
-	da = (da - info.maxValue) / (info.minValue - info.minValue);
+	da = (da - info.minValue) / (info.maxValue - info.minValue);
 	imageStore(densityImage, pos, vec4(da));
 }

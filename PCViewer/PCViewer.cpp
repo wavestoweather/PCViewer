@@ -386,7 +386,7 @@ struct DrawList {
 	std::vector<float> brushedRatioToParent;     // Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
 	bool immuneToGlobalBrushes;
 	VkBuffer buffer;
-	VkBuffer indexBuffer;
+	VkBuffer indexBuffer;							//indexbuffer for line rendering!!!
 	uint32_t indexBufferOffset;
 	VkBuffer ubo;
 	//VkBuffer histogramIndBuffer;
@@ -5119,7 +5119,7 @@ static void updateIsoSurface(GlobalBrush& gb) {
 		uint32_t w = xDim.second.size();
 		uint32_t h = yDim.second.size();
 		uint32_t d = zDim.second.size();
-		bool regularGrid[4]{ xDim.first, yDim.first, zDim.first };
+		bool regularGrid[3]{ xDim.first, yDim.first, zDim.first };
 
 		isoSurfaceRenderer->update3dBinaryVolume(xDim.second, yDim.second, zDim.second, pcAttributes.size(), brushIndices, minMax, posIndices, dl->buffer, ds->data.size() * pcAttributes.size() * sizeof(float), dl->indicesBuffer, dl->indices.size(), miMa, index);
 	}
@@ -5803,7 +5803,7 @@ static void uploadDrawListTo3dView(DrawList& dl, int attribute) {
 	bool linDims[3]{ xDim.first, yDim.first, zDim.first };
 	float minMax[2]{ pcAttributes[attribute].min, pcAttributes[attribute].max };
 
-	view3d->update3dImage(xDim.second, yDim.second, zDim.second, linDims, view3dSettings.posIndices, attribute, minMax, parent->buffer.buffer, parent->data.size() * pcAttributes.size() * sizeof(float), dl.indexBuffer, dl.indices.size(), pcAttributes.size());
+	view3d->update3dImage(xDim.second, yDim.second, zDim.second, linDims, view3dSettings.posIndices, attribute, minMax, parent->buffer.buffer, parent->data.size() * pcAttributes.size() * sizeof(float), dl.indicesBuffer, dl.indices.size(), pcAttributes.size());
 }
 
 static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
@@ -12687,7 +12687,7 @@ int main(int, char**)
 				check_vk_result(vkQueueWaitIdle(g_Queue));
 				exportDrawData->FramebufferScale = old_scale;
 				unsigned char* img = new unsigned char[g_ExportImageWidth * g_ExportImageHeight * 4];
-				VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_ExportWindowFrame.Backbuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_ExportImageWidth, g_ExportImageHeight, 1, img, g_ExportImageWidth* g_ExportImageHeight * 4 * sizeof(unsigned char));
+				VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_ExportWindowFrame.Backbuffer, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_ExportImageWidth, g_ExportImageHeight, 1, img, g_ExportImageWidth* g_ExportImageHeight * 4 * sizeof(unsigned char));
 				//transforming the downloaded image to the correct image coordinates
 				for (int x = 0; x < g_ExportImageWidth; ++x) {
 					for (int y = 0; y < g_ExportImageHeight; ++y) {

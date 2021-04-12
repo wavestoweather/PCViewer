@@ -222,7 +222,7 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_LINEAR,16,1,&image3dSampler);
 		}
 
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_STORAGE_BIT, &image3d);
+		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d);
 
 		VkMemoryRequirements memRequirements;
 		vkGetImageMemoryRequirements(device, image3d, &memRequirements);
@@ -271,6 +271,7 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory);
 	vkBindBufferMemory(device, buffer, bufferMemory, 0);
+	VkUtil::uploadData(device, bufferMemory, 0, uboByteSize, &ubo);
 
 	//create graphics buffer for dimension values
 	uint32_t dimValsByteSize = (4 + xDim.size() + yDim.size() + zDim.size()) * sizeof(float);
@@ -326,6 +327,9 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	VkUtil::transitionImageLayout(commands, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkUtil::commitCommandBuffer(queue, commands);
 	check_vk_result(vkQueueWaitIdle(queue));
+
+	//std::vector<uint8_t> dow(xDim.size() * yDim.size() * zDim.size());
+	//VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, xDim.size(), yDim.size(), zDim.size(), dow.data(), dow.size());
 
 	vkDestroyBuffer(device, buffer, nullptr);
 	vkDestroyBuffer(device, dimValsBuffer, nullptr);

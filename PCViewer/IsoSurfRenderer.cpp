@@ -1237,7 +1237,7 @@ void IsoSurfRenderer::exportBinaryCsv(std::string path, uint32_t binaryIndex)
 	uint32_t h = drawlistBrushes[binaryIndex].gridDimensions[1];
 	uint32_t d = drawlistBrushes[binaryIndex].gridDimensions[2];
 	uint8_t* binaryData = new uint8_t[w * h * d];
-	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage[binaryIndex], VK_IMAGE_LAYOUT_GENERAL, w, h, d, binaryData, w * h * d); 
+	VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, binaryImage[binaryIndex], VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, w, h, d, binaryData, w * h * d); 
 
 	if (true) {
 		std::ofstream file(path);
