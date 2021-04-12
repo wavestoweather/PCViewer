@@ -52,6 +52,7 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	rotationSpeed = .15f;
 	lightDir = glm::vec3(-1, -1, -1);
 	lightDir = glm::vec3(-1, -1, -1);
+	stepSize = .0005f;
 
 	//setting up graphic resources
 	
@@ -400,6 +401,7 @@ void View3d::render()
 	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;
 	ubo.faces.z = float(ubo.camPos.z > 0) - .5f;
 	ubo.linearAxes = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
+	ubo.stepSize = stepSize;
 
 	ubo.lightDir = lightDir;
 	void* d;
@@ -423,6 +425,11 @@ void View3d::render()
 void View3d::setImageDescriptorSet(VkDescriptorSet descriptor)
 {
 	imageDescriptorSet = descriptor;
+}
+
+void View3d::setTransferFunctionImage(VkImageView view)
+{
+	VkUtil::updateImageDescriptorSet(device, sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 3, descriptorSet);
 }
 
 VkDescriptorSet View3d::getImageDescriptorSet()
@@ -628,6 +635,10 @@ void View3d::createPipeline()
 
 	uboLayoutBinding.binding = 2;
 	uboLayoutBinding.descriptorCount = 3;
+	bindings.push_back(uboLayoutBinding);
+
+	uboLayoutBinding.binding = 3;
+	uboLayoutBinding.descriptorCount = 1;
 	bindings.push_back(uboLayoutBinding);
 
 	VkUtil::createDescriptorSetLayout(device, bindings, &descriptorSetLayout);

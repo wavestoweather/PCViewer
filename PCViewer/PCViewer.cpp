@@ -52,6 +52,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "IsoSurfRenderer.h"
 #include "BrushIsoSurfRenderer.h"
 #include "MultivariateGauss.h"
+#include "TransferFunctionEditor.h"
 
 #include "ColorPalette.h"
 
@@ -928,6 +929,8 @@ static std::string ttempStr = "abc";
 std::vector<ViolinPlot> violinAttributePlots;
 std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
+
+static TransferFunctionEditor* transferFunctionEditor;
 
 //method declarations
 template <typename T,typename T2>
@@ -6936,6 +6939,8 @@ int main(int, char**)
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+	transferFunctionEditor = new TransferFunctionEditor(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+	view3d->setTransferFunctionImage(transferFunctionEditor->getTransferImageView());
 
 	{//Set imgui style and load all settings
 		// Setup Dear ImGui style
@@ -10546,7 +10551,7 @@ int main(int, char**)
 #ifdef RENDER3D
 		//begin view 3d window      ----------------------------------------------------------------------
 		if (view3dSettings.enabled) {
-			ImGui::Begin("3dview", &view3dSettings.enabled);
+			ImGui::Begin("3dview", &view3dSettings.enabled, ImGuiWindowFlags_MenuBar);
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Save Settings")) {
 					addSaveSettingsMenu<View3dSettings>(&view3dSettings, "View3dSettings", "view3dsettings");
@@ -10566,9 +10571,9 @@ int main(int, char**)
 					//if (ImGui::Checkbox("Activate shading", &view3d->shade)) {
 					//	view3d->render();
 					//}
-					//if (ImGui::SliderFloat("Ray march step size", &view3d->stepSize, 0.0005f, .05f, "%.5f")) {
-					//	view3d->render();
-					//}
+					if (ImGui::SliderFloat("Ray march step size", &view3d->stepSize, 0.0005f, .05f, "%.5f")) {
+						view3d->render();
+					}
 					//if (ImGui::SliderFloat("Step size for normal calc", &view3d->shadingStep, .1f, 10)) {
 					//	view3d->render();
 					//}
@@ -10584,7 +10589,7 @@ int main(int, char**)
 					//}
 					ImGui::EndMenu();
 				}
-				ImGui::EndMenu();
+				ImGui::EndMenuBar();
 			}
 
 			ImGui::Image((ImTextureID)view3d->getImageDescriptorSet(), ImVec2(800, 800));
@@ -10673,6 +10678,11 @@ int main(int, char**)
 				else {
 					uploadDrawListTo3dView(*std::next(g_PcPlotDrawLists.begin(), drawList), densityAttribute);
 				}
+			}
+			ImGui::Text("Transfer function (Click to edit):");
+			if (ImGui::ImageButton((ImTextureID)transferFunctionEditor->getTransferDescriptorSet(), { 300, 25 })) {
+				transferFunctionEditor->setNextEditorPos(ImGui::GetMousePos(), { 0, 1 });
+				transferFunctionEditor->show();
 			}
 			ImGui::End();
 		}
@@ -12667,6 +12677,8 @@ int main(int, char**)
 			ImGui::End();
 		}
 
+		transferFunctionEditor->draw();
+
 		pcSettings.rescaleTableColumns = false;
 
 		// Rendering
@@ -12738,6 +12750,7 @@ int main(int, char**)
 		delete[] brushTemplateAttrEnabled;
 	if (activeBrushAttributes)
 		delete[] activeBrushAttributes;
+	delete transferFunctionEditor;
 	for (ViolinPlot& vp : violinAttributePlots) {
 		if (vp.activeAttributes) delete[] vp.activeAttributes;
 	}

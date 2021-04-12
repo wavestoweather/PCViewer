@@ -35,6 +35,7 @@ public:
 	void updateCameraPos(const CamNav::NavigationInput& input, float deltaT);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void render();
 	void setImageDescriptorSet(VkDescriptorSet descriptor);
+	void setTransferFunctionImage(VkImageView view);
 	VkDescriptorSet getImageDescriptorSet();
 	VkSampler getImageSampler();
 	VkImageView getImageView();
@@ -42,6 +43,7 @@ public:
 	float flySpeed;
 	float fastFlyMultiplier;
 	float rotationSpeed;
+	float stepSize;
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;	//cameraPosition in model space
@@ -49,7 +51,8 @@ private:
 		alignas(16) glm::vec3 lightDir;
 		alignas(16) glm::mat4 mvp;	//modelViewProjection Matrix
 		uint32_t linearAxes;
-		uint32_t padding[3];
+		float stepSize;
+		uint32_t padding[2];
 	};
 
 	struct ComputeUBO {
