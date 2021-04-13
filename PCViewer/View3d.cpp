@@ -553,7 +553,7 @@ void View3d::createPipeline()
 	VkVertexInputAttributeDescription attributeDescription = {};	//describes the attribute of the vertex. If more than 1 attribute is used this has to be an array
 	attributeDescription.binding = 0;
 	attributeDescription.location = 0;
-	attributeDescription.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	attributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
 	attributeDescription.offset = offsetof(glm::vec3, x);
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};

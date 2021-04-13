@@ -1,4 +1,4 @@
-﻿/*
+/*
 This program is written and maintained by Josef Stumpfegger (josefstumpfegger@outlook.de) and Alexander Kumpf (alexander.kumpf@tum.de)
 As this program originally was not written with the intend of being published, the code-basis is not the most beautiful one, we are sorry.
 Should you find errors, problems, speed up ideas or anything else, dont be shy and contact either of us!
@@ -1150,7 +1150,7 @@ static void createPcPlotHistoPipeline() {
 	VkUtil::createDescriptorSetLayout(g_Device, bindings, &g_PcPlotHistoDescriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(g_PcPlotHistoDescriptorSetLayout);
-
+    
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotHistoPipelineLayout, &g_PcPlotHistoPipeline);
 
 	shaderModules[3] = nullptr;
@@ -1244,7 +1244,7 @@ static void createPcPlotHistoPipeline() {
 
 	//describes how big the vertex data is and how to read the data
 	bindingDescripiton.binding = 0;
-	bindingDescripiton.stride = sizeof(Vec4);
+    bindingDescripiton.stride = 16;//sizeof(Vec4);
 	bindingDescripiton.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
 	attributeDescription = {};
@@ -3429,8 +3429,8 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 
 	// Create Logical Device (with 2 queues)
 	{
-		int device_extension_count = 3;
-		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing" };
+        int device_extension_count = 4;
+        const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing", "VK_KHR_portability_subset" };
 
 		VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexingFeatures{};
 		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
@@ -3439,9 +3439,9 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		indexingFeatures.runtimeDescriptorArray = VK_TRUE;
 
 		VkPhysicalDeviceFeatures deviceFeatures = {};
-		deviceFeatures.geometryShader = VK_TRUE;
+		//deviceFeatures.geometryShader = VK_TRUE;
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
-		deviceFeatures.wideLines = VK_TRUE;
+		//deviceFeatures.wideLines = VK_TRUE;
 		deviceFeatures.depthClamp = VK_TRUE;
 		deviceFeatures.vertexPipelineStoresAndAtomics = VK_TRUE;
 		deviceFeatures.shaderStorageImageExtendedFormats = VK_TRUE;
@@ -5094,6 +5094,7 @@ static void updateMaxHistogramValues(ViolinDrawlistPlot& plot) {
 }
 
 static void updateIsoSurface(GlobalBrush& gb) {
+    return;
 	int amtOfLines = 0;
 	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
 	if ((ImGui::IsMouseDown(0) && pcSettings.liveBrushThreshold < amtOfLines) || !isoSurfSettings.coupleIsoSurfaceRenderer) return;
@@ -5156,6 +5157,7 @@ static void updateIsoSurface(GlobalBrush& gb) {
 }
 
 static void updateIsoSurface(DrawList& dl) {
+    return;
 	int amtOfLines = 0;
 	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
 	if ((ImGui::IsMouseDown(0) && pcSettings.liveBrushThreshold < amtOfLines) || !isoSurfSettings.coupleIsoSurfaceRenderer) return;
@@ -5724,9 +5726,9 @@ static bool updateActiveIndices(DrawList& dl) {
 	updateDrawListIndexBuffer(dl);
 
 	//rendering the updated active points in the bubble plotter
-	if (bubbleWindowSettings.coupleToBrushing) {
-		bubblePlotter->render();
-	}
+	//if (bubbleWindowSettings.coupleToBrushing) {
+	//	bubblePlotter->render();
+	//}
 
 	if ((violinPlotDrawlistSettings.coupleViolinPlots || violinPlotAttributeSettings.coupleViolinPlots) && histogramManager->containsHistogram(dl.name)) {
 		std::vector<std::pair<float, float>> minMax;
@@ -6928,28 +6930,25 @@ int main(int, char**)
 		err = vkDeviceWaitIdle(g_Device);
 		check_vk_result(err);
 	}
-
 #ifdef RENDER3D
 	{//creating the 3d viewer and its descriptor set
 		view3d = new View3d(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
 		view3d->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(view3d->getImageSampler(), view3d->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
 	}
 #endif
-
 #ifdef BUBBLEVIEW
 	{//creating the node viewer and its descriptor set
-		bubblePlotter = new BubblePlotter(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
-		bubblePlotter->setImageDescSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(bubblePlotter->getImageSampler(), bubblePlotter->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
-		bubblePlotter->addSphere(1.0f, glm::vec4(1, 1, 1, 1), glm::vec3(0, 0, 0));
-		bubblePlotter->render();
+		//bubblePlotter = new BubblePlotter(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		//bubblePlotter->setImageDescSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(bubblePlotter->getImageSampler(), bubblePlotter->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
+		//bubblePlotter->addSphere(1.0f, glm::vec4(1, 1, 1, 1), glm::vec3(0, 0, 0));
+		//bubblePlotter->render();
 	}
 #endif
-
 	{//iso surface renderer
-		isoSurfaceRenderer = new IsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
-		isoSurfaceRenderer->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(isoSurfaceRenderer->getImageSampler(), isoSurfaceRenderer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
-		brushIsoSurfaceRenderer = new BrushIsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
-		brushIsoSurfaceRenderer->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(brushIsoSurfaceRenderer->getImageSampler(), brushIsoSurfaceRenderer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
+		//isoSurfaceRenderer = new IsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		//isoSurfaceRenderer->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(isoSurfaceRenderer->getImageSampler(), isoSurfaceRenderer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
+		//brushIsoSurfaceRenderer = new BrushIsoSurfRenderer(800, 800, g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
+		//brushIsoSurfaceRenderer->setImageDescriptorSet((VkDescriptorSet)ImGui_ImplVulkan_AddTexture(brushIsoSurfaceRenderer->getImageSampler(), brushIsoSurfaceRenderer->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool));
 	}
 
 	{//creating the settngs manager
@@ -6968,7 +6967,7 @@ int main(int, char**)
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	transferFunctionEditor = new TransferFunctionEditor(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
 	view3d->setTransferFunctionImage(transferFunctionEditor->getTransferImageView());
-
+   
 	{//Set imgui style and load all settings
 		// Setup Dear ImGui style
 		if (settingsManager->getSetting("defaultstyle").id != "settingnotfound") {
@@ -7522,13 +7521,13 @@ int main(int, char**)
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Workbenches")) {
-				ImGui::MenuItem("Bubbleplot workbench", "", &bubbleWindowSettings.enabled);
+				//ImGui::MenuItem("Bubbleplot workbench", "", &bubbleWindowSettings.enabled);
 				ImGui::MenuItem("3d View", "", &view3dSettings.enabled);
-				if(ImGui::BeginMenu("Iso surface workbenches")) {
-					ImGui::MenuItem("Iso surface workbench", "", &isoSurfSettings.enabled);
-					ImGui::MenuItem("Direct iso surface workbench", "", &brushIsoSurfSettings.enabled);
-					ImGui::EndMenu();
-				}
+				//if(ImGui::BeginMenu("Iso surface workbenches")) {
+				//	ImGui::MenuItem("Iso surface workbench", "", &isoSurfSettings.enabled);
+				//	ImGui::MenuItem("Direct iso surface workbench", "", &brushIsoSurfSettings.enabled);
+				//	ImGui::EndMenu();
+				//}
 				if (ImGui::BeginMenu("Violinplot workbenches")) {
 					ImGui::MenuItem("Violin attribute major", "", &violinPlotAttributeSettings.enabled);
 					ImGui::MenuItem("Violin drawlist major", "", &violinPlotDrawlistSettings.enabled);
@@ -7972,7 +7971,7 @@ int main(int, char**)
 				}
 
 				//drawing the list for brush templates
-				ImGui::BeginChild("brushTemplates", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::BeginChild("brushTemplates", ImVec2(400, picSize.y / 2), true, ImGuiWindowFlags_HorizontalScrollbar);
 				ImGui::Text("Brush Templates");
 				ImGui::Separator();
 				for (int i = 0; i < templateBrushes.size(); i++) {
@@ -8030,7 +8029,7 @@ int main(int, char**)
 				ImGui::EndChild();
 				ImGui::SameLine();
 				//Drawing the list of global brushes
-				ImGui::BeginChild("GlobalBrushes", ImVec2(400, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::BeginChild("GlobalBrushes", ImVec2(400, picSize.y/2), true, ImGuiWindowFlags_HorizontalScrollbar);
 				ImGui::Text("Global Brushes");
 				ImGui::Separator();
 				//child for names and selection
@@ -8352,7 +8351,7 @@ int main(int, char**)
 
 				//Statistics for global brushes
 				ImGui::SameLine();
-				ImGui::BeginChild("Brush statistics", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::BeginChild("Brush statistics", ImVec2(0, picSize.y / 2), true, ImGuiWindowFlags_HorizontalScrollbar);
 				ImGui::Text("Brush statistics: Percentage of lines kept after brushing");
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("The bar shows the percentage of points active in comparison to all points in the drawlist. Exception: For the index list which is the parent of the brush, the ratio of points active in the index list vs. its parent data set is shown.");
@@ -9782,7 +9781,7 @@ int main(int, char**)
 							attributeNames.push_back(pcAttributes[i].name);
 							attributeMinMax.push_back({ pcAttributes[i].min,pcAttributes[i].max });
 						}
-						bubblePlotter->setBubbleData(dl.indices, attributeNames, attributeMinMax, parent->data, dl.buffer, dl.activeIndicesBufferView, attributeNames.size(), parent->data.size());
+						//bubblePlotter->setBubbleData(dl.indices, attributeNames, attributeMinMax, parent->data, dl.buffer, dl.activeIndicesBufferView, attributeNames.size(), parent->data.size());
 
 						//Debugging of histogramms
 						//histogramManager->setNumberOfBins(100);
@@ -10603,9 +10602,9 @@ int main(int, char**)
 					//if (ImGui::SliderFloat("Wireframe width", &view3d->gridLineWidth, 0, .1f)) {
 					//	view3d->render();
 					//}
-					if (ImGui::DragFloat3("Ligt direction", &isoSurfaceRenderer->lightDir.x)) {
-						view3d->render();
-					}
+					//if (ImGui::DragFloat3("Ligt direction", &isoSurfaceRenderer->lightDir.x)) {
+					//	view3d->render();
+					//}
 					//if (ImGui::ColorEdit4("Image background", isoSurfaceRenderer->imageBackground.color.float32, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
 					//	view3d->imageBackGroundUpdated();
 					//	view3d->render();
@@ -12801,7 +12800,7 @@ int main(int, char**)
 		delete view3d;
 #endif
 #ifdef BUBBLEVIEW
-		delete bubblePlotter;
+		//delete bubblePlotter;
 #endif
 		delete brushIsoSurfaceRenderer;
 		delete isoSurfaceRenderer;
