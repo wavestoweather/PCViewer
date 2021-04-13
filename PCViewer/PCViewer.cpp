@@ -9207,10 +9207,6 @@ int main(int, char**)
 				prioritySelectAttribute = true;
 			}
 
-			if (ImGui::Checkbox("Put 3d view always in focus", nullptr)) {
-
-			}
-
 			auto histComp = g_PcPlotDrawLists.begin();
 			if (pcSettings.histogrammDrawListComparison != -1) std::advance(histComp, pcSettings.histogrammDrawListComparison);
 			if (ImGui::BeginCombo("Histogramm Comparison", (pcSettings.histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {

@@ -220,7 +220,7 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 			vkDestroyImageView(device, image3dView, nullptr);
 		}
 		if (!image3dSampler) {
-			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_LINEAR,16,1,&image3dSampler);
+			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,VK_FILTER_LINEAR,1,1,&image3dSampler);
 		}
 
 		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d);
