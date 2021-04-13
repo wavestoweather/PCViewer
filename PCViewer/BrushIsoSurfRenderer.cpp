@@ -36,6 +36,11 @@ BrushIsoSurfRenderer::BrushIsoSurfRenderer(uint32_t height, uint32_t width, VkDe
 	computeDescriptorSetLayout = VK_NULL_HANDLE;
 	brushBuffer = VK_NULL_HANDLE;
 	brushMemory = VK_NULL_HANDLE;
+	dimensionCorrectionMemory = VK_NULL_HANDLE;
+	dimensionCorrectionImages[0] = VK_NULL_HANDLE;
+	dimensionCorrectionImages[1] = VK_NULL_HANDLE;
+	dimensionCorrectionImages[2] = VK_NULL_HANDLE;
+	dimensionCorrectionViews = std::vector<VkImageView>(3, VK_NULL_HANDLE);
 	brushByteSize = 0;
 	shade = true;
 	stepSize = .006f;
@@ -148,6 +153,17 @@ BrushIsoSurfRenderer::~BrushIsoSurfRenderer()
 	if (brushMemory) {
 		vkFreeMemory(device, brushMemory, nullptr);
 	}
+	if (dimensionCorrectionMemory) {
+		vkFreeMemory(device, dimensionCorrectionMemory, nullptr);
+	}
+	if (dimensionCorrectionImages[0]) {
+		vkDestroyImage(device, dimensionCorrectionImages[0], nullptr);
+		vkDestroyImage(device, dimensionCorrectionImages[1], nullptr);
+		vkDestroyImage(device, dimensionCorrectionImages[2], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[0], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[1], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[2], nullptr);
+	}
 }
 
 void BrushIsoSurfRenderer::resize(uint32_t width, uint32_t height)
@@ -202,9 +218,14 @@ void BrushIsoSurfRenderer::resizeBox(float width, float height, float depth)
 	render();
 }
 
-bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height, uint32_t depth, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid)
+bool BrushIsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, uint32_t amtOfAttributes, const std::vector<uint32_t>& densityAttributes, uint32_t positionIndices[3], std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, bool regularGrid[3])
 {
 	VkResult err;
+	int width = xDim.size(), height = yDim.size(), depth = zDim.size();
+	dimensionCorrectionLinearDim[0] = regularGrid[0];
+	dimensionCorrectionLinearDim[1] = regularGrid[1];
+	dimensionCorrectionLinearDim[2] = regularGrid[2];
+	updateDimensionImages(xDim, yDim, zDim);
 
 	uint32_t required3dImages = densityAttributes.size();
 
@@ -315,13 +336,42 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	infoBytes->yMax = minMax[positionIndices[1]].second;
 	infoBytes->zMin = minMax[positionIndices[2]].first;
 	infoBytes->zMax = minMax[positionIndices[2]].second;
-	infoBytes->padding = regularGrid;
+	infoBytes->regularGrid = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
 	int* inf = (int*)(infoBytes + 1);
 	for (int i = 0; i < densityAttributes.size(); ++i) {
 		inf[i] = densityAttributes[i];
 	}
 	//PCUtil::numdump((int*)(infoBytes), densityAttributes.size() + 16);
 	VkUtil::uploadData(device, infosMem, 0, infosByteSize, infoBytes);
+
+	//create graphics buffer for dimension values
+	uint32_t dimValsByteSize = (4 + xDim.size() + yDim.size() + zDim.size()) * sizeof(float);
+	float* dimValsBytes = new float[dimValsByteSize];
+	VkBuffer dimValsBuffer;
+	VkDeviceMemory dimValsMemory;
+	VkUtil::createBuffer(device, dimValsByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dimValsBuffer);
+	vkGetBufferMemoryRequirements(device, dimValsBuffer, &memReq);
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &dimValsMemory);
+	vkBindBufferMemory(device, dimValsBuffer, dimValsMemory, 0);
+	int offset = 0;
+	dimValsBytes[offset++] = xDim.size();
+	dimValsBytes[offset++] = yDim.size();
+	dimValsBytes[offset++] = zDim.size();
+	dimValsBytes[offset++] = 0; //padding
+	for (float f : xDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : yDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : zDim) {
+		dimValsBytes[offset++] = f;
+	}
+	assert(offset * sizeof(float) == dimValsByteSize);
+	VkUtil::uploadData(device, dimValsMemory, 0, dimValsByteSize, dimValsBytes);
+	delete[] dimValsBytes;
 	
 	//create descriptor set and update all need things
 	VkDescriptorSet descSet;
@@ -333,7 +383,8 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	std::vector<VkImageLayout> imageLayouts(required3dImages, VK_IMAGE_LAYOUT_GENERAL);
 	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, data, amtOfData * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 3, descSet);
+	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 4, descSet);
 	
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
 	VkCommandBuffer computeCommands;
@@ -360,6 +411,8 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(uint32_t width, uint32_t height,
 	vkFreeDescriptorSets(device, descriptorPool, 1, &descSet);
 	vkFreeMemory(device, infosMem, nullptr);
 	vkDestroyBuffer(device, infos, nullptr);
+	vkFreeMemory(device, dimValsMemory, nullptr);
+	vkDestroyBuffer(device, dimValsBuffer, nullptr);
 	delete[] infoBytes;
 
 	//uploading the density values currently manual, as there is an error in the compute pipeline ----------------------------------------------------------
@@ -485,6 +538,7 @@ void BrushIsoSurfRenderer::render()
 	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
 	ubo.mvp = ubo.mvp * view *scale;
 	ubo.camPos = glm::inverse(scale) * glm::vec4(cameraPos,1);
+	ubo.linearDims = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
 
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
 	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;
@@ -554,47 +608,6 @@ void BrushIsoSurfRenderer::render()
 	
 	VkUtil::uploadData(device, brushMemory, 0, brushByteSize, brushInfos);
 	delete[] brushInfos;
-
-	//checking the brush infos
-	//for (int axis = 0; axis < brushInfos->amtOfAxis; ++axis) {
-	//	int axisOffset = int(brushI[axis]);
-	//	//check if there exists a brush on this axis
-	//	if (bool(brushI[axisOffset])) {		//amtOfBrushes > 0
-	//		//as there exist brushes we get the density for this attribute
-	//		//float density = texture(texSampler[axis], startPoint).x;
-	//		//for every brush
-	//		for (int brush = 0; brush < brushI[axisOffset]; ++brush) {
-	//			int brushOffset = int(brushI[axisOffset + 1 + brush]);
-	//			//for every MinMax
-	//			for (int minMax = 0; minMax < brushI[brushOffset + 1]; ++minMax) {
-	//				int minMaxOffset = brushOffset + 6 + 2 * minMax;			//+6 as after 1 the brush index lies, then the amtount of Minmax lies and then the color comes in a vec4
-	//				int brushIndex = int(brushI[brushOffset]);
-	//				float mi = brushI[minMaxOffset];
-	//				float ma = brushI[minMaxOffset + 1];
-	//				std::cout << "Axis: " << axis << ", brush index: " << brushIndex << ", Min: " << mi << ", Max: " << ma << "Color: " << brushI[brushOffset + 2]<< " " << brushI[brushOffset + 3] << " " << brushI[brushOffset + 4] << " " << brushI[brushOffset + 5] << std::endl;
-	//				//bool stepInOut = prevDensity[axis] < mi && density >= mi ||
-	//				//	prevDensity[axis] > mi&& density <= mi ||
-	//				//	prevDensity[axis] > ma&& density <= ma ||
-	//				//	prevDensity[axis] < ma && density >= ma;
-	//				//
-	//				////this are all the things i have to set to test if a surface has to be drawn
-	//				//brushBorder[brushIndex] = brushBorder[brushIndex] || stepInOut;
-	//				//brushBits[brushIndex] &= (uint((density<mi || density>ma) && !brushBorder[brushIndex]) << axis) ^ 0xffffffff;
-	//				//brushColor[brushIndex] = vec4(bInfo.brushes[brushOffset + 2, brushOffset + 3, brushOffset + 4, brushOffset + 5]);
-	//
-	//				//the surface calculation is moved to the end of the for loop, as we have to check for every attribute of the brush if it is inside it
-	//				//if(stepInBot^^stepOutBot || stepInTop^^stepOutTop){			//if we stepped in or out of the min max range blend surface color to total color
-	//				//	vec4 surfColor = vec4(bInfo.brushes[brushOffset + 1,brushOffset + 2,brushOffset + 3,brushOffset + 4]);
-	//				//	outColor.xyz += (1-outColor.w) * surfColor.w * surfColor.xyz;
-	//				//	outColor.w += (1-outColor.w) * surfColor.w;
-	//				//	//check for alphaStop
-	//				//	if(outColor.w > alphaStop) br = true;
-	//				//}
-	//			}
-	//		}
-	//		//prevDensity[axis] = density;
-	//	}
-	//}
 
 	//submitting the command buffer
 	VkSubmitInfo submitInfo = {};
@@ -837,7 +850,12 @@ void BrushIsoSurfRenderer::createPipeline()
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
 
-	std::vector<bool> valid{ true,false,true };
+	uboLayoutBinding.binding = 3;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	uboLayoutBinding.descriptorCount = 3;
+	bindings.push_back(uboLayoutBinding);
+
+	std::vector<bool> valid{ true,false,true,true };
 	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, valid, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
@@ -866,12 +884,15 @@ void BrushIsoSurfRenderer::createPipeline()
 	binding.binding = 2;								//data buffer
 	bindings.push_back(binding);
 
-	binding.binding = 3;								//densityImages
+	binding.binding = 3;								//dimensioncorrectionbuffer
+	bindings.push_back(binding);
+	
+	binding.binding = 4;								//densityImages
 	binding.descriptorCount = MAXAMTOF3DTEXTURES;
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	bindings.push_back(binding);
 
-	std::vector<bool> validd{ true,true,true,false };
+	std::vector<bool> validd{ true,true,true,true,false };
 	VkUtil::createDescriptorSetLayoutPartiallyBound(device, bindings, validd, &computeDescriptorSetLayout);
 	std::vector<VkDescriptorSetLayout>layouts;
 	layouts.push_back(computeDescriptorSetLayout);
@@ -899,6 +920,9 @@ void BrushIsoSurfRenderer::updateDescriptorSet()
 	for (int i = 0; i < activeDensities.size(); ++i)imViews[i] = image3dView[activeDensities[i]];
 	VkUtil::updateImageArrayDescriptorSet(device, image3dSampler, image3dView, layouts, 1, descriptorSet);
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+	std::vector<VkSampler> samplers(3, sampler);
+	layouts = std::vector<VkImageLayout>(3, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::updateImageArrayDescriptorSet(device, samplers, dimensionCorrectionViews, layouts, 3, descriptorSet);
 }
 
 void BrushIsoSurfRenderer::updateBrushBuffer()
@@ -989,4 +1013,74 @@ void BrushIsoSurfRenderer::updateCommandBuffer()
 
 	err = vkQueueWaitIdle(queue);
 	check_vk_result(err);
+}
+
+bool BrushIsoSurfRenderer::updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim)
+{
+	if (!dimensionCorrectionMemory) {
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages);
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 1);
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 2);
+		VkMemoryRequirements memReq;
+		VkMemoryAllocateInfo alloc{};
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[0], &memReq);
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.allocationSize += memReq.size;
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[1], &memReq);
+		alloc.allocationSize += memReq.size;
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[2], &memReq);
+		alloc.allocationSize += memReq.size;
+		alloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, 0);
+		check_vk_result(vkAllocateMemory(device, &alloc, nullptr, &dimensionCorrectionMemory));
+		vkBindImageMemory(device, dimensionCorrectionImages[0], dimensionCorrectionMemory, 0);
+		vkBindImageMemory(device, dimensionCorrectionImages[1], dimensionCorrectionMemory, alloc.allocationSize / 3);
+		vkBindImageMemory(device, dimensionCorrectionImages[2], dimensionCorrectionMemory, alloc.allocationSize / 3 * 2);
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data());
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[1], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data() + 1);
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[2], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data() + 2);
+
+		VkCommandBuffer command;
+		VkUtil::createCommandBuffer(device, commandPool, &command);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[0], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[1], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[2], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::commitCommandBuffer(queue, command);
+		vkQueueWaitIdle(queue);
+		vkFreeCommandBuffers(device, commandPool, 1, &command);
+	}
+
+
+	if (!PCUtil::vectorEqual(xDim, dimensionCorrectionArrays[0]) || !PCUtil::vectorEqual(yDim, dimensionCorrectionArrays[1]) || !PCUtil::vectorEqual(zDim, dimensionCorrectionArrays[2])) {
+		dimensionCorrectionArrays[0] = std::vector<float>(xDim);
+		dimensionCorrectionArrays[1] = std::vector<float>(yDim);
+		dimensionCorrectionArrays[2] = std::vector<float>(zDim);
+		std::vector<float> correction(dimensionCorrectionSize);
+		float alpha = 0;
+		if (!dimensionCorrectionLinearDim[0]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(dimensionCorrectionSize - 1);
+				float axisVal = alpha * xDim.back() + (1 - alpha) * xDim.front();
+				correction[i] = PCUtil::getVectorIndex(xDim, axisVal) / (xDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+		if (!dimensionCorrectionLinearDim[1]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(dimensionCorrectionSize - 1);
+				float axisVal = alpha * yDim.back() + (1 - alpha) * yDim.front();
+				correction[i] = PCUtil::getVectorIndex(yDim, axisVal) / (yDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+		if (!dimensionCorrectionLinearDim[2]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(dimensionCorrectionSize - 1);
+				float axisVal = alpha * zDim.back() + (1 - alpha) * zDim.front();
+				correction[i] = PCUtil::getVectorIndex(zDim, axisVal) / (zDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[2], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+	}
+
+	return true;
 }

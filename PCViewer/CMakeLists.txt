@@ -1,24 +1,6 @@
 cmake_minimum_required (VERSION 3.7)
 
-SET( Eigen3_DIR "$ENV{Eigen3_DIR}" )
-IF( NOT Eigen3_DIR )
-    message ("Eigen3 libary include path not set. Searching project subdirectories...")
-    message ("checking for directory ${CMAKE_CURRENT_SOURCE_DIR}/eigen-master")
-    IF(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/eigen-master")
-        #add_subdirectory("eigen-master")
-        #include_directories("eigen-master")
-        message ("using subdirectory eigen-master for the Eigen3 library")
-        SET( Eigen3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/eigen-master" )
-    else()
-        IF(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/eigen-3.3.7")
-            #add_subdirectory("eigen-3.3.7")
-            #include_directories("eigen-3.3.7")
-            message ("using subdirectory eigen-3.3.7 for the Eigen3 library")
-            SET( Eigen3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/eigen-3.3.7" )
-        endif()
-    endif()
-endif()
-message (" Eigen include dir ${Eigen3_DIR}")
+SET( Eigen3_DIR "eigen-3.3.7" )
 IF( NOT Eigen3_DIR )
     MESSAGE( FATAL_ERROR "Please point the environment variable Eigen3_DIR to the include directory of your Eigen3 installation.")
 ENDIF()
@@ -29,16 +11,23 @@ IF (WIN32)
     set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/PCViewer/cmake/Win/")
 ENDIF ()
 
+# enable jpeg and png support for CImg library
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_png")
+
 add_subdirectory("glm")
 
 # Fügen Sie der ausführbaren Datei dieses Projekts eine Quelle hinzu.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(netCDF CONFIG REQUIRED)
+find_package(PNG REQUIRED)
+find_package(Threads REQUIRED)
+find_package(X11 REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 message("include dirs: ${netCDF_INCLUDE_DIR}")
 
-include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR})
+include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR})
 #include_directories(${Eigen3_DIR})
 
 file(GLOB pcviewer_SRC
@@ -53,9 +42,13 @@ file(GLOB imgui_SRC
 	"imgui/*.hpp"
 )
 
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC})
+file(GLOB cimg_SRC
+    "cimg/*.h"
+)
 
-target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm netCDF::netcdf)# Eigen3::Eigen
+add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC})
+
+target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm netCDF::netcdf ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES})# Eigen3::Eigen
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS

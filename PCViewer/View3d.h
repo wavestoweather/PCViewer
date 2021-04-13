@@ -12,12 +12,15 @@ the backside of the cube are raymarched.
 #include <vulkan/vulkan.h>
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/euler_angles.hpp"
+#include "CameraNav.hpp"
 #include <limits.h>
 #include <string.h>
 
 #define VERTICALPANSPEED .01f
 #define HORIZONTALPANSPEED .01f
 #define ZOOMSPEED .03f
+#define LOCALSIZE 256
 
 #define IDX3D(x,y,z,width,height) ((x)+((y)*width)+((z)*width*height))
 
@@ -28,24 +31,57 @@ public:
 
 	void resize(uint32_t width, uint32_t height);
 	void resizeBox(float width, float height, float depth);
-	void update3dImage(uint32_t width, uint32_t height, uint32_t depth, float* data);
-	void updateCameraPos(float* mouseMovement);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
+	void update3dImage(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, bool linAxis[3], const uint32_t posIndices[3], uint32_t densityIndex, const float minMax[2], VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t indicesSize, uint32_t amtOfAttributes);
+	void updateCameraPos(const CamNav::NavigationInput& input, float deltaT);		//mouse movement must have following format: {x-velocity,y-velocity,mousewheel-velocity}
 	void render();
 	void setImageDescriptorSet(VkDescriptorSet descriptor);
+	void setTransferFunctionImage(VkImageView view);
 	VkDescriptorSet getImageDescriptorSet();
 	VkSampler getImageSampler();
 	VkImageView getImageView();
+
+	float flySpeed;
+	float fastFlyMultiplier;
+	float rotationSpeed;
+	float stepSize;
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;	//cameraPosition in model space
 		alignas(16) glm::vec3 faces;//face positions for intersection tests
 		alignas(16) glm::vec3 lightDir;
 		alignas(16) glm::mat4 mvp;	//modelViewProjection Matrix
+		uint32_t linearAxes;
+		float stepSize;
+		uint32_t padding[2];
 	};
+
+	struct ComputeUBO {
+		uint32_t posIndices[3];
+		uint32_t linearAxes;
+		uint32_t densityAttribute;
+		uint32_t amtOfIndices;
+		uint32_t amtOfAttributes;
+		float xMin;
+		float xMax;
+		float yMin;
+		float yMax;
+		float zMin;
+		float zMax;
+		uint32_t dimX;
+		uint32_t dimY;
+		uint32_t dimZ;
+		float minValue;
+		float maxValue;
+	};
+
+	//constants
+	const int			dimensionCorrectionSize = 256;
+	const VkFormat		dimensionCorrectionFormat = VK_FORMAT_R32_SFLOAT;
 	
 	//shaderpaths
 	static char vertPath[];
 	static char fragPath[];
+	static char computePath[];
 
 	//general information about the 3d view
 	uint32_t imageHeight;
@@ -89,9 +125,20 @@ private:
 	VkBuffer			indexBuffer;
 	VkBuffer			uniformBuffer;
 	uint32_t			uniformBufferOffset;
+	std::vector<float>	dimensionCorrectionArrays[3];
+	bool				dimensionCorrectionLinearDim[3];
+	VkDeviceMemory		dimensionCorrectionMemory;
+	VkImage				dimensionCorrectionImages[3];
+	std::vector<VkImageView> dimensionCorrectionViews;
+
+	//compute resources
+	VkPipeline			densityFillPipeline;
+	VkPipelineLayout	densityFillPipelineLayout;
+	VkDescriptorSetLayout densityFillDescriptorLayout;
 
 	//camera variables
 	glm::vec3 camPos;		//camera position
+	glm::vec2 camRot;
 	glm::vec3 lightDir;
 
 	//methods to instatiate vulkan resources
@@ -101,5 +148,6 @@ private:
 	void createPipeline();
 	void createDescriptorSets();
 	void updateCommandBuffer();
+	bool updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim);
 };
 #endif 

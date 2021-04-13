@@ -269,7 +269,7 @@ void BubblePlotter::addCylinder(float r, float length, glm::vec4 color, glm::vec
 	recordRenderCommands();
 }
 
-void BubblePlotter::setBubbleData(glm::uvec3& pos, std::vector<uint32_t> indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, std::vector<float*>& data, VkBuffer gData, VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData)
+void BubblePlotter::setBubbleData(std::vector<uint32_t>& indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, std::vector<float*>& data, VkBuffer gData, VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData)
 {
 	if(amtOfAttributes != this->amtOfAttributes){
 		if (attributeActivations) {
@@ -289,19 +289,18 @@ void BubblePlotter::setBubbleData(glm::uvec3& pos, std::vector<uint32_t> indices
 		this->attributeColors = new glm::vec4[amtOfAttributes];
 		this->attributeTopOffsets = new float[amtOfAttributes];
 		int offsetCounter = 0;
-		float offsetStep = 1.0f / (amtOfAttributes - 3 - 1);
+		float offsetStep = 1.0f / (amtOfAttributes - 1);
 		for (int i = 0; i < amtOfAttributes; ++i) {
-			this->attributeActivations[i] = true;
+			this->attributeActivations[i] = i != posIndices.x && i != posIndices.y && i != posIndices.z;
 			this->attributeMinMaxValues.push_back(attributesMinMax[i]);
 			float hue = distribution(randomEngine) * 10;
 			hsl randCol = { hue,.5f,.6f };
 			rgb col = hsl2rgb(randCol);
 			this->attributeColors[i] = glm::vec4(col.r, col.g, col.b, .8f);
 			this->attributeTopOffsets[i] = offsetCounter * offsetStep;
-			if (i != pos.x && i != pos.y && i != pos.z) ++offsetCounter;
+			++offsetCounter;
 		}
 	}
-	posIndices = pos;
 	this->attributeNames = attributeNames;
 	this->dataActivations = activeData;
 	this->attributeScales = std::vector<BubblePlotter::Scale>(amtOfAttributes, BubblePlotter::Scale_Normal);		//on setting bubble data the scale is reset
@@ -338,15 +337,27 @@ void BubblePlotter::setBubbleData(glm::uvec3& pos, std::vector<uint32_t> indices
 
 	vkBindBufferMemory(device, bubbleIndexBuffer, bubbleIndexMemory, 0);
 
-	std::vector<uint32_t> indCopy(indices);
+	this->data = &data;
+	this->indices = &indices;
+	updateRenderOrder();
+
+	setupUbo();
+	recordRenderCommands();
+	render();
+}
+
+void BubblePlotter::updateRenderOrder()
+{
+	std::vector<uint32_t> indCopy(*indices);
 	//sorting the bubble instances for positive render order
-	std::vector<float*>* dat = &data;
-	std::sort(indices.begin(), indices.end(), [dat, pos](uint32_t a, uint32_t b) {float lonA = (*dat)[a][pos.x];
-	float lonB = (*dat)[b][pos.x];
-	float latA = (*dat)[a][pos.y];
-	float latB = (*dat)[b][pos.y];
-	float altA = (*dat)[a][pos.z];
-	float altB = (*dat)[b][pos.z];
+	std::vector<float*>* dat = data;
+	auto pI = posIndices;
+	std::sort(indCopy.begin(), indCopy.end(), [dat, pI](uint32_t a, uint32_t b) {float lonA = (*dat)[a][pI.x];
+	float lonB = (*dat)[b][pI.x];
+	float latA = (*dat)[a][pI.y];
+	float latB = (*dat)[b][pI.y];
+	float altA = (*dat)[a][pI.z];
+	float altB = (*dat)[b][pI.z];
 	if (altA > altB) return true;
 	else if (altA < altB) return false;
 	else {
@@ -355,12 +366,8 @@ void BubblePlotter::setBubbleData(glm::uvec3& pos, std::vector<uint32_t> indices
 		else return lonA > lonB;
 	}});
 	indCopy.insert(indCopy.end(), indCopy.rbegin(), indCopy.rend());
-	
-	VkUtil::uploadData(device, bubbleIndexMemory, 0, indCopy.size() * sizeof(uint32_t), indCopy.data());
 
-	setupUbo();
-	recordRenderCommands();
-	render();
+	VkUtil::uploadData(device, bubbleIndexMemory, 0, indCopy.size() * sizeof(uint32_t), indCopy.data());
 }
 
 void BubblePlotter::render()
@@ -395,7 +402,7 @@ void BubblePlotter::render()
 		attributeInfos[i * 8 + 1] = attributeColors[i].y;
 		attributeInfos[i * 8 + 2] = attributeColors[i].z;
 		attributeInfos[i * 8 + 3] = attributeColors[i].w;
-		attributeInfos[i * 8 + 4] = (attributeActivations[i] && i!= posIndices.x && i != posIndices.y && i != posIndices.z) ? attributeTopOffsets[i] : -1;
+		attributeInfos[i * 8 + 4] = (attributeActivations[i]) ? attributeTopOffsets[i] : -1;
 		attributeInfos[i * 8 + 5] = attributeMinMaxValues[i].first;
 		attributeInfos[i * 8 + 6] = attributeMinMaxValues[i].second;
 		attributeInfos[i * 8 + 7] = attributeScales[i];

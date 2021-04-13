@@ -71,3 +71,31 @@ void PCUtil::matrixdump(const std::vector<std::vector<double>>& matrix)
 		std::cout << std::endl;
 	}
 }
+
+float PCUtil::getVectorIndex(const std::vector<float>& values, float v)
+{
+	//binary search
+	int a = 0, b = values.size();
+	while (b - a > 1) {
+		int half = (b + a) / 2;
+		float val = values[half];
+		if (v < val)
+			b = half;
+		else
+			a = half;
+	}
+	//a now at begin index, b at endindex
+	if (a == values.size() - 1)
+		return a;
+	float af = values[a], bf = values[b];
+	return (v - af) / (bf - af) + a;
+}
+
+bool PCUtil::vectorEqual(const std::vector<float>& a, const std::vector<float>& b)
+{
+	if (a.size() != b.size()) return false;
+	for (int i = 0; i < a.size(); ++i)
+		if (a[i] != b[i])
+			return false;
+	return true;
+}

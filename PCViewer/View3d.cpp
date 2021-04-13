@@ -2,6 +2,7 @@
 
 char View3d::vertPath[]= "shader/3dVert.spv";
 char View3d::fragPath[]= "shader/3dFrag.spv";
+char View3d::computePath[]= "shader/3dComp.spv";
 
 View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool)
 {
@@ -36,10 +37,22 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	prepareImageCommand = VK_NULL_HANDLE;
 	frameBuffer = VK_NULL_HANDLE;
 	imageDescriptorSet = VK_NULL_HANDLE;
+	densityFillPipeline = VK_NULL_HANDLE;
+	dimensionCorrectionMemory = VK_NULL_HANDLE;
+	dimensionCorrectionImages[0] = VK_NULL_HANDLE;
+	dimensionCorrectionImages[1] = VK_NULL_HANDLE;
+	dimensionCorrectionImages[2] = VK_NULL_HANDLE;
+	dimensionCorrectionViews = std::vector<VkImageView>(3, VK_NULL_HANDLE);
 
 
-	camPos = glm::vec3(2, 2, 2);
+	camPos = glm::vec3(1, 0, 1);
+	camRot = glm::vec2(0, .78f);
+	flySpeed = .5f;
+	fastFlyMultiplier = 2.5f;
+	rotationSpeed = .15f;
 	lightDir = glm::vec3(-1, -1, -1);
+	lightDir = glm::vec3(-1, -1, -1);
+	stepSize = .0005f;
 
 	//setting up graphic resources
 	
@@ -48,22 +61,6 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	createDescriptorSets();
 	resize(width, height);
 
-	
-	const int w = 100, h = 5, de = 1;
-	glm::vec4 d[w * h * de] = {};
-	d[0] = glm::vec4(1, 0, 0, 1);
-	d[1] = glm::vec4(1, 0, 0, 1);
-	d[2] = glm::vec4(1, 0, 0, 1);
-	d[3] = glm::vec4(1, 0, 0, 1);
-	d[8] = glm::vec4(0, 1, 0, .5f);
-	d[26] = glm::vec4(0, 0, 1, .1f);
-	/*for (int i = 1; i < 27; i+=3) {
-		d[4 * i] = i / 27.0f;
-		d[4 * i + 1] = 1 - (i / 27.0f);
-		d[4 * i + 2] = 0;
-		d[4 * i + 3] = .1f;
-	}*/
-	update3dImage(w, h, de, (float*)d);
 	resizeBox(1.5f, 1, 1.5f);
 }
 
@@ -120,6 +117,23 @@ View3d::~View3d()
 	if (uniformBuffer) {
 		vkDestroyBuffer(device, uniformBuffer, nullptr);
 	}
+	if (densityFillPipeline)
+		vkDestroyPipeline(device, densityFillPipeline, nullptr);
+	if (densityFillPipelineLayout)
+		vkDestroyPipelineLayout(device, densityFillPipelineLayout, nullptr);
+	if (densityFillDescriptorLayout)
+		vkDestroyDescriptorSetLayout(device, densityFillDescriptorLayout, nullptr);
+	if (dimensionCorrectionMemory) {
+		vkFreeMemory(device, dimensionCorrectionMemory, nullptr);
+	}
+	if (dimensionCorrectionImages[0]) {
+		vkDestroyImage(device, dimensionCorrectionImages[0], nullptr);
+		vkDestroyImage(device, dimensionCorrectionImages[1], nullptr);
+		vkDestroyImage(device, dimensionCorrectionImages[2], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[0], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[1], nullptr);
+		vkDestroyImageView(device, dimensionCorrectionViews[2], nullptr);
+	}
 }
 
 void View3d::resize(uint32_t width, uint32_t height)
@@ -174,14 +188,26 @@ void View3d::resizeBox(float width, float height, float depth)
 	render();
 }
 
-void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, float* data)
+void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim, bool linAxis[3], const uint32_t posIndices[3], uint32_t densityIndex, const float minMax[2], VkBuffer data, uint32_t dataByteSize, VkBuffer indices, uint32_t indicesSize, uint32_t amtOfAttributes)
 {
+	if (!descriptorSet) {
+		std::vector<VkDescriptorSetLayout> layouts;
+		layouts.push_back(descriptorSetLayout);
+		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+	}
 	VkResult err;
+	int width = xDim.size(), height = yDim.size(), depth = zDim.size();
+	dimensionCorrectionLinearDim[0] = linAxis[0];
+	dimensionCorrectionLinearDim[1] = linAxis[1];
+	dimensionCorrectionLinearDim[2] = linAxis[2];
+	updateDimensionImages(xDim, yDim, zDim);
 
+	bool imageUpdated = false;
 	if ((width != image3dWidth) || (height != image3dHeight) || (depth != image3dDepth)) {
 		image3dWidth = width;
 		image3dHeight = height;
 		image3dDepth = depth;
+		imageUpdated = true;
 
 		//destroying old resources
 		if (image3dMemory) {
@@ -194,10 +220,10 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 			vkDestroyImageView(device, image3dView, nullptr);
 		}
 		if (!image3dSampler) {
-			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,VK_FILTER_NEAREST,16,1,&image3dSampler);
+			VkUtil::createImageSampler(device,VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,VK_FILTER_LINEAR,1,1,&image3dSampler);
 		}
 
-		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, &image3d);
+		VkUtil::create3dImage(device, image3dWidth, image3dHeight, image3dDepth, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &image3d);
 
 		VkMemoryRequirements memRequirements;
 		vkGetImageMemoryRequirements(device, image3d, &memRequirements);
@@ -210,63 +236,108 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 		check_vk_result(err);
 		vkBindImageMemory(device, image3d, image3dMemory, 0);
 
-		VkUtil::create3dImageView(device, image3d, VK_FORMAT_R8G8B8A8_UNORM, 1, &image3dView);
-
-		std::vector<VkDescriptorSetLayout> layouts;
-		layouts.push_back(descriptorSetLayout);
-		if (!descriptorSet) {
-			VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
-		}
+		VkUtil::create3dImageView(device, image3d, VK_FORMAT_R8_UNORM, 1, &image3dView);
 		VkUtil::updateImageDescriptorSet(device, image3dSampler, image3dView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, descriptorSet);
 	}
-	//converting the data to a short array
-	uint8_t* dat = new uint8_t[width * height * depth * 4];
-	for (int i = 0; i < width * height * depth * 4; i++) {
-		dat[i] = data[i] * std::numeric_limits<uint8_t>::max();
-	}
-	//uploading the data with a staging buffer
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-
-	VkUtil::createBuffer(device, width * height * depth * 4 * sizeof(uint8_t), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
-	VkMemoryRequirements memReq;
-	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReq);
+	
+	//filling the 3d image via the compute pipeline
+	ComputeUBO ubo{};
+	ubo.posIndices[0] = posIndices[0];
+	ubo.posIndices[1] = posIndices[1];
+	ubo.posIndices[2] = posIndices[2];
+	ubo.linearAxes = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
+	ubo.densityAttribute = densityIndex;
+	ubo.amtOfIndices = indicesSize;
+	ubo.amtOfAttributes = amtOfAttributes;
+	ubo.xMin = xDim.front();
+	ubo.xMax = xDim.back();
+	ubo.yMin = yDim.front();
+	ubo.yMax = yDim.back();
+	ubo.zMin = zDim.front();
+	ubo.zMax = zDim.back();
+	ubo.dimX = xDim.size();
+	ubo.dimY = yDim.size();
+	ubo.dimZ = zDim.size();
+	ubo.minValue = minMax[0];
+	ubo.maxValue = minMax[1];
+	uint32_t uboByteSize = sizeof(ComputeUBO);
+	VkBuffer buffer;
+	VkDeviceMemory bufferMemory;
+	VkUtil::createBuffer(device, uboByteSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &buffer);
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	VkMemoryRequirements memReq = {};
+	vkGetBufferMemoryRequirements(device, buffer, &memReq);
 	allocInfo.allocationSize = memReq.size;
-	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-	err = vkAllocateMemory(device, &allocInfo, nullptr, &stagingBufferMemory);
-	vkBindBufferMemory(device, stagingBuffer, stagingBufferMemory, 0);
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory);
+	vkBindBufferMemory(device, buffer, bufferMemory, 0);
+	VkUtil::uploadData(device, bufferMemory, 0, uboByteSize, &ubo);
 
-	void* p;
-	vkMapMemory(device, stagingBufferMemory, 0, width * height * depth * 4 * sizeof(uint8_t), 0, &p);
-	memcpy(p, dat, width * height * depth * 4 * sizeof(uint8_t));
-	vkUnmapMemory(device, stagingBufferMemory);
+	//create graphics buffer for dimension values
+	uint32_t dimValsByteSize = (4 + xDim.size() + yDim.size() + zDim.size()) * sizeof(float);
+	float* dimValsBytes = new float[dimValsByteSize];
+	VkBuffer dimValsBuffer;
+	VkDeviceMemory dimValsMemory;
+	VkUtil::createBuffer(device, dimValsByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dimValsBuffer);
+	vkGetBufferMemoryRequirements(device, dimValsBuffer, &memReq);
+	allocInfo.allocationSize = memReq.size;
+	allocInfo.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	vkAllocateMemory(device, &allocInfo, nullptr, &dimValsMemory);
+	vkBindBufferMemory(device, dimValsBuffer, dimValsMemory, 0);
+	int offset = 0;
+	dimValsBytes[offset++] = xDim.size();
+	dimValsBytes[offset++] = yDim.size();
+	dimValsBytes[offset++] = zDim.size();
+	dimValsBytes[offset++] = 0; //padding
+	for (float f : xDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : yDim) {
+		dimValsBytes[offset++] = f;
+	}
+	for (float f : zDim) {
+		dimValsBytes[offset++] = f;
+	}
+	assert(offset * sizeof(float) == dimValsByteSize);
+	VkUtil::uploadData(device, dimValsMemory, 0, dimValsByteSize, dimValsBytes);
+	delete[] dimValsBytes;
 
-	VkCommandBuffer command;
-	VkUtil::createCommandBuffer(device, commandPool, &command);
-	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	VkUtil::copyBufferTo3dImage(command, stagingBuffer, image3d, width, height, depth);
-	VkUtil::transitionImageLayout(command, image3d, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	err = vkEndCommandBuffer(command);
+	VkDescriptorSet commandSet;
+	std::vector<VkDescriptorSetLayout> sets{densityFillDescriptorLayout};
+	VkUtil::createDescriptorSets(device, sets, descriptorPool, &commandSet);
+	VkUtil::updateDescriptorSet(device, buffer, sizeof(ComputeUBO), 0, commandSet);
+	VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
+	VkUtil::updateDescriptorSet(device, data, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
+	VkUtil::updateStorageImageDescriptorSet(device, image3dView, VK_IMAGE_LAYOUT_GENERAL, 3, commandSet);
+	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
 
-	VkSubmitInfo submitInfo = {};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.signalSemaphoreCount = 0;
-	submitInfo.waitSemaphoreCount = 0;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &command;
+	VkCommandBuffer commands;
+	VkUtil::createCommandBuffer(device, commandPool, &commands);
+	if (imageUpdated) {
+		VkUtil::transitionImageLayout(commands, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	}
+	else {
+		VkUtil::transitionImageLayout(commands, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	}
+	vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, densityFillPipeline);
+	vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, densityFillPipelineLayout, 0, 1, &commandSet, 0, { 0 });
+	uint32_t patchAmount = indicesSize / LOCALSIZE;
+	patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+	vkCmdDispatch(commands, patchAmount, 1, 1);
+	VkUtil::transitionImageLayout(commands, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkUtil::commitCommandBuffer(queue, commands);
+	check_vk_result(vkQueueWaitIdle(queue));
 
-	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-	check_vk_result(err);
+	//std::vector<uint8_t> dow(xDim.size() * yDim.size() * zDim.size());
+	//VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, xDim.size(), yDim.size(), zDim.size(), dow.data(), dow.size());
 
-	err = vkDeviceWaitIdle(device);
-	check_vk_result(err);
-
-	vkDestroyBuffer(device, stagingBuffer, nullptr);
-	vkFreeMemory(device, stagingBufferMemory, nullptr);
-
-	delete[] dat;
+	vkDestroyBuffer(device, buffer, nullptr);
+	vkDestroyBuffer(device, dimValsBuffer, nullptr);
+	vkFreeMemory(device, bufferMemory, nullptr);
+	vkFreeMemory(device, dimValsMemory, nullptr);
+	vkFreeDescriptorSets(device, descriptorPool, 1, &commandSet);
+	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 
 	if (!descriptorSet) {
 		resize(1, 1);
@@ -277,40 +348,60 @@ void View3d::update3dImage(uint32_t width, uint32_t height, uint32_t depth, floa
 	render();
 }
 
-void View3d::updateCameraPos(float* mouseMovement)
+void View3d::updateCameraPos(const CamNav::NavigationInput& input, float deltaT)
 {
-	//rotation matrix for height adjustment
-	glm::mat4 vertical;
-	vertical = glm::rotate(glm::mat4(1.0f), mouseMovement[1] * VERTICALPANSPEED, glm::normalize(glm::cross(camPos, glm::vec3(0, 1, 0))));
-	glm::vec3 temp = vertical * glm::vec4(camPos, 1);
-	if (dot(temp, glm::vec3(1, 0, 0)) * dot(camPos, glm::vec3(1, 0, 0)) < 0 || dot(temp, glm::vec3(0, 0, 1)) * dot(camPos, glm::vec3(0, 0, 1)) < 0)
-		vertical = glm::mat4(1.0f);
-	//rotation matrix for horizontal adjustment
-	glm::mat4 horizontal = glm::rotate(glm::mat4(1.0f), mouseMovement[0] * HORIZONTALPANSPEED, glm::vec3(0, 1, 0));
-	camPos = horizontal * vertical * glm::vec4(camPos,1);
+	//first do the rotation, as the user has a more inert feeling when the fly direction matches the view direction instantly
+	if (input.mouseDeltaX) {
+		camRot.y -= rotationSpeed * input.mouseDeltaX * .02f;
+	}
+	if (input.mouseDeltaY) {
+		camRot.x -= rotationSpeed * input.mouseDeltaY * .02f;
+	}
 
-	//adding zooming
-	glm::vec3 zoomDir = -camPos;
-	camPos += ZOOMSPEED * zoomDir * mouseMovement[2];
+	glm::mat4 rot = glm::eulerAngleYX(camRot.y, camRot.x);
+	if (input.a) {	//fly left
+		glm::vec4 left = rot * glm::vec4(-1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(left.x, left.y, left.z);
+	}
+	if (input.d) {	//fly right
+		glm::vec4 right = rot * glm::vec4(1, 0, 0, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(right.x, right.y, right.z);
+	}
+	if (input.s) {	//fly backward
+		glm::vec4 back = rot * glm::vec4(0, 0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(back.x, back.y, back.z);
+	}
+	if (input.w) {	//fly forward
+		glm::vec4 front = rot * glm::vec4(0, 0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+		camPos += glm::vec3(front.x, front.y, front.z);
+	}
+	if (input.q) {	//fly down
+		camPos += glm::vec3(0, -1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
+	if (input.e) {	//fly up
+		camPos += glm::vec3(0, 1, 0) * flySpeed * ((input.shift) ? fastFlyMultiplier : 1) * deltaT;
+	}
 }
 
 void View3d::render()
 {
+	if (commandBuffer == VK_NULL_HANDLE) return;
 	VkResult err;
 
 	//uploading the uniformBuffer
 	UniformBuffer ubo;
 	ubo.mvp = glm::perspective(glm::radians(45.0f), (float)imageWidth / (float)imageHeight, 0.1f, 100.0f);;
 	ubo.mvp[1][1] *= -1;
-	glm::mat4 look = glm::lookAt(camPos, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-	float max = glm::max(glm::max(image3dWidth, image3dHeight), image3dDepth);
-	glm::mat4 scale = glm::scale(glm::mat4(1.0f),glm::vec3(boxWidth,boxHeight,boxDepth));
-	ubo.mvp = ubo.mvp * look *scale;
+	glm::mat4 view = glm::transpose(glm::eulerAngleY(camRot.y) * glm::eulerAngleX(camRot.x)) * glm::translate(glm::mat4(1.0), -camPos);;
+	glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(boxWidth, boxHeight, boxDepth));
+	ubo.mvp = ubo.mvp * view * scale;
 	ubo.camPos = glm::inverse(scale) * glm::vec4(camPos,1);
 
 	ubo.faces.x = float(ubo.camPos.x > 0) - .5f;
 	ubo.faces.y = float(ubo.camPos.y > 0) - .5f;
 	ubo.faces.z = float(ubo.camPos.z > 0) - .5f;
+	ubo.linearAxes = (uint32_t(dimensionCorrectionLinearDim[0])) | (uint32_t(dimensionCorrectionLinearDim[1]) << 1) | (uint32_t(dimensionCorrectionLinearDim[2]) << 2);
+	ubo.stepSize = stepSize;
 
 	ubo.lightDir = lightDir;
 	void* d;
@@ -334,6 +425,11 @@ void View3d::render()
 void View3d::setImageDescriptorSet(VkDescriptorSet descriptor)
 {
 	imageDescriptorSet = descriptor;
+}
+
+void View3d::setTransferFunctionImage(VkImageView view)
+{
+	VkUtil::updateImageDescriptorSet(device, sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 3, descriptorSet);
 }
 
 VkDescriptorSet View3d::getImageDescriptorSet()
@@ -537,6 +633,14 @@ void View3d::createPipeline()
 	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 	bindings.push_back(uboLayoutBinding);
 
+	uboLayoutBinding.binding = 2;
+	uboLayoutBinding.descriptorCount = 3;
+	bindings.push_back(uboLayoutBinding);
+
+	uboLayoutBinding.binding = 3;
+	uboLayoutBinding.descriptorCount = 1;
+	bindings.push_back(uboLayoutBinding);
+
 	VkUtil::createDescriptorSetLayout(device, bindings, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(descriptorSetLayout);
@@ -544,6 +648,40 @@ void View3d::createPipeline()
 	VkUtil::createRenderPass(device, VkUtil::PASS_TYPE_COLOR_OFFLINE, &renderPass);
 
 	VkUtil::createPipeline(device, &vertexInputInfo, imageWidth, imageHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &renderPass, &pipelineLayout, &pipeline);
+
+	//creating the fill copute pipeline
+	VkShaderModule computeModule = VkUtil::createShaderModule(device, PCUtil::readByteFile(computePath));
+
+	bindings.clear();
+	VkDescriptorSetLayoutBinding binding = {};
+	binding.descriptorCount = 1;
+	binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	binding.binding = 0;								//compute infos
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	bindings.push_back(binding);
+
+	binding.binding = 1;								//indices buffer
+	binding.descriptorCount = 1;
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	bindings.push_back(binding);
+
+	binding.binding = 2;								//data buffer
+	bindings.push_back(binding);
+
+	binding.binding = 3;								//density image
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	bindings.push_back(binding);
+
+	binding.binding = 4;								//dimension values
+	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	bindings.push_back(binding);
+
+	VkUtil::createDescriptorSetLayout(device, bindings, &densityFillDescriptorLayout);
+	std::vector<VkDescriptorSetLayout>layouts;
+	layouts.push_back(densityFillDescriptorLayout);
+
+	VkUtil::createComputePipeline(device, computeModule, layouts, &densityFillPipelineLayout, &densityFillPipeline);
 }
 
 void View3d::createDescriptorSets()
@@ -599,4 +737,77 @@ void View3d::updateCommandBuffer()
 
 	err = vkDeviceWaitIdle(device);
 	check_vk_result(err);
+}
+
+bool View3d::updateDimensionImages(const std::vector<float>& xDim, const std::vector<float>& yDim, const std::vector<float>& zDim)
+{
+	if (!dimensionCorrectionMemory) {
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages);
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 1);
+		VkUtil::create1dImage(device, dimensionCorrectionSize, dimensionCorrectionFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, dimensionCorrectionImages + 2);
+		VkMemoryRequirements memReq;
+		VkMemoryAllocateInfo alloc{};
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[0], &memReq);
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.allocationSize += memReq.size;
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[1], &memReq);
+		alloc.allocationSize += memReq.size;
+		vkGetImageMemoryRequirements(device, dimensionCorrectionImages[2], &memReq);
+		alloc.allocationSize += memReq.size;
+		alloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memReq.memoryTypeBits, 0);
+		check_vk_result(vkAllocateMemory(device, &alloc, nullptr, &dimensionCorrectionMemory));
+		vkBindImageMemory(device, dimensionCorrectionImages[0], dimensionCorrectionMemory, 0);
+		vkBindImageMemory(device, dimensionCorrectionImages[1], dimensionCorrectionMemory, alloc.allocationSize / 3);
+		vkBindImageMemory(device, dimensionCorrectionImages[2], dimensionCorrectionMemory, alloc.allocationSize / 3 * 2);
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[0], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data());
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[1], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data() + 1);
+		VkUtil::create1dImageView(device, dimensionCorrectionImages[2], dimensionCorrectionFormat, 1, dimensionCorrectionViews.data() + 2);
+
+		VkCommandBuffer command;
+		VkUtil::createCommandBuffer(device, commandPool, &command);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[0], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[1], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command, dimensionCorrectionImages[2], dimensionCorrectionFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::commitCommandBuffer(queue, command);
+		vkQueueWaitIdle(queue);
+		vkFreeCommandBuffers(device, commandPool, 1, &command);
+	}
+
+
+	if (!PCUtil::vectorEqual(xDim, dimensionCorrectionArrays[0]) || !PCUtil::vectorEqual(yDim, dimensionCorrectionArrays[1]) || !PCUtil::vectorEqual(zDim, dimensionCorrectionArrays[2])) {
+		dimensionCorrectionArrays[0] = std::vector<float>(xDim);
+		dimensionCorrectionArrays[1] = std::vector<float>(yDim);
+		dimensionCorrectionArrays[2] = std::vector<float>(zDim);
+		std::vector<float> correction(dimensionCorrectionSize);
+		float alpha = 0;
+		if (!dimensionCorrectionLinearDim[0]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(dimensionCorrectionSize - 1);
+				float axisVal = alpha * xDim.back() + (1 - alpha) * xDim.front();
+				correction[i] = PCUtil::getVectorIndex(xDim, axisVal) / (xDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+		if (!dimensionCorrectionLinearDim[1]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(dimensionCorrectionSize - 1);
+				float axisVal = alpha * yDim.back() + (1 - alpha) * yDim.front();
+				correction[i] = PCUtil::getVectorIndex(yDim, axisVal) / (yDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+		if (!dimensionCorrectionLinearDim[2]) {
+			for (int i = 0; i < dimensionCorrectionSize; ++i) {
+				alpha = i / float(dimensionCorrectionSize - 1);
+				float axisVal = alpha * zDim.back() + (1 - alpha) * zDim.front();
+				correction[i] = PCUtil::getVectorIndex(zDim, axisVal) / (zDim.size() - 1);
+			}
+			VkUtil::uploadImageData(device, physicalDevice, commandPool, queue, dimensionCorrectionImages[2], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, dimensionCorrectionFormat, dimensionCorrectionSize, 1, 1, correction.data(), correction.size() * sizeof(float));
+		}
+		std::vector<VkSampler> samplers(3, sampler);
+		std::vector<VkImageLayout> layouts = std::vector<VkImageLayout>(3, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::updateImageArrayDescriptorSet(device, samplers, dimensionCorrectionViews, layouts, 2, descriptorSet);
+	}
+
+	return true;
 }

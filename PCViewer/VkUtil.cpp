@@ -407,6 +407,25 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType,VkRende
 		subpass.pColorAttachments = &colorAttachmentRef;
 
 		break;
+	case VkUtil::PASS_TYPE_COLOR_EXPORT:
+		attachment.format = VK_FORMAT_B8G8R8A8_UNORM;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		colorAttachments.push_back(attachment);
+
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+
+		break;
 	case VkUtil::PASS_TYPE_COLOR_OFFLINE_NO_CLEAR:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -873,7 +892,7 @@ void VkUtil::copyBufferTo3dImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-void VkUtil::copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth)
+void VkUtil::copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, VkImageLayout imageLayout, uint32_t width, uint32_t height, uint32_t depth)
 {
 	VkBufferImageCopy region = {};
 	region.bufferOffset = 0;
@@ -892,7 +911,7 @@ void VkUtil::copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer,
 		depth
 	};
 
-	vkCmdCopyImageToBuffer(commandBuffer, image, VK_IMAGE_LAYOUT_GENERAL, buffer, 1, &region);
+	vkCmdCopyImageToBuffer(commandBuffer, image, imageLayout, buffer, 1, &region);
 }
 
 void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
@@ -985,6 +1004,13 @@ void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
 		sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
 		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 		barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1005,6 +1031,13 @@ void VkUtil::transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
 
 		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -1038,6 +1071,30 @@ void VkUtil::createImage(VkDevice device, uint32_t width, uint32_t height, VkFor
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
 	imageInfo.extent.width = width;
 	imageInfo.extent.height = height;
+	imageInfo.extent.depth = 1;
+	imageInfo.mipLevels = 1;
+	imageInfo.arrayLayers = 1;
+	imageInfo.format = imageFormat;
+	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageInfo.usage = usageFlags;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+	err = vkCreateImage(device, &imageInfo, nullptr, image);
+	check_vk_result(err);
+}
+
+void VkUtil::create1dImage(VkDevice device, uint32_t width, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image)
+{
+	VkResult err;
+
+	//creating the VkImage for the PcPlot
+	VkImageCreateInfo imageInfo = {};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = VK_IMAGE_TYPE_1D;
+	imageInfo.extent.width = width;
+	imageInfo.extent.height = 1;
 	imageInfo.extent.depth = 1;
 	imageInfo.mipLevels = 1;
 	imageInfo.arrayLayers = 1;
@@ -1112,6 +1169,29 @@ void VkUtil::createImageView(VkDevice device, VkImage image, VkFormat imageForma
 	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 	createInfo.subresourceRange.aspectMask = aspectMask;
+	createInfo.subresourceRange.baseMipLevel = 0;
+	createInfo.subresourceRange.levelCount = mipLevelCount;
+	createInfo.subresourceRange.baseArrayLayer = 0;
+	createInfo.subresourceRange.layerCount = 1;
+
+	err = vkCreateImageView(device, &createInfo, nullptr, imageView);
+	check_vk_result(err);
+}
+
+void VkUtil::create1dImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView)
+{
+	VkResult err;
+
+	VkImageViewCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	createInfo.image = image;
+	createInfo.viewType = VK_IMAGE_VIEW_TYPE_1D;
+	createInfo.format = imageFormat;
+	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	createInfo.subresourceRange.baseMipLevel = 0;
 	createInfo.subresourceRange.levelCount = mipLevelCount;
 	createInfo.subresourceRange.baseArrayLayer = 0;
@@ -1203,7 +1283,11 @@ void VkUtil::uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, V
 	uploadData(device, stagingMemory, 0, byteSize, data);
 	VkCommandBuffer commands;
 	createCommandBuffer(device, commandPool, &commands);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		transitionImageLayout(commands, image, imageFormat, imageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	copyBufferTo3dImage(commands, stagingBuffer, image, x, y, z);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		transitionImageLayout(commands, image, imageFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, imageLayout);
 	commitCommandBuffer(queue, commands);
 	check_vk_result(vkQueueWaitIdle(queue));
 
@@ -1212,7 +1296,7 @@ void VkUtil::uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, V
 	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 }
 
-void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
+void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkFormat format, VkImageLayout imageLayout, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize)
 {
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
@@ -1228,7 +1312,11 @@ void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice,
 
 	VkCommandBuffer commands;
 	createCommandBuffer(device, commandPool, &commands);
-	copy3dImageToBuffer(commands, stagingBuffer, image, x, y, z);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+		transitionImageLayout(commands, image, format, imageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	copy3dImageToBuffer(commands, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, x, y, z);
+	if (imageLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+		transitionImageLayout(commands, image, format, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, imageLayout);
 	commitCommandBuffer(queue, commands);
 	check_vk_result(vkQueueWaitIdle(queue));
 	downloadData(device, stagingMemory, 0, byteSize, data);

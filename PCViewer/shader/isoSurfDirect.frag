@@ -1,11 +1,16 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
+#define DIMXBIT 1
+#define DIMYBIT 2
+#define DIMZBIT 4
 
 layout(binding = 0) uniform UniformBufferObject{
 	vec3 camPos;
 	vec3 cubeSides;
 	vec3 lightDir;
 	mat4 mvp;
+	uint linearDims;
+	uint padding[3];
 } ubo;
 
 //currently the maximum amount of brushes attributes is 30!
@@ -23,8 +28,25 @@ layout(std430 ,binding = 2) buffer brushInfos{
 	//color brush0[4*float], color brush1[4*float], ... , color brush n[4*float]
 }info;
 
+layout(binding = 3) uniform sampler1D dimCor[3];
+
 layout(location = 0) in vec3 endPos;
 layout(location = 0) out vec4 outColor;
+
+bool xLin;
+bool yLin;
+bool zLin;
+
+vec3 cubePosToSamplePos(vec3 pos){
+	vec3 sampleLoc = pos;
+	if(!xLin)
+		sampleLoc.x = texture(dimCor[0], sampleLoc.x).x;
+	if(!yLin)
+		sampleLoc.y = texture(dimCor[1], sampleLoc.y).x;
+	if(!zLin)
+		sampleLoc.z = texture(dimCor[2], sampleLoc.z).x;
+	return sampleLoc;
+}
 
 float rand(vec3 co)
 {
@@ -32,6 +54,9 @@ float rand(vec3 co)
 }
 
 void main() {
+	xLin = bool(ubo.linearDims & DIMXBIT);
+	yLin = bool(ubo.linearDims & DIMYBIT);
+	zLin = bool(ubo.linearDims & DIMZBIT);
 
 	vec3 d = endPos-ubo.camPos;
 	vec3 dinv = 1/d;
@@ -85,7 +110,7 @@ void main() {
 			//check if there exists a brush on this axis
 			if(info.brushes[axisOffset] > 0){		//amtOfBrushes > 0
 				//as there exist brushes we get the density for this attribute
-				float density = texture(texSampler[axis],startPoint).x;
+				float density = texture(texSampler[axis],cubePosToSamplePos(startPoint)).x;
 				//for every brush
 				for(int brush = 0;brush<info.brushes[axisOffset] && !br && stepAdaption < 2;++brush){
 					int brushOffset = int(info.brushes[axisOffset + 1 + brush]);
@@ -130,7 +155,7 @@ void main() {
 								float precDensity = density;
 								for(int i = 0;i< refinmentSteps;++i){
 									vec3 tmpPoint = .5f * curPos + .5f * prevPos;
-									precDensity = texture(texSampler[brush], tmpPoint).x;
+									precDensity = texture(texSampler[brush], cubePosToSamplePos(tmpPoint)).x;
 									if(precDensity<isoVal){		//intersection is in interval[tmpPoint , curPos]
 										prevPos = tmpPoint;
 									}
@@ -139,12 +164,12 @@ void main() {
 									}
 								}
 								curPos = .5f * prevPos + .5f * curPos;
-								float xDir = texture(texSampler[axis],curPos+vec3(info.shadingStep * stepsize,0,0)).x, 
-									xDirr = texture(texSampler[axis],curPos-vec3(info.shadingStep * stepsize,0,0)).x, 
-									yDir = texture(texSampler[axis],curPos+vec3(0,info.shadingStep * stepsize,0)).x,
-									yDirr = texture(texSampler[axis],curPos-vec3(0,info.shadingStep * stepsize,0)).x,
-									zDir = texture(texSampler[axis],curPos+vec3(0,0,info.shadingStep * stepsize)).x,
-									zDirr = texture(texSampler[axis],curPos-vec3(0,0,info.shadingStep * stepsize)).x;
+								float xDir = texture(texSampler[axis],cubePosToSamplePos(curPos+vec3(info.shadingStep * stepsize,0,0))).x, 
+									xDirr = texture(texSampler[axis], cubePosToSamplePos(curPos-vec3(info.shadingStep * stepsize,0,0))).x, 
+									yDir = texture(texSampler[axis],  cubePosToSamplePos(curPos+vec3(0,info.shadingStep * stepsize,0))).x,
+									yDirr = texture(texSampler[axis], cubePosToSamplePos(curPos-vec3(0,info.shadingStep * stepsize,0))).x,
+									zDir = texture(texSampler[axis],  cubePosToSamplePos(curPos+vec3(0,0,info.shadingStep * stepsize))).x,
+									zDirr = texture(texSampler[axis], cubePosToSamplePos(curPos-vec3(0,0,info.shadingStep * stepsize))).x;
 
 
 //								float xDir = texture(texSampler[axis],startPoint+vec3(info.shadingStep * stepsize,0,0)).x, 

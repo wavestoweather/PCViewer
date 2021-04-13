@@ -20,6 +20,8 @@ SettingsManager::~SettingsManager()
 
 bool SettingsManager::addSetting(Setting s, bool autostore)
 {
+	if (s.id.empty() || s.type.empty()) return false;
+
 	void* data = new char[s.byteLength];
 	memcpy(data, s.data, s.byteLength);
 
@@ -64,6 +66,7 @@ bool SettingsManager::deleteSetting(std::string id)
 
 SettingsManager::Setting SettingsManager::getSetting(std::string id)
 {
+	if (settings.find(id) == settings.end()) return { "settingnotfound" };
 	return settings[id];
 }
 

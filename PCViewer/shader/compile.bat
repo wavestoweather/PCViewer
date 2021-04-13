@@ -14,6 +14,7 @@ E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o densFrag.spv dens.frag
 
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o 3dVert.spv 3d.vert
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o 3dFrag.spv 3d.frag
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o 3dComp.spv 3d.comp
 
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o nodeVert.spv nodeViewer.vert
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o nodeGeom.spv node.geom
