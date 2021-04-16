@@ -26,7 +26,7 @@ the backside of the cube are raymarched.
 
 class View3d {
 public:
-	View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool);
+	View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t histogramBinAmt = 256);
 	~View3d();
 
 	void resize(uint32_t width, uint32_t height);
@@ -44,6 +44,8 @@ public:
 	float fastFlyMultiplier;
 	float rotationSpeed;
 	float stepSize;
+
+	std::vector<int> 	histogramBins;
 private:
 	struct UniformBuffer {
 		glm::vec3 camPos;	//cameraPosition in model space
@@ -58,20 +60,26 @@ private:
 	struct ComputeUBO {
 		uint32_t posIndices[3];
 		uint32_t linearAxes;
+
 		uint32_t densityAttribute;
 		uint32_t amtOfIndices;
 		uint32_t amtOfAttributes;
 		float xMin;
+
 		float xMax;
 		float yMin;
 		float yMax;
 		float zMin;
+
 		float zMax;
 		uint32_t dimX;
 		uint32_t dimY;
 		uint32_t dimZ;
+
 		float minValue;
 		float maxValue;
+		int histAmt;
+		int padding;
 	};
 
 	//constants
@@ -140,6 +148,11 @@ private:
 	glm::vec3 camPos;		//camera position
 	glm::vec2 camRot;
 	glm::vec3 lightDir;
+
+	//histogramm variables
+	VkBuffer			histogramBuffer;
+	uint32_t			histogramBufferOffset;
+	uint32_t			histogramBinsAmt;
 
 	//methods to instatiate vulkan resources
 	void createPrepareImageCommandBuffer();

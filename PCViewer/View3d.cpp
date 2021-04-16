@@ -4,7 +4,7 @@ char View3d::vertPath[]= "shader/3dVert.spv";
 char View3d::fragPath[]= "shader/3dFrag.spv";
 char View3d::computePath[]= "shader/3dComp.spv";
 
-View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool)
+View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t histogramBinAmt)
 {
 	imageHeight = 0;
 	imageWidth = 0;
@@ -43,6 +43,7 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	dimensionCorrectionImages[1] = VK_NULL_HANDLE;
 	dimensionCorrectionImages[2] = VK_NULL_HANDLE;
 	dimensionCorrectionViews = std::vector<VkImageView>(3, VK_NULL_HANDLE);
+	histogramBuffer = VK_NULL_HANDLE;
 
 
 	camPos = glm::vec3(1, 0, 1);
@@ -53,6 +54,8 @@ View3d::View3d(uint32_t height, uint32_t width, VkDevice device, VkPhysicalDevic
 	lightDir = glm::vec3(-1, -1, -1);
 	lightDir = glm::vec3(-1, -1, -1);
 	stepSize = .0005f;
+
+	this->histogramBinsAmt = histogramBinAmt;
 
 	//setting up graphic resources
 	
@@ -133,6 +136,9 @@ View3d::~View3d()
 		vkDestroyImageView(device, dimensionCorrectionViews[0], nullptr);
 		vkDestroyImageView(device, dimensionCorrectionViews[1], nullptr);
 		vkDestroyImageView(device, dimensionCorrectionViews[2], nullptr);
+	}
+	if(histogramBuffer){
+		vkDestroyBuffer(device, histogramBuffer, nullptr);
 	}
 }
 
@@ -260,6 +266,7 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	ubo.dimZ = zDim.size();
 	ubo.minValue = minMax[0];
 	ubo.maxValue = minMax[1];
+	ubo.histAmt = histogramBinsAmt;
 	uint32_t uboByteSize = sizeof(ComputeUBO);
 	VkBuffer buffer;
 	VkDeviceMemory bufferMemory;
@@ -311,9 +318,11 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	VkUtil::updateDescriptorSet(device, data, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
 	VkUtil::updateStorageImageDescriptorSet(device, image3dView, VK_IMAGE_LAYOUT_GENERAL, 3, commandSet);
 	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
+	VkUtil::updateDescriptorSet(device, histogramBuffer, histogramBinsAmt * sizeof(int), 5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
 
 	VkCommandBuffer commands;
 	VkUtil::createCommandBuffer(device, commandPool, &commands);
+	vkCmdFillBuffer(commands, histogramBuffer, 0, histogramBinsAmt * sizeof(int), 0);
 	if (imageUpdated) {
 		VkUtil::transitionImageLayout(commands, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	}
@@ -329,8 +338,8 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	VkUtil::commitCommandBuffer(queue, commands);
 	check_vk_result(vkQueueWaitIdle(queue));
 
-	//std::vector<uint8_t> dow(xDim.size() * yDim.size() * zDim.size());
-	//VkUtil::downloadImageData(device, physicalDevice, commandPool, queue, image3d, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, xDim.size(), yDim.size(), zDim.size(), dow.data(), dow.size());
+	histogramBins.resize(histogramBinsAmt);
+	VkUtil::downloadData(device, constantMemory, histogramBufferOffset, histogramBinsAmt * sizeof(int), histogramBins.data());
 
 	vkDestroyBuffer(device, buffer, nullptr);
 	vkDestroyBuffer(device, dimValsBuffer, nullptr);
@@ -483,6 +492,7 @@ void View3d::createBuffer()
 	VkUtil::createBuffer(device, 8 * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &vertexBuffer);
 	VkUtil::createBuffer(device, 12 * 3 * sizeof(uint16_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &indexBuffer);
 	VkUtil::createBuffer(device, sizeof(UniformBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &uniformBuffer);
+	VkUtil::createBuffer(device, histogramBinsAmt * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &histogramBuffer);
 
 	VkResult err;
 
@@ -504,6 +514,11 @@ void View3d::createBuffer()
 	memAlloc.allocationSize += memReq.size;
 	memoryTypeBits |= memReq.memoryTypeBits;
 
+	histogramBufferOffset = memAlloc.allocationSize;
+	vkGetBufferMemoryRequirements(device, histogramBuffer, &memReq);
+	memAlloc.allocationSize += memReq.size;
+	memoryTypeBits |= memReq.memoryTypeBits;
+
 	memAlloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	err = vkAllocateMemory(device, &memAlloc, nullptr, &constantMemory);
 	check_vk_result(err);
@@ -511,6 +526,7 @@ void View3d::createBuffer()
 	vkBindBufferMemory(device, vertexBuffer, constantMemory, 0);
 	vkBindBufferMemory(device, indexBuffer, constantMemory, indexBufferOffset);
 	vkBindBufferMemory(device, uniformBuffer, constantMemory, uniformBufferOffset);
+	vkBindBufferMemory(device, histogramBuffer, constantMemory, histogramBufferOffset);
 
 	//creating the data for the buffers
 	glm::vec3 vB[8];
@@ -675,6 +691,9 @@ void View3d::createPipeline()
 
 	binding.binding = 4;								//dimension values
 	binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	bindings.push_back(binding);
+
+	binding.binding = 5;								//histogram values
 	bindings.push_back(binding);
 
 	VkUtil::createDescriptorSetLayout(device, bindings, &densityFillDescriptorLayout);

@@ -1,6 +1,7 @@
 CMakeLists.txt.user
 PCViewer/glm/.Rhistory
 .vs/
+.vscode/
 out/
 build/
 nbproject/

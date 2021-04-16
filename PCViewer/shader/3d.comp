@@ -9,20 +9,26 @@ layout( binding = 0) uniform Informations{
 	uint yInd;
 	uint zInd;
 	uint linearDims;
+
 	uint densityAttribute;
 	uint amtOfIndices;
 	uint amtOfAttributes;
 	float xMin;
+
 	float xMax;
 	float yMin;
 	float yMax;
 	float zMin;
+
 	float zMax;
 	uint dimX;
 	uint dimY;
 	uint dimZ;
+
 	float minValue;
 	float maxValue;
+	int binsAmt;
+	int pad;
 } info;
 
 layout(std430, binding = 1) buffer IndexBuffer{
@@ -39,6 +45,10 @@ layout(std430, binding = 4) buffer dimVals{
 	vec4 dimSizes;
 	float values[];
 }dims;
+
+layout(std430, binding = 5) buffer B{
+	int bins[];
+}hist;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
@@ -70,6 +80,10 @@ void main(){
 	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
 	uint i = ind[gl_GlobalInvocationID.x];
 
+	float da = data[i*info.amtOfAttributes + info.densityAttribute];
+	da = (da - info.minValue) / (info.maxValue - info.minValue);
+	if(da < 0 || da > 1) return;
+
 	ivec3 pos;
 	if(bool(info.linearDims & DIMXBIT))
 		pos.x = int(((data[i*info.amtOfAttributes + info.xInd] - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX - 1) + .5f);
@@ -85,7 +99,7 @@ void main(){
 		pos.z = getVectorIndex(2, data[i*info.amtOfAttributes + info.zInd]);
 	if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
 
-	float da = data[i*info.amtOfAttributes + info.densityAttribute];
-	da = (da - info.minValue) / (info.maxValue - info.minValue);
 	imageStore(densityImage, pos, vec4(da));
+	int bin = int(da * (info.binsAmt - 1) + .5f);
+	atomicAdd(hist.bins[bin], 1);
 }

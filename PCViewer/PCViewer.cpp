@@ -127,6 +127,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
 //#define _DEBUG
+//#define IMGUI_VULKAN_DEBUG_REPORT
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -1013,6 +1014,11 @@ static float determineViolinScaleLocalDiv(std::vector<float>& maxCount, bool **a
 	return div;
 }
 
+static float intArrayGetter(void* data, int idx)
+{
+    int * arr = (int*)data;
+    return float(arr[idx]);
+}
 
 static void updateDrawListIndexBuffer(DrawList& dl);
 static bool updateActiveIndices(DrawList& dl);
@@ -10676,9 +10682,12 @@ int main(int, char**)
 				}
 			}
 			ImGui::Text("Transfer function (Click to edit):");
-			if (ImGui::ImageButton((ImTextureID)transferFunctionEditor->getTransferDescriptorSet(), { 300, 25 })) {
+			if (ImGui::ImageButton((ImTextureID)transferFunctionEditor->getTransferDescriptorSet(), { 300, 25 },{0,0},{1,1},0)) {
 				transferFunctionEditor->setNextEditorPos(ImGui::GetMousePos(), { 0, 1 });
 				transferFunctionEditor->show();
+			}
+			if(view3d->histogramBins.size()){
+				ImGui::PlotHistogram("Denisty Histogram", &intArrayGetter, view3d->histogramBins.data(), view3d->histogramBins.size(), 0, 0, FLT_MAX, FLT_MAX, ImVec2(300,50));
 			}
 			ImGui::End();
 		}
