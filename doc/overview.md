@@ -13,7 +13,7 @@ The main plot in the PCViewer is a standard Parallel coordinates plot (PCP) whic
 Image missing currently
 
 
-To further amplify the information in the parallel coordinates plot for large datasets as well as for a high amount of parallel rendered datasets, at the axes a color coded histogram can be enabled. For detailed information see the [Density Histogram documentation](pcp.md/histogram).
+To further amplify the information in the parallel coordinates plot for large datasets as well as for a high amount of parallel rendered datasets, at the axes a color coded histogram can be enabled. For detailed information see the [Density Histogram documentation](pcp.md#histogram).
 
 Image for density histogram
 
@@ -51,7 +51,7 @@ Image of drawlist major violin plot.
 
 ---
 
-## Member Comparison
+## Member/Dataset Comparison
 A key in the design of the PCViewer was the ability to effectively compare different datasets. Here the comparison value for the different visualisations shall be shown.
 
 ---
