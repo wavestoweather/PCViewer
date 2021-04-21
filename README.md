@@ -1,3 +1,7 @@
+
+# PCViewer
+### A detailed user documentation can be found in the [documentation section](/doc/overview.md).
+
 Associated publication
 https://arxiv.org/abs/2007.15446
 
@@ -45,7 +49,7 @@ For Windows using vcpkg do
 ```
 ### Small problems
 
-It might be necessary to set the variable "Eigen2_DIR" to the directory of the eigen library in the folder (currently eigen-3.3.7). Further, a link to the Vulkan-SDK has to be set. 
+It might be necessary to set the variable "Eigen2_DIR" to the directory of the eigen library in the folder (currently eigen-3.3.7). Further, a link to the Vulkan-SDK has to be set.
 
 Windows:
 For some cmake versions, the cmakes clash. The branch master_ak solves this clash by removing an uninstall line from the cmake of the eigen library. Not the best solution, but then it also works for those cmake versions...
