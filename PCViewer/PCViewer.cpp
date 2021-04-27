@@ -4678,12 +4678,7 @@ static bool openNetCDF(const char* filename){
     
     ds.reducedDataSetSize = ds.data.size();
 
-	createPcPlotVertexBuffer(pcAttributes, ds.data);
-
-	ds.buffer = g_PcPlotVertexBuffers.back();
-
 	TemplateList tl = {};
-	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
 	tl.name = "Default Drawlist";
 	for (int i = 0; i < ds.data.size(); i++) {
 		tl.indices.push_back(i);
@@ -4716,8 +4711,23 @@ static bool openNetCDF(const char* filename){
 			pcAttributes[j].min -= .1;
 			pcAttributes[j].max += .1;
 		}
+		else if (std::isinf(pcAttributes[j].min) && std::isinf(pcAttributes[j].max)) {
+			pcAttributes[j].min = -.1;
+			pcAttributes[j].max = .1;
+		}
+	}
+	for (int i : tl.indices) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			//replace the fill values with better suited ones.
+			if (has_fill_value[attr_to_var[j]] && ds.data[i][j] == fill_values[attr_to_var[j]] && pcAttributes[j].categories.empty())
+				ds.data[i][j] = 2 * pcAttributes[j].max - pcAttributes[j].min;
+		}
 	}
 
+	createPcPlotVertexBuffer(pcAttributes, ds.data);
+
+	ds.buffer = g_PcPlotVertexBuffers.back();
+	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
 	ds.drawLists.push_back(tl);
 
 	g_PcPlotDataSets.push_back(ds);
