@@ -4346,6 +4346,7 @@ static bool openNetCDF(const char* filename){
     std::vector<Attribute> tmp;
     std::vector<std::string> attributes;
     std::vector<std::vector<int>> attribute_dims;
+    std::vector<std::vector<int>> variable_dims;
 	std::vector<int> attr_to_var;
     
     char vName[NC_MAX_NAME];
@@ -4355,22 +4356,23 @@ static bool openNetCDF(const char* filename){
             nc_close(fileId);
             return false;
         }
+		int ndims;
+		if ((retval = nc_inq_varndims(fileId, i, &ndims))) {
+			std::cout << "Error at getting variable dimensions" << std::endl;
+			nc_close(fileId);
+			return false;
+		}
+		variable_dims.push_back(std::vector<int>(ndims));
+		if ((retval = nc_inq_vardimid(fileId, i, variable_dims.back().data()))) {
+			std::cout << "Error at getting variable dimension array" << std::endl;
+			nc_close(fileId);
+			return false;
+		}
 		if (queryAttributes[i].active) {
 			tmp.push_back({ vName, vName,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
 			attributes.push_back(tmp.back().name);
 			attr_to_var.push_back(i);
-			int ndims;
-			if ((retval = nc_inq_varndims(fileId, i, &ndims))) {
-				std::cout << "Error at getting variable dimensions" << std::endl;
-				nc_close(fileId);
-				return false;
-			}
-			attribute_dims.push_back(std::vector<int>(ndims));
-			if ((retval = nc_inq_vardimid(fileId, i, attribute_dims.back().data()))) {
-				std::cout << "Error at getting variable dimension array" << std::endl;
-				nc_close(fileId);
-				return false;
-			}
+			attribute_dims.push_back(variable_dims[i]);
 		}
         //std::cout << vName << "(";
         //for(int dim: attribute_dims.back()){
@@ -4410,6 +4412,8 @@ static bool openNetCDF(const char* filename){
     }
 
 	std::vector<std::vector<float>> data(nvars);
+	std::vector<float> fill_values(nvars);
+	std::vector<float> has_fill_value(nvars);
 	std::vector<std::vector<std::string>> categories(nvars);
 	//getting all dimensions to distinguish the size for the data arrays
 	uint32_t data_size = 0;
@@ -4431,17 +4435,28 @@ static bool openNetCDF(const char* filename){
 	}
 	//std::cout<< "netCDF data size: " << data_size << std::endl;
 	for (int i = 0; i < data.size(); ++i) {
-		data[i].resize(data_size);
+		//only resize if attribute is active, plus the size is only allocated for the needed size
+		if (queryAttributes[i].active) {
+			int attributeSize = 1;
+			for (int dim : variable_dims[i]) {
+				if (!dimension_is_stringsize[dim])
+					attributeSize *= queryAttributes[queryAttributes.size() - ndims + dim].dimensionSize;
+			}
+			data[i].resize(attributeSize);
+		}
 	}
 
 	//reading out all data from the netCDF file(including conversion)
 	for (int i = 0; i < nvars; ++i) {
+		if (!queryAttributes[i].active) continue;
 		nc_type type;
 		if ((retval = nc_inq_vartype(fileId, i, &type))){
 			std::cout << "Error at reading data type" << std::endl;
 			nc_close(fileId);
 			return false;
 		}
+		int hasFill = 0; // if 1 no fill
+		float fillValue = 0;
 		switch(type){
 			case NC_FLOAT:
 			if ((retval = nc_get_var_float(fileId, i, data[i].data()))) {
@@ -4449,38 +4464,64 @@ static bool openNetCDF(const char* filename){
 				nc_close(fileId);
 				return false;
 			}
+			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &fillValue))) {
+				std::cout << "Error at reading fill value" << std::endl;
+				nc_close(fileId);
+				return false;
+			}
 			break;
 			case NC_DOUBLE:
 			{
-			auto d = std::vector<double>(data_size);
+			auto d = std::vector<double>(data[i].size());
 			if ((retval = nc_get_var_double(fileId, i, d.data()))) {
 				std::cout << "Error at reading data" << std::endl;
 				nc_close(fileId);
 				return false;
 			}
 			data[i] = std::vector<float>(d.begin(), d.end());
+			double f = 0;
+			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &f))) {
+				std::cout << "Error at reading fill value" << std::endl;
+				nc_close(fileId);
+				return false;
+			}
+			fillValue = f;
 			break;
 			}
 			case NC_INT:
 			{
-			auto d = std::vector<int>(data_size);
+			auto d = std::vector<int>(data[i].size());
 			if ((retval = nc_get_var_int(fileId, i, d.data()))) {
 				std::cout << "Error at reading data" << std::endl;
 				nc_close(fileId);
 				return false;
 			}
 			data[i] = std::vector<float>(d.begin(), d.end());
+			int f = 0;
+			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &f))) {
+				std::cout << "Error at reading fill value" << std::endl;
+				nc_close(fileId);
+				return false;
+			}
+			fillValue = f;
 			break;
 			}
 			case NC_UINT:
 			{
-			auto d = std::vector<uint32_t>(data_size);
+			auto d = std::vector<uint32_t>(data[i].size());
 			if ((retval = nc_get_var_uint(fileId, i, d.data()))) {
 				std::cout << "Error at reading data" << std::endl;
 				nc_close(fileId);
 				return false;
 			}
 			data[i] = std::vector<float>(d.begin(), d.end());
+			uint32_t f = 0;
+			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &f))) {
+				std::cout << "Error at reading fill value" << std::endl;
+				nc_close(fileId);
+				return false;
+			}
+			fillValue = f;
 			break;
 			}
 			case NC_CHAR:
@@ -4513,12 +4554,15 @@ static bool openNetCDF(const char* filename){
 					return false;
 				}
 				for(int offset = 0; offset < dataSize; offset += wordlen){
-					categories[i].push_back(std::string(&names[offset]));
+					categories[i].push_back(std::string(&names[offset], &names[offset] + wordlen));
 				}
 			}
 			break;
 		}
-		
+		if (hasFill != 1) {
+			fill_values[i] = fillValue;
+			has_fill_value[i] = true;
+		}
 	}
     
     //everything needed was red, so colosing the file
@@ -4652,6 +4696,9 @@ static bool openNetCDF(const char* filename){
 	}
 	for (int i : tl.indices) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
+			//ignoring fill values
+			if (has_fill_value[attr_to_var[j]] && ds.data[i][j] == fill_values[attr_to_var[j]] && pcAttributes[j].categories.empty())
+				continue;
 			if (ds.data[i][j] < tl.minMax[j].first)
 				tl.minMax[j].first = ds.data[i][j];
 			if (ds.data[i][j] > tl.minMax[j].second)

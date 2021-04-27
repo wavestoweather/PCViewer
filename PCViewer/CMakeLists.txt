@@ -48,6 +48,10 @@ file(GLOB cimg_SRC
 
 add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC})
 
+if(WIN32)
+    set(netCDF_LIBRARIES netCDF::netcdf)
+endif()
+
 target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES})# Eigen3::Eigen
 
 message (" Copying shaders")
