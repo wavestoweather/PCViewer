@@ -2958,7 +2958,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					indices_count = batchSizeLeft;
 					batchSizeLeft = 0;
 				}
-				uint32_t amtOfI = indices_count * (order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
+				uint32_t amtOfI = indices_count * (order.size() + 3);
 				uint32_t iOffset = curIndex * (order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
 				vkCmdDrawIndexed(line_batch_commands.back(), amtOfI, 1, iOffset, 0, 0);
 
@@ -3055,7 +3055,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
 
 			//ready to draw with draw indexed
-			uint32_t amtOfI = drawList->indices.size() * (order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
+			uint32_t amtOfI = drawList->indices.size() * (order.size() + 3);
 			vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfI, 1, 0, 0, 0);
 
 			//draw the Median Line
