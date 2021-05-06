@@ -7887,6 +7887,8 @@ int main(int, char**)
 		//Parallel coordinates plot ----------------------------------------------------------------------------------------
 		ImVec2 picPos;
 		bool picHovered;
+		bool histogramHovered = false;
+		bool anyHover = false;
 		size_t amtOfLabels = 0;
 		if (ImGui::Begin("Parallel coordinates", NULL)) {
 			float windowW = ImGui::GetWindowWidth();
@@ -9151,7 +9153,6 @@ int main(int, char**)
 					c++;
 				}
 
-				bool anyHover = false;
 				static bool newBrush = false;
 				bool brushDelete = false;
 
@@ -9364,6 +9365,26 @@ int main(int, char**)
 					}
 				}
 				ImGui::DragInt("LiveBrushThreshold", &pcSettings.liveBrushThreshold, 1000, 0, 10000000);
+
+				ImGui::EndPopup();
+			}
+
+			//plot right click menu
+			for (int i = 0; i < amtOfLabels; ++i) {
+				auto mousePos = ImGui::GetMousePos();
+				float x = gap * i / (amtOfLabels - 1) + picPos.x - pcSettings.histogrammWidth / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
+				histogramHovered |= mousePos.x > x && mousePos.x < x + pcSettings.histogrammWidth && mousePos.y > picPos.y && mousePos.y < picPos.y + picSize.y;
+				histogramHovered &= pcSettings.drawHistogramm;
+			}
+			if (picHovered && !anyHover && !histogramHovered && ImGui::GetIO().MouseClicked[1]) {
+				ImGui::OpenPopup("PCPMenu");
+			}
+			if (ImGui::BeginPopup("PCPMenu")) {
+				if (ImGui::MenuItem("DrawHistogram", "", &pcSettings.drawHistogramm))
+					pcPlotRender = true;
+				if (ImGui::MenuItem("Show Pc Plot Density", "", &pcSettings.pcPlotDensity))
+					pcPlotRender = true;
+
 
 				ImGui::EndPopup();
 			}
