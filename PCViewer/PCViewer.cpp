@@ -8038,6 +8038,8 @@ int main(int, char**)
 			}
 
 			ImVec2 picSize(ImGui::GetWindowWidth() - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
+			bool brushRightClickMenu = false;
+			bool isBrushRightClickMenuOpen = ImGui::IsPopupOpen("BrushMenu");
 			if (pcSettings.toggleGlobalBrushes) {
 				//drawing checkboxes for activating brush templates
 				ImGui::Separator();
@@ -8921,7 +8923,6 @@ int main(int, char**)
 				}
 
 				//drawing the global brush
-				//global brushes currently only support change of brush but no adding of new brushes or deletion of brushes
 				if (selectedGlobalBrush != -1) {
 					if (globalBrushes[selectedGlobalBrush].fractureDepth) {
 						GlobalBrush& globalBrush = globalBrushes[selectedGlobalBrush];
@@ -8938,6 +8939,9 @@ int main(int, char**)
 						}
 					}
 					else {
+						bool anyHover = false;
+						static bool newBrush = false;
+						std::set<int> brushDelete;
 						for (auto& brush : globalBrushes[selectedGlobalBrush].brushes) {
 							if (!pcAttributeEnabled[brush.first])
 								continue;
@@ -8946,7 +8950,6 @@ int main(int, char**)
 							float x = gap * placeOfInd(brush.first) / (amtOfLabels - 1) + picPos.x - BRUSHWIDTH / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
 							float width = BRUSHWIDTH;
 
-							int del = -1;
 							int ind = 0;
 							bool brushHover = false;
 							for (auto& br : brush.second) {
@@ -8957,7 +8960,7 @@ int main(int, char**)
 								//edgeHover = 1 -> Top edge is hovered
 								//edgeHover = 2 -> Bot edge is hovered
 								int edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST && mousePos.y < y + EDGEHOVERDIST ? 1 : 0;
-								edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
+								edgeHover |= mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
 								int r = (brushDragIds.find(br.first) != brushDragIds.end()) ? 200 : 30;
                                 // Determine color for brush box highlight etc.
                                 ImU32 brushBoxColor = IM_COL32(r, 0, 200, 255);
@@ -8966,7 +8969,7 @@ int main(int, char**)
                                 ImGui::GetWindowDrawList()->AddRect(ImVec2(x, y), ImVec2(x + width, y + height), brushBoxColor, 1, ImDrawCornerFlags_All, 5);
 								brushHover |= hover || edgeHover;
 								//set mouse cursor
-								if (edgeHover || brushDragIds.size()) {
+								if (edgeHover) {
 									ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 								}
 								if (hover) {
@@ -8974,18 +8977,28 @@ int main(int, char**)
 								}
 								//activate dragging of edge
 								if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+									if (!ImGui::GetIO().KeyCtrl) {
+										brushDragIds.clear();
+									}
 									brushDragIds.insert(br.first);
 									brushDragMode = edgeHover;
 								}
 								if (hover && ImGui::GetIO().MouseClicked[0]) {
+									if (!ImGui::GetIO().KeyCtrl) {
+										brushDragIds.clear();
+									}
 									brushDragIds.insert(br.first);
 									brushDragMode = 0;
 								}
 								//drag edge
-								if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseDown[0]) {
+								if (brushDragIds.find(br.first) != brushDragIds.end() && (ImGui::GetIO().MouseDown[0] || ImGui::IsKeyPressed(82) || ImGui::IsKeyPressed(81))) {
 									globalBrushes[selectedGlobalBrush].edited = true;
-									if (brushDragMode == 0) {
+									if (brushDragMode == 0 || ImGui::IsKeyPressed(82) || ImGui::IsKeyPressed(81)) {
 										float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[brush.first].max - pcAttributes[brush.first].min);
+										if (ImGui::IsKeyPressed(82))
+											delta = (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * -.01;
+										if( ImGui::IsKeyPressed(81))
+											delta = (pcAttributes[brush.first].max - pcAttributes[brush.first].min) * .01;
 										br.second.second -= delta;
 										br.second.first -= delta;
 									}
@@ -9009,16 +9022,15 @@ int main(int, char**)
 										updateIsoSurface(globalBrushes[selectedGlobalBrush]);
 									}
 								}
-								//release edge
-								if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
-									brushDragIds.clear();
-									pcPlotRender = updateAllActiveIndices();
-									updateIsoSurface(globalBrushes[selectedGlobalBrush]);
-								}
 
 								//check for deletion of brush
 								if (ImGui::GetIO().MouseClicked[1] && hover) {
-									del = ind;
+									brushRightClickMenu = true;
+									//brushDragIds.clear();
+								}
+
+								if (ImGui::IsKeyPressed(76, false) && brushDragIds.size()) {
+									brushDelete = brushDragIds;
 									brushDragIds.clear();
 								}
 
@@ -9043,32 +9055,24 @@ int main(int, char**)
 									ImGui::SetNextWindowPos({ x + width / 2,y }, 0, { xAnchor,1 });
 									ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
 									ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
-									ImGui::Begin("Tooltip brush max", NULL, flags);
+									ImGui::Begin(("Tooltip brush max##" + std::to_string(br.first)).c_str(), NULL, flags);
 									ImGui::Text("%f", br.second.second);
 									ImGui::End();
 
 									ImGui::SetNextWindowPos({ x + width / 2, y + height }, 0, { xAnchor,0 });
 									ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
-									ImGui::Begin("Tooltip brush min", NULL, flags);
+									ImGui::Begin(("Tooltip brush min##" + std::to_string(br.first)).c_str(), NULL, flags);
 									ImGui::Text("%f", br.second.first);
 									ImGui::End();
 								}
 
 								ind++;
 							}
-							//deleting a brush
-							if (del != -1) {
-								globalBrushes[selectedGlobalBrush].edited = true;
-								brush.second[del] = brush.second[brush.second.size() - 1];
-								brush.second.pop_back();
-								del = -1;
-								pcPlotRender = updateAllActiveIndices();
-								updateIsoSurface(globalBrushes[selectedGlobalBrush]);
-							}
 
 							//create a new brush
 							bool axisHover = mousePos.x > x&& mousePos.x < x + BRUSHWIDTH && mousePos.y > picPos.y&& mousePos.y < picPos.y + picSize.y;
-							if (!brushHover && axisHover && brushDragIds.size() == 0) {
+							anyHover |= brushHover;
+							if (!brushHover && axisHover && brushDragIds.empty()) {
 								ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
 								if (ImGui::GetIO().MouseClicked[0]) {
@@ -9081,8 +9085,41 @@ int main(int, char**)
 									brushDragMode = 1;
 									brush.second.push_back(temp);
 								}
+								newBrush = true;
 							}
+
 						}
+						//deleting a brush
+						if (brushDelete.size()) {
+							globalBrushes[selectedGlobalBrush].edited = true;
+							for (auto& gb : globalBrushes[selectedGlobalBrush].brushes) {
+								for (int br = 0; br < gb.second.size(); ++br) {
+									if (brushDelete.find(gb.second[br].first) != brushDelete.end()) {
+										gb.second[br] = gb.second[gb.second.size() - 1];
+										gb.second.pop_back();
+										--br;
+									}
+								}
+							}
+							brushDelete.clear();
+							pcPlotRender = updateAllActiveIndices();
+							updateIsoSurface(globalBrushes[selectedGlobalBrush]);
+						}
+
+						//release edge
+						//if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
+						if (!anyHover && brushDragIds.size() && (ImGui::GetIO().MouseReleased[0] || (!newBrush && ImGui::GetIO().MouseClicked[0])) && !ImGui::GetIO().KeyCtrl) {
+							newBrush = false;
+							brushDragIds.clear();
+							pcPlotRender = updateAllActiveIndices();
+							updateIsoSurface(globalBrushes[selectedGlobalBrush]);
+						}
+						if (anyHover && (ImGui::GetIO().MouseReleased[0]) || (brushDragIds.size() && ( ImGui::IsKeyPressed(82) || ImGui::IsKeyPressed(81)))) {
+							pcPlotRender = updateAllActiveIndices();
+							updateIsoSurface(globalBrushes[selectedGlobalBrush]);
+						}
+						//if (edgeHover && !ImGui::GetIO().MouseDown[0])
+						//	edgeHover = 0;
 					}
 				}
 
@@ -9114,6 +9151,10 @@ int main(int, char**)
 					c++;
 				}
 
+				bool anyHover = false;
+				static bool newBrush = false;
+				bool brushDelete = false;
+
 				for (int i = 0; i < pcAttributes.size(); i++) {
 					if (!pcAttributeEnabled[i])
 						continue;
@@ -9140,8 +9181,10 @@ int main(int, char**)
 						edgeHover = mousePos.x > x&& mousePos.x<x + width && mousePos.y>y - EDGEHOVERDIST + height && mousePos.y < y + EDGEHOVERDIST + height ? 2 : edgeHover;
 						brushHover |= hover || edgeHover;
 
+						anyHover |= brushHover;
+
 						//set mouse cursor
-						if (edgeHover || brushDragIds.size()) {
+						if (edgeHover) {
 							ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 						}
 						if (hover) {
@@ -9149,17 +9192,27 @@ int main(int, char**)
 						}
 						//activate dragging of edge
 						if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+							if (!ImGui::GetIO().KeyCtrl) {
+								brushDragIds.clear();
+							}
 							brushDragIds.insert(b.id);
 							brushDragMode = edgeHover;
 						}
 						if (hover && ImGui::GetIO().MouseClicked[0]) {
+							if (!ImGui::GetIO().KeyCtrl) {
+								brushDragIds.clear();
+							}
 							brushDragIds.insert(b.id);
 							brushDragMode = 0;
 						}
 						//drag edge
-						if (brushDragIds.find(b.id) != brushDragIds.end() && ImGui::GetIO().MouseDown[0]) {
-							if (brushDragMode == 0) {
+						if (brushDragIds.find(b.id) != brushDragIds.end() && (ImGui::GetIO().MouseDown[0] || ImGui::IsKeyPressed(82) || ImGui::IsKeyPressed(81))) {
+							if (brushDragMode == 0 || ImGui::IsKeyPressed(82) || ImGui::IsKeyPressed(81)) {
 								float delta = ImGui::GetIO().MouseDelta.y / picSize.y * (pcAttributes[i].max - pcAttributes[i].min);
+								if (ImGui::IsKeyPressed(82))
+									delta = (pcAttributes[i].max - pcAttributes[i].min) * -.01;
+								if (ImGui::IsKeyPressed(81))
+									delta = (pcAttributes[i].max - pcAttributes[i].min) * .01;
 								b.minMax.second -= delta;
 								b.minMax.first -= delta;
 							}
@@ -9182,16 +9235,14 @@ int main(int, char**)
 								pcPlotRender = updateActiveIndices(*dl);
 							}
 						}
-						//release edge
-						if (brushDragIds.find(b.id) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
-							brushDragIds.clear();
-							pcPlotRender = updateActiveIndices(*dl);
+
+						//check right click
+						if (ImGui::GetIO().MouseClicked[1] && hover) {
+							brushRightClickMenu = true;
 						}
 
-						//check for deletion of brush
-						if (ImGui::GetIO().MouseClicked[1] && hover) {
-							del = ind;
-							brushDragIds.clear();
+						if (ImGui::IsKeyPressed(76, false) && brushDragIds.size()) {
+							brushDelete = true;
 						}
 
 						//draw tooltip on hover for min and max value
@@ -9203,26 +9254,18 @@ int main(int, char**)
 							ImGui::SetNextWindowPos({ x + width / 2,y }, 0, { xAnchor,1 });
 							ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
 							ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
-							ImGui::Begin("Tooltip brush max", NULL, flags);
+							ImGui::Begin(("Tooltip brush max##" + std::to_string(b.id)).c_str(), NULL, flags);
 							ImGui::Text("%f", b.minMax.second);
 							ImGui::End();
 
 							ImGui::SetNextWindowPos({ x + width / 2, y + height }, 0, { xAnchor,0 });
 							ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
-							ImGui::Begin("Tooltip brush min", NULL, flags);
+							ImGui::Begin(("Tooltip brush min##" + std::to_string(b.id)).c_str(), NULL, flags);
 							ImGui::Text("%f", b.minMax.first);
 							ImGui::End();
 						}
 
 						ind++;
-					}
-
-					//deleting a brush
-					if (del != -1) {
-						dl->brushes[i][del] = dl->brushes[i][dl->brushes[i].size() - 1];
-						dl->brushes[i].pop_back();
-						del = -1;
-						pcPlotRender = updateActiveIndices(*dl);
 					}
 
 					//create a new brush
@@ -9231,6 +9274,7 @@ int main(int, char**)
 						ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
 						if (ImGui::GetIO().MouseClicked[0]) {
+							newBrush = true;
 							Brush temp = {};
 							temp.id = currentBrushId++;
 							temp.minMax.first = ((mousePos.y - picPos.y) / picSize.y) * (pcAttributes[i].min - pcAttributes[i].max) + pcAttributes[i].max;
@@ -9241,8 +9285,89 @@ int main(int, char**)
 						}
 					}
 				}
+				//deleting a brush
+				if (brushDelete) {
+					for (auto& gb : dl->brushes) {
+						for (int br = 0; br < gb.size(); ++br) {
+							if (brushDragIds.find(gb[br].id) != brushDragIds.end()) {
+								gb[br] = gb[gb.size() - 1];
+								gb.pop_back();
+								--br;
+							}
+						}
+					}
+					brushDragIds.clear();
+					pcPlotRender = updateActiveIndices(*dl);
+				}
+				
+				//release edge
+				//if (brushDragIds.find(br.first) != brushDragIds.end() && ImGui::GetIO().MouseReleased[0] && !ImGui::GetIO().KeyCtrl) {
+				if (!anyHover && brushDragIds.size() && (ImGui::GetIO().MouseReleased[0] || (!newBrush && ImGui::GetIO().MouseClicked[0])) && !ImGui::GetIO().KeyCtrl) {
+					newBrush = false;
+					brushDragIds.clear();
+					pcPlotRender = updateActiveIndices(*dl);
+					updateIsoSurface(*dl);
+				}
+				if (anyHover && (ImGui::GetIO().MouseReleased[0]) || brushDragIds.size() && (ImGui::IsKeyPressed(82) || ImGui::IsKeyPressed(81)) && selectedGlobalBrush < 0) {
+					pcPlotRender = updateActiveIndices(*dl);
+					updateIsoSurface(*dl);
+				}
 			}
 
+			//brush right click menu
+			static std::set<int> brushIdsCopy;
+			if (brushRightClickMenu) {
+				ImGui::OpenPopup("BrushMenu");
+				brushIdsCopy = brushDragIds;
+			}
+			if (ImGui::BeginPopup("BrushMenu")) {
+				brushDragIds = brushIdsCopy;
+				ImGui::PushItemWidth(100);
+				if (ImGui::MenuItem("Delete", "", false, (bool)brushDragIds.size())) {
+					if (selectedGlobalBrush >= 0) {
+						globalBrushes[selectedGlobalBrush].edited = true;
+						for (auto& gb : globalBrushes[selectedGlobalBrush].brushes) {
+							for (int br = 0; br < gb.second.size(); ++br) {
+								if (brushDragIds.find(gb.second[br].first) != brushDragIds.end()) {
+									gb.second[br] = gb.second[gb.second.size() - 1];
+									gb.second.pop_back();
+									--br;
+								}
+							}
+						}
+						brushDragIds.clear();
+						pcPlotRender = updateAllActiveIndices();
+						updateIsoSurface(globalBrushes[selectedGlobalBrush]);
+					}
+					else {
+						DrawList* dl = 0;
+						uint32_t c = 0;
+						for (DrawList& d : g_PcPlotDrawLists) {
+							if (c == pcPlotSelectedDrawList[0]) {
+								dl = &d;
+								break;
+							}
+							c++;
+						}
+						for (auto& gb : dl->brushes) {
+							for (int br = 0; br < gb.size(); ++br) {
+								if (brushDragIds.find(gb[br].id) != brushDragIds.end()) {
+									gb[br] = gb[gb.size() - 1];
+									gb.pop_back();
+									--br;
+								}
+							}
+						}
+						brushDragIds.clear();
+						pcPlotRender = updateActiveIndices(*dl);
+						updateIsoSurface(*dl);
+					}
+				}
+				ImGui::DragInt("LiveBrushThreshold", &pcSettings.liveBrushThreshold, 1000, 0, 10000000);
+
+				ImGui::EndPopup();
+			}
+			
 			//handling priority selection
 			if (prioritySelectAttribute) {
 				pcPlotSelectedDrawList.clear();
