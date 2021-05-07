@@ -5377,7 +5377,7 @@ static void updateIsoSurface(DrawList& dl) {
 static bool updateActiveIndices(DrawList& dl) {
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
-		if (ImGui::GetIO().MouseDown[0]) return false;
+		if (ImGui::GetIO().MouseDown[0] && !ImGui::IsMouseDoubleClicked(0)) return false;
 	}
 
 	//getting the parent dataset data
@@ -8986,7 +8986,7 @@ int main(int, char**)
 									ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
 								}
 								//activate dragging of edge
-								if (edgeHover && ImGui::GetIO().MouseClicked[0]) {
+								if (edgeHover &&  ImGui::GetIO().MouseClicked[0]) {
 									if (!ImGui::GetIO().KeyCtrl) {
 										brushDragIds.clear();
 									}
@@ -9041,6 +9041,11 @@ int main(int, char**)
 
 								if (ImGui::IsKeyPressed(76, false) && brushDragIds.size()) {
 									brushDelete = brushDragIds;
+									brushDragIds.clear();
+								}
+
+								if (ImGui::IsMouseDoubleClicked(0) && brushHover) {
+									brushDelete = { (int)br.first };
 									brushDragIds.clear();
 								}
 
@@ -9252,6 +9257,11 @@ int main(int, char**)
 
 						if (ImGui::IsKeyPressed(76, false) && brushDragIds.size()) {
 							brushDelete = true;
+						}
+
+						if (ImGui::IsMouseDoubleClicked(0) && brushHover) {
+							brushDelete = true;
+							brushDragIds = { b.id };
 						}
 
 						//draw tooltip on hover for min and max value
