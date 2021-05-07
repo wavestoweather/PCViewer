@@ -738,6 +738,7 @@ static const unsigned char		colorPalette[] = { 0, 0, 0		,255
 
 static bool* pcAttributeEnabled = NULL;											//Contains whether a specific attribute is enabled
 static std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
+static std::vector<int> pcAttributesSorted;
 static std::vector<int> pcAttrOrd = std::vector<int>();							//Contains the ordering of the attributes	
 static std::vector<std::string> droppedPaths = std::vector<std::string>();
 static bool* createDLForDrop = NULL;
@@ -4752,6 +4753,12 @@ static bool openNetCDF(const char* filename){
     return true;
 }
 
+static void sortAttributes() {
+	pcAttributesSorted.resize(pcAttributes.size());
+	for (int i = 0; i < pcAttributesSorted.size(); ++i) pcAttributesSorted[i] = i;
+	std::sort(pcAttributesSorted.begin(), pcAttributesSorted.end(), [&](int lhs, int rhs) {return pcAttributes[lhs].name < pcAttributes[rhs].name; }); //now one can print sorted by iteratin through the vector and printing the name of the attribute at the current iterator index
+}
+
 static bool openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
@@ -4809,6 +4816,8 @@ static bool openDataset(const char* filename) {
 	}
 	s.type = "AttributeSetting";
 	settingsManager->addSetting(s);
+
+	sortAttributes();		//sortin the attributes to display in alphabetical order
 
 	delete[] s.data;
     return true;
@@ -7931,6 +7940,7 @@ int main(int, char**)
 					ImGui::InputText("##newName", newAttributeName, ImGuiInputTextFlags_AutoSelectAll);
 					if ((ImGui::IsKeyPressedMap(ImGuiKey_Enter) || ImGui::IsKeyPressedMap(ImGuiKey_KeyPadEnter))) {
 						pcAttributes[i].name = std::string(newAttributeName);
+						sortAttributes();		//resorting attributes
 						editAttributeName = -1;
 					}
 					if (!ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -7954,6 +7964,12 @@ int main(int, char**)
 					if (name != pcAttributes[i].originalName && ImGui::IsItemHovered()) {
 						ImGui::BeginTooltip();
 						ImGui::Text(pcAttributes[i].originalName.c_str());
+						ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
+						ImGui::EndTooltip();
+					}
+					if (name == pcAttributes[i].originalName && ImGui::IsItemHovered()) {
+						ImGui::BeginTooltip();
+						ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
 						ImGui::EndTooltip();
 					}
 					if (ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered()) {
@@ -9580,12 +9596,31 @@ int main(int, char**)
 
 			ImGui::Separator();
 
-			ImGui::Text("Data Settings:");
+			ImGui::Text("Coordinate Settings:");
 
-			for (int i = 0; i < pcAttributes.size(); i++) {
-				if (ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i])) {
+			for (int i = 0; i < pcAttributesSorted.size(); i++) {
+				if (ImGui::Checkbox(pcAttributes[pcAttributesSorted[i]].name.c_str(), &pcAttributeEnabled[pcAttributesSorted[i]])) {
 					updateAllDrawListIndexBuffer();
 					pcPlotRender = true;
+				}
+				ImGui::SameLine(200);
+				if(ImGui::ArrowButton("##attributeright", ImGuiDir_Left)) {
+					//switch left
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::BeginTooltip();
+					ImGui::Text("Switch with attribute left");
+					ImGui::Text("Alternative: drag and drop axis labels)");
+					ImGui::EndTooltip();
+				}
+				if (ImGui::ArrowButton("##attributeleft", ImGuiDir_Right)) {
+					//switch right
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::BeginTooltip();
+					ImGui::Text("Switch with attribute right");
+					ImGui::Text("Alternative: drag and drop axis labels)");
+					ImGui::EndTooltip();
 				}
 			}
 
@@ -9605,178 +9640,180 @@ int main(int, char**)
 
 			ImGui::Separator();
 
-			ImGui::Text("Histogram Settings:");
-			ImGui::Columns(2);
-			if (ImGui::Checkbox("Draw Histogram", &pcSettings.drawHistogramm)) {
-				pcPlotRender = true;
-				if (pcSettings.computeRatioPtsInDLvsIn1axbrushedParent)
-				{
-					pcPlotRender = updateAllActiveIndices();
-				}
-			}
-			ImGui::NextColumn();
-			if (ImGui::Checkbox("Draw Pie-Ratio", &pcSettings.computeRatioPtsInDLvsIn1axbrushedParent)) {
-				if (pcSettings.drawHistogramm) {
-					pcPlotRender = updateAllActiveIndices();
-				}
-			}
-
-
-			ImGui::Columns(1);
-			if (ImGui::SliderFloat("Histogram Width", &pcSettings.histogrammWidth, 0, .5) && pcSettings.drawHistogramm) {
-				if (pcSettings.histogrammDrawListComparison != -1) {
-					uploadDensityUiformBuffer();
-				}
-				pcPlotRender = true;
-			}
-			if (ImGui::ColorEdit4("Histogram Background", &pcSettings.histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && pcSettings.drawHistogramm) {
-				pcPlotRender = true;
-			}
-			if (ImGui::Checkbox("Show Density", &pcSettings.histogrammDensity) && pcSettings.drawHistogramm) {
-				pcPlotRender = true;
-			}
-			if (ImGui::ColorEdit4("Density Background", &pcSettings.densityBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && pcSettings.drawHistogramm) {
-				pcPlotRender = true;
-			}
-			if (ImGui::SliderFloat("Blur radius", &pcSettings.densityRadius, .001f, .5f)) {
-				uploadDensityUiformBuffer();
-				pcPlotRender = true;
-			}
-			if (ImGui::Checkbox("Adjust density by active lines", &pcSettings.adustHistogrammByActiveLines)) {
-				pcPlotRender = true;
-			}
-			ImGui::Separator();
-
-			ImGui::Text("Parallel Coordinates Settings:");
-
-			if (ImGui::Checkbox("Show PcPlot Density", &pcSettings.pcPlotDensity)) {
-				pcPlotRender = true;
-			}
-
-			if (ImGui::Checkbox("Enable density mapping", &pcSettings.enableDensityMapping)) {
-				if (pcAttributes.size()) {
-					uploadDensityUiformBuffer();
+			if (ImGui::CollapsingHeader("PCP/Hitogram settings")) {
+				ImGui::Text("Histogram Settings:");
+				ImGui::Columns(2);
+				if (ImGui::Checkbox("Draw Histogram", &pcSettings.drawHistogramm)) {
 					pcPlotRender = true;
+					if (pcSettings.computeRatioPtsInDLvsIn1axbrushedParent)
+					{
+						pcPlotRender = updateAllActiveIndices();
+					}
 				}
-			}
-
-			if (ImGui::Checkbox("Enable grayscale density", &pcSettings.enableDensityGreyscale)) {
-				if (pcAttributes.size()) {
-					uploadDensityUiformBuffer();
-					pcPlotRender = true;
-				}
-			}
-
-			//if (ImGui::Checkbox("Enable additive density", &pcPlotLinDensity)) {
-			//	if (pcAttributes.size()) {
-			//		uploadDensityUiformBuffer();
-			//		pcPlotRender = true;
-			//	}
-			//}
-
-			if (ImGui::Checkbox("Enable median calc", &pcSettings.calculateMedians)) {
-				for (DrawList& dl : g_PcPlotDrawLists) {
-					dl.activeMedian = 0;
-				}
-			}
-
-			if (ImGui::Checkbox("Enable brushing", &pcSettings.enableBrushing)) {
-				pcPlotRender = updateAllActiveIndices();
-			}
-
-			if (ImGui::SliderFloat("Median line width", &pcSettings.medianLineWidth, .5f, 20.0f)) {
-				pcPlotRender = true;
-			}
-
-			if (ImGui::ColorEdit4("Plot Background Color", &pcSettings.PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
-				pcPlotRender = true;
-			}
-
-			if (ImGui::Checkbox("Render Splines", &pcSettings.renderSplines)) {
-				updateAllDrawListIndexBuffer();
-				pcPlotRender = true;
-			}
-
-			if (ImGui::Checkbox("Enable Axis Lines", &pcSettings.enableAxisLines)) {
-			}
-
-			if (ImGui::Checkbox("Always show 0 tick", &pcSettings.enableZeroTick)){}
-
-			if (ImGui::DragInt("Amout of ticks", &pcSettings.axisTickAmount,1, 0, 100)){}
-
-			if (ImGui::InputInt("Priority draw list index", &priorityListIndex, 1, 1) && priorityAttribute != -1) {
-				if (priorityListIndex < 0)priorityListIndex = 0;
-				if (priorityListIndex >= g_PcPlotDrawLists.size())priorityListIndex = g_PcPlotDrawLists.size() - 1;
-				upatePriorityColorBuffer();
-				pcPlotRender = true;
-			}
-
-			if (ImGui::BeginCombo("Priority rendering", (priorityAttribute == -1) ? "Off" : pcAttributes[priorityAttribute].name.c_str())) {
-				if (ImGui::MenuItem("Off")) {
-					priorityAttribute = -1;
-					pcPlotRender = true;
-				}
-				for (int i = 0; i < pcAttributes.size(); i++) {
-					if (pcAttributeEnabled[i]) {
-						if (ImGui::MenuItem(pcAttributes[i].name.c_str()) && g_PcPlotDrawLists.size()) {
-							priorityAttribute = i;
-							priorityAttributeCenterValue = pcAttributes[i].max;
-							upatePriorityColorBuffer();
-							pcPlotRender = true;
-						}
+				ImGui::NextColumn();
+				if (ImGui::Checkbox("Draw Pie-Ratio", &pcSettings.computeRatioPtsInDLvsIn1axbrushedParent)) {
+					if (pcSettings.drawHistogramm) {
+						pcPlotRender = updateAllActiveIndices();
 					}
 				}
 
-				ImGui::EndCombo();
-			}
 
-			if (ImGui::IsKeyPressed(KEYP) && !ImGui::IsAnyItemActive()) {
-				if (prioritySelectAttribute) {
-					prioritySelectAttribute = false;
+				ImGui::Columns(1);
+				if (ImGui::SliderFloat("Histogram Width", &pcSettings.histogrammWidth, 0, .5) && pcSettings.drawHistogramm) {
+					if (pcSettings.histogrammDrawListComparison != -1) {
+						uploadDensityUiformBuffer();
+					}
+					pcPlotRender = true;
 				}
-				else {
-					prioritySelectAttribute = true;
+				if (ImGui::ColorEdit4("Histogram Background", &pcSettings.histogrammBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && pcSettings.drawHistogramm) {
+					pcPlotRender = true;
 				}
-			}
-
-
-			if (ImGui::Button("Set Priority center")) {
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("or press 'P' to set a priority rendering center");
+				if (ImGui::Checkbox("Show Density", &pcSettings.histogrammDensity) && pcSettings.drawHistogramm) {
+					pcPlotRender = true;
 				}
-
-				prioritySelectAttribute = true;
-			}
-
-			auto histComp = g_PcPlotDrawLists.begin();
-			if (pcSettings.histogrammDrawListComparison != -1) std::advance(histComp, pcSettings.histogrammDrawListComparison);
-			if (ImGui::BeginCombo("Histogramm Comparison", (pcSettings.histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
-				if (ImGui::MenuItem("Off")) {
-					pcSettings.histogrammDrawListComparison = -1;
+				if (ImGui::ColorEdit4("Density Background", &pcSettings.densityBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar) && pcSettings.drawHistogramm) {
+					pcPlotRender = true;
+				}
+				if (ImGui::SliderFloat("Blur radius", &pcSettings.densityRadius, .001f, .5f)) {
 					uploadDensityUiformBuffer();
-					if (pcSettings.drawHistogramm) {
+					pcPlotRender = true;
+				}
+				if (ImGui::Checkbox("Adjust density by active lines", &pcSettings.adustHistogrammByActiveLines)) {
+					pcPlotRender = true;
+				}
+				ImGui::Separator();
+
+				ImGui::Text("Parallel Coordinates Settings:");
+
+				if (ImGui::Checkbox("Show PcPlot Density", &pcSettings.pcPlotDensity)) {
+					pcPlotRender = true;
+				}
+
+				if (ImGui::Checkbox("Enable density mapping", &pcSettings.enableDensityMapping)) {
+					if (pcAttributes.size()) {
+						uploadDensityUiformBuffer();
 						pcPlotRender = true;
 					}
 				}
-				auto it = g_PcPlotDrawLists.begin();
-				for (int i = 0; i < g_PcPlotDrawLists.size(); i++, ++it) {
-					if (ImGui::MenuItem(it->name.c_str())) {
-						pcSettings.histogrammDrawListComparison = i;
+
+				if (ImGui::Checkbox("Enable grayscale density", &pcSettings.enableDensityGreyscale)) {
+					if (pcAttributes.size()) {
+						uploadDensityUiformBuffer();
+						pcPlotRender = true;
+					}
+				}
+
+				//if (ImGui::Checkbox("Enable additive density", &pcPlotLinDensity)) {
+				//	if (pcAttributes.size()) {
+				//		uploadDensityUiformBuffer();
+				//		pcPlotRender = true;
+				//	}
+				//}
+
+				if (ImGui::Checkbox("Enable median calc", &pcSettings.calculateMedians)) {
+					for (DrawList& dl : g_PcPlotDrawLists) {
+						dl.activeMedian = 0;
+					}
+				}
+
+				if (ImGui::Checkbox("Enable brushing", &pcSettings.enableBrushing)) {
+					pcPlotRender = updateAllActiveIndices();
+				}
+
+				if (ImGui::SliderFloat("Median line width", &pcSettings.medianLineWidth, .5f, 20.0f)) {
+					pcPlotRender = true;
+				}
+
+				if (ImGui::ColorEdit4("Plot Background Color", &pcSettings.PcPlotBackCol.x, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
+					pcPlotRender = true;
+				}
+
+				if (ImGui::Checkbox("Render Splines", &pcSettings.renderSplines)) {
+					updateAllDrawListIndexBuffer();
+					pcPlotRender = true;
+				}
+
+				if (ImGui::Checkbox("Enable Axis Lines", &pcSettings.enableAxisLines)) {
+				}
+
+				if (ImGui::Checkbox("Always show 0 tick", &pcSettings.enableZeroTick)) {}
+
+				if (ImGui::DragInt("Amout of ticks", &pcSettings.axisTickAmount, 1, 0, 100)) {}
+
+				if (ImGui::InputInt("Priority draw list index", &priorityListIndex, 1, 1) && priorityAttribute != -1) {
+					if (priorityListIndex < 0)priorityListIndex = 0;
+					if (priorityListIndex >= g_PcPlotDrawLists.size())priorityListIndex = g_PcPlotDrawLists.size() - 1;
+					upatePriorityColorBuffer();
+					pcPlotRender = true;
+				}
+
+				if (ImGui::BeginCombo("Priority rendering", (priorityAttribute == -1) ? "Off" : pcAttributes[priorityAttribute].name.c_str())) {
+					if (ImGui::MenuItem("Off")) {
+						priorityAttribute = -1;
+						pcPlotRender = true;
+					}
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						if (pcAttributeEnabled[i]) {
+							if (ImGui::MenuItem(pcAttributes[i].name.c_str()) && g_PcPlotDrawLists.size()) {
+								priorityAttribute = i;
+								priorityAttributeCenterValue = pcAttributes[i].max;
+								upatePriorityColorBuffer();
+								pcPlotRender = true;
+							}
+						}
+					}
+
+					ImGui::EndCombo();
+				}
+
+				if (ImGui::IsKeyPressed(KEYP) && !ImGui::IsAnyItemActive()) {
+					if (prioritySelectAttribute) {
+						prioritySelectAttribute = false;
+					}
+					else {
+						prioritySelectAttribute = true;
+					}
+				}
+
+
+				if (ImGui::Button("Set Priority center")) {
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("or press 'P' to set a priority rendering center");
+					}
+
+					prioritySelectAttribute = true;
+				}
+
+				auto histComp = g_PcPlotDrawLists.begin();
+				if (pcSettings.histogrammDrawListComparison != -1) std::advance(histComp, pcSettings.histogrammDrawListComparison);
+				if (ImGui::BeginCombo("Histogramm Comparison", (pcSettings.histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
+					if (ImGui::MenuItem("Off")) {
+						pcSettings.histogrammDrawListComparison = -1;
 						uploadDensityUiformBuffer();
 						if (pcSettings.drawHistogramm) {
 							pcPlotRender = true;
 						}
 					}
+					auto it = g_PcPlotDrawLists.begin();
+					for (int i = 0; i < g_PcPlotDrawLists.size(); i++, ++it) {
+						if (ImGui::MenuItem(it->name.c_str())) {
+							pcSettings.histogrammDrawListComparison = i;
+							uploadDensityUiformBuffer();
+							if (pcSettings.drawHistogramm) {
+								pcPlotRender = true;
+							}
+						}
+					}
+
+					ImGui::EndCombo();
 				}
 
-				ImGui::EndCombo();
+				ImGui::Checkbox("Create default drawlist on load", &pcSettings.createDefaultOnLoad);
+
+				ImGui::DragInt("Live brush threshold", &pcSettings.liveBrushThreshold, 1000);
+
+				ImGui::SliderInt("Max line batch size", &pcSettings.lineBatchSize, 30000, 1e7);
 			}
-
-			ImGui::Checkbox("Create default drawlist on load", &pcSettings.createDefaultOnLoad);
-
-			ImGui::DragInt("Live brush threshold", &pcSettings.liveBrushThreshold, 1000);
-
-			ImGui::SliderInt("Max line batch size", &pcSettings.lineBatchSize, 30000, 1e7);
 
 			ImGui::EndChild();
 
