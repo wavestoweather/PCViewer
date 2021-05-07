@@ -4304,9 +4304,9 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 		//dimensions are not attributes, they can however appear as an attribute too in the list
 		//check if dimension is a string length that should not be shown
 		if(dimIsStringLenght[i])
-			out.push_back(QueryAttribute{ std::string(dimName), -dimSizes[i], 1, -1, 0, 0, dimSizes[i], true, false });
+			out.push_back(QueryAttribute{ std::string(dimName), -dimSizes[i], 1, 1, 0, 0, dimSizes[i], true, false });
 		else
-			out.push_back(QueryAttribute{ std::string(dimName), dimSizes[i], 1, -1, 0, 0, dimSizes[i], true, false });
+			out.push_back(QueryAttribute{ std::string(dimName), dimSizes[i], 1, 1, 0, 0, dimSizes[i], true, false });
 		//if ((retval = nc_inq_varid(fileId, dimName, &dimension_variable_indices[i]))) {
 		//	// dimensions can exist as dimensions exclusiveley
 		//	std::cout << "Error at getting variable id of dimension" << std::endl;
@@ -7242,6 +7242,14 @@ int main(int, char**)
 			g_MainWindowData.FrameIndex = 0;
 		}
 
+		//disable keyboard navigation if brushes are active
+		if (brushDragIds.size() && (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard)) {
+			ImGui::GetIO().ConfigFlags ^= ImGuiConfigFlags_NavEnableKeyboard; //deactivate keyboard navigation
+		}
+		if (brushDragIds.empty() && !(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard)) {
+			ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; //enable keyboard navigation
+		}
+
 		// Start the Dear ImGui frame
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplSDL2_NewFrame(window);
@@ -9371,24 +9379,146 @@ int main(int, char**)
 
 			//plot right click menu
 			for (int i = 0; i < amtOfLabels; ++i) {
-				auto mousePos = ImGui::GetMousePos();
-				float x = gap * i / (amtOfLabels - 1) + picPos.x - pcSettings.histogrammWidth / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
-				histogramHovered |= mousePos.x > x && mousePos.x < x + pcSettings.histogrammWidth && mousePos.y > picPos.y && mousePos.y < picPos.y + picSize.y;
+				auto mousePos = ImGui::GetIO().MousePos;
+				float histWidth = pcSettings.histogrammWidth * picSize.x * .5f;
+				float x = gap * i / (amtOfLabels - 1) + picPos.x - histWidth / 2 + ((pcSettings.drawHistogramm) ? (pcSettings.histogrammWidth / 4.0 * picSize.x) : 0);
+				histogramHovered |= mousePos.x > x && mousePos.x < x + histWidth && mousePos.y > picPos.y && mousePos.y < picPos.y + picSize.y;
 				histogramHovered &= pcSettings.drawHistogramm;
 			}
 			if (picHovered && !anyHover && !histogramHovered && ImGui::GetIO().MouseClicked[1]) {
 				ImGui::OpenPopup("PCPMenu");
 			}
 			if (ImGui::BeginPopup("PCPMenu")) {
+				ImGui::PushItemWidth(100);
 				if (ImGui::MenuItem("DrawHistogram", "", &pcSettings.drawHistogramm))
 					pcPlotRender = true;
 				if (ImGui::MenuItem("Show Pc Plot Density", "", &pcSettings.pcPlotDensity))
 					pcPlotRender = true;
+				if (ImGui::MenuItem("Density Mapping", "", &pcSettings.enableDensityMapping))
+					pcPlotRender = true;
+				if (ImGui::MenuItem("Greyscale denisty", "", &pcSettings.enableDensityGreyscale)) {
+					if (pcAttributes.size()) {
+						uploadDensityUiformBuffer();
+						pcPlotRender = true;
+					}
+				}
+				ImGui::MenuItem("Enable Medina Calc", "", &pcSettings.calculateMedians);
+				if (ImGui::MenuItem("Enable brushing", "", &pcSettings.enableBrushing)) {
+					updateAllActiveIndices();
+					pcPlotRender = true;
+				}
+				if (ImGui::SliderFloat("Median line width", &pcSettings.medianLineWidth, 1, 20))
+					pcPlotRender = true;
+				if (ImGui::ColorEdit4("Plot background", &pcSettings.PcPlotBackCol.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+					pcPlotRender = true;
+				if (ImGui::MenuItem("Render splines", "", &pcSettings.renderSplines))
+					pcPlotRender = true;
+				ImGui::MenuItem("Enable axis lines", "", &pcSettings.enableAxisLines);
+				ImGui::MenuItem("Always show 0 tick", "", &pcSettings.enableZeroTick);
+				ImGui::DragInt("Tick amount", &pcSettings.axisTickAmount, 0, 1000);
+				
+				if (ImGui::InputInt("Priority draw list index", &priorityListIndex, 1, 1) && priorityAttribute != -1) {
+					if (priorityListIndex < 0)priorityListIndex = 0;
+					if (priorityListIndex >= g_PcPlotDrawLists.size())priorityListIndex = g_PcPlotDrawLists.size() - 1;
+					upatePriorityColorBuffer();
+					pcPlotRender = true;
+				}
+
+				if (ImGui::BeginCombo("Priority rendering", (priorityAttribute == -1) ? "Off" : pcAttributes[priorityAttribute].name.c_str())) {
+					if (ImGui::MenuItem("Off")) {
+						priorityAttribute = -1;
+						pcPlotRender = true;
+					}
+					for (int i = 0; i < pcAttributes.size(); i++) {
+						if (pcAttributeEnabled[i]) {
+							if (ImGui::MenuItem(pcAttributes[i].name.c_str()) && g_PcPlotDrawLists.size()) {
+								priorityAttribute = i;
+								priorityAttributeCenterValue = pcAttributes[i].max;
+								upatePriorityColorBuffer();
+								pcPlotRender = true;
+							}
+						}
+					}
+
+					ImGui::EndCombo();
+				}
+
+				//if (ImGui::IsKeyPressed(KEYP) && !ImGui::IsAnyItemActive()) {
+				//	if (prioritySelectAttribute) {
+				//		prioritySelectAttribute = false;
+				//	}
+				//	else {
+				//		prioritySelectAttribute = true;
+				//	}
+				//}
 
 
+				if (ImGui::MenuItem("Set Priority center")) {
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("or press 'P' to set a priority rendering center");
+					}
+
+					prioritySelectAttribute = true;
+				}
+
+				auto histComp = g_PcPlotDrawLists.begin();
+				if (pcSettings.histogrammDrawListComparison != -1) std::advance(histComp, pcSettings.histogrammDrawListComparison);
+				if (ImGui::BeginCombo("Histogramm Comparison", (pcSettings.histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
+					if (ImGui::MenuItem("Off")) {
+						pcSettings.histogrammDrawListComparison = -1;
+						uploadDensityUiformBuffer();
+						if (pcSettings.drawHistogramm) {
+							pcPlotRender = true;
+						}
+					}
+					auto it = g_PcPlotDrawLists.begin();
+					for (int i = 0; i < g_PcPlotDrawLists.size(); i++, ++it) {
+						if (ImGui::MenuItem(it->name.c_str())) {
+							pcSettings.histogrammDrawListComparison = i;
+							uploadDensityUiformBuffer();
+							if (pcSettings.drawHistogramm) {
+								pcPlotRender = true;
+							}
+						}
+					}
+
+					ImGui::EndCombo();
+				}
+
+				ImGui::MenuItem("Default drawlist on load", "", &pcSettings.createDefaultOnLoad);
+				ImGui::SliderInt("Line batch size", &pcSettings.lineBatchSize, 1e5, 1e7);
+
+				ImGui::PopItemWidth();
 				ImGui::EndPopup();
 			}
 			
+			if (histogramHovered && ImGui::GetIO().MouseClicked[1]) {
+				ImGui::OpenPopup("HistMenu");
+			}
+			if (ImGui::BeginPopup("HistMenu")) {
+				ImGui::PushItemWidth(100);
+				if (ImGui::MenuItem("Draw Pie-Ratio", "", &pcSettings.computeRatioPtsInDLvsIn1axbrushedParent))
+					updateAllActiveIndices();
+				if (ImGui::SliderFloat("Histogram wdith", &pcSettings.histogrammWidth, 0, 2.f / (amtOfLabels)))
+					pcPlotRender = true;
+				if (ImGui::ColorEdit4("Histogram background", &pcSettings.histogrammBackCol.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+					pcPlotRender = true;
+				if (ImGui::MenuItem("Show Density", "", &pcSettings.histogrammDensity))
+					pcPlotRender = true;
+				if (ImGui::ColorEdit4("Density background", &pcSettings.densityBackCol.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+					pcPlotRender = true;
+				if (ImGui::SliderFloat("Blur radius", &pcSettings.densityRadius, .001f, .5f)) {
+					uploadDensityUiformBuffer();
+					pcPlotRender = true;
+				}
+				if (ImGui::MenuItem("Adjust density by line count", "", &pcSettings.adustHistogrammByActiveLines)) {
+					uploadDensityUiformBuffer();
+					pcPlotRender = true;
+				}
+
+				ImGui::EndPopup();
+			}
+
 			//handling priority selection
 			if (prioritySelectAttribute) {
 				pcPlotSelectedDrawList.clear();
@@ -9437,6 +9567,32 @@ int main(int, char**)
 			//Settings section
 			ImGui::BeginChild("Settings", ImVec2(500, -1), true);
 			ImGui::Text("Settings");
+
+			ImGui::Separator();
+
+			ImGui::Text("Data Settings:");
+
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				if (ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i])) {
+					updateAllDrawListIndexBuffer();
+					pcPlotRender = true;
+				}
+			}
+
+			ImGui::InputText("Directory Path", pcFilePath, 200);
+
+			ImGui::SameLine();
+
+			//Opening a new Dataset into the Viewer
+			if (ImGui::Button("Open")) {
+				bool success = openDataset(pcFilePath);
+				if (success && pcSettings.createDefaultOnLoad) {
+					//pcPlotRender = true;
+					createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+				}
+			}
+
 			ImGui::Separator();
 
 			ImGui::Text("Histogram Settings:");
@@ -9564,7 +9720,7 @@ int main(int, char**)
 				ImGui::EndCombo();
 			}
 
-			if (ImGui::IsKeyPressed(KEYP)) {
+			if (ImGui::IsKeyPressed(KEYP) && !ImGui::IsAnyItemActive()) {
 				if (prioritySelectAttribute) {
 					prioritySelectAttribute = false;
 				}
@@ -9612,30 +9768,6 @@ int main(int, char**)
 
 			ImGui::SliderInt("Max line batch size", &pcSettings.lineBatchSize, 30000, 1e7);
 
-			ImGui::Separator();
-
-			ImGui::Text("Data Settings:");
-
-			for (int i = 0; i < pcAttributes.size(); i++) {
-				if (ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i])) {
-					updateAllDrawListIndexBuffer();
-					pcPlotRender = true;
-				}
-			}
-
-			ImGui::InputText("Directory Path", pcFilePath, 200);
-
-			ImGui::SameLine();
-
-			//Opening a new Dataset into the Viewer
-			if (ImGui::Button("Open")) {
-				bool success = openDataset(pcFilePath);
-				if (success && pcSettings.createDefaultOnLoad) {
-					//pcPlotRender = true;
-					createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
-				}
-			}
 			ImGui::EndChild();
 
 			//DataSets, from which draw lists can be created
