@@ -9613,6 +9613,7 @@ int main(int, char**)
 					ImGui::Text("Alternative: drag and drop axis labels)");
 					ImGui::EndTooltip();
 				}
+				ImGui::SameLine();
 				if (ImGui::ArrowButton("##attributeleft", ImGuiDir_Right)) {
 					//switch right
 				}
