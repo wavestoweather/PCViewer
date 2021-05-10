@@ -777,7 +777,7 @@ struct PCSettings {
 	bool computeRatioPtsInDLvsIn1axbrushedParent = false;
 	bool histogrammDensity = true;
 	bool pcPlotDensity = false;
-	float densityRadius = .05f;
+	float densityRadius = .005f;
 	bool enableDensityMapping = true;
 	bool enableDensityGreyscale = false;
 	bool calculateMedians = true;
@@ -2745,12 +2745,12 @@ static std::pair<bool,std::vector<float>>& getDimensionValues(const DataSet& ds,
 }
 
 // This function assumes that only indices of active attributes are passed. 
-static int placeOfInd(int ind) {
+static int placeOfInd(int ind, bool countDisabled = false) {
 	int place = 0;
 	for (int i : pcAttrOrd) {
 		if (i == ind)
 			break;
-		if (pcAttributeEnabled[i])
+		if (pcAttributeEnabled[i] || countDisabled)
 			place++;
 	}
 	return place;
@@ -9575,7 +9575,7 @@ int main(int, char**)
 				ImGui::EndPopup();
 			}
 			
-			if (histogramHovered && ImGui::GetIO().MouseClicked[1]) {
+			if (!anyHover && histogramHovered && ImGui::GetIO().MouseClicked[1]) {
 				ImGui::OpenPopup("HistMenu");
 			}
 			if (ImGui::BeginPopup("HistMenu")) {
@@ -9597,6 +9597,18 @@ int main(int, char**)
 				if (ImGui::MenuItem("Adjust density by line count", "", &pcSettings.adustHistogrammByActiveLines)) {
 					uploadDensityUiformBuffer();
 					pcPlotRender = true;
+				}
+				if (ImGui::BeginMenu("Add reference histogram")) {
+					for (auto& ds : g_PcPlotDataSets) {
+						if (ImGui::MenuItem(ds.name.c_str())) {
+							//create new drawlist from the default drawlist, set it immune to global brushes and deaktivate standard rendering
+							createPcPlotDrawList(ds.drawLists.front(), ds, ("Reference_" + ds.name).c_str());
+							g_PcPlotDrawLists.back().immuneToGlobalBrushes = true;
+							g_PcPlotDrawLists.back().show = false;
+							pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+						}
+					}
+					ImGui::EndMenu();
 				}
 
 				ImGui::EndPopup();
@@ -9671,9 +9683,14 @@ int main(int, char**)
 				if(ImGui::ArrowButton(("##attributeright" + std::to_string(i)).c_str(), ImGuiDir_Left)) {
 					//switch left
 					if (pcAttributeEnabled[i]) {
-						int ownPlace = placeOfInd(i);
-						if (ownPlace > 0) {
-							switchAttributes(ownPlace - 1, ownPlace, io.KeyCtrl);
+						int ownPlace = placeOfInd(i, true);
+						int prefInd = ownPlace - 1;
+						for (;;) {
+							if (prefInd < 0 || pcAttributeEnabled[pcAttrOrd[prefInd]]) break;
+							else --prefInd;
+						}
+						if (prefInd >= 0) {
+							switchAttributes(prefInd, ownPlace, io.KeyCtrl);
 							updateAllDrawListIndexBuffer();
 							pcPlotRender = true;
 						}
@@ -9689,9 +9706,14 @@ int main(int, char**)
 				if (ImGui::ArrowButton(("##attributeleft" + std::to_string(i)).c_str(), ImGuiDir_Right)) {
 					//switch right
 					if (pcAttributeEnabled[i]) {
-						int ownPlace = placeOfInd(i);
-						if (ownPlace < amtOfLabels - 1) {
-							switchAttributes(ownPlace + 1, ownPlace, io.KeyCtrl);
+						int ownPlace = placeOfInd(i, true);
+						int nextInd = ownPlace + 1;
+						for (;;) {
+							if (nextInd >= pcAttributes.size() || pcAttributeEnabled[pcAttrOrd[nextInd]]) break;
+							else ++nextInd;
+						}
+						if (nextInd < pcAttributes.size()) {
+							switchAttributes(nextInd, ownPlace, io.KeyCtrl);
 							updateAllDrawListIndexBuffer();
 							pcPlotRender = true;
 						}
