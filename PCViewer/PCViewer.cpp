@@ -82,11 +82,15 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include <sstream>
 #include <utility>
 #include <netcdf.h>
+#include <filesystem>
 	
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
 #endif
+
+//important vector holding all supported file formats
+std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 
 //defines for key ids
 #define KEYW 26
@@ -242,6 +246,10 @@ struct QueryAttribute {
 	int trimIndices[2];
 	bool active;
 	bool linearize;
+
+	bool operator==(const QueryAttribute& other) const {
+		return name == other.name && dimensionSize == other.dimensionSize && dimensionality == other.dimensionality;
+	}
 };
 
 static std::vector<QueryAttribute> queryAttributes;
@@ -741,6 +749,7 @@ static std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Conta
 static std::vector<int> pcAttributesSorted;
 static std::vector<int> pcAttrOrd = std::vector<int>();							//Contains the ordering of the attributes	
 static std::vector<std::string> droppedPaths = std::vector<std::string>();
+static std::vector<uint8_t> droppedPathActive;
 static bool* createDLForDrop = NULL;
 static bool pathDropped = false;
 static std::default_random_engine engine;
@@ -7268,6 +7277,7 @@ int main(int, char**)
                 done = true;
             else if(event.type == SDL_DROPFILE) {       // In case if dropped file
                 droppedPaths.push_back(std::string(event.drop.file));
+				droppedPathActive.push_back(1);
                 pathDropped = true;
 				std::string file(event.drop.file);
 				if (droppedPaths.size() == 1 && file.substr(file.find_last_of(".") + 1) == "nc") {
@@ -7507,14 +7517,17 @@ int main(int, char**)
 					}
 				}
 				ImGui::Text("Do you really want to open these Datasets?");
+				int c = 0;
 				for (std::string& s : droppedPaths) {
-					ImGui::Text(s.c_str());
+					ImGui::Checkbox(s.c_str(), (bool*)&droppedPathActive[c++]);
 				}
 				ImGui::Separator();
 
 				if (ImGui::Button("Open", ImVec2(120, 0)) || ImGui::IsKeyPressed(KEYENTER)) {
 					ImGui::CloseCurrentPopup();
+					c = 0;
 					for (std::string& s : droppedPaths) {
+						if (!droppedPathActive[c++]) continue;
 						bool success = openDataset(s.c_str());
 						if (success && pcSettings.createDefaultOnLoad) {
 							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
@@ -9694,7 +9707,11 @@ int main(int, char**)
 
 			if (ImGui::BeginPopup("AttributePopup")) {
 				ImGui::SetNextItemWidth(100);
-				ImGui::InputText("##newName", newAttributeName, 50);
+				if (ImGui::InputText("##newName", newAttributeName, 50, ImGuiInputTextFlags_EnterReturnsTrue)) {
+					pcAttributes[popupAttribute].name = newAttributeName;
+					sortAttributes();
+					ImGui::CloseCurrentPopup();
+				}
 				ImGui::SameLine();
 				if (ImGui::MenuItem("Rename")) {
 					pcAttributes[popupAttribute].name = newAttributeName;
@@ -9714,20 +9731,6 @@ int main(int, char**)
 				}
 
 				ImGui::EndPopup();
-			}
-
-			ImGui::InputText("Directory Path", pcFilePath, 200);
-
-			ImGui::SameLine();
-
-			//Opening a new Dataset into the Viewer
-			if (ImGui::Button("Open")) {
-				bool success = openDataset(pcFilePath);
-				if (success && pcSettings.createDefaultOnLoad) {
-					//pcPlotRender = true;
-					createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
-				}
 			}
 
 			ImGui::Separator();
@@ -9917,7 +9920,45 @@ int main(int, char**)
 			DataSet* destroySet = NULL;
 			bool destroy = false;
 
-			ImGui::Text("Datasets");
+			ImGui::Text("Datasets:");
+			bool open = ImGui::InputText("Directory Path", pcFilePath, 200, ImGuiInputTextFlags_EnterReturnsTrue);
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::Text("Enter either a file including filepath,\nOr a folder (division with /) and all datasets in the folder will be loaded\nOr drag and drop files to load onto application.");
+				ImGui::EndTooltip();
+			}
+
+			ImGui::SameLine();
+
+			//Opening a new Dataset into the Viewer
+			if (ImGui::Button("Open") || open) {
+				std::string f = pcFilePath;
+				std::string fileExtension = f.substr(f.find_last_of("/\\") + 1);
+				size_t pos = fileExtension.find_last_of(".");
+				if (pos != std::string::npos) {		//entered discrete file
+					bool success = openDataset(pcFilePath);
+					if (success && pcSettings.createDefaultOnLoad) {
+						//pcPlotRender = true;
+						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+						pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+					}
+				}
+				else {					//entered folder -> open open dataset dialogue
+					for (const auto& entry : std::filesystem::directory_iterator(f)) {
+						if (entry.is_regular_file()) {	//only process normal enties
+							fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
+							if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
+							droppedPaths.emplace_back(entry.path().u8string());
+							droppedPathActive.emplace_back(1);
+							pathDropped = true;
+							f = entry.path().u8string();
+							if (queryAttributes.empty() && f.substr(f.find_last_of(".") + 1) == "nc") {
+								queryAttributes = queryNetCDF((entry.path().u8string()).c_str());
+							}
+						}
+					}
+				}
+			}
 			ImGui::Separator();
 			for (DataSet& ds : g_PcPlotDataSets) {
 				if (ImGui::TreeNode(ds.name.c_str())) {
