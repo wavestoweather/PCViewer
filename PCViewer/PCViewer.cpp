@@ -6903,6 +6903,44 @@ void addSaveSettingsMenu(T* settingStruct, const std::string& settingName, const
 	}
 }
 
+bool loadAttributeSettings(const std::string setting, int attribute) {
+	SettingsManager::Setting s = settingsManager->getSetting(setting);
+	if (((int*)(s.data))[0] != pcAttributes.size()) {
+		return false;
+	}
+
+	std::vector<Attribute> savedAttr;
+	char* d = (char*)s.data + sizeof(int);
+	bool cont = false;
+	for (int i = 0; i < ((int*)s.data)[0]; i++) {
+		Attribute a = {};
+		a.name = std::string(d);
+		d += a.name.size() + 1;
+		a.min = *(float*)d;
+		d += sizeof(float);
+		a.max = *(float*)d;
+		d += sizeof(float);
+		savedAttr.push_back(a);
+		if (pcAttributes[i].name != savedAttr[i].name) {
+			return false;
+		}
+	}
+
+	int* o = (int*)d;
+	bool* act = (bool*)(d + pcAttributes.size() * sizeof(int));
+	if (attribute < 0) {
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			pcAttributes[i] = savedAttr[i];
+			pcAttrOrd[i] = o[i];
+			pcAttributeEnabled[i] = act[i];
+		}
+	}
+	else { // only reset min, max
+		pcAttributes[attribute] = savedAttr[attribute];
+	}
+	return true;
+}
+
 int main(int, char**)
 {
 #ifdef DETECTMEMLEAK
@@ -7584,40 +7622,11 @@ int main(int, char**)
 				if (ImGui::BeginMenu("Load...")) {
 					for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
 						if (ImGui::MenuItem(s->id.c_str())) {
-							if (((int*)(s->data))[0] != pcAttributes.size()) {
-								openLoad = true;
-								continue;
+							openLoad = !loadAttributeSettings(s->id, -1);
+							if (!openLoad) {
+								updateAllDrawListIndexBuffer();
+								pcPlotRender = true;
 							}
-
-							std::vector<Attribute> savedAttr;
-							char* d = (char*)s->data + sizeof(int);
-							bool cont = false;
-							for (int i = 0; i < ((int*)s->data)[0]; i++) {
-								Attribute a = {};
-								a.name = std::string(d);
-								d += a.name.size() + 1;
-								a.min = *(float*)d;
-								d += sizeof(float);
-								a.max = *(float*)d;
-								d += sizeof(float);
-								savedAttr.push_back(a);
-								if (pcAttributes[i].name != savedAttr[i].name) {
-									openLoad = true;
-									cont = true;
-								}
-							}
-							if (cont)
-								continue;
-
-							int* o = (int*)d;
-							bool* act = (bool*)(d + pcAttributes.size() * sizeof(int));
-							for (int i = 0; i < pcAttributes.size(); i++) {
-								pcAttributes[i] = savedAttr[i];
-								pcAttrOrd[i] = o[i];
-								pcAttributeEnabled[i] = act[i];
-							}
-							updateAllDrawListIndexBuffer();
-							pcPlotRender = true;
 						}
 					}
 					ImGui::EndMenu();
@@ -8004,6 +8013,7 @@ int main(int, char**)
 			c = 0;
 			c1 = 0;
 			offset = 0;
+			static int popupMinMax = -1;
 			for (auto i : pcAttrOrd) {
 				if (!pcAttributeEnabled[i]) {
 					c++;
@@ -8019,6 +8029,10 @@ int main(int, char**)
 				if (ImGui::DragFloat(name.c_str(), &pcAttributes[i].max, (pcAttributes[i].max - pcAttributes[i].min) * .001f, 0.0f, 0.0f, "%6.4g")) {
 					pcPlotRender = true;
 					pcPlotPreviousSlectedDrawList = -1;
+				}
+				if (ImGui::IsItemClicked(1)) {
+					ImGui::OpenPopup("MinMaxPopup");
+					popupMinMax = i;
 				}
 				ImGui::PopItemWidth();
 
@@ -8056,11 +8070,30 @@ int main(int, char**)
 					pcPlotRender = true;
 					pcPlotPreviousSlectedDrawList = -1;
 				}
+				if (ImGui::IsItemClicked(1)) {
+					ImGui::OpenPopup("MinMaxPopup");
+					popupMinMax = i;
+				}
 				ImGui::PopItemWidth();
 
 				c++;
 				c1++;
 				offset += gap;
+			}
+			if (ImGui::BeginPopup("MinMaxPopup")) {
+				if (ImGui::MenuItem("Swap min/max")) {
+					std::swap(pcAttributes[popupMinMax].min, pcAttributes[popupMinMax].max);
+					pcPlotRender = true;
+				}
+				if (ImGui::MenuItem("Reset min/max")) {
+					std::string resetName = g_PcPlotDrawLists.front().name;
+					bool update = loadAttributeSettings(resetName, popupMinMax);
+					if (update) {
+						updateAllDrawListIndexBuffer();
+						pcPlotRender = true;
+					}
+				}
+				ImGui::EndPopup();
 			}
 
 			ImVec2 picSize(ImGui::GetWindowWidth() - 2 * paddingSide + 5, io.DisplaySize.y * 2 / 5);
@@ -8286,10 +8319,21 @@ int main(int, char**)
 						ImGui::Text("%s", brush->name.c_str());
 						ImGui::EndDragDropSource();
 					}
+					static char newBrushName[50]{};
 					if (ImGui::IsItemClicked(1)) {
 						ImGui::OpenPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str());
+						strcpy(newBrushName, globalBrushes[i].name.c_str());
 					}
 					if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
+						ImGui::SetNextItemWidth(100);
+						if (ImGui::InputText("##newBrushName", newBrushName, 50, ImGuiInputTextFlags_EnterReturnsTrue)) {
+							globalBrushes[i].name = newBrushName;
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::SameLine();
+						if (ImGui::MenuItem("Rename")) {
+							globalBrushes[i].name = newBrushName;
+						}
 						if (globalBrushes[i].kdTree) {
 							if (ImGui::BeginCombo("Fracture depth", std::to_string(globalBrushes[i].fractureDepth).c_str())) {
 								for (int j = 0; j < pcSettings.maxFractionDepth; j++) {
@@ -9598,14 +9642,29 @@ int main(int, char**)
 
 			ImGui::Text("Coordinate Settings:");
 
-			for (int i = 0; i < pcAttributesSorted.size(); i++) {
-				if (ImGui::Checkbox(pcAttributes[pcAttributesSorted[i]].name.c_str(), &pcAttributeEnabled[pcAttributesSorted[i]])) {
+			static int popupAttribute = -1;
+			static char newAttributeName[50]{};
+			for (int i : pcAttributesSorted) {
+				if (ImGui::Checkbox(pcAttributes[i].name.c_str(), &pcAttributeEnabled[i])) {
 					updateAllDrawListIndexBuffer();
 					pcPlotRender = true;
 				}
+				if (ImGui::IsItemClicked(1)){ 
+					ImGui::OpenPopup("AttributePopup"); 
+					popupAttribute = i;
+					strcpy(newAttributeName, pcAttributes[i].originalName.c_str());
+				}
 				ImGui::SameLine(200);
-				if(ImGui::ArrowButton("##attributeright", ImGuiDir_Left)) {
+				if(ImGui::ArrowButton(("##attributeright" + std::to_string(i)).c_str(), ImGuiDir_Left)) {
 					//switch left
+					if (pcAttributeEnabled[i]) {
+						int ownPlace = placeOfInd(i);
+						if (ownPlace > 0) {
+							switchAttributes(ownPlace - 1, ownPlace, io.KeyCtrl);
+							updateAllDrawListIndexBuffer();
+							pcPlotRender = true;
+						}
+					}
 				}
 				if (ImGui::IsItemHovered()) {
 					ImGui::BeginTooltip();
@@ -9614,8 +9673,16 @@ int main(int, char**)
 					ImGui::EndTooltip();
 				}
 				ImGui::SameLine();
-				if (ImGui::ArrowButton("##attributeleft", ImGuiDir_Right)) {
+				if (ImGui::ArrowButton(("##attributeleft" + std::to_string(i)).c_str(), ImGuiDir_Right)) {
 					//switch right
+					if (pcAttributeEnabled[i]) {
+						int ownPlace = placeOfInd(i);
+						if (ownPlace < amtOfLabels - 1) {
+							switchAttributes(ownPlace + 1, ownPlace, io.KeyCtrl);
+							updateAllDrawListIndexBuffer();
+							pcPlotRender = true;
+						}
+					}
 				}
 				if (ImGui::IsItemHovered()) {
 					ImGui::BeginTooltip();
@@ -9623,6 +9690,30 @@ int main(int, char**)
 					ImGui::Text("Alternative: drag and drop axis labels)");
 					ImGui::EndTooltip();
 				}
+			}
+
+			if (ImGui::BeginPopup("AttributePopup")) {
+				ImGui::SetNextItemWidth(100);
+				ImGui::InputText("##newName", newAttributeName, 50);
+				ImGui::SameLine();
+				if (ImGui::MenuItem("Rename")) {
+					pcAttributes[popupAttribute].name = newAttributeName;
+					sortAttributes();
+				}
+				if (ImGui::MenuItem("Reset min/max")) {
+					std::string resetName = g_PcPlotDrawLists.front().name;
+					bool update = loadAttributeSettings(resetName, popupAttribute);
+					if (update) {
+						updateAllDrawListIndexBuffer();
+						pcPlotRender = true;
+					}
+				}
+				if (ImGui::MenuItem("Swap min/max")) {
+					std::swap(pcAttributes[popupAttribute].min, pcAttributes[popupAttribute].max);
+					pcPlotRender = true;
+				}
+
+				ImGui::EndPopup();
 			}
 
 			ImGui::InputText("Directory Path", pcFilePath, 200);
