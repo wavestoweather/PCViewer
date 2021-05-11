@@ -7604,7 +7604,44 @@ int main(int, char**)
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::BeginMenu("Open")) {
-					//TODO generalize file opening
+					bool open = ImGui::InputText("Directory Path", pcFilePath, 200, ImGuiInputTextFlags_EnterReturnsTrue);
+					if (ImGui::IsItemHovered()) {
+						ImGui::BeginTooltip();
+						ImGui::Text("Enter either a file including filepath,\nOr a folder (division with /) and all datasets in the folder will be loaded\nOr drag and drop files to load onto application.");
+						ImGui::EndTooltip();
+					}
+
+					ImGui::SameLine();
+
+					//Opening a new Dataset into the Viewer
+					if (ImGui::Button("Open") || open) {
+						std::string f = pcFilePath;
+						std::string fileExtension = f.substr(f.find_last_of("/\\") + 1);
+						size_t pos = fileExtension.find_last_of(".");
+						if (pos != std::string::npos) {		//entered discrete file
+							bool success = openDataset(pcFilePath);
+							if (success && pcSettings.createDefaultOnLoad) {
+								//pcPlotRender = true;
+								createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+								pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+							}
+						}
+						else {					//entered folder -> open open dataset dialogue
+							for (const auto& entry : std::filesystem::directory_iterator(f)) {
+								if (entry.is_regular_file()) {	//only process normal enties
+									fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
+									if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
+									droppedPaths.emplace_back(entry.path().u8string());
+									droppedPathActive.emplace_back(1);
+									pathDropped = true;
+									f = entry.path().u8string();
+									if (queryAttributes.empty() && f.substr(f.find_last_of(".") + 1) == "nc") {
+										queryAttributes = queryNetCDF((entry.path().u8string()).c_str());
+									}
+								}
+							}
+						}
+					}
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Open recent")) {
@@ -7622,7 +7659,20 @@ int main(int, char**)
 				}
 				if (ImGui::BeginMenu("Export")) {
 					if (ImGui::MenuItem("Png")) {
-
+						ImGuiID id = ImGui::GetWindowViewport()->ID;
+						ImVec2 size = ImGui::GetWindowViewport()->GetWorkSize();
+						for (int i = 0; i < ImGui::GetCurrentContext()->Viewports.Size; i++) {
+							if (ImGui::GetCurrentContext()->Viewports[i]->ID == id) {
+								g_ExportViewportNumber = i;
+								break;
+							}
+						}
+						if (g_ExportImageWidth != (int)size.x * g_ExportScale || g_ExportImageHeight != (int)size.y * g_ExportScale) {
+							g_ExportImageWidth = (int)size.x * g_ExportScale;
+							g_ExportImageHeight = (int)size.y * g_ExportScale;
+							recreateExportWindow();
+						}
+						g_ExportCountDown = 1;
 					}
 					ImGui::EndMenu();
 				}
@@ -7787,6 +7837,26 @@ int main(int, char**)
 					globalBrushes[animationBrush].brushes[animationAttribute] = { { currentBrushId++,{pcAttributes[animationAttribute].min - d, pcAttributes[animationAttribute].min + d} } };
 					animationCurrentStep = -1;
 				}
+				ImGui::Separator();
+				ImGui::DragFloat("Size muliplicator", &g_ExportScale, .5f, .5f, 20);
+				ImVec2 size = ImGui::GetWindowViewport()->GetWorkSize();
+				ImGui::Text("Resulting size: {%d, %d}", (int)(size.x* g_ExportScale), (int)(size.y* g_ExportScale));
+				ImGui::InputText("Export file(including filepath)", g_ExportPath, 200);
+				if (ImGui::MenuItem("Export")) {
+					ImGuiID id = ImGui::GetWindowViewport()->ID;
+					for (int i = 0; i < ImGui::GetCurrentContext()->Viewports.Size; i++) {
+						if (ImGui::GetCurrentContext()->Viewports[i]->ID == id) {
+							g_ExportViewportNumber = i;
+							break;
+						}
+					}
+					if (g_ExportImageWidth != (int)size.x * g_ExportScale || g_ExportImageHeight != (int)size.y * g_ExportScale) {
+						g_ExportImageWidth = (int)size.x * g_ExportScale;
+						g_ExportImageHeight = (int)size.y * g_ExportScale;
+						recreateExportWindow();
+					}
+					g_ExportCountDown = 1;
+				}
 
 				ImGui::EndMenu();
 			}
@@ -7807,7 +7877,7 @@ int main(int, char**)
 					memcpy(color, payload->Data, payload->DataSize);
 				}
 			}
-			addExportMenu();
+			//addExportMenu();
 			if (ImGui::BeginMenu("Help")) {
 				if (ImGui::MenuItem("User Documentation")) {
 					openUserDoc = true;
