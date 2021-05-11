@@ -749,6 +749,8 @@ static std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Conta
 static std::vector<int> pcAttributesSorted;
 static std::vector<int> pcAttrOrd = std::vector<int>();							//Contains the ordering of the attributes	
 static std::vector<std::string> droppedPaths = std::vector<std::string>();
+static std::vector<std::string> recentFiles;
+static int recentFilesAmt = 10;
 static std::vector<uint8_t> droppedPathActive;
 static bool* createDLForDrop = NULL;
 static bool pathDropped = false;
@@ -2594,6 +2596,7 @@ static void destroyPcPlotDataSet(DataSet& dataSet) {
 
 		pcAttributes.clear();
 		pcAttrOrd.clear();
+		pcAttributesSorted.clear();
 		if (pcAttributeEnabled) {
 			delete[] pcAttributeEnabled;
 			pcAttributeEnabled = nullptr;
@@ -4768,6 +4771,31 @@ static void sortAttributes() {
 	std::sort(pcAttributesSorted.begin(), pcAttributesSorted.end(), [&](int lhs, int rhs) {return pcAttributes[lhs].name < pcAttributes[rhs].name; }); //now one can print sorted by iteratin through the vector and printing the name of the attribute at the current iterator index
 }
 
+static void saveRecentFiles() {
+	int const stringLength = 50;
+	SettingsManager::Setting s{};
+	s.id = "RecentFiles";
+	s.type = "RecentFiles";
+	s.byteLength = stringLength * recentFiles.size();
+	s.data = new char[stringLength * recentFiles.size()];
+	char* cur = (char*)s.data;
+	for (auto& f : recentFiles) {
+		strcpy(cur, f.c_str());
+		cur += stringLength;
+	}
+	settingsManager->addSetting(s);
+}
+
+static void loadRecentFiles() {
+	int const stringLength = 50;
+	SettingsManager::Setting& s = settingsManager->getSetting("RecentFiles");
+	recentFiles = std::vector<std::string>(s.byteLength / stringLength);
+	char* cur = (char*)s.data;
+	for (int i = 0; i < recentFiles.size(); ++i, cur += stringLength) {
+		recentFiles[i] = cur;
+	}
+}
+
 static bool openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
@@ -4788,6 +4816,15 @@ static bool openDataset(const char* filename) {
     if(!opened) return false;
 	//printing Amount of data loaded
 	std::cout << "Amount of data loaded: " << g_PcPlotDataSets.back().data.size() << std::endl;
+
+	//adding path to the recent files list if not yet added and resizing the list if too large
+	if (std::find(recentFiles.begin(), recentFiles.end(), std::string(filename)) == recentFiles.end()) {
+		recentFiles.push_back(filename);
+		if (recentFiles.size() > recentFilesAmt) {
+			recentFiles = std::vector<std::string>(recentFiles.begin() + 1, recentFiles.end());
+		}
+		saveRecentFiles();
+	}
 
 	//standard things which should be done on loading of a dataset
 	//adding a standard attributes saving
@@ -7258,6 +7295,9 @@ int main(int, char**)
 			int index = *((int*)settingsManager->getSetting("defaultViolinDrawlist").data);
 			memcpy(&violinPlotAttributeSettings, (*set)[index]->data, sizeof(ViolinSettings));
 		}
+
+		//loading recent files
+		loadRecentFiles();
 	}
 
 	// Main loop
@@ -7560,6 +7600,45 @@ int main(int, char**)
 		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
+			if (ImGui::BeginMenu("File")) {
+				if (ImGui::BeginMenu("Open")) {
+					//TODO generalize file opening
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Open recent")) {
+					for (auto& f : recentFiles) {
+						if (ImGui::MenuItem(f.c_str())) {
+							droppedPaths.push_back(f);
+							droppedPathActive.push_back(1);
+							pathDropped = true;
+							if (queryAttributes.empty() && f.substr(f.find_last_of(".") + 1) == "nc") {
+								queryAttributes = queryNetCDF(event.drop.file);
+							}
+						}
+					}
+					ImGui::EndMenu();
+				}
+				if (ImGui::BeginMenu("Export")) {
+					if (ImGui::MenuItem("Png")) {
+
+					}
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Edit")) {
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("View")) {
+
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Options")) {
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Help")) {
+				ImGui::EndMenu();
+			}
 			if (ImGui::BeginMenu("Gui")) {
 				//ImGui::ShowFontSelector("Select font");
 				//ImGui::ShowStyleSelector("Select gui style");

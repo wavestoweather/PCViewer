@@ -21,10 +21,11 @@ public:
 
 	bool addSetting(Setting s, bool autostore = true);
 	bool deleteSetting(std::string id);
-	Setting getSetting(std::string id);
+	Setting& getSetting(std::string id);
 	std::vector<Setting*>* getSettingsType(std::string type);
 
 private:
+	Setting notFound{ "settingnotfound" };
 	static char settingsFile[];
 	static char filePath[];
 	void storeSettings(const char* filename);

@@ -64,9 +64,9 @@ bool SettingsManager::deleteSetting(std::string id)
 	return true;
 }
 
-SettingsManager::Setting SettingsManager::getSetting(std::string id)
+SettingsManager::Setting& SettingsManager::getSetting(std::string id)
 {
-	if (settings.find(id) == settings.end()) return { "settingnotfound" };
+	if (settings.find(id) == settings.end()) return notFound;
 	return settings[id];
 }
 
