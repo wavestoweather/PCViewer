@@ -7597,7 +7597,7 @@ int main(int, char**)
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 		}
 
-		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false;
+		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false, openUserDoc = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
@@ -7627,21 +7627,6 @@ int main(int, char**)
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Edit")) {
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("View")) {
-
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Options")) {
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Help")) {
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Gui")) {
-				//ImGui::ShowFontSelector("Select font");
-				//ImGui::ShowStyleSelector("Select gui style");
 				if (ImGui::BeginMenu("Load style")) {
 					for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType("style")) {
 						if (ImGui::MenuItem(savedStyle->id.c_str())) {
@@ -7676,10 +7661,10 @@ int main(int, char**)
 					int selection = -1;
 					if (settingsManager->getSetting("defaultstyle").id != "settingnotfound")
 						selection = *((int*)settingsManager->getSetting("defaultstyle").data);
-					if (ImGui::MenuItem("Default","", selection == -1)) settingsManager->deleteSetting("defaultstyle");
+					if (ImGui::MenuItem("Default", "", selection == -1)) settingsManager->deleteSetting("defaultstyle");
 					int c = 0;
 					for (SettingsManager::Setting* savedStyle : *settingsManager->getSettingsType("style")) {
-						
+
 						if (ImGui::MenuItem(savedStyle->id.c_str(), "", selection == c)) {
 							SettingsManager::Setting s{};
 							s.id = "defaultstyle";
@@ -7695,58 +7680,22 @@ int main(int, char**)
 				ImGui::ShowStyleEditor();
 				ImGui::EndMenu();
 			}
-			if (ImGui::BeginMenu("Settings")) {
-				addSaveSettingsMenu<PCSettings>(&pcSettings, "PCSettings", "pcsettings");
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Maximize")) {
-				ImGui::DragInt("Max window Width", (int*)&windowWidth, 10, 200, 10000);
-				ImGui::DragInt("Max window Height", (int*)&windowHeight, 10, 200, 10000);
-				if (ImGui::MenuItem("Maximize!")) {
-					SDL_SetWindowSize(window, windowWidth, windowHeight);
-				}
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Attribute")) {
-				if (ImGui::MenuItem("Save Attributes", "Ctrl+S") && pcAttributes.size() > 0) {
-					openSave = true;
-				}
-				if (ImGui::BeginMenu("Load...")) {
-					for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
-						if (ImGui::MenuItem(s->id.c_str())) {
-							openLoad = !loadAttributeSettings(s->id, -1);
-							if (!openLoad) {
-								updateAllDrawListIndexBuffer();
-								pcPlotRender = true;
-							}
-						}
-					}
+			if (ImGui::BeginMenu("View")) {
+				ImGui::MenuItem("Bubbleplot workbench", "", &bubbleWindowSettings.enabled);
+				ImGui::MenuItem("3d View", "", &view3dSettings.enabled);
+				if (ImGui::BeginMenu("Iso surface workbenches")) {
+					ImGui::MenuItem("Iso surface workbench", "", &isoSurfSettings.enabled);
+					ImGui::MenuItem("Direct iso surface workbench", "", &brushIsoSurfSettings.enabled);
 					ImGui::EndMenu();
 				}
-				if (ImGui::MenuItem("Manage")) {
-					openAttributesManager = true;
+				if (ImGui::BeginMenu("Violinplot workbenches")) {
+					ImGui::MenuItem("Violin attribute major", "", &violinPlotAttributeSettings.enabled);
+					ImGui::MenuItem("Violin drawlist major", "", &violinPlotDrawlistSettings.enabled);
+					ImGui::EndMenu();
 				}
 				ImGui::EndMenu();
 			}
-			if (ImGui::BeginMenu("Colors")) {
-				for (auto& s : *settingsManager->getSettingsType("COLOR")) {
-					ImGui::ColorEdit4(s->id.c_str(), (float*)s->data, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-				}
-				if (ImGui::MenuItem("Manage")) {
-					openColorManager = true;
-				}
-
-				ImGui::EndMenu();
-			}
-			//If a color was dropped open saving popup.
-			if (ImGui::BeginDragDropTarget()) {
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("_COL4F")) {
-					saveColor = true;
-					memcpy(color, payload->Data, payload->DataSize);
-				}
-			}
-
-			if (ImGui::BeginMenu("Global brush")) {
+			if (ImGui::BeginMenu("Options")) {
 				if (ImGui::MenuItem("Activate Global Brushing", "", &pcSettings.toggleGlobalBrushes) && !pcSettings.toggleGlobalBrushes) {
 					pcPlotRender = updateAllActiveIndices();
 				}
@@ -7759,11 +7708,9 @@ int main(int, char**)
 
 					ImGui::EndMenu();
 				}
-				ImGui::InputFloat("Mu add factor", &pcSettings.brushMuFactor, 0.000001, 0.001,10);
+				ImGui::InputFloat("Mu add factor", &pcSettings.brushMuFactor, 0.000001, 0.001, 10);
 
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Fractioning")) {
+				ImGui::Separator();
 				if (ImGui::InputInt("Max fraction depth", &pcSettings.maxFractionDepth, 1, 1)) {
 					if (pcSettings.maxFractionDepth < 1) pcSettings.maxFractionDepth = 1;
 					if (pcSettings.maxFractionDepth > 30)pcSettings.maxFractionDepth = 30;
@@ -7795,16 +7742,15 @@ int main(int, char**)
 					if (pcSettings.fractionBoxLineWidth < 1) pcSettings.maxFractionDepth = 1;
 					if (pcSettings.fractionBoxLineWidth > 30) pcSettings.maxFractionDepth = 30;
 				}
-				
+
 				ImGui::SliderFloat("Multivariate std dev thresh", &pcSettings.multivariateStdDivThresh, .01f, 5);
-				
+
 				if (ImGui::IsItemDeactivatedAfterEdit()) {
 					pcPlotRender = updateAllActiveIndices();
 				}
 
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Animation")) {
+				ImGui::Separator();
+
 				ImGui::SliderFloat("Animation duration per step", &pcSettings.animationDuration, .1f, 10);
 				ImGui::Checkbox("Export animation steps", &pcSettings.animationExport);
 				ImGui::InputText("Export path(including file-name/ending)", animationExportPath, 200);
@@ -7839,24 +7785,144 @@ int main(int, char**)
 					globalBrushes[animationBrush].brushes[animationAttribute] = { { currentBrushId++,{pcAttributes[animationAttribute].min - d, pcAttributes[animationAttribute].min + d} } };
 					animationCurrentStep = -1;
 				}
+
 				ImGui::EndMenu();
 			}
-			if (ImGui::BeginMenu("Workbenches")) {
-				ImGui::MenuItem("Bubbleplot workbench", "", &bubbleWindowSettings.enabled);
-				ImGui::MenuItem("3d View", "", &view3dSettings.enabled);
-				if(ImGui::BeginMenu("Iso surface workbenches")) {
-					ImGui::MenuItem("Iso surface workbench", "", &isoSurfSettings.enabled);
-					ImGui::MenuItem("Direct iso surface workbench", "", &brushIsoSurfSettings.enabled);
-					ImGui::EndMenu();
+			if (ImGui::BeginMenu("Colors")) {
+				for (auto& s : *settingsManager->getSettingsType("COLOR")) {
+					ImGui::ColorEdit4(s->id.c_str(), (float*)s->data, ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 				}
-				if (ImGui::BeginMenu("Violinplot workbenches")) {
-					ImGui::MenuItem("Violin attribute major", "", &violinPlotAttributeSettings.enabled);
-					ImGui::MenuItem("Violin drawlist major", "", &violinPlotDrawlistSettings.enabled);
-					ImGui::EndMenu();
+				if (ImGui::MenuItem("Manage")) {
+					openColorManager = true;
 				}
+
 				ImGui::EndMenu();
+			}
+			//If a color was dropped open saving popup.
+			if (ImGui::BeginDragDropTarget()) {
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("_COL4F")) {
+					saveColor = true;
+					memcpy(color, payload->Data, payload->DataSize);
+				}
 			}
 			addExportMenu();
+			if (ImGui::BeginMenu("Help")) {
+				if (ImGui::MenuItem("User Documentation")) {
+					openUserDoc = true;
+				}
+				ImGui::EndMenu();
+			}
+
+			//if (ImGui::BeginMenu("Global brush")) {
+			//	if (ImGui::MenuItem("Activate Global Brushing", "", &pcSettings.toggleGlobalBrushes) && !pcSettings.toggleGlobalBrushes) {
+			//		pcPlotRender = updateAllActiveIndices();
+			//	}
+			//
+			//	if (ImGui::BeginMenu("Brush Combination")) {
+			//		static char* const combinations[] = { "OR","AND" };
+			//		if (ImGui::Combo("brushCombination", &pcSettings.brushCombination, combinations, sizeof(combinations) / sizeof(*combinations))) {
+			//			pcPlotRender = updateAllActiveIndices();
+			//		}
+			//
+			//		ImGui::EndMenu();
+			//	}
+			//	ImGui::InputFloat("Mu add factor", &pcSettings.brushMuFactor, 0.000001, 0.001,10);
+			//
+			//	ImGui::EndMenu();
+			//}
+			//if (ImGui::BeginMenu("Fractioning")) {
+			//	if (ImGui::InputInt("Max fraction depth", &pcSettings.maxFractionDepth, 1, 1)) {
+			//		if (pcSettings.maxFractionDepth < 1) pcSettings.maxFractionDepth = 1;
+			//		if (pcSettings.maxFractionDepth > 30)pcSettings.maxFractionDepth = 30;
+			//	}
+			//
+			//	if (ImGui::InputInt("Outlier rank", &pcSettings.outlierRank, 1, 1)) {
+			//		if (pcSettings.outlierRank < 1) pcSettings.outlierRank = 1;
+			//	}
+			//
+			//	static char* boundsTypes[] = { "No adjustment","Pull in outside", "Pull in both sides" };
+			//	if (ImGui::BeginCombo("Bounds behaviour", boundsTypes[pcSettings.boundsBehaviour])) {
+			//		for (int i = 0; i < 3; i++) {
+			//			if (ImGui::MenuItem(boundsTypes[i])) pcSettings.boundsBehaviour = i;
+			//		}
+			//		ImGui::EndCombo();
+			//	}
+			//
+			//	static char* splitTypes[] = { "Split half","SAH" };
+			//	if (ImGui::BeginCombo("Split behaviour", splitTypes[pcSettings.splitBehaviour])) {
+			//		for (int i = 0; i < 2; ++i) {
+			//			if (ImGui::MenuItem(splitTypes[i])) pcSettings.splitBehaviour = i;
+			//		}
+			//		ImGui::EndCombo();
+			//	}
+			//
+			//	ImGui::DragFloat("Fractionbox width", &pcSettings.fractionBoxWidth, 1, 0, 100);
+			//
+			//	if (ImGui::InputInt("Fractionbox linewidth", &pcSettings.fractionBoxLineWidth, 1, 1)) {
+			//		if (pcSettings.fractionBoxLineWidth < 1) pcSettings.maxFractionDepth = 1;
+			//		if (pcSettings.fractionBoxLineWidth > 30) pcSettings.maxFractionDepth = 30;
+			//	}
+			//	
+			//	ImGui::SliderFloat("Multivariate std dev thresh", &pcSettings.multivariateStdDivThresh, .01f, 5);
+			//	
+			//	if (ImGui::IsItemDeactivatedAfterEdit()) {
+			//		pcPlotRender = updateAllActiveIndices();
+			//	}
+			//
+			//	ImGui::EndMenu();
+			//}
+			//if (ImGui::BeginMenu("Animation")) {
+			//	ImGui::SliderFloat("Animation duration per step", &pcSettings.animationDuration, .1f, 10);
+			//	ImGui::Checkbox("Export animation steps", &pcSettings.animationExport);
+			//	ImGui::InputText("Export path(including file-name/ending)", animationExportPath, 200);
+			//	ImGui::Separator();
+			//	if (ImGui::MenuItem("Start drawlist animation")) {
+			//		pcViewerState = pcSettings.animationSteps ? PCViewerState::AnimateDrawlistsExport : PCViewerState::AnimateDrawlists;
+			//		animationStart = std::chrono::steady_clock::now();
+			//	}
+			//	ImGui::Separator();
+			//	if (ImGui::BeginCombo("Brush to animate", animationBrush == -1 ? "Select" : globalBrushes[animationBrush].name.c_str())) {
+			//		for (int i = 0; i < globalBrushes.size(); ++i) {
+			//			if (ImGui::MenuItem(globalBrushes[i].name.c_str())) {
+			//				animationBrush = i;
+			//			}
+			//		}
+			//		ImGui::EndCombo();
+			//	}
+			//	if (ImGui::BeginCombo("Attribute to animate", animationAttribute == -1 ? "Select" : pcAttributes[animationAttribute].name.c_str())) {
+			//		for (int i = 0; i < pcAttributes.size(); ++i) {
+			//			if (ImGui::MenuItem(pcAttributes[i].name.c_str())) {
+			//				animationAttribute = i;
+			//			}
+			//		}
+			//		ImGui::EndCombo();
+			//	}
+			//	ImGui::DragInt("Steps amount", &pcSettings.animationSteps, 1, 2, 1e6);
+			//	if (ImGui::MenuItem("Start global brush animation") && animationBrush >= 0 && animationAttribute >= 0) {
+			//		pcViewerState = pcSettings.animationExport ? PCViewerState::AnimateGlobalBrushExport : PCViewerState::AnimateGlobalBrush;
+			//		animationStart = std::chrono::steady_clock::now();
+			//		animationAttributeBrush = globalBrushes[animationBrush].brushes[animationAttribute];
+			//		float d = (pcAttributes[animationAttribute].max - pcAttributes[animationAttribute].min) / pcSettings.animationSteps / 2;
+			//		globalBrushes[animationBrush].brushes[animationAttribute] = { { currentBrushId++,{pcAttributes[animationAttribute].min - d, pcAttributes[animationAttribute].min + d} } };
+			//		animationCurrentStep = -1;
+			//	}
+			//	ImGui::EndMenu();
+			//}
+			//if (ImGui::BeginMenu("Workbenches")) {
+			//	ImGui::MenuItem("Bubbleplot workbench", "", &bubbleWindowSettings.enabled);
+			//	ImGui::MenuItem("3d View", "", &view3dSettings.enabled);
+			//	if(ImGui::BeginMenu("Iso surface workbenches")) {
+			//		ImGui::MenuItem("Iso surface workbench", "", &isoSurfSettings.enabled);
+			//		ImGui::MenuItem("Direct iso surface workbench", "", &brushIsoSurfSettings.enabled);
+			//		ImGui::EndMenu();
+			//	}
+			//	if (ImGui::BeginMenu("Violinplot workbenches")) {
+			//		ImGui::MenuItem("Violin attribute major", "", &violinPlotAttributeSettings.enabled);
+			//		ImGui::MenuItem("Violin drawlist major", "", &violinPlotDrawlistSettings.enabled);
+			//		ImGui::EndMenu();
+			//	}
+			//	ImGui::EndMenu();
+			//}
 			ImGui::EndMenuBar();
 		}
 		//popup for saving a new Attribute Setting
@@ -7874,6 +7940,16 @@ int main(int, char**)
 		}
 		if (openColorManager) {
 			ImGui::OpenPopup("Color manager");
+		}
+		if (openUserDoc) {
+			ImGui::OpenPopup("UserDoc");
+		}
+		if (ImGui::BeginPopup("UserDoc", ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("For the user documentation go onto the website");
+			char website[] = "https://github.com/wavestoweather/PCViewer/blob/master/doc/overview.md";
+			ImGui::SetNextItemWidth(500);
+			ImGui::InputText("##userdoc", website, 71, ImGuiInputTextFlags_ReadOnly);
+			ImGui::EndPopup();
 		}
 		if (ImGui::BeginPopupModal("Manage attribute settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			std::string del;

@@ -48,6 +48,7 @@ bool SettingsManager::addSetting(Setting s, bool autostore)
 
 bool SettingsManager::deleteSetting(std::string id)
 {
+	if (settings.find(id) == settings.end()) return false;
 	Setting s = settings[id];
 	delete[] s.data;
 
