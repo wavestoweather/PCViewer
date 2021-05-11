@@ -373,7 +373,9 @@ struct GlobalBrush {
 	bool useMultivariate;								//indicator if brush should use fractions or multivariates
 	std::vector<std::vector<std::pair<float, float>>> fractions;
 	std::vector<MultivariateGauss::MultivariateBrush> multivariates;
-	std::string name;									//the name of a global brush describes the template list it was created from and more...
+	std::string nam;
+	//std::string name;									//the name of a global brush describes the template list it was created from and more...
+	std::string id;										//id of the brush
 	std::map<std::string, int> lineRatios;			//contains the ratio of still active lines per drawlist
 	std::map<int, std::vector<std::pair<unsigned int, std::pair<float, float>>>> brushes;	//for every brush that exists, one entry in this map exists, where the key is the index of the Attribute in the pcAttributes vector and the pair describes the minMax values
 };
@@ -5340,20 +5342,20 @@ static void updateIsoSurface(GlobalBrush& gb) {
 	for (auto& dl : g_PcPlotDrawLists) amtOfLines += dl.indices.size();
 	if ((ImGui::IsMouseDown(0) && pcSettings.liveBrushThreshold < amtOfLines) || !isoSurfSettings.coupleIsoSurfaceRenderer) return;
 	if (brushIsoSurfSettings.coupleBrushIsoSurfaceRenderer && brushIsoSurfSettings.enabled) {
-		if (brushIsoSurfaceRenderer->brushColors.find(gb.name) != brushIsoSurfaceRenderer->brushColors.end()) {
+		if (brushIsoSurfaceRenderer->brushColors.find(gb.id) != brushIsoSurfaceRenderer->brushColors.end()) {
 			std::vector<std::vector<std::pair<float, float>>> minMax(pcAttributes.size());
 			for (auto& axis : gb.brushes) {
 				for (auto& m : axis.second) {
 					minMax[axis.first].push_back(m.second);
 				}
 			}
-			brushIsoSurfaceRenderer->updateBrush(gb.name, minMax);
+			brushIsoSurfaceRenderer->updateBrush(gb.id, minMax);
 		}
 	}
 	int index = -1;
 	for (auto& db : isoSurfaceRenderer->drawlistBrushes) {
 		++index;
-		if (gb.name != db.brush) continue;
+		if (gb.id != db.brush) continue;
 		DrawList* dl = nullptr;
 		for (DrawList& draw : g_PcPlotDrawLists) {
 			if (draw.name == db.drawlist) {
@@ -7612,7 +7614,7 @@ int main(int, char**)
 							droppedPathActive.push_back(1);
 							pathDropped = true;
 							if (queryAttributes.empty() && f.substr(f.find_last_of(".") + 1) == "nc") {
-								queryAttributes = queryNetCDF(event.drop.file);
+								queryAttributes = queryNetCDF(f.c_str());
 							}
 						}
 					}
@@ -7760,9 +7762,9 @@ int main(int, char**)
 					animationStart = std::chrono::steady_clock::now();
 				}
 				ImGui::Separator();
-				if (ImGui::BeginCombo("Brush to animate", animationBrush == -1 ? "Select" : globalBrushes[animationBrush].name.c_str())) {
+				if (ImGui::BeginCombo("Brush to animate", animationBrush == -1 ? "Select" : globalBrushes[animationBrush].nam.c_str())) {
 					for (int i = 0; i < globalBrushes.size(); ++i) {
-						if (ImGui::MenuItem(globalBrushes[i].name.c_str())) {
+						if (ImGui::MenuItem(globalBrushes[i].nam.c_str())) {
 							animationBrush = i;
 						}
 					}
@@ -8362,7 +8364,8 @@ int main(int, char**)
 				ImGui::SameLine(250);
 				if (ImGui::Button("Combine active global brushes")) {
 					GlobalBrush combo;
-					combo.name = "Combined(";
+					combo.nam = "Combined(";
+					combo.id = "comb(";
 					bool any = false;
 					for (auto& brush : globalBrushes) {
 						if (!brush.active)
@@ -8373,11 +8376,13 @@ int main(int, char**)
 							combo.brushes[br.first].insert(combo.brushes[br.first].end(), br.second.begin(), br.second.end());
 						}
 						brush.active = false;
-						combo.name += brush.name.substr(std::min(brush.name.length() ,(size_t)5)) + "|";
+						combo.nam += brush.nam.substr(std::min(brush.nam.length() ,(size_t)5)) + "|";
+						combo.id += brush.id.substr(std::min(brush.id.length() ,(size_t)5)) + "|";
 					}
 					combo.active = true;
 					combo.edited = true;
-					combo.name += ")";
+					combo.nam += ")";
+					combo.id += ")";
 					combo.parent = nullptr;
 					combo.kdTree = nullptr;
 
@@ -8424,7 +8429,8 @@ int main(int, char**)
 							preview.active = true;
 							preview.edited = false;
 							preview.useMultivariate = false;
-							preview.name = templateBrushes[i].name;
+							preview.nam = templateBrushes[i].name;
+							preview.id = templateBrushes[i].name;
 							for (int i = 0; i < pcAttributes.size(); ++i) {
 								preview.brushes[i] = {};
 							}
@@ -8468,7 +8474,7 @@ int main(int, char**)
 				bool popEnd = false;
 				static int openConvertToLokal = -1, setParent = -1;
 				for (int i = 0; i < globalBrushes.size(); i++) {
-					if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i, ImGuiSelectableFlags_None, ImVec2(350, 0))) {
+					if (ImGui::Selectable(globalBrushes[i].nam.c_str(), selectedGlobalBrush == i, ImGuiSelectableFlags_None, ImVec2(350, 0))) {
 						pcPlotSelectedDrawList.clear();
 						if (selectedGlobalBrush != i) {
 							selectedGlobalBrush = i;
@@ -8484,23 +8490,23 @@ int main(int, char**)
 					if (ImGui::BeginDragDropSource()) {
 						GlobalBrush* brush = &globalBrushes[i];
 						ImGui::SetDragDropPayload("GlobalBrush", &brush, sizeof(GlobalBrush*));
-						ImGui::Text("%s", brush->name.c_str());
+						ImGui::Text("%s", brush->id.c_str());
 						ImGui::EndDragDropSource();
 					}
 					static char newBrushName[50]{};
 					if (ImGui::IsItemClicked(1)) {
-						ImGui::OpenPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str());
-						strcpy(newBrushName, globalBrushes[i].name.c_str());
+						ImGui::OpenPopup(("GlobalBrushPopup##" + globalBrushes[i].id).c_str());
+						strcpy(newBrushName, globalBrushes[i].nam.c_str());
 					}
-					if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].name).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
+					if (ImGui::BeginPopup(("GlobalBrushPopup##" + globalBrushes[i].id).c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
 						ImGui::SetNextItemWidth(100);
 						if (ImGui::InputText("##newBrushName", newBrushName, 50, ImGuiInputTextFlags_EnterReturnsTrue)) {
-							globalBrushes[i].name = newBrushName;
+							globalBrushes[i].nam = newBrushName;
 							ImGui::CloseCurrentPopup();
 						}
 						ImGui::SameLine();
 						if (ImGui::MenuItem("Rename")) {
-							globalBrushes[i].name = newBrushName;
+							globalBrushes[i].nam = newBrushName;
 						}
 						if (globalBrushes[i].kdTree) {
 							if (ImGui::BeginCombo("Fracture depth", std::to_string(globalBrushes[i].fractureDepth).c_str())) {
@@ -8643,7 +8649,7 @@ int main(int, char**)
 					}
 
 					ImGui::SameLine();
-					if (i < globalBrushes.size() && ImGui::Checkbox(("##cbgb_" + globalBrushes[i].name).c_str(), &globalBrushes[i].active)) {
+					if (i < globalBrushes.size() && ImGui::Checkbox(("##cbgb_" + globalBrushes[i].id).c_str(), &globalBrushes[i].active)) {
 						pcPlotRender = updateAllActiveIndices();
 					}
 				}
@@ -8652,7 +8658,8 @@ int main(int, char**)
 				if (ImGui::Button("+##globalBrush", {100,0})) {
 					globalBrushes.push_back({});
 					globalBrushes.back().active = true;
-					globalBrushes.back().name = std::to_string(globalBrushCreateCount++);
+					globalBrushes.back().nam = std::to_string(globalBrushCreateCount++);
+					globalBrushes.back().id = globalBrushes.back().nam;
 					for (int i = 0; i < pcAttributes.size(); ++i) {
 						globalBrushes.back().brushes[i] = {};
 					}
@@ -8769,7 +8776,8 @@ int main(int, char**)
 						gb.active = true;
 						gb.edited = true;
 						gb.useMultivariate = false;
-						gb.name = dl->name;
+						gb.nam = dl->name;
+						gb.id = dl->name;
 						gb.parent = dl->parentTemplateList;
 						gb.kdTree = nullptr;
 						DataSet* ds = &(*std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [dl](auto d) {return d.name == dl->parentDataSet; }));
@@ -8801,8 +8809,8 @@ int main(int, char**)
 				ImGui::Separator();
 				//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 				for (auto& brush : globalBrushes) {
-					ImGui::BeginChild(("##brushStat" + brush.name).c_str(), ImVec2(400, 0), true);
-					ImGui::Text(brush.name.c_str());
+					ImGui::BeginChild(("##brushStat" + brush.id).c_str(), ImVec2(400, 0), true);
+					ImGui::Text(brush.nam.c_str());
 					float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 					static std::vector<float> ratios;
 					ImVec2 defaultCursorPos = ImGui::GetCursorPos();
@@ -8970,7 +8978,7 @@ int main(int, char**)
 						cursorPos.y += lineHeight;
 					}
 					ImGui::SetCursorPos(defaultCursorPos);
-					int hover = ImGui::PlotHistogramVertical(("##histo" + brush.name).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight * ratios.size()));
+					int hover = ImGui::PlotHistogramVertical(("##histo" + brush.id).c_str(), ratios.data(), ratios.size(), 0, NULL, 0, 1.0f, ImVec2(75, lineHeight * ratios.size()));
 					if (hover != -1) {
 						ImGui::BeginTooltip();
 						ImGui::Text("%2.1f%%", ratios[hover] * 100);
@@ -10204,7 +10212,8 @@ int main(int, char**)
 						ImGui::Separator();
 						if ((ImGui::Button("Create")) || ImGui::IsKeyPressed(KEYENTER)) {
 							GlobalBrush brush = {};
-							brush.name = std::string(n);
+							brush.nam = std::string(n);
+							brush.id = std::string(n);
 							brush.active = true;
 							brush.useMultivariate = false;
 							brush.edited = false;
@@ -11260,10 +11269,10 @@ int main(int, char**)
 			}
 			ImGui::SameLine();
 			if (selectedGlobalBrush != -1 && !globalBrushes.size()) selectedGlobalBrush = -1;
-			if (ImGui::BeginCombo("Brush(if now brush is selected, active indices are used for iso Surface)", (selectedGlobalBrush == -1) ? choose : globalBrushes[selectedGlobalBrush].name.c_str())) {
+			if (ImGui::BeginCombo("Brush(if now brush is selected, active indices are used for iso Surface)", (selectedGlobalBrush == -1) ? choose : globalBrushes[selectedGlobalBrush].nam.c_str())) {
 				if (ImGui::Selectable(choose, selectedGlobalBrush == -1)) selectedGlobalBrush = -1;
 				for (int i = 0; i < globalBrushes.size(); ++i) {
-					if (ImGui::Selectable(globalBrushes[i].name.c_str(), selectedGlobalBrush == i)) selectedGlobalBrush = i;
+					if (ImGui::Selectable(globalBrushes[i].nam.c_str(), selectedGlobalBrush == i)) selectedGlobalBrush = i;
 				}
 				ImGui::EndCombo();
 			}
@@ -11341,7 +11350,7 @@ int main(int, char**)
 					int index = -1;
 					for (int i = 0; i < isoSurfaceRenderer->drawlistBrushes.size(); ++i) {
 						if (dl->name == isoSurfaceRenderer->drawlistBrushes[i].drawlist){
-							if (isoSurfaceRenderer->drawlistBrushes[i].brush.size() && globalBrushes[selectedGlobalBrush].name == isoSurfaceRenderer->drawlistBrushes[i].brush) {
+							if (isoSurfaceRenderer->drawlistBrushes[i].brush.size() && globalBrushes[selectedGlobalBrush].id == isoSurfaceRenderer->drawlistBrushes[i].brush) {
 								index = i;
 								break;
 							}
@@ -11357,7 +11366,7 @@ int main(int, char**)
 					uint32_t d = zDim.second.size();
 					bool regularGrid[3]{ xDim.first, yDim.first, zDim.first };
 					if (index == -1) {
-						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,(selectedGlobalBrush == -1) ? "" : globalBrushes[selectedGlobalBrush].name,{ 1,0,0,1 }, {w, h, d} });
+						isoSurfaceRenderer->drawlistBrushes.push_back({ dl->name,(selectedGlobalBrush == -1) ? "" : globalBrushes[selectedGlobalBrush].id,{ 1,0,0,1 }, {w, h, d} });
 					}
 					if (selectedGlobalBrush == -1) {
 						std::vector<std::pair<float, float>> posBounds(3);
@@ -11731,7 +11740,7 @@ int main(int, char**)
 							minMax[axis.first].push_back(m.second);
 						}
 					}
-					brushIsoSurfaceRenderer->updateBrush(brush->name, minMax);
+					brushIsoSurfaceRenderer->updateBrush(brush->id, minMax);
 				}
 
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
