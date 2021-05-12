@@ -131,7 +131,6 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
 //#define _DEBUG
-//#define IMGUI_VULKAN_DEBUG_REPORT
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -421,6 +420,7 @@ struct DrawList {
 	std::vector<uint32_t> histogramUbosOffsets;
 	std::vector<VkDescriptorSet> histogrammDescSets;
 	VkDeviceMemory dlMem;
+	VkDeviceMemory indexBufferMemory;
 	VkDescriptorSet uboDescSet;
 	std::vector<uint32_t> indices;
 	//std::vector<uint32_t> activeInd;
@@ -1979,7 +1979,7 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	vkBindBufferMemory(g_Device, stagingBuffer.buffer, stagingBuffer.memory, 0);
 
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &vertexBuffer.memory);
 	check_vk_result(err);
 
@@ -2209,61 +2209,6 @@ static void destroyPcPlotVertexBuffer(Buffer& buffer) {
 	g_PcPlotVertexBuffers.erase(it);
 }
 
-static void removePcPlotDrawLists(DataSet dataSet) {
-	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ) {
-		if (it->parentDataSet == dataSet.name) {
-			it->indices.clear();
-			activeBrushRatios.erase(it->name);
-			if (it->dlMem) {
-				vkFreeMemory(g_Device, it->dlMem, nullptr);
-				it->dlMem = VK_NULL_HANDLE;
-			}
-			if (it->ubo) {
-				vkDestroyBuffer(g_Device, it->ubo, nullptr);
-				it->ubo = VK_NULL_HANDLE;
-			}
-			if (it->medianBuffer) {
-				vkDestroyBuffer(g_Device, it->medianBuffer, nullptr);
-				it->medianBuffer = VK_NULL_HANDLE;
-			}
-			if (it->medianUbo) {
-				vkDestroyBuffer(g_Device, it->medianUbo, nullptr);
-				it->medianUbo = VK_NULL_HANDLE;
-			}
-			if (it->indexBuffer) {
-				vkDestroyBuffer(g_Device, it->indexBuffer, nullptr);
-				it->indexBuffer = VK_NULL_HANDLE;
-			}
-			if (it->priorityColorBuffer) {
-				vkDestroyBuffer(g_Device, it->priorityColorBuffer, nullptr);
-				it->priorityColorBuffer = VK_NULL_HANDLE;
-			}
-			if (it->activeIndicesBuffer) {
-				vkDestroyBuffer(g_Device, it->activeIndicesBuffer, nullptr);
-				it->activeIndicesBuffer = VK_NULL_HANDLE;
-			}
-			if (it->activeIndicesBufferView) {
-				vkDestroyBufferView(g_Device, it->activeIndicesBufferView, nullptr);
-				it->activeIndicesBufferView = VK_NULL_HANDLE;
-			}
-			if (it->indicesBuffer) {
-				vkDestroyBuffer(g_Device, it->indicesBuffer, nullptr);
-				it->indicesBuffer = VK_NULL_HANDLE;
-			}
-			for (int i = 0; i < it->histogramUbos.size(); i++) {
-				vkDestroyBuffer(g_Device, it->histogramUbos[i], nullptr);
-			}
-			for (GlobalBrush& brush : globalBrushes) {
-				brush.lineRatios.erase(it->name);
-			}
-			g_PcPlotDrawLists.erase(it++);
-		}
-		else {
-			it++;
-		}
-	}
-}
-
 static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char* listName) {
 	VkResult err;
 
@@ -2336,9 +2281,13 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.indexBuffer);
 	check_vk_result(err);
 
-	dl.indexBufferOffset = allocInfo.allocationSize;
+	dl.indexBufferOffset = 0;
 	vkGetBufferMemoryRequirements(g_Device, dl.indexBuffer, &memRequirements);
-	allocInfo.allocationSize += memRequirements.size;
+	VkMemoryAllocateInfo allIn{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+	allIn.allocationSize = memRequirements.size;
+	allIn.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	vkAllocateMemory(g_Device, &allIn, nullptr, &dl.indexBufferMemory);
+	vkBindBufferMemory(g_Device, dl.indexBuffer, dl.indexBufferMemory, 0);
 
 	//priority rendering color buffer
 	bufferInfo.size = ds.data.size() * sizeof(float);
@@ -2399,23 +2348,23 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, sizeof(UniformBufferObject), 0, dl.medianUboDescSet);
 
 	//creating and uploading the indexbuffer data
-	uint32_t* indBuffer = new uint32_t[tl.indices.size() * 2];
-	for (int i = 0; i < tl.indices.size(); i++) {
-		indBuffer[2 * i] = tl.indices[i] * pcAttributes.size();
-		indBuffer[2 * i + 1] = tl.indices[i] * pcAttributes.size();
-	}
-	void* d;
-	vkMapMemory(g_Device, dl.dlMem, offset, tl.indices.size() * sizeof(uint32_t) * 2, 0, &d);
-	memcpy(d, indBuffer, tl.indices.size() * sizeof(uint32_t) * 2);
-	vkUnmapMemory(g_Device, dl.dlMem);
-	delete[] indBuffer;
+	//uint32_t* indBuffer = new uint32_t[tl.indices.size() * 2];
+	//for (int i = 0; i < tl.indices.size(); i++) {
+	//	indBuffer[2 * i] = tl.indices[i] * pcAttributes.size();
+	//	indBuffer[2 * i + 1] = tl.indices[i] * pcAttributes.size();
+	//}
+	//void* d;
+	//vkMapMemory(g_Device, dl.dlMem, offset, tl.indices.size() * sizeof(uint32_t) * 2, 0, &d);
+	//memcpy(d, indBuffer, tl.indices.size() * sizeof(uint32_t) * 2);
+	//vkUnmapMemory(g_Device, dl.dlMem);
+	//delete[] indBuffer;
 
 
 	//binding the medianBuffer
 	vkBindBufferMemory(g_Device, dl.medianBuffer, dl.dlMem, dl.medianBufferOffset);
 
 	//binding the indexBuffer
-	vkBindBufferMemory(g_Device, dl.indexBuffer, dl.dlMem, dl.indexBufferOffset);
+	//vkBindBufferMemory(g_Device, dl.indexBuffer, dl.dlMem, dl.indexBufferOffset);
 
 	//binding the  priority rendering buffer
 	vkBindBufferMemory(g_Device, dl.priorityColorBuffer, dl.dlMem, dl.priorityColorBufferOffset);
@@ -2554,8 +2503,24 @@ static void removePcPlotDrawList(DrawList& drawList) {
 				vkDestroyBuffer(g_Device, it->indicesBuffer, nullptr);
 				it->indicesBuffer = VK_NULL_HANDLE;
 			}
+			if (it->indexBufferMemory){
+				vkFreeMemory(g_Device, it->indexBufferMemory, nullptr);
+				it->indexBufferMemory = VK_NULL_HANDLE;
+			}
 			g_PcPlotDrawLists.erase(it);
 			break;
+		}
+	}
+}
+
+static void removePcPlotDrawLists(DataSet dataSet) {
+	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ) {
+		if (it->parentDataSet == dataSet.name) {
+			removePcPlotDrawList(*it);
+			it = g_PcPlotDrawLists.begin(); //resetting the iterator, as the old one is now not valid anymore
+		}
+		else {
+			it++;
 		}
 	}
 }
