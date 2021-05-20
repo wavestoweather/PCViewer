@@ -7714,6 +7714,8 @@ int main(int, char**)
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Options")) {
+				addSaveSettingsMenu<PCSettings>(&pcSettings, "PCSettings", "pcsettings");
+				ImGui::Separator();
 				if (ImGui::MenuItem("Activate Global Brushing", "", &pcSettings.toggleGlobalBrushes) && !pcSettings.toggleGlobalBrushes) {
 					pcPlotRender = updateAllActiveIndices();
 				}

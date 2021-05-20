@@ -22,15 +22,14 @@ The menu bar contains the following settings:
 1. **File**: File settigns which includes an ``open`` menu for opening a folder or a discrete file, an ``Open recent`` for opening a recently opened file (Maximum 10 files are stored currently), and an ``Export`` menu for exporting the current window as png.
 2. **Edit**: The edit menu contains all settings for the window style such as, frame border, frame rounding, frame colors, and so on. In the top there exist three menu items to load and save custom styles and setting the default style. Just below these menu items is a dropdown menu called Colors which has preset color styles from which one can choose. By default ``Dark`` is chosen.
 3. **View**: The view menu contains all additional workbenches to visualize the data. The available workbenches are: [Bubbleplot workbench](scatterplot.md), [3d View](density.md), [2 Iso surface workbenches](iso.md), and [2 Violin plot Workbenches](violin.md).
-4. **Options**: Here general options for brushing, brush fractioning, animation and image exportion can be found. ``Activate Global Brushing`` activates global brushing, ``Brush combination`` sets how multiple global brushes are combined (via and or or on active lines) and ``Mu add factor`` is the fraction amount to be added/substracted to the global brush bounds when using the mouse wheel on a brush. ``Max fraction depth`` sets the maximum depth of the kd-tree which splits a specific global brush into its factures, ``Outlier rank`` sets the threshold for which a kd-tree node is deemed an outlier, ``Bounds behaviour`` specifies the behaviour of the boundaries of the hypercube when split, ``Fractionbox width`` is the width of the renderd fraction boxes, ``Fractionbox linewidth`` the linewidth of the fraction boxes, ``Multivariate std dev thres`` is the threshold for the multivariate gauss distribution inside the fraction boxes until which a line is assumed to be contained in a fraction. More on that in the [Global brush documentation](brushing.md#global-brushes).On using and capabilities of animations see the [animation section](#animation). ``Animation duration per step`` is wait time for each animation step until the animation continues, ``Export animation steps`` is a checkbox to automatically export the animation steps as png's and ``Export path`` specifies the export location for the animation images. Put a ``%d`` in the filename to specify where the export image index should be put. Via the ``Brush to animate`` combo selection one can select the global brush wich should be used for brush animation, ``Attribute to animate`` specifies the attribute on which the brush animation should be run, ``Steps amount`` specifies the amount of animation steps and the axis division size. The last section then specifies settings for the image export. ``Size multiplicator`` sets the multiplicator with which the window size is multiplied to get the pixel size of the export image. This size can be seen in the line below. Below that one can specify an export file path and export an image form the current widow to the specified filename.
+4. **Options**: Here general options for brushing, brush fractioning, animation and image exportion can be found. In the top a section for storing the pcp settings, loading stored ones and selecting a default setting can be found. ``Activate Global Brushing`` activates global brushing, ``Brush combination`` sets how multiple global brushes are combined (via and or or on active lines) and ``Mu add factor`` is the fraction amount to be added/substracted to the global brush bounds when using the mouse wheel on a brush. ``Max fraction depth`` sets the maximum depth of the kd-tree which splits a specific global brush into its factures, ``Outlier rank`` sets the threshold for which a kd-tree node is deemed an outlier, ``Bounds behaviour`` specifies the behaviour of the boundaries of the hypercube when split, ``Fractionbox width`` is the width of the renderd fraction boxes, ``Fractionbox linewidth`` the linewidth of the fraction boxes, ``Multivariate std dev thres`` is the threshold for the multivariate gauss distribution inside the fraction boxes until which a line is assumed to be contained in a fraction. More on that in the [Global brush documentation](brushing.md#global-brushes).On using and capabilities of animations see the [animation section](#animation). ``Animation duration per step`` is wait time for each animation step until the animation continues, ``Export animation steps`` is a checkbox to automatically export the animation steps as png's and ``Export path`` specifies the export location for the animation images. Put a ``%d`` in the filename to specify where the export image index should be put. Via the ``Brush to animate`` combo selection one can select the global brush wich should be used for brush animation, ``Attribute to animate`` specifies the attribute on which the brush animation should be run, ``Steps amount`` specifies the amount of animation steps and the axis division size. The last section then specifies settings for the image export. ``Size multiplicator`` sets the multiplicator with which the window size is multiplied to get the pixel size of the export image. This size can be seen in the line below. Below that one can specify an export file path and export an image form the current widow to the specified filename.
 5. **Colors**: The colors menu provides the ability to store colors and load them. To store simply drag and drop a color from anywhere in the application onto the `Colors` menu (Drop indicator will show). Then a popup modal window appears to input a name for the newly saved color. When the color is saved it appears under the `Colors` menu. To load a color simply drag and drop your color out of the list and onto the color field in the application to set the corresponding color.
 6. **Help**: The Help menu contains a menu entry which gives you the link to this documentation.
 
-1. **Gui**: Gui settings to customize the appearance of the PCViewer application. In the top of the Gui Menu a section for storing and loading styles. With the `Set Default Style` menu item one can select the default style which should be loaded upon starting the PCViewer. In the `Colors` combo selection predefined color settings are safed to give good starting points for customizing the colors. The default style of the PCViewer is the `Dark` color setting.
-2. **Settings**: The settings menu tab provides the saved states for PCP settings. Again, similar to the style settings in the Gui tab, one can `Load PCSettings`, `Save/Remove PCSettings` and setting the default PCP settings on starting the application
-
 ## Parallel coordinates plot
-Image of loaded data
+This is how the preset view of a loaded dataset looks like:
+
+![standard loaded](images/pcp_loaded_standard.png)
 
 On top of the pcp, labels for each axis are displayed showing the name of the attribute.
 In the following the different interactions are shown, while the default parameters when loading a dataset are explained in detail in the [data loading section](data.md#data-loading).
@@ -48,7 +47,8 @@ In order to arrange the axes in any order you want the PCViewer supports two kin
 1. **Axes-Switching**: To switch the place of two attributes simply drag and drop one axis label onto another one. On drop both will be switched.
 2. **Axes-Shifting**: When holding down the `Ctrl`-key on dropping an axis, the dragged axis is pushed into the axis space it was dropped in and all axes between the new axis position and the old axis position are shifted towards the old position.
 
-Both types are displayed in [figure xxx](figure).
+The following figure shows the two different types for attribute switching:
+![atttribute switching](images/axes_switch.png)
 #### Attribute min/max
 Below the axis label is a drag float box which controlls the maximum axis value. Below the pcp another drag float box is positions which controlls the minimum axis value. To change these simply either
 1. **drag** the value to increase or decrease it,
@@ -61,10 +61,40 @@ Further note that one can also invert an axis by inserting the max value into th
 #### Saving Attribute Settings
 In order to save the attribute settings including axes ordering, axes scales, axes activations one can either simply press `Ctrl+S` or go into the `Attributes` menu in the [menu bar](#menu-bar) and click the `save` menu item. In the popup simply enter a name for the settings and click save permanently save it.
 
-To load a saved attribute setting simply open the `Attributes` menu in the [menu bar](#menu-bar), enter the `Load...` sub menu and click on the setting you want to load. The loading of an attribute settings includes a safety check if the setting is applicable to the current data structure.
+To load a saved attribute settings go to the [parallel coordinates settings](#parallel-coordinates-settings) and click on the setting you want to load. The loading of an attribute settings includes a safety check if the setting is applicable to the current data structure.
+
+#### PCP right click menu
+Most parallel coordinates settings can be accessed by right clicking on the pcp. The following menu opens up:
+![pcprightclickmenu](images/rightclick_pcp.png)
+
+The settings do the following:
+- **DrawHistogram** activates the stacked histogram overlay for the axes (details in the [overlayed axes histograms](overlayed-axes-histograms)).
+- **Show Pc Plot Density** activates pcp density few. Not adviced as this visualisation was abandoned due to lack of information retrieval
+- **Density Mapping** activates density color mapping. Density is mapped to heatmap colors according to the density.
+- **Greyscal density** actives greyscale density mapping instead of color mapping. If density and greyscale mapping are active, greyscale density is shown.
+- **Enable Median Calc** can be used to deactivate median calc.
+- **Enable brushing** does not affect anything(dead).
+- **Median line width** sets the width for the median line.
+- **Plot background** can be used to set the background color of the pcp. The axes color is automatically set to be the inverse of the background color.
+- **Render splines** selects whether splines (smooth lines) or polylines are drawn.
+- **Enable axis lines** activates axis lines.
+- **Always show 0 tick** can be activated to enforce 0 axis tick if min < 0 < max. Automatically removes on standard tick from the axis.
+- **Tick amount** sets the amount of ticks per axes (A tick is a value indicator on the axis).
+- **Priority draw list index** sets the index of the drawlist which is rendered with priority colors. More information to priority renderin in section [priority rendering](#priority-rendering)
+- **Priority rendering** dropdown can be used to activate priority rendering for an axis, or can be used to deactivate priority rendering.
+- **Set Priority center** enables the user to specify a priority center on an axis by clicking where the center should be set.
+- **Histogram comparison** enables to show the difference between one histogram and the rest of the stacked histograms.
+- **Default dralist on load** If active for each drawlist loaded a defeault drawlist containing all datapoints of the dataset is created automatically.
+- **Line batch size** sets the maximum line amount issued by a single command buffer. If a VkError -4 is reported when the lines should be renderd, reduce this amount.
 
 #### Overlayed Axes Histograms
 In order to better analyse the different distributions of drawlists for each attribute one can overlay a stacked color coded histogram at the attribute axes.
+
+#### Priority rendering
+
+## Global Brushes
+
+## Parallel Coordinates Settings
 
 ## Datasets
 In the dataset section one can manage all loaded datasets. Here only the standard user interactions are shown, for a more detailed explanation see the [data documentation](data.md).
