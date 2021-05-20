@@ -88,7 +88,8 @@ The settings do the following:
 - **Line batch size** sets the maximum line amount issued by a single command buffer. If a VkError -4 is reported when the lines should be renderd, reduce this amount.
 
 #### Overlayed Axes Histograms
-In order to better analyse the different distributions of drawlists for each attribute one can overlay a stacked color coded histogram at the attribute axes.
+In order to better analyse the different distributions of drawlists for each attribute one can overlay a stacked color coded histogram at the attribute axes:
+![stacked histogram](images/pcp_wideHistogram.png)
 
 #### Priority rendering
 
