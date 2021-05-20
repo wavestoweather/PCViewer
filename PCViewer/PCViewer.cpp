@@ -4755,7 +4755,7 @@ static void saveRecentFiles() {
 }
 
 static void loadRecentFiles() {
-	int const stringLength = 50;
+	int const stringLength = 250;
 	SettingsManager::Setting& s = settingsManager->getSetting("RecentFiles");
 	recentFiles = std::vector<std::string>(s.byteLength / stringLength);
 	char* cur = (char*)s.data;
@@ -7565,7 +7565,7 @@ int main(int, char**)
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 		}
 
-		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openLoad = false, openAttributesManager = false, saveColor = false, openColorManager = false, openUserDoc = false;
+		bool openSave = ImGui::GetIO().KeyCtrl && ImGui::IsKeyDown(22), openAttributesManager = false, saveColor = false, openColorManager = false, openUserDoc = false;
 		float color[4];
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
@@ -7967,9 +7967,6 @@ int main(int, char**)
 		if (openSave) {
 			ImGui::OpenPopup("Save attribute setting");
 		}
-		if (openLoad) {
-			ImGui::OpenPopup("Load error");
-		}
 		if (openAttributesManager) {
 			ImGui::OpenPopup("Manage attribute settings");
 		}
@@ -8053,14 +8050,6 @@ int main(int, char**)
 			ImGui::SetItemDefaultFocus();
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::EndPopup();
-		}
-		//popup for loading error
-		if (ImGui::BeginPopupModal("Load error")) {
-			ImGui::Text("Error at loading the current setting");
-			if ((ImGui::Button("Close", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYESC)) {
 				ImGui::CloseCurrentPopup();
 			}
 			ImGui::EndPopup();
@@ -9951,6 +9940,60 @@ int main(int, char**)
 					pcPlotRender = true;
 				}
 
+				ImGui::EndPopup();
+			}
+
+			ImGui::Separator();
+			bool openLoad = false;
+			if (ImGui::CollapsingHeader("Saved Attributes settings")){
+				for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
+					if (ImGui::Button(s->id.c_str())) {
+						if (((int*)(s->data))[0] != pcAttributes.size()) {
+							openLoad = true;
+							continue;
+						}
+
+						std::vector<Attribute> savedAttr;
+						char* d = (char*)s->data + sizeof(int);
+						bool cont = false;
+						for (int i = 0; i < ((int*)s->data)[0]; i++) {
+							Attribute a = {};
+							a.name = std::string(d);
+							d += a.name.size() + 1;
+							a.min = *(float*)d;
+							d += sizeof(float);
+							a.max = *(float*)d;
+							d += sizeof(float);
+							savedAttr.push_back(a);
+							if (pcAttributes[i].name != savedAttr[i].name) {
+								openLoad = true;
+								cont = true;
+							}
+						}
+						if (cont)
+							continue;
+
+						int* o = (int*)d;
+						bool* act = (bool*)(d + pcAttributes.size() * sizeof(int));
+						for (int i = 0; i < pcAttributes.size(); i++) {
+							pcAttributes[i] = savedAttr[i];
+							pcAttrOrd[i] = o[i];
+							pcAttributeEnabled[i] = act[i];
+						}
+						updateAllDrawListIndexBuffer();
+						pcPlotRender = true;
+					}
+				}
+			}
+			if (openLoad) {
+				ImGui::OpenPopup("Load error");
+			}
+			//popup for loading error
+			if (ImGui::BeginPopupModal("Load error")) {
+				ImGui::Text("Error at loading the current setting");
+				if ((ImGui::Button("Close", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYESC)) {
+					ImGui::CloseCurrentPopup();
+				}
 				ImGui::EndPopup();
 			}
 
