@@ -4739,7 +4739,7 @@ static void sortAttributes() {
 }
 
 static void saveRecentFiles() {
-	int const stringLength = 50;
+	int const stringLength = 250;
 	SettingsManager::Setting s{};
 	s.id = "RecentFiles";
 	s.type = "RecentFiles";
@@ -4751,6 +4751,7 @@ static void saveRecentFiles() {
 		cur += stringLength;
 	}
 	settingsManager->addSetting(s);
+	delete[] s.data;
 }
 
 static void loadRecentFiles() {
