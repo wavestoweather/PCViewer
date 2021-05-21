@@ -136,11 +136,28 @@ When right clicking on a brush the following menu appears:
 - **Delete** deletes the brush that was right clicked
 - **LiveBrushThreshold** sets the threshold for live brushing. If more datapoints are in the drawlists than the threshold, brushing is only performed on releasing the mouse. Else the active lines are updated non stop when brushes are being changed.
 ### Local Brushes
-
+To select a local brush simply click on a drawlist. This marks the drawlist and shows all local brushes for this drawlist. Also new brushes can be created. Local brushes are shown as red boxes over the axes. If multiple drawlists are selected, only the local brush for the topmost selected drawlist can be edited.
 
 ### Global Brushes
+For global brushes a sperate section in the PCViewer exists (red rectangle):
 
+![global_brush](images/pcp_global_brushes.png)
+
+The first subsection of the global brushes section "Brush Templates" is explained in the [brush documentaion](brushing.md).
+
+Then the global brushes are listed. To select a global brush to edit it simply click on it. Via the checkbox on the right side of the name the brush can be deactivated. When a brush is selected its brush ranges are shown as green rectangles. Creating, deleting and editing the boxes works as described above.
+
+To add a new global brush simply click on the "+" button. To rename a brush right click on it. To delete also right click on it and select ``Delete``.
+
+The next subsection shows brush statistics. Also look at the [brush documentaion](brushing.md) for more detail on that.
 ## Parallel Coordinates Settings
+Here a few axis settings can be accessed:
+
+![axis settigns](images/pcp_coords_settings.png)
+
+For each attriute one line is shown where one can activate/deactivate it or push its place in the pcp to the left or to the right. By right clicking on an attribute name one can rename an attribute, reset its min/max values or switch its min/max values (inverting the axis).
+
+Below this section is a section for loading saved attribute settings. To load simply click on a saved attribute setting. Note that for each dataset loaded automatically such a saved attributes entry is generated.
 
 ## Datasets
 In the dataset section one can manage all loaded datasets. Here only the standard user interactions are shown, for a more detailed explanation see the [data documentation](data.md).
