@@ -91,9 +91,54 @@ The settings do the following:
 In order to better analyse the different distributions of drawlists for each attribute one can overlay a stacked color coded histogram at the attribute axes:
 ![stacked histogram](images/pcp_wideHistogram.png)
 
-#### Priority rendering
+Here at each axis histograms are placed vertically which show color coded how much lines are present at a certain axis value. Blue is a low value, white are high values.
 
-## Global Brushes
+To activate histogram drawing right click on the pcp and activate ``DrawHistogram``.
+
+Then for each drawlist where the Hist checkbox is active, a bar in the histogram is reserved and filled with its histogram. The order of the histogram bars is from the left to the right, the topmost drawlist being on the far left. In the example above a time ensemble is shown, with the first time step in the top most drawlist (leftmost bar in the histograms).
+
+Rightclicking on the histogram kopens up the histogram menu:
+
+![histogram right click](images/rightclick_histogram.png)
+
+- **Draw Pie-Ratio**: Draws pie plots to indicate the "reductivness" of a brush (more infos coming soon...)
+- **Histogram width**: Sets the maximum histogram width. The maximum value on the float slider means that only the histograms are visible and are fully occluding the pcp.
+- **Histogram background**: Defines the background of the histograms if no density conversion is performed.
+- **Show Density**: Enables the density mapping for the histogram.
+- **Density Background**: Defines the background of the histograms if density mapping is enabled. If color mapping for the densities is enabled this should be black.
+- **Blur radius**: Sets the radius of the smoothing kernel for density visualization.
+- **Adjust density by line count**: If enabled automatically adjusts density mapping according to the remaining lines after brushing.
+- **Add reference histogram**: Convenience function where one can select a dataset and the default drawlist is added as a drawlist with pcp drawing deactivated and histogram drawing activated and immune to global brushes. This results in a histogram bar which is not brushed without having a corresponding pcp resulting in kind of a reference histogram.
+#### Priority rendering
+In order to ease the correlation analysis of multiple attributes for a single dataset. In pcp general correlation analysis between two axes can mainly be found by placing the two correlating attributes next to each other, making this analysis infeasable for multivariate datasets with high attribute counts.
+
+Priority rendering means that the user can specify a variable which is used for prioritization, sets the priority center and then all datapoints are sorted wrt. the distance to the priority center and are color coded based on that distance. A resulting plot can look like this:
+
+![priority_rendering](images/pcp_priority.png)
+
+Here the priority center was set on the "h" attribute at the very top. The closer a datapoint (a single line in pcp) is to that priority center, the hotter it is drawn. Note that hotter lines are always drawn on top of colder lines. This results in a color gradient from hot to cold on the "h" axis. Here one can see that now the line tracing is very easily possible by following the color coded lines.
+
+To set the priority center right click on the pcp and click on ``Set Priority Center`` and then click on an axis at the location where the priority center should be. To deactivate right click on the pcp and in the ``Priority Rendering`` combo choose "Off" to reset the view to normal.
+
+Only a single drawlist can be renderd with a priority cneter. To change the drawlist that is affected by priority rendering right click on the pcp and set the ``Priority center drawlist index``.
+
+## Brushes
+One of the main feature of the PCViewer application is the interactive exploration of a dataset. For large datasets, which are the focus of the application, often relevant structures are occluded due to the sheer size of the datasets. To explore subsets of the data without previously having selected subsets in the dataset the PCViewer allows to "brush" the data.
+
+Brushing in the PCViewer is realized by selecting ranges on the axes, for which datapoints lying in the specified ranges stay active. The application inclkdues two types of brushing: Local and global brushing. Here local means that the brush is only applied to one drawlist, while a global brush affects all drawlsits (exept drawlist which are immune, see [drawlists section](#drawlists)). Note that this is only a very short overview over brushing, see the [brushing documentation](brushing.md) for more details.
+
+To generally create a brush on an axis, select the brush (see [local brushes](#local-brushes) or [global brushes](#global-brushes) on how to select) and go to the axis where the brush should be created. On hovering the mouse courser changes to a hand indicating the ability to create a brush. To crate a brush simply click and drag. A new box will appear. At the same time the lines that are outside the box are deactivated, leaving only lines going through the specified range. Already created brushes can be dragged by hovering over them, deleted by either double clicking on them or marking them by clicking on them and pressing ``Del``.
+
+When right clicking on a brush the following menu appears:
+
+![brush_rightclick](images/rightclick_brush.png)
+
+- **Delete** deletes the brush that was right clicked
+- **LiveBrushThreshold** sets the threshold for live brushing. If more datapoints are in the drawlists than the threshold, brushing is only performed on releasing the mouse. Else the active lines are updated non stop when brushes are being changed.
+### Local Brushes
+
+
+### Global Brushes
 
 ## Parallel Coordinates Settings
 
