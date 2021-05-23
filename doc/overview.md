@@ -4,7 +4,7 @@ Everything you need to know to use the PCViewer application and what it is capab
 
 PCViewer is a program to efficiently visualize large datasets and interactiveley explore and compare them. Visualization techniques include Parallel Coordinates Plot with a colorcoded embedded histograms, 3d iso surface rendering, Violin plot drawings, 3d Scatterplots and 3d density visualization. Special emphasize was laid on analysing ensemble datasets providing special visualizations to efficiently compare different members.
 
-For a walk through beginners explanation for an example workthrough can be seen in ...
+For a walk through beginners explanation for an example workthrough can be seen in the [example pdf](PCViewer_example.pdf).
 
 ## Visualization Overview
 In the following all visualizations which can be done with the PCViewer are shown.
