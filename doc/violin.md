@@ -37,7 +37,7 @@ Before the plots are shown is a drop down to switch between the "stacked" and "s
 
 Then all violin plots are shown, axes can be switche via drag and dropping the axis labels (just as for the pcp).
 
-A resulting stacked and summed view with multiple drawlists can look something like this:
+A resulting stacked (left) and summed (right) view with multiple drawlists can look something like this:
 
 ![violin stacked summed](images/violin_att_stacked_summed.png)
 
