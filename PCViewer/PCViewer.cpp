@@ -6965,10 +6965,30 @@ int main(int, char**)
 	engine.seed(15);
 
 	//data class test
+	std::vector<float> to50(50);
+	for(int i = 0; i < 50; ++i) to50[i] = i;
 	Data data;
 	data.dimensionSizes = {3,4,2};
-	data.columnDimensions = {{0,1},{0,1,2},{2}};
-	data.columns.push_back({});
+	data.columnDimensions = {{0,1},{2,1,0},{2}};
+	data.columns.push_back(std::vector<float>(to50.begin(), to50.begin() + 12));
+	data.columns.push_back(std::vector<float>(to50.begin(), to50.begin() + 24));
+	data.columns.push_back(std::vector<float>(to50.begin(), to50.begin() + 2));
+
+	for(int c = 0; c < data.columns.size(); ++c){
+		for(int i = 0; i < data.size(); ++i) std::cout << " " << data(i,c);
+		std::cout << std::endl;
+	}
+	auto byteSize = data.packedByteSize();
+	std::vector<float> packed(byteSize / 4);
+	data.packData(packed.data());
+	PCUtil::numdump(packed.data(), packed.size());
+	//data.subsampleTrim({1,2,1},{{0,3},{0,4},{0,2}});
+	//data.subsampleTrim({1,2,1},{{0,3},{0,2},{0,2}});
+	data.removeDim(1, 0);
+	for(int c = 0; c < data.columns.size(); ++c){
+		for(int i = 0; i < data.size(); ++i) std::cout << " " << data(i,c);
+		std::cout << std::endl;
+	}
 
 	//test of multivariate gauss calculations
 	//float determinant;

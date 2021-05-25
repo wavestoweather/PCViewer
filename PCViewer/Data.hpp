@@ -63,7 +63,7 @@ class Data{
         uint32_t dataSize = calcDataSize();
         std::vector<uint8_t> data(headerSize + dataSize);       //byte vector
         createPackedHeaderData(data);
-
+        createPackedData(data, headerSize);
         std::copy(data.begin(), data.end(), (uint8_t*)dst);
     };
 
@@ -77,7 +77,7 @@ class Data{
     }
 
     // subsample a dimension
-    void subsampleTrim(const std::vector<uint32_t>& samplingRates, const std::vector<std::pair<uint32_t, uint32_t>>& trimIndices){
+    void subsampleTrim(const std::vector<uint32_t>& samplingRates, const std::vector<std::pair<uint32_t, uint32_t>>& trimIndices){     
         std::vector<uint32_t> reducedDimensions(dimensionSizes.size());
         for(int d = 0; d < dimensionSizes.size(); ++d){
             reducedDimensions[d] = trimIndices[d].second - trimIndices[d].first;
@@ -147,7 +147,7 @@ class Data{
     // access data by an index \in[0, cross(dimensionSizes)] and a column
     float& operator()(uint32_t index, uint32_t column){
         std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
-        for(int i = dimensionSizes.size(); i >= 0; ++i){
+        for(int i = dimensionSizes.size() - 1; i >= 0; --i){
             dimensionIndices[i] = index % dimensionSizes[i];
             index /= dimensionSizes[i];
         }
