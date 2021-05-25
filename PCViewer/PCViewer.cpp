@@ -355,8 +355,9 @@ struct DataSet {
 	Data data;
 	std::list<TemplateList> drawLists;
 	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
+	bool dlfData;
 
-	bool operator==(const DataSet& other) {
+	bool operator==(const DataSet& other) const {
 		return this->name == other.name;
 	}
 };
@@ -4050,6 +4051,7 @@ static bool openDlf(const char* filename) {
 
 			//after Attribute collection reading in the data
 			DataSet ds;
+			ds.dlfData = true;
 			if (tmp != std::string("Data:")) {
 				std::cout << "Data Section not found. Got " << tmp << " instead." << std::endl;
 				pcAttributes.clear();
@@ -4389,6 +4391,53 @@ static bool openNetCDF(const char* filename){
 		}
 	}
 
+	//attribute check
+	//checking if the Attributes are correct
+	std::vector<int> permutation = checkAttriubtes(attributes);
+    if (pcAttributes.size() != 0) {
+        if (tmp.size() != pcAttributes.size()) {
+            std::cout << "The Amount of Attributes of the .nc file is not compatible with the currently loaded datasets" << std::endl;
+            return false;
+        }
+
+        if (!permutation.size()) {
+            std::cout << "The attributes of the .nc data are not the same as the ones already loaded in the program." << std::endl;
+            return false;
+        }
+	}
+	//if this is the first Dataset to be loaded, fill the pcAttributes vector
+	else {
+		pcAttributes = tmp;
+
+		//setting up the boolarray and setting all the attributes to true
+		pcAttributeEnabled = new bool[pcAttributes.size()];
+		activeBrushAttributes = new bool[pcAttributes.size()];
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			pcAttributeEnabled[i] = true;
+			activeBrushAttributes[i] = false;
+			pcAttrOrd.push_back(i);
+		}
+
+		//setting up the categorical datastruct
+		for(int i = 0; i < pcAttributes.size(); ++i){
+			if(categories[attr_to_var[i]].size()){
+				//we do have categorical data
+				std::vector<std::pair<std::string,int>> lexicon;
+				int c = 0;
+				for (auto& categorie : categories[attr_to_var[i]]) {
+					lexicon.push_back({ categorie, c });
+					c++;
+				}
+				std::sort(lexicon.begin(), lexicon.end(), [](auto& a, auto& b) {return a.first < b.first; });	//after sorting the names are ordered in lexigraphical order, the seconds are the original indices
+		
+				for(int j = 0; j < categories[attr_to_var[i]].size() ; ++j){
+					pcAttributes[i].categories[lexicon[j].first] = j;
+					pcAttributes[i].categories_ordered.push_back({lexicon[j].first, j});
+				}
+			}
+		}
+	}
+
 	//preparing the data member of dataset to hold the data
 	DataSet ds{};
 	ds.data.dimensionSizes = std::vector<uint32_t>(dim_sizes.begin(), dim_sizes.end());
@@ -4396,13 +4445,13 @@ static bool openNetCDF(const char* filename){
 	ds.data.columns.resize(tmp.size());
 	ds.data.columnDimensions.resize(tmp.size());
 	for(int i = 0; i < ds.data.columns.size(); ++i){
-		int var = attr_to_var[i];
-		ds.data.columnDimensions[i] = std::vector<uint32_t>(attribute_dims[i].begin(), attribute_dims[i].end());
+		int var = attr_to_var[permutation[i]];
+		ds.data.columnDimensions[permutation[i]] = std::vector<uint32_t>(attribute_dims[i].begin(), attribute_dims[i].end());
 		int columnSize = 1;
 		for (int dim : attribute_dims[i]) {
 			columnSize *= ds.data.dimensionSizes[dim];
 		}
-		ds.data.columns[i].resize(columnSize);
+		ds.data.columns[permutation[i]].resize(columnSize);
 	}
 	for(int i = 0; i < dim_sizes.size(); ++i){
 		if(dimension_is_stringsize[i])
@@ -4411,7 +4460,7 @@ static bool openNetCDF(const char* filename){
 
 	//reading out all data from the netCDF file(including conversion)
 	for (int i = 0; i < ds.data.columns.size(); ++i) {
-		int var = attr_to_var[i];
+		int var = attr_to_var[permutation[i]];
 		nc_type type;
 		if ((retval = nc_inq_vartype(fileId, var, &type))){
 			std::cout << "Error at reading data type" << std::endl;
@@ -4518,6 +4567,7 @@ static bool openNetCDF(const char* filename){
 				}
 				for(int offset = 0; offset < dataSize; offset += wordlen){
 					categories[i].push_back(std::string(&names[offset], &names[offset] + wordlen));
+					ds.data.columns[i].push_back(pcAttributes[i].categories[categories[i].back()]);
 				}
 			}
 			break;
@@ -4531,63 +4581,13 @@ static bool openNetCDF(const char* filename){
     //everything needed was red, so colosing the file
     nc_close(fileId);
 
-    //attribute check
-	//checking if the Attributes are correct
-	std::vector<int> permutation = checkAttriubtes(attributes);
-    if (pcAttributes.size() != 0) {
-        if (tmp.size() != pcAttributes.size()) {
-            std::cout << "The Amount of Attributes of the .nc file is not compatible with the currently loaded datasets" << std::endl;
-            return false;
-        }
-
-        if (!permutation.size()) {
-            std::cout << "The attributes of the .nc data are not the same as the ones already loaded in the program." << std::endl;
-            return false;
-        }
-	}
-	//if this is the first Dataset to be loaded, fill the pcAttributes vector
-	else {
-		pcAttributes = tmp;
-
-		//setting up the boolarray and setting all the attributes to true
-		pcAttributeEnabled = new bool[pcAttributes.size()];
-		activeBrushAttributes = new bool[pcAttributes.size()];
-		for (int i = 0; i < pcAttributes.size(); i++) {
-			pcAttributeEnabled[i] = true;
-			activeBrushAttributes[i] = false;
-			pcAttrOrd.push_back(i);
-		}
-
-		//setting up the categorical datastruct
-		for(int i = 0; i < pcAttributes.size(); ++i){
-			if(categories[attr_to_var[i]].size()){
-				//we do have categorical data
-				std::vector<std::pair<std::string,int>> lexicon;
-				int c = 0;
-				for (auto& categorie : categories[attr_to_var[i]]) {
-					lexicon.push_back({ categorie, c });
-					c++;
-				}
-				std::sort(lexicon.begin(), lexicon.end(), [](auto& a, auto& b) {return a.first < b.first; });	//after sorting the names are ordered in lexigraphical order, the seconds are the original indices
-		
-				for(int j = 0; j < categories[attr_to_var[i]].size() ; ++j){
-					pcAttributes[i].categories[lexicon[j].first] = j;
-					pcAttributes[i].categories_ordered.push_back({lexicon[j].first, j});
-				}
-			}
-		}
-	}
-
-	//linearizing a dimension if needed
-	for (int i = 0; i < queryAttributes.size(); ++i) {
+	//linearizing a column if wanted
+	for (int i = 0, c = 0; i < queryAttributes.size(); ++i) {
+		if (!queryAttributes[i].active) continue;
 		if (queryAttributes[i].linearize) {
-			float minimum = data[i][0];
-			float maximum = data[i][queryAttributes[i].dimensionSize - 1];
-			for (int j = 0; j < queryAttributes[i].dimensionSize; ++j) {
-				float alpha = j / float(queryAttributes[i].dimensionSize - 1);
-				data[i][j] = (1 - alpha) * minimum + alpha * maximum;
-			}
+			ds.data.linearizeColumn(permutation[c]);
 		}
+		++c;
 	}
 
     std::vector<float> categorieFloats(pcAttributes.size(), 0);
@@ -4596,47 +4596,6 @@ static bool openNetCDF(const char* filename){
 	std::string fname(filename);
 	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
 	ds.name = fname.substr(offset + 1);
-    float* d = new float[reduced_data_size * pcAttributes.size()];
-    int array_index = 0;
-    while(iter_indices[0] < iter_stops[0]){
-        int d_array_index = array_index * pcAttributes.size();
-        for(int att = 0; att < pcAttributes.size(); ++att){
-            int d_index = 0;
-			bool is_categorie = false;
-            for(int dim = 0; dim < attribute_dims[att].size(); ++dim){
-                int index_add = iter_indices[attribute_dims[att][dim]];
-                for(int add = dim + 1; add < attribute_dims[att].size(); ++add){
-					if(!dimension_is_stringsize[attribute_dims[att][add]])
-                    	index_add *= dim_sizes[attribute_dims[att][add]];
-					else
-						is_categorie = true;
-                }
-                d_index += index_add;
-            }
-			int a = d_array_index + permutation[att], b = reduced_data_size * pcAttributes.size();
-			assert( a< b); //safety check for debugging that we do not overflow the data array
-			if(!is_categorie)
-            	d[d_array_index + permutation[att]] = data[attr_to_var[att]][d_index];
-			else
-				d[d_array_index + permutation[att]] = pcAttributes[att].categories[categories[attr_to_var[att]][d_index]];
-        }
-        //increasing the iteration counters
-        array_index += 1;
-        iter_indices.back() += iter_increments.back();
-        for(int dim = ndims - 2; dim >= 0; --dim){
-            if(iter_indices[dim + 1] >= iter_stops[dim + 1]){
-                iter_indices[dim] += iter_increments[dim];
-                iter_indices[dim + 1] = iter_starts[dim + 1];
-				//if (!queryAttributes[dimension_variable_indices[dim + 1]].active)
-				//	iter_indices[dim + 1] = queryAttributes[dimension_variable_indices[dim + 1]].dimensionSlice;
-            }
-        }
-    }
-    //assigning the data array into the DataSet struct
-    ds.data = std::vector<float*>(reduced_data_size);
-	for (int i = 0; i < reduced_data_size; i++) {
-		ds.data[i] = &d[i * pcAttributes.size()];
-	}
     
     ds.reducedDataSetSize = ds.data.size();
 
@@ -4654,12 +4613,12 @@ static bool openNetCDF(const char* filename){
 	for (int i : tl.indices) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
 			//ignoring fill values
-			if (has_fill_value[attr_to_var[j]] && ds.data[i][j] == fill_values[attr_to_var[j]] && pcAttributes[j].categories.empty())
+			if (has_fill_value[j] && ds.data(i,j) == fill_values[j] && pcAttributes[j].categories.empty())
 				continue;
-			if (ds.data[i][j] < tl.minMax[j].first)
-				tl.minMax[j].first = ds.data[i][j];
-			if (ds.data[i][j] > tl.minMax[j].second)
-				tl.minMax[j].second = ds.data[i][j];
+			if (ds.data(i,j) < tl.minMax[j].first)
+				tl.minMax[j].first = ds.data(i,j);
+			if (ds.data(i,j) > tl.minMax[j].second)
+				tl.minMax[j].second = ds.data(i,j);
             //updating pcAttributes minmax if needed
             if(tl.minMax[j].first < pcAttributes[j].min)
                 pcAttributes[j].min = tl.minMax[j].first;
@@ -4681,8 +4640,8 @@ static bool openNetCDF(const char* filename){
 	for (int i : tl.indices) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
 			//replace the fill values with better suited ones.
-			if (has_fill_value[attr_to_var[j]] && ds.data[i][j] == fill_values[attr_to_var[j]] && pcAttributes[j].categories.empty())
-				ds.data[i][j] = 2 * pcAttributes[j].max - pcAttributes[j].min;
+			if (has_fill_value[j] && ds.data(i,j) == fill_values[j] && pcAttributes[j].categories.empty())
+				ds.data(i,j) = 2 * pcAttributes[j].max - pcAttributes[j].min;
 		}
 	}
 
@@ -4850,10 +4809,10 @@ static void addIndecesToDs(DataSet& ds, const char* filepath) {
 		}
 		for (int i : tl.indices) {
 			for (int j = 0; j < pcAttributes.size(); j++) {
-				if (ds.data[i][j] < tl.minMax[j].first)
-					tl.minMax[j].first = ds.data[i][j];
-				if (ds.data[i][j] > tl.minMax[j].second)
-					tl.minMax[j].second = ds.data[i][j];
+				if (ds.data(i,j) < tl.minMax[j].first)
+					tl.minMax[j].first = ds.data(i,j);
+				if (ds.data(i,j) > tl.minMax[j].second)
+					tl.minMax[j].second = ds.data(i,j);
 			}
 		}
 		tl.pointRatio = ((float)tl.indices.size()) / ds.data.size();
@@ -5096,7 +5055,7 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 	//ordering active indices if priority rendering is enabled
 	if (priorityReorder) {
 		priorityReorder = false;
-		std::vector<float*>* data;
+		Data* data;
 		for (DataSet& ds : g_PcPlotDataSets) {
 			if (ds.name == dl.parentDataSet) {
 				data = &ds.data;
@@ -5114,7 +5073,7 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 		thrust::sort_by_key(keys.begin(), keys.end(), dl.activeInd.begin(), thrust::greater<float>());
 
 #else
-		std::sort(dl.indices.begin(), dl.indices.end(), [data, p](int a, int b) {return fabs((*data)[a][p] - priorityAttributeCenterValue) > fabs((*data)[b][p] - priorityAttributeCenterValue); });
+		std::sort(dl.indices.begin(), dl.indices.end(), [data, p](int a, int b) {return fabs((*data)(a,p) - priorityAttributeCenterValue) > fabs((*data)(b,p) - priorityAttributeCenterValue); });
 		VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, dl.indices.size() * sizeof(uint32_t), dl.indices.data());
 		//std::sort(dl.activeInd.begin(), dl.activeInd.end(), [data, p](int a, int b) {return fabs((*data)[a][p] - priorityAttributeCenterValue) > fabs((*data)[b][p] - priorityAttributeCenterValue); });
 #endif
@@ -5231,7 +5190,7 @@ static void upatePriorityColorBuffer() {
 	std::advance(it, priorityListIndex);
 	DrawList* dl = &(*it);
 
-	std::vector<float*>* data;
+	Data* data;
 	for (DataSet& ds : g_PcPlotDataSets) {
 		if (ds.name == dl->parentDataSet) {
 			data = &ds.data;
@@ -5251,7 +5210,7 @@ static void upatePriorityColorBuffer() {
 	//}
 	float* color = new float[data->size()];
 	for (int i : dl->indices) {
-		color[i] = 1 - .9f * (fabs((*data)[i][priorityAttribute] - priorityAttributeCenterValue) / denom);
+		color[i] = 1 - .9f * (fabs((*data)(i,priorityAttribute) - priorityAttributeCenterValue) / denom);
 	}
 
 	void* d;
@@ -5386,7 +5345,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	}
 
 	//getting the parent dataset data
-	std::vector<float*>* data;
+	Data* data;
 	for (DataSet& ds : g_PcPlotDataSets) {
 		if (ds.name == dl.parentDataSet) {
 			data = &ds.data;
@@ -5619,7 +5578,7 @@ static bool updateActiveIndices(DrawList& dl) {
 
 	//if no brush is active, reset the active indices
 	if (!brush.size() && !globalBrushesActive) {
-		std::vector<float*>* data;
+		Data* data;
 		for (DataSet& ds : g_PcPlotDataSets) {
 			if (ds.name == dl.parentDataSet) {
 				data = &ds.data;
@@ -5707,10 +5666,11 @@ static bool updateActiveIndices(DrawList& dl) {
 							float currBrMax = currFr[iax].second;
 
 							int iVal = -1;
-							for (auto& val : parentDS->data)
+							for(int i = 0; i < parentDS->data.size(); ++i)
 							{
 								iVal++;
-								if ((val[ax] >= currBrMin) && (val[ax] <= currBrMax))
+								float v = parentDS->data(i,ax);
+								if ((v >= currBrMin) && (v <= currBrMax))
 								{
 									parentActive[iVal] = true;
 									++parentCount;
@@ -5747,9 +5707,10 @@ static bool updateActiveIndices(DrawList& dl) {
 
 							float currBrMin = currBr.second.first;
 							float currBrMax = currBr.second.second;
-							for (auto& val : parentDS->data)
+							for(int i = 0; i < parentDS->data.size(); ++i)
 							{
-								if ((val[iax] >= currBrMin) && (val[iax] <= currBrMax))
+								float v = parentDS->data(i,iax);
+								if ((v >= currBrMin) && (v <= currBrMax))
 								{
 									++parentCount;
 								}
@@ -6060,7 +6021,7 @@ static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
 	for (int i : dl.indices) {
 		if (!act[i]) continue;
 		for (int j = 0; j < pcAttributes.size(); j++) {
-			file << ds->data[i][j];
+			file << ds->data(i,j);
 			if (j != pcAttributes.size() - 1)
 				file << ",";
 		}
@@ -6178,21 +6139,21 @@ static void calculateDrawListMedians(DrawList& dl) {
 	std::vector<uint32_t> dataCpy(actIndices);
 
 	for (int i = 0; i < pcAttributes.size(); i++) {
-		std::sort(dataCpy.begin(), dataCpy.end(), [i, ds](int a, int b) {return ds->data[a][i] > ds->data[b][i]; });
-		medianArr[MEDIAN * pcAttributes.size() + i] = ds->data[dataCpy[dataCpy.size() >> 1]][i];
+		std::sort(dataCpy.begin(), dataCpy.end(), [i, ds](int a, int b) {return ds->data(a,i) > ds->data(b,i); });
+		medianArr[MEDIAN * pcAttributes.size() + i] = ds->data(dataCpy[dataCpy.size() >> 1],i);
 	}
 
 	//arithmetic median calculation
 	for (int i = 0; i < actIndices.size(); i++) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
 			if (i == 0)
-				medianArr[ARITHMEDIAN * pcAttributes.size() + j] = 0;
-			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds->data[actIndices[i]][j];
+				medianArr[ARITHMEDIAN * pcAttributes.size() + j] = ds->data(actIndices[i],j) / actIndices.size();
+			medianArr[ARITHMEDIAN * pcAttributes.size() + j] += ds->data(actIndices[i],j) / actIndices.size();
 		}
 	}
-	for (int i = 0; i < pcAttributes.size(); i++) {
-		medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= actIndices.size();
-	}
+	//for (int i = 0; i < pcAttributes.size(); i++) {
+	//	medianArr[ARITHMEDIAN * pcAttributes.size() + i] /= actIndices.size();
+	//}
 
 	//geometric median. Computed via gradient descent
 	//geometric median
@@ -8316,7 +8277,7 @@ int main(int, char**)
 							}
 						}
 						for (DataSet& ds : g_PcPlotDataSets) {
-							if (ds.oneData) {			//oneData indicates a .dlf data -> template brushes are available
+							if (ds.dlfData) {			//oneData indicates a .dlf data -> template brushes are available
 								for (TemplateList& tl : ds.drawLists) {
 									//checking if the template list is in the correct subspace and if so adding it to the template Brushes
 									std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']') - tl.name.find_first_of('[') - 1);
@@ -8344,7 +8305,7 @@ int main(int, char**)
 									}
 								}
 							}
-							else if (pcSettings.showCsvTemplates && !ds.oneData) {
+							else if (pcSettings.showCsvTemplates && !ds.dlfData) {
 								auto tl = ++ds.drawLists.begin();
 								for (; tl != ds.drawLists.end(); ++tl) {
 									TemplateBrush t = {};
@@ -10431,7 +10392,7 @@ int main(int, char**)
                             float attMin = pcAttributes[selectedAtt].min, attMax = pcAttributes[selectedAtt].max;
                             float attDiff = attMax - attMin;
                             for(int datum = 0; datum < ds.data.size(); ++datum){
-                                float da = ds.data[datum][selectedAtt];
+                                float da = ds.data(datum,selectedAtt);
                                 int index = int(((da - attMin) / attDiff) * (amtOfGroups - 1) + .5f);
                                 indices[index].push_back(datum);
                             }

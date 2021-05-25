@@ -5,6 +5,7 @@
 #include<stdint.h>
 #include<algorithm>
 #include<cassert>
+#include<limits>
 
 /*  This class holds the data in optimized format
 *
@@ -173,6 +174,17 @@ class Data{
         }
     }
 
+    void linearizeColumn(int column){
+        std::set<float> elements(columns[column].begin(), columns[column].end());
+        float min = *elements.begin();
+        float max = *elements.rbegin();
+        for(int d = 0; d < columns[column].size(); ++d){
+            int i = std::distance(elements.begin(), elements.find(columns[column][d]));
+            float alpha = i / float(elements.size() - 1);
+            columns[column][d] = (1 - alpha) * min + alpha * max;
+        }
+    }
+
     // access data by an index \in[0, cross(dimensionSizes)] and a column
     float& operator()(uint32_t index, uint32_t column){
         std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
@@ -184,7 +196,7 @@ class Data{
         return columns[column][columnIndex];
     }
     // const data access
-    float operator()(uint32_t index, uint32_t column) const{
+    const float& operator()(uint32_t index, uint32_t column) const{
         std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
         for(int i = dimensionSizes.size() - 1; i >= 0; --i){
             dimensionIndices[i] = index % dimensionSizes[i];

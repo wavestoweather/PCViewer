@@ -14,6 +14,7 @@
 #include "glm/gtx/euler_angles.hpp"
 #include "CameraNav.hpp"
 #include "Color.h"
+#include "Data.hpp"
 #include <string.h>
 #include <algorithm>
 #include <random>
@@ -42,7 +43,7 @@ public:
 	//activeAttributes: Buffer view for the bool buffer with the activations
 	//amtOfAttributes:	amount of attributes
 	//amtOfData:		amount of data
-	void setBubbleData(std::vector<uint32_t>& indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, std::vector<float*>& data, VkBuffer gData,VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData);
+	void setBubbleData(std::vector<uint32_t>& indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, const Data& data, VkBuffer gData,VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData);
 	void updateRenderOrder();
 	void render();
 	void updateCameraPos(CamNav::NavigationInput input, float deltaT);
@@ -192,7 +193,7 @@ private:
 	uint32_t amtOfIdxCylinder;
 
 	std::vector<uint32_t>* indices;
-	std::vector<float*>* data;
+	const Data* data;
 
 	//mehtods
 	void setupRenderPipeline();

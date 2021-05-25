@@ -3,6 +3,7 @@
 #include <vector>
 #include <limits>
 #include "MultivariateGauss.h"
+#include "Data.hpp"
 
 class KdTree {
 public:
@@ -18,7 +19,7 @@ public:
 	};
 
 	KdTree() {};
-	KdTree(std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::vector<std::pair<float, float>>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds, SplitBehaviour splitBounds) {
+	KdTree(std::vector<uint32_t>& indices, const Data& data, std::vector<int>& attributes, std::vector<std::vector<std::pair<float, float>>> initialBounds, int recursionDepth, BoundsBehaviour adjustBounds, SplitBehaviour splitBounds) {
 		//building the kd tree;
 		this->adjustBounds = adjustBounds;
 		this->splitBounds = splitBounds;
@@ -145,12 +146,12 @@ private:
 	SplitBehaviour splitBounds;
 	std::vector<std::vector<uint32_t>> oderedIndices;
 
-	std::vector<uint32_t> getActiveIndices(std::vector<int>& attributes, std::vector<float*>& data, std::vector<uint32_t>& indices, std::vector<std::pair<float, float>>& bounds) {
+	std::vector<uint32_t> getActiveIndices(std::vector<int>& attributes, const Data& data, std::vector<uint32_t>& indices, std::vector<std::pair<float, float>>& bounds) {
 		std::vector<uint32_t> res;
 		for (uint32_t i : indices) {
 			bool active = true;
 			for (int atb = 0; atb < attributes.size(); ++atb) {
-				if (data[i][attributes[atb]] < bounds[atb].first || data[i][attributes[atb]] > bounds[atb].second) {
+				if (data(i,attributes[atb]) < bounds[atb].first || data(i,attributes[atb]) > bounds[atb].second) {
 					active = false;
 					break;
 				}
@@ -171,7 +172,7 @@ private:
 		return res;
 	};
 
-	MultivariateGauss::MultivariateBrush calcMultivariateBrush(std::vector<int>& attributes, std::vector<float*>& data, std::vector<uint32_t>& indices) {
+	MultivariateGauss::MultivariateBrush calcMultivariateBrush(std::vector<int>& attributes, const Data& data, std::vector<uint32_t>& indices) {
 		std::vector<std::vector<double>> dataMatrix(indices.size(), std::vector<double>(attributes.size()));
 		std::vector<std::vector<double>> covariance(attributes.size(), std::vector<double>(attributes.size(), 0));
 		std::vector<std::vector<double>> invCov(attributes.size(), std::vector<double>(attributes.size(), 0));
@@ -182,7 +183,7 @@ private:
 		for (int i = 0; i < indices.size(); ++i) {
 			for (int j = 0; j < attributes.size(); ++j) {
 				//normalizing the data to the brush ot have a more stabel covariance matrix
-				dataMatrix[i][j] = (data[indices[i]][attributes[j]] - origBounds[j].first) * brushDiff[j];
+				dataMatrix[i][j] = (data(indices[i],attributes[j]) - origBounds[j].first) * brushDiff[j];
 			}
 		}
 		MultivariateGauss::compute_average_vector(dataMatrix, mean);
@@ -216,7 +217,7 @@ private:
 				for (int j = 0; j < indices.size(); ++j) {
 					float v = 0;
 					for (int k = 0; k < singularVals.size(); ++k) {
-						v += data[indices[j]][attributes[k]] * svd.matrixV()(k, i);
+						v += data(indices[j],attributes[k]) * svd.matrixV()(k, i);
 					}
 					if (v < b.first)b.first = v;
 					if (v > b.second)b.second = v;
@@ -252,11 +253,11 @@ private:
 		return multBrush;
 	}
 
-	int buildRec(int split, std::vector<uint32_t>& indices, std::vector<float*>& data, std::vector<int>& attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
+	int buildRec(int split, std::vector<uint32_t>& indices, const Data& data, std::vector<int>& attributes, std::vector<std::pair<float,float>>& bounds, int recDepth) {
 		if (!indices.size() || !recDepth) return -1;
-		std::vector<float*>* d = &data;
+		const Data* d = &data;
 		std::vector<int>* att = &attributes;
-		if (splitBounds == KdTree_Split_SAH) std::sort(indices.begin(), indices.end(), [d, split, att](uint32_t a, uint32_t b) { return (*d)[a][(*att)[split]] < (*d)[b][(*att)[split]]; });
+		if (splitBounds == KdTree_Split_SAH) std::sort(indices.begin(), indices.end(), [d, split, att](uint32_t a, uint32_t b) { return (*d)(a,(*att)[split]) < (*d)(b,(*att)[split]); });
 		Node n = {};
 		n.bounds = bounds;
 		n.split = split;
@@ -286,11 +287,11 @@ private:
 			float minCost = std::numeric_limits<float>::max();
 			float a = bounds[split].second - bounds[split].first;
 			for (int i = 0; i < indices.size(); ++i) {
-				float pFront = data[indices[i]][attributes[split]] - bounds[split].first, pBack = a - pFront;
+				float pFront = data(indices[i],attributes[split]) - bounds[split].first, pBack = a - pFront;
 				float cost = pFront * (i + 1) + pBack * (indices.size() - i - 1);
 				if (cost < minCost) {
 					minCost = cost;
-					mid = data[indices[i]][attributes[split]];
+					mid = data(indices[i],attributes[split]);
 					splitIndex = i;
 				}
 			}
@@ -317,7 +318,7 @@ private:
 		//assining the points to the left and right bounding box. also get the maximum extent of the points in both directions if wanted
 		std::vector<uint32_t> leftPts, rightPts;
 		for (int i : indices) {
-			float val = data[i][attributes[split]];
+			float val = data(i,attributes[split]);
 			if (val < mid) {
 				switch (adjustBounds) {
 				case KdTree_Bounds_Static: break;

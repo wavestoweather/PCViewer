@@ -269,7 +269,7 @@ void BubblePlotter::addCylinder(float r, float length, glm::vec4 color, glm::vec
 	recordRenderCommands();
 }
 
-void BubblePlotter::setBubbleData(std::vector<uint32_t>& indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, std::vector<float*>& data, VkBuffer gData, VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData)
+void BubblePlotter::setBubbleData(std::vector<uint32_t>& indices, std::vector<std::string>& attributeNames, std::vector<std::pair<float, float>> attributesMinMax, const Data& data, VkBuffer gData, VkBufferView activeData, uint32_t amtOfAttributes, uint32_t amtOfData)
 {
 	if(amtOfAttributes != this->amtOfAttributes){
 		if (attributeActivations) {
@@ -350,14 +350,14 @@ void BubblePlotter::updateRenderOrder()
 {
 	std::vector<uint32_t> indCopy(*indices);
 	//sorting the bubble instances for positive render order
-	std::vector<float*>* dat = data;
 	auto pI = posIndices;
-	std::sort(indCopy.begin(), indCopy.end(), [dat, pI](uint32_t a, uint32_t b) {float lonA = (*dat)[a][pI.x];
-	float lonB = (*dat)[b][pI.x];
-	float latA = (*dat)[a][pI.y];
-	float latB = (*dat)[b][pI.y];
-	float altA = (*dat)[a][pI.z];
-	float altB = (*dat)[b][pI.z];
+	const Data* dat = data;
+	std::sort(indCopy.begin(), indCopy.end(), [dat, pI](uint32_t a, uint32_t b) {float lonA = (*dat)(a,pI.x);
+	float lonB = (*dat)(b,pI.x);
+	float latA = (*dat)(a,pI.y);
+	float latB = (*dat)(b,pI.y);
+	float altA = (*dat)(a,pI.z);
+	float altB = (*dat)(b,pI.z);
 	if (altA > altB) return true;
 	else if (altA < altB) return false;
 	else {
