@@ -352,9 +352,8 @@ struct Buffer {
 struct DataSet {
 	std::string name;
 	Buffer buffer;
-	std::vector<float*> data;
+	Data data;
 	std::list<TemplateList> drawLists;
-	bool oneData = false;			//if is set to true, all data in data is in one continous float* array. -> on deletion only delete[] the float* of data[0]
 	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
 
 	bool operator==(const DataSet& other) {
@@ -1946,7 +1945,7 @@ static void cleanupPcPlotCommandPool() {
 	vkDestroyCommandPool(g_Device, g_PcPlotCommandPool, nullptr);
 }
 
-static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, const std::vector<float*>& data) {
+static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, const Data& data) {
 	VkResult err;
 
 	//creating the command buffer as its needed to do all the operations in here
@@ -1954,17 +1953,17 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	Buffer vertexBuffer, stagingBuffer;
 
-	uint32_t amtOfVertices = Attributes.size() * data.size();
+	uint32_t bufferSize = data.packedByteSize();
 
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = sizeof(Vertex) * Attributes.size() * data.size();
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
 	check_vk_result(err);
-	VkUtil::createBuffer(g_Device, sizeof(Vertex)*amtOfVertices,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,&stagingBuffer.buffer);
+	VkUtil::createBuffer(g_Device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,&stagingBuffer.buffer);
 
 	VkMemoryRequirements memRequirements;
 	vkGetBufferMemoryRequirements(g_Device, vertexBuffer.buffer, &memRequirements);
@@ -1986,29 +1985,15 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	vkBindBufferMemory(g_Device, vertexBuffer.buffer, vertexBuffer.memory, 0);
 
-	//VkDeviceSize offsets[] = { 0 };
-	//vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &g_PcPlotVertexBuffer, offsets);
-
-	//creating a 1-D array with all the Attributes
-	float* d = new float[data.size() * Attributes.size()];
-	uint32_t i = 0;
-	for (float* p : data) {
-		for (int j = 0; j < Attributes.size(); j++) {
-			d[i++] = p[j];
-		}
-	}
-
 	//filling the Vertex Buffer with all Datapoints
 	void* mem;
-	vkMapMemory(g_Device, stagingBuffer.memory, 0, sizeof(Vertex) * amtOfVertices, 0, &mem);
-	memcpy(mem, d, amtOfVertices * sizeof(Vertex));
+	vkMapMemory(g_Device, stagingBuffer.memory, 0, bufferSize, 0, &mem);
+	data.packData(mem);
 	vkUnmapMemory(g_Device, stagingBuffer.memory);
-
-	delete[] d;
 
 	VkCommandBuffer copyComm;
 	VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &copyComm);
-	VkUtil::copyBuffer(copyComm, stagingBuffer.buffer, vertexBuffer.buffer, sizeof(Vertex) * amtOfVertices, 0, 0);
+	VkUtil::copyBuffer(copyComm, stagingBuffer.buffer, vertexBuffer.buffer, bufferSize, 0, 0);
 	VkUtil::commitCommandBuffer(g_Queue, copyComm);
 	check_vk_result(vkQueueWaitIdle(g_Queue));
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &copyComm);
@@ -2544,15 +2529,6 @@ static void destroyPcPlotDataSet(DataSet& dataSet) {
 
 	removePcPlotDrawLists(dataSet);
 
-	if (dataSet.oneData) {
-		delete[] dataSet.data[0];
-	}
-	else {
-		for (int i = 0; i < dataSet.data.size(); i++) {
-			delete[] dataSet.data[i];
-		}
-	}
-
 	pcSettings.updateBrushTemplates = true;
 
 	g_PcPlotDataSets.erase(it);
@@ -2585,15 +2561,6 @@ static void cleanupPcPlotDataSets() {
 	for (DataSet ds : g_PcPlotDataSets) {
 		ds.drawLists.clear();
 		removePcPlotDrawLists(ds);
-
-		if (ds.oneData) {
-			delete[] ds.data[0];
-		}
-		else {
-			for (int i = 0; i < ds.data.size(); i++) {
-				delete[] ds.data[i];
-			}
-		}
 	}
 
 	g_PcPlotDataSets.clear();
@@ -2691,8 +2658,8 @@ static std::pair<bool,std::vector<float>>& getDimensionValues(const DataSet& ds,
 	if (!arraysExist) {
 		dimensionValues[pcAttributes[dimension].name] = {};
 		std::set<float> used;
-		for (float* datum : ds.data) {
-			float d = datum[dimension];
+		for (int i = 0; i < ds.data.columns[dimension].size(); ++i) {
+			float d = ds.data.columns[dimension][i];		//directly qurying the column to avoid copying
 			if (used.find(d) == used.end()) {
 				dimensionValues[pcAttributes[dimension].name].second.push_back(d);
 				used.insert(d);
@@ -3792,7 +3759,8 @@ static bool openCsv(const char* filename) {
 
 		//parsing the data which follows the attribute declaration
 		else {
-			ds.data.push_back(new float[pcAttributes.size()]);
+			ds.data.columns.resize(pcAttributes.size());
+			ds.data.columnDimensions.resize(pcAttributes.size(), {0});		//all columns only depend on the first dimension, the index dimension
 			size_t attr = 0;
 			float curF = 0;
 			while ((pos = line.find(delimiter)) != std::string::npos) {
@@ -3827,7 +3795,7 @@ static bool openCsv(const char* filename) {
 				if (curF < pcAttributes[permutation[attr]].min)
 					pcAttributes[permutation[attr]].min = curF;
 
-				ds.data.back()[permutation[attr++]] = curF;
+				ds.data.columns[permutation[attr++]].push_back(curF);
 			}
 			if (attr == pcAttributes.size()) {
 				std::cerr << "The dataset to open is not consitent!" << std::endl;
@@ -3858,9 +3826,21 @@ static bool openCsv(const char* filename) {
 				pcAttributes[permutation[attr]].max = curF;
 			if (curF < pcAttributes[permutation[attr]].min)
 				pcAttributes[permutation[attr]].min = curF;
-			ds.data.back()[permutation[attr]] = curF;
+			ds.data.columns[permutation[attr]].push_back(curF);
 		}
 	}
+	//setting the dataset index dimension size
+	ds.data.dimensionSizes = {(uint32_t) ds.data.columns[0].size()};
+	ds.data.compress();
+#ifdef _DEBUG	//debug check for same length columns
+	uint32_t columnsSize = 0;
+	for(int i = 0; i < ds.columns.size(); ++i){
+		if(i == 0)
+			columnsSize = ds.columns[i].size();
+		else
+			assert(columnsSize == ds.columns[i].size());
+	}
+#endif
 
 	//lexicografically ordering labeled data
 	std::vector<std::vector<std::pair<int,int>>> lexicon;	//first has the index of the categorie, second has its corresponding numeric value
@@ -3877,10 +3857,10 @@ static bool openCsv(const char* filename) {
 		}
 	}
 	//now ordering
-	for (float* d : ds.data) {
+	for (int i = 0; i < ds.data.size(); ++i) {
 		for (int k = 0; k < pcAttributes.size(); ++k) {
 			if (lexicon[k].size()) {
-				d[k] = lexicon[k][int(d[k])].first;
+				ds.data(i, k) = lexicon[k][int(ds.data(i, k))].first;
 			}
 		}
 	}
@@ -3921,10 +3901,10 @@ static bool openCsv(const char* filename) {
 	}
 	for (int i : tl.indices) {
 		for (int j = 0; j < pcAttributes.size(); j++) {
-			if (ds.data[i][j] < tl.minMax[j].first)
-				tl.minMax[j].first = ds.data[i][j];
-			if (ds.data[i][j] > tl.minMax[j].second)
-				tl.minMax[j].second = ds.data[i][j];
+			if (ds.data(i,j) < tl.minMax[j].first)
+				tl.minMax[j].first = ds.data(i,j);
+			if (ds.data(i,j) > tl.minMax[j].second)
+				tl.minMax[j].second = ds.data(i,j);
 		}
 	}
 
@@ -4077,32 +4057,29 @@ static bool openDlf(const char* filename) {
 			}
 			//reading the data
 			else {
-				ds.oneData = true;
+				ds.data.dimensionSizes = {(uint32_t)amtOfPoints};
+				ds.data.columns.resize(pcAttributes.size(), std::vector<float>(amtOfPoints));
+				ds.data.columnDimensions.resize(pcAttributes.size(), {0});
 				std::string fname(filename);
 				int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
 				ds.name = fname.substr(offset + 1);
 
 				file >> tmp;
 
-				float* d = new float[amtOfPoints * pcAttributes.size()];
 				int a = 0;
 				for (int i = 0; i < amtOfPoints * pcAttributes.size() && tmp != std::string("Drawlists:"); file >> tmp, i++) {
 					int datum = i / pcAttributes.size();
 					int index = i % pcAttributes.size();
-					index = datum * pcAttributes.size() + permutation[index];
-					d[index] = std::stof(tmp);
-					if (pcAttributes[a].min > d[index]) {
-						pcAttributes[a].min = d[index];
+					//index = datum * pcAttributes.size() + permutation[index];
+					float d = std::stof(tmp);
+					ds.data.columns[permutation[index]][datum] = d;
+					if (pcAttributes[a].min > d) {
+						pcAttributes[a].min = d;
 					}
-					if (pcAttributes[a].max < d[index]) {
-						pcAttributes[a].max = d[index];
+					if (pcAttributes[a].max < d) {
+						pcAttributes[a].max = d;
 					}
 					a = (a + 1) % pcAttributes.size();
-				}
-
-				ds.data = std::vector<float*>(amtOfPoints);
-				for (int i = 0; i < amtOfPoints; i++) {
-					ds.data[i] = &d[i * pcAttributes.size()];
 				}
 			}
 
@@ -4120,10 +4097,10 @@ static bool openDlf(const char* filename) {
 			for (int i = 0; i < ds.data.size(); i++) {
 				defaultT.indices.push_back(i);
 				for (int j = 0; j < pcAttributes.size(); j++) {
-					if (ds.data[i][j] < defaultT.minMax[j].first)
-						defaultT.minMax[j].first = ds.data[i][j];
-					if (ds.data[i][j] > defaultT.minMax[j].second)
-						defaultT.minMax[j].second = ds.data[i][j];
+					if (ds.data(i,j) < defaultT.minMax[j].first)
+						defaultT.minMax[j].first = ds.data(i,j);
+					if (ds.data(i,j) > defaultT.minMax[j].second)
+						defaultT.minMax[j].second = ds.data(i,j);
 				}
 			}
 			ds.drawLists.push_back(defaultT);
@@ -4132,8 +4109,6 @@ static bool openDlf(const char* filename) {
 			if (tmp != std::string("Drawlists:")) {
 				std::cout << "Missing Draw lists section. Got " << tmp << " instead" << std::endl;
 				pcAttributes.clear();
-				delete[] ds.data[0];
-				ds.data.clear();
 				return false;
 			}
 			//beginnin to read the drawlists
@@ -4160,10 +4135,10 @@ static bool openDlf(const char* filename) {
 					}
 					for (int i : tl.indices) {
 						for (int j = 0; j < pcAttributes.size(); j++) {
-							if (ds.data[i][j] < tl.minMax[j].first)
-								tl.minMax[j].first = ds.data[i][j];
-							if (ds.data[i][j] > tl.minMax[j].second)
-								tl.minMax[j].second = ds.data[i][j];
+							if (ds.data(i,j) < tl.minMax[j].first)
+								tl.minMax[j].first = ds.data(i,j);
+							if (ds.data(i,j) > tl.minMax[j].second)
+								tl.minMax[j].second = ds.data(i,j);
 						}
 					}
 					tl.pointRatio = tl.indices.size() / ((float)ds.data.size());
@@ -4392,7 +4367,6 @@ static bool openNetCDF(const char* filename){
         //std:: cout << "Dimension " << dimName << " at index " << dimension_variable_indices[i] << " with lenght" << iter_stops[i] << std::endl;
     }
 
-	std::vector<std::vector<float>> data(nvars);
 	std::vector<float> fill_values(nvars);
 	std::vector<float> has_fill_value(nvars);
 	std::vector<std::vector<std::string>> categories(nvars);
@@ -4414,24 +4388,32 @@ static bool openNetCDF(const char* filename){
 			reduced_data_size *= dim_size;
 		}
 	}
-	//std::cout<< "netCDF data size: " << data_size << std::endl;
-	for (int i = 0; i < data.size(); ++i) {
-		//only resize if attribute is active, plus the size is only allocated for the needed size
-		if (queryAttributes[i].active) {
-			int attributeSize = 1;
-			for (int dim : variable_dims[i]) {
-				if (!dimension_is_stringsize[dim])
-					attributeSize *= queryAttributes[queryAttributes.size() - ndims + dim].dimensionSize;
-			}
-			data[i].resize(attributeSize);
+
+	//preparing the data member of dataset to hold the data
+	DataSet ds{};
+	ds.data.dimensionSizes = std::vector<uint32_t>(dim_sizes.begin(), dim_sizes.end());
+	ds.data.columnDimensions.resize(attribute_dims.size());
+	ds.data.columns.resize(tmp.size());
+	ds.data.columnDimensions.resize(tmp.size());
+	for(int i = 0; i < ds.data.columns.size(); ++i){
+		int var = attr_to_var[i];
+		ds.data.columnDimensions[i] = std::vector<uint32_t>(attribute_dims[i].begin(), attribute_dims[i].end());
+		int columnSize = 1;
+		for (int dim : attribute_dims[i]) {
+			columnSize *= ds.data.dimensionSizes[dim];
 		}
+		ds.data.columns[i].resize(columnSize);
+	}
+	for(int i = 0; i < dim_sizes.size(); ++i){
+		if(dimension_is_stringsize[i])
+			ds.data.removeDim(i, 0);
 	}
 
 	//reading out all data from the netCDF file(including conversion)
-	for (int i = 0; i < nvars; ++i) {
-		if (!queryAttributes[i].active) continue;
+	for (int i = 0; i < ds.data.columns.size(); ++i) {
+		int var = attr_to_var[i];
 		nc_type type;
-		if ((retval = nc_inq_vartype(fileId, i, &type))){
+		if ((retval = nc_inq_vartype(fileId, var, &type))){
 			std::cout << "Error at reading data type" << std::endl;
 			nc_close(fileId);
 			return false;
@@ -4440,12 +4422,12 @@ static bool openNetCDF(const char* filename){
 		float fillValue = 0;
 		switch(type){
 			case NC_FLOAT:
-			if ((retval = nc_get_var_float(fileId, i, data[i].data()))) {
+			if ((retval = nc_get_var_float(fileId, var, ds.data.columns[i].data()))) {
 				std::cout << "Error at reading data" << std::endl;
 				nc_close(fileId);
 				return false;
 			}
-			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &fillValue))) {
+			if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &fillValue))) {
 				std::cout << "Error at reading fill value" << std::endl;
 				nc_close(fileId);
 				return false;
@@ -4453,15 +4435,15 @@ static bool openNetCDF(const char* filename){
 			break;
 			case NC_DOUBLE:
 			{
-			auto d = std::vector<double>(data[i].size());
-			if ((retval = nc_get_var_double(fileId, i, d.data()))) {
+			auto d = std::vector<double>(ds.data.columns[i].size());
+			if ((retval = nc_get_var_double(fileId, var, d.data()))) {
 				std::cout << "Error at reading data" << std::endl;
 				nc_close(fileId);
 				return false;
 			}
-			data[i] = std::vector<float>(d.begin(), d.end());
+			ds.data.columns[i] = std::vector<float>(d.begin(), d.end());
 			double f = 0;
-			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &f))) {
+			if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &f))) {
 				std::cout << "Error at reading fill value" << std::endl;
 				nc_close(fileId);
 				return false;
@@ -4471,15 +4453,15 @@ static bool openNetCDF(const char* filename){
 			}
 			case NC_INT:
 			{
-			auto d = std::vector<int>(data[i].size());
-			if ((retval = nc_get_var_int(fileId, i, d.data()))) {
+			auto d = std::vector<int>(ds.data.columns[i].size());
+			if ((retval = nc_get_var_int(fileId, var, d.data()))) {
 				std::cout << "Error at reading data" << std::endl;
 				nc_close(fileId);
 				return false;
 			}
-			data[i] = std::vector<float>(d.begin(), d.end());
+			ds.data.columns[i] = std::vector<float>(d.begin(), d.end());
 			int f = 0;
-			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &f))) {
+			if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &f))) {
 				std::cout << "Error at reading fill value" << std::endl;
 				nc_close(fileId);
 				return false;
@@ -4489,15 +4471,15 @@ static bool openNetCDF(const char* filename){
 			}
 			case NC_UINT:
 			{
-			auto d = std::vector<uint32_t>(data[i].size());
-			if ((retval = nc_get_var_uint(fileId, i, d.data()))) {
+			auto d = std::vector<uint32_t>(ds.data.columns[i].size());
+			if ((retval = nc_get_var_uint(fileId, var, d.data()))) {
 				std::cout << "Error at reading data" << std::endl;
 				nc_close(fileId);
 				return false;
 			}
-			data[i] = std::vector<float>(d.begin(), d.end());
+			ds.data.columns[i] = std::vector<float>(d.begin(), d.end());
 			uint32_t f = 0;
-			if ((retval = nc_inq_var_fill(fileId, i, &hasFill, &f))) {
+			if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &f))) {
 				std::cout << "Error at reading fill value" << std::endl;
 				nc_close(fileId);
 				return false;
@@ -4510,13 +4492,13 @@ static bool openNetCDF(const char* filename){
 			{
 				int dataSize = 1;
 				int amtOfDims;
-				if((retval = nc_inq_varndims(fileId, i, &amtOfDims))){
+				if((retval = nc_inq_varndims(fileId, var, &amtOfDims))){
 					std::cout << "Error at reading dimsizes for categorical data" << std::endl;
 					nc_close(fileId);
 					return false;
 				}
 				std::vector<int> dims(amtOfDims);
-				if((retval = nc_inq_vardimid(fileId, i, dims.data()))){
+				if((retval = nc_inq_vardimid(fileId, var, dims.data()))){
 					std::cout << "Error at reading dims for categorical data" << std::endl;
 					nc_close(fileId);
 					return false;
@@ -4610,8 +4592,7 @@ static bool openNetCDF(const char* filename){
 
     std::vector<float> categorieFloats(pcAttributes.size(), 0);
     //creating the data array and parsing the input data
-    DataSet ds{};
-    ds.oneData = true;
+    
 	std::string fname(filename);
 	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
 	ds.name = fname.substr(offset + 1);

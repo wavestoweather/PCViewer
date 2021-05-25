@@ -45,13 +45,13 @@ class Data{
     Data(const std::vector<uint32_t>& dimensionSizes,const std::vector<std::vector<uint32_t>>& columnDimensions,const std::vector<std::vector<float>>& columns):
         dimensionSizes(dimensionSizes), columnDimensions(columnDimensions), columns(columns){};
 
-    uint32_t size(){
+    uint32_t size() const{
         uint32_t ret = 1;
         for(int i: dimensionSizes) ret *= i;
         return ret;
     };
 
-    uint32_t packedByteSize(){
+    uint32_t packedByteSize() const{
         uint32_t headerSize = calcHeaderSize();
         uint32_t dataSize = calcDataSize();
         return headerSize + dataSize;
@@ -59,7 +59,7 @@ class Data{
 
     // packs all data for the gpu in float format(also indexing information in the header so it can be used by standard cast to int)
     // handle over the mapped memory address of the data buffer to instantly upload to gpu
-    void packData(void* dst){
+    void packData(void* dst) const{
         uint32_t headerSize = calcHeaderSize();
         uint32_t dataSize = calcDataSize();
         std::vector<uint8_t> data(headerSize + dataSize);       //byte vector
@@ -88,6 +88,7 @@ class Data{
         }
 
         for(int c = 0; c < columns.size(); ++c){
+            //TODO: add safety check if something changes for the column, continue otherwise
             std::vector<uint32_t> redDimIndices(columnDimensions[c].size(), 0);
             std::vector<uint32_t> redDimIncrements(columnDimensions[c].size(), 1);
             std::vector<uint32_t> redDimStarts(columnDimensions[c].size());
@@ -182,16 +183,26 @@ class Data{
         uint32_t columnIndex = this->index(dimensionIndices, column);
         return columns[column][columnIndex];
     }
+    // const data access
+    float operator()(uint32_t index, uint32_t column) const{
+        std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
+        for(int i = dimensionSizes.size() - 1; i >= 0; --i){
+            dimensionIndices[i] = index % dimensionSizes[i];
+            index /= dimensionSizes[i];
+        }
+        uint32_t columnIndex = this->index(dimensionIndices, column);
+        return columns[column][columnIndex];
+    }
 
 private:
     // header size in bytes
-    uint32_t calcHeaderSize(){
+    uint32_t calcHeaderSize() const{
         uint32_t columnDimensionSize = 0;
         for(auto& cd: columnDimensions) columnDimensionSize += cd.size();
         return (2 + dimensionSizes.size() + 3 * columns.size() + columnDimensionSize) * sizeof(float);
     }
     // data size in bytes
-    uint32_t calcDataSize(){
+    uint32_t calcDataSize() const{
         uint32_t dataSize = 0;
         for(auto& column: columns){
             dataSize += column.size() * sizeof(column[0]);
@@ -199,7 +210,7 @@ private:
         return dataSize;
     }
     // returns the index for a column given the diemension indices
-    uint32_t index(const std::vector<uint32_t>& dimensionIndices, uint32_t column){
+    uint32_t index(const std::vector<uint32_t>& dimensionIndices, uint32_t column) const{
         uint32_t columnIndex = 0;
         for(int d = 0; d < columnDimensions[column].size(); ++d){
             uint32_t factor = 1;
@@ -211,7 +222,7 @@ private:
         return columnIndex;
     }
     //  returns the index for a column given the dimension indices. Dimension indices only include indices for the current dimension, no mapping needed
-    uint32_t indexReducedDimIndices(const std::vector<uint32_t>& dimensionIndices, uint32_t column){
+    uint32_t indexReducedDimIndices(const std::vector<uint32_t>& dimensionIndices, uint32_t column) const{
         uint32_t columnIndex = 0;
         for(int d = 0; d < columnDimensions[column].size(); ++d){
             uint32_t factor = 1;
@@ -224,7 +235,7 @@ private:
     }
 
     // puts header data into the beginning of the dst vector(cast to floats)
-    void createPackedHeaderData(std::vector<uint8_t>& dst){
+    void createPackedHeaderData(std::vector<uint8_t>& dst) const{
         uint32_t headerSize = calcHeaderSize();
         uint32_t curPos = 0;
         *reinterpret_cast<float*>(&dst[curPos]) = dimensionSizes.size();
@@ -264,7 +275,7 @@ private:
         assert(curPos == headerSize);           //safety check
     }
 
-    void createPackedData(std::vector<uint8_t>& dst, uint32_t startOffset){
+    void createPackedData(std::vector<uint8_t>& dst, uint32_t startOffset) const{
         uint32_t curPos = startOffset;
         for(int i = 0; i < columns.size(); ++i){
             for(int j =0 ; j < columns[i].size(); ++j){
