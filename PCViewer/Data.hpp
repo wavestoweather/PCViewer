@@ -1,6 +1,7 @@
 #pragma once
 
 #include<vector>
+#include<set>
 #include<stdint.h>
 #include<algorithm>
 #include<cassert>
@@ -144,6 +145,32 @@ class Data{
         }
     }
 
+    void removeColumn(uint32_t column){
+        columns.erase(columns.begin() + column);
+        columnDimensions.erase(columnDimensions.begin() + column);
+    }
+
+    void removeUnusedDimension(){
+        std::set<uint32_t> usedDims;
+        for(auto& columnDims: columnDimensions) for(auto& dim: columnDims) usedDims.insert(dim);
+        std::vector<uint32_t> unusedDims;
+        if(usedDims.size() < dimensionSizes.size()){  //unused dims exist
+            for(int d = 0; d < dimensionSizes.size(); ++d){
+                if(usedDims.find(d) == usedDims.end())
+                    unusedDims.push_back(d);
+            }
+            for(int c = 0; c < columnDimensions.size(); ++c){
+                for(int d = 0; d < columnDimensions[c].size(); ++d){
+                    int decrement = 0;
+                    for(auto unused: unusedDims){
+                        if(columnDimensions[c][d] > unused) ++decrement;
+                    }
+                    columnDimensions[c][d] -= decrement;
+                }
+            }
+        }
+    }
+
     // access data by an index \in[0, cross(dimensionSizes)] and a column
     float& operator()(uint32_t index, uint32_t column){
         std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
@@ -155,7 +182,7 @@ class Data{
         return columns[column][columnIndex];
     }
 
-    private:
+private:
     // header size in bytes
     uint32_t calcHeaderSize(){
         uint32_t columnDimensionSize = 0;
