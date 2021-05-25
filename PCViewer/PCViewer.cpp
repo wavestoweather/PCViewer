@@ -53,6 +53,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "BrushIsoSurfRenderer.h"
 #include "MultivariateGauss.h"
 #include "TransferFunctionEditor.h"
+#include "Data.hpp"
 
 #include "ColorPalette.h"
 
