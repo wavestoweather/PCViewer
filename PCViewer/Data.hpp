@@ -68,13 +68,14 @@ class Data{
         std::copy(data.begin(), data.end(), (uint8_t*)dst);
     };
 
-    // shrinks all vectors to fit the data
+    // shrinks all vectors to fit the data and removes unused dimensions to avoid unnesecary index accessing
     void compress(){
         dimensionSizes.shrink_to_fit();
         columnDimensions.shrink_to_fit();
         for(auto& column: columnDimensions) column.shrink_to_fit();
         columns.shrink_to_fit();
         for(auto& column: columns) column.shrink_to_fit();
+        removeUnusedDimension();
     }
 
     // subsample a dimension
