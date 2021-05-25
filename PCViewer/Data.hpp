@@ -64,7 +64,7 @@ class Data{
         std::vector<uint8_t> data(headerSize + dataSize);       //byte vector
         createPackedHeaderData(data);
 
-        std::copy(data.begin(), data.end(), dst);
+        std::copy(data.begin(), data.end(), (uint8_t*)dst);
     };
 
     // shrinks all vectors to fit the data

@@ -6964,6 +6964,12 @@ int main(int, char**)
 
 	engine.seed(15);
 
+	//data class test
+	Data data;
+	data.dimensionSizes = {3,4,2};
+	data.columnDimensions = {{0,1},{0,1,2},{2}};
+	data.columns.push_back({});
+
 	//test of multivariate gauss calculations
 	//float determinant;
 	//std::vector<std::vector<double>> X{ {10,0,-3,10}, {-2,-4,1,.5},{3,0,2,7},{-3,5,9,0} };
