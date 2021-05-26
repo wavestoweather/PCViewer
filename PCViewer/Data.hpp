@@ -89,6 +89,7 @@ class Data{
         }
 
         for(int c = 0; c < columns.size(); ++c){
+            if(columnDimensions[c].empty()) continue; //constants are not affected by subsampling dimensions
             //TODO: add safety check if something changes for the column, continue otherwise
             std::vector<uint32_t> redDimIndices(columnDimensions[c].size(), 0);
             std::vector<uint32_t> redDimIncrements(columnDimensions[c].size(), 1);
