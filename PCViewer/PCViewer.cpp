@@ -131,7 +131,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -343,6 +343,7 @@ struct Buffer {
 	VkBuffer buffer;
 	VkBuffer uboBuffer;
 	VkDeviceMemory memory;
+	VkDescriptorSet descriptorSet;
 
 	bool operator==(const Buffer& other) {
 		return this->buffer == other.buffer && this->memory == other.memory;
@@ -398,6 +399,7 @@ struct DrawList {
 	std::vector<float> brushedRatioToParent;     // Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
 	bool immuneToGlobalBrushes;
 	VkBuffer buffer;
+	VkDescriptorSet dataDescriptorSet;				//is relesed when dataset is removed
 	VkBuffer indexBuffer;							//indexbuffer for line rendering!!!
 	uint32_t indexBufferOffset;
 	VkBuffer ubo;
@@ -405,6 +407,7 @@ struct DrawList {
 	//uint32_t histIndexBufferOffset;
 	std::vector<VkBuffer> histogramUbos;
 	VkBuffer medianBuffer;
+	VkDescriptorSet medianBufferSet;				//has to be created/released in drawlist creation
 	VkBuffer medianUbo;
 	uint32_t priorityColorBufferOffset;
 	VkBuffer priorityColorBuffer;
@@ -547,6 +550,7 @@ static VkDescriptorSet			g_PcPlotImageDescriptorSet = VK_NULL_HANDLE;
 static VkRenderPass				g_PcPlotRenderPass = VK_NULL_HANDLE;		//contains the render pass for the pc
 static VkRenderPass				g_PcPlotRenderPass_noClear = VK_NULL_HANDLE;
 static VkDescriptorSetLayout	g_PcPlotDescriptorLayout = VK_NULL_HANDLE;
+static VkDescriptorSetLayout	g_PcPlotDataSetLayout = VK_NULL_HANDLE;
 static VkDescriptorPool			g_PcPlotDescriptorPool = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotDescriptorSet = VK_NULL_HANDLE;
 static VkBuffer					g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
@@ -1590,10 +1594,10 @@ static void createPcPlotPipeline() {
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
-	vertexInputInfo.vertexAttributeDescriptionCount = 1;
-	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+	//vertexInputInfo.vertexBindingDescriptionCount = 1;
+	//vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
+	//vertexInputInfo.vertexAttributeDescriptionCount = 1;
+	//vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1693,6 +1697,11 @@ static void createPcPlotPipeline() {
 	err = vkCreateDescriptorSetLayout(g_Device, &layoutInfo, nullptr, &g_PcPlotDescriptorLayout);
 	check_vk_result(err);
 
+	uboLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	layoutInfo.bindingCount = 1;
+	err = vkCreateDescriptorSetLayout(g_Device, &layoutInfo, nullptr, &g_PcPlotDataSetLayout);
+	check_vk_result(err);
+
 	VkDescriptorPoolSize poolSizes[3] = {};
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	poolSizes[0].descriptorCount = 100;
@@ -1705,7 +1714,7 @@ static void createPcPlotPipeline() {
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = 3;
 	poolInfo.pPoolSizes = poolSizes;
-	poolInfo.maxSets = 1;
+	poolInfo.maxSets = 100;
 
 	err = vkCreateDescriptorPool(g_Device, &poolInfo, nullptr, &g_PcPlotDescriptorPool);
 	check_vk_result(err);
@@ -1719,10 +1728,11 @@ static void createPcPlotPipeline() {
 	err = vkAllocateDescriptorSets(g_Device, &allocInfo, &g_PcPlotDescriptorSet);
 	check_vk_result(err);
 
+	VkDescriptorSetLayout layouts[2]{g_PcPlotDescriptorLayout, g_PcPlotDataSetLayout};
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 1;
-	pipelineLayoutInfo.pSetLayouts = &g_PcPlotDescriptorLayout;
+	pipelineLayoutInfo.setLayoutCount = 2;
+	pipelineLayoutInfo.pSetLayouts = layouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 0;
 	pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -1771,15 +1781,15 @@ static void createPcPlotPipeline() {
 	attributeDescription = {};
 	attributeDescription.binding = 0;
 	attributeDescription.location = 0;
-	attributeDescription.format = VK_FORMAT_R32_SFLOAT;
-	attributeDescription.offset = offsetof(Vertex, y);
+	attributeDescription.format = VK_FORMAT_UNDEFINED;
+	attributeDescription.offset = 0;
 
 	vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
-	vertexInputInfo.vertexAttributeDescriptionCount = 1;
-	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+	//vertexInputInfo.vertexBindingDescriptionCount = 1;
+	//vertexInputInfo.pVertexBindingDescriptions = &bindingDescripiton;
+	//vertexInputInfo.vertexAttributeDescriptionCount = 1;
+	//vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
 
 	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
 	uboLayoutBinding.binding = 0;
@@ -1793,6 +1803,7 @@ static void createPcPlotPipeline() {
 
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(g_PcPlotDescriptorLayout);
+	descriptorSetLayouts.push_back(g_PcPlotDataSetLayout);
 
 	std::vector<VkDynamicState> dynamicStateVec;
 	dynamicStateVec.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
@@ -1850,6 +1861,7 @@ static void createPcPlotPipeline() {
 static void cleanupPcPlotPipeline() {
 	vkDestroyDescriptorPool(g_Device, g_PcPlotDescriptorPool, nullptr);
 	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotDescriptorLayout, nullptr);
+	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotDataSetLayout, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotPipeline, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotSplinePipelineLayout, nullptr);
@@ -1958,7 +1970,7 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(Vertex) * Attributes.size() * data.size();
+	bufferInfo.size = bufferSize;
 	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -2000,6 +2012,11 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &copyComm);
 	vkDestroyBuffer(g_Device, stagingBuffer.buffer, nullptr);
 	vkFreeMemory(g_Device, stagingBuffer.memory, nullptr);
+
+	std::vector<VkDescriptorSetLayout> layouts{g_PcPlotDataSetLayout};
+	VkUtil::createDescriptorSets(g_Device, layouts, g_PcPlotDescriptorPool, &vertexBuffer.descriptorSet);
+
+	VkUtil::updateDescriptorSet(g_Device, vertexBuffer.buffer, bufferSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vertexBuffer.descriptorSet);
 
 	g_PcPlotVertexBuffers.push_back(vertexBuffer);
 
@@ -2192,6 +2209,9 @@ static void destroyPcPlotVertexBuffer(Buffer& buffer) {
 		vkFreeMemory(g_Device, buffer.memory, nullptr);
 		buffer.memory = VK_NULL_HANDLE;
 	}
+	if (buffer.descriptorSet){
+		vkFreeDescriptorSets(g_Device, g_PcPlotDescriptorPool, 1, &buffer.descriptorSet);
+	}
 
 	g_PcPlotVertexBuffers.erase(it);
 }
@@ -2349,6 +2369,9 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	//binding the medianBuffer
 	vkBindBufferMemory(g_Device, dl.medianBuffer, dl.dlMem, dl.medianBufferOffset);
+	layouts = {g_PcPlotDataSetLayout};
+	VkUtil::createDescriptorSets(g_Device, layouts, g_PcPlotDescriptorPool, &dl.medianBufferSet);
+	VkUtil::updateDescriptorSet(g_Device, dl.medianBuffer, MEDIANCOUNT * pcAttributes.size() * sizeof(float), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianBufferSet);
 
 	//binding the indexBuffer
 	//vkBindBufferMemory(g_Device, dl.indexBuffer, dl.dlMem, dl.indexBufferOffset);
@@ -2462,6 +2485,9 @@ static void removePcPlotDrawList(DrawList& drawList) {
 			if (it->medianBuffer) {
 				vkDestroyBuffer(g_Device, it->medianBuffer, nullptr);
 				it->medianBuffer = VK_NULL_HANDLE;
+			}
+			if (it->medianBufferSet){
+				vkFreeDescriptorSets(g_Device, g_PcPlotDescriptorPool, 1, &it->medianBufferSet);
 			}
 			if (it->medianUbo) {
 				vkDestroyBuffer(g_Device, it->medianUbo, nullptr);
@@ -2886,14 +2912,17 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				continue;
 			do {
 				VkDeviceSize offsets[] = { 0 };
-				vkCmdBindVertexBuffers(line_batch_commands.back(), 0, 1, &drawList->buffer, offsets);
+				//vkCmdBindVertexBuffers(line_batch_commands.back(), 0, 1, &drawList->buffer, offsets);
 				vkCmdBindIndexBuffer(line_batch_commands.back(), drawList->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 				//binding the right ubo
-				if (pcSettings.renderSplines)
-					vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
-				else
-					vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
+				VkDescriptorSet descSets[2]{drawList->uboDescSet, drawList->dataDescriptorSet};
+				if (pcSettings.renderSplines){
+					vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 2, descSets, 0, nullptr);
+				}
+				else{
+					vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 2, descSets, 0, nullptr);
+				}
 
 				vkCmdSetLineWidth(line_batch_commands.back(), 1.0f);
 
@@ -2916,13 +2945,14 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				//draw the Median Line
 				if (drawList->activeMedian != 0 && curIndex == drawList->indices.size()) {
 					vkCmdSetLineWidth(line_batch_commands.back(), pcSettings.medianLineWidth);
-					vkCmdBindVertexBuffers(line_batch_commands.back(), 0, 1, &drawList->medianBuffer, offsets);
+					//vkCmdBindVertexBuffers(line_batch_commands.back(), 0, 1, &drawList->medianBuffer, offsets);
 					vkCmdBindIndexBuffer(line_batch_commands.back(), g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+					VkDescriptorSet medianDescSets[2]{drawList->medianUboDescSet, drawList->medianBufferSet};
 					if (pcSettings.renderSplines)
-						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
+						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 2, medianDescSets, 0, nullptr);
 					else
-						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
+						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 2, medianDescSets, 0, nullptr);
 
 					vkCmdDrawIndexed(line_batch_commands.back(), amtOfIndeces + ((pcSettings.renderSplines) ? 2 : 0), 1, 0, (drawList->activeMedian - 1) * pcAttributes.size(), 0);
 
@@ -2992,14 +3022,15 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				continue;
 
 			VkDeviceSize offsets[] = { 0 };
-			vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
+			//vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
 			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 			//binding the right ubo
+			VkDescriptorSet descSets[2]{drawList->uboDescSet, drawList->dataDescriptorSet};
 			if (pcSettings.renderSplines)
-				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
+				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 2, descSets, 0, nullptr);
 			else
-				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->uboDescSet, 0, nullptr);
+				vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 2, descSets, 0, nullptr);
 
 			vkCmdSetLineWidth(g_PcPlotCommandBuffer, 1.0f);
 
@@ -3013,10 +3044,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->medianBuffer, offsets);
 				vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+				VkDescriptorSet medianDescSets[2]{drawList->medianUboDescSet, drawList->medianBufferSet};
 				if (pcSettings.renderSplines)
-					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
+					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 2, medianDescSets, 0, nullptr);
 				else
-					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &drawList->medianUboDescSet, 0, nullptr);
+					vkCmdBindDescriptorSets(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 2, medianDescSets, 0, nullptr);
 
 				vkCmdDrawIndexed(g_PcPlotCommandBuffer, amtOfIndeces + ((pcSettings.renderSplines) ? 2 : 0), 1, 0, (drawList->activeMedian - 1) * pcAttributes.size(), 0);
 
@@ -3835,11 +3867,11 @@ static bool openCsv(const char* filename) {
 	ds.data.compress();
 #ifdef _DEBUG	//debug check for same length columns
 	uint32_t columnsSize = 0;
-	for(int i = 0; i < ds.columns.size(); ++i){
+	for(int i = 0; i < ds.data.columns.size(); ++i){
 		if(i == 0)
-			columnsSize = ds.columns[i].size();
+			columnsSize = ds.data.columns[i].size();
 		else
-			assert(columnsSize == ds.columns[i].size());
+			assert(columnsSize == ds.data.columns[i].size());
 	}
 #endif
 
@@ -3922,9 +3954,9 @@ static bool openCsv(const char* filename) {
 
 	int dc = 0;
 	std::cout << std::endl << "Data:" << std::endl;
-	for (auto d : ds.data) {
+	for (int d = 0; d < ds.data.size(); ++d) {
 		for (int i = 0; i < pcAttributes.size(); i++) {
-			std::cout << d[i] << " , ";
+			std::cout << ds.data(d, i) << " , ";
 		}
 		std::cout << std::endl;
 		if (dc++ > 10)
@@ -4661,9 +4693,9 @@ static bool openNetCDF(const char* filename){
 
 	int dc = 0;
 	std::cout << std::endl << "Data:" << std::endl;
-	for (auto d : ds.data) {
+	for (int d = 0; d < ds.data.size(); ++d) {
 		for (int i = 0; i < pcAttributes.size(); i++) {
-			std::cout << d[i] << " , ";
+			std::cout << ds.data(d, i) << " , ";
 		}
 		std::cout << std::endl;
 		if (dc++ > 10)
