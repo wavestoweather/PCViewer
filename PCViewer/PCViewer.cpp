@@ -131,7 +131,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-#define _DEBUG
+//#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -1714,6 +1714,7 @@ static void createPcPlotPipeline() {
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = 3;
 	poolInfo.pPoolSizes = poolSizes;
+	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 	poolInfo.maxSets = 100;
 
 	err = vkCreateDescriptorPool(g_Device, &poolInfo, nullptr, &g_PcPlotDescriptorPool);
@@ -2272,7 +2273,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	//Median Buffer for Median Lines
 	bufferInfo.size = MEDIANCOUNT * pcAttributes.size() * sizeof(float);
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.medianBuffer);
 	check_vk_result(err);
 
@@ -2405,7 +2406,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	for (int i = 0; i < layouts.size(); i++) {
 		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
 		VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 1, dl.histogrammDescSets[i]);
-		VkUtil::updateDescriptorSet(g_Device, tl.buffer, ds.data.size() * pcAttributes.size() * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
+		VkUtil::updateDescriptorSet(g_Device, tl.buffer, ds.data.packedByteSize(), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
 	}
 
 	//specifying the uniform buffer location
@@ -2443,11 +2444,12 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	std::cout << "Hue: " << hue << std::endl;
 #endif
 
-	hsl randCol = { hue,.5f,.6f };
+	hsl randCol = { hue,.8f,.6f };
 	rgb col = hsl2rgb(randCol);
 
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
+	dl.dataDescriptorSet = ds.buffer.descriptorSet;
 	dl.color = { (float)col.r,(float)col.g,(float)col.b,pcSettings.autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, 1.f) : pcSettings.alphaDrawLists };
 	dl.prefColor = dl.color;
 	dl.show = true;
@@ -4629,6 +4631,15 @@ static bool openNetCDF(const char* filename){
 	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
 	ds.name = fname.substr(offset + 1);
     
+	//reducing the dataset
+	std::vector<uint32_t> samplingRates(iter_increments.size());
+	std::vector<std::pair<uint32_t, uint32_t>> trimIndices(samplingRates.size());
+	for(int i = 0; i < samplingRates.size(); ++i){
+		samplingRates[i] = iter_increments[i];
+		trimIndices[i].first = iter_starts[i];
+		trimIndices[i].second = iter_stops[i];
+	}
+	ds.data.subsampleTrim(samplingRates, trimIndices);
     ds.reducedDataSetSize = ds.data.size();
 
 	TemplateList tl = {};
@@ -13694,10 +13705,10 @@ int main(int, char**)
 		vkDestroySampler(g_Device, g_PcPlotSampler, nullptr);
 		cleanupPcPlotCommandPool();
 		cleanupPcPlotFramebuffer();
+		cleanupPcPlotDataSets();
 		cleanupPcPlotPipeline();
 		cleanupPcPlotRenderPass();
 		cleanupPcPlotImageView();
-		cleanupPcPlotDataSets();
 		cleanupPcPlotHistoPipeline();
 	}
 
