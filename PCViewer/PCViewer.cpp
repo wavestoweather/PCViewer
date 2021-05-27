@@ -253,6 +253,7 @@ struct QueryAttribute {
 };
 
 static std::vector<QueryAttribute> queryAttributes;
+static bool queryAttributesCsv;		//indicates if the quried attributes are from a csv file (Only subsampling is available, as the table size is not known prior to read out)
 
 struct Vec4 {
 	float x;
@@ -4195,6 +4196,21 @@ static bool openDlf(const char* filename) {
 	}
 }
 
+static std::vector<QueryAttribute> queryCSV(const char* filename) {
+	std::ifstream file(filename, std::ios::in);
+	std::string firstLine;
+	std::getline(file, firstLine);
+	std::stringstream lineStream(firstLine);
+	
+	std::vector<QueryAttribute> ret;
+	std::string name;
+	while(std::getline(lineStream, name, ',')){
+		ret.push_back(QueryAttribute{ std::string(name), 0, 1, 1, 0, 0, -1, true, false });
+	}
+	ret.push_back(QueryAttribute{ "Index", 1, 0, 1, 0, 0, -1, true, false });
+	return ret;
+}
+
 static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 	int fileId, retval;
 	if ((retval = nc_open(filename, NC_NOWRITE, &fileId))) {
@@ -4317,6 +4333,19 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 	nc_close(fileId);
 
 	return out;
+}
+
+std::vector<QueryAttribute> queryFileAttributes(const char* filename){
+	std::string file(filename);
+	if (file.substr(file.find_last_of(".") + 1) == "csv") {
+		queryAttributesCsv = true;
+		return queryCSV(filename);
+	}
+	if (file.substr(file.find_last_of(".") + 1) == "nc") {
+		queryAttributesCsv = false;
+		return queryNetCDF(filename);
+	}
+	return {};	//default return empty vector
 }
 
 static bool openNetCDF(const char* filename){
@@ -7275,7 +7304,7 @@ int main(int, char**)
                 pathDropped = true;
 				std::string file(event.drop.file);
 				if (droppedPaths.size() == 1 && file.substr(file.find_last_of(".") + 1) == "nc") {
-					queryAttributes = queryNetCDF(event.drop.file);
+					queryAttributes = queryFileAttributes(event.drop.file);
 				}
                 SDL_free(event.drop.file);              // Free dropped_filedir memory;
             }
