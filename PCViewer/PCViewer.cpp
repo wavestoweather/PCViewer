@@ -3867,6 +3867,7 @@ static bool openCsv(const char* filename) {
 	}
 	//setting the dataset index dimension size
 	ds.data.dimensionSizes = {(uint32_t) ds.data.columns[0].size()};
+	ds.data.subsampleTrim({(uint32_t)queryAttributes.back().dimensionSubsample}, {{0, ds.data.dimensionSizes[0]}});
 	ds.data.compress();
 #ifdef _DEBUG	//debug check for same length columns
 	uint32_t columnsSize = 0;
@@ -7507,7 +7508,7 @@ int main(int, char**)
 					int c = 0;
 					for (auto& a : queryAttributes) {
 						if(a.dimensionSize < 0) continue;	//ignore stringlength dimensions
-						if(prefAtt && a.dimensionSize != 0){
+						if(prefAtt && a.dimensionSize != 0){	//split line for dimensions
 							prefAtt = false;
 							ImGui::Separator();
 						}
@@ -7522,8 +7523,10 @@ int main(int, char**)
 								ImGui::SameLine();
 								ImGui::InputInt(("sampleFrequency##" + std::to_string(c)).c_str(), &a.dimensionSubsample);
 								if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
-								ImGui::SameLine();
-								ImGui::InputInt2(("Trim Indices##" + std::to_string(c)).c_str(), a.trimIndices);
+								if(!queryAttributesCsv){
+									ImGui::SameLine();
+									ImGui::InputInt2(("Trim Indices##" + std::to_string(c)).c_str(), a.trimIndices);
+								}
 							}
 							else {
 								ImGui::SameLine();
@@ -7616,9 +7619,7 @@ int main(int, char**)
 									droppedPathActive.emplace_back(1);
 									pathDropped = true;
 									f = entry.path().u8string();
-									if (queryAttributes.empty() && f.substr(f.find_last_of(".") + 1) == "nc") {
-										queryAttributes = queryNetCDF((entry.path().u8string()).c_str());
-									}
+									queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
 								}
 							}
 						}
@@ -7631,9 +7632,7 @@ int main(int, char**)
 							droppedPaths.push_back(f);
 							droppedPathActive.push_back(1);
 							pathDropped = true;
-							if (queryAttributes.empty() && f.substr(f.find_last_of(".") + 1) == "nc") {
-								queryAttributes = queryNetCDF(f.c_str());
-							}
+							queryAttributes = queryFileAttributes(f.c_str());
 						}
 					}
 					ImGui::EndMenu();
@@ -10233,9 +10232,7 @@ int main(int, char**)
 							droppedPathActive.emplace_back(1);
 							pathDropped = true;
 							f = entry.path().u8string();
-							if (queryAttributes.empty() && f.substr(f.find_last_of(".") + 1) == "nc") {
-								queryAttributes = queryNetCDF((entry.path().u8string()).c_str());
-							}
+							queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
 						}
 					}
 				}
