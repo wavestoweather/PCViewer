@@ -661,7 +661,7 @@ void VkUtil::createDescriptorSets(VkDevice device,const std::vector<VkDescriptor
 	check_vk_result(err);
 }
 
-void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, VkDescriptorSet descriptorSet)
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorBufferInfo desBufferInfo = {};
 	desBufferInfo.buffer = buffer;
@@ -680,7 +680,7 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
-void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, uint32_t offset, VkDescriptorSet descriptorSet)
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t offset, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorBufferInfo desBufferInfo = {};
 	desBufferInfo.buffer = buffer;
@@ -699,7 +699,7 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
-void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet)
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorBufferInfo desBufferInfo = {};
 	desBufferInfo.buffer = buffer;
@@ -718,7 +718,7 @@ void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size
 	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 }
 
-void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, uint32_t offset, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet)
+void VkUtil::updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t offset, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet)
 {
 	VkDescriptorBufferInfo desBufferInfo = {};
 	desBufferInfo.buffer = buffer;

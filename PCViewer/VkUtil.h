@@ -53,10 +53,10 @@ namespace VkUtil{
 	void createDescriptorPool(VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, VkDescriptorPool* descriptorPool);
 	void destroyDescriptorPool(VkDevice device, VkDescriptorPool pool);
 	void createDescriptorSets(VkDevice device, const std::vector<VkDescriptorSetLayout>& layouts, VkDescriptorPool pool, VkDescriptorSet* descriptorSetArray);
-	void updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, VkDescriptorSet descriptorSet);
-	void updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, uint32_t offset, VkDescriptorSet descriptorSet);
-	void updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet);
-	void updateDescriptorSet(VkDevice device, VkBuffer buffer, uint32_t size, uint32_t binding, uint32_t offset, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet);
+	void updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, VkDescriptorSet descriptorSet);
+	void updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t offset, VkDescriptorSet descriptorSet);
+	void updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet);
+	void updateDescriptorSet(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t offset, VkDescriptorType descriptorType, VkDescriptorSet descriptorSet);
 	void updateTexelBufferDescriptorSet(VkDevice device, VkBufferView bufferView, uint32_t binding, VkDescriptorSet descriptorSet);
 	void updateImageDescriptorSet(VkDevice device, VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout, uint32_t binding, VkDescriptorSet descriptorSet);
 	void updateImageArrayDescriptorSet(VkDevice device, std::vector<VkSampler>& sampler, std::vector<VkImageView>& imageViews, std::vector<VkImageLayout>& imageLayouts, uint32_t binding, VkDescriptorSet descriptorSet);
