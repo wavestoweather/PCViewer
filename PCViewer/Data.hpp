@@ -80,17 +80,29 @@ class Data{
     }
 
     // subsample a dimension
-    void subsampleTrim(const std::vector<uint32_t>& samplingRates, const std::vector<std::pair<uint32_t, uint32_t>>& trimIndices){     
+    void subsampleTrim(const std::vector<uint32_t>& samplingRates, const std::vector<std::pair<uint32_t, uint32_t>>& trimIndices){    
+        std::vector<uint32_t> normalSampling(samplingRates.size(), 1);
+        std::vector<std::pair<uint32_t, uint32_t>> noTrim;
+        for(auto dim: dimensionSizes) noTrim.push_back({0, dim});
+        if(samplingRates == normalSampling && trimIndices == noTrim) return;        //nothing has to be done
+
         std::vector<uint32_t> reducedDimensions(dimensionSizes.size());
         for(int d = 0; d < dimensionSizes.size(); ++d){
             reducedDimensions[d] = trimIndices[d].second - trimIndices[d].first;
+            reducedDimensions[d] += samplingRates[d] - 1;
             reducedDimensions[d] /= samplingRates[d];
-            if(reducedDimensions[d] == 0) reducedDimensions[d] = 1;
         }
 
         for(int c = 0; c < columns.size(); ++c){
-            if(columnDimensions[c].empty()) continue; //constants are not affected by subsampling dimensions
-            //TODO: add safety check if something changes for the column, continue otherwise
+            bool trimmedSubsampled = false; 
+            for(auto dim: columnDimensions[c]){
+                if(samplingRates[dim] != 1 || trimIndices[c] != std::pair<uint32_t, uint32_t>(0, dimensionSizes[c])){
+                    trimmedSubsampled = true;
+                    break;
+                }
+            }
+            if(!trimmedSubsampled) continue;            //discarding columns which dont depend on any subsampled/trimmed dimension
+
             std::vector<uint32_t> redDimIndices(columnDimensions[c].size(), 0);
             std::vector<uint32_t> redDimIncrements(columnDimensions[c].size(), 1);
             std::vector<uint32_t> redDimStarts(columnDimensions[c].size());
