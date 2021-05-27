@@ -3748,16 +3748,20 @@ static bool openCsv(const char* filename) {
 			std::vector<Attribute> tmp;
 			std::vector<std::string> attributes;
 
+			int count = 0;
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
+				if(!queryAttributes[count++].active) continue;		//ignore deactivated attributes
 				tmp.push_back({ cur, cur,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
 				attributes.push_back(tmp.back().name);
 			}
 			//adding the last item which wasn't recognized
 			line = line.substr(0, line.find("\r"));
-			tmp.push_back({ line, line,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
-			attributes.push_back(tmp.back().name);
+			if(queryAttributes[count++].active){
+				tmp.push_back({ line, line,{},{},std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() });
+				attributes.push_back(tmp.back().name);
+			}
 
 			//checking if the Attributes are correct
 			permutation = checkAttriubtes(attributes);
@@ -3799,9 +3803,11 @@ static bool openCsv(const char* filename) {
 			ds.data.columnDimensions.resize(pcAttributes.size(), {0});		//all columns only depend on the first dimension, the index dimension
 			size_t attr = 0;
 			float curF = 0;
+			int count = 0;
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
 				line.erase(0, pos + delimiter.length());
+				if(!queryAttributes[count++].active) continue;
 				//checking for an overrunning attribute counter
 				if (attr == pcAttributes.size()) {
 					std::cerr << "The dataset to open is not consitent!" << std::endl;
@@ -3833,6 +3839,7 @@ static bool openCsv(const char* filename) {
 
 				ds.data.columns[permutation[attr++]].push_back(curF);
 			}
+			if(!queryAttributes[count++].active) continue;
 			if (attr == pcAttributes.size()) {
 				std::cerr << "The dataset to open is not consitent!" << std::endl;
 				f.close();
