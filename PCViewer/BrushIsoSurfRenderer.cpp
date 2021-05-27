@@ -382,7 +382,7 @@ bool BrushIsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, 
 	
 	std::vector<VkImageLayout> imageLayouts(required3dImages, VK_IMAGE_LAYOUT_GENERAL);
 	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, data, amtOfData * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateStorageImageArrayDescriptorSet(device, image3dSampler, image3dView, imageLayouts, 4, descSet);
 	

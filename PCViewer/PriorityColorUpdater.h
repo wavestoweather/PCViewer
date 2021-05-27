@@ -129,7 +129,7 @@ public:
 		vkUnmapMemory(device, indexMemory);
 
 		VkUtil::updateDescriptorSet(device, indexBuffer, indexByteSize, 1, descSet);
-		VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 2, descSet);
+		VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, descSet);
 		VkUtil::updateDescriptorSet(device, priorityColorBuffer, dataSize * sizeof(float), 3, descSet);
 
 		VkCommandBuffer command;

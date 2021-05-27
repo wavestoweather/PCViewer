@@ -1,6 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Informations{
 	uint amtOfAttributes;
@@ -19,8 +20,8 @@ layout(std430, binding = 1) buffer Brushes{
 }brushes;
 
 layout(std430, binding = 2) buffer Data{
-	float data[];
-}d;
+	float d[];
+}data;
 
 layout(std430, binding = 3) buffer Ind{
 	uint ind[];
@@ -30,6 +31,8 @@ layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
+#include "dataAccess.glsl"
+
 void main(){
 	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
 	bool lineKeep = true;
@@ -37,8 +40,9 @@ void main(){
 		bool good = false;
 		for(int brush = 0; brush < info.indicesOffsets[axis].z;brush++){
 			vec2 minMax = brushes.minMax[info.indicesOffsets[axis].y + brush].xy;
-			uint datInd = indices.ind[gl_GlobalInvocationID.x] * info.amtOfAttributes + info.indicesOffsets[axis].x;
-			float datum = d.data[datInd];
+			uint index = indices.ind[gl_GlobalInvocationID.x];
+			uint column = info.indicesOffsets[axis].x;
+			float datum = getPackedData(index, column);
 			if(datum>=minMax.x&&datum<=minMax.y){
 				good = true;
 				break;

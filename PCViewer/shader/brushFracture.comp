@@ -1,6 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Informations{
 	uint amtOfAttributes;
@@ -19,8 +20,8 @@ layout(std430, binding = 1) buffer Fractures{
 }fractures;
 
 layout(std430, binding = 2) buffer Data{
-	float data[];
-}d;
+	float d[];
+}data;
 
 layout(std430, binding = 3) buffer Ind{
 	uint ind[];
@@ -30,6 +31,8 @@ layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
+#include "dataAccess.glsl"
+
 void main(){
 	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
 	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
@@ -37,9 +40,9 @@ void main(){
 	for(int fracture = 0; fracture<info.amtOfFractures;++fracture){
 		bool good = true;
 		for (int j = 0; j < info.amtOfFractureAxes; ++j) {
-			uint dataIndex = lineIndex * info.amtOfAttributes + info.attributeInd[j];		//getting the data index for the current axis
 			uint fractureBase = 2*(fracture * info.amtOfFractureAxes + j);					//getting the start index for min and max values of the fracture. Multiplication with 2 required as we got min and max values after each other
-			if (d.data[dataIndex] < fractures.minMax[fractureBase] || d.data[dataIndex] > fractures.minMax[fractureBase + 1]) {
+			float datum = getPackedData(lineIndex, info.attributeInd[j]);
+			if (datum < fractures.minMax[fractureBase] || datum > fractures.minMax[fractureBase + 1]) {
 				good = false;
 				break;
 			}

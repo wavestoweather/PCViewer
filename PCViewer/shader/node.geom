@@ -1,4 +1,6 @@
 #version 450
+#extension GL_GOOGLE_include_directive : enable
+
 layout(std430, binding = 0) buffer Info{
 	float alphaMultiplier;
 	uint clipNormalize;
@@ -30,8 +32,10 @@ layout (location = 0) in uint dataIndex[];
 layout (points, max_vertices = 20) out;
 layout(location = 0) out vec4 colorV;
 
+#include "dataAccess.glsl"
+
 void main() {
-	for(int attributeIndex = 0;attributeIndex<infos.amtOfAttributes;++attributeIndex){
+	for(int attributeIndex = 0; attributeIndex<infos.amtOfAttributes; ++attributeIndex){
 		float offsetP = infos.attributeInfos[attributeIndex*8 + 4];
 		if(offsetP<0){	//discard deactivated items
 			gl_Position = vec4(-2,-2,-2,1);
@@ -39,7 +43,7 @@ void main() {
 		}
 		bool activ = bool(imageLoad( act, int(dataIndex[0])));
 		colorV = vec4(infos.attributeInfos[attributeIndex*8],infos.attributeInfos[attributeIndex*8 + 1], infos.attributeInfos[attributeIndex*8 + 2], infos.attributeInfos[attributeIndex*8+ 3]);
-		vec4 pos = vec4(data.d[dataIndex[0]*infos.amtOfAttributes + infos.posIndices.x], data.d[dataIndex[0]*infos.amtOfAttributes + infos.posIndices.y], data.d[dataIndex[0]*infos.amtOfAttributes + infos.posIndices.z], 1);
+		vec4 pos = vec4(getPackedData(dataIndex[0], infos.posIndices.x), getPackedData(dataIndex[0], infos.posIndices.y), getPackedData(dataIndex[0], infos.posIndices.z), 1);
 		pos.xyz -= infos.boundingRectMin.xyz;
 		pos.xyz /= infos.boundingRectMax.xyz - infos.boundingRectMin.xyz;
 		pos.y += infos.offset * offsetP;		//offset is applied after normalization to get a higher effect
@@ -65,7 +69,7 @@ void main() {
 		        colorV.a *= infos.alphaMultiplier/pdistance;
 		    }
 
-		    float radius = data.d[dataIndex[0]*infos.amtOfAttributes + attributeIndex];
+		    float radius = getPackedData(dataIndex[0], attributeIndex);
 
 			if(bool(infos.clipNormalize&1)){
 				float min = infos.attributeInfos[attributeIndex * 8 + 5];

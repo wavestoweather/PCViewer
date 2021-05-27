@@ -188,7 +188,7 @@ public:
 
 		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, uboBuffers[1], brushesByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 4, descriptorSet);
 
@@ -318,7 +318,7 @@ public:
 
 		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, uboBuffers[1], brushesByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 4, descriptorSet);
 
@@ -441,7 +441,7 @@ public:
 
 		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, uboBuffers[1], fracturesByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 4, descriptorSet);
 
@@ -562,7 +562,7 @@ public:
 
 		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, uboBuffers[1], fracturesByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
-		VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
 		VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 4, descriptorSet);
 

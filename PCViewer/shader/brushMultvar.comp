@@ -1,6 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Informations{
 	uint amtOfAttributes;
@@ -20,8 +21,8 @@ layout(std430, binding = 1) buffer Multivariats{
 }multvar;
 
 layout(std430, binding = 2) buffer Data{
-	float data[];
-}d;
+	float d[];
+}data;
 
 layout(std430, binding = 3) buffer Ind{
 	uint ind[];
@@ -31,6 +32,8 @@ layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
+#include "dataAccess.glsl"
+
 void main(){
 	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
 	//float gaussMin = pow(.38774,info.amtOfMultvarAxes) * 0.00598;
@@ -39,8 +42,8 @@ void main(){
 	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
 	//fill x
 	for (int j = 0; j < info.amtOfMultvarAxes; ++j) {
-		uint dataIndex = lineIndex * info.amtOfAttributes + uint(info.attributeInd[j * 3]);		//getting the data index for the current axis
-		x[j] = d.data[dataIndex];
+		float datum = getPackedData(lineIndex, uint(info.attributeInd[j * 3]));
+		x[j] = datum;
 		x[j] = (x[j] - info.attributeInd[j * 3 + 1]) / (info.attributeInd[j * 3 + 2] - info.attributeInd[j * 3 + 1]);	//normalizing the datum
 	}
 

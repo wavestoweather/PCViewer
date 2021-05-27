@@ -2,6 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : enable
 #define DIMXBIT 1
 #define DIMYBIT 2
 #define DIMZBIT 4
@@ -39,8 +40,8 @@ layout(std430, binding = 1) buffer IndexBuffer{
 };
 
 layout(std430, binding = 2) buffer DataBuffer{
-	float data[];
-};
+	float d[];
+}data;
 
 layout(std430, binding = 3) buffer dimVals{
 	vec4 dimSizes;
@@ -50,6 +51,8 @@ layout(std430, binding = 3) buffer dimVals{
 layout(binding = 4, r16) uniform writeonly image3D densitys[];
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+#include "dataAccess.glsl"
 
 int getVectorIndex(int dim, float v)
 {
@@ -81,22 +84,22 @@ void main(){
 
 	ivec3 pos;
 	if(bool(info.linearDims & DIMXBIT))
-		pos.x = int(((data[i*info.amtOfAttributes + info.xInd] - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX - 1) + .5f);
+		pos.x = int(((getPackedData(i, info.xInd) - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX - 1) + .5f);
 	else
-		pos.x = getVectorIndex(0, data[i*info.amtOfAttributes + info.xInd]);
+		pos.x = getVectorIndex(0, getPackedData(i, info.xInd));
 	if(bool(info.linearDims & DIMYBIT))
-		pos.y = int(((data[i*info.amtOfAttributes + info.yInd] - info.yMin) / (info.yMax - info.yMin)) * float(info.dimY - 1) + .5f);
+		pos.y = int(((getPackedData(i, info.yInd)- info.yMin) / (info.yMax - info.yMin)) * float(info.dimY - 1) + .5f);
 	else
-		pos.y = getVectorIndex(1, data[i*info.amtOfAttributes + info.yInd]);
+		pos.y = getVectorIndex(1, getPackedData(i, info.yInd));
 	if(bool(info.linearDims & DIMZBIT))
-		pos.z = int(((data[i*info.amtOfAttributes + info.zInd] - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ - 1) + .5f);
+		pos.z = int(((getPackedData(i, info.zInd) - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ - 1) + .5f);
 	else
-		pos.z = getVectorIndex(2, data[i*info.amtOfAttributes + info.zInd]);
+		pos.z = getVectorIndex(2, getPackedData(i, info.zInd));
 	if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
 
 	//storing the data values
 	for(int ind = 0;ind<info.amtOfBrushAttributes;++ind){
-		float da = data[i*info.amtOfAttributes + info.attributes[ind]];
+		float da = getPackedData(i, info.attributes[ind]);
 		imageStore(densitys[ind], pos, vec4(da));
 	}
 }

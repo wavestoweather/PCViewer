@@ -131,7 +131,7 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 	VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descSet);
 	VkUtil::updateDescriptorSet(device, uboBuffers[0], infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, data, amtOfData * minMax.size() * sizeof(float), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateTexelBufferDescriptorSet(device, indicesActivations, 3, descSet);
 	VkUtil::updateDescriptorSet(device, uboBuffers[1], binsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 

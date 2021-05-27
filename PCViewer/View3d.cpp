@@ -315,7 +315,7 @@ void View3d::update3dImage(const std::vector<float>& xDim, const std::vector<flo
 	VkUtil::createDescriptorSets(device, sets, descriptorPool, &commandSet);
 	VkUtil::updateDescriptorSet(device, buffer, sizeof(ComputeUBO), 0, commandSet);
 	VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
-	VkUtil::updateDescriptorSet(device, data, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
+	VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
 	VkUtil::updateStorageImageDescriptorSet(device, image3dView, VK_IMAGE_LAYOUT_GENERAL, 3, commandSet);
 	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);
 	VkUtil::updateDescriptorSet(device, histogramBuffer, histogramBinsAmt * sizeof(int), 5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, commandSet);

@@ -766,6 +766,6 @@ void BubblePlotter::setupUbo()
 	VkUtil::createDescriptorSets(device, layouts, descriptorPool, &uboSet);
 
 	VkUtil::updateDescriptorSet(device, ubo, uboByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, uboSet);
-	if (dataBuffer)VkUtil::updateDescriptorSet(device, dataBuffer, sizeof(float) * amtOfAttributes * amtOfDatapoints, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, uboSet);
+	if (dataBuffer)VkUtil::updateDescriptorSet(device, dataBuffer, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, uboSet);
 	if (dataActivations)VkUtil::updateTexelBufferDescriptorSet(device, dataActivations, 2, uboSet);
 }

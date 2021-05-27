@@ -821,7 +821,7 @@ bool IsoSurfRenderer::update3dBinaryVolume(const std::vector<float>& xDim, const
 	VkUtil::updateDescriptorSet(device, brushBuffer, brushByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, indices, amtOfIndices * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, data, dataByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 5, descSet);
 	
 	//creating the command buffer, binding all the needed things and dispatching it to update the density images
@@ -989,7 +989,7 @@ IsoSurfRenderer::IsoSurfRendererError IsoSurfRenderer::update3dBinaryVolume(cons
 	VkUtil::updateDescriptorSet(device, infos, infosByteSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 1, descSet);
 	VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-	VkUtil::updateDescriptorSet(device, data, dataSize * amtOfAttributes * sizeof(float), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+	VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateDescriptorSet(device, dimValsBuffer, dimValsByteSize, 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 	VkUtil::updateStorageImageDescriptorSet(device, (index == -1) ? binaryImageView.back() : binaryImageView[index], VK_IMAGE_LAYOUT_GENERAL, 5, descSet);
 

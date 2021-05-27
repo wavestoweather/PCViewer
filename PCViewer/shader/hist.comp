@@ -1,6 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Informations{
 	uint numOfBins;
@@ -15,8 +16,8 @@ layout(std430, binding = 1) buffer Indices{
 }ind;
 
 layout(std430, binding = 2) buffer Data{
-	float data[];
-}d;
+	float d[];
+}data;
 
 layout(binding = 3, r8) uniform imageBuffer act;
 
@@ -26,13 +27,15 @@ layout(std430, binding = 4) buffer Bins{
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
+#include "dataAccess.glsl"
+
 void main(){
 	if(gl_GlobalInvocationID.x >= info.numOfIndices) return;
 	uint index = ind.i[gl_GlobalInvocationID.x];
 	bool a = bool(imageLoad( act, int(index)));
 	if(!a) return;
 	for(int axis = 0; axis<info.numOfAttributes;++axis){
-		float val = d.data[index*info.numOfAttributes + axis];
+		float val = getPackedData(index, axis);
 		if(!bool(info.ignoreZero) || val != 0){
 			int binIndex = int((val-info.minMax[2*axis])/(info.minMax[2*axis+1]-info.minMax[2*axis]) * .999999f * info.numOfBins);		//multiplication with .999999f is done to prevent that a value could be added to bin at index numOfBins
 			atomicAdd(b.bins[axis*info.numOfBins+binIndex],1);
