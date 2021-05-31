@@ -4632,10 +4632,14 @@ static bool openNetCDF(const char* filename){
 					nc_close(fileId);
 					return false;
 				}
+				int c = 0;
 				for(int offset = 0; offset < dataSize; offset += wordlen){
 					categories[i].push_back(std::string(&names[offset], &names[offset] + wordlen));
-					ds.data.columns[i].push_back(pcAttributes[i].categories[categories[i].back()]);
+					pcAttributes[i].categories[categories[i].back()] = c++;
+					pcAttributes[i].categories_ordered.push_back({categories[i].back(), float(pcAttributes[i].categories[categories[i].back()])});
+					ds.data.columns[i][offset / wordlen] = pcAttributes[i].categories[categories[i].back()];
 				}
+				std::sort(pcAttributes[i].categories_ordered.begin(), pcAttributes[i].categories_ordered.end(), [&](auto& left, auto& right){return left.second < right.second;});
 			}
 			break;
 		}
@@ -4656,9 +4660,6 @@ static bool openNetCDF(const char* filename){
 		}
 		++c;
 	}
-
-    std::vector<float> categorieFloats(pcAttributes.size(), 0);
-    //creating the data array and parsing the input data
     
 	std::string fname(filename);
 	int offset = (fname.find_last_of("/") < fname.find_last_of("\\")) ? fname.find_last_of("/") : fname.find_last_of("\\");
