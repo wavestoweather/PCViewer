@@ -4665,12 +4665,15 @@ static bool openNetCDF(const char* filename){
 	ds.name = fname.substr(offset + 1);
     
 	//reducing the dataset
-	std::vector<uint32_t> samplingRates(iter_increments.size());
+	std::vector<uint32_t> samplingRates(ds.data.dimensionSizes.size());
 	std::vector<std::pair<uint32_t, uint32_t>> trimIndices(samplingRates.size());
-	for(int i = 0; i < samplingRates.size(); ++i){
-		samplingRates[i] = iter_increments[i];
-		trimIndices[i].first = iter_starts[i];
-		trimIndices[i].second = iter_stops[i];
+	int c = 0;
+	for(int i = 0; i < iter_starts.size(); ++i){
+		if(dimension_is_stringsize[i]) continue;
+		samplingRates[c] = iter_increments[i];
+		trimIndices[c].first = iter_starts[i];
+		trimIndices[c].second = iter_stops[i];
+		++c;
 	}
 	ds.data.subsampleTrim(samplingRates, trimIndices);
     ds.reducedDataSetSize = ds.data.size();
