@@ -19,10 +19,10 @@ typedef struct {
 } hsl;
 
 static hsv   rgb2hsv(rgb in);
-static rgb   hsv2rgb(hsv in);
-static rgb	 hsl2rgb(hsl in);
+static rgb   hsv2rgb(const hsv& in);
+static rgb	 hsl2rgb(const hsl& in);
 
-rgb hsv2rgb(hsv in)
+rgb hsv2rgb(const hsv& in)
 {
 	double      hh, p, q, t, ff;
 	long        i;
@@ -74,7 +74,7 @@ rgb hsv2rgb(hsv in)
 	return out;
 }
 
-rgb hsl2rgb(hsl in) {
+rgb hsl2rgb(const hsl& in) {
 	double      hh, c, x, m;
 	long        i;
 	rgb         out;

@@ -14,6 +14,10 @@ public:
 		std::string type;
 		uint32_t byteLength;
 		void* data;
+
+		bool operator==(const Setting& other) const{
+			return id == other.id;
+		}
 	};
 
 	SettingsManager();
@@ -23,9 +27,9 @@ public:
 	bool deleteSetting(std::string id);
 	Setting& getSetting(std::string id);
 	std::vector<Setting*>* getSettingsType(std::string type);
+	Setting notFound{ "settingnotfound" };
 
 private:
-	Setting notFound{ "settingnotfound" };
 	static char settingsFile[];
 	static char filePath[];
 	void storeSettings(const char* filename);

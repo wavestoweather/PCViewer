@@ -54,6 +54,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "MultivariateGauss.h"
 #include "TransferFunctionEditor.h"
 #include "Data.hpp"
+#include "DrawlistColorPalette.hpp"
 
 #include "ColorPalette.h"
 
@@ -872,6 +873,7 @@ struct BubbleWindowSettings {
 static BubblePlotter* bubblePlotter;
 
 static SettingsManager* settingsManager;
+static DrawlistColorPalette* drawListColorPalette;
 
 static GpuBrusher* gpuBrusher;
 
@@ -2440,13 +2442,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
 	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.medianUboDescSet);
 
-	float hue = distribution(engine) * 10;
-#ifdef _DEBUG
-	std::cout << "Hue: " << hue << std::endl;
-#endif
-
-	hsl randCol = { hue,.8f,.6f };
-	rgb col = hsl2rgb(randCol);
+	rgb col = drawListColorPalette->getNextColor();
 
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
@@ -7225,6 +7221,7 @@ int main(int, char**)
 
 	{//creating the settngs manager
 		settingsManager = new SettingsManager();
+		drawListColorPalette = new DrawlistColorPalette(settingsManager);
 	}
 
 	{//brushing gpu
@@ -10576,6 +10573,9 @@ int main(int, char**)
 											updateActiveIndices(g_PcPlotDrawLists.back());
                             			}
 									}
+									else{
+										std::cout << "The selected attribute seems to not bundle the data, splitting is aborted" << std::endl;
+									}
 								}
 								break;
 							}
@@ -10659,6 +10659,11 @@ int main(int, char**)
 				}
 				pcPlotRender = true;
 			}
+			ImGui::SameLine();
+			if(ImGui::Button("Edit drawlist color palette")){
+				drawListColorPalette->openColorPaletteEditor();
+			}
+			drawListColorPalette->drawColorPaletteEditor();
 			int count = 0;
 
 			ImGui::Columns(9, "Columns", true);
@@ -13853,6 +13858,7 @@ int main(int, char**)
 		delete brushIsoSurfaceRenderer;
 		delete isoSurfaceRenderer;
 		delete settingsManager;
+		delete drawListColorPalette;
 		delete gpuBrusher;
 		delete histogramManager;
 
