@@ -10454,7 +10454,7 @@ int main(int, char**)
 						static int splitType = 0;
 						static std::vector<float> quantiles{0, 1.0f};
 						if(ImGui::BeginTabBar("SplitTab")){
-							if(ImGui::BeginTabItem("Uniform Split")){
+							if(ImGui::BeginTabItem("Linear Split")){
 								splitType = 0;
                         		if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
                         		    for(int att = 0; att < pcAttributes.size(); ++att){
