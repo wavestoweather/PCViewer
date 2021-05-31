@@ -10448,41 +10448,139 @@ int main(int, char**)
 					}
                     
                     //Popup for member split
-                    if(ImGui::Button("Split members")){
+                    if(ImGui::Button("Split dataset")){
                         ImGui::OpenPopup("SPLITDATASET");
                     }
                     if(ImGui::BeginPopupModal("SPLITDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize)){
                         static int selectedAtt = 0;
-                        if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
-                            for(int att = 0; att < pcAttributes.size(); ++att){
-                                if(ImGui::MenuItem(pcAttributes[att].name.c_str())) selectedAtt = att;
-                            }
-                            ImGui::EndCombo();
-                        }
                         static int amtOfGroups = 100;
-                        ImGui::InputInt("Amount of split groups", &amtOfGroups);
+						static int splitType = 0;
+						static std::vector<float> quantiles{0, 1.0f};
+						if(ImGui::BeginTabBar("SplitTab")){
+							if(ImGui::BeginTabItem("Uniform Split")){
+								splitType = 0;
+                        		if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
+                        		    for(int att = 0; att < pcAttributes.size(); ++att){
+                        		        if(ImGui::MenuItem(pcAttributes[att].name.c_str())) selectedAtt = att;
+                        		    }
+                        		    ImGui::EndCombo();
+                        		}
+                        		ImGui::InputInt("Amount of split groups", &amtOfGroups);
+								ImGui::EndTabItem();
+							}
+							if(ImGui::BeginTabItem("Quantiles Split")){
+								splitType = 1;
+								int addItem = -1;
+								int deleteItem = -1;
+								if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
+                        		    for(int att = 0; att < pcAttributes.size(); ++att){
+                        		        if(ImGui::MenuItem(pcAttributes[att].name.c_str())) selectedAtt = att;
+                        		    }
+                        		    ImGui::EndCombo();
+                        		}
+								ImGui::Text("Split quantiles:");
+								for(int i = 0; i < quantiles.size(); ++i){
+									float min = 0, max = 1, speed = .01f;
+									if(i == 0) speed = 0.0000000001;
+									else if(i == quantiles.size() - 1) speed = 0.000000001;
+									else {min = quantiles[i - 1], max = quantiles[i + 1];}
+									ImGui::DragFloat(("##quantile" + std::to_string(i)).c_str(), quantiles.data() + i, speed, min, max);
+									if(i != 0 && i != quantiles.size()-1){
+										ImGui::SameLine();
+										if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) deleteItem = i;
+									}
+									if(i < quantiles.size() - 1){
+										static float buttonHeight = 10;
+										static float space = 5;
+										float prevCursorPosY = ImGui::GetCursorPosY();
+										ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() / 2.0f + space);
+										if(ImGui::Button(("##addButton" + std::to_string(i)).c_str(), ImVec2(250,buttonHeight))){
+											addItem = i;
+										}
+										ImGui::SetCursorPosY(prevCursorPosY + space);
+									}
+								}
+								if(addItem >= 0) quantiles.insert(quantiles.begin() + addItem + 1, (quantiles[addItem] + quantiles[addItem + 1]) / 2.0f);
+								if(deleteItem >= 0) quantiles.erase(quantiles.begin() + deleteItem);
+
+								ImGui::EndTabItem();
+							}
+							if(ImGui::BeginTabItem("Automatic Split")){
+								splitType = 2;
+								ImGui::Text("Care to only select variables with bundled values.\n If too much groups are detected, no split will be done.");
+								if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
+                        		    for(int att = 0; att < pcAttributes.size(); ++att){
+                        		        if(ImGui::MenuItem(pcAttributes[att].name.c_str())) selectedAtt = att;
+                        		    }
+                        		    ImGui::EndCombo();
+                        		}
+								ImGui::EndTabItem();
+							}
+
+							ImGui::EndTabBar();
+						}
                         if(ImGui::Button("Split")){
-                            std::vector<std::vector<uint32_t>> indices(amtOfGroups);
-                            
-                            //assigning each datum to one of the groups
-                            float attMin = pcAttributes[selectedAtt].min, attMax = pcAttributes[selectedAtt].max;
-                            float attDiff = attMax - attMin;
-                            for(int datum = 0; datum < ds.data.size(); ++datum){
-                                float da = ds.data(datum,selectedAtt);
-                                int index = int(((da - attMin) / attDiff) * (amtOfGroups - 1) + .5f);
-                                indices[index].push_back(datum);
-                            }
-                            
-                            //safe standard indexlist of default list
+							std::vector<std::vector<uint32_t>> indices(amtOfGroups);
                             std::vector<uint32_t> sta = ds.drawLists.front().indices;
-                            for(int group = 0; group < amtOfGroups; ++group){
-                                std::string t_name = ds.name + "_" + std::to_string(group);
-                                ds.drawLists.front().indices = indices[group];;
-                                createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
-								updateActiveIndices(g_PcPlotDrawLists.back());
-                            }
-                            pcPlotRender = true;
-                            ds.drawLists.front().indices = sta;
+							switch(splitType){
+							case 0: //linear block split
+                            
+                            	//assigning each datum to one of the groups
+								{
+                            	float attMin = pcAttributes[selectedAtt].min, attMax = pcAttributes[selectedAtt].max;
+                            	float attDiff = attMax - attMin;
+                            	for(int datum = 0; datum < ds.data.size(); ++datum){
+                            	    float da = ds.data(datum,selectedAtt);
+                            	    int index = int(((da - attMin) / attDiff) * (amtOfGroups - 1) + .5f);
+                            	    indices[index].push_back(datum);
+                            	}
+	
+                            	//safe standard indexlist of default list
+                            	for(int group = 0; group < amtOfGroups; ++group){
+                            	    std::string t_name = ds.name + "_" + std::to_string(group);
+                            	    ds.drawLists.front().indices = indices[group];;
+                            	    createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+									updateActiveIndices(g_PcPlotDrawLists.back());
+                            	}
+								}
+                            	
+								break;
+							case 1:		//quantile split
+								//ordering the indices in a copy fo the default drawlist
+								{
+								auto ordered = sta;
+								std::sort(ordered.begin(), ordered.end(), [&](uint32_t left, uint32_t right){return ds.data(left, selectedAtt) < ds.data(right, selectedAtt);});
+								quantiles.front() = 0; quantiles.back() = 1;
+								for(int i = 0; i < quantiles.size() - 1; ++i){
+									std::vector<uint32_t> quant(ordered.begin() + ordered.size() * quantiles[i], ordered.begin() + ordered.size() * quantiles[i + 1]);
+									ds.drawLists.front().indices = quant;
+									std::string t_name = ds.name + "_" + std::to_string(i);
+									createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+									updateActiveIndices(g_PcPlotDrawLists.back());
+								}
+								}
+								break;
+							case 2:		//automatic split behaviour
+								{
+									const auto& dimensionValues =  getDimensionValues(ds, selectedAtt).second;
+									if(dimensionValues.size() * 10 < ds.data.size()){	//the dimension values size has to be 10 times smaller than the whole data size to count for an axis with group values
+										indices.resize(dimensionValues.size());
+										for(uint32_t d = 0; d < ds.data.size(); ++d){
+											float data = ds.data(d, selectedAtt);
+											indices[std::lower_bound(dimensionValues.begin(), dimensionValues.end(), data) - dimensionValues.begin()].push_back(d);
+										}
+										for(int group = 0; group < indices.size(); ++group){
+                            	    		std::string t_name = ds.name + "_" + std::to_string(group);
+                            	    		ds.drawLists.front().indices = indices[group];;
+                            	    		createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+											updateActiveIndices(g_PcPlotDrawLists.back());
+                            			}
+									}
+								}
+								break;
+							}
+							ds.drawLists.front().indices = sta;
+							pcPlotRender = true;
                             
                             ImGui::CloseCurrentPopup();
                         }
