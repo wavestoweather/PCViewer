@@ -10550,7 +10550,7 @@ int main(int, char**)
 							}
 							if(ImGui::BeginTabItem("Automatic Split")){
 								splitType = 2;
-								ImGui::Text("Care to only select variables with bundled values.\n If too much groups are detected, no split will be done.");
+								ImGui::Text("Only select variables with discrete values.\n If too much values wrt data size are found, no split will be performed.");
 								if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
                         		    for(int att = 0; att < pcAttributes.size(); ++att){
                         		        if(ImGui::MenuItem(pcAttributes[att].name.c_str())) selectedAtt = att;
