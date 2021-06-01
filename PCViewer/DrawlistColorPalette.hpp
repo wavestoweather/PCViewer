@@ -42,7 +42,7 @@ public:
     SettingsManager* settingsManager;
     //adding new colors should be done by directly accessing the colors member
     std::vector<Color> colors;
-    uint curColor;
+    uint32_t curColor;
     float saturation = .8f;
     float value = .8f;
     int colorDistance = 4;
@@ -64,7 +64,7 @@ public:
             ImVec2 baseCursorPos = ImGui::GetCursorPos();
             int del = -1;
             for(int i = 0; i < labelAmt; ++i){
-                ImGui::SetCursorPos({baseCursorPos.x + size / 2 + std::sin(float(i) / labelAmt * 2 * M_PI) * size / 2, baseCursorPos.y + size / 2 + std::cos(float(i)/ labelAmt * 2 * M_PI) * size / 2});
+                ImGui::SetCursorPos({baseCursorPos.x + size / 2 + std::sin(float(i) / labelAmt * 2 * float(M_PI)) * size / 2, baseCursorPos.y + size / 2 + std::cos(float(i)/ labelAmt * 2 * float(M_PI)) * size / 2});
                 if(i & 1){ // + symbol to add a new color
                     if(ImGui::Button(("+##newColor" + std::to_string(i)).c_str())){
                         colors.insert(colors.begin() + (i >> 1) + 1, Color({1,1,1}));
