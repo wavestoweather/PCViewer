@@ -7312,7 +7312,7 @@ int main(int, char**)
 				droppedPathActive.push_back(1);
                 pathDropped = true;
 				std::string file(event.drop.file);
-				if (droppedPaths.size() == 1 && file.substr(file.find_last_of(".") + 1) == "nc") {
+				if (droppedPaths.size() == 1) {
 					queryAttributes = queryFileAttributes(event.drop.file);
 				}
                 SDL_free(event.drop.file);              // Free dropped_filedir memory;
