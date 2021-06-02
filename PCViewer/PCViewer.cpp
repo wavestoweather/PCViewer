@@ -84,8 +84,6 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include <sstream>
 #include <utility>
 #include <netcdf.h>
-#include <filesystem>
-	
 
 #ifdef DETECTMEMLEAK
 #define new new( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -7618,18 +7616,18 @@ int main(int, char**)
 								pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 							}
 						}
-						else {					//entered folder -> open open dataset dialogue
-							for (const auto& entry : std::filesystem::directory_iterator(f)) {
-								if (entry.is_regular_file()) {	//only process normal enties
-									fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
-									if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
-									droppedPaths.emplace_back(entry.path().u8string());
-									droppedPathActive.emplace_back(1);
-									pathDropped = true;
-									f = entry.path().u8string();
-									queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
-								}
-							}
+						else {					//entered folder -> open open dataset dialogue ignore for ubuntu 18, no filesystem available
+							//for (const auto& entry : std::filesystem::directory_iterator(f)) {
+							//	if (entry.is_regular_file()) {	//only process normal enties
+							//		fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
+							//		if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
+							//		droppedPaths.emplace_back(entry.path().u8string());
+							//		droppedPathActive.emplace_back(1);
+							//		pathDropped = true;
+							//		f = entry.path().u8string();
+							//		queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
+							//	}
+							//}
 						}
 					}
 					ImGui::EndMenu();
@@ -10231,18 +10229,18 @@ int main(int, char**)
 						pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 					}
 				}
-				else {					//entered folder -> open open dataset dialogue
-					for (const auto& entry : std::filesystem::directory_iterator(f)) {
-						if (entry.is_regular_file()) {	//only process normal enties
-							fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
-							if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
-							droppedPaths.emplace_back(entry.path().u8string());
-							droppedPathActive.emplace_back(1);
-							pathDropped = true;
-							f = entry.path().u8string();
-							queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
-						}
-					}
+				else {					//entered folder -> open open dataset dialogue ignor for ubuntu 18
+					//for (const auto& entry : std::filesystem::directory_iterator(f)) {
+					//	if (entry.is_regular_file()) {	//only process normal enties
+					//		fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
+					//		if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
+					//		droppedPaths.emplace_back(entry.path().u8string());
+					//		droppedPathActive.emplace_back(1);
+					//		pathDropped = true;
+					//		f = entry.path().u8string();
+					//		queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
+					//	}
+					//}
 				}
 			}
 			ImGui::Separator();
