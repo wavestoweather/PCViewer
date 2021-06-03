@@ -147,7 +147,7 @@ void VkUtil::createCommandBuffer(VkDevice device, VkCommandPool commandPool, VkC
 	check_vk_result(err);
 }
 
-void VkUtil::createBuffer(VkDevice device, uint32_t size, VkBufferUsageFlags usage, VkBuffer* buffer)
+void VkUtil::createBuffer(VkDevice device, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer)
 {
 	VkResult err;
 
