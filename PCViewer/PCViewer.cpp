@@ -132,7 +132,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -1970,7 +1970,7 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	Buffer vertexBuffer, stagingBuffer;
 
-	uint32_t bufferSize = data.packedByteSize();
+	uint64_t bufferSize = data.packedByteSize();
 
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -4690,15 +4690,15 @@ static bool openNetCDF(const char* filename){
 	for (int i = 0; i < pcAttributes.size(); i++) {
 		tl.minMax.push_back(std::pair<float, float>(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()));
 	}
-	for (int i : tl.indices) {
-		for (int j = 0; j < pcAttributes.size(); j++) {
+	for (int j = 0; j < pcAttributes.size(); j++) {
+		for (float f: ds.data.columns[j]) {
 			//ignoring fill values
-			if (has_fill_value[j] && ds.data(i,j) == fill_values[j] && pcAttributes[j].categories.empty())
+			if (has_fill_value[j] && f == fill_values[j] && pcAttributes[j].categories.empty())
 				continue;
-			if (ds.data(i,j) < tl.minMax[j].first)
-				tl.minMax[j].first = ds.data(i,j);
-			if (ds.data(i,j) > tl.minMax[j].second)
-				tl.minMax[j].second = ds.data(i,j);
+			if (f < tl.minMax[j].first)
+				tl.minMax[j].first = f;
+			if (f > tl.minMax[j].second)
+				tl.minMax[j].second = f;
             //updating pcAttributes minmax if needed
             if(tl.minMax[j].first < pcAttributes[j].min)
                 pcAttributes[j].min = tl.minMax[j].first;
@@ -4717,11 +4717,11 @@ static bool openNetCDF(const char* filename){
 			pcAttributes[j].max = .1;
 		}
 	}
-	for (int i : tl.indices) {
-		for (int j = 0; j < pcAttributes.size(); j++) {
+	for (int j = 0; j < pcAttributes.size(); j++) {
+		for (float& f: ds.data.columns[j]) {
 			//replace the fill values with better suited ones.
-			if (has_fill_value[j] && ds.data(i,j) == fill_values[j] && pcAttributes[j].categories.empty())
-				ds.data(i,j) = 2 * pcAttributes[j].max - pcAttributes[j].min;
+			if (has_fill_value[j] && f == fill_values[j] && pcAttributes[j].categories.empty())
+				f = 2 * pcAttributes[j].max - pcAttributes[j].min;
 		}
 	}
 

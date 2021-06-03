@@ -52,17 +52,17 @@ class Data{
         return ret;
     };
 
-    uint32_t packedByteSize() const{
-        uint32_t headerSize = calcHeaderSize();
-        uint32_t dataSize = calcDataSize();
+    uint64_t packedByteSize() const{
+        uint64_t headerSize = calcHeaderSize();
+        uint64_t dataSize = calcDataSize();
         return headerSize + dataSize;
     };
 
     // packs all data for the gpu in float format(also indexing information in the header so it can be used by standard cast to int)
     // handle over the mapped memory address of the data buffer to instantly upload to gpu
     void packData(void* dst) const{
-        uint32_t headerSize = calcHeaderSize();
-        uint32_t dataSize = calcDataSize();
+        uint64_t headerSize = calcHeaderSize();
+        uint64_t dataSize = calcDataSize();
         std::vector<uint8_t> data(headerSize + dataSize);       //byte vector
         createPackedHeaderData(data);
         createPackedData(data, headerSize);
@@ -221,14 +221,14 @@ class Data{
 
 private:
     // header size in bytes
-    uint32_t calcHeaderSize() const{
-        uint32_t columnDimensionSize = 0;
+    uint64_t calcHeaderSize() const{
+        uint64_t columnDimensionSize = 0;
         for(auto& cd: columnDimensions) columnDimensionSize += cd.size();
         return (2 + dimensionSizes.size() + 3 * columns.size() + columnDimensionSize) * sizeof(float);
     }
     // data size in bytes
-    uint32_t calcDataSize() const{
-        uint32_t dataSize = 0;
+    uint64_t calcDataSize() const{
+        uint64_t dataSize = 0;
         for(auto& column: columns){
             dataSize += column.size() * sizeof(column[0]);
         }
@@ -301,7 +301,7 @@ private:
     }
 
     void createPackedData(std::vector<uint8_t>& dst, uint32_t startOffset) const{
-        uint32_t curPos = startOffset;
+        uint64_t curPos = startOffset;
         for(int i = 0; i < columns.size(); ++i){
             for(int j =0 ; j < columns[i].size(); ++j){
                 *reinterpret_cast<float*>(&dst[curPos]) = columns[i][j];
