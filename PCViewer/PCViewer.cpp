@@ -806,7 +806,7 @@ struct PCSettings {
 	bool showCsvTemplates = false;
 	bool updateBrushTemplates = false;
 	bool drawListForTemplateBrush = false;
-	int liveBrushThreshold = 1e4;
+	int liveBrushThreshold = 5e5;
 	int lineBatchSize = 2e6;
 
 	//variables for global brushes

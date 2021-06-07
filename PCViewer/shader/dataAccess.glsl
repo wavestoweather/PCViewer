@@ -23,6 +23,6 @@ float getPackedData(uint index, uint column){
         columnIndex += factor * dimensionIndices[dim];
     }
 
-    int columnBaseOffset = int(data.d[2 + dimensionCount + 2 * columnCount + column]);
+    uint columnBaseOffset = floatBitsToUint(data.d[2 + dimensionCount + 2 * columnCount + column]);
     return data.d[columnBaseOffset + columnIndex];
 }

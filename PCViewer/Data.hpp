@@ -268,9 +268,7 @@ private:
         *reinterpret_cast<float*>(&dst[curPos]) = columns.size();
         curPos += 4;
         for(int i = 0; i < dimensionSizes.size(); ++i){ //diemnsion sizes
-            std::cout << dimensionSizes[i] << std::endl;
             *reinterpret_cast<float*>(&dst[curPos]) = dimensionSizes[i];
-            std::cout << float(dimensionSizes[i]) << std::endl;
             curPos += 4;
         }
         std::vector<uint32_t> columnDimensionOffsets(columns.size());
@@ -288,10 +286,8 @@ private:
             curPos += 4;
         }
         uint32_t curOffset = headerSize / sizeof(float);
-        for(int i = 0; i < columns.size(); ++i){        // data offsets
-            std::cout << curOffset << std::endl;
-            std::cout << float(curOffset) << std::endl;
-            *reinterpret_cast<float*>(&dst[curPos]) = curOffset;
+        for(int i = 0; i < columns.size(); ++i){        // data offsets(are transferred as uints)
+            *reinterpret_cast<uint32_t*>(&dst[curPos]) = curOffset;
             curPos += 4;
             curOffset += columns[i].size();
         }
