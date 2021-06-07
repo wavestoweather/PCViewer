@@ -132,7 +132,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -162,6 +162,7 @@ static int						g_ExportImageHeight = 720 * g_ExportScale;
 static int						g_ExportCountDown = -1;					//amount of frames until export is done (used to let menu bars close, plots render ...), -1 when disabled
 static int						g_ExportViewportNumber = 0;
 static char						g_ExportPath[200] = "export.png";
+static long						g_MaxStorageBufferSize = 0;
 
 template <typename T>
 std::vector<T> operator+(const std::vector<T>& a, const std::vector<T>& b) {
@@ -597,6 +598,7 @@ static VkFramebuffer			g_PcPlotFramebuffer = VK_NULL_HANDLE;
 static VkFramebuffer			g_PcPlotFramebuffer_noClear = VK_NULL_HANDLE;
 static VkCommandPool			g_PcPlotCommandPool = VK_NULL_HANDLE;
 static VkCommandBuffer			g_PcPlotCommandBuffer = VK_NULL_HANDLE;
+static VkFence					g_PcPlotRenderFence = VK_NULL_HANDLE;
 static std::list<Buffer>		g_PcPlotVertexBuffers;
 static std::list<DataSet>		g_PcPlotDataSets;
 static std::list<DrawList>		g_PcPlotDrawLists;
@@ -1956,10 +1958,16 @@ static void createPcPlotCommandPool() {
 
 	err = vkCreateCommandPool(g_Device, &poolInfo, nullptr, &g_PcPlotCommandPool);
 	check_vk_result(err);
+
+	VkFenceCreateInfo fenceInfo{};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	err = vkCreateFence(g_Device, &fenceInfo, nullptr, &g_PcPlotRenderFence);
+	vkResetFences(g_Device, 1, &g_PcPlotRenderFence);
 }
 
 static void cleanupPcPlotCommandPool() {
 	vkDestroyCommandPool(g_Device, g_PcPlotCommandPool, nullptr);
+	vkDestroyFence(g_Device, g_PcPlotRenderFence, nullptr);
 }
 
 static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, const Data& data) {
@@ -2665,11 +2673,13 @@ static void cleanupPcPlotCommandBuffer() {
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &g_PcPlotCommandBuffer;
 
-	err = vkQueueSubmit(g_Queue, 1, &submitInfo, VK_NULL_HANDLE);
+	err = vkQueueSubmit(g_Queue, 1, &submitInfo, g_PcPlotRenderFence);
 	check_vk_result(err);
 
-	err = vkQueueWaitIdle(g_Queue);
+	err = vkWaitForFences(g_Device, 1, &g_PcPlotRenderFence, true, 60e9);	//timeout of 60 seconds
 	check_vk_result(err);
+
+	vkResetFences(g_Device, 1, &g_PcPlotRenderFence);
 
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
 }
@@ -3271,8 +3281,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	//when cleaning up the command buffer all data is drawn
 	cleanupPcPlotCommandBuffer();
 
-	err = vkQueueWaitIdle(g_Queue);
-	check_vk_result(err);
+	//err = vkQueueWaitIdle(g_Queue);
+	//check_vk_result(err);
 
 #ifdef PRINTRENDERTIME
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -3357,6 +3367,11 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		// e.g. VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU if available, or with the greatest memory available, etc.
 		// for sake of simplicity we'll just take the first one, assuming it has a graphics queue family.
 		g_PhysicalDevice = gpus[0];
+
+		VkPhysicalDeviceProperties props;
+		vkGetPhysicalDeviceProperties(g_PhysicalDevice, &props);
+		g_MaxStorageBufferSize = props.limits.maxStorageBufferRange;
+
 		free(gpus);
 	}
 
@@ -4677,7 +4692,16 @@ static bool openNetCDF(const char* filename){
 		++c;
 	}
 	ds.data.subsampleTrim(samplingRates, trimIndices);
+	ds.data.compress();
     ds.reducedDataSetSize = ds.data.size();
+
+	uint64_t packedSize = ds.data.packedByteSize();
+	if(ds.data.packedByteSize() > g_MaxStorageBufferSize){		//The data has to be split up.
+		std::cout << "The byte size needed for the GPU buffer is too large!" << std::endl;
+		std::cout << "In total " << ds.data.packedByteSize() << " b is needed, but only " << g_MaxStorageBufferSize << " b are allowed." << std::endl;
+		std::cout << "Reduce the data size by " << 100.0f - (float(g_MaxStorageBufferSize) / ds.data.packedByteSize()) << " to load it" << std::endl;
+		return false;
+	}
 
 	TemplateList tl = {};
 	tl.name = "Default Drawlist";
@@ -4802,7 +4826,12 @@ static bool openDataset(const char* filename) {
 		std::cout << "The given type of the file is not supported by this programm" << std::endl;
 		return false;
 	}
-    if(!opened) return false;
+    if(!opened){
+		pcAttributes.clear();
+		pcAttrOrd.clear();
+		pcAttributesSorted.clear();
+		return false;
+	}
 	//printing Amount of data loaded
 	std::cout << "Amount of data loaded: " << g_PcPlotDataSets.back().data.size() << std::endl;
 
