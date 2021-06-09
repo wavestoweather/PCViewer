@@ -46,8 +46,8 @@ class Data{
     Data(const std::vector<uint32_t>& dimensionSizes,const std::vector<std::vector<uint32_t>>& columnDimensions,const std::vector<std::vector<float>>& columns):
         dimensionSizes(dimensionSizes), columnDimensions(columnDimensions), columns(columns){};
 
-    uint32_t size() const{
-        uint32_t ret = 1;
+    uint64_t size() const{
+        uint64_t ret = 1;
         for(int i: dimensionSizes) ret *= i;
         return ret;
     };

@@ -4698,8 +4698,8 @@ static bool openNetCDF(const char* filename){
 	uint64_t packedSize = ds.data.packedByteSize();
 	if(ds.data.packedByteSize() > g_MaxStorageBufferSize){		//The data has to be split up.
 		std::cout << "The byte size needed for the GPU buffer is too large!" << std::endl;
-		std::cout << "In total " << ds.data.packedByteSize() << " b is needed, but only " << g_MaxStorageBufferSize << " b are allowed." << std::endl;
-		std::cout << "Reduce the data size by " << 100.0f - (float(g_MaxStorageBufferSize) / ds.data.packedByteSize()) << " to load it" << std::endl;
+		std::cout << "In total " << (ds.data.packedByteSize() >> 20) << "MByte is needed, but only " << (g_MaxStorageBufferSize >> 20) << "MByte are allowed." << std::endl;
+		std::cout << "Reduce the data size by " << 100.0f - 100.0f * (float(g_MaxStorageBufferSize) / ds.data.packedByteSize()) << "% to load it" << std::endl;
 		return false;
 	}
 

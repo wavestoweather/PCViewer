@@ -65,7 +65,7 @@ HistogramManager::~HistogramManager()
 	}
 }
 
-void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations)
+void HistogramManager::computeHistogramm(const std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations)
 {
 	if (!logScale) {
 		logScale = new bool[minMax.size()];
@@ -192,12 +192,12 @@ void HistogramManager::computeHistogramm(std::string& name, std::vector<std::pai
 	delete[] binsBytes;
 }
 
-HistogramManager::Histogram& HistogramManager::getHistogram(std::string name)
+HistogramManager::Histogram& HistogramManager::getHistogram(const std::string& name)
 {
 	return histograms[name];
 }
 
-bool HistogramManager::containsHistogram(std::string& name)
+bool HistogramManager::containsHistogram(const std::string& name)
 {
 	return histograms.find(name) != histograms.end();
 }

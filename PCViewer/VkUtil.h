@@ -17,6 +17,15 @@ static void check_vk_result(VkResult err)
 }
 
 namespace VkUtil{
+	struct Context{
+		uint32_t screenSize[2];
+		VkPhysicalDevice physicalDevice;
+		VkDevice device;
+		VkDescriptorPool descriptorPool;
+		VkCommandPool commandPool;
+		VkQueue queue;
+	};
+
 	struct BlendInfo {
 		VkPipelineColorBlendAttachmentState blendAttachment;
 		VkPipelineColorBlendStateCreateInfo createInfo;

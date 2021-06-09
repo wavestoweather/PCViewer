@@ -31,9 +31,9 @@ public:
 	HistogramManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool, uint32_t binsAmount);
 	~HistogramManager();
 
-	void computeHistogramm(std::string& name, std::vector<std::pair<float,float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations);
-	Histogram& getHistogram(std::string name);
-	bool containsHistogram(std::string& name);
+	void computeHistogramm(const std::string& name, std::vector<std::pair<float,float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations);
+	Histogram& getHistogram(const std::string& name);
+	bool containsHistogram(const std::string& name);
 
     /** Uses the chi-squared distance measure to compare all single attribute histograms
     and sums over all attributes. Mode = 0 -> originalBins, Mode = 1 -> binsRendered.
