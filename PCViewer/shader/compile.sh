@@ -30,3 +30,6 @@ glslangValidator -V -o brushFractureComp.spv brushFracture.comp
 glslangValidator -V -o brushMultvarComp.spv brushMultvar.comp
 glslangValidator -V -o histComp.spv hist.comp
 glslangValidator -V -o indexComp.spv index.comp
+glslangValidator -V -o band.vert.spv band.vert
+glslangValidator -V -o band.frag.spv band.frag
+glslangValidator -V -o band.geom.spv band.geom

@@ -37,4 +37,8 @@ E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o brushMultvarComp.spv brushM
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o histComp.spv hist.comp
 
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o indexComp.spv index.comp
+
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o band.vert.spv band.vert
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o band.frag.spv band.frag
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o band.geom.spv band.geom
 pause

@@ -33,6 +33,7 @@ public:
     // For attribute order change, attribute activation change try to use "updateAttributeOrdering".
     LineBundles(const VkUtil::Context& context, const std::string& drawList, const Data* data, HistogramManager* histManager, const std::vector<std::pair<std::string, std::pair<float, float>>>& attributes, const std::vector<std::pair<uint32_t, bool>>& attributeOrder, const float* color): vkContext(context), data(data), baseColor(color){
         //first group data at axes, then create vulkan instances for rendering
+        if(!histManager->containsHistogram(drawList)) return;
         assert(histManager->containsHistogram(drawList));
         HistogramManager::Histogram& hist = histManager->getHistogram(drawList);
         for(uint32_t a = 0; a < attributes.size(); ++a){
@@ -72,7 +73,7 @@ public:
     }
 
     ~LineBundles(){
-        if(!vkContext.device) return;
+        if(!vkContext.device) return; //empty line bundles object
         if(vkData) 
             vkDestroyBuffer(vkContext.device, vkData, nullptr);
         if(vkVertexBuffer) 
@@ -93,6 +94,9 @@ public:
         if(vkDescriptorSetLayout)
             vkDestroyDescriptorSetLayout(vkContext.device, vkDescriptorSetLayout, nullptr);
     };
+
+    LineBundles(const LineBundles&) = delete;
+    LineBundles& operator=(const LineBundles&) = delete;
 
     // Can be used to reuse current axis grouping to save calculation
     void updateAttributeOrdering(const std::vector<std::pair<uint32_t, bool>>& attributeOrder){
@@ -116,7 +120,7 @@ public:
                     int bundleIndexA = getBundleIndex(valA, a);
                     int bundleIndexB = getBundleIndex(valB, b);
                     int alphaIndex = bundleIndexA * bundlesData[b].size() + bundleIndexB;
-                    alphaValues.back()[alphaIndex] += 1.0 / data->size();
+                    alphaValues.back()[alphaIndex] += 10.0 / data->size();
                 }
                 a = b;
             }
@@ -125,7 +129,7 @@ public:
         recreateVulkanBuffer(attributeOrder);
     }
 
-    void renderBundles(VkCommandBuffer buffer){
+    void recordDrawBundles(VkCommandBuffer buffer){
         if(!vkContext.device) return;         //empty LineBundles object
         vkCmdBindPipeline(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline);
         vkCmdBindDescriptorSets(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineLayout, 0, 1, &vkDescriptorSet, 0, nullptr);
@@ -135,9 +139,19 @@ public:
         vkCmdDrawIndexed(buffer, indexCount, 1, 0, 0, 0);
     }
 
+    void setAxisInfosBuffer(VkBuffer buffer, uint32_t bufferSize){
+        VkUtil::updateDescriptorSet(vkContext.device, buffer, bufferSize, 1, vkDescriptorSet);
+    }
+
 private:
     // All vulkan resources are handled in private are automatically allocated and deallocated
     uint32_t indexCount;
+    //vkData :  holds vertex information like axis ordering...
+    //  structure: float3 Color, axisInfo[numAxis], alphaValues[]
+    //  axisInfo: uint alphaOffset
+    //  alphaValues: float[] alpha vals
+    //vkVertexBuffer: holds the min, mean and max points on each axis as a vertex
+    //vkIndexBuffer: holds the index buffer for rendering
     VkBuffer vkData, vkVertexBuffer, vkIndexBuffer;
     VkDeviceMemory vkMemory;
     static uint32_t pipelineCounter;
@@ -148,6 +162,10 @@ private:
     VkDescriptorSet vkDescriptorSet;
 
     const VkUtil::Context vkContext;
+
+    const char* vertPath = "shaders/band.vert.spv";
+    const char* geomPath = "shaders/band.geom.spv";
+    const char* fragPath = "shaders/band.frag.spv";
 
     //recreates vulkan data for rendering if already existing, else simply creates
     void recreateVulkanBuffer(const std::vector<std::pair<uint32_t, bool>>& attributeOrder){   
@@ -162,7 +180,7 @@ private:
 
         uint32_t dataSize = 0;
         for(auto& pair: attributeOrder) if(pair.first > dataSize) dataSize = pair.first;
-        dataSize *= sizeof(uint32_t);
+        dataSize *= 2 * sizeof(uint32_t);
         dataSize += sizeof(float) * 3; //color of colorband
         std::vector<uint8_t> gpuData(dataSize);
         *reinterpret_cast<float*>(&gpuData[0]) = baseColor[0];
@@ -171,6 +189,8 @@ private:
         uint32_t curPos = 12, dataPos = gpuData.size(), axisIndex = 0;
         for(int i = 0; i < attributeOrder.size(); ++i){
             *reinterpret_cast<uint32_t*>(&gpuData[curPos]) = dataPos;
+            curPos += 4;
+            *reinterpret_cast<uint32_t*>(&gpuData[curPos]) = bundlesData[i].size();
             curPos += 4;
             
             if(attributeOrder[i].second){
@@ -269,7 +289,19 @@ private:
     void createVulkanPipeline(){
         ++pipelineCounter;
 
-        std::vector<VkDescriptorSetLayoutBinding> bindings{{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL_GRAPHICS, nullptr}};
+        VkShaderModule shaderModules[5] = {};
+	    //the vertex shader for the pipeline
+	    std::vector<char> vertexBytes = PCUtil::readByteFile(vertPath);
+	    shaderModules[0] = VkUtil::createShaderModule(vkContext.device, vertexBytes);
+	    //the geometry shader for the pipeline
+	    std::vector<char> geometryBytes = PCUtil::readByteFile(geomPath);
+	    shaderModules[3] = VkUtil::createShaderModule(vkContext.device, geometryBytes);
+	    //the fragment shader for the pipeline
+	    std::vector<char> fragmentBytes = PCUtil::readByteFile(fragPath);
+	    shaderModules[4] = VkUtil::createShaderModule(vkContext.device, fragmentBytes);
+
+        std::vector<VkDescriptorSetLayoutBinding> bindings{{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_ALL_GRAPHICS, nullptr}
+                                                            ,{1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}};
         VkUtil::createDescriptorSetLayout(vkContext.device, bindings, &vkDescriptorSetLayout);
 
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions{{0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32_UINT, 3 * sizeof(float)}};
@@ -295,10 +327,23 @@ private:
         stencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
         VkUtil::BlendInfo blendInfo;    //TODO:: change this
+        blendInfo.blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        blendInfo.blendAttachment.blendEnable = VK_TRUE;
+        blendInfo.blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        blendInfo.blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        blendInfo.blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        blendInfo.blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        blendInfo.blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        blendInfo.createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        blendInfo.createInfo.logicOpEnable = VK_FALSE;
+        blendInfo.createInfo.attachmentCount = 1;
+        blendInfo.createInfo.pAttachments = &blendInfo.blendAttachment;
         
         VkUtil::createRenderPass(vkContext.device, VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR, &vkRenderPass);
 
-        VkUtil::createPipeline(vkContext.device, &vertexInfo, vkContext.screenSize[0], vkContext.screenSize[1], {}, nullptr, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, &rasterizationInfo, &multisampleInfo, &stencilInfo,
+        VkUtil::createPipeline(vkContext.device, &vertexInfo, vkContext.screenSize[0], vkContext.screenSize[1], {}, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, &rasterizationInfo, &multisampleInfo, &stencilInfo,
                             &blendInfo, {vkDescriptorSetLayout}, &vkRenderPass, &vkPipelineLayout, &vkPipeline);
     }
 };
+
+VkDescriptorSetLayout LineBundles::vkDescriptorSetLayout;

@@ -55,6 +55,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "TransferFunctionEditor.h"
 #include "Data.hpp"
 #include "DrawlistColorPalette.hpp"
+#include "LineBundles.hpp"
 
 #include "ColorPalette.h"
 
@@ -85,6 +86,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include <utility>
 #include <netcdf.h>
 #include <filesystem>
+#include <memory>
 	
 
 #ifdef DETECTMEMLEAK
@@ -132,7 +134,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -432,6 +434,7 @@ struct DrawList {
 	std::vector<uint32_t> indices;
 	//std::vector<uint32_t> activeInd;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
+	LineBundles* lineBundles;
 };
 
 enum PCViewerState {
@@ -2471,6 +2474,21 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.medianColor = { 1,1,1,1 };
 
 	g_PcPlotDrawLists.push_back(dl);
+
+	{
+		std::vector<std::pair<float,float>> histMinmax(pcAttributes.size());
+		for(int i = 0; i < pcAttributes.size(); ++i) histMinmax[i] = {pcAttributes[i].min, pcAttributes[i].max};
+		histogramManager->computeHistogramm(dl.name, histMinmax, dl.buffer, ds.data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+	}
+
+	VkUtil::Context vkContext{g_PcPlotWidth, g_PcPlotHeight, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue};
+	std::vector<std::pair<std::string, std::pair<float, float>>> attributes(pcAttributes.size());
+	std::vector<std::pair<uint32_t, bool>> attributeOrder(pcAttributes.size());
+	for(int i = 0; i < pcAttributes.size(); ++i) {
+		attributes[i] = {pcAttributes[i].name, {pcAttributes[i].min, pcAttributes[i].max}};
+		attributeOrder[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
+	}
+	dl.lineBundles = new LineBundles(vkContext, dl.name, &ds.data, histogramManager, attributes, attributeOrder, &g_PcPlotDrawLists.back().color.x);
 }
 
 static void removePcPlotDrawList(DrawList& drawList) {
@@ -3170,7 +3188,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 		//the offset which has to be added to draw the histogramms next to one another
 		uint32_t amtOfHisto = 0;
-		for (auto dl : g_PcPlotDrawLists) {
+		for (auto& dl : g_PcPlotDrawLists) {
 			if (dl.showHistogramm)
 				amtOfHisto++;
 		}
