@@ -52,6 +52,7 @@ public:
 	bool* logScale;
 
 	bool adaptMinMaxToBrush;
+	float stdDev;
 
 private:
 	VkDevice device;
@@ -73,7 +74,6 @@ private:
 	VkDeviceMemory uboMemory;
 
 	uint32_t numOfBins;
-	float stdDev;
 	std::map<std::string, Histogram> histograms;
 
 	void updateSmoothedValues(Histogram& hist);

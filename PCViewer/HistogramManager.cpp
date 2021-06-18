@@ -46,7 +46,7 @@ HistogramManager::HistogramManager(VkDevice device, VkPhysicalDevice physicalDev
 	ignoreZeroValues = false;
 	ignoreZeroBins = false;
 	logScale = nullptr;
-	adaptMinMaxToBrush = true;
+	adaptMinMaxToBrush = false;
 }
 
 HistogramManager::~HistogramManager()

@@ -2,8 +2,8 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 //resolution of the resulting spline
-const int res = 20;
-const int reductionRes = 5;
+const int res = 28;
+const int reductionRes = 10;
 const float alpha = .5f;
 const float centerWeight = .9;
 const float innerPadding = .1;
@@ -19,9 +19,10 @@ layout (location = 1)in vec4 pos[];
 layout (location = 2)in uvec2 ids[];
 
 // Standard fare for drawing lines
-layout (triangle_strip, max_vertices = 2 * (res + 1)) out;
+layout (triangle_strip, max_vertices = 2 * (res)) out;
 layout (location = 0)out vec4 color;
-layout (location = 1)out vec2 side; //has a 1 in x if top, 1 in y if bot
+layout (location = 1)out vec3 side; //has a 1 in x if top, 1 in y if bot, z component is band width
+layout (location = 2)out vec4 haloColor;
 
 float getT(in float t,in vec2 p0,in vec2 p1);
 
@@ -47,10 +48,10 @@ void main (void) {
   vec2 prevBot = botA;
   vec2 nextTop = innerATop;
   vec2 nextBot = innerABot;
-  prevTop.x -= innerATop.x - topA.x;
-  prevBot.x -= innerATop.x - topA.x;
-  nextTop.x += innerATop.x - topA.x;
-  nextBot.x += innerATop.x - topA.x;
+  prevTop.x -= .35 * (innerATop.x - topA.x);
+  prevBot.x -= .35 * (innerATop.x - topA.x);
+  nextTop.x += .35 * (innerATop.x - topA.x);
+  nextBot.x += .35 * (innerATop.x - topA.x);
 
   //draw compression band
   addBand(topA, botA, innerATop, innerABot, prevTop, prevBot, nextTop, nextBot, reductionRes, false);
@@ -71,10 +72,10 @@ void main (void) {
   prevBot = innerBBot;
   nextTop = topB;
   nextBot = botB;
-  prevTop.x -= topB.x - innerBTop.x;
-  prevBot.x -= topB.x - innerBTop.x;
-  nextTop.x += topB.x - innerBTop.x;
-  nextBot.x += topB.x - innerBTop.x;
+  prevTop.x -= .35 * (topB.x - innerBTop.x);
+  prevBot.x -= .35 * (topB.x - innerBTop.x);
+  nextTop.x += .35 * (topB.x - innerBTop.x);
+  nextBot.x += .35 * (topB.x - innerBTop.x);
   addBand(innerBTop, innerBBot, topB, botB, prevTop, prevBot, nextTop, nextBot, reductionRes, true);
 
   //EndPrimitive();
@@ -96,10 +97,12 @@ void addBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 prev
   float t1b = getT(t0b, prevLeftBot, leftBot);
   float t2b = getT(t1b, leftBot, rightBot);
   float t3b = getT(t2b, rightBot, nextRightBot);
+  float distLeft = leftTop.y - leftBot.y, distRight = rightTop.y - rightBot.y;
 
-  int offset = floatBitsToInt(data.d[3 + 2 * ids[1].x]);
-  offset += int(ids[1].y) * floatBitsToInt(data.d[3 + 2 * ids[2].x + 1]) + int(ids[2].y); //adding the correct group number to get the final offset
-  float colorAlpha = clamp(data.d[offset],0,1);
+  int offset = floatBitsToInt(data.d[9 + 2 * ids[1].x]);
+  offset += int(ids[1].y) * floatBitsToInt(data.d[9 + 2 * ids[2].x + 1]) + int(ids[2].y); //adding the correct group number to get the final offset
+  float colorAlpha = data.d[offset];
+  float haloWidth = data.d[4];
 
   //double spline, always adding 2 vertx per iteration (1 in top spline, one in bot)
   int maxCount = count;
@@ -109,35 +112,43 @@ void addBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 prev
     vec2 a = leftTop, b = rightTop, prev_vtx = prevLeftTop, next_vtx = nextRightTop;
     float t0 = t0a, t1 = t1a, t2 = t2a, t3 = t3a;
     float t = mix(t1, t2, i / float(maxCount));
-	vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
-	vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
-	vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
-	
-	vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
-	vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
-	
-	gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
-	color = col[1];
-    color.a = colorAlpha;
-    side = vec2(1,0); //indicates top vertex
+	  vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
+	  vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
+	  vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
+  
+	  vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
+	  vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
+  
+	  gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
+	  color = col[1];
+    color.a *= colorAlpha;
+    side = vec3(haloWidth,0,mix(distLeft, distRight, float(i) / (count - 1))); //indicates top vertex
+    haloColor.x = data.d[5];
+    haloColor.y = data.d[6];
+    haloColor.z = data.d[7];
+    haloColor.w = data.d[8];
 
-	EmitVertex();
+	  EmitVertex();
     a = leftBot, b = rightBot, prev_vtx = prevLeftBot, next_vtx = nextRightBot;
     t0 = t0b, t1 = t1b, t2 = t2b, t3 = t3b;
     t = mix(t1, t2, i / float(maxCount));
-	A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
-	A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
-	A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
-	
-	B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
-	B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
-	
-	gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
-	color = col[1];
-    color.a = colorAlpha;
-    side = vec2(0,1); //indicates bot vertex
+	  A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
+	  A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
+	  A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
+  
+	  B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
+	  B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
+  
+	  gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
+	  color = col[1];
+    color.a *= colorAlpha;
+    side = vec3(0, haloWidth, mix(distLeft, distRight, float(i) / (count - 1))); //indicates bot vertex
+    haloColor.x = data.d[5];
+    haloColor.y = data.d[6];
+    haloColor.z = data.d[7];
+    haloColor.w = data.d[8];
 
-	EmitVertex();
+	  EmitVertex();
 
   }
 }

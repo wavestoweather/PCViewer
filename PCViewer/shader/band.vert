@@ -31,15 +31,16 @@ void main() {
 	
 	vec3 y = posIn - ubo.vertexTransformations[i].y;
 	y /= (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);
-	y *= 2;
-	y -= 1;
+	y *= -2;
+	y += 1;
     posOut = vec4(y, 1);
 
-    gl_Position = vec4( x, y.y * -1.0f, 0.0, 1.0);
+    gl_Position = vec4( x, y.y, 0.0, 1.0);
 
 	color.x = data.d[0];
 	color.y = data.d[1];
 	color.z = data.d[2];
+	color.w = data.d[3];
     //retrieving alpha value in geometry shader as both axis are needed
 
     idsOut = ids;

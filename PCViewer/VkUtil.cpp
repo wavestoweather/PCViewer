@@ -1250,7 +1250,7 @@ void VkUtil::createImageSampler(VkDevice device, VkSamplerAddressMode adressMode
 	check_vk_result(err);
 }
 
-void VkUtil::uploadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize, void* data)
+void VkUtil::uploadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize,const void* data)
 {
 	void* d;
 	vkMapMemory(device, memory, offset, byteSize, 0, &d);

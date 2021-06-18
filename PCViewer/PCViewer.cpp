@@ -435,6 +435,7 @@ struct DrawList {
 	//std::vector<uint32_t> activeInd;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 	LineBundles* lineBundles;
+	bool renderBundles;
 };
 
 enum PCViewerState {
@@ -833,6 +834,9 @@ struct PCSettings {
 	float animationDuration = 2.0f;		//time for every active brush to show in seconds
 	bool animationExport = true;
 	int animationSteps = 2;
+
+	//variables for band rendering
+	float haloWidth = 1;
 }static pcSettings;
 
 //variables for brush templates
@@ -2231,6 +2235,8 @@ static void destroyPcPlotVertexBuffer(Buffer& buffer) {
 	g_PcPlotVertexBuffers.erase(it);
 }
 
+static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations, bool callForviolinAttributePlots = false);
+
 static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char* listName) {
 	VkResult err;
 
@@ -2474,21 +2480,6 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.medianColor = { 1,1,1,1 };
 
 	g_PcPlotDrawLists.push_back(dl);
-
-	{
-		std::vector<std::pair<float,float>> histMinmax(pcAttributes.size());
-		for(int i = 0; i < pcAttributes.size(); ++i) histMinmax[i] = {pcAttributes[i].min, pcAttributes[i].max};
-		histogramManager->computeHistogramm(dl.name, histMinmax, dl.buffer, ds.data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
-	}
-
-	VkUtil::Context vkContext{g_PcPlotWidth, g_PcPlotHeight, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue};
-	std::vector<std::pair<std::string, std::pair<float, float>>> attributes(pcAttributes.size());
-	std::vector<std::pair<uint32_t, bool>> attributeOrder(pcAttributes.size());
-	for(int i = 0; i < pcAttributes.size(); ++i) {
-		attributes[i] = {pcAttributes[i].name, {pcAttributes[i].min, pcAttributes[i].max}};
-		attributeOrder[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
-	}
-	dl.lineBundles = new LineBundles(vkContext, dl.name, &ds.data, histogramManager, attributes, attributeOrder, &g_PcPlotDrawLists.back().color.x);
 }
 
 static void removePcPlotDrawList(DrawList& drawList) {
@@ -2545,6 +2536,7 @@ static void removePcPlotDrawList(DrawList& drawList) {
 				vkFreeMemory(g_Device, it->indexBufferMemory, nullptr);
 				it->indexBufferMemory = VK_NULL_HANDLE;
 			}
+			if (it->lineBundles) delete it->lineBundles;
 			g_PcPlotDrawLists.erase(it);
 			break;
 		}
@@ -2937,6 +2929,16 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList) {
 			if (!drawList->show)
 				continue;
+			if (drawList->renderBundles){
+				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				vkCmdEndRenderPass(line_batch_commands.back());
+				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->lineBundles->haloColor);
+				drawList->lineBundles->haloWidth = pcSettings.haloWidth;
+				drawList->lineBundles->recordDrawBundles(line_batch_commands.back());
+				VkUtil::beginRenderPass(line_batch_commands.back(), clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
+				vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				continue;
+			}
 			do {
 				VkDeviceSize offsets[] = { 0 };
 				//vkCmdBindVertexBuffers(line_batch_commands.back(), 0, 1, &drawList->buffer, offsets);
@@ -3047,6 +3049,22 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList) {
 			if (!drawList->show)
 				continue;
+
+			if (drawList->renderBundles){
+				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				vkCmdEndRenderPass(g_PcPlotCommandBuffer);
+				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->lineBundles->haloColor);
+				drawList->lineBundles->haloWidth = pcSettings.haloWidth;
+				drawList->lineBundles->recordDrawBundles(g_PcPlotCommandBuffer);
+				std::vector<VkClearValue> clearValues{ { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w } };
+				VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
+				vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				if (pcSettings.renderSplines)
+					vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				else
+					vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
+				continue;
+			}
 
 			VkDeviceSize offsets[] = { 0 };
 			//vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
@@ -5119,7 +5137,7 @@ static void getyScaleDLForAttributeViolins(unsigned int& dlNr,
 }
 
 /** Computes histogram values for one single Drawlist. */
-static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations, bool callForviolinAttributePlots = false) {
+static void exeComputeHistogram(std::string& name, std::vector<std::pair<float, float>>& minMax, VkBuffer data, uint32_t amtOfData, VkBuffer indices, uint32_t amtOfIndices, VkBufferView indicesActivations, bool callForviolinAttributePlots) {
 	if (histogramManager->adaptMinMaxToBrush) {
 		std::vector<std::pair<float, float>> violinMinMax(minMax.size(), { std::numeric_limits<float>().max(),std::numeric_limits<float>().min() });
 
@@ -5178,6 +5196,15 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 	}
 
 	std::sort(order.begin(), order.end(), [](std::pair<int, int>a, std::pair<int, int>b) {return a.second < b.second; });
+
+	//updateing drawlist line bundles
+	if(dl.lineBundles){
+		std::vector<std::pair<uint32_t, bool>> ord(pcAttributes.size());
+		for(int i = 0; i < pcAttributes.size(); ++i){
+			ord[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
+		}
+		dl.lineBundles->updateAttributeOrdering(ord);
+	}
 
 	//ordering active indices if priority rendering is enabled
 	if (priorityReorder) {
@@ -10953,6 +10980,46 @@ int main(int, char**)
 						//	std::for_each(i.begin(), i.end(), [](uint32_t a) {std::cout << a << ","; });
 						//	std::cout << std::endl;
 						//}
+					}
+					ImGui::Separator();
+					static float bundlesAmt = 1;
+					static bool changed = true;
+					changed |= ImGui::SliderFloat("Bundles amount", &bundlesAmt, .01f, 10.0f);
+					if(ImGui::MenuItem("Render as Bands", "", &dl.renderBundles)){
+						pcPlotRender = true;
+						if(dl.renderBundles && (changed || !dl.lineBundles)){
+							if(dl.lineBundles) delete dl.lineBundles;
+							dl.color.w = .1f;
+							auto parent = std::find(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), DataSet{dl.parentDataSet});
+							assert(parent!=g_PcPlotDataSets.end());
+							{
+								std::vector<std::pair<float,float>> histMinmax(pcAttributes.size());
+								for(int i = 0; i < pcAttributes.size(); ++i) histMinmax[i] = {pcAttributes[i].min, pcAttributes[i].max};
+								exeComputeHistogram(dl.name, histMinmax, dl.buffer, parent->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+							}
+							float prevStdDev = 0;
+							if(changed){
+								prevStdDev = histogramManager->stdDev;
+								histogramManager->setSmoothingKernelSize(10.0 / bundlesAmt);
+							}
+
+							VkUtil::Context vkContext{g_PcPlotWidth, g_PcPlotHeight, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue};
+							std::vector<std::pair<std::string, std::pair<float, float>>> attributes(pcAttributes.size());
+							std::vector<std::pair<uint32_t, bool>> attributeOrder(pcAttributes.size());
+							for(int i = 0; i < pcAttributes.size(); ++i) {
+								attributes[i] = {pcAttributes[i].name, {pcAttributes[i].min, pcAttributes[i].max}};
+								attributeOrder[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
+							}
+							dl.lineBundles = new LineBundles(vkContext, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, dl.name, &parent->data, histogramManager, attributes, attributeOrder, &g_PcPlotDrawLists.back().color.x);
+							
+							if(changed){
+								changed = false;
+								histogramManager->setSmoothingKernelSize(prevStdDev);
+							}
+						}
+					}
+					if(ImGui::SliderFloat("Halo size", &pcSettings.haloWidth, 0, 1.01f)){
+						pcPlotRender = true;
 					}
 
 					ImGui::EndPopup();

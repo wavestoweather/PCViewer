@@ -23,6 +23,8 @@ public:
 
     const Data* data;
     const float* baseColor;
+    float haloWidth = 1;
+    float haloColor[4]= {1.0f,1.0f,1.0f,1.0f};              //standard halo color is white
     std::vector<std::vector<BundleData>> bundlesData;       //for each axis an array of bundle data exists
     std::vector<std::vector<float>> alphaValues;            //for each pair of Bundles which have to be shown, an alpha value is stored here
 
@@ -31,14 +33,14 @@ public:
     // A new Line Bundle should be created if histogram changes or the atribute boundaries are updated(Everything where the line bundles at the axis change)
     // The histogram has to be added prior to creating the LineBundles object, otherwise an empty lineBundles object is returned
     // For attribute order change, attribute activation change try to use "updateAttributeOrdering".
-    LineBundles(const VkUtil::Context& context, const std::string& drawList, const Data* data, HistogramManager* histManager, const std::vector<std::pair<std::string, std::pair<float, float>>>& attributes, const std::vector<std::pair<uint32_t, bool>>& attributeOrder, const float* color): vkContext(context), data(data), baseColor(color){
+    LineBundles(const VkUtil::Context& context, VkRenderPass renderPass, VkFramebuffer framebuffer, const std::string& drawList, const Data* data, HistogramManager* histManager, const std::vector<std::pair<std::string, std::pair<float, float>>>& attributes, const std::vector<std::pair<uint32_t, bool>>& attributeOrder, const float* color): vkContext(context), vkRenderPass(renderPass), vkFrameBuffer(framebuffer), data(data), baseColor(color){
         //first group data at axes, then create vulkan instances for rendering
         if(!histManager->containsHistogram(drawList)) return;
         assert(histManager->containsHistogram(drawList));
         HistogramManager::Histogram& hist = histManager->getHistogram(drawList);
         for(uint32_t a = 0; a < attributes.size(); ++a){
             bundlesData.push_back({});
-            bool increasing = false;
+            bool increasing = true;
             int groupStartIndex = -1;
             float avg = 0;
             float min = attributes[a].second.first;
@@ -49,18 +51,19 @@ public:
             for(int b = 0; b < hist.bins[a].size(); ++b){
                 if(avg == 0 && hist.bins[a][b] == 0) continue;  //ignore 0 bins at the beginning
                 if(!increasing && prevValue < hist.bins[a][b]){ //changing from decreasing to increasing
-                    max = (float(b) / hist.bins[a].size()) * (attributes[a].second.second - attributes[a].second.first) + attributes[a].second.first;
+                    max = (float(b) / (hist.bins[a].size() - 1)) * (attributes[a].second.second - attributes[a].second.first) + attributes[a].second.first;
                     avg /= avgValueCount;
                     bundlesData.back().push_back(BundleData{min, avg, max, a, groupNr++});
                     min = max;
                     avg = 0;
                     avgValueCount = 0;
+                    increasing = true;
                 }
                 if(increasing && prevValue > hist.bins[a][b]){  //changing from increasing to decreasing
                     increasing = false;
                 }
                 prevValue = hist.bins[a][b];
-                avg += ((float(b) / hist.bins[a].size()) * (attributes[a].second.second - attributes[a].second.first) + attributes[a].second.first) * prevValue;
+                avg += ((float(b) / (hist.bins[a].size() - 1)) * (attributes[a].second.second - attributes[a].second.first) + attributes[a].second.first) * prevValue;
                 avgValueCount += prevValue;
             }
             //adding eventually the last gropu which is not recognized if the values were decreasing all the time to the top
@@ -69,6 +72,8 @@ public:
                 bundlesData.back().push_back({min, avg, attributes[a].second.second, a, groupNr++});
             }
         }
+
+        createVulkanPipeline();
         updateAttributeOrdering(attributeOrder);
     }
 
@@ -89,8 +94,6 @@ public:
             vkDestroyPipeline(vkContext.device, vkPipeline, nullptr);
         if(vkPipelineLayout)
             vkDestroyPipelineLayout(vkContext.device, vkPipelineLayout, nullptr);
-        if(vkRenderPass)
-            vkDestroyRenderPass(vkContext.device, vkRenderPass, nullptr);
         if(vkDescriptorSetLayout)
             vkDestroyDescriptorSetLayout(vkContext.device, vkDescriptorSetLayout, nullptr);
     };
@@ -120,23 +123,30 @@ public:
                     int bundleIndexA = getBundleIndex(valA, a);
                     int bundleIndexB = getBundleIndex(valB, b);
                     int alphaIndex = bundleIndexA * bundlesData[b].size() + bundleIndexB;
-                    alphaValues.back()[alphaIndex] += 10.0 / data->size();
+                    alphaValues.back()[alphaIndex] += 10.0f / data->size();
                 }
                 a = b;
             }
         }
-
         recreateVulkanBuffer(attributeOrder);
     }
 
     void recordDrawBundles(VkCommandBuffer buffer){
         if(!vkContext.device) return;         //empty LineBundles object
+        std::vector<VkClearValue> clearValues;
+        std::vector<float> data(9);
+        std::copy(baseColor, baseColor + 4, data.data());
+        data[4] = haloWidth;
+        std::copy(haloColor, haloColor + 4, data.data() + 5);
+        VkUtil::uploadData(vkContext.device, vkMemory, 0, 9 * sizeof(float), (void*)data.data());
+        VkUtil::beginRenderPass(buffer, clearValues, vkRenderPass, vkFrameBuffer, {vkContext.screenSize[0], vkContext.screenSize[1]});
         vkCmdBindPipeline(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline);
         vkCmdBindDescriptorSets(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineLayout, 0, 1, &vkDescriptorSet, 0, nullptr);
         VkDeviceSize offsets[1]{0};
         vkCmdBindVertexBuffers(buffer, 0, 1, &vkVertexBuffer, offsets);
         vkCmdBindIndexBuffer(buffer, vkIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(buffer, indexCount, 1, 0, 0, 0);
+        vkCmdEndRenderPass(buffer);
     }
 
     void setAxisInfosBuffer(VkBuffer buffer, uint32_t bufferSize){
@@ -145,27 +155,28 @@ public:
 
 private:
     // All vulkan resources are handled in private are automatically allocated and deallocated
-    uint32_t indexCount;
+    uint32_t indexCount = 0;
     //vkData :  holds vertex information like axis ordering...
-    //  structure: float3 Color, axisInfo[numAxis], alphaValues[]
+    //  structure: float4 Color, float HaloWidth, float4 haloColor, axisInfo[numAxis], alphaValues[]
     //  axisInfo: uint alphaOffset
     //  alphaValues: float[] alpha vals
     //vkVertexBuffer: holds the min, mean and max points on each axis as a vertex
     //vkIndexBuffer: holds the index buffer for rendering
-    VkBuffer vkData, vkVertexBuffer, vkIndexBuffer;
-    VkDeviceMemory vkMemory;
+    VkBuffer vkData = 0, vkVertexBuffer = 0, vkIndexBuffer = 0;
+    VkDeviceMemory vkMemory = 0;
     static uint32_t pipelineCounter;
     static VkPipeline vkPipeline;
     static VkPipelineLayout vkPipelineLayout;
-    static VkRenderPass vkRenderPass;
     static VkDescriptorSetLayout vkDescriptorSetLayout;
-    VkDescriptorSet vkDescriptorSet;
+    VkDescriptorSet vkDescriptorSet = 0;
+    VkRenderPass vkRenderPass;
+    VkFramebuffer vkFrameBuffer;
 
-    const VkUtil::Context vkContext;
+    const VkUtil::Context vkContext = {};
 
-    const char* vertPath = "shaders/band.vert.spv";
-    const char* geomPath = "shaders/band.geom.spv";
-    const char* fragPath = "shaders/band.frag.spv";
+    const char* vertPath = "shader/band.vert.spv";
+    const char* geomPath = "shader/band.geom.spv";
+    const char* fragPath = "shader/band.frag.spv";
 
     //recreates vulkan data for rendering if already existing, else simply creates
     void recreateVulkanBuffer(const std::vector<std::pair<uint32_t, bool>>& attributeOrder){   
@@ -179,21 +190,28 @@ private:
             vkFreeMemory(vkContext.device, vkMemory, nullptr);
 
         uint32_t dataSize = 0;
-        for(auto& pair: attributeOrder) if(pair.first > dataSize) dataSize = pair.first;
+        for(auto& pair: attributeOrder) if(pair.first + 1 > dataSize) dataSize = pair.first + 1;
         dataSize *= 2 * sizeof(uint32_t);
-        dataSize += sizeof(float) * 3; //color of colorband
+        dataSize += sizeof(float) * 4; //color of colorband
+        dataSize += sizeof(float) * 5; //halo color and halo width
         std::vector<uint8_t> gpuData(dataSize);
         *reinterpret_cast<float*>(&gpuData[0]) = baseColor[0];
         *reinterpret_cast<float*>(&gpuData[4]) = baseColor[1];
         *reinterpret_cast<float*>(&gpuData[8]) = baseColor[2];
-        uint32_t curPos = 12, dataPos = gpuData.size(), axisIndex = 0;
+        *reinterpret_cast<float*>(&gpuData[12]) = baseColor[3];
+        *reinterpret_cast<float*>(&gpuData[16]) = haloWidth;
+        *reinterpret_cast<float*>(&gpuData[20]) = haloColor[0];
+        *reinterpret_cast<float*>(&gpuData[24]) = haloColor[1];
+        *reinterpret_cast<float*>(&gpuData[28]) = haloColor[2];
+        *reinterpret_cast<float*>(&gpuData[32]) = haloColor[3];
+        uint32_t curPos = 36, dataPos = gpuData.size(), axisIndex = 0;
         for(int i = 0; i < attributeOrder.size(); ++i){
-            *reinterpret_cast<uint32_t*>(&gpuData[curPos]) = dataPos;
+            *reinterpret_cast<uint32_t*>(&gpuData[curPos]) = dataPos / sizeof(float);
             curPos += 4;
             *reinterpret_cast<uint32_t*>(&gpuData[curPos]) = bundlesData[i].size();
             curPos += 4;
             
-            if(attributeOrder[i].second){
+            if(attributeOrder[i].second && axisIndex < alphaValues.size()){
                 gpuData.resize(gpuData.size() + alphaValues[axisIndex].size() * sizeof(float));
                 for(float val: alphaValues[axisIndex]){
                     *reinterpret_cast<float*>(&gpuData[dataPos]) = val;
@@ -237,9 +255,11 @@ private:
                         indexData.push_back(primitiveRestart);
                     }
                 }
+                a = b;
             }
         }
         VkUtil::createBuffer(vkContext.device, indexData.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &vkIndexBuffer);
+        indexCount = indexData.size();
 
         VkMemoryRequirements memReq;
         VkMemoryAllocateInfo allocInfo{};
@@ -279,7 +299,7 @@ private:
     int getBundleIndex(float val, uint32_t axis) const{
         int index = 0;
         for(auto& bundle: bundlesData[axis]){
-            if(val >= bundle.max && val <= bundle.min) break;
+            if(val <= bundle.max && val >= bundle.min) break;
             ++index;
         }
         return index;
@@ -306,7 +326,7 @@ private:
 
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions{{0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32_UINT, 3 * sizeof(float)}};
 
-        std::vector<VkVertexInputBindingDescription> bindingDescriptions{{0, 3 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX}, {0, 2 * sizeof(uint32_t), VK_VERTEX_INPUT_RATE_VERTEX}};
+        std::vector<VkVertexInputBindingDescription> bindingDescriptions{{0, 5 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX}};
 
         VkPipelineVertexInputStateCreateInfo vertexInfo{};
         vertexInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -318,15 +338,16 @@ private:
         VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
         rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizationInfo.lineWidth = 1;
-        rasterizationInfo.polygonMode = VK_POLYGON_MODE_LINE;
+        rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
 
         VkPipelineMultisampleStateCreateInfo multisampleInfo{};
         multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo stencilInfo{};        //leave disabled
         stencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
-        VkUtil::BlendInfo blendInfo;    //TODO:: change this
+        VkUtil::BlendInfo blendInfo{};
         blendInfo.blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         blendInfo.blendAttachment.blendEnable = VK_TRUE;
         blendInfo.blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -339,11 +360,12 @@ private:
         blendInfo.createInfo.attachmentCount = 1;
         blendInfo.createInfo.pAttachments = &blendInfo.blendAttachment;
         
-        VkUtil::createRenderPass(vkContext.device, VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR, &vkRenderPass);
-
         VkUtil::createPipeline(vkContext.device, &vertexInfo, vkContext.screenSize[0], vkContext.screenSize[1], {}, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, &rasterizationInfo, &multisampleInfo, &stencilInfo,
                             &blendInfo, {vkDescriptorSetLayout}, &vkRenderPass, &vkPipelineLayout, &vkPipeline);
     }
 };
 
-VkDescriptorSetLayout LineBundles::vkDescriptorSetLayout;
+VkDescriptorSetLayout LineBundles::vkDescriptorSetLayout = 0;
+VkPipeline LineBundles::vkPipeline = 0;
+VkPipelineLayout LineBundles::vkPipelineLayout = 0;
+uint32_t LineBundles::pipelineCounter = 0;
