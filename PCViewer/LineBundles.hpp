@@ -158,7 +158,7 @@ private:
     uint32_t indexCount = 0;
     //vkData :  holds vertex information like axis ordering...
     //  structure: float4 Color, float HaloWidth, float4 haloColor, axisInfo[numAxis], alphaValues[]
-    //  axisInfo: uint alphaOffset
+    //  axisInfo: uint alphaOffset, uint group count
     //  alphaValues: float[] alpha vals
     //vkVertexBuffer: holds the min, mean and max points on each axis as a vertex
     //vkIndexBuffer: holds the index buffer for rendering
@@ -206,10 +206,8 @@ private:
         *reinterpret_cast<float*>(&gpuData[32]) = haloColor[3];
         uint32_t curPos = 36, dataPos = gpuData.size(), axisIndex = 0;
         for(int i = 0; i < attributeOrder.size(); ++i){
-            *reinterpret_cast<uint32_t*>(&gpuData[curPos]) = dataPos / sizeof(float);
-            curPos += 4;
-            *reinterpret_cast<uint32_t*>(&gpuData[curPos]) = bundlesData[i].size();
-            curPos += 4;
+            *reinterpret_cast<uint32_t*>(&gpuData[curPos + attributeOrder[i].first * 2 * sizeof(uint32_t)]) = dataPos / sizeof(float);
+            *reinterpret_cast<uint32_t*>(&gpuData[curPos + attributeOrder[i].first * 2 * sizeof(uint32_t) + sizeof(uint32_t)]) = bundlesData[attributeOrder[i].first].size();
             
             if(attributeOrder[i].second && axisIndex < alphaValues.size()){
                 gpuData.resize(gpuData.size() + alphaValues[axisIndex].size() * sizeof(float));
