@@ -134,7 +134,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-#define _DEBUG
+//#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -836,7 +836,7 @@ struct PCSettings {
 	int animationSteps = 2;
 
 	//variables for band rendering
-	float haloWidth = 1;
+	float haloWidth = .1f;
 }static pcSettings;
 
 //variables for brush templates
