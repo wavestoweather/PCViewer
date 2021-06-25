@@ -5,6 +5,9 @@
 #include "Data.hpp"
 
 //Single class for data projection, differnet methods can be set in the constructor
+//When created the data is projected in a separate thread
+//On completion the "projected" member is set to true
+//Call wait on the future object to sync
 class DataProjector{
 public:
     enum Method{
@@ -46,13 +49,13 @@ public:
         }
     }
 
+    Eigen::MatrixXf projectedPoints;
     bool projected = false;
     float progress = .0f;
     int reducedDimensionSize;
-    Eigen::MatrixXf projectedPoints;
+    std::future<void> future;
 
 protected:
-    std::future<void> future;
     const Data& data;
     std::vector<uint32_t> indices;
     ProjectionSettings settings;

@@ -77,16 +77,18 @@ public:
 
     std::vector<std::vector<uint32_t>> clusters;
     std::vector<Eigen::VectorXf> clusterMeans;
+    std::future<void> future;
+    float progress = 0;
+    bool clustered = false;
 
 protected:
     ClusterSettings settings;
-    std::future<void> future;
     const Eigen::MatrixXf& points;
     std::vector<uint32_t> clusterAssignments;
     bool clusterUpdated;
     Method method;
 
-    float distance(const Eigen::MatrixXf& a,const Eigen::MatrixXf& b){
+    float distance(const Eigen::VectorXf& a,const Eigen::VectorXf& b){
         switch(settings.distanceMetric){
             case DistanceMetric::Norm: return (a - b).norm();
             case DistanceMetric::SquaredNorm: return (a - b).squaredNorm();
@@ -99,7 +101,7 @@ protected:
         int c = 0;
         for(auto& cluster: clusters){
             for(uint32_t p: cluster){
-                clusterMeans[c] += points.col(p);
+                clusterMeans[c] += points.row(p);
             }
             clusterMeans[c] /= static_cast<float>(cluster.size());
             ++c;
@@ -185,15 +187,19 @@ protected:
                 break;
             }
         }
+        progress = .1f;
 
         //k means iteration
         clusterUpdated = true;
         for(int counter = 0; counter < settings.maxIterations && clusterUpdated; ++counter){
             clusterUpdated = false;
+            progress = counter / float(settings.maxIterations) * .9 + .1;
 
             assignmentStepKMeans();
             updateStepKMeans();
         }
+        progress = 1;
+        clustered = true;
     }
     void execDBScan(){
         std::cout << "Not implemented yet" << std::endl;
