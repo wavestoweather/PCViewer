@@ -56,6 +56,8 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "Data.hpp"
 #include "DrawlistColorPalette.hpp"
 #include "LineBundles.hpp"
+#include "DataClusterer.hpp"
+#include "DataProjector.hpp"
 
 #include "ColorPalette.h"
 
