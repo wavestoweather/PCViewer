@@ -38,16 +38,23 @@ public:
                     if(i < activations.size() - 1) ImGui::SameLine();
                 }
             }
-            if(ImGui::InputInt("Reduction dimension", &projectionDimension)) std::clamp(projectionDimension, 1, 100);
+            if(ImGui::InputInt("Reduction dimension", &projectionDimension)) projectionDimension = std::clamp(projectionDimension, 1, 100);
             if(ImGui::BeginTabBar("ProjectionTabBar")){
                 if(ImGui::BeginTabItem("PCA")){
                     projectorMethod = DataProjector::Method::PCA;
-                    ImGui::Text("No special settings for PCA...");
+                    ImGui::Text("No special settings for PCA (But its fast ;) )...");
                     ImGui::EndTabItem();
                 }
                 if(ImGui::BeginTabItem("t-SNE")){
                     projectorMethod = DataProjector::Method::TSNE;
-                    ImGui::Text("Hier könnte jetzt ihre werbung stehen");
+                    ImGui::Text("NOTE: Very slow for large datasets");
+                    if(ImGui::InputInt("Max Iteration", &projectionSettings.maxIter)) projectionSettings.maxIter = std::clamp(projectionSettings.maxIter, 1, 100);
+                    ImGui::InputInt("Stop lying iteration", &projectionSettings.stopLyingIter);
+                    ImGui::InputInt("Momentum switch iteration", &projectionSettings.momSwitchIter);
+                    ImGui::InputDouble("Perplexity", &projectionSettings.perplexity);
+                    ImGui::InputDouble("Theta", &projectionSettings.theta);
+                    ImGui::Checkbox("Skip Random Init", &projectionSettings.skipRandomInit);
+                    ImGui::InputInt("Random Seed", &projectionSettings.randSeed);
                     ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
@@ -80,8 +87,8 @@ public:
                         ImGui::EndCombo();
                     }
 
-                    if(ImGui::InputInt("Amount of clusters", &clusterSettings.kmeansClusters)) std::clamp(clusterSettings.kmeansClusters, 1, 100);
-                    if(ImGui::InputInt("Amount of iterations", &clusterSettings.maxIterations)) std::clamp(clusterSettings.maxIterations, 1, 100);
+                    if(ImGui::InputInt("Amount of clusters", &clusterSettings.kmeansClusters)) clusterSettings.kmeansClusters = std::clamp(clusterSettings.kmeansClusters, 1, 100);
+                    if(ImGui::InputInt("Amount of iterations", &clusterSettings.maxIterations)) clusterSettings.maxIterations = std::clamp(clusterSettings.maxIterations, 1, 100);
                     static char* initMethods[]{"Forgy", "Uniform Random", "Normal Random", "PlusPlus"};
                     if(ImGui::BeginCombo("Init method", initMethods[int(clusterSettings.kmeansInitMethod)])){
                         for(int i = 0; i < 4; ++i){
