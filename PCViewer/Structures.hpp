@@ -108,3 +108,12 @@ struct DrawList {
 	LineBundles* lineBundles;
 	bool renderBundles;
 };
+
+struct Attribute {
+	std::string name;
+	std::string originalName;
+	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.
+	std::vector<std::pair<std::string, float>> categories_ordered; // used to show the categories not cluttered
+	float min;			//min value of all values
+	float max;			//max value of all values
+};

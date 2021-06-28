@@ -84,9 +84,9 @@ public:
 protected:
     ClusterSettings settings;
     const Eigen::MatrixXf& points;
-    std::vector<uint32_t> clusterAssignments;
     bool clusterUpdated;
     Method method;
+    std::vector<uint32_t> clusterAssignments;
 
     float distance(const Eigen::VectorXf& a,const Eigen::VectorXf& b){
         switch(settings.distanceMetric){
@@ -144,6 +144,7 @@ protected:
             }
             case InitMethod::UniformRandom:{
                 for(int i = 0; i < points.rows(); ++i) clusters[intDistCluster(engine)].push_back(i);
+                for(auto& mean: clusterMeans) mean = Eigen::VectorXf::Zero(points.cols());
                 updateStepKMeans();
                 break;
             }

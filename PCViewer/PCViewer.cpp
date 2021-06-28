@@ -57,8 +57,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "Data.hpp"
 #include "DrawlistColorPalette.hpp"
 #include "LineBundles.hpp"
-#include "DataClusterer.hpp"
-#include "DataProjector.hpp"
+#include "ClusteringWorkbench.hpp"
 
 #include "ColorPalette.h"
 
@@ -441,15 +440,6 @@ struct ViolinDrawlistPlot {
 
 //    std::unique_ptr<ColorPaletteManager> colorPaletteManager
 //        = ColorPaletteManager();
-};
-
-struct Attribute {
-	std::string name;
-	std::string originalName;
-	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.
-	std::vector<std::pair<std::string, float>> categories_ordered; // used to show the categories not cluttered
-	float min;			//min value of all values
-	float max;			//max value of all values
 };
 
 static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
@@ -866,6 +856,7 @@ std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
 
 static TransferFunctionEditor* transferFunctionEditor;
+static ClusteringWorkbench clusteringWorkbench(pcAttributes, g_PcPlotDataSets);
 
 //method declarations
 template <typename T,typename T2>
@@ -7710,6 +7701,7 @@ int main(int, char**)
 					ImGui::MenuItem("Violin drawlist major", "", &violinPlotDrawlistSettings.enabled);
 					ImGui::EndMenu();
 				}
+				ImGui::MenuItem("Clustering workbench", "", &clusteringWorkbench.active);
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Options")) {
@@ -13835,6 +13827,8 @@ int main(int, char**)
 		}
 
 		transferFunctionEditor->draw();
+
+		clusteringWorkbench.draw();
 
 		pcSettings.rescaleTableColumns = false;
 
