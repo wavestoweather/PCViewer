@@ -48,18 +48,18 @@ public:
                 if(ImGui::BeginTabItem("t-SNE")){
                     projectorMethod = DataProjector::Method::TSNE;
                     ImGui::Text("NOTE: Very slow for large datasets");
-                    if(ImGui::InputInt("Max Iteration", &projectionSettings.maxIter)) projectionSettings.maxIter = std::clamp(projectionSettings.maxIter, 1, 100);
-                    ImGui::InputInt("Stop lying iteration", &projectionSettings.stopLyingIter);
-                    ImGui::InputInt("Momentum switch iteration", &projectionSettings.momSwitchIter);
-                    ImGui::InputDouble("Perplexity", &projectionSettings.perplexity);
-                    ImGui::InputDouble("Theta", &projectionSettings.theta);
+                    if(ImGui::InputInt("Max Iteration", &projectionSettings.maxIter)) projectionSettings.maxIter = std::clamp(projectionSettings.maxIter, 1, 10000);
+                    ImGui::InputInt("Stop lying iteration (Stop lying about similarity values)", &projectionSettings.stopLyingIter);
+                    ImGui::InputInt("Momentum switch iteration (Switching momentum for faster convergence)", &projectionSettings.momSwitchIter);
+                    if(ImGui::InputDouble("Perplexity (Variation scale, small value->local variations dominate)", &projectionSettings.perplexity)) std::clamp(projectionSettings.perplexity, 1.0, 100.0);
+                    if(ImGui::InputDouble("Theta (Approximation: 0->exact, >>0->less exact)", &projectionSettings.theta)) projectionSettings.theta = std::clamp(projectionSettings.theta, .0, 100.0);
                     ImGui::Checkbox("Skip Random Init", &projectionSettings.skipRandomInit);
-                    ImGui::InputInt("Random Seed", &projectionSettings.randSeed);
+                    ImGui::InputInt("Random Seed (negativ for time as seed)", &projectionSettings.randSeed);
                     ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
             }
-            bool disabled = projector && !projector->projected;
+            bool disabled = projector && !projector->projected && !projector->interrupted;
             if(disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
             if(ImGui::Button("Project")){
                 if(projector) delete projector;
@@ -74,6 +74,8 @@ public:
             }
             if(disabled) ImGui::PopItemFlag();
             if(projector) ImGui::Text("Projectioin progress: %d%%", int(projector->progress * 100));
+
+            ImGui::Separator();
 
             ImGui::Text("Clustering Settings");
             if(ImGui::BeginTabBar("ClusteringTabBar")){
@@ -120,7 +122,7 @@ public:
             }
             disabled = clusterer && !clusterer->clustered;
             if(disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-            if(ImGui::Button("Cluster")){
+            if(ImGui::Button("Cluster") && projector &&projector->projected){
                 if(clusterer) delete clusterer;
                 clusterer = new DataClusterer(projector->projectedPoints, clusterMethod, clusterSettings);
             }
@@ -154,7 +156,7 @@ public:
     }
     bool active = false;
     int projectionDimension = 2;
-    DataProjector::ProjectionSettings projectionSettings{};
+    DataProjector::ProjectionSettings projectionSettings{30.0, .0, -1, 1000, 500, 700, false};
     DataProjector::Method projectorMethod = DataProjector::Method::PCA;
     DataProjector* projector = 0;
     DataClusterer::ClusterSettings clusterSettings{};

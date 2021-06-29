@@ -2,7 +2,9 @@
 #include <future>
 #include <iostream>
 #include <Eigen/Dense>
+#include <limits.h>
 #include "Data.hpp"
+#include "tsne/tsne.h"
 
 //Single class for data projection, differnet methods can be set in the constructor
 //When created the data is projected in a separate thread
@@ -51,6 +53,7 @@ public:
 
     Eigen::MatrixXf projectedPoints;
     bool projected = false;
+    bool interrupted = false;
     float progress = .0f;
     int reducedDimensionSize;
     std::future<void> future;
@@ -75,8 +78,15 @@ protected:
         Eigen::RowVectorXf mins = d.colwise().minCoeff(), diff = d.colwise().maxCoeff() - mins;
         diff.array() += eps;
         d.array().rowwise() /= diff.array();
-        return d;
         progress = .33f;
+        return d;
+    }
+
+    void normalizeProjectedPoints(){
+        Eigen::RowVectorXf min = projectedPoints.colwise().minCoeff();
+        Eigen::RowVectorXf diff = projectedPoints.colwise().maxCoeff() - min;
+        projectedPoints.rowwise() -= min;
+        projectedPoints.array().rowwise() /= diff.array(); 
     }
 
     void execPCA(){
@@ -88,73 +98,9 @@ protected:
         projectedPoints = u * svd.singularValues().real().asDiagonal();
         //drop unused scores and normalizing the points
         projectedPoints.conservativeResize(Eigen::NoChange, reducedDimensionSize);
-        Eigen::RowVectorXf min = projectedPoints.colwise().minCoeff();
-        Eigen::RowVectorXf diff = projectedPoints.colwise().maxCoeff() - min;
-        projectedPoints.rowwise() -= min;
-        projectedPoints.array().rowwise() /= diff.array();
+        normalizeProjectedPoints();
         progress = 1;
         projected = true;
-    }
-
-    Eigen::MatrixXf squaredEuclideanDistance(const Eigen::MatrixXf& m){
-        return ((-2 * m * m.transpose()).colwise() + m.rowwise().squaredNorm()).rowwise() + m.rowwise().squaredNorm().transpose(); 
-    }
-
-    Eigen::MatrixXf gaussianPerplexity(const Eigen::MatrixXf& M, double perplexity){
-        auto dd = squaredEuclideanDistance(M);
-        Eigen::MatrixXf p = Eigen::MatrixXf::Zero(dd.rows(), dd.cols());
-        for(int n = 0; n < M.rows(); ++n){
-            bool found = false;
-            double beta = 1;
-            double minBeta = -DBL_MAX;
-            double maxBeta = DBL_MAX;
-            double tol = 1e-5;
-            double sumP;
-
-            int iter = 0;
-            while(!found && iter < 200){
-                sumP = DBL_MIN;
-                double H = 0;
-                for(int m = 0; m < M.rows(); ++m) {
-                    p(n, m) = exp(-beta * dd(n,m)); 
-                    if(n != m) {
-                        sumP += p(n,m);
-                        H += beta * p(n,m) * dd(n,m);
-                    }
-                }
-                p(n,n) = DBL_MIN;
-                H = (H / sumP) + log(sumP);
-
-                double Hdiff = H - log(perplexity);
-                if(Hdiff < tol && -Hdiff < tol) found = true;
-                else{
-                    if(Hdiff > 0){
-                        minBeta = beta;
-                        if(maxBeta == DBL_MAX || maxBeta == -DBL_MAX)
-                            beta *= 2;
-                        else
-                            beta = (beta + maxBeta) / 2.0;
-                    }
-                    else{
-                        maxBeta = beta;
-                        if(minBeta == -DBL_MAX || minBeta == DBL_MAX){
-                            if(beta < 0)
-                                beta *= 2;
-                            else
-                                beta = beta <= 1.0 ? -.5 : beta / 2;
-                        }
-                        else{
-                            beta = (beta + minBeta) / 2.0;
-                        }
-                    }
-                }
-                ++iter;
-            }
-
-            // normalize p
-            p.row(n) /= sumP;
-        }
-        return p;
     }
 
     void execTSNE(){
@@ -164,26 +110,24 @@ protected:
             return;
         }
         bool exact = settings.theta == .0f;
-
-        // learning params
-        float totalTime = 0;
-        double momentum = .5, final_momentum = .8;
-        double eta = 200.0;
-
-        Eigen::VectorXd dY = Eigen::VectorXd::Zero(reducedDimensionSize);
-        Eigen::VectorXd uY = Eigen::VectorXd::Zero(reducedDimensionSize);
-        Eigen::VectorXd gains = Eigen::VectorXd::Ones(reducedDimensionSize);
-
-        Eigen::MatrixXf d = getDataMatrix();
-
-        // Computing input similarities for exact t-SNE
-        if(exact){
-            auto p = gaussianPerplexity(d, settings.perplexity);
-            double sumP = p.sum();
-            p /= sumP;
+        if(exact && data.size() * data.size() > INT_MAX){
+            std::cout << "Too large dataset for exact computation, use a theta > 0 for approximation" << std::endl;
+            progress = 1;
+            interrupted = true;
+            return;
         }
-        else{   // input similarities for approxiamte t-SNE
-            
+
+        Eigen::MatrixXd d = getDataMatrix().cast<double>();
+        Eigen::MatrixXd y(d.rows(), reducedDimensionSize);
+
+        TSNE::run(d.data(), d.rows(), d.cols(), y.data(), reducedDimensionSize, settings.perplexity, settings.theta, settings.randSeed, settings.skipRandomInit, settings.maxIter, settings.stopLyingIter, settings.momSwitchIter, &progress);
+        if(progress == -1){
+            interrupted = true;
+            return;
         }
+        projectedPoints = y.cast<float>();
+        normalizeProjectedPoints();
+        progress = 1;
+        projected = true;
     }
 };

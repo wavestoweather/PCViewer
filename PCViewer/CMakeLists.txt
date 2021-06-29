@@ -46,7 +46,12 @@ file(GLOB cimg_SRC
     "cimg/*.h"
 )
 
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC})
+file(GLOB tsne_SRC
+    "tsne/*.h"
+    "tsne/*.cpp"
+)
+
+add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC})
 
 if(WIN32)
     set(netCDF_LIBRARIES netCDF::netcdf)
