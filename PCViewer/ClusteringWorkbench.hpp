@@ -109,7 +109,8 @@ public:
                 }
                 if(ImGui::BeginTabItem("DBScan")){
                     clusterMethod = DataClusterer::Method::DBScan;
-                    ImGui::Text("Hier könnte jetzt ihre werbung stehen");
+                    if(ImGui::InputFloat("Epsilon(max point distance)", &clusterSettings.dbscanEpsilon)) clusterSettings.dbscanEpsilon = std::clamp(clusterSettings.dbscanEpsilon, .01f, 100.0f);
+                    if(ImGui::InputInt("Min Points(Minimum number of points for a cluster)", &clusterSettings.dbscanMinPoints)) clusterSettings.dbscanMinPoints = std::clamp(clusterSettings.dbscanMinPoints, 1, 1000);
                     ImGui::EndTabItem();
                 }
                 if(ImGui::BeginTabItem("HClustering")){

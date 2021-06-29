@@ -6,12 +6,13 @@
 #include<random>
 #include<Eigen/Dense>
 #include "Data.hpp"
+#include "DBScan.hpp"
 
 
 //Single Class for data clustering. In the constructor different Clustering methods can be inserted to change the clustering
 class DataClusterer{
 public:
-    enum Method{
+    enum class Method{
         KMeans,
         DBScan,
         Hirarchical
@@ -48,6 +49,8 @@ public:
         int maxIterations;
 
         //DBScan
+        int dbscanMinPoints;
+        float dbscanEpsilon;
 
         //Hirarchical
 
@@ -203,7 +206,9 @@ protected:
         clustered = true;
     }
     void execDBScan(){
-        std::cout << "Not implemented yet" << std::endl;
+        DBScan dbscan(settings.dbscanMinPoints, settings.dbscanEpsilon, points, clusters, &progress);
+        progress = 1;
+        clustered = true;
     }
     void execHirarchical(){
         std::cout << "Not implemented yet" << std::endl;
