@@ -10,12 +10,12 @@
 
 class ClusteringWorkbench{
 public:
-    ClusteringWorkbench(const std::vector<Attribute>& attributes, const std::list<DataSet>& datasets): datasets(datasets), attributes(attributes), activations(attributes.size(), 1){}
+    ClusteringWorkbench(const std::vector<Attribute>& attributes, std::list<DataSet>& datasets): datasets(datasets), attributes(attributes), activations(attributes.size(), 1){}
 
     //draws a standard imgui window with all functionalyties for the clustering workbench
     void draw(){
         if(!active) return;
-        if(ImGui::Begin("Clustering Workbench", &active, 0)){
+        if(ImGui::Begin("Clustering Workbench", &active)){
             ImGui::Text("Data Projection:");
             static int datasetIndex = 0;
             static char* defaultName = "No datasets available";
@@ -59,8 +59,11 @@ public:
                 }
                 ImGui::EndTabBar();
             }
-            bool disabled = projector && !projector->projected && !projector->interrupted;
-            if(disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            bool disabled = datasetIndex >= datasets.size() || (projector && !projector->projected && !projector->interrupted);
+            if(disabled){ 
+                ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+            }
             if(ImGui::Button("Project")){
                 if(projector) delete projector;
                 if(clusterer) delete clusterer;
@@ -72,7 +75,10 @@ public:
                 }
                 projector = new DataProjector(datasets.front().data, 2, projectorMethod, projectionSettings, indices);
             }
-            if(disabled) ImGui::PopItemFlag();
+            if(disabled) {
+                ImGui::PopItemFlag();
+                ImGui::PopStyleVar();
+            }
             if(projector) ImGui::Text("Projectioin progress: %d%%", int(projector->progress * 100));
 
             ImGui::Separator();
@@ -121,13 +127,19 @@ public:
 
                 ImGui::EndTabBar();
             }
-            disabled = clusterer && !clusterer->clustered;
-            if(disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            disabled = clusterer && !clusterer->clustered || !projector || (!projector->projected || projector->interrupted);
+            if(disabled){ 
+                ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+            }
             if(ImGui::Button("Cluster") && projector &&projector->projected){
                 if(clusterer) delete clusterer;
                 clusterer = new DataClusterer(projector->projectedPoints, clusterMethod, clusterSettings);
             }
-            if(disabled) ImGui::PopItemFlag();
+            if(disabled) {
+                ImGui::PopItemFlag();
+                ImGui::PopStyleVar();
+            }
             if(clusterer) ImGui::Text("Cluster progress: %d%%", int(clusterer->progress * 100));
 
             // drawing a 2d scatterplot for the projected and clustered points
@@ -152,12 +164,37 @@ public:
                 }
 
             }
+
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 500 + 5);
+
+            static char clusterName[200]{"Cluster"};
+            ImGui::InputText("Cluster base name", clusterName, sizeof(clusterName)); ImGui::SameLine();
+            if(ImGui::Button("Convert clusters to indexlist") && clusterer && clusterer->clustered){
+                for(int i = 0; i < clusterer->clusters.size(); ++i){
+                    //ds->drawLists.push_back(TemplateList{})
+                    TemplateList tl{};
+                    tl.name = clusterName + std::to_string(i);
+                    tl.buffer = ds->buffer.buffer;
+                    tl.indices = clusterer->clusters[i];
+                    tl.minMax = std::vector<std::pair<float, float>>(attributes.size(), std::pair{std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()});
+                    for(int a = 0; a < attributes.size(); ++a){
+                        for(auto index: clusterer->clusters[i]){
+                            const auto& d = ds->data(index, a);
+                            if(d < tl.minMax[a].first) tl.minMax[a].first = d;
+                            if(d > tl.minMax[a].second) tl.minMax[a].second = d;
+                        }
+                    }
+                    tl.pointRatio = clusterer->clusters[i].size() / float(ds->data.size());
+                    tl.parentDataSetName = ds->name;
+                    ds->drawLists.push_back(tl);
+                }
+            }
         }
         ImGui::End();
     }
     bool active = false;
     int projectionDimension = 2;
-    DataProjector::ProjectionSettings projectionSettings{30.0, .0, -1, 1000, 500, 700, false};
+    DataProjector::ProjectionSettings projectionSettings{2000.0, 1.0, -1, 100, 0, 700, false};
     DataProjector::Method projectorMethod = DataProjector::Method::PCA;
     DataProjector* projector = 0;
     DataClusterer::ClusterSettings clusterSettings{};
@@ -167,7 +204,7 @@ public:
     std::vector<ImVec4> colors{{1,1,0,.2f}, {0,1,0,.2f}, {0,1,1,.2f}, {1,0,1,.2f}, {1,0,0,.2f}};
 
 protected:
-    const std::list<DataSet>& datasets;
+    std::list<DataSet>& datasets;
     const std::vector<Attribute>& attributes;
     std::vector<uint8_t> activations;
 

@@ -117,8 +117,20 @@ protected:
             return;
         }
 
-        Eigen::MatrixXd d = getDataMatrix().cast<double>();
-        Eigen::MatrixXd y(d.rows(), reducedDimensionSize);
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> d = getDataMatrix().cast<double>();
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> y(d.rows(), reducedDimensionSize);
+
+        //checking rowmajorness of d
+        //assert(d(0,0) == d.data()[0]);
+        //assert(d(0,1) == d.data()[1]);
+        //assert(d(0,2) == d.data()[2]);
+        //assert(d(1,0) == d.data()[3]);
+        //std::cout << d(0,0) << " " << d.data()[0] << std::endl;
+        //std::cout << d(0,1) << " " << d.data()[1] << std::endl;
+        //std::cout << d(0,2) << " " << d.data()[2] << std::endl;
+        //std::cout << d(1,0) << " " << d.data()[3] << std::endl;
+        //std::cout << d(2,0) << " " << d.data()[6] << std::endl;
+
 
         TSNE::run(d.data(), d.rows(), d.cols(), y.data(), reducedDimensionSize, settings.perplexity, settings.theta, settings.randSeed, settings.skipRandomInit, settings.maxIter, settings.stopLyingIter, settings.momSwitchIter, &progress);
         if(progress == -1){

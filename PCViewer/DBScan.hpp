@@ -7,7 +7,7 @@ class DBScan {
 public:    
     DBScan(unsigned int minPts, float eps, const Eigen::MatrixXf& points, std::vector<std::vector<uint32_t>>& cluster, float* progress): 
     minPoints(minPts),
-    epsilon(eps),
+    epsilon(eps * eps),
     tree(points),
     progress(progress),
     points(points),
