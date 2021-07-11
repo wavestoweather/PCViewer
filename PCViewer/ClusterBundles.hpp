@@ -8,6 +8,7 @@
 #include "HistogramManager.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
+#include "Structures.hpp"
 
 class ClusterBundles{
 public:
@@ -25,10 +26,16 @@ public:
     ClusterBundles(): vkContext({}){};
 
     // A new Line Bundle should be created if histogram changes or the atribute boundaries are updated(Everything where the line bundles at the axis change)
-    // The histogram has to be added prior to creating the LineBundles object, otherwise an empty lineBundles object is returned
-    // For attribute order change, attribute activation change try to use "updateAttributeOrdering".
-    ClusterBundles(const VkUtil::Context& context, VkRenderPass renderPass, VkFramebuffer framebuffer, const std::string& drawList, const Data* data, HistogramManager* histManager, const std::vector<std::pair<std::string, std::pair<float, float>>>& attributes, const std::vector<std::pair<uint32_t, bool>>& attributeOrder, const float* color): vkContext(context), vkRenderPass(renderPass), vkFrameBuffer(framebuffer), data(data), baseColor(color){
-        
+    ClusterBundles(const VkUtil::Context& context, VkRenderPass renderPass, VkFramebuffer framebuffer, const std::string& drawList, const Data* data, HistogramManager* histManager, const std::vector<std::pair<std::string, std::pair<float, float>>>& attributes, const std::vector<std::pair<uint32_t, bool>>& attributeOrder, const float* color, const std::vector<TemplateList*>& templateLists): 
+    vkContext(context), vkRenderPass(renderPass), vkFrameBuffer(framebuffer), data(data), baseColor(color)
+    {
+        //going through each template list and calculating its alpha values and bundle vertices
+        for(auto tlP: templateLists){
+            alphaValues.push_back(float(tlP->indices.size()) / data->size());
+            for(int a = 0; a < attributes.size(); ++a){
+                bundlesData.push_back({tlP->minMax[a].first, .5f * tlP->minMax[a].first +  .5f *  tlP->minMax[a].second, tlP->minMax[a].second});
+            }
+        }
 
         createVulkanPipeline();
         updateAttributeOrdering(attributeOrder);
@@ -90,8 +97,7 @@ private:
     // All vulkan resources are handled in private are automatically allocated and deallocated
     uint32_t indexCount = 0;
     //vkData :  holds vertex information like axis ordering...
-    //  structure: float4 Color, float HaloWidth, float4 haloColor, axisInfo[numAxis], alphaValues[]
-    //  axisInfo: uint alphaOffset, uint group count
+    //  structure: float4 Color, float HaloWidth, float4 haloColor, alphaValues[]
     //  alphaValues: float[] alpha vals
     //vkVertexBuffer: holds the min, mean and max points on each axis as a vertex
     //vkIndexBuffer: holds the index buffer for rendering
@@ -107,9 +113,9 @@ private:
 
     VkUtil::Context vkContext = {};
 
-    const char* vertPath = "shader/band.vert.spv";
-    const char* geomPath = "shader/band.geom.spv";
-    const char* fragPath = "shader/band.frag.spv";
+    char* vertPath = "shader/band.vert.spv";
+    char* geomPath = "shader/band.geom.spv";
+    char* fragPath = "shader/band.frag.spv";
 
     //recreates vulkan data for rendering if already existing, else simply creates
     void recreateVulkanBuffer(const std::vector<std::pair<uint32_t, bool>>& attributeOrder){   
@@ -122,15 +128,50 @@ private:
         if(vkMemory)
             vkFreeMemory(vkContext.device, vkMemory, nullptr);
 
-        uint32_t dataSize = 0;
+        uint32_t dataSize = 0;      //alpha data and background data
+        dataSize = attributeOrder.size();
+        dataSize *= sizeof(float);
+        dataSize += sizeof(float) * 4; //color of colorband
+        dataSize += sizeof(float) * 5; //halo color and halo width
+        std::vector<uint8_t> gpuData(dataSize);
+        *reinterpret_cast<float*>(&gpuData[0]) = baseColor[0];
+        *reinterpret_cast<float*>(&gpuData[4]) = baseColor[1];
+        *reinterpret_cast<float*>(&gpuData[8]) = baseColor[2];
+        *reinterpret_cast<float*>(&gpuData[12]) = baseColor[3];
+        *reinterpret_cast<float*>(&gpuData[16]) = haloWidth;
+        *reinterpret_cast<float*>(&gpuData[20]) = haloColor[0];
+        *reinterpret_cast<float*>(&gpuData[24]) = haloColor[1];
+        *reinterpret_cast<float*>(&gpuData[28]) = haloColor[2];
+        *reinterpret_cast<float*>(&gpuData[32]) = haloColor[3];
+        uint32_t curPos = 36;
+        for(float f: alphaValues){
+            *reinterpret_cast<float*>(&gpuData[curPos]) = f;
+            curPos+=4;
+        }
+        assert(curPos == gpuData.size());
 
+        VkUtil::createBuffer(vkContext.device, gpuData.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &vkData);
 
-        VkUtil::createBuffer(vkContext.device, 247, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &vkData);
-
-        VkUtil::createBuffer(vkContext.device, 247, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &vkVertexBuffer);
+        VkUtil::createBuffer(vkContext.device, bundlesData.size() * sizeof(BundleVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &vkVertexBuffer);
 
         std::vector<uint32_t> indexData;
         uint32_t primitiveRestart = 0xFFFFFFFF;
+        for(int l = 0; l < bundlesData.size() / attributeOrder.size(); ++l){
+            bool first = true;
+            uint32_t last = 0;
+            for(auto& att: attributeOrder){
+                if(!att.second) continue;
+                if(first){
+                    indexData.push_back(l * bundlesData.size() + att.first);
+                    first =  false;
+                }
+                last = l * bundlesData.size() + att.first;
+                indexData.push_back(last);
+            }
+            indexData.push_back(last);
+            indexData.push_back(primitiveRestart);
+        }
+        
 
         VkUtil::createBuffer(vkContext.device, indexData.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &vkIndexBuffer);
         indexCount = indexData.size();
@@ -158,8 +199,8 @@ private:
         vkBindBufferMemory(vkContext.device, vkVertexBuffer, vkMemory, vertexBufferOffset);
         vkBindBufferMemory(vkContext.device, vkIndexBuffer, vkMemory, indexBufferOffset);
 
-        VkUtil::uploadData(vkContext.device, vkMemory, 0, 247, nullptr);
-        VkUtil::uploadData(vkContext.device, vkMemory, vertexBufferOffset, 247, nullptr);
+        VkUtil::uploadData(vkContext.device, vkMemory, 0, gpuData.size() * sizeof(gpuData[0]), gpuData.data());
+        VkUtil::uploadData(vkContext.device, vkMemory, vertexBufferOffset, bundlesData.size() * sizeof(bundlesData[0]), bundlesData.data());
         VkUtil::uploadData(vkContext.device, vkMemory, indexBufferOffset, indexData.size() * sizeof(uint32_t), indexData.data());
 
         if(!vkDescriptorSet){
@@ -168,12 +209,6 @@ private:
         }
 
         VkUtil::updateDescriptorSet(vkContext.device, vkData, 247, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkDescriptorSet);
-    }
-
-    int getBundleIndex(float val, uint32_t axis) const{
-        int index = 0;
-
-        return index;
     }
 
     // creates the pipeline including all necessary vulkan resources for rendering such as the descriptor set layout, the descriptor set...
