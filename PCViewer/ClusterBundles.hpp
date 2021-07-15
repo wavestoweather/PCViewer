@@ -11,6 +11,8 @@
 #include "TemplateList.hpp"
 
 class ClusterBundles{
+    //epsilon value for equal min max values
+    float eps = 2e-2;
 public:
     struct BundleVertex{
         float min, avg, max;        //axis is not need, as it can be induced by the vertex index
@@ -31,9 +33,13 @@ public:
     {
         //going through each template list and calculating its alpha values and bundle vertices
         for(auto tlP: templateLists){
-            alphaValues.push_back(float(tlP->indices.size()) / data->size());
+            alphaValues.push_back(100.0f * float(tlP->indices.size()) / data->size());
             for(int a = 0; a < attributes.size(); ++a){
                 bundlesData.push_back({tlP->minMax[a].first, .5f * tlP->minMax[a].first +  .5f *  tlP->minMax[a].second, tlP->minMax[a].second});
+                if(bundlesData.back().min == bundlesData.back().max){
+                    bundlesData.back().min -= eps;
+                    bundlesData.back().max += eps;
+                }
             }
         }
 
@@ -162,10 +168,10 @@ private:
             for(auto& att: attributeOrder){
                 if(!att.second) continue;
                 if(first){
-                    indexData.push_back(l * bundlesData.size() + att.first);
+                    indexData.push_back(l * attributeOrder.size() + att.first);
                     first =  false;
                 }
-                last = l * bundlesData.size() + att.first;
+                last = l * attributeOrder.size() + att.first;
                 indexData.push_back(last);
             }
             indexData.push_back(last);

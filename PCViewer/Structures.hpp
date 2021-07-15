@@ -101,7 +101,7 @@ struct DrawList {
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 	LineBundles* lineBundles;
 	ClusterBundles* clusterBundles;
-	bool renderBundles;
+	bool renderBundles, renderClusterBundles;
 };
 
 struct Attribute {

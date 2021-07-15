@@ -12,26 +12,26 @@
 //Single Class for data clustering. In the constructor different Clustering methods can be inserted to change the clustering
 class DataClusterer{
 public:
-    enum class Method{
+    enum class Method: int{
         KMeans,
         DBScan,
         Hirarchical
     };
 
-    enum DistanceMetric{
+    enum class DistanceMetric: int{
         Norm,
         SquaredNorm,
         L1Norm
     };
 
-    enum InitMethod{
+    enum class InitMethod: int{
         Forgy,
         UniformRandom,
         NormalRandom,
         PlusPlus
     };
 
-    enum KMethod{
+    enum class KMethod: int{
         Mean,
         Median,
         Mediod

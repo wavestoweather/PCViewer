@@ -10,7 +10,11 @@
 
 class ClusteringWorkbench{
 public:
-    ClusteringWorkbench(const std::vector<Attribute>& attributes, std::list<DataSet>& datasets): datasets(datasets), attributes(attributes), activations(attributes.size(), 1){}
+    ClusteringWorkbench(const std::vector<Attribute>& attributes, std::list<DataSet>& datasets): datasets(datasets), attributes(attributes), activations(attributes.size(), 1){
+        clusterSettings.kmeansClusters = 10;
+        clusterSettings.kmeansInitMethod = DataClusterer::InitMethod::PlusPlus;
+        clusterSettings.maxIterations = 20;
+    }
 
     //draws a standard imgui window with all functionalyties for the clustering workbench
     void draw(){
@@ -88,7 +92,7 @@ public:
                 if(ImGui::BeginTabItem("KMeans")){
                     clusterMethod = DataClusterer::Method::KMeans;
                     static char* distanceMetrics[3]{"Norm", "SquaredNorm", "L1Norm"};
-                    if(ImGui::BeginCombo("Distance Metric", distanceMetrics[clusterSettings.distanceMetric])){
+                    if(ImGui::BeginCombo("Distance Metric", distanceMetrics[(int)clusterSettings.distanceMetric])){
                         for(int i = 0; i < std::size(distanceMetrics); ++i){
                             if(ImGui::MenuItem(distanceMetrics[i])) clusterSettings.distanceMetric = DataClusterer::DistanceMetric(i);
                         }
@@ -105,7 +109,7 @@ public:
                         ImGui::EndCombo();
                     }
                     static char* kMethods[]{"Mean", "Median", "Mediod"};
-                    if(ImGui::BeginCombo("K Method", kMethods[clusterSettings.kmeansMethod])){
+                    if(ImGui::BeginCombo("K Method", kMethods[(int)clusterSettings.kmeansMethod])){
                         for(int i = 0; i < 3; ++i)
                             if(ImGui::MenuItem(kMethods[i])) clusterSettings.kmeansMethod = DataClusterer::KMethod(i);
                         ImGui::EndCombo();

@@ -2834,7 +2834,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
 				continue;
 			}
-			else if(drawList->clusterBundles){
+			else if(drawList->renderClusterBundles){
 				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
 				vkCmdEndRenderPass(line_batch_commands.back());
 				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->clusterBundles->haloColor);
@@ -2970,7 +2970,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
 				continue;
 			}
-			if (drawList->clusterBundles){
+			if (drawList->renderClusterBundles){
 				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
 				vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->clusterBundles->haloColor);
@@ -10949,10 +10949,11 @@ int main(int, char**)
 							}
 						}
 					}
-					if(ImGui::MenuItem("Render cluster bands")){
-						pcPlotRender = true;
+					if(ImGui::MenuItem("Render cluster bands", "", &dl.renderClusterBundles)){
 						openClusterSelection = true;
+						pcPlotRender = true;
 					}
+					dl.renderClusterBundles &= bool(dl.clusterBundles);
 					if(ImGui::SliderFloat("Halo size", &pcSettings.haloWidth, 0, 1.01f)){
 						pcPlotRender = true;
 					}
@@ -11003,6 +11004,8 @@ int main(int, char**)
 						}
 
 						dl.clusterBundles = new ClusterBundles(vkContext, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, dl.name, &parent->data, attributes, attributeOrder, &dl.color.x, templateLists);
+						dl.renderClusterBundles = true;
+						pcPlotRender = true;
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::SameLine();
