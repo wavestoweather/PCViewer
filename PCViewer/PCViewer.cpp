@@ -136,7 +136,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-#define _DEBUG
+//#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
