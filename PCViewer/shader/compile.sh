@@ -33,3 +33,5 @@ glslangValidator -V -o indexComp.spv index.comp
 glslangValidator -V -o band.vert.spv band.vert
 glslangValidator -V -o band.frag.spv band.frag
 glslangValidator -V -o band.geom.spv band.geom
+glslangValidator -V -o cluster_band.vert.spv cluster_band.vert
+glslangValidator -V -o cluster_band.geom.spv cluster_band.geom

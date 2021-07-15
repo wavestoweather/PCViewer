@@ -136,7 +136,7 @@ std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -2431,6 +2431,7 @@ static void removePcPlotDrawList(DrawList& drawList) {
 				it->indexBufferMemory = VK_NULL_HANDLE;
 			}
 			if (it->lineBundles) delete it->lineBundles;
+			if (it->clusterBundles) delete it->clusterBundles;
 			g_PcPlotDrawLists.erase(it);
 			break;
 		}
@@ -2833,6 +2834,16 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
 				continue;
 			}
+			else if(drawList->clusterBundles){
+				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				vkCmdEndRenderPass(line_batch_commands.back());
+				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->clusterBundles->haloColor);
+				drawList->clusterBundles->haloWidth = pcSettings.haloWidth;
+				drawList->clusterBundles->recordDrawBundles(line_batch_commands.back());
+				VkUtil::beginRenderPass(line_batch_commands.back(), clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
+				vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				continue;
+			}
 			do {
 				VkDeviceSize offsets[] = { 0 };
 				//vkCmdBindVertexBuffers(line_batch_commands.back(), 0, 1, &drawList->buffer, offsets);
@@ -2950,6 +2961,21 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->lineBundles->haloColor);
 				drawList->lineBundles->haloWidth = pcSettings.haloWidth;
 				drawList->lineBundles->recordDrawBundles(g_PcPlotCommandBuffer);
+				std::vector<VkClearValue> clearValues{ { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w } };
+				VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
+				vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				if (pcSettings.renderSplines)
+					vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				else
+					vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
+				continue;
+			}
+			if (drawList->clusterBundles){
+				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				vkCmdEndRenderPass(g_PcPlotCommandBuffer);
+				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->clusterBundles->haloColor);
+				drawList->clusterBundles->haloWidth = pcSettings.haloWidth;
+				drawList->clusterBundles->recordDrawBundles(g_PcPlotCommandBuffer);
 				std::vector<VkClearValue> clearValues{ { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w } };
 				VkUtil::beginRenderPass(g_PcPlotCommandBuffer, clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
 				vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
@@ -5098,6 +5124,15 @@ static void updateDrawListIndexBuffer(DrawList& dl) {
 			ord[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
 		}
 		dl.lineBundles->updateAttributeOrdering(ord);
+	}
+
+	//updating drawlist cluster bundles
+	if(dl.clusterBundles){
+		std::vector<std::pair<uint32_t, bool>> ord(pcAttributes.size());
+		for(int i = 0; i < pcAttributes.size(); ++i){
+			ord[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
+		}
+		dl.clusterBundles->updateAttributeOrdering(ord);
 	}
 
 	//ordering active indices if priority rendering is enabled
@@ -10779,6 +10814,7 @@ int main(int, char**)
 				if (ImGui::IsItemHovered() && io.MouseClicked[1]) {
 					ImGui::OpenPopup(("drawListMenu" + dl.name).c_str());
 				}
+				bool openClusterSelection = false;
 				if (ImGui::BeginPopup(("drawListMenu" + dl.name).c_str())) {
 					if (ImGui::MenuItem("Immune to global brushes", "", &dl.immuneToGlobalBrushes)) {
 						pcPlotRender = updateActiveIndices(dl);
@@ -10905,7 +10941,7 @@ int main(int, char**)
 								attributes[i] = {pcAttributes[i].name, {pcAttributes[i].min, pcAttributes[i].max}};
 								attributeOrder[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
 							}
-							dl.lineBundles = new LineBundles(vkContext, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, dl.name, &parent->data, histogramManager, attributes, attributeOrder, &g_PcPlotDrawLists.back().color.x);
+							dl.lineBundles = new LineBundles(vkContext, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, dl.name, &parent->data, histogramManager, attributes, attributeOrder, &dl.color.x);
 							
 							if(changed){
 								changed = false;
@@ -10913,10 +10949,66 @@ int main(int, char**)
 							}
 						}
 					}
+					if(ImGui::MenuItem("Render cluster bands")){
+						pcPlotRender = true;
+						openClusterSelection = true;
+					}
 					if(ImGui::SliderFloat("Halo size", &pcSettings.haloWidth, 0, 1.01f)){
 						pcPlotRender = true;
 					}
 
+					ImGui::EndPopup();
+				}
+				if(openClusterSelection)
+					ImGui::OpenPopup("ClusterSelection");
+				if(ImGui::BeginPopupModal("ClusterSelection")){
+					auto parent = std::find(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), DataSet{dl.parentDataSet});
+					assert(parent!=g_PcPlotDataSets.end());
+					static std::vector<uint8_t> selectedTl;
+					selectedTl.resize(parent->drawLists.size(), 1);
+					static char filterText[200];
+					if(ImGui::InputText("TemplateList filter(Upper/Lowercase matters)", filterText, 200)){
+						int c = 0;
+						for(auto& tl: parent->drawLists){
+							if(tl.name.find(filterText)==tl.name.npos){
+								selectedTl[c] = 0;		//setting not filtered lists to false
+							}
+							++c;
+						}
+					}
+					ImGui::BeginChild("TemplateLists",{400, 200}, true);
+					int c = 0;
+					for(auto& tl: parent->drawLists){
+						if(tl.name.find(filterText)!=tl.name.npos){
+							ImGui::Checkbox(tl.name.c_str(), (bool*)&selectedTl[c]);
+						}
+						++c;
+					}
+					ImGui::EndChild();
+					if(ImGui::Button("Set cluster bundles")){
+						if(dl.clusterBundles) delete dl.clusterBundles;
+						VkUtil::Context vkContext{g_PcPlotWidth, g_PcPlotHeight, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue};
+						std::vector<std::pair<std::string, std::pair<float, float>>> attributes(pcAttributes.size());
+						std::vector<std::pair<uint32_t, bool>> attributeOrder(pcAttributes.size());
+						for(int i = 0; i < pcAttributes.size(); ++i) {
+							attributes[i] = {pcAttributes[i].name, {pcAttributes[i].min, pcAttributes[i].max}};
+							attributeOrder[i] = {pcAttrOrd[i], pcAttributeEnabled[pcAttrOrd[i]]};
+						}
+						std::vector<TemplateList*> templateLists;
+						int c = 0;
+						for(auto i = parent->drawLists.begin(); i != parent->drawLists.end(); ++i, ++c){
+							if(selectedTl[c]){
+								templateLists.push_back(&(*i));
+							}
+						}
+
+						dl.clusterBundles = new ClusterBundles(vkContext, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, dl.name, &parent->data, attributes, attributeOrder, &dl.color.x, templateLists);
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if(ImGui::Button("Cancel")){
+						ImGui::CloseCurrentPopup();
+					};
 					ImGui::EndPopup();
 				}
 				ImGui::NextColumn();

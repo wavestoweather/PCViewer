@@ -8,7 +8,7 @@
 #include "HistogramManager.h"
 #include "VkUtil.h"
 #include "PCUtil.h"
-#include "Structures.hpp"
+#include "TemplateList.hpp"
 
 class ClusterBundles{
 public:
@@ -26,7 +26,7 @@ public:
     ClusterBundles(): vkContext({}){};
 
     // A new Line Bundle should be created if histogram changes or the atribute boundaries are updated(Everything where the line bundles at the axis change)
-    ClusterBundles(const VkUtil::Context& context, VkRenderPass renderPass, VkFramebuffer framebuffer, const std::string& drawList, const Data* data, HistogramManager* histManager, const std::vector<std::pair<std::string, std::pair<float, float>>>& attributes, const std::vector<std::pair<uint32_t, bool>>& attributeOrder, const float* color, const std::vector<TemplateList*>& templateLists): 
+    ClusterBundles(const VkUtil::Context& context, VkRenderPass renderPass, VkFramebuffer framebuffer, const std::string& drawList, const Data* data, const std::vector<std::pair<std::string, std::pair<float, float>>>& attributes, const std::vector<std::pair<uint32_t, bool>>& attributeOrder, const float* color, const std::vector<TemplateList*>& templateLists): 
     vkContext(context), vkRenderPass(renderPass), vkFrameBuffer(framebuffer), data(data), baseColor(color)
     {
         //going through each template list and calculating its alpha values and bundle vertices
@@ -113,8 +113,8 @@ private:
 
     VkUtil::Context vkContext = {};
 
-    char* vertPath = "shader/band.vert.spv";
-    char* geomPath = "shader/band.geom.spv";
+    char* vertPath = "shader/cluster_band.vert.spv";
+    char* geomPath = "shader/cluster_band.geom.spv";
     char* fragPath = "shader/band.frag.spv";
 
     //recreates vulkan data for rendering if already existing, else simply creates
@@ -129,7 +129,7 @@ private:
             vkFreeMemory(vkContext.device, vkMemory, nullptr);
 
         uint32_t dataSize = 0;      //alpha data and background data
-        dataSize = attributeOrder.size();
+        dataSize = alphaValues.size();
         dataSize *= sizeof(float);
         dataSize += sizeof(float) * 4; //color of colorband
         dataSize += sizeof(float) * 5; //halo color and halo width
@@ -208,7 +208,7 @@ private:
             VkUtil::createDescriptorSets(vkContext.device, layouts, vkContext.descriptorPool, &vkDescriptorSet);
         }
 
-        VkUtil::updateDescriptorSet(vkContext.device, vkData, 247, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkDescriptorSet);
+        VkUtil::updateDescriptorSet(vkContext.device, vkData, dataSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkDescriptorSet);
     }
 
     // creates the pipeline including all necessary vulkan resources for rendering such as the descriptor set layout, the descriptor set...
@@ -230,9 +230,9 @@ private:
                                                             ,{1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}};
         VkUtil::createDescriptorSetLayout(vkContext.device, bindings, &vkDescriptorSetLayout);
 
-        std::vector<VkVertexInputAttributeDescription> attributeDescriptions{{0,0,VK_FORMAT_R32G32B32_SFLOAT,0}, {1,0,VK_FORMAT_R32G32_UINT, 3 * sizeof(float)}};
+        std::vector<VkVertexInputAttributeDescription> attributeDescriptions{{0,0,VK_FORMAT_R32G32B32_SFLOAT,0}};
 
-        std::vector<VkVertexInputBindingDescription> bindingDescriptions{{0, 5 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX}};
+        std::vector<VkVertexInputBindingDescription> bindingDescriptions{{0, 3 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX}};
 
         VkPipelineVertexInputStateCreateInfo vertexInfo{};
         vertexInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;

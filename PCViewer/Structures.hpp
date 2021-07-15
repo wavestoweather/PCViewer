@@ -5,6 +5,9 @@
 #include <list>
 #include "Data.hpp"
 #include "LineBundles.hpp"
+#include "ClusterBundles.hpp"
+#include "TemplateList.hpp"
+
 
 struct Vec4 {
 	float x;
@@ -24,15 +27,6 @@ struct Vec4 {
 struct Vec2 {
 	float u;
 	float v;
-};
-
-struct TemplateList {
-	std::string name;
-	VkBuffer buffer;
-	std::vector<uint32_t> indices;
-	std::vector<std::pair<float, float>> minMax;
-	float pointRatio;		//ratio of points in the datasaet(reduced)
-    std::string parentDataSetName = ""; // This only gets set for template lists used to generate brushes to identify the parent dataset correctly but only once.
 };
 
 struct Buffer {
@@ -106,6 +100,7 @@ struct DrawList {
 	//std::vector<uint32_t> activeInd;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
 	LineBundles* lineBundles;
+	ClusterBundles* clusterBundles;
 	bool renderBundles;
 };
 
