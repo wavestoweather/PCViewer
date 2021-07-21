@@ -99,7 +99,7 @@ protected:
         }
     }
 
-    float updateStepKMeans(){
+    void updateStepKMeans(){
         for(auto& vec: clusterMeans) vec.setZero();
         int c = 0;
         for(auto& cluster: clusters){
