@@ -88,6 +88,8 @@ public:
                 execHirarchical();
             }break;
         }
+        progress = 1;
+        clustered = true;
     }
 
     std::vector<std::vector<uint32_t>> clusters;
@@ -248,14 +250,18 @@ protected:
     }
     
     void computeDistanceMatrix(){
+        size_t p = 0;
         for(uint32_t y = 0; y < points.rows(); ++y){
             for(uint32_t x = y + 1; x < points.rows(); ++x){
-                const uint32_t index = idx(x, y);
+                const uint32_t index = idx(y, x);
+                progress = .2f * (double(p++) / (double(points.rows()) * points.rows() / 2.0));
                 const Eigen::VectorXf vecX = points.row(x);
                 const Eigen::VectorXf vecY = points.row(y);
 
                 double measure = distance(vecX, vecY);
                 h_distances[index] = measure;
+                if(index < 100)
+                    bool breakHard = true;
                 h_indices[index] = std::make_pair(y,x);
             }
         }
@@ -336,19 +342,22 @@ protected:
     }
 
     void execHirarchical(){
-        std::cout << "Not implemented yet" << std::endl;
         h_distances.resize(points.rows() * (points.rows() - 1) / 2);
         h_indices.resize(h_distances.size());
         h_nodes.resize(points.rows());
         h_nodeIDs.resize(points.rows());
+        std::cout <<"Hirarchial clustering distance matrix" << std::endl;
         computeDistanceMatrix();
+        progress = .2f;
 
         const size_t numRuns = points.rows() - 1;
 
         const float maxValue = std::numeric_limits<float>::max();
         std::iota(h_nodeIDs.begin(), h_nodeIDs.end(), 0);   //filling with 0 to i
 
+        std::cout << "node generation" << std::endl;
         for(size_t counter = 0; counter < numRuns; ++counter){
+            progress = .2f + .4f * counter / numRuns;
             auto minIt = std::min_element(h_distances.begin(), h_distances.end());
             float minDist = *minIt;
             size_t i = minIt - h_distances.begin();
@@ -356,7 +365,7 @@ protected:
             const auto& indices = h_indices[i];
             const size_t& indexI = indices.first, & indexJ = indices.second;
 
-            for(size_t ii = 0; ii < indexI; ++i){
+            for(size_t ii = 0; ii < indexI; ++ii){
                 const float dKI = h_distances[idx(ii, indexI)];
                 const float dKJ = h_distances[idx(ii, indexJ)];
 
@@ -364,7 +373,7 @@ protected:
                 h_distances[idx(ii, indexJ)] = maxValue;
             }
 
-            for(size_t ii = indexI + 1; ii < indexJ; ++i){
+            for(size_t ii = indexI + 1; ii < indexJ; ++ii){
                 const float dKI = h_distances[idx(indexI, ii)];
                 const float dKJ = h_distances[idx(ii, indexJ)];
 
@@ -397,11 +406,12 @@ protected:
         clusters.resize(settings.hclusteringClusters);
         uint32_t cluster = 0;
         std::fill(h_nodeIDs.begin(), h_nodeIDs.end(), 0);
-        for(size_t i = points.rows() - 2; i >= 0; --i){
+        for(int64_t i = points.rows() - 2; i >= 0; --i){
+            progress = .6f + .4f - (.4f * i / points.rows());
             const Node& node = h_nodes[i];
             size_t& nodeID = h_nodeIDs[i];
 
-            if(cluster < settings.hclusteringClusters){
+            if(cluster < settings.hclusteringClusters - 1){
                 if(node.left < points.rows()) clusters[nodeID].push_back(node.left);
                 else h_nodeIDs[node.left - points.rows()] = nodeID;
 
