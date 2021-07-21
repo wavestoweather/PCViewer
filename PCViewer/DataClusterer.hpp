@@ -4,6 +4,7 @@
 #include<vector>
 #include<future>
 #include<random>
+#include<utility>
 #include<Eigen/Dense>
 #include "Data.hpp"
 #include "DBScan.hpp"
@@ -37,6 +38,16 @@ public:
         Mediod
     };
 
+    enum class HClusteringLinkage: int{
+        Single,
+        Complete,
+        Weighted,
+        Median,
+        Average,
+        Ward,
+        Centroid
+    };
+
     //contains settings for all clustering methods, the correct settings are read out
     struct ClusterSettings{
         //general settings
@@ -53,7 +64,8 @@ public:
         float dbscanEpsilon;
 
         //Hirarchical
-
+        HClusteringLinkage hclusteringLinkage;
+        int hclusteringClusters;
     };
 
     DataClusterer(const Eigen::MatrixXf& points, Method method, const ClusterSettings& settings):settings(settings), points(points), method(method){
@@ -210,7 +222,203 @@ protected:
         progress = 1;
         clustered = true;
     }
+
+    // Hirarchical clustering-------------------------------------------------------------------
+    struct Node{
+        size_t left, right;
+        float distance;
+        size_t size;
+    };
+    struct LanceWilliamsCoeffs
+    {
+        double ai;
+        double aj;
+        double beta;
+        double gamma;
+    };
+
+    std::vector<float> h_distances;
+    std::vector<std::pair<uint32_t, uint32_t>> h_indices;
+    std::vector<Node> h_nodes;
+    std::vector<size_t> h_nodeIDs;
+    
+    inline uint32_t idx(uint32_t x, uint32_t y){
+        uint32_t n = points.rows();
+        return x * (2 * n - 1 - x) / 2 + (y - x - 1);
+    }
+    
+    void computeDistanceMatrix(){
+        for(uint32_t y = 0; y < points.rows(); ++y){
+            for(uint32_t x = y + 1; x < points.rows(); ++x){
+                const uint32_t index = idx(x, y);
+                const Eigen::VectorXf vecX = points.row(x);
+                const Eigen::VectorXf vecY = points.row(y);
+
+                double measure = distance(vecX, vecY);
+                h_distances[index] = measure;
+                h_indices[index] = std::make_pair(y,x);
+            }
+        }
+    }
+
+    LanceWilliamsCoeffs computeCoefficients(size_t i, size_t j, size_t k){
+        size_t nI, nJ, nK;
+        size_t nodeID = 0;
+        switch(settings.hclusteringLinkage){
+            case HClusteringLinkage::Single:
+                return {.5, .5, 0, -.5f};
+            case HClusteringLinkage::Complete:
+                return {.5, .5, 0, .5};
+            case HClusteringLinkage::Weighted:
+                return {.5, .5, 0, 0};
+            case HClusteringLinkage::Median:
+                return {.5, .5, -.25, 0};
+            case HClusteringLinkage::Average:{
+                nodeID = h_nodeIDs[i] - points.rows();
+                nI = (nodeID >= 0) ? h_nodes[nodeID].size : 1;
+                nodeID = h_nodeIDs[j] - points.rows();
+                nJ = (nodeID >= 0) ? h_nodes[nodeID].size : 1;
+
+                const double sumN = static_cast<double>(nI + nJ);
+                const double ai = nI / sumN;
+                const double aj = nJ / sumN;
+
+                return { ai, aj, 0.0, 0.0 };
+            }
+            case HClusteringLinkage::Ward:{
+                nodeID = h_nodeIDs[i] - points.rows();
+                nI = (nodeID >= 0) ? h_nodes[nodeID].size : 1;
+                nodeID = h_nodeIDs[j] - points.rows();
+                nJ = (nodeID >= 0) ? h_nodes[nodeID].size : 1;
+                nodeID = h_nodeIDs[k] - points.rows();
+                nK = (nodeID >= 0) ? h_nodes[nodeID].size : 1;
+
+                const double sumN = static_cast<double>(nI + nJ + nK);
+                const double ai = (nI + nK) / sumN;
+                const double aj = (nJ + nK) / sumN;
+                const double beta = nK / sumN * (-1);
+
+                return { ai, aj, beta, 0.0 };
+            }
+            case HClusteringLinkage::Centroid:{
+                nodeID = h_nodeIDs[i] - points.rows();
+                nI = (nodeID >= 0) ? h_nodes[nodeID].size : 1;
+                nodeID = h_nodeIDs[j] - points.rows();
+                nJ = (nodeID >= 0) ? h_nodes[nodeID].size : 1;
+
+                const double sumN = static_cast<double>(nI + nJ);
+                const double ai = nI / sumN;
+                const double aj = nJ / sumN;
+                const double beta = (-nI * nJ) / (sumN * sumN);
+
+                return { ai, aj, beta, 0.0 };
+            }
+        }
+        return {};
+    }
+
+    // Lance-Williams algorithm
+    float computeNewDistance(float dKI, float dKJ, size_t i, size_t j, size_t k){
+        const LanceWilliamsCoeffs c = computeCoefficients(i, j, k);
+        
+        double betaTerm = 0, gammaTerm = 0;
+
+        if(c.beta > 0){
+            const double valIJ = h_distances[idx(i, j)];
+            betaTerm = c.beta * valIJ;
+        }
+        if(c.gamma > 0){
+            const double absD = std::abs(dKI - dKJ);
+            gammaTerm = c.gamma * absD;
+        }
+
+        return c.ai * dKI + c.aj * dKJ + betaTerm + gammaTerm;
+    }
+
     void execHirarchical(){
         std::cout << "Not implemented yet" << std::endl;
+        h_distances.resize(points.rows() * (points.rows() - 1) / 2);
+        h_indices.resize(h_distances.size());
+        h_nodes.resize(points.rows());
+        h_nodeIDs.resize(points.rows());
+        computeDistanceMatrix();
+
+        const size_t numRuns = points.rows() - 1;
+
+        const float maxValue = std::numeric_limits<float>::max();
+        std::iota(h_nodeIDs.begin(), h_nodeIDs.end(), 0);   //filling with 0 to i
+
+        for(size_t counter = 0; counter < numRuns; ++counter){
+            auto minIt = std::min_element(h_distances.begin(), h_distances.end());
+            float minDist = *minIt;
+            size_t i = minIt - h_distances.begin();
+
+            const auto& indices = h_indices[i];
+            const size_t& indexI = indices.first, & indexJ = indices.second;
+
+            for(size_t ii = 0; ii < indexI; ++i){
+                const float dKI = h_distances[idx(ii, indexI)];
+                const float dKJ = h_distances[idx(ii, indexJ)];
+
+                h_distances[idx(ii, indexI)] = computeNewDistance(dKI, dKJ, indexI, indexJ, ii);
+                h_distances[idx(ii, indexJ)] = maxValue;
+            }
+
+            for(size_t ii = indexI + 1; ii < indexJ; ++i){
+                const float dKI = h_distances[idx(indexI, ii)];
+                const float dKJ = h_distances[idx(ii, indexJ)];
+
+                h_distances[idx(indexI, ii)] = computeNewDistance(dKI, dKJ, indexI, indexJ, ii);
+                h_distances[idx(ii, indexJ)] = maxValue;
+            }
+
+            for(size_t ii = indexJ + 1; ii < points.rows(); ++ii){
+                const float dKI = h_distances[idx(indexI, ii)];
+                const float dKJ = h_distances[idx(indexJ, ii)];
+
+                h_distances[idx(indexI, ii)] = computeNewDistance(dKI, dKJ, indexI, indexJ, ii);
+                h_distances[idx(indexJ, ii)] = maxValue;
+            }
+
+            h_distances[idx(indexI, indexJ)] = maxValue;
+
+            auto& node = h_nodes[counter];
+
+            node.distance = minDist;
+            node.left = size_t(h_nodeIDs[indexI]);
+            node.right = size_t(h_nodeIDs[indexJ]);
+            node.size = (node.left >= points.rows()) ? h_nodes[node.left - points.rows()].size : 1;
+            node.size += (node.right >= points.rows()) ? h_nodes[node.right - points.rows()].size : 1;
+
+            h_nodeIDs[indexI] = counter + points.rows();
+        }
+
+        //cutting the node trees
+        clusters.resize(settings.hclusteringClusters);
+        uint32_t cluster = 0;
+        std::fill(h_nodeIDs.begin(), h_nodeIDs.end(), 0);
+        for(size_t i = points.rows() - 2; i >= 0; --i){
+            const Node& node = h_nodes[i];
+            size_t& nodeID = h_nodeIDs[i];
+
+            if(cluster < settings.hclusteringClusters){
+                if(node.left < points.rows()) clusters[nodeID].push_back(node.left);
+                else h_nodeIDs[node.left - points.rows()] = nodeID;
+
+                cluster++;
+
+                if (node.right < points.rows()) clusters[cluster].push_back(node.right);
+                else h_nodeIDs[node.right - points.rows()] = cluster;
+                continue;
+            }
+
+            const size_t leftID = node.left;
+            if (leftID >= points.rows()) h_nodeIDs[leftID - points.rows()] = nodeID;
+            else clusters[nodeID].push_back(leftID);
+
+            const size_t rightID = node.right;
+            if (rightID >= points.rows()) h_nodeIDs[rightID - points.rows()] = nodeID;
+            else clusters[nodeID].push_back(rightID);
+        }
     }
 };

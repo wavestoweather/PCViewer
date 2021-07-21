@@ -125,7 +125,14 @@ public:
                 }
                 if(ImGui::BeginTabItem("HClustering")){
                     clusterMethod = DataClusterer::Method::Hirarchical;
-                    ImGui::Text("Hier könnte jetzt ihre werbung stehen");
+                    //if(ImGui::InputInt("ClusterAmt", &clusterSettings.hclusteringClusters)) clusterSettings.hclusteringClusters = std::clamp(clusterSettings.hclusteringClusters, 1, 100);
+                    //static char* hLinkages[]{"Single", "Complete", "Weighted", "Median", "Average", "Ward", "Centroid"};
+                    //if(ImGui::BeginCombo("Clustering Linkage", hLinkages[(int)clusterSettings.hclusteringLinkage])){
+                    //    for(int i = 0; i < 7; ++i){
+                    //        if(ImGui::MenuItem(hLinkages[i])) clusterSettings.hclusteringClusters = i;
+                    //    }
+                    //    ImGui::EndCombo();
+                    //}
                     ImGui::EndTabItem();
                 }
 
