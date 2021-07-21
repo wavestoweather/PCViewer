@@ -129,7 +129,7 @@ public:
                     static char* hLinkages[]{"Single", "Complete", "Weighted", "Median", "Average", "Ward", "Centroid"};
                     if(ImGui::BeginCombo("Clustering Linkage", hLinkages[(int)clusterSettings.hclusteringLinkage])){
                         for(int i = 0; i < 7; ++i){
-                            if(ImGui::MenuItem(hLinkages[i])) clusterSettings.hclusteringClusters = i;
+                            if(ImGui::MenuItem(hLinkages[i])) clusterSettings.hclusteringLinkage = DataClusterer::HClusteringLinkage(i);
                         }
                         ImGui::EndCombo();
                     }
