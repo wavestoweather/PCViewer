@@ -346,7 +346,6 @@ protected:
         h_indices.resize(h_distances.size());
         h_nodes.resize(points.rows());
         h_nodeIDs.resize(points.rows());
-        std::cout <<"Hirarchial clustering distance matrix" << std::endl;
         computeDistanceMatrix();
         progress = .2f;
 
@@ -355,7 +354,6 @@ protected:
         const float maxValue = std::numeric_limits<float>::max();
         std::iota(h_nodeIDs.begin(), h_nodeIDs.end(), 0);   //filling with 0 to i
 
-        std::cout << "node generation" << std::endl;
         for(size_t counter = 0; counter < numRuns; ++counter){
             progress = .2f + .4f * counter / numRuns;
             auto minIt = std::min_element(h_distances.begin(), h_distances.end());
