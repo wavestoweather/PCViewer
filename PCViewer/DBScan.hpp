@@ -57,7 +57,7 @@ protected:
     protected:
         const Eigen::MatrixXf& points;
         const size_t noChild = size_t(-1);
-        size_t buildTree(const std::vector<size_t>::iterator& begin, const std::vector<size_t>::iterator& end, uint level){
+        size_t buildTree(const std::vector<size_t>::iterator& begin, const std::vector<size_t>::iterator& end, uint32_t level){
             assert(begin != end);     //if indices size is 0, something went wrong
             assert(begin < end);
             if(end - begin == 1){        //creating a leaf node
