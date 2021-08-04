@@ -3773,7 +3773,24 @@ static bool openCsv(const char* filename) {
 			int count = 0;
 			while ((pos = line.find(delimiter)) != std::string::npos) {
 				cur = line.substr(0, pos);
-				line.erase(0, pos + delimiter.length());
+				if(cur[0] == '\"'){
+					line.erase(0, pos);
+					cur.erase(0,1);
+					if(cur.back() == '\"'){
+						cur.pop_back();
+					}
+					else{
+						while(line[0] != '\"'){
+							cur += line[0];
+							line.erase(0, 1);
+						}
+					}
+					// deleting all things to the next comma
+					pos = line.find(delimiter);
+					line.erase(0, pos + delimiter.length());
+				}
+				else
+					line.erase(0, pos + delimiter.length());
 				if(!queryAttributes[count++].active) continue;
 				//checking for an overrunning attribute counter
 				if (attr == pcAttributes.size()) {
@@ -3815,6 +3832,7 @@ static bool openCsv(const char* filename) {
 
 			//adding the last item which wasn't recognized
 			cur = line;//.substr(0, line.size() - 1);
+			cur.erase(std::remove(cur.begin(), cur.end(), '\"'), cur.end());
 			if (cur.empty()) curF = 0;
 			else {
 				char* ptr;
@@ -4573,6 +4591,24 @@ static bool openNetCDF(const char* filename){
 			}
 			fillValue = f;
 			break;
+			}
+			case NC_UBYTE:
+			case NC_BYTE:{
+				auto d = std::vector<uint8_t>(ds.data.columns[i].size());
+				if((retval = nc_get_var_ubyte(fileId, var, d.data()))){
+					std::cout << "Error at reading fill value" << std::endl;
+					nc_close(fileId);
+					return false;
+				}
+				ds.data.columns[i] = std::vector<float>(d.begin(), d.end());
+				uint8_t f = 0;
+				if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &f))) {
+					std::cout << "Error at reading fill value" << std::endl;
+					nc_close(fileId);
+					return false;
+				}
+				fillValue = f;
+				break;
 			}
 			case NC_CHAR:
 			//categorical data
@@ -9207,7 +9243,7 @@ int main(int, char**)
 							ImGui::SetNextWindowPos({ x ,y }, 0, { xAnchor,.5f });
 							ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
 							ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
-							ImGui::Begin(("Tooltip Categorie" + categorie.first).c_str(), NULL, flags);
+							ImGui::Begin(("Tooltip Categorie" + categorie.first + pcAttributes[i].originalName).c_str(), NULL, flags);
 							ImGui::Text(categorie.first.c_str());
 							ImGui::End();
                             prev_y = y;
