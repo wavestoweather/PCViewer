@@ -4592,6 +4592,40 @@ static bool openNetCDF(const char* filename){
 			fillValue = f;
 			break;
 			}
+			case NC_UINT64:{
+				auto d = std::vector<unsigned long long>(ds.data.columns[i].size());
+				if((retval = nc_get_var_ulonglong(fileId, var, d.data()))){
+					std::cout << "Error at reading fill value" << std::endl;
+					nc_close(fileId);
+					return false;
+				}
+				ds.data.columns[i] = std::vector<float>(d.begin(), d.end());
+				unsigned long long f = 0;
+				if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &f))) {
+					std::cout << "Error at reading fill value" << std::endl;
+					nc_close(fileId);
+					return false;
+				}
+				fillValue = f;
+				break;
+			}
+			case NC_INT64:{
+				auto d = std::vector<long long>(ds.data.columns[i].size());
+				if((retval = nc_get_var_longlong(fileId, var, d.data()))){
+					std::cout << "Error at reading fill value" << std::endl;
+					nc_close(fileId);
+					return false;
+				}
+				ds.data.columns[i] = std::vector<float>(d.begin(), d.end());
+				long long f = 0;
+				if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &f))) {
+					std::cout << "Error at reading fill value" << std::endl;
+					nc_close(fileId);
+					return false;
+				}
+				fillValue = f;
+				break;
+			}
 			case NC_UBYTE:
 			case NC_BYTE:{
 				auto d = std::vector<uint8_t>(ds.data.columns[i].size());
@@ -4649,6 +4683,8 @@ static bool openNetCDF(const char* filename){
 				std::sort(pcAttributes[i].categories_ordered.begin(), pcAttributes[i].categories_ordered.end(), [&](auto& left, auto& right){return left.second < right.second;});
 			}
 			break;
+			default:
+				std::cout << "The variable type " << type << " can not be handled correctly!" << std::endl;
 		}
 		if (hasFill != 1) {
 			fill_values[i] = fillValue;
