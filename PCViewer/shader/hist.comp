@@ -38,7 +38,8 @@ void main(){
 		float val = getPackedData(index, axis);
 		if(!bool(info.ignoreZero) || val != 0){
 			int binIndex = int((val-info.minMax[2*axis])/(info.minMax[2*axis+1]-info.minMax[2*axis]) * .999999f * info.numOfBins);		//multiplication with .999999f is done to prevent that a value could be added to bin at index numOfBins
-			atomicAdd(b.bins[axis*info.numOfBins+binIndex],1);
+			if(binIndex < info.numOfBins)
+				atomicAdd(b.bins[axis*info.numOfBins+binIndex],1);
 		}
 	}
 }
