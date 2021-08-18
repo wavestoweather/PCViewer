@@ -10345,7 +10345,20 @@ int main(int, char**)
 						}
 						if (ImGui::BeginPopupModal(tl.name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
 						{
-							ImGui::Text((std::string("Creating a drawing list from ") + tl.name + "\n\n").c_str());
+							int destination = 0;
+							if(ImGui::BeginTabBar("Destination")){
+								if(ImGui::BeginTabItem("Drawlist")){
+									destination = 0;
+									ImGui::Text((std::string("Creating a DRAWLIST list from ") + tl.name).c_str());
+									ImGui::EndTabItem();
+								}
+								if(ImGui::BeginTabItem("TemplateList")){
+									destination = 1;
+									ImGui::Text((std::string("Creating a TEMPLATELIST from ") + tl.name).c_str());
+									ImGui::EndTabItem();
+								}
+								ImGui::EndTabBar();
+							}
 							ImGui::Separator();
 							ImGui::InputText("Drawlist Name", pcDrawListName, 200);
 							if(ImGui::CollapsingHeader("Subsample/Trim")){
@@ -10359,13 +10372,29 @@ int main(int, char**)
 							if ((ImGui::Button("Create", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYENTER))
 							{
 								ImGui::CloseCurrentPopup();
-								auto tmp = tl.indices;
-								tl.indices.resize(int(ceilf(1.f * (trim[1] - trim[0]) / subsample)));
-								int ind = 0;
-								for(int i = trim[0]; i < trim[1]; i += subsample) tl.indices[ind++] = tmp[i];
-								createPcPlotDrawList(tl, ds, pcDrawListName);
-								tl.indices = tmp;
-								pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+								if(destination == 0){
+									auto tmp = tl.indices;
+									tl.indices.resize(int(ceilf(1.f * (trim[1] - trim[0]) / subsample)));
+									int ind = 0;
+									for(int i = trim[0]; i < trim[1]; i += subsample) tl.indices[ind++] = tmp[i];
+									createPcPlotDrawList(tl, ds, pcDrawListName);
+									tl.indices = tmp;
+									pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+								}
+								else{
+									auto found = std::find_if(ds.drawLists.begin(), ds.drawLists.end(), [&](TemplateList& tl){return tl.name == pcDrawListName;});
+									if(found == ds.drawLists.end()){
+										ds.drawLists.push_back(tl);
+										ds.drawLists.back().name = pcDrawListName;
+										ds.drawLists.back().indices.resize(int(ceilf(1.f * (trim[1] - trim[0]) / subsample)));
+										int ind = 0;
+										for(int i = trim[0]; i < trim[1]; i += subsample) ds.drawLists.back().indices[ind++] = tl.indices[i];
+									}
+									else{
+										if(debugLevel >= 1)
+											std::cout << "A template list with the same name is already existing! No template list is produced." << std::endl;
+									}
+								}
 							}
 							ImGui::SetItemDefaultFocus();
 							ImGui::SameLine();
@@ -10552,6 +10581,20 @@ int main(int, char**)
                         ImGui::OpenPopup("SPLITDATASET");
                     }
                     if(ImGui::BeginPopupModal("SPLITDATASET", NULL, ImGuiWindowFlags_AlwaysAutoResize)){
+						static int destination = 0; //0 corresponds to draw list as target, 1 is template lsits as target
+						if(ImGui::BeginTabBar("Destination")){
+							if(ImGui::BeginTabItem("Drawlist")){
+								destination = 0;
+								ImGui::Text("The resulting splits are delivered as Drawlists(instantly drawn)");
+								ImGui::EndTabItem();
+							}
+							if(ImGui::BeginTabItem("Templatelist")){
+								destination = 1;
+								ImGui::Text("The resulting splits are delivered as Templatelists(Are only list of indices)");
+								ImGui::EndTabItem();
+							}
+							ImGui::EndTabBar();
+						}
                         static int selectedAtt = 0;
                         static int amtOfGroups = 100;
 						static int splitType = 0;
@@ -10680,9 +10723,15 @@ int main(int, char**)
                             	//safe standard indexlist of default list
                             	for(int group = 0; group < amtOfGroups; ++group){
                             	    std::string t_name = ds.name + "_" + std::to_string(group);
-                            	    ds.drawLists.front().indices = indices[group];;
-                            	    createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
-									updateActiveIndices(g_PcPlotDrawLists.back());
+                            	    ds.drawLists.front().indices = indices[group];
+									if(destination == 0){
+                            	    	createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+										updateActiveIndices(g_PcPlotDrawLists.back());
+									}
+									else{
+										ds.drawLists.push_back(ds.drawLists.front());
+										ds.drawLists.back().name = t_name;
+									}
                             	}
 								}
                             	
@@ -10698,8 +10747,14 @@ int main(int, char**)
 									if(quant.emplace_back()) continue; //ignore empty quantiles
 									ds.drawLists.front().indices = quant;
 									std::string t_name = ds.name + "_" + std::to_string(i);
-									createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
-									updateActiveIndices(g_PcPlotDrawLists.back());
+									if(destination == 0){
+										createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+										updateActiveIndices(g_PcPlotDrawLists.back());
+									}
+									else{
+										ds.drawLists.push_back(ds.drawLists.front());
+										ds.drawLists.back().name = t_name;
+									}
 								}
 								}
 								break;
@@ -10715,9 +10770,15 @@ int main(int, char**)
 										std::remove_if(indices.begin(), indices.end(), [&](std::vector<uint32_t>& v){return v.empty();}); //ignore empty groups
 										for(int group = 0; group < indices.size(); ++group){
                             	    		std::string t_name = ds.name + "_" + std::to_string(group);
-                            	    		ds.drawLists.front().indices = indices[group];;
-                            	    		createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
-											updateActiveIndices(g_PcPlotDrawLists.back());
+                            	    		ds.drawLists.front().indices = indices[group];
+											if(destination == 0){
+                            	    			createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+												updateActiveIndices(g_PcPlotDrawLists.back());
+											}
+											else{
+												ds.drawLists.push_back(ds.drawLists.front());
+												ds.drawLists.back().name = t_name;
+											}
                             			}
 									}
 									else{
@@ -10736,15 +10797,22 @@ int main(int, char**)
 									indices.erase(std::remove_if(indices.begin(), indices.end(), [&](std::vector<uint32_t>& v){return v.empty();}), indices.end()); //ignore empty groups
 									for(int group = 0; group < indices.size(); ++group){
                             	    	std::string t_name = ds.name + "_" + std::to_string(group);
-                            	    	ds.drawLists.front().indices = indices[group];;
-                            	    	createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
-										updateActiveIndices(g_PcPlotDrawLists.back());
+                            	    	ds.drawLists.front().indices = indices[group];
+										if(destination == 0){
+                            	    		createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+											updateActiveIndices(g_PcPlotDrawLists.back());
+										}
+										else{
+											ds.drawLists.push_back(ds.drawLists.front());
+											ds.drawLists.back().name = t_name;
+										}
                             		}
 								}
 								break;
 							}
 							ds.drawLists.front().indices = sta;
-							pcPlotRender = true;
+							if(destination == 0)
+								pcPlotRender = true;
                             
                             ImGui::CloseCurrentPopup();
                         }
