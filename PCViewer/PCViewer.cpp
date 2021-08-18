@@ -10978,7 +10978,11 @@ int main(int, char**)
 					ImGui::OpenPopup(("drawListMenu" + dl.name).c_str());
 				}
 				bool openClusterSelection = false;
+				bool openDrawlistInfos = false;
 				if (ImGui::BeginPopup(("drawListMenu" + dl.name).c_str())) {
+					if(ImGui::MenuItem("Drawlist statistics")){
+						openDrawlistInfos = true;
+					}
 					if (ImGui::MenuItem("Immune to global brushes", "", &dl.immuneToGlobalBrushes)) {
 						pcPlotRender = updateActiveIndices(dl);
 					}
@@ -11224,6 +11228,22 @@ int main(int, char**)
 					if(ImGui::Button("Cancel")){
 						ImGui::CloseCurrentPopup();
 					};
+					ImGui::EndPopup();
+				}
+				static int currentActiveLines = 0;
+				if(openDrawlistInfos){
+					ImGui::OpenPopup("DrawListStatistics");
+					std::vector<uint8_t> activeIndices(std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& ds){return ds.name == dl.parentDataSet;})->data.size());
+					VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, activeIndices.size(), activeIndices.data());
+					currentActiveLines = 0;
+					for(uint8_t a: activeIndices) if(a) ++currentActiveLines;
+				}
+				if(ImGui::BeginPopupModal("DrawListStatistics")){
+					ImGui::Text("Parent dataset: %s", dl.parentDataSet.c_str());
+					ImGui::Text("Parent Templatelist: %s", dl.parentTemplateList->name.c_str());
+					ImGui::Text("Max amount of lines: %d", int(dl.indices.size()));
+					ImGui::Text("Current active Lines: %d", currentActiveLines);
+					if(ImGui::Button("Close")) ImGui::CloseCurrentPopup();
 					ImGui::EndPopup();
 				}
 				ImGui::NextColumn();
