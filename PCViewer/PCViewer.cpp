@@ -6151,10 +6151,10 @@ static void uploadDrawListTo3dView(DrawList& dl, int attribute) {
 static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
 	std::string path(filepath);
 	if (path.substr(path.find_last_of('.')) != ".csv") {
-		return;
 #ifdef _DEBUG
 		std::cout << "The filepath with filename given was not a .csv file. Instead " << path.substr(path.find_last_of('.')) << " was found." << std::endl;
 #endif
+		return;
 	}
 
 	//getting the parent dataset for the data
@@ -6192,10 +6192,10 @@ static void exportBrushAsCsv(DrawList& dl, const  char* filepath) {
 static void exportBrushAsIdxf(DrawList& dl, const char* filepath) {
 	std::string path(filepath);
 	if (path.substr(path.find_last_of('.')) != ".idxf") {
-		return;
 #ifdef _DEBUG
 		std::cout << "The filepath with filename given was not a .idxf file. Instead " << path.substr(path.find_last_of('.')) << " was found." << std::endl;
 #endif
+		return;
 	}
 	bool* act = new bool[dl.indices.size()];
 	VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, dl.indices.size() * sizeof(bool), act);
@@ -6206,6 +6206,51 @@ static void exportBrushAsIdxf(DrawList& dl, const char* filepath) {
 	}
 	file.close();
 	delete[] act;
+}
+
+
+static void exportTemplateListAsCsv(TemplateList& tl, const char* filepath){
+	std::string path(filepath);
+	if (path.substr(path.find_last_of('.')) != ".csv") {
+#ifdef _DEBUG
+		std::cout << "The filepath with filename given was not a .csv file. Instead " << path.substr(path.find_last_of('.')) << " was found." << std::endl;
+#endif
+		return;
+	}
+
+	auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& d){return d.name == tl.parentDataSetName;});
+
+	std::ofstream file(filepath);
+	//adding the attributes
+	for (int i = 0; i < pcAttributes.size(); i++) {
+		file << pcAttributes[i].name;
+		if (i != pcAttributes.size() - 1)
+			file << ",";
+	}
+	file << "\n";
+	//adding the data;
+	for (int i : tl.indices) {
+		for (int j = 0; j < pcAttributes.size(); j++) {
+			file << ds->data(i,j);
+			if (j != pcAttributes.size() - 1)
+				file << ",";
+		}
+		file << "\n";
+	}
+}
+
+static void exportTemplateListAsIdxf(TemplateList& tl, const char* filepath){
+	std::string path(filepath);
+	if (path.substr(path.find_last_of('.')) != ".idxf") {
+#ifdef _DEBUG
+		std::cout << "The filepath with filename given was not a .idxf file. Instead " << path.substr(path.find_last_of('.')) << " was found." << std::endl;
+#endif
+		return;
+	}
+	std::ofstream file(filepath);
+	for (int i : tl.indices) {
+		file << i << "\n";
+	}
 }
 
 //calculates the length of a vector of size pcAttributes.size()
@@ -10406,6 +10451,8 @@ int main(int, char**)
 					//Popup for converting a template list to brush
 					bool convertToGlobalBrush = false;
 					bool convertToLokalBrush = false;
+					bool exportIdxf = false;
+					bool exportCsv = false;
 					if (ImGui::BeginPopup("CONVERTTOBRUSH")) {
 						if (ImGui::MenuItem("Convert to global brush")) {
 							convertToGlobalBrush = true;
@@ -10413,6 +10460,14 @@ int main(int, char**)
 						}
 						if (ImGui::MenuItem("Convert to lokal brush")) {
 							convertToLokalBrush = true;
+							ImGui::CloseCurrentPopup();
+						}
+						if(ImGui::MenuItem("Safe as .Idxf")){
+							exportIdxf = true;
+							ImGui::CloseCurrentPopup();
+						}
+						if(ImGui::MenuItem("Safe as .csv")){
+							exportCsv = true;
 							ImGui::CloseCurrentPopup();
 						}
 						ImGui::EndPopup();
@@ -10503,7 +10558,41 @@ int main(int, char**)
 						if ((ImGui::Button("Cancel")) || ImGui::IsKeyPressed(KEYESC)) {
 							ImGui::CloseCurrentPopup();
 						}
+						
+						ImGui::EndPopup();
+					}
 
+					if(exportIdxf){
+						ImGui::OpenPopup("ExportIdxf");
+					}
+					if(ImGui::BeginPopupModal("ExportIdxf")){
+						static char exportFilename[300];
+						ImGui::InputText("Filename (has to include .idxf)", exportFilename, 300);
+						if(ImGui::Button("Export") || ImGui::IsKeyPressedMap(ImGuiKey_Enter)){
+							exportTemplateListAsIdxf(*convert, exportFilename);
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::SameLine();
+						if(ImGui::Button("Cancel") || ImGui::IsKeyPressedMap(ImGuiKey_Escape)){
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::EndPopup();
+					}
+
+					if(exportCsv){
+						ImGui::OpenPopup("ExportCsv");
+					}
+					if(ImGui::BeginPopupModal("ExportCsv")){
+						static char exportFilename[300];
+						ImGui::InputText("Filename (has to include .csv)", exportFilename, 300);
+						if(ImGui::Button("Export") || ImGui::IsKeyPressedMap(ImGuiKey_Enter)){
+							exportTemplateListAsCsv(*convert, exportFilename);
+							ImGui::CloseCurrentPopup();
+						}
+						ImGui::SameLine();
+						if(ImGui::Button("Cancel") || ImGui::IsKeyPressedMap(ImGuiKey_Escape)){
+							ImGui::CloseCurrentPopup();
+						}
 						ImGui::EndPopup();
 					}
 
