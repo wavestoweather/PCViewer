@@ -98,6 +98,10 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 //important vector holding all supported file formats
 std::vector<std::string> supportedDataFormats{ ".nc", ".csv", ".idxf", ".dlf" };
 
+// debug print settings
+std::vector<std::string> debugLevels{"NoInfos", "Error", "ErrorWarning", "ErrorWarningInfo"};
+static int debugLevel = 3;
+
 //defines for key ids
 #define KEYW 26
 #define KEYA 4
@@ -4721,7 +4725,7 @@ static bool openNetCDF(const char* filename){
 	}
 	ds.data.subsampleTrim(samplingRates, trimIndices);
 	ds.data.compress();
-    ds.reducedDataSetSize = ds.data.size();
+	ds.reducedDataSetSize = ds.data.size();
 
 	uint64_t packedSize = ds.data.packedByteSize();
 	if(ds.data.packedByteSize() > g_MaxStorageBufferSize){		//The data has to be split up.
@@ -10388,26 +10392,31 @@ int main(int, char**)
 
 						ImGui::Separator();
 						if ((ImGui::Button("Create")) || ImGui::IsKeyPressed(KEYENTER)) {
-							GlobalBrush brush = {};
-							brush.nam = std::string(n);
-							brush.id = std::string(n);
-							brush.active = true;
-							brush.useMultivariate = false;
-							brush.edited = false;
-							brush.parent = convert;
-							brush.kdTree = nullptr;
-							brush.parentDataset = &ds;
-							for (int i = 0; i < pcAttributes.size(); i++) {
-								if (activeBrushAttributes[i]) {
-									brush.brushes[i].push_back(std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]));
-								}
-								else {
-									brush.brushes[i] = {};
-								}
+							if(std::string(n).empty()){
+								if(debugLevel >= 1)
+									std::cout << "The name for the new Brush musn't be empyt!" << std::endl;
 							}
-							globalBrushes.push_back(brush);
-							pcPlotRender = updateAllActiveIndices();
-
+							else{
+								GlobalBrush brush = {};
+								brush.nam = std::string(n);
+								brush.id = std::string(n);
+								brush.active = true;
+								brush.useMultivariate = false;
+								brush.edited = false;
+								brush.parent = convert;
+								brush.kdTree = nullptr;
+								brush.parentDataset = &ds;
+								for (int i = 0; i < pcAttributes.size(); i++) {
+									if (activeBrushAttributes[i]) {
+										brush.brushes[i].push_back(std::pair<int, std::pair<float, float>>(currentBrushId++, convert->minMax[i]));
+									}
+									else {
+										brush.brushes[i] = {};
+									}
+								}
+								globalBrushes.push_back(brush);
+								pcPlotRender = updateAllActiveIndices();
+							}
 							ImGui::CloseCurrentPopup();
 						}
 						ImGui::SameLine();
@@ -10959,32 +10968,32 @@ int main(int, char**)
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::Separator();
-					if (ImGui::MenuItem("Send to Bubble plotter")) {
-						DataSet* parent;
-						for (auto it = g_PcPlotDataSets.begin(); it != g_PcPlotDataSets.end(); ++it) {
-							if (it->name == dl.parentDataSet) {
-								parent = &(*it);
-							}
-						}
-						std::vector<uint32_t> ids;
-						std::vector<std::string> attributeNames;
-						std::vector<std::pair<float, float>> attributeMinMax;
-						for (int i = 0; i < pcAttributes.size(); ++i) {
-							attributeNames.push_back(pcAttributes[i].name);
-							attributeMinMax.push_back({ pcAttributes[i].min,pcAttributes[i].max });
-						}
-						bubblePlotter->setBubbleData(dl.indices, attributeNames, attributeMinMax, parent->data, dl.buffer, dl.activeIndicesBufferView, attributeNames.size(), parent->data.size());
+					//if (ImGui::MenuItem("Send to Bubble plotter")) {
+					//	DataSet* parent;
+					//	for (auto it = g_PcPlotDataSets.begin(); it != g_PcPlotDataSets.end(); ++it) {
+					//		if (it->name == dl.parentDataSet) {
+					//			parent = &(*it);
+					//		}
+					//	}
+					//	std::vector<uint32_t> ids;
+					//	std::vector<std::string> attributeNames;
+					//	std::vector<std::pair<float, float>> attributeMinMax;
+					//	for (int i = 0; i < pcAttributes.size(); ++i) {
+					//		attributeNames.push_back(pcAttributes[i].name);
+					//		attributeMinMax.push_back({ pcAttributes[i].min,pcAttributes[i].max });
+					//	}
+					//	bubblePlotter->setBubbleData(dl.indices, attributeNames, attributeMinMax, parent->data, dl.buffer, dl.activeIndicesBufferView, attributeNames.size(), parent->data.size());
 
-						//Debugging of histogramms
-						//histogramManager->setNumberOfBins(100);
-						//histogramManager->computeHistogramm(dl.name, dl.activeInd, attributeMinMax, parent->buffer.buffer, parent->data.size());
-						//for (auto& i : histogramManager->getHistogram(dl.name).bins)
-						//{
-						//	std::for_each(i.begin(), i.end(), [](uint32_t a) {std::cout << a << ","; });
-						//	std::cout << std::endl;
-						//}
-					}
-					ImGui::Separator();
+					//	//Debugging of histogramms
+					//	//histogramManager->setNumberOfBins(100);
+					//	//histogramManager->computeHistogramm(dl.name, dl.activeInd, attributeMinMax, parent->buffer.buffer, parent->data.size());
+					//	//for (auto& i : histogramManager->getHistogram(dl.name).bins)
+					//	//{
+					//	//	std::for_each(i.begin(), i.end(), [](uint32_t a) {std::cout << a << ","; });
+					//	//	std::cout << std::endl;
+					//	//}
+					//}
+					//ImGui::Separator();
 					static float bundlesAmt = 1;
 					static bool changed = true;
 					changed |= ImGui::SliderFloat("Bundles amount", &bundlesAmt, .01f, 10.0f);
@@ -11028,6 +11037,55 @@ int main(int, char**)
 					dl.renderClusterBundles &= bool(dl.clusterBundles);
 					if(ImGui::SliderFloat("Halo size", &pcSettings.haloWidth, 0, 1.01f)){
 						pcPlotRender = true;
+					}
+
+					ImGui::Separator();
+					static char templateListName[200];
+					ImGui::InputText("##templateListName", templateListName, 200);
+					ImGui::SameLine();
+					if(ImGui::MenuItem("Convert to Template List")){
+						std::string listName(templateListName);
+						if(listName.empty()){
+							if(debugLevel >= 1)
+								std::cout << "No name entered!" << std::endl;
+						}
+						else{
+							auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&] (DataSet& s){return s.name == dl.parentDataSet;});
+							auto tl = std::find_if(ds->drawLists.begin(), ds->drawLists.end(), [&](TemplateList& t){return t.name == listName;});
+							if(tl != ds->drawLists.end()){
+								if(debugLevel >= 1)
+									std::cout << "Template list name already exists for the derived Data Set!" << std::endl;
+							}
+							else{
+								//now converting to template list
+								ds->drawLists.push_back({});
+								auto& curTl = ds->drawLists.back();
+								curTl.name = listName;
+								curTl.buffer = ds->buffer.buffer;
+								curTl.parentDataSetName = ds->name;
+								curTl.pointRatio = 1;
+								curTl.minMax = std::vector<std::pair<float, float>>(pcAttributes.size(), {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()});
+								std::vector<uint8_t> activeIndices(ds->data.size());
+								VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, activeIndices.size(), activeIndices.data());
+								for(uint32_t i = 0; i < activeIndices.size(); ++i){
+									if(activeIndices[i]){
+										curTl.indices.push_back(i);
+										for(int a = 0; a < pcAttributes.size(); ++a){
+											float curVal = ds->data(i, a);
+											if(curVal < curTl.minMax[a].first){
+												curTl.minMax[a].first = curVal;
+											}
+											if(curVal > curTl.minMax[a].second){
+												curTl.minMax[a].second = curVal;
+											}
+										}
+									}
+								}
+								if(debugLevel >= 3){
+									std::cout << "Drawlist to Templatelist conversion done" << std::endl;
+								}
+							}
+						}
 					}
 
 					ImGui::EndPopup();
