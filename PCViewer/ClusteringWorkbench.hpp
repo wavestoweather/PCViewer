@@ -14,6 +14,9 @@ public:
         clusterSettings.kmeansClusters = 10;
         clusterSettings.kmeansInitMethod = DataClusterer::InitMethod::PlusPlus;
         clusterSettings.maxIterations = 20;
+        
+        clusterSettings.dbscanEpsilon = .01f;
+        clusterSettings.dbscanMinPoints = 10;
     }
 
     //draws a standard imgui window with all functionalyties for the clustering workbench
@@ -22,13 +25,30 @@ public:
         if(ImGui::Begin("Clustering Workbench", &active)){
             ImGui::Text("Data Projection:");
             static int datasetIndex = 0;
+            static int templateListIndex = 0;
             static char* defaultName = "No datasets available";
+            static char* defaultTemplate = "Dataset has to be selected";
             auto ds = datasets.begin(); std::advance(ds, datasetIndex);
             if(ImGui::BeginCombo("Dataset to cluster", datasetIndex < datasets.size() ? ds->name.c_str(): defaultName)){
                 int c = 0;
                 for(auto& ds: datasets){
                     if(ImGui::MenuItem(ds.name.c_str())){
                         datasetIndex = c;
+                    }
+                    ++c;
+                }
+                ImGui::EndCombo();
+            }
+            std::list<TemplateList>::iterator tl;
+            if(datasetIndex < datasets.size()){
+                templateListIndex = std::min(templateListIndex, int(ds->drawLists.size() - 1));
+                tl = ds->drawLists.begin(); std::advance(tl, templateListIndex);
+            }
+            if(ImGui::BeginCombo("Templatelist to cluster", datasetIndex < datasets.size() ? tl->name.c_str() : defaultTemplate)){
+                int c = 0;
+                for(auto& tl: ds->drawLists){
+                    if(ImGui::MenuItem(tl.name.c_str())){
+                        templateListIndex = c;
                     }
                     ++c;
                 }
@@ -42,7 +62,7 @@ public:
                     if(i < activations.size() - 1) ImGui::SameLine();
                 }
             }
-            if(ImGui::InputInt("Reduction dimension", &projectionDimension)) projectionDimension = std::clamp(projectionDimension, 1, 100);
+            if(ImGui::InputInt("Reduction dimension", &projectionDimension)) projectionDimension = std::max(projectionDimension, 1);
             if(ImGui::BeginTabBar("ProjectionTabBar")){
                 if(ImGui::BeginTabItem("PCA")){
                     projectorMethod = DataProjector::Method::PCA;
@@ -77,7 +97,7 @@ public:
                     if(n) indices.push_back(c);
                     ++c;
                 }
-                projector = new DataProjector(datasets.front().data, 2, projectorMethod, projectionSettings, indices);
+                projector = new DataProjector(datasets.front().data, projectionDimension, projectorMethod, projectionSettings, tl->indices, indices);
             }
             if(disabled) {
                 ImGui::PopItemFlag();
@@ -205,10 +225,10 @@ public:
     }
     bool active = false;
     int projectionDimension = 2;
-    DataProjector::ProjectionSettings projectionSettings{2000.0, 1.0, -1, 100, 0, 700, false};
+    DataProjector::ProjectionSettings projectionSettings{20.0, 1.0, -1, 100, 0, 700, false};
     DataProjector::Method projectorMethod = DataProjector::Method::PCA;
     DataProjector* projector = 0;
-    DataClusterer::ClusterSettings clusterSettings{};
+    DataClusterer::ClusterSettings clusterSettings;
     DataClusterer::Method clusterMethod = DataClusterer::Method::KMeans;
     DataClusterer* clusterer = 0;
 
@@ -218,23 +238,4 @@ protected:
     std::list<DataSet>& datasets;
     const std::vector<Attribute>& attributes;
     std::vector<uint8_t> activations;
-
-    void cluster(){
-	    DataProjector projector(datasets.front().data, 2, DataProjector::Method::PCA, {});
-	    while(!projector.projected){
-	    	std::cout << "\r" << projector.progress << std::flush;
-	    }
-	    std::cout << std::endl;
-	    projector.future.wait();
-	    DataClusterer::ClusterSettings settings;
-	    settings.maxIterations = 100;
-	    settings.distanceMetric = DataClusterer::DistanceMetric::Norm;
-	    settings.kmeansClusters = 10;
-	    settings.kmeansInitMethod = DataClusterer::InitMethod::PlusPlus;
-	    settings.kmeansMethod = DataClusterer::KMethod::Mean;
-	    DataClusterer clusterer(projector.projectedPoints, DataClusterer::Method::KMeans, settings);
-	    while(!clusterer.clustered) std::cout << "\r" << clusterer.progress << std::flush;
-	    clusterer.future.wait();
-	    std::cout << std::endl;
-    }
 };

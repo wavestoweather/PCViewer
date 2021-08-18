@@ -26,12 +26,12 @@ public:
         bool skipRandomInit;
     };
 
-    DataProjector(const Data& data, int reducedDimensionSize, Method projectionMethod, const ProjectionSettings& settings, std::vector<uint32_t> indices = {}):data(data), reducedDimensionSize(reducedDimensionSize), projectionMethod(projectionMethod){
-        if(indices.empty()){
-            this->indices.resize(data.size());
-            for(uint32_t i = 0; i < indices.size(); ++i) this->indices[i] = i;
+    DataProjector(const Data& data, int reducedDimensionSize, Method projectionMethod, const ProjectionSettings& settings, std::vector<uint32_t>& indices, std::vector<uint32_t> attributeIndices = {}):data(data), reducedDimensionSize(reducedDimensionSize), projectionMethod(projectionMethod), indices(indices){
+        if(attributeIndices.empty()){
+            this->attributeIndices.resize(data.columns.size());
+            for(uint32_t i = 0; i < indices.size(); ++i) this->attributeIndices[i] = i;
         }
-        else this->indices = indices;
+        else this->attributeIndices = attributeIndices;
         this->settings = settings;
         future = std::async(runAsync, this);
     }
@@ -60,19 +60,19 @@ public:
 
 protected:
     const Data& data;
-    std::vector<uint32_t> indices;
+    std::vector<uint32_t> attributeIndices, &indices;
     ProjectionSettings settings;
     const float eps = 1e-6;
     Method projectionMethod;
     Eigen::MatrixXf getDataMatrix(){
         //data to eigen matrix
-        Eigen::MatrixXf d(data.size(), indices.size());
-        for(int i = 0; i < data.size(); ++i){
-            for(int  c = 0; c < indices.size(); ++c){
-                d(i,c) = data(i,indices[c]);
+        Eigen::MatrixXf d(indices.size(), attributeIndices.size());
+        for(int i = 0; i < indices.size(); ++i){
+            for(int  c = 0; c < attributeIndices.size(); ++c){
+                d(i,c) = data(indices[i],attributeIndices[c]);
             }
         }
-        //zero center and normalize data + perfrom svd
+        //zero center and normalize
         Eigen::RowVectorXf meanCols = d.colwise().mean();
         d = d.rowwise() - meanCols;
         Eigen::RowVectorXf mins = d.colwise().minCoeff(), diff = d.colwise().maxCoeff() - mins;
