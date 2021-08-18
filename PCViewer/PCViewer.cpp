@@ -10331,9 +10331,12 @@ int main(int, char**)
 					static TemplateList* convert = nullptr;
 					int c = 0;		//counter to reduce the amount of template lists being drawn
 					for (TemplateList& tl : ds.drawLists) {
+						static int subsample = 1, trim[2];
 						if (c++ > 10000)break;
 						if (ImGui::Button(tl.name.c_str())) {
 							ImGui::OpenPopup(tl.name.c_str());
+							trim[0] = 0;
+							trim[1] = tl.indices.size();
 							strcpy(pcDrawListName, tl.name.c_str());
 						}
 						if (ImGui::IsItemClicked(1)) {
@@ -10345,12 +10348,23 @@ int main(int, char**)
 							ImGui::Text((std::string("Creating a drawing list from ") + tl.name + "\n\n").c_str());
 							ImGui::Separator();
 							ImGui::InputText("Drawlist Name", pcDrawListName, 200);
+							if(ImGui::CollapsingHeader("Subsample/Trim")){
+								if(ImGui::InputInt("Subsampling Rate", &subsample)) subsample = std::max(subsample, 1);
+								if(ImGui::InputInt2("Trim indcies",trim)){
+									trim[0] = std::clamp(trim[0], 0, trim[1] - 1);
+									trim[1] = std::clamp(trim[1], trim[0] + 1, int(tl.indices.size()));
+								}
+							}
 
 							if ((ImGui::Button("Create", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYENTER))
 							{
 								ImGui::CloseCurrentPopup();
-
+								auto tmp = tl.indices;
+								tl.indices.resize(int(ceilf(1.f * (trim[1] - trim[0]) / subsample)));
+								int ind = 0;
+								for(int i = trim[0]; i < trim[1]; i += subsample) tl.indices[ind++] = tmp[i];
 								createPcPlotDrawList(tl, ds, pcDrawListName);
+								tl.indices = tmp;
 								pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 							}
 							ImGui::SetItemDefaultFocus();
