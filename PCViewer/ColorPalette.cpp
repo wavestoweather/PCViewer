@@ -129,6 +129,7 @@ std::vector<char*> ColorPalette::convVecStrToChar(const std::vector<std::string>
 
 }
 
+//note to alexander: This is an incredible unstable bit of code(Actually the memory of pc is deallocated when the function exits)...
 char* ColorPalette::convStrToChar(const std::string & s)
 {
     std::unique_ptr<char[]> pc(new char[s.size()+1]); // = new char[s.size()+1];

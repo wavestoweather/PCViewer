@@ -12745,6 +12745,8 @@ int main(int, char**)
 					//violinDrawlistPlots[i].colorPaletteManager->useColorPalette = false;				
 				}
 
+				includeColorbrewerToViolinPlot(violinAttributePlots[i].colorPaletteManager, &violinAttributePlots[i].drawListLineColors, &violinAttributePlots[i].drawListFillColors);
+
 
 				ImGui::Columns(previousNrOfColumns);
 
