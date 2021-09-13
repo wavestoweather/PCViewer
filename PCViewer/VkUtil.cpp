@@ -193,7 +193,7 @@ void VkUtil::commitCommandBuffer( VkQueue queue, VkCommandBuffer commandBuffer)
 	check_vk_result(err);
 }
 
-void VkUtil::beginRenderPass(VkCommandBuffer commandBuffer, std::vector<VkClearValue>& clearValues, VkRenderPass renderPass, VkFramebuffer framebuffer, VkExtent2D extend)
+void VkUtil::beginRenderPass(VkCommandBuffer commandBuffer, const std::vector<VkClearValue>& clearValues, VkRenderPass renderPass, VkFramebuffer framebuffer, VkExtent2D extend)
 {
 	VkRenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -208,7 +208,7 @@ void VkUtil::beginRenderPass(VkCommandBuffer commandBuffer, std::vector<VkClearV
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
 
-void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, const std::vector<VkDynamicState>& dynamicStates, VkShaderModule* shaderModules, VkPrimitiveTopology topology, VkPipelineRasterizationStateCreateInfo* rasterizerInfo, VkPipelineMultisampleStateCreateInfo* multisamplingInfo, VkPipelineDepthStencilStateCreateInfo* depthStencilInfo, BlendInfo* blendInfo, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkRenderPass* renderPass, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline)
+void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, const std::vector<VkDynamicState>& dynamicStates, VkShaderModule* shaderModules, VkPrimitiveTopology topology, VkPipelineRasterizationStateCreateInfo* rasterizerInfo, VkPipelineMultisampleStateCreateInfo* multisamplingInfo, VkPipelineDepthStencilStateCreateInfo* depthStencilInfo, BlendInfo* blendInfo, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkRenderPass* renderPass, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline, const std::vector<VkPushConstantRange>& pushConstantRanges)
 {
 	VkResult err;
 
@@ -292,8 +292,8 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutInfo.setLayoutCount = descriptorSetLayouts.size();
 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+	pipelineLayoutInfo.pushConstantRangeCount = pushConstantRanges.size();
+	pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
 
 	err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, pipelineLayout);
 	check_vk_result(err);

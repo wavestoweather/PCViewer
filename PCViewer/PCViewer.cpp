@@ -58,6 +58,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "DrawlistColorPalette.hpp"
 #include "LineBundles.hpp"
 #include "ClusteringWorkbench.hpp"
+#include "ScatterplotWorkbench.hpp"
 
 #include "ColorPalette.h"
 
@@ -794,6 +795,8 @@ struct IsoSettings {
 	glm::uvec3 posIndices{ 1,0,2 };
 }static brushIsoSurfSettings;
 static IsoSettings isoSurfSettings;
+
+static ScatterplotWorkbench* scatterplotWorkbench;
 
 //variables for animation
 static std::chrono::steady_clock::time_point animationStart(std::chrono::duration<int>(0));
@@ -7360,6 +7363,10 @@ int main(int, char**)
 		histogramManager = new HistogramManager(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool, violinPlotBinsSize);
 	}
 
+	{// scatterplot workbench
+		scatterplotWorkbench = new ScatterplotWorkbench({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
+	}
+
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	transferFunctionEditor = new TransferFunctionEditor(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
@@ -7858,6 +7865,7 @@ int main(int, char**)
 					ImGui::EndMenu();
 				}
 				ImGui::MenuItem("Clustering workbench", "", &clusteringWorkbench.active);
+				ImGui::MenuItem("Scatterplot workbench", "", &scatterplotWorkbench->active);
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Options")) {
@@ -14248,6 +14256,8 @@ int main(int, char**)
 
 		clusteringWorkbench.draw();
 
+		scatterplotWorkbench->draw();
+
 		pcSettings.rescaleTableColumns = false;
 
 		// Rendering
@@ -14355,6 +14365,7 @@ int main(int, char**)
 		delete drawListColorPalette;
 		delete gpuBrusher;
 		delete histogramManager;
+		delete scatterplotWorkbench;
 
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.kdTree) delete gb.kdTree;
