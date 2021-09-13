@@ -4,6 +4,7 @@
 #include<vector>
 #include<string>
 #include"imgui/imgui.h"
+#include"imgui/imgui_impl_vulkan.h"
 #include"VkUtil.h"
 #include"PCUtil.h"
 #include"Structures.hpp"
@@ -91,6 +92,7 @@ public:
         VkSampler sampler{};
         VkFramebuffer framebuffer{};
         VkDeviceMemory imageMemory{};
+        VkDescriptorSet resultImageSet{};
         std::vector<bool> activeAttributes;
         std::vector<Attribute>& attributes;
         std::vector<DrawListInstance> dls;
@@ -156,12 +158,26 @@ public:
                 VkUtil::commitCommandBuffer(context.queue, command);
                 res = vkQueueWaitIdle(context.queue);
                 vkFreeCommandBuffers(context.device, context.commandPool, 1, &command);
+
+                if(resultImageSet) vkFreeDescriptorSets(context.device, context.descriptorPool, 1, &resultImageSet);
+                resultImageSet = static_cast<VkDescriptorSet>(ImGui_ImplVulkan_AddTexture(sampler, resultImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, context.device, context.descriptorPool));
             }
         }
 
         void draw(int index){
             ImGui::BeginChild(("Scatterplot" + std::to_string(index)).c_str());
-
+            ImGui::Text("Drawlists");
+            for(DrawListInstance& dl: dls){
+                ImGui::Text(dl.drawListName.c_str());
+            }
+            ImGui::Image(static_cast<ImTextureID>(resultImageSet), ImVec2{curWidth, curHeight});
+            if(ImGui::BeginDragDropTarget()){
+                if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")){
+                    DrawList* dl = *((DrawList**)payload->Data);
+                    addDrawList(*dl);
+                }
+            }
+            
             ImGui::EndChild();
         };
 
