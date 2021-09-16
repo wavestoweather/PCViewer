@@ -11,7 +11,7 @@ layout(std430, binding = 2) buffer Ind{
     uint i[];
 } indices;
 
-layout(std430, binding = 2) buffer Buffer{
+layout(std430, binding = 3) buffer Buffer{
     float spacing;
     float radius;
     uint inactiveSquare;    //last bit inactive, second last square
@@ -42,12 +42,20 @@ void main() {
         float y = getPackedData(ind, pConst.yAttr);
         //normalization
         x = (x - ubo.minMax[2 * pConst.xAttr]) / (ubo.minMax[2 * pConst.xAttr + 1] - ubo.minMax[2 * pConst.xAttr]);
-        y = (y - ubo.minMax[2 * pConst.yAttr]) / (ubo.minMax[2 * pConst.yAttr + 1] - ubo.minMax[2 * pConst.yAttr]);
+        y = 1 - (y - ubo.minMax[2 * pConst.yAttr]) / (ubo.minMax[2 * pConst.yAttr + 1] - ubo.minMax[2 * pConst.yAttr]);
         gl_PointSize = ubo.radius;
         if(x < 0 || y < 0 || x > 1 || y > 1) gl_Position = vec4(-2,-2,-2,1);
-        else gl_Position = vec4((x - (ubo.matrixSize - 1) * ubo.spacing) / (ubo.matrixSize) + pConst.posX * (1.0f / (ubo.matrixSize- 1) + ubo.spacing / 2),
-                                (y - (ubo.matrixSize - 1) * ubo.spacing) / (ubo.matrixSize) + pConst.posY * (1.0f / (ubo.matrixSize- 1) + ubo.spacing / 2),
-                                .5,1);
+        else{
+            float blockTotalWidth = 1.0 / (ubo.matrixSize - 1);
+            float blockWidth = blockTotalWidth * (1.0 - ubo.spacing);
+            x *= blockWidth;
+            x += pConst.posX * blockTotalWidth;
+            y *= blockWidth;
+            y += pConst.posY * blockTotalWidth;
+            x = x * 2 - 1;
+            y = y * 2 - 1;
+            gl_Position = vec4(x, y, .5,1);
+        }
         if(lineActive) color = ubo.color;
         else color = ubo.inactiveColor;
     }

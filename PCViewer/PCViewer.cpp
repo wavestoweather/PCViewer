@@ -141,7 +141,7 @@ static int debugLevel = 3;
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -7364,7 +7364,7 @@ int main(int, char**)
 	}
 
 	{// scatterplot workbench
-		scatterplotWorkbench = new ScatterplotWorkbench({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
+		scatterplotWorkbench = new ScatterplotWorkbench({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, pcAttributes);
 	}
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;

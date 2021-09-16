@@ -18,6 +18,7 @@ public:
         // each drawlist which is assigned to the scatterplot has stored its information in the DrawListInstance struct
         struct DrawListInstance{
             VkUtil::Context context{};
+            bool active{true};
             std::string drawListName{};
             VkBuffer data{};
             VkBuffer indices{};
@@ -43,7 +44,7 @@ public:
             activeData(activeData),
             indicesSize(indicesSize)
             {
-                uint32_t uboSize = sizeof(UBO) + 2 * attributes.size();
+                uint32_t uboSize = sizeof(UBO) + 2 * attributes.size() * sizeof(float);
                 VkUtil::createBuffer(context.device, uboSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubo);
                 VkMemoryRequirements memReq;
                 vkGetBufferMemoryRequirements(context.device, ubo, &memReq);
@@ -65,11 +66,12 @@ public:
             }
 
             void updateUniformBufferData(const std::vector<Attribute>& attributes){
-                uint32_t uboSize = sizeof(UBO) + 2 * attributes.size();
+                uint32_t uboSize = sizeof(UBO) + 2 * attributes.size() * sizeof(float);
                 std::vector<uint8_t> uniformBytes(uboSize);
                 std::copy(reinterpret_cast<uint8_t*>(&uniformBuffer), reinterpret_cast<uint8_t*>((&uniformBuffer) + 1), uniformBytes.begin());
                 float* miMa = reinterpret_cast<float*>(uniformBytes.data() + sizeof(UBO));
                 for(int i = 0; i < attributes.size(); ++i){
+                    //std::cout << reinterpret_cast<ulong>(miMa + 2 * i) << "|" << reinterpret_cast<ulong>(uniformBytes.data() + uboSize) << std::endl;
                     assert(reinterpret_cast<uint8_t*>(miMa + 2 * i) < uniformBytes.data() + uboSize);
                     miMa[2 * i] = attributes[i].min;
                     miMa[2 * i + 1] = attributes[i].max;
@@ -93,23 +95,27 @@ public:
         VkFramebuffer framebuffer{};
         VkDeviceMemory imageMemory{};
         VkDescriptorSet resultImageSet{};
-        std::vector<bool> activeAttributes;
+        uint activeAttributesCount{};
+        std::vector<uint8_t> activeAttributes;
         std::vector<Attribute>& attributes;
         std::vector<DrawListInstance> dls;
-        float matrixSpacing{.01f};
+        float matrixSpacing{.05f};
         bool showInactivePoints{true};
 
         //external vulkan resources (dont have to be destroyed)
         VkRenderPass renderPass;
         VkDescriptorSetLayout descriptorSetLayout;
+        VkPipeline pipeline;
         VkPipelineLayout pipelineLayout;
 
-        ScatterPlot(VkUtil::Context context, int width, int height, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout, VkPipelineLayout pipelineLayout, std::vector<Attribute>& attributes): 
+        ScatterPlot(VkUtil::Context context, int width, int height, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout, VkPipeline pipeline, VkPipelineLayout pipelineLayout, std::vector<Attribute>& attributes): 
         context(context), 
         renderPass(renderPass),
+        activeAttributesCount(attributes.size()),
         activeAttributes(attributes.size(), true), 
         attributes(attributes),
         descriptorSetLayout(descriptorSetLayout),
+        pipeline(pipeline),
         pipelineLayout(pipelineLayout)
         {
             resizeImage(width, height);
@@ -154,7 +160,6 @@ public:
                 VkCommandBuffer command;
                 VkUtil::createCommandBuffer(context.device, context.commandPool, &command);
                 VkUtil::transitionImageLayout(command, resultImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                vkEndCommandBuffer(command);
                 VkUtil::commitCommandBuffer(context.queue, command);
                 res = vkQueueWaitIdle(context.queue);
                 vkFreeCommandBuffers(context.device, context.commandPool, 1, &command);
@@ -165,46 +170,106 @@ public:
         }
 
         void draw(int index){
-            ImGui::BeginChild(("Scatterplot" + std::to_string(index)).c_str());
+            ImGui::BeginChild(("Scatterplot" + std::to_string(index)).c_str(),{0,0}, true);
+            ImGui::Text("Attribute activations:");
+            for(int i = 0; i < attributes.size(); ++i){
+                if(i != 0) ImGui::SameLine();
+                if(ImGui::Checkbox((attributes[i].name + "##scatter").c_str(), (bool*)&activeAttributes[i])){
+                    activeAttributesCount = 0;
+                    for(auto x: activeAttributes) if(x) ++activeAttributesCount;
+                    updatePlot();
+                }
+            }
             ImGui::Text("Drawlists");
             for(DrawListInstance& dl: dls){
-                ImGui::Text(dl.drawListName.c_str());
+                if(ImGui::Checkbox((dl.drawListName + "##scatter").c_str(), &dl.active)){
+                    updatePlot();
+                }
+                ImGui::SameLine(200);
+                if(ImGui::ColorEdit4(("Color##scatter"+ dl.drawListName).c_str(), dl.uniformBuffer.color, ImGuiColorEditFlags_NoInputs)){
+                    dl.updateUniformBufferData(attributes);
+                    updatePlot();
+                }
+                ImGui::SameLine(300);
+                if(ImGui::Checkbox(("Deactivated Lines##" + dl.drawListName).c_str(), (bool*)&dl.uniformBuffer.showInactivePoints)){
+                    dl.updateUniformBufferData(attributes);
+                    updatePlot();
+                }
+                ImGui::SameLine(500);
+                if(ImGui::ColorEdit4(("ColorInactive##scatter"+ dl.drawListName).c_str(), dl.uniformBuffer.inactiveColor, ImGuiColorEditFlags_NoInputs)){
+                    dl.updateUniformBufferData(attributes);
+                    updatePlot();
+                }
+                ImGui::SameLine(600);
+                if(ImGui::SliderFloat(("Radius##scatter"+dl.drawListName).c_str(), &dl.uniformBuffer.radius, 1, 20)){
+                    dl.updateUniformBufferData(attributes);
+                    updatePlot();
+                }
+                
+            }
+            //Plot section
+            ImGui::Separator();
+            float xSpacing = curWidth / (activeAttributesCount - 1);
+            float curSpace = 0;
+            bool firstLabel = true;
+            for(int i = 0; i < attributes.size() - 1; ++i){
+                if(!activeAttributes[i]) continue;
+                if(!firstLabel) ImGui::SameLine(curSpace); 
+                if(firstLabel) firstLabel = false;
+                ImGui::Text(attributes[i].name.c_str());
+                curSpace += xSpacing;
             }
             ImGui::Image(static_cast<ImTextureID>(resultImageSet), ImVec2{curWidth, curHeight});
             if(ImGui::BeginDragDropTarget()){
                 if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")){
                     DrawList* dl = *((DrawList**)payload->Data);
                     addDrawList(*dl);
+                    updatePlot();
                 }
             }
             
             ImGui::EndChild();
         };
 
+        void updatePlot(){
+            VkCommandBuffer commandBuffer;
+            VkUtil::createCommandBuffer(context.device, context.commandPool, &commandBuffer);
+            updateRender(commandBuffer);
+            VkUtil::commitCommandBuffer(context.queue, commandBuffer);
+            VkResult res = vkQueueWaitIdle(context.queue); check_vk_result(res);
+            vkFreeCommandBuffers(context.device, context.commandPool, 1, &commandBuffer);
+        }
+
         void updateRender(VkCommandBuffer commandBuffer){
             uint32_t matrixSize = 0;
-            for(bool b: activeAttributes) if(b) ++matrixSize;
+            for(uint8_t b: activeAttributes) if(b) ++matrixSize;
             VkUtil::transitionImageLayout(commandBuffer, resultImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             VkUtil::beginRenderPass(commandBuffer, {{0,0,0,1}}, renderPass, framebuffer, {uint32_t(curWidth), uint32_t(curHeight)});
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            VkViewport viewport{0, 0, curWidth, curHeight, 0,1};
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            VkRect2D scissor{{0,0}, {curWidth, curHeight}};
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             for(DrawListInstance& dl: dls){
+                if(!dl.active) continue;
                 //update descriptor set values
                 dl.uniformBuffer.spacing = matrixSpacing;
                 dl.uniformBuffer.matrixSize = matrixSize;
-                dl.uniformBuffer.showInactivePoints = showInactivePoints;
                 dl.updateUniformBufferData(attributes);
 
                 //TODO draw for all scatter plots + set dynamic states
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &dl.descSet, 0, nullptr);
-                int posX = 0, posY = 0;
+                int posX = 0, posY = matrixSize - 2;
                 for(int i = 0; i < attributes.size(); ++i){
                     if(!activeAttributes[i]) continue;
-                    for(int j = i + 1; j < attributes.size(); ++j){
+                    for(int j = attributes.size() - 1; j > i; --j){
                         if(!activeAttributes[j]) continue;
                         PushConstant pc{posX, posY, i, j};
                         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pc);
                         vkCmdDraw(commandBuffer, dl.indicesSize, 1, 0, 0);
-                        ++posY;
+                        --posY;
                     }
+                    posY = matrixSize - 2;
                     ++posX;
                 }
             }
@@ -214,22 +279,18 @@ public:
 
         void addDrawList(DrawList& dl){
             dls.emplace_back(context, dl.name, dl.buffer, dl.activeIndicesBufferView, dl.indicesBuffer, dl.indices.size(), descriptorSetLayout, attributes);
-            //update only the new scatterplot entry
-            VkCommandBuffer commandBuffer;
-            VkUtil::createCommandBuffer(context.device, context.commandPool, &commandBuffer);
-            updateRender(commandBuffer);
-            VkUtil::commitCommandBuffer(context.queue, commandBuffer);
-            VkResult res = vkQueueWaitIdle(context.queue); check_vk_result(res);
-            vkFreeCommandBuffers(context.device, context.commandPool, 1, &commandBuffer);
+            activeAttributes.resize(attributes.size(), 1);
+            activeAttributesCount = 0;
+            for(auto x: activeAttributes) if(x) ++activeAttributesCount;
         }
     };
 
-    ScatterplotWorkbench(VkUtil::Context context): context(context){
+    ScatterplotWorkbench(VkUtil::Context context, std::vector<Attribute>& attributes): context(context), attributes(attributes){
         createPipeline();
     }
 
     void addPlot(std::vector<Attribute>& attributes){
-        scatterPlots.emplace_back(context, defaultWidth, defaultHeight, renderPass, descriptorSetLayout, pipelineLayout, attributes);
+        scatterPlots.emplace_back(context, defaultWidth, defaultHeight, renderPass, descriptorSetLayout, pipeline, pipelineLayout, attributes);
     }
 
     ~ScatterplotWorkbench(){
@@ -241,10 +302,13 @@ public:
 
     void draw(){
         if(!active) return;
-        ImGui::Begin("Scatterplot Workbench");
+        ImGui::Begin("Scatterplot Workbench", &active);
         int c = 0;
         for(ScatterPlot& s: scatterPlots){
             s.draw(c++);
+        }
+        if(ImGui::Button("+", ImVec2{500,0})){
+            addPlot(attributes);
         }
         ImGui::End();
     }
@@ -252,6 +316,7 @@ public:
     void updateRenders(const std::vector<int>& attrIndices){
         VkCommandBuffer commandBuffer;
         VkUtil::createCommandBuffer(context.device, context.commandPool, &commandBuffer);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         for(ScatterPlot& s: scatterPlots){
             bool change = false;
             for(int i: attrIndices) change |= s.activeAttributes[i];
@@ -273,6 +338,7 @@ protected:
     VkRenderPass renderPass{};
 
     VkUtil::Context context;
+    std::vector<Attribute>& attributes;
 
     struct PushConstant{
         uint32_t posX;
@@ -376,9 +442,11 @@ protected:
 	bindings.push_back(uboLayoutBinding);
 
 	uboLayoutBinding.binding = 2;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	bindings.push_back(uboLayoutBinding);
+
+    uboLayoutBinding.binding = 3;
+    bindings.push_back(uboLayoutBinding);
 
 	VkUtil::createDescriptorSetLayout(context.device, bindings, &descriptorSetLayout);
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
