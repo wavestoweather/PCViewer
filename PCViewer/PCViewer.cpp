@@ -6079,6 +6079,12 @@ static bool updateActiveIndices(DrawList& dl) {
 		updateIsoSurface(dl);
 	}
 
+	if (scatterplotWorkbench->active){
+		std::vector<int> indices(pcAttributes.size());
+		for(int i = 0; i < pcAttributes.size(); ++i) indices[i] = i;
+		scatterplotWorkbench->updateRenders(indices);
+	}
+
 	//setting the median to no median to enforce median recalculation
 	dl.activeMedian = 0;
 	return true;
