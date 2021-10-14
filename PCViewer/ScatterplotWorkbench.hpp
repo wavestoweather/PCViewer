@@ -3,6 +3,7 @@
 #include<vulkan/vulkan.h>
 #include<vector>
 #include<string>
+#include<map>
 #include"imgui/imgui.h"
 #include"imgui/imgui_impl_vulkan.h"
 #include"VkUtil.h"
@@ -39,9 +40,9 @@ public:
             uint32_t indicesSize;
             const std::vector<Attribute>& attributes;
 
-            DrawListInstance(VkUtil::Context context, const std::string& name, VkBuffer data, VkBufferView activeData, VkBuffer indices, uint32_t indicesSize, VkDescriptorSetLayout descriptorSetLayout, const std::vector<Attribute>& attributes):
+            DrawListInstance(VkUtil::Context context, const DrawList& drawList, VkBuffer data, VkBufferView activeData, VkBuffer indices, uint32_t indicesSize, VkDescriptorSetLayout descriptorSetLayout, const std::vector<Attribute>& attributes):
             context(context),
-            drawListName(name),
+            drawListName(drawList.name),
             data(data),
             activeData(activeData),
             indicesSize(indicesSize),
@@ -49,25 +50,7 @@ public:
             descSetLayout(descriptorSetLayout),
             attributes(attributes)
             {
-                uint32_t uboSize = sizeof(UBO) + 2 * attributes.size() * sizeof(float);
-                VkUtil::createBuffer(context.device, uboSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubo);
-                VkMemoryRequirements memReq;
-                vkGetBufferMemoryRequirements(context.device, ubo, &memReq);
-                VkMemoryAllocateInfo memAlloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-                memAlloc.allocationSize = memReq.size;
-                uint32_t memBits = memReq.memoryTypeBits;
-                memAlloc.memoryTypeIndex = VkUtil::findMemoryType(context.physicalDevice, memBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-                VkResult res = vkAllocateMemory(context.device, &memAlloc, nullptr, &uboMemory); check_vk_result(res);
-                vkBindBufferMemory(context.device, ubo, uboMemory, 0);
-
-                //updateUniformBufferData(attributes);
-
-                VkUtil::createDescriptorSets(context.device, {descriptorSetLayout}, context.descriptorPool, &descSet);
-                VkUtil::updateDescriptorSet(context.device, data, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-                VkUtil::updateTexelBufferDescriptorSet(context.device, activeData, 1, descSet);
-                VkUtil::updateDescriptorSet(context.device, indices, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-                VkUtil::updateDescriptorSet(context.device, ubo, uboSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+                setupUniformBuffer();
             }
 
             DrawListInstance(const DrawListInstance& other):
@@ -82,7 +65,37 @@ public:
             descSetLayout(other.descSetLayout),
             attributes(other.attributes)
             {
-                uint32_t uboSize = sizeof(UBO) + 2 * other.attributes.size() * sizeof(float);
+                setupUniformBuffer();
+            };
+
+            DrawListInstance(DrawListInstance&& other):
+            context(other.context), drawListName(other.drawListName), data(other.data), activeData(other.activeData), indicesSize(other.indicesSize), indices(other.indices),
+            descSet(other.descSet), descSetLayout(other.descSetLayout), ubo(other.ubo), uboMemory(other.uboMemory),
+            uniformBuffer(other.uniformBuffer), active(other.active), attributes(other.attributes)
+            {
+                std::cout << "move it" << std::endl;
+                other.descSet = 0;
+                other.ubo = 0;
+                other.uboMemory = 0;
+            }
+
+            DrawListInstance operator=(const DrawListInstance& other){
+                context = other.context;
+                drawListName = other.drawListName;
+                data = other.data;
+                activeData = other.activeData;
+                indicesSize = other.indicesSize;
+                indices = other.indices;
+                uniformBuffer = other.uniformBuffer;
+                active = other.active;
+                descSetLayout = other.descSetLayout;
+                //assert(attributes == other.attributes);
+                
+                setupUniformBuffer();
+            }
+
+            void setupUniformBuffer(){
+                uint32_t uboSize = sizeof(UBO) + 2 * attributes.size() * sizeof(float);
                 VkUtil::createBuffer(context.device, uboSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubo);
                 VkMemoryRequirements memReq;
                 vkGetBufferMemoryRequirements(context.device, ubo, &memReq);
@@ -94,23 +107,11 @@ public:
                 VkResult res = vkAllocateMemory(context.device, &memAlloc, nullptr, &uboMemory); check_vk_result(res);
                 vkBindBufferMemory(context.device, ubo, uboMemory, 0);
 
-                //updateUniformBufferData(other.attributes);
-
-                VkUtil::createDescriptorSets(context.device, {other.descSetLayout}, context.descriptorPool, &descSet);
+                VkUtil::createDescriptorSets(context.device, {descSetLayout}, context.descriptorPool, &descSet);
                 VkUtil::updateDescriptorSet(context.device, data, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
                 VkUtil::updateTexelBufferDescriptorSet(context.device, activeData, 1, descSet);
                 VkUtil::updateDescriptorSet(context.device, indices, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
                 VkUtil::updateDescriptorSet(context.device, ubo, uboSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
-            };
-
-            DrawListInstance(DrawListInstance&& other):
-            context(other.context), drawListName(other.drawListName), data(other.data), activeData(other.activeData), indicesSize(other.indicesSize), indices(other.indices),
-            descSet(other.descSet), ubo(other.ubo), uboMemory(other.uboMemory),
-            uniformBuffer(other.uniformBuffer), active(other.active), attributes(other.attributes)
-            {
-                other.descSet = 0;
-                other.ubo = 0;
-                other.uboMemory = 0;
             }
 
             void updateUniformBufferData(const std::vector<Attribute>& attributes){
@@ -148,7 +149,8 @@ public:
         std::vector<Attribute>& attributes;
         std::vector<DrawListInstance> dls;
         float matrixSpacing{.05f};
-        bool showInactivePoints{true};
+        float matrixBorderWidth{1};
+        ImVec4 matrixBorderColor{1,1,1,1};
 
         //external vulkan resources (dont have to be destroyed)
         VkRenderPass renderPass;
@@ -230,6 +232,28 @@ public:
             }
             ImGui::Text("Drawlists");
             for(DrawListInstance& dl: dls){
+                if(ImGui::ArrowButton(("##ab" + dl.drawListName).c_str(), ImGuiDir_Up)){
+                    int i = 0;
+                    for(i = 0; i < dls.size(); ++i) if(dls[i].drawListName == dl.drawListName) break;
+                    if(i != 0){
+                        DrawListInstance tmp = dls[i];
+                        dls[i] = dls[i - 1];
+                        dls[i - 1] = tmp;
+                        updatePlot();
+                    }
+                }
+                ImGui::SameLine(25);
+                if(ImGui::ArrowButton(("##abdown" + dl.drawListName).c_str(), ImGuiDir_Down)){
+                    int i = 0;
+                    for(i = 0; i < dls.size(); ++i) if(dls[i].drawListName == dl.drawListName) break;
+                    if(i != dls.size() - 1){
+                        DrawListInstance tmp = dls[i];
+                        dls[i] = dls[i + 1];
+                        dls[i + 1] = tmp;
+                        updatePlot();
+                    }
+                }
+                ImGui::SameLine(50);
                 if(ImGui::Checkbox((dl.drawListName + "##scatter").c_str(), &dl.active)){
                     updatePlot();
                 }
@@ -258,7 +282,7 @@ public:
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::SameLine(700);
+                ImGui::SameLine(750);
                 if(ImGui::SliderFloat(("Radius##scatter"+dl.drawListName).c_str(), &dl.uniformBuffer.radius, 1, 20)){
                     dl.updateUniformBufferData(attributes);
                     updatePlot();
@@ -267,16 +291,23 @@ public:
             }
             //Plot section
             ImGui::Separator();
+            //drawing the labels on the left
+            float curY = ImGui::GetCursorPosY();
             float xSpacing = curWidth / (activeAttributesCount - 1);
-            float curSpace = 0;
-            bool firstLabel = true;
+            const int leftSpace = 150;
+            int curPlace = 0;
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + xSpacing / 2);
             for(int i = 0; i < attributes.size() - 1; ++i){
-                if(!activeAttributes[i]) continue;
-                if(!firstLabel) ImGui::SameLine(curSpace); 
-                if(firstLabel) firstLabel = false;
-                ImGui::Text(attributes[i].name.c_str());
-                curSpace += xSpacing;
+                int curAttr = i + 1;
+                if(!activeAttributes[curAttr] || curPlace == activeAttributesCount - 1) continue;
+                ImGui::Text(attributes[curAttr].name.c_str());
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + xSpacing - ImGui::GetTextLineHeightWithSpacing());
+                ++curPlace;
             }
+            ImGui::SetCursorPosY(curY);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + leftSpace);
+            ImVec2 imagePos = ImGui::GetCursorScreenPos();
+            ImVec2 imageSize{curWidth, curHeight};
             ImGui::Image(static_cast<ImTextureID>(resultImageSet), ImVec2{curWidth, curHeight});
             if(ImGui::BeginDragDropTarget()){
                 if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")){
@@ -284,6 +315,30 @@ public:
                     addDrawList(*dl);
                     updatePlot();
                 }
+            }
+            //Drawing boxes around the matrix elements
+            float curX = imagePos.x;
+            curY = imagePos.y;
+            for(int i = 0; i < activeAttributesCount - 1; ++i){
+                for(int j = 0; j <= i; ++j){
+                    ImGui::GetWindowDrawList()->AddRect({curX, curY}, {curX + xSpacing, curY + xSpacing}, ImGui::GetColorU32(matrixBorderColor), 0, ImDrawCornerFlags_All, matrixBorderWidth);
+                    curX += xSpacing;
+                }
+                curX = imagePos.x;
+                curY += xSpacing;
+            }
+
+            float curSpace = xSpacing / 2 + leftSpace;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xSpacing / 2 + leftSpace);
+            bool firstLabel = true;
+            curPlace = 0;
+            for(int i = 0; i < attributes.size() - 1; ++i){
+                if(!activeAttributes[i] || curPlace == activeAttributesCount - 1) continue;
+                if(!firstLabel) ImGui::SameLine(curSpace); 
+                if(firstLabel) firstLabel = false;
+                ImGui::Text(attributes[i].name.c_str());
+                curSpace += xSpacing;
+                ++curPlace;
             }
             
             ImGui::EndChild();
@@ -353,7 +408,7 @@ public:
         };
 
         void addDrawList(DrawList& dl){
-            dls.emplace_back(context, dl.name, dl.buffer, dl.activeIndicesBufferView, dl.indicesBuffer, dl.indices.size(), descriptorSetLayout, attributes);
+            dls.emplace_back(context, dl, dl.buffer, dl.activeIndicesBufferView, dl.indicesBuffer, dl.indices.size(), descriptorSetLayout, attributes);
             activeAttributes.resize(attributes.size(), 1);
             activeAttributesCount = 0;
             for(auto x: activeAttributes) if(x) ++activeAttributesCount;
@@ -406,6 +461,13 @@ public:
     bool active = false;
     std::vector<ScatterPlot> scatterPlots;
     int defaultWidth = 800, defaultHeight = 800;
+    bool showInactivePoints{true};
+    struct Polygon{
+        bool change{false};
+        std::vector<ImVec2> borderPoints;
+    };
+    using Polygons = std::vector<Polygon>;
+    std::map<std::string, Polygons> lassoSelections;
 protected:
     VkPipeline pipeline{};
     VkPipelineLayout pipelineLayout{};
