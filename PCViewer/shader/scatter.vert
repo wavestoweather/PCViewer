@@ -26,17 +26,26 @@ layout(push_constant) uniform PushConstants{
     uint posY;
     uint xAttr;
     uint yAttr;
+    uint discardBits;
 }pConst;
 
 layout(location = 0) out vec4 color;
 layout(location = 1) out uint square;
+layout(location = 2) out uint disc; //uint to indicate if the fragments should be discarded
 
 #include"dataAccess.glsl"
+
+const uint discardNone = 0, discardActive = 1, discardInactive = 2;
 
 void main() {
     uint ind = indices.i[gl_VertexIndex];
     bool lineActive = bool(imageLoad(act, int(ind)));
     square = ubo.inactiveSquare & (1 << 1);
+    switch(pConst.discardBits){
+    case discardNone: disc = 0; break;
+    case discardActive: lineActive ? disc = 1 : disc = 0; break;
+    case discardInactive: lineActive ? disc = 0: disc = 0; break;
+    }
     if(lineActive || bool(ubo.inactiveSquare & 1)){
         float x = getPackedData(ind, pConst.xAttr);
         float y = getPackedData(ind, pConst.yAttr);

@@ -33,16 +33,21 @@ public:
                 float inactiveColor[4]{.1f,.1f,.1f,.1f};
             }uniformBuffer;
             VkDescriptorSet descSet{};
+            VkDescriptorSetLayout descSetLayout{};
             VkBuffer ubo{};
             VkDeviceMemory uboMemory{};
             uint32_t indicesSize;
+            const std::vector<Attribute>& attributes;
 
             DrawListInstance(VkUtil::Context context, const std::string& name, VkBuffer data, VkBufferView activeData, VkBuffer indices, uint32_t indicesSize, VkDescriptorSetLayout descriptorSetLayout, const std::vector<Attribute>& attributes):
             context(context),
             drawListName(name),
             data(data),
             activeData(activeData),
-            indicesSize(indicesSize)
+            indicesSize(indicesSize),
+            indices(indices),
+            descSetLayout(descriptorSetLayout),
+            attributes(attributes)
             {
                 uint32_t uboSize = sizeof(UBO) + 2 * attributes.size() * sizeof(float);
                 VkUtil::createBuffer(context.device, uboSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubo);
@@ -56,13 +61,56 @@ public:
                 VkResult res = vkAllocateMemory(context.device, &memAlloc, nullptr, &uboMemory); check_vk_result(res);
                 vkBindBufferMemory(context.device, ubo, uboMemory, 0);
 
-                updateUniformBufferData(attributes);
+                //updateUniformBufferData(attributes);
 
                 VkUtil::createDescriptorSets(context.device, {descriptorSetLayout}, context.descriptorPool, &descSet);
                 VkUtil::updateDescriptorSet(context.device, data, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
                 VkUtil::updateTexelBufferDescriptorSet(context.device, activeData, 1, descSet);
                 VkUtil::updateDescriptorSet(context.device, indices, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
                 VkUtil::updateDescriptorSet(context.device, ubo, uboSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+            }
+
+            DrawListInstance(const DrawListInstance& other):
+            context(other.context),
+            drawListName(other.drawListName),
+            data(other.data),
+            activeData(other.activeData),
+            indicesSize(other.indicesSize),
+            indices(other.indices),
+            uniformBuffer(other.uniformBuffer),
+            active(other.active),
+            descSetLayout(other.descSetLayout),
+            attributes(other.attributes)
+            {
+                uint32_t uboSize = sizeof(UBO) + 2 * other.attributes.size() * sizeof(float);
+                VkUtil::createBuffer(context.device, uboSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &ubo);
+                VkMemoryRequirements memReq;
+                vkGetBufferMemoryRequirements(context.device, ubo, &memReq);
+                VkMemoryAllocateInfo memAlloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+                memAlloc.allocationSize = memReq.size;
+                uint32_t memBits = memReq.memoryTypeBits;
+                memAlloc.memoryTypeIndex = VkUtil::findMemoryType(context.physicalDevice, memBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+                VkResult res = vkAllocateMemory(context.device, &memAlloc, nullptr, &uboMemory); check_vk_result(res);
+                vkBindBufferMemory(context.device, ubo, uboMemory, 0);
+
+                //updateUniformBufferData(other.attributes);
+
+                VkUtil::createDescriptorSets(context.device, {other.descSetLayout}, context.descriptorPool, &descSet);
+                VkUtil::updateDescriptorSet(context.device, data, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+                VkUtil::updateTexelBufferDescriptorSet(context.device, activeData, 1, descSet);
+                VkUtil::updateDescriptorSet(context.device, indices, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+                VkUtil::updateDescriptorSet(context.device, ubo, uboSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+            };
+
+            DrawListInstance(DrawListInstance&& other):
+            context(other.context), drawListName(other.drawListName), data(other.data), activeData(other.activeData), indicesSize(other.indicesSize), indices(other.indices),
+            descSet(other.descSet), ubo(other.ubo), uboMemory(other.uboMemory),
+            uniformBuffer(other.uniformBuffer), active(other.active), attributes(other.attributes)
+            {
+                other.descSet = 0;
+                other.ubo = 0;
+                other.uboMemory = 0;
             }
 
             void updateUniformBufferData(const std::vector<Attribute>& attributes){
@@ -201,11 +249,21 @@ public:
                     updatePlot();
                 }
                 ImGui::SameLine(600);
+                ImGui::PushItemWidth(100);
+                const static char* pointTypes[]{"Circle", "Square"};
+                if(ImGui::BeginCombo(("##PoFo" + dl.drawListName).c_str(), pointTypes[dl.uniformBuffer.showInactivePoints >> 1])){
+                    for(int i = 0; i < 2; ++i){
+                        if(ImGui::MenuItem(pointTypes[i])) {i ? dl.uniformBuffer.showInactivePoints |= i << 1 : dl.uniformBuffer.showInactivePoints ^= dl.uniformBuffer.showInactivePoints & 2;}
+                        updatePlot();
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SameLine(700);
                 if(ImGui::SliderFloat(("Radius##scatter"+dl.drawListName).c_str(), &dl.uniformBuffer.radius, 1, 20)){
                     dl.updateUniformBufferData(attributes);
                     updatePlot();
                 }
-                
+                ImGui::PopItemWidth();
             }
             //Plot section
             ImGui::Separator();
@@ -257,14 +315,31 @@ public:
                 dl.uniformBuffer.matrixSize = matrixSize;
                 dl.updateUniformBufferData(attributes);
 
-                //TODO draw for all scatter plots + set dynamic states
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &dl.descSet, 0, nullptr);
+                //draw inactive points
                 int posX = 0, posY = matrixSize - 2;
+                if(dl.uniformBuffer.showInactivePoints){
+                    for(int i = 0; i < attributes.size(); ++i){
+                        if(!activeAttributes[i]) continue;
+                        for(int j = attributes.size() - 1; j > i; --j){
+                            if(!activeAttributes[j]) continue;
+                            PushConstant pc{posX, posY, i, j, 1};
+                            vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pc);
+                            vkCmdDraw(commandBuffer, dl.indicesSize, 1, 0, 0);
+                            --posY;
+                        }
+                        posY = matrixSize - 2;
+                        ++posX;
+                    }
+                }
+                //draw active points
+                posX = 0;
+                posY = matrixSize - 2;
                 for(int i = 0; i < attributes.size(); ++i){
                     if(!activeAttributes[i]) continue;
                     for(int j = attributes.size() - 1; j > i; --j){
                         if(!activeAttributes[j]) continue;
-                        PushConstant pc{posX, posY, i, j};
+                        PushConstant pc{posX, posY, i, j, 2};
                         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pc);
                         vkCmdDraw(commandBuffer, dl.indicesSize, 1, 0, 0);
                         --posY;
@@ -345,6 +420,7 @@ protected:
         uint32_t posY;
         uint32_t xAttr;
         uint32_t yAttr;
+        uint32_t discard;
     };
 
     void createPipeline(){
