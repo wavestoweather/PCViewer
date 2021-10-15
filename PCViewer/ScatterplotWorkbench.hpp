@@ -50,6 +50,7 @@ public:
             descSetLayout(descriptorSetLayout),
             attributes(attributes)
             {
+                std::copy_n(&drawList.color.x, 4, uniformBuffer.color);
                 setupUniformBuffer();
             }
 
@@ -73,13 +74,12 @@ public:
             descSet(other.descSet), descSetLayout(other.descSetLayout), ubo(other.ubo), uboMemory(other.uboMemory),
             uniformBuffer(other.uniformBuffer), active(other.active), attributes(other.attributes)
             {
-                std::cout << "move it" << std::endl;
                 other.descSet = 0;
                 other.ubo = 0;
                 other.uboMemory = 0;
             }
 
-            DrawListInstance operator=(const DrawListInstance& other){
+            DrawListInstance& operator=(const DrawListInstance& other){
                 context = other.context;
                 drawListName = other.drawListName;
                 data = other.data;
@@ -92,6 +92,27 @@ public:
                 //assert(attributes == other.attributes);
                 
                 setupUniformBuffer();
+                return *this;
+            }
+
+            DrawListInstance& operator=(DrawListInstance&& other){
+                context = other.context;
+                drawListName = other.drawListName;
+                data = other.data;
+                activeData = other.activeData;
+                indicesSize = other.indicesSize;
+                indices = other.indices;
+                uniformBuffer = other.uniformBuffer;
+                active = other.active;
+                descSetLayout = other.descSetLayout;
+                descSet = other.descSet;
+                ubo = other.ubo;
+                uboMemory = other.uboMemory;
+
+                other.descSet = 0;
+                other.ubo = 0;
+                other.uboMemory = 0;
+                return *this;
             }
 
             void setupUniformBuffer(){
@@ -162,7 +183,7 @@ public:
         context(context), 
         renderPass(renderPass),
         activeAttributesCount(attributes.size()),
-        activeAttributes(attributes.size(), true), 
+        activeAttributes( attributes.size(), true), 
         attributes(attributes),
         descriptorSetLayout(descriptorSetLayout),
         pipeline(pipeline),
@@ -222,7 +243,7 @@ public:
         void draw(int index){
             ImGui::BeginChild(("Scatterplot" + std::to_string(index)).c_str(),{0,0}, true);
             ImGui::Text("Attribute activations:");
-            for(int i = 0; i < attributes.size(); ++i){
+            for(int i = 0; i < activeAttributes.size(); ++i){
                 if(i != 0) ImGui::SameLine();
                 if(ImGui::Checkbox((attributes[i].name + "##scatter").c_str(), (bool*)&activeAttributes[i])){
                     activeAttributesCount = 0;
@@ -231,29 +252,30 @@ public:
                 }
             }
             ImGui::Text("Drawlists");
-            for(DrawListInstance& dl: dls){
+            for(auto dlI = dls.rbegin(); dlI != dls.rend(); ++dlI){
+                DrawListInstance& dl = *dlI;
                 if(ImGui::ArrowButton(("##ab" + dl.drawListName).c_str(), ImGuiDir_Up)){
                     int i = 0;
                     for(i = 0; i < dls.size(); ++i) if(dls[i].drawListName == dl.drawListName) break;
-                    if(i != 0){
-                        DrawListInstance tmp = dls[i];
-                        dls[i] = dls[i - 1];
-                        dls[i - 1] = tmp;
+                    if(i != dls.size() - 1){
+                        DrawListInstance tmp = std::move(dls[i]);
+                        dls[i] = std::move(dls[i + 1]);
+                        dls[i + 1] = std::move(tmp);
                         updatePlot();
                     }
                 }
-                ImGui::SameLine(25);
+                ImGui::SameLine(30);
                 if(ImGui::ArrowButton(("##abdown" + dl.drawListName).c_str(), ImGuiDir_Down)){
                     int i = 0;
                     for(i = 0; i < dls.size(); ++i) if(dls[i].drawListName == dl.drawListName) break;
-                    if(i != dls.size() - 1){
-                        DrawListInstance tmp = dls[i];
-                        dls[i] = dls[i + 1];
-                        dls[i + 1] = tmp;
+                    if(i != 0){
+                        DrawListInstance tmp = std::move(dls[i]);
+                        dls[i] = std::move(dls[i - 1]);
+                        dls[i - 1] = std::move(tmp);
                         updatePlot();
                     }
                 }
-                ImGui::SameLine(50);
+                ImGui::SameLine(55);
                 if(ImGui::Checkbox((dl.drawListName + "##scatter").c_str(), &dl.active)){
                     updatePlot();
                 }
@@ -297,7 +319,7 @@ public:
             const int leftSpace = 150;
             int curPlace = 0;
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + xSpacing / 2);
-            for(int i = 0; i < attributes.size() - 1; ++i){
+            for(int i = 0; activeAttributes.size() && i < attributes.size() - 1; ++i){
                 int curAttr = i + 1;
                 if(!activeAttributes[curAttr] || curPlace == activeAttributesCount - 1) continue;
                 ImGui::Text(attributes[curAttr].name.c_str());
@@ -312,14 +334,14 @@ public:
             if(ImGui::BeginDragDropTarget()){
                 if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")){
                     DrawList* dl = *((DrawList**)payload->Data);
-                    addDrawList(*dl);
+                    addDrawList(*dl, attributes);
                     updatePlot();
                 }
             }
             //Drawing boxes around the matrix elements
             float curX = imagePos.x;
             curY = imagePos.y;
-            for(int i = 0; i < activeAttributesCount - 1; ++i){
+            for(int i = 0; activeAttributesCount && i < activeAttributesCount - 1; ++i){
                 for(int j = 0; j <= i; ++j){
                     ImGui::GetWindowDrawList()->AddRect({curX, curY}, {curX + xSpacing, curY + xSpacing}, ImGui::GetColorU32(matrixBorderColor), 0, ImDrawCornerFlags_All, matrixBorderWidth);
                     curX += xSpacing;
@@ -332,7 +354,7 @@ public:
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xSpacing / 2 + leftSpace);
             bool firstLabel = true;
             curPlace = 0;
-            for(int i = 0; i < attributes.size() - 1; ++i){
+            for(int i = 0; activeAttributes.size() && i < attributes.size() - 1; ++i){
                 if(!activeAttributes[i] || curPlace == activeAttributesCount - 1) continue;
                 if(!firstLabel) ImGui::SameLine(curSpace); 
                 if(firstLabel) firstLabel = false;
@@ -407,7 +429,7 @@ public:
             VkUtil::transitionImageLayout(commandBuffer, resultImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         };
 
-        void addDrawList(DrawList& dl){
+        void addDrawList(DrawList& dl, std::vector<Attribute>& attr){
             dls.emplace_back(context, dl, dl.buffer, dl.activeIndicesBufferView, dl.indicesBuffer, dl.indices.size(), descriptorSetLayout, attributes);
             activeAttributes.resize(attributes.size(), 1);
             activeAttributesCount = 0;
@@ -419,7 +441,7 @@ public:
         createPipeline();
     }
 
-    void addPlot(std::vector<Attribute>& attributes){
+    void addPlot(){
         scatterPlots.emplace_back(context, defaultWidth, defaultHeight, renderPass, descriptorSetLayout, pipeline, pipelineLayout, attributes);
     }
 
@@ -438,7 +460,7 @@ public:
             s.draw(c++);
         }
         if(ImGui::Button("+", ImVec2{500,0})){
-            addPlot(attributes);
+            addPlot();
         }
         ImGui::End();
     }
@@ -449,6 +471,7 @@ public:
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         for(ScatterPlot& s: scatterPlots){
             bool change = false;
+            if(attrIndices.size() != s.activeAttributes.size()) continue;
             for(int i: attrIndices) change |= s.activeAttributes[i];
             change |= attrIndices.empty();
             if(change) s.updateRender(commandBuffer);
