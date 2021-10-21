@@ -14,6 +14,38 @@
 // all scatterplots are scatterplot matrices which can be reduced to only show wanted parameter combinations
 class ScatterplotWorkbench{
 public:
+    ImVec2 static pixelPosToParameterPos(const ImVec2& mousePos, const ImVec2& borderMin, const ImVec2& borderMax, int attr1, int attr2, const std::vector<Attribute>& pcAttributes){
+        float x = mousePos.x - borderMin.x;
+        x /= borderMax.x - borderMin.x;
+        x *= pcAttributes[attr1].max - pcAttributes[attr1].min;
+        x += pcAttributes[attr1].min;
+        float y = mousePos.y - borderMin.y;
+        y /= borderMax.y - borderMin.y;
+        y *= pcAttributes[attr2].max - pcAttributes[attr2].min;
+        y += pcAttributes[attr2].min;
+        return {x, y};
+    }
+
+    ImVec2 static parameterPosToPixelPos(const ImVec2& paramPos, const ImVec2& borderMin, const ImVec2& borderMax, int attr1, int attr2, const std::vector<Attribute>& pcAttributes){
+        float x = paramPos.x - pcAttributes[attr1].min;
+        x /= pcAttributes[attr1].max - pcAttributes[attr1].min;
+        x *= borderMax.x - borderMin.x;
+        x += borderMin.x;
+        float y = paramPos.y - pcAttributes[attr2].min;
+        y /= pcAttributes[attr2].max - pcAttributes[attr2].min;
+        y *= borderMax.y - borderMin.y;
+        y += borderMin.y;
+        return {x, y};
+    }
+
+    float static distance2(const ImVec2& a, const ImVec2& b){
+    	return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
+    }
+
+    float static distance(const ImVec2& a, const ImVec2& b){
+    	return std::sqrt(distance2(a, b));
+    }
+
     // the scatter plot workbench can have multiple scatter plots
     struct ScatterPlot{
         // each drawlist which is assigned to the scatterplot has stored its information in the DrawListInstance struct
@@ -157,6 +189,7 @@ public:
         };
 
         int curWidth = 0, curHeight = 0;
+        int id;
 
         VkUtil::Context context;
         VkImage resultImage{};
@@ -187,7 +220,8 @@ public:
         attributes(attributes),
         descriptorSetLayout(descriptorSetLayout),
         pipeline(pipeline),
-        pipelineLayout(pipelineLayout)
+        pipelineLayout(pipelineLayout),
+        id(scatterPlotCounter++)
         {
             resizeImage(width, height);
         }
@@ -339,15 +373,111 @@ public:
                 }
             }
             //Drawing boxes around the matrix elements
+            //Drawing the lasso selections
             float curX = imagePos.x;
+            int curAttr = 1;
             curY = imagePos.y;
             for(int i = 0; activeAttributesCount && i < activeAttributesCount - 1; ++i){
+                while(!activeAttributes[curAttr] && curAttr < activeAttributes.size()) ++curAttr;
+                int curAttr2 = 0;
                 for(int j = 0; j <= i; ++j){
+                    //boxes
                     ImGui::GetWindowDrawList()->AddRect({curX, curY}, {curX + xSpacing, curY + xSpacing}, ImGui::GetColorU32(matrixBorderColor), 0, ImDrawCornerFlags_All, matrixBorderWidth);
+                    //Lassos
+                    while(!activeAttributes[curAttr2] && curAttr2 < activeAttributes.size()) ++curAttr2;
+                    if(dls.size() && lassoSelections.find(dls.front().drawListName) != lassoSelections.end()){
+                        auto lasso = std::find_if(lassoSelections[dls.front().drawListName].begin(), lassoSelections[dls.front().drawListName].end(),
+                                                    [&](const Polygon& polygon){return polygon.attr1 == curAttr && polygon.attr2 == curAttr2;});
+                        if(lasso != lassoSelections[dls.front().drawListName].end()){
+                            for(int p = 1; p < lasso->borderPoints.size(); ++p){
+                                ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[p - 1], {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
+                                ImVec2 b = parameterPosToPixelPos(lasso->borderPoints[p], {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
+                                ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
+                            }
+                            ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[0], {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
+                            ImVec2 b = parameterPosToPixelPos(lasso->borderPoints.back(), {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
+                            ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
+                        }
+                    }
                     curX += xSpacing;
+                    ++curAttr2;
                 }
                 curX = imagePos.x;
                 curY += xSpacing;
+                ++curAttr;
+            }
+
+            //lasso selection
+            ImVec2 mousePos = ImGui::GetMousePos();
+            bool inside = mousePos.x > imagePos.x && mousePos.x < imagePos.x + imageSize.x
+                            && mousePos.y > imagePos.y && mousePos.y < imagePos.y + imageSize.y;
+            static int attr1 = -1, attr2 = -1, plotId = -1;
+            static ImVec2 borderMin, borderMax;
+            static ScatterPlot* curPlot{};
+            static ImVec2 prevPointPos;
+            if(ImGui::IsMouseClicked(0) && inside && attr1 < 0){   //begin lasso selection. Get attributes
+                plotId = id;
+                curPlot = this;
+                curX = imagePos.x;
+                curY = imagePos.y;
+                bool done = false;
+                attr1 = 1; attr2 = 0;
+                for(int i = 0; activeAttributesCount && i < activeAttributesCount - 1; ++i){
+                    while(!activeAttributes[attr1] && attr1 < activeAttributes.size()) ++attr1;
+                    for(int j = 0; j <= i && !done; ++j){
+                        while(!activeAttributes[attr2] && attr2 < activeAttributes.size()) ++attr2;
+                        inside = mousePos.x > curX && mousePos.x < curX + xSpacing
+                            && mousePos.y > curY && mousePos.y < curY + xSpacing;
+                        if(inside) {
+                            done = true;
+                            borderMin = {curX, curY + xSpacing};    // y is already inverted here for easier later calculations
+                            borderMax = {curX + xSpacing, curY};
+                            break;
+                        }
+                        curX += xSpacing;
+                        ++attr2;
+                    }
+                    if(done) break;
+                    curX = imagePos.x;
+                    curY += xSpacing;
+                    attr2 = 0;
+                    ++attr1;
+                }
+                //std::cout << "Attr1: " << attributes[attr1].name << " | Attr2:" << attributes[attr2].name << std::endl; 
+                bool lassoCreated = false;
+                if(dls.size() && lassoSelections.find(dls.front().drawListName) != lassoSelections.end()){
+                    auto p = std::find_if(lassoSelections.find(dls.front().drawListName)->second.begin(), lassoSelections.find(dls.front().drawListName)->second.end(), [&](Polygon& p){return p.attr1 == attr1 && p.attr2 == attr2;});
+                    if(p != lassoSelections.find(dls.front().drawListName)->second.end()){
+                        *p = {false, attr1, attr2, {}};
+                        std::swap(lassoSelections.find(dls.front().drawListName)->second.back(), *p);
+                        lassoCreated = true;
+                    }
+                }
+                if(dls.size() && lassoSelections.find(dls.front().drawListName) == lassoSelections.end()){
+                    lassoSelections[dls.front().drawListName] = {{false, attr1, attr2, {}}};
+                    lassoCreated = true;
+                }
+                if(dls.size() && !lassoCreated)
+                    lassoSelections[dls.front().drawListName].push_back({false, attr1, attr2, {}});
+            }
+
+            //section to continously handle lasso creation
+            if(plotId == id){
+                if(!ImGui::IsMouseDown(0)){  //stop lasso
+                    attr1 = -1; attr2 = -1; plotId = -1;
+                }
+                else{
+                    assert(lassoSelections[dls.front().drawListName].back().attr1 == attr1 && lassoSelections[dls.front().drawListName].back().attr2 == attr2);
+                    auto& points = lassoSelections[dls.front().drawListName].back().borderPoints;
+                    if(points.empty()){ //first point
+                        points.push_back(pixelPosToParameterPos(mousePos, borderMin, borderMax, attr1, attr2, attributes));
+                        prevPointPos = mousePos;
+                    }
+                    else if(distance2(mousePos, prevPointPos) > 25){    //on high enough distnace set next lasso point
+                        points.push_back(pixelPosToParameterPos(mousePos, borderMin, borderMax, attr1, attr2, attributes));
+                        prevPointPos = mousePos;
+                    }
+                }
             }
 
             float curSpace = xSpacing / 2 + leftSpace;
@@ -487,10 +617,12 @@ public:
     bool showInactivePoints{true};
     struct Polygon{
         bool change{false};
+        int attr1, attr2;
         std::vector<ImVec2> borderPoints;
     };
     using Polygons = std::vector<Polygon>;
-    std::map<std::string, Polygons> lassoSelections;
+    static std::map<std::string, Polygons> lassoSelections;
+    static int scatterPlotCounter;
 protected:
     VkPipeline pipeline{};
     VkPipelineLayout pipelineLayout{};
@@ -618,3 +750,6 @@ protected:
     VkUtil::createPipeline(context.device, &vertexInputInfo, 100, 100, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, &depthStencil, &blendInfo, descriptorSetLayouts, &renderPass, &pipelineLayout, &pipeline, pushConstantRanges);
     }
 };
+
+std::map<std::string, ScatterplotWorkbench::Polygons> ScatterplotWorkbench::lassoSelections = {};
+int ScatterplotWorkbench::scatterPlotCounter = 0;
