@@ -353,8 +353,9 @@ public:
             const int leftSpace = 150;
             int curPlace = 0;
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + xSpacing / 2);
-            for(int i = 0; activeAttributes.size() && i < attributes.size() - 1; ++i){
-                int curAttr = i + 1;
+            int startInd = 1; while(activeAttributes.size() && !activeAttributes[startInd - 1]) ++startInd;
+            for(int i = startInd; activeAttributes.size() && i < attributes.size(); ++i){
+                int curAttr = i;
                 if(!activeAttributes[curAttr] || curPlace == activeAttributesCount - 1) continue;
                 ImGui::Text(attributes[curAttr].name.c_str());
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + xSpacing - ImGui::GetTextLineHeightWithSpacing());
@@ -375,7 +376,7 @@ public:
             //Drawing boxes around the matrix elements
             //Drawing the lasso selections
             float curX = imagePos.x;
-            int curAttr = 1;
+            int curAttr = 1; while(activeAttributes.size() && !activeAttributes[curAttr - 1]) ++curAttr;
             curY = imagePos.y;
             for(int i = 0; activeAttributesCount && i < activeAttributesCount - 1; ++i){
                 while(!activeAttributes[curAttr] && curAttr < activeAttributes.size()) ++curAttr;
@@ -421,7 +422,7 @@ public:
                 curX = imagePos.x;
                 curY = imagePos.y;
                 bool done = false;
-                attr1 = 1; attr2 = 0;
+                attr1 = 1; attr2 = 0; while(activeAttributes.size() && !activeAttributes[attr1 - 1]) ++attr1;
                 for(int i = 0; activeAttributesCount && i < activeAttributesCount - 1; ++i){
                     while(!activeAttributes[attr1] && attr1 < activeAttributes.size()) ++attr1;
                     for(int j = 0; j <= i && !done; ++j){
