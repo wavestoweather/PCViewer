@@ -5610,8 +5610,8 @@ static bool updateActiveIndices(DrawList& dl) {
 		}
 	}
 	if (brush.size()) {
-		std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), true, pcSettings.brushCombination == 1, globalBrushes.size() == 0);
-		globalRemainingLines = res.second;
+		GpuBrusher::ReturnStruct res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), true, pcSettings.brushCombination == 1, globalBrushes.size() == 0);
+		globalRemainingLines = res.activeLines;
 		firstBrush = false;
 	}
 	
@@ -5629,7 +5629,7 @@ static bool updateActiveIndices(DrawList& dl) {
 						break;
 					}
 				}
-				std::pair<uint32_t, int> res;// = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
+				GpuBrusher::ReturnStruct res;// = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, brushCombination == 1, c == globalBrushes.size());
 				if (gb.useMultivariate) {
 					std::vector<std::pair<float, float>> origBounds = gb.kdTree->getOriginalBounds();
 					float x[30]{};
@@ -5709,8 +5709,8 @@ static bool updateActiveIndices(DrawList& dl) {
 				else {
 					res = gpuBrusher->brushIndices(gb.fractions, gb.attributes, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, c == globalBrushes.size());
 				}
-				gb.lineRatios[dl.name] = res.first;
-				globalRemainingLines = res.second;
+				gb.lineRatios[dl.name] = res.singleBrushActiveLines;
+				globalRemainingLines = res.activeLines;
 				firstBrush = false;
 				++c;
 			}
@@ -5729,9 +5729,9 @@ static bool updateActiveIndices(DrawList& dl) {
 					}
 				}
 				if (!brush.size()) continue;
-				std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, c == globalBrushes.size());
-				gb.lineRatios[dl.name] = res.first;
-				globalRemainingLines = res.second;
+				GpuBrusher::ReturnStruct res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, c == globalBrushes.size());
+				gb.lineRatios[dl.name] = res.singleBrushActiveLines;
+				globalRemainingLines = res.activeLines;
 				firstBrush = false;
 				++c;
 			}
@@ -5790,9 +5790,9 @@ static bool updateActiveIndices(DrawList& dl) {
 				for (auto br : b.second) {
 					brush.clear();
 					brush[b.first].push_back(br.second);
-					std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size());
-					if(res.first)
-						dl.brushedRatioToParent[b.first] = float(globalRemainingLines) / res.first;
+					GpuBrusher::ReturnStruct res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size());
+					if(res.singleBrushActiveLines)
+						dl.brushedRatioToParent[b.first] = float(globalRemainingLines) / res.singleBrushActiveLines;
 					else
 						dl.brushedRatioToParent[b.first] = 0;
 				}
@@ -5863,9 +5863,9 @@ static bool updateActiveIndices(DrawList& dl) {
 						
 							brush.clear();
 							brush[currBr.first].push_back(currBr.second);
-							std::pair<uint32_t, int> res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size());
+							GpuBrusher::ReturnStruct res = gpuBrusher->brushIndices(brush, data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size());
 
-							std::cout << res.first << "\n";
+							std::cout << res.singleBrushActiveLines << "\n";
 
 							float currBrMin = currBr.second.first;
 							float currBrMax = currBr.second.second;

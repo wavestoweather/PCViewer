@@ -1,0 +1,88 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
+
+layout(std430, binding = 0) buffer Informations{
+	uint amtOfAttributes;
+	uint amtOfBrushAxes;
+	uint amtOfIndices;
+	uint lineCount;
+	int globalLineCount;
+	uint first;
+	uint and;
+	uint padding;
+	uvec4 indicesOffsets[];
+} info;
+
+//lasso layout:
+//floatInd lasso start 1, lasso start 2, lasso start ... (floatInd is the index as float)
+//Lasso lasso1, lasso2, lasso ...
+//Lasso:
+//	float amtOfBorderPoints
+//  float2 attr12
+//  float2 point1, point2, pointN
+layout(std430, binding = 1) buffer Lassos{
+	uint amtOfLassos;
+	float data[];
+}brushes;
+
+layout(std430, binding = 2) buffer Data{
+	float d[];
+}data;
+
+layout(std430, binding = 3) buffer Ind{
+	uint ind[];
+}indices;
+
+layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+#include "dataAccess.glsl"
+
+void main(){
+	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
+	bool lineKeep = true;
+	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
+	for(int lasso = 0; lasso < brushes.amtOfLassos; ++lasso){
+		int baseIndex = int(brushes.data[lasso]);
+		int amtBorder = int(brushes.data[baseIndex]);
+		int attr1 = int(brushes.data[baseIndex + 1]);
+		int attr2 = int(brushes.data[baseIndex + 2]);
+		bool inLasso = false;
+		vec2 d = vec2(getPackedData(lineIndex, attr1), getPackedData(lineIndex, attr2));
+		for(int i = 0; i < amtBorder; ++i){
+			vec2 a = vec2(brushes.data[baseIndex + 3 + i * 2], brushes.data[baseIndex + 4 + i * 2]);
+			int j = (i + 1) % amtBorder;
+			vec2 b = vec2(brushes.data[baseIndex + 3 + j * 2], brushes.data[baseIndex + 4 + j * 2]);
+			//calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+			if( ((a.y > d.y) != (b.y > d.y)) &&
+				(d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
+				inLasso = !inLasso;
+		}
+		lineKeep = lineKeep && inLasso;
+		if(!lineKeep) break;
+	}
+	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
+	if(bool(info.first)){
+		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
+		if(info.first!=2)
+			imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
+	}
+	else{
+		if(bool(info.and)){
+			a = a && lineKeep;
+		}
+		else{
+			a = a || lineKeep;
+		}
+		if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
+		if(info.first!=2)
+			imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
+	}
+	
+	if(lineKeep){
+		atomicAdd(info.lineCount,1);
+	}
+}

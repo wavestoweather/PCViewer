@@ -9,11 +9,13 @@
 #include "VkUtil.h"
 #include "PCUtil.h"
 #include "MultivariateGauss.h"
+#include "LassoBrush.hpp"
 
 #define LOCALSIZE 256
 #define SHADERPATH "shader/brushComp.spv"
 #define SHADERPATHFRACTURE "shader/brushFractureComp.spv"
 #define SHADERPATHMULTIVARIATE "shader/brushMultvarComp.spv"
+#define SHADERPATHLASSO "shader/brushLasso.spv"
 
 class GpuBrusher {
 private:
@@ -80,6 +82,8 @@ private:
 	VkPipelineLayout fracturePipelineLayout;
 	VkPipeline multivariatePipeline;
 	VkPipelineLayout multivariatePipelineLayout;
+	VkPipeline lassoPipeline;
+	VkPipelineLayout lassoPipelineLayout;
 	VkBuffer uboBuffers[2];
 	uint32_t uboOffsets[2];
 	VkDeviceMemory uboMemory;
@@ -124,6 +128,9 @@ public:
 
 		module = VkUtil::createShaderModule(device, PCUtil::readByteFile(std::string(SHADERPATHMULTIVARIATE)));
 		VkUtil::createComputePipeline(device, module, layouts, &multivariatePipelineLayout, &multivariatePipeline);
+
+		module = VkUtil::createShaderModule(device, PCUtil::readByteFile(std::string(SHADERPATHLASSO)));
+		VkUtil::createComputePipeline(device, module, layouts, &lassoPipelineLayout, &lassoPipeline);
 	};
 
 	~GpuBrusher() {
@@ -134,10 +141,17 @@ public:
 		vkDestroyPipelineLayout(device, fracturePipelineLayout, nullptr);
 		vkDestroyPipeline(device, multivariatePipeline, nullptr);
 		vkDestroyPipelineLayout(device, multivariatePipelineLayout, nullptr);
+		vkDestroyPipeline(device, lassoPipeline, nullptr);
+		vkDestroyPipelineLayout(device, lassoPipelineLayout, nullptr);
+	};
+
+	struct ReturnStruct{
+		uint32_t singleBrushActiveLines;
+		int activeLines;
 	};
 
 	//returns a pair containing the number of lines which would be active, would only one brush be applied, and the number of lines that really are still active
-	std::pair<uint32_t,int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
+	ReturnStruct brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(UBOinfo) - sizeof(uint32_t) + sizeof(uint32_t) * 4 * brushes.size();
 		UBOinfo* informations = (UBOinfo*)malloc(infoBytesSize);
@@ -251,7 +265,7 @@ public:
 
 		//getting the amount of remaining lines(if only this brush would have been applied)
 		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOinfo), informations);
-		std::pair<uint32_t,int> res(informations->lineCount,informations->globalLineCount);
+		ReturnStruct res{informations->lineCount,informations->globalLineCount};
 		
 		vkFreeCommandBuffers(device, commandPool, 1, &command);
 		vkFreeDescriptorSets(device, descriptorPool, 1, &descriptorSet);
@@ -267,7 +281,7 @@ public:
 
 	//returns a pair containing the number of lines which would be active, would only one brush be applied, and the number of lines that really are still active
 	//this pipeline does not change the contents of the active indices bool array
-	std::pair<uint32_t, int> brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes) {
+	ReturnStruct brushIndices(std::map<int, std::vector<std::pair<float, float>>>& brushes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes) {
 		//allocating all ubos and collection information about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(UBOinfo) - sizeof(uint32_t) + sizeof(uint32_t) * 4 * brushes.size();
 		UBOinfo* informations = (UBOinfo*)malloc(infoBytesSize);
@@ -381,7 +395,7 @@ public:
 
 		//getting the amount of remaining lines(if only this brush would have been applied)
 		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOinfo), informations);
-		std::pair<uint32_t, int> res(informations->lineCount, informations->globalLineCount);
+		ReturnStruct res{informations->lineCount, informations->globalLineCount};
 
 		vkFreeCommandBuffers(device, commandPool, 1, &command);
 		vkFreeDescriptorSets(device, descriptorPool, 1, &descriptorSet);
@@ -396,7 +410,7 @@ public:
 	};
 
 	//returns a pair containing the number of lines which would be active, would only these fractures be applied, and the number of lines that really are still active
-	std::pair<uint32_t, int> brushIndices(std::vector<std::vector<std::pair<float, float>>>& fractures, std::vector<int>& attributes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
+	ReturnStruct brushIndices(std::vector<std::vector<std::pair<float, float>>>& fractures, std::vector<int>& attributes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(UBOFractureInfo) + attributes.size() * sizeof(uint32_t);
 		UBOFractureInfo* informations = (UBOFractureInfo*)malloc(infoBytesSize);
@@ -502,7 +516,7 @@ public:
 
 		//getting the amount of remaining lines(if only this brush would have been applied)
 		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOFractureInfo), informations);
-		std::pair<uint32_t, int> res(informations->lineCount, informations->globalLineCount);
+		ReturnStruct res{informations->lineCount, informations->globalLineCount};
 
 		vkFreeCommandBuffers(device, commandPool, 1, &command);
 		vkFreeDescriptorSets(device, descriptorPool, 1, &descriptorSet);
@@ -517,7 +531,7 @@ public:
 	};
 
 	//returns a pair containing the number of lines which would be active, would only these fractures be applied, and the number of lines that really are still active
-	std::pair<uint32_t, int> brushIndices(std::vector<MultivariateGauss::MultivariateBrush>& fractures, std::vector<std::pair<float,float>>& bounds, std::vector<int>& attributes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush, float stdDev) {
+	ReturnStruct brushIndices(std::vector<MultivariateGauss::MultivariateBrush>& fractures, std::vector<std::pair<float,float>>& bounds, std::vector<int>& attributes, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush, float stdDev) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(UBOFractureInfo) + (attributes.size() * 3 + 1) * sizeof(float);
 		UBOFractureInfo* informations = (UBOFractureInfo*)malloc(infoBytesSize);
@@ -639,7 +653,7 @@ public:
 
 		//getting the amount of remaining lines(if only this brush would have been applied)
 		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOFractureInfo), informations);
-		std::pair<uint32_t, int> res(informations->lineCount, informations->globalLineCount);
+		ReturnStruct res{informations->lineCount, informations->globalLineCount};
 
 		vkFreeCommandBuffers(device, commandPool, 1, &command);
 		vkFreeDescriptorSets(device, descriptorPool, 1, &descriptorSet);
@@ -649,6 +663,120 @@ public:
 
 		free(informations);
 		free(gpuFractures);
+
+		return res;
+	};
+
+	//returns a pair containing the number of lines which would be active, would only these fractures be applied, and the number of lines that really are still active
+	ReturnStruct brushIndices(const Polygons& lassos, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
+		//allocating all ubos and collection iformation about amount of brushes etc.
+		uint32_t infoBytesSize = sizeof(UBOinfo);
+		UBOFractureInfo* informations = (UBOFractureInfo*)malloc(infoBytesSize);
+
+		uint32_t lassosByteSize = sizeof(uint32_t) + lassos.size() * (1 + 3) * sizeof(float);
+		for(const auto& lasso: lassos) lassosByteSize += sizeof(float) * 2 * lasso.borderPoints.size();
+		float* lassoBytes = (float*)malloc(lassosByteSize);
+
+		//allocating buffers and memory for ubos
+		uboOffsets[0] = 0;
+		VkUtil::createBuffer(device, infoBytesSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[0]);
+		VkUtil::createBuffer(device, lassosByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uboBuffers[1]);
+
+		VkResult err;
+		VkMemoryRequirements memReq;
+		uint32_t memTypeBits;
+
+		uboOffsets[0] = 0;
+		vkGetBufferMemoryRequirements(device, uboBuffers[0], &memReq);
+		VkMemoryAllocateInfo memalloc = {};
+		memalloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memalloc.allocationSize = memReq.size;
+		memTypeBits = memReq.memoryTypeBits;
+
+		uboOffsets[1] = memalloc.allocationSize;
+		vkGetBufferMemoryRequirements(device, uboBuffers[1], &memReq);
+		memalloc.allocationSize += memReq.size;
+		memTypeBits |= memReq.memoryTypeBits;
+
+		memalloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		err = vkAllocateMemory(device, &memalloc, nullptr, &uboMemory);
+		check_vk_result(err);
+
+		//binding buffers to memory
+		vkBindBufferMemory(device, uboBuffers[0], uboMemory, uboOffsets[0]);
+		vkBindBufferMemory(device, uboBuffers[1], uboMemory, uboOffsets[1]);
+
+		//creating the descriptor set and binding all buffers to the corrsponding bindings
+		VkDescriptorSet descriptorSet;
+		std::vector<VkDescriptorSetLayout> layouts;
+		layouts.push_back(descriptorSetLayout);
+		VkUtil::createDescriptorSets(device, layouts, descriptorPool, &descriptorSet);
+
+		VkUtil::updateDescriptorSet(device, uboBuffers[0], infoBytesSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, uboBuffers[1], lassosByteSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, data, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateDescriptorSet(device, indices, indicesSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorSet);
+		VkUtil::updateTexelBufferDescriptorSet(device, activeIndices, 4, descriptorSet);
+
+		//uploading data for brushing
+		void* d;
+		//informations->amtOfBrushAxes = brushes.size();
+		//informations->amtOfAttributes = amtOfAttributes;
+		informations->amtOfIndices = indicesSize;
+		informations->lineCount = 0;
+		informations->globalLineCount = (lastBrush) ? 0 : -1;
+		informations->first = first;
+		informations->andOr = andy;
+		
+		*(uint32_t*)lassoBytes = lassos.size();
+		uint32_t base_index = 1 + lassos.size();
+		uint32_t lassoC = 0;
+		for(const auto& lasso: lassos){
+			lassoBytes[1 + lassoC] = base_index - 1; //1 has to be substracted as the first element is not in the array on the gpu
+			lassoBytes[base_index++] = lasso.borderPoints.size();
+			lassoBytes[base_index++] = lasso.attr1;
+			lassoBytes[base_index++] = lasso.attr2;
+			for(const auto& p: lasso.borderPoints){
+				lassoBytes[base_index++] = p.x;
+				lassoBytes[base_index++] = p.y;
+			}
+			++lassoC;
+		}
+		assert(base_index * sizeof(float) == lassosByteSize);
+
+		vkMapMemory(device, uboMemory, uboOffsets[0], infoBytesSize, 0, &d);
+		memcpy(d, informations, infoBytesSize);
+		vkUnmapMemory(device, uboMemory);
+
+		vkMapMemory(device, uboMemory, uboOffsets[1], lassosByteSize, 0, &d);
+		memcpy(d, lassoBytes, lassosByteSize);
+		vkUnmapMemory(device, uboMemory);
+
+		//dispatching the command buffer to calculate active indices
+		VkCommandBuffer command;
+		VkUtil::createCommandBuffer(device, commandPool, &command);
+
+		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, lassoPipelineLayout, 0, 1, &descriptorSet, 0, {});
+		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, lassoPipeline);
+		int patchAmount = indicesSize / LOCALSIZE;
+		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+		vkCmdDispatch(command, patchAmount, 1, 1);
+		VkUtil::commitCommandBuffer(queue, command);
+		err = vkQueueWaitIdle(queue);
+		check_vk_result(err);
+
+		//getting the amount of remaining lines(if only this brush would have been applied)
+		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOFractureInfo), informations);
+		ReturnStruct res{informations->lineCount, informations->globalLineCount};
+
+		vkFreeCommandBuffers(device, commandPool, 1, &command);
+		vkFreeDescriptorSets(device, descriptorPool, 1, &descriptorSet);
+		vkFreeMemory(device, uboMemory, nullptr);
+		vkDestroyBuffer(device, uboBuffers[0], nullptr);
+		vkDestroyBuffer(device, uboBuffers[1], nullptr);
+
+		free(informations);
+		free(lassoBytes);
 
 		return res;
 	};

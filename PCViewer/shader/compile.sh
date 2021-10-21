@@ -28,6 +28,7 @@ glslangValidator -V -o isoSurfCopyOnes.spv isoSurfCopyOnes.comp
 glslangValidator -V -o brushComp.spv brush.comp
 glslangValidator -V -o brushFractureComp.spv brushFracture.comp
 glslangValidator -V -o brushMultvarComp.spv brushMultvar.comp
+glslangValidator -V -o brushLasso.spv brushLasso.comp
 glslangValidator -V -o histComp.spv hist.comp
 glslangValidator -V -o indexComp.spv index.comp
 glslangValidator -V -o band.vert.spv band.vert
