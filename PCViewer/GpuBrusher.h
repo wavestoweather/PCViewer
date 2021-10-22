@@ -671,7 +671,7 @@ public:
 	ReturnStruct brushIndices(const Polygons& lassos, uint32_t dataSize, VkBuffer data, VkBuffer indices, uint32_t indicesSize, VkBufferView activeIndices, uint32_t amtOfAttributes, bool first, bool andy, bool lastBrush) {
 		//allocating all ubos and collection iformation about amount of brushes etc.
 		uint32_t infoBytesSize = sizeof(UBOinfo);
-		UBOFractureInfo* informations = (UBOFractureInfo*)malloc(infoBytesSize);
+		UBOinfo* informations = (UBOinfo*)malloc(infoBytesSize);
 
 		uint32_t lassosByteSize = sizeof(uint32_t) + lassos.size() * (1 + 3) * sizeof(float);
 		for(const auto& lasso: lassos) lassosByteSize += sizeof(float) * 2 * lasso.borderPoints.size();
@@ -721,7 +721,7 @@ public:
 		//uploading data for brushing
 		void* d;
 		//informations->amtOfBrushAxes = brushes.size();
-		//informations->amtOfAttributes = amtOfAttributes;
+		informations->amtOfAttributes = amtOfAttributes;
 		informations->amtOfIndices = indicesSize;
 		informations->lineCount = 0;
 		informations->globalLineCount = (lastBrush) ? 0 : -1;
@@ -766,7 +766,7 @@ public:
 		check_vk_result(err);
 
 		//getting the amount of remaining lines(if only this brush would have been applied)
-		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOFractureInfo), informations);
+		VkUtil::downloadData(device, uboMemory, 0, sizeof(UBOinfo), informations);
 		ReturnStruct res{informations->lineCount, informations->globalLineCount};
 
 		vkFreeCommandBuffers(device, commandPool, 1, &command);

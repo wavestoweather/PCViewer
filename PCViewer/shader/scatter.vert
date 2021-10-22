@@ -44,7 +44,7 @@ void main() {
     switch(pConst.discardBits){
     case discardNone: disc = 0; break;
     case discardActive: lineActive ? disc = 1 : disc = 0; break;
-    case discardInactive: lineActive ? disc = 0: disc = 0; break;
+    case discardInactive: lineActive ? disc = 0: disc = 1; break;
     }
     if(lineActive || bool(ubo.inactiveSquare & 1)){
         float x = getPackedData(ind, pConst.xAttr);

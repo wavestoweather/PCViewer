@@ -5738,8 +5738,16 @@ static bool updateActiveIndices(DrawList& dl) {
 		}
 	}
 
+	//apply lasso brushes
+	bool lassoBrushExists = scatterplotWorkbench->lassoSelections.find(dl.name) != scatterplotWorkbench->lassoSelections.end();
+	if(lassoBrushExists){
+		GpuBrusher::ReturnStruct res = gpuBrusher->brushIndices(scatterplotWorkbench->lassoSelections[dl.name], data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, true);
+		firstBrush = false;
+		globalRemainingLines = res.activeLines;
+	}
+
 	//if no brush is active, reset the active indices
-	if (!brush.size() && !globalBrushesActive) {
+	if (!brush.size() && !globalBrushesActive && !lassoBrushExists) {
 		Data* data;
 		for (DataSet& ds : g_PcPlotDataSets) {
 			if (ds.name == dl.parentDataSet) {
@@ -14263,6 +14271,16 @@ int main(int, char**)
 		clusteringWorkbench.draw();
 
 		scatterplotWorkbench->draw();
+		// checking for lasso selections update
+		if(scatterplotWorkbench->updatedDrawlists.size()){
+			for(auto& dlName: scatterplotWorkbench->updatedDrawlists){
+				auto curDl = std::find_if(g_PcPlotDrawLists.begin(), g_PcPlotDrawLists.end(), [&](DrawList& dl){return dl.name == dlName;});
+				if(curDl != g_PcPlotDrawLists.end())
+					updateActiveIndices(*curDl);
+			}
+			scatterplotWorkbench->updatedDrawlists.clear();
+			pcPlotRender = true;		//updating the pcPlot to show new brushed lines
+		}
 
 		pcSettings.rescaleTableColumns = false;
 

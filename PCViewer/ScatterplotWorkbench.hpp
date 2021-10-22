@@ -16,12 +16,13 @@
 class ScatterplotWorkbench{
 public:
     ImVec2 static pixelPosToParameterPos(const ImVec2& mousePos, const ImVec2& borderMin, const ImVec2& borderMax, int attr1, int attr2, const std::vector<Attribute>& pcAttributes){
-        float x = mousePos.x - borderMin.x;
-        x /= borderMax.x - borderMin.x;
+        float x = mousePos.y - borderMax.y;
+        x /= borderMax.y - borderMin.y;
+        x *= -1; //inverting y axis
         x *= pcAttributes[attr1].max - pcAttributes[attr1].min;
         x += pcAttributes[attr1].min;
-        float y = mousePos.y - borderMin.y;
-        y /= borderMax.y - borderMin.y;
+        float y = mousePos.x - borderMin.x;
+        y /= borderMax.x - borderMin.x;
         y *= pcAttributes[attr2].max - pcAttributes[attr2].min;
         y += pcAttributes[attr2].min;
         return {x, y};
@@ -30,13 +31,14 @@ public:
     ImVec2 static parameterPosToPixelPos(const ImVec2& paramPos, const ImVec2& borderMin, const ImVec2& borderMax, int attr1, int attr2, const std::vector<Attribute>& pcAttributes){
         float x = paramPos.x - pcAttributes[attr1].min;
         x /= pcAttributes[attr1].max - pcAttributes[attr1].min;
-        x *= borderMax.x - borderMin.x;
-        x += borderMin.x;
+        x *= -1;
+        x *= borderMax.y - borderMin.y;
+        x += borderMax.y;
         float y = paramPos.y - pcAttributes[attr2].min;
         y /= pcAttributes[attr2].max - pcAttributes[attr2].min;
-        y *= borderMax.y - borderMin.y;
-        y += borderMin.y;
-        return {x, y};
+        y *= borderMax.x - borderMin.x;
+        y += borderMin.x;
+        return {y, x};
     }
 
     float static distance2(const ImVec2& a, const ImVec2& b){
@@ -392,12 +394,12 @@ public:
                                                     [&](const Polygon& polygon){return polygon.attr1 == curAttr && polygon.attr2 == curAttr2;});
                         if(lasso != lassoSelections[dls.front().drawListName].end()){
                             for(int p = 1; p < lasso->borderPoints.size(); ++p){
-                                ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[p - 1], {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
-                                ImVec2 b = parameterPosToPixelPos(lasso->borderPoints[p], {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
+                                ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[p - 1], {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
+                                ImVec2 b = parameterPosToPixelPos(lasso->borderPoints[p], {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
                                 ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                             }
-                            ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[0], {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
-                            ImVec2 b = parameterPosToPixelPos(lasso->borderPoints.back(), {curX, curY + xSpacing}, {curX + xSpacing, curY}, curAttr, curAttr2, attributes);
+                            ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[0], {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
+                            ImVec2 b = parameterPosToPixelPos(lasso->borderPoints.back(), {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
                             ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                         }
                     }
@@ -432,8 +434,8 @@ public:
                             && mousePos.y > curY && mousePos.y < curY + xSpacing;
                         if(inside) {
                             done = true;
-                            borderMin = {curX, curY + xSpacing};    // y is already inverted here for easier later calculations
-                            borderMax = {curX + xSpacing, curY};
+                            borderMin = {curX, curY};    // y is already inverted here for easier later calculations
+                            borderMax = {curX + xSpacing, curY + xSpacing};
                             break;
                         }
                         curX += xSpacing;
@@ -450,23 +452,28 @@ public:
                 if(dls.size() && lassoSelections.find(dls.front().drawListName) != lassoSelections.end()){
                     auto p = std::find_if(lassoSelections.find(dls.front().drawListName)->second.begin(), lassoSelections.find(dls.front().drawListName)->second.end(), [&](Polygon& p){return p.attr1 == attr1 && p.attr2 == attr2;});
                     if(p != lassoSelections.find(dls.front().drawListName)->second.end()){
-                        *p = {false, attr1, attr2, {}};
+                        *p = {attr1, attr2, {}};
                         std::swap(lassoSelections.find(dls.front().drawListName)->second.back(), *p);
                         lassoCreated = true;
                     }
                 }
                 if(dls.size() && lassoSelections.find(dls.front().drawListName) == lassoSelections.end()){
-                    lassoSelections[dls.front().drawListName] = {{false, attr1, attr2, {}}};
+                    lassoSelections[dls.front().drawListName] = {{attr1, attr2, {}}};
                     lassoCreated = true;
                 }
                 if(dls.size() && !lassoCreated)
-                    lassoSelections[dls.front().drawListName].push_back({false, attr1, attr2, {}});
+                    lassoSelections[dls.front().drawListName].push_back({attr1, attr2, {}});
             }
 
             //section to continously handle lasso creation
             if(plotId == id){
                 if(!ImGui::IsMouseDown(0)){  //stop lasso
                     attr1 = -1; attr2 = -1; plotId = -1;
+                    updatedDrawlists.push_back(dls.front().drawListName);
+                    auto& points = lassoSelections[dls.front().drawListName].back().borderPoints;
+                    if(points.size() < 3){  //deleting the brush
+                        lassoSelections[dls.front().drawListName].pop_back();
+                    }
                 }
                 else{
                     assert(lassoSelections[dls.front().drawListName].back().attr1 == attr1 && lassoSelections[dls.front().drawListName].back().attr2 == attr2);
@@ -477,6 +484,7 @@ public:
                     }
                     else if(distance2(mousePos, prevPointPos) > 25){    //on high enough distnace set next lasso point
                         points.push_back(pixelPosToParameterPos(mousePos, borderMin, borderMax, attr1, attr2, attributes));
+                        //std::cout << attributes[attr1].name << ": " << points.back().x << std::endl;
                         prevPointPos = mousePos;
                     }
                 }
@@ -619,6 +627,7 @@ public:
     bool showInactivePoints{true};
     
     static std::map<std::string, Polygons> lassoSelections;
+    static std::vector<std::string> updatedDrawlists;
     static int scatterPlotCounter;
 protected:
     VkPipeline pipeline{};
@@ -749,4 +758,5 @@ protected:
 };
 
 std::map<std::string, Polygons> ScatterplotWorkbench::lassoSelections = {};
+std::vector<std::string> ScatterplotWorkbench::updatedDrawlists{};
 int ScatterplotWorkbench::scatterPlotCounter = 0;
