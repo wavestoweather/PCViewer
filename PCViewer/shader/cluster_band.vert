@@ -6,13 +6,13 @@ layout(binding = 0) buffer StorageBuffer{
     float[] d;  //discrete structure of values in LineBundles.hpp
 }data;
 
-layout(binding = 1) uniform UniformBufferObject{
+layout(binding = 1) buffer UniformBufferObject{
 	float alpha;
 	uint amtOfVerts;
 	uint amtOfAttributes;
 	float padding;
 	vec4 color;
-	vec4 vertexTransformations[50];		//x holds the x position, y and z hold the lower and the upper bound respectivley
+	vec4 vertexTransformations[];		//x holds the x position, y and z hold the lower and the upper bound respectivley
 } ubo;
 
 layout(location = 0) in vec3 posIn;     //min, avg, max

@@ -2,13 +2,13 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_GOOGLE_include_directive : enable
 
-layout(binding = 0) uniform UniformBufferObject{
+layout(binding = 0) buffer UniformBufferObject{
 	float alpha;
 	uint amtOfVerts;
 	uint amtOfAttributes;
 	float padding;
 	vec4 color;
-	vec4 vertexTransformations[50];		//x holds the x position, y and z hold the lower and the upper bound respectivley
+	vec4 vertexTransformations[];		//x holds the x position, y and z hold the lower and the upper bound respectivley
 } ubo;
 
 layout(std430, binding = 1) buffer PriorityColors{

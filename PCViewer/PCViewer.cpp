@@ -282,7 +282,11 @@ struct UniformBufferObject {
 	uint32_t amtOfAttributes;
 	float padding;
 	Vec4 color;
-	Vec4 VertexTransormations[50];			//IMPORTANT: the length of this array should be the same length it is in the shader. To be the same length, due to padding this array has to be 4 times the length and just evvery 4th entry is used
+	std::vector<Vec4> vertTransformations;
+	//Vec4 VertexTransormations[];			//is now a variable length array at the end of the UBO
+	uint32_t size(){
+		return sizeof(UniformBufferObject) - sizeof(vertTransformations) + sizeof(vertTransformations[0]) * vertTransformations.size();
+	}
 };
 
 //uniform Buffer for the histogramms
@@ -1588,7 +1592,7 @@ static void createPcPlotPipeline() {
 
 	VkDescriptorSetLayoutBinding uboLayoutBindings[3] = {};
 	uboLayoutBindings[0].binding = 0;
-	uboLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	uboLayoutBindings[0].descriptorCount = 1;
 	uboLayoutBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
@@ -1707,7 +1711,7 @@ static void createPcPlotPipeline() {
 
 	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
 	uboLayoutBinding.binding = 0;
-	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	uboLayoutBinding.descriptorCount = 1;
 	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
 
@@ -2143,14 +2147,15 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	DrawList dl = {};
 	dl.parentTemplateList = &tl;
-
+	UniformBufferObject ubo;
+	ubo.vertTransformations.resize(pcAttributes.size());
 	//uniformBuffer for pcPlot Drawing
 	Buffer uboBuffer;
 
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(UniformBufferObject);
-	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	bufferInfo.size = ubo.size();
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.ubo);
@@ -2167,6 +2172,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	//uniformBuffer for Histogramms
 	bufferInfo.size = sizeof(HistogramUniformBuffer);
+	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 	for (int i = 0; i < pcAttributes.size(); i++) {
 		dl.histogramUbos.push_back({});
 		err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.histogramUbos.back());
@@ -2179,8 +2185,8 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	}
 
 	//Median line uniform buffer
-	bufferInfo.size = sizeof(UniformBufferObject);
-	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	bufferInfo.size = ubo.size();
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.medianUbo);
@@ -2256,7 +2262,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	vkBindBufferMemory(g_Device, dl.ubo, dl.dlMem, 0);
 
 	//Binding histogram uniform buffers
-	uint32_t offset = sizeof(UniformBufferObject);
+	uint32_t offset = ubo.size();
 	offset = (offset % memRequirements.alignment) ? offset + (memRequirements.alignment - (offset % memRequirements.alignment)) : offset; //alining the memory
 	dl.histogramUbosOffsets.push_back(offset);
 	for (int i = 0; i < dl.histogramUbos.size(); i++) {
@@ -2274,7 +2280,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	std::vector<VkDescriptorSetLayout> layouts;
 	layouts.push_back(g_PcPlotDescriptorLayout);
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &dl.medianUboDescSet);
-	VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, sizeof(UniformBufferObject), 0, dl.medianUboDescSet);
+	VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, ubo.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
 
 	//creating and uploading the indexbuffer data
 	//uint32_t* indBuffer = new uint32_t[tl.indices.size() * 2];
@@ -2334,7 +2340,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	VkDescriptorBufferInfo desBufferInfos[1] = {};
 	desBufferInfos[0].buffer = dl.ubo;
 	desBufferInfos[0].offset = 0;
-	desBufferInfos[0].range = sizeof(UniformBufferObject);
+	desBufferInfos[0].range = ubo.size();
 
 	VkDescriptorSetAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -2349,7 +2355,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	descriptorWrite.dstSet = dl.uboDescSet;
 	descriptorWrite.dstBinding = 0;
 	descriptorWrite.dstArrayElement = 0;
-	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	descriptorWrite.descriptorCount = 1;
 	descriptorWrite.pBufferInfo = desBufferInfos;
 
@@ -2717,7 +2723,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	ubo.amtOfVerts = amtOfIndeces;
 	ubo.amtOfAttributes = attributes.size();
 	ubo.color = { 1,1,1,1 };
-	ubo.VertexTransormations[0].w = (priorityAttribute != -1) ? 1.f : 0;
+	ubo.vertTransformations.resize(ubo.amtOfAttributes);
+	ubo.vertTransformations[0].w = (priorityAttribute != -1) ? 1.f : 0;
 	if (pcSettings.drawHistogramm) {
 		ubo.padding = pcSettings.histogrammWidth / 2;
 	}
@@ -2728,11 +2735,11 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	int c = 0;
 
 	for (int i : attributeOrder) {
-		ubo.VertexTransormations[i].x = c;
+		ubo.vertTransformations[i].x = c;
 		if (attributeEnabled[i])
 			c++;
-		ubo.VertexTransormations[i].y = attributes[i].min;
-		ubo.VertexTransormations[i].z = attributes[i].max;
+		ubo.vertTransformations[i].y = attributes[i].min;
+		ubo.vertTransformations[i].z = attributes[i].max;
 	}
 
 	std::vector<std::pair<int, int>> order;
@@ -2781,16 +2788,23 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	void* da;
 	c = 0;
 	for (DrawList& ds : g_PcPlotDrawLists) {
-		ubo.VertexTransormations[0].w = (priorityAttribute != -1 && c == priorityListIndex) ? 1.f : 0;
+		uint32_t uboSize = sizeof(UniformBufferObject) - sizeof(UniformBufferObject::vertTransformations);
+		uint32_t trafoSize = sizeof(ubo.vertTransformations[0]) * ubo.vertTransformations.size();
+		std::vector<uint8_t> bits(uboSize + trafoSize);
+		ubo.vertTransformations[0].w = (priorityAttribute != -1 && c == priorityListIndex) ? 1.f : 0;
 		ubo.color = ds.color;
-		vkMapMemory(g_Device, ds.dlMem, 0, sizeof(UniformBufferObject), 0, &da);
-		memcpy(da, &ubo, sizeof(UniformBufferObject));
+		std::copy_n(reinterpret_cast<uint8_t*>(&ubo), uboSize, bits.data());
+		std::copy_n(reinterpret_cast<uint8_t*>(ubo.vertTransformations.data()), trafoSize, bits.data() + uboSize);
+		vkMapMemory(g_Device, ds.dlMem, 0, bits.size(), 0, &da);
+		memcpy(da, bits.data(), bits.size());
 		vkUnmapMemory(g_Device, ds.dlMem);
 
-		ubo.VertexTransormations[0].w = 0;
+		ubo.vertTransformations[0].w = 0;
 		ubo.color = ds.medianColor;
-		vkMapMemory(g_Device, ds.dlMem, ds.medianUboOffset, sizeof(UniformBufferObject), 0, &da);
-		memcpy(da, &ubo, sizeof(UniformBufferObject));
+		std::copy_n(reinterpret_cast<uint8_t*>(&ubo), uboSize, bits.data());
+		std::copy_n(reinterpret_cast<uint8_t*>(ubo.vertTransformations.data()), trafoSize, bits.data() + uboSize);
+		vkMapMemory(g_Device, ds.dlMem, ds.medianUboOffset, bits.size(), 0, &da);
+		memcpy(da, bits.data(), bits.size());
 		vkUnmapMemory(g_Device, ds.dlMem);
 
 		c++;
@@ -2832,7 +2846,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			if (!drawList->show)
 				continue;
 			if (drawList->renderBundles){
-				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, ubo.size());
 				vkCmdEndRenderPass(line_batch_commands.back());
 				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->lineBundles->haloColor);
 				drawList->lineBundles->haloWidth = pcSettings.haloWidth;
@@ -2842,7 +2856,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				continue;
 			}
 			else if(drawList->renderClusterBundles){
-				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, ubo.size());
 				vkCmdEndRenderPass(line_batch_commands.back());
 				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->clusterBundles->haloColor);
 				drawList->clusterBundles->haloWidth = pcSettings.haloWidth;
@@ -2963,7 +2977,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				continue;
 
 			if (drawList->renderBundles){
-				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, ubo.size());
 				vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->lineBundles->haloColor);
 				drawList->lineBundles->haloWidth = pcSettings.haloWidth;
@@ -2978,7 +2992,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				continue;
 			}
 			if (drawList->renderClusterBundles){
-				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, sizeof(UniformBufferObject));
+				drawList->clusterBundles->setAxisInfosBuffer(drawList->ubo, ubo.size());
 				vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 				std::copy(&pcSettings.PcPlotBackCol.x, &pcSettings.PcPlotBackCol.x + 4, drawList->clusterBundles->haloColor);
 				drawList->clusterBundles->haloWidth = pcSettings.haloWidth;

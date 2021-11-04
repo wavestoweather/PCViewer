@@ -96,7 +96,7 @@ public:
     }
 
     void setAxisInfosBuffer(VkBuffer buffer, uint32_t bufferSize){
-        VkUtil::updateDescriptorSet(vkContext.device, buffer, bufferSize, 1, vkDescriptorSet);
+        VkUtil::updateDescriptorSet(vkContext.device, buffer, bufferSize, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vkDescriptorSet);
     }
 
 private:
