@@ -33,6 +33,7 @@ include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCL
 file(GLOB pcviewer_SRC
     "*.h"
     "*.cpp"
+    "*.hpp"
 )
 
 file(GLOB imgui_SRC

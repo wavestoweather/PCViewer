@@ -1,4 +1,6 @@
+#define NOSTATICS
 #include "ScatterplotWorkbench.hpp"
+#undef NOSTATICS
 #include <cmath>
 
 ImVec2 ScatterplotWorkbench::pixelPosToParameterPos(const ImVec2& mousePos, const ImVec2& borderMin, const ImVec2& borderMax, int attr1, int attr2, const std::vector<Attribute>& pcAttributes){
