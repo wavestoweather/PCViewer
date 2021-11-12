@@ -280,6 +280,7 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
     //drawing the labels on the left
     float curY = ImGui::GetCursorPosY();
     float xSpacing = curWidth / (activeAttributesCount - 1);
+    float xSpacingMargin = xSpacing * (1.0 - matrixSpacing);
     const int leftSpace = 150;
     int curPlace = 0;
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + xSpacing / 2);
@@ -313,7 +314,7 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
         int curAttr2 = 0;
         for(int j = 0; j <= i; ++j){
             //boxes
-            ImGui::GetWindowDrawList()->AddRect({curX, curY}, {curX + xSpacing, curY + xSpacing}, ImGui::GetColorU32(matrixBorderColor), 0, ImDrawCornerFlags_All, matrixBorderWidth);
+            ImGui::GetWindowDrawList()->AddRect({curX, curY}, {curX + xSpacingMargin, curY + xSpacingMargin}, ImGui::GetColorU32(matrixBorderColor), 0, ImDrawCornerFlags_All, matrixBorderWidth);
             //Lassos
             while(!activeAttributes[curAttr2] && curAttr2 < activeAttributes.size()) ++curAttr2;
             if(dls.size() && lassoSelections.find(dls.front().drawListName) != lassoSelections.end()){
@@ -321,12 +322,12 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
                                             [&](const Polygon& polygon){return polygon.attr1 == curAttr && polygon.attr2 == curAttr2;});
                 if(lasso != lassoSelections[dls.front().drawListName].end()){
                     for(int p = 1; p < lasso->borderPoints.size(); ++p){
-                        ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[p - 1], {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
-                        ImVec2 b = parameterPosToPixelPos(lasso->borderPoints[p], {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
+                        ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[p - 1], {curX, curY}, {curX + xSpacingMargin, curY + xSpacingMargin}, curAttr, curAttr2, attributes);
+                        ImVec2 b = parameterPosToPixelPos(lasso->borderPoints[p], {curX, curY}, {curX + xSpacingMargin, curY + xSpacingMargin}, curAttr, curAttr2, attributes);
                         ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                     }
-                    ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[0], {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
-                    ImVec2 b = parameterPosToPixelPos(lasso->borderPoints.back(), {curX, curY}, {curX + xSpacing, curY + xSpacing}, curAttr, curAttr2, attributes);
+                    ImVec2 a = parameterPosToPixelPos(lasso->borderPoints[0], {curX, curY}, {curX + xSpacingMargin, curY + xSpacingMargin}, curAttr, curAttr2, attributes);
+                    ImVec2 b = parameterPosToPixelPos(lasso->borderPoints.back(), {curX, curY}, {curX + xSpacingMargin, curY + xSpacingMargin}, curAttr, curAttr2, attributes);
                     ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                 }
             }
@@ -356,12 +357,12 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
             while(!activeAttributes[attr1] && attr1 < activeAttributes.size()) ++attr1;
             for(int j = 0; j <= i && !done; ++j){
                 while(!activeAttributes[attr2] && attr2 < activeAttributes.size()) ++attr2;
-                inside = mousePos.x > curX && mousePos.x < curX + xSpacing
-                    && mousePos.y > curY && mousePos.y < curY + xSpacing;
+                inside = mousePos.x > curX && mousePos.x < curX + xSpacingMargin
+                    && mousePos.y > curY && mousePos.y < curY + xSpacingMargin;
                 if(inside) {
                     done = true;
                     borderMin = {curX, curY};    // y is already inverted here for easier later calculations
-                    borderMax = {curX + xSpacing, curY + xSpacing};
+                    borderMax = {curX + xSpacingMargin, curY + xSpacingMargin};
                     break;
                 }
                 curX += xSpacing;
