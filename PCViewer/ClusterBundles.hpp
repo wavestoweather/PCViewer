@@ -119,9 +119,9 @@ private:
 
     VkUtil::Context vkContext = {};
 
-    char* vertPath = "shader/cluster_band.vert.spv";
-    char* geomPath = "shader/cluster_band.geom.spv";
-    char* fragPath = "shader/band.frag.spv";
+    char const* vertPath = "shader/cluster_band.vert.spv";
+    char const* geomPath = "shader/cluster_band.geom.spv";
+    char const* fragPath = "shader/band.frag.spv";
 
     //recreates vulkan data for rendering if already existing, else simply creates
     void recreateVulkanBuffer(const std::vector<std::pair<uint32_t, bool>>& attributeOrder){   

@@ -2147,6 +2147,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	DrawList dl = {};
 	dl.parentTemplateList = &tl;
+	dl.data = &ds.data;
 	UniformBufferObject ubo;
 	ubo.vertTransformations.resize(pcAttributes.size());
 	//uniformBuffer for pcPlot Drawing

@@ -11,7 +11,7 @@
 #include "MultivariateGauss.h"
 #include "LassoBrush.hpp"
 
-#define LOCALSIZE 256
+#define BRUSHERLOCALSIZE 256
 #define SHADERPATH "shader/brushComp.spv"
 #define SHADERPATHFRACTURE "shader/brushFractureComp.spv"
 #define SHADERPATHMULTIVARIATE "shader/brushMultvarComp.spv"
@@ -256,8 +256,8 @@ public:
 
 		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, {});
 		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-		int patchAmount = indicesSize / LOCALSIZE;
-		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+		int patchAmount = indicesSize / BRUSHERLOCALSIZE;
+		patchAmount += (indicesSize % BRUSHERLOCALSIZE) ? 1 : 0;
 		vkCmdDispatch(command, patchAmount, 1, 1);
 		VkUtil::commitCommandBuffer(queue, command);
 		err = vkQueueWaitIdle(queue);
@@ -386,8 +386,8 @@ public:
 
 		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, {});
 		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-		int patchAmount = indicesSize / LOCALSIZE;
-		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+		int patchAmount = indicesSize / BRUSHERLOCALSIZE;
+		patchAmount += (indicesSize % BRUSHERLOCALSIZE) ? 1 : 0;
 		vkCmdDispatch(command, patchAmount, 1, 1);
 		VkUtil::commitCommandBuffer(queue, command);
 		err = vkQueueWaitIdle(queue);
@@ -507,8 +507,8 @@ public:
 
 		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, fracturePipelineLayout, 0, 1, &descriptorSet, 0, {});
 		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, fracturePipeline);
-		int patchAmount = indicesSize / LOCALSIZE;
-		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+		int patchAmount = indicesSize / BRUSHERLOCALSIZE;
+		patchAmount += (indicesSize % BRUSHERLOCALSIZE) ? 1 : 0;
 		vkCmdDispatch(command, patchAmount, 1, 1);
 		VkUtil::commitCommandBuffer(queue, command);
 		err = vkQueueWaitIdle(queue);
@@ -644,8 +644,8 @@ public:
 
 		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, multivariatePipelineLayout, 0, 1, &descriptorSet, 0, {});
 		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, multivariatePipeline);
-		int patchAmount = indicesSize / LOCALSIZE;
-		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+		int patchAmount = indicesSize / BRUSHERLOCALSIZE;
+		patchAmount += (indicesSize % BRUSHERLOCALSIZE) ? 1 : 0;
 		vkCmdDispatch(command, patchAmount, 1, 1);
 		VkUtil::commitCommandBuffer(queue, command);
 		err = vkQueueWaitIdle(queue);
@@ -758,8 +758,8 @@ public:
 
 		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, lassoPipelineLayout, 0, 1, &descriptorSet, 0, {});
 		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, lassoPipeline);
-		int patchAmount = indicesSize / LOCALSIZE;
-		patchAmount += (indicesSize % LOCALSIZE) ? 1 : 0;
+		int patchAmount = indicesSize / BRUSHERLOCALSIZE;
+		patchAmount += (indicesSize % BRUSHERLOCALSIZE) ? 1 : 0;
 		vkCmdDispatch(command, patchAmount, 1, 1);
 		VkUtil::commitCommandBuffer(queue, command);
 		err = vkQueueWaitIdle(queue);

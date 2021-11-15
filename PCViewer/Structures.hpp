@@ -62,6 +62,7 @@ struct DrawList {
 	std::string name;
 	std::string parentDataSet;
 	TemplateList* parentTemplateList;
+	const Data* data;
 	Vec4 color;
 	Vec4 prefColor;
 	bool show;

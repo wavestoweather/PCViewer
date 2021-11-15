@@ -8,7 +8,7 @@
 #include "VkUtil.h"
 #include "PCUtil.h"
 
-#define LOCALSIZE 64
+#define PCULOCALSIZE 64
 
 class PriorityColorUpdater {
 private:
@@ -137,9 +137,9 @@ public:
 		
 		vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descSet, 0, {});
 		vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-		int patchAmount = indices.size() / LOCALSIZE;
-		patchAmount += (indices.size() % LOCALSIZE) ? 1 : 0;
-		vkCmdDispatch(command, indices.size() / LOCALSIZE + 1, 1, 1);
+		int patchAmount = indices.size() / PCULOCALSIZE;
+		patchAmount += (indices.size() % PCULOCALSIZE) ? 1 : 0;
+		vkCmdDispatch(command, indices.size() / PCULOCALSIZE + 1, 1, 1);
 
 
 		vkDeviceWaitIdle(device);

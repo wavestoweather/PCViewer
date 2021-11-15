@@ -200,23 +200,22 @@ class Data{
 
     // access data by an index \in[0, cross(dimensionSizes)] and a column
     float& operator()(uint32_t index, uint32_t column){
-        std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
-        for(int i = dimensionSizes.size() - 1; i >= 0; --i){
-            dimensionIndices[i] = index % dimensionSizes[i];
-            index /= dimensionSizes[i];
-        }
-        uint32_t columnIndex = this->index(dimensionIndices, column);
-        return columns[column][columnIndex];
+        uint64_t colIndex = columnIndex(index, column);
+        return columns[column][colIndex];
     }
     // const data access
     const float& operator()(uint32_t index, uint32_t column) const{
+        uint64_t colIndex = columnIndex(index, column);
+        return columns[column][colIndex];
+    }
+    // converts data index to column index (needed for non full dimensional columns)
+    uint64_t columnIndex(uint32_t index, uint32_t column) const{
         std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
         for(int i = dimensionSizes.size() - 1; i >= 0; --i){
             dimensionIndices[i] = index % dimensionSizes[i];
             index /= dimensionSizes[i];
         }
-        uint32_t columnIndex = this->index(dimensionIndices, column);
-        return columns[column][columnIndex];
+        return this->index(dimensionIndices, column);
     }
 
 private:
@@ -246,6 +245,7 @@ private:
         }
         return columnIndex;
     }
+
     //  returns the index for a column given the dimension indices. Dimension indices only include indices for the current dimension, no mapping needed
     uint32_t indexReducedDimIndices(const std::vector<uint32_t>& dimensionIndices, uint32_t column) const{
         uint32_t columnIndex = 0;
