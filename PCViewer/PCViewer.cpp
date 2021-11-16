@@ -4728,7 +4728,7 @@ static void saveRecentFiles() {
 		cur += stringLength;
 	}
 	settingsManager->addSetting(s);
-	delete[] s.data;
+	delete[] static_cast<char*>(s.data);
 }
 
 static void loadRecentFiles() {
@@ -4815,7 +4815,7 @@ static bool openDataset(const char* filename) {
 
 	sortAttributes();		//sortin the attributes to display in alphabetical order
 
-	delete[] s.data;
+	delete[] static_cast<char*>(s.data);
     return true;
 }
 
@@ -7566,7 +7566,7 @@ int main(int, char**)
 							prefAtt = false;
 							ImGui::Separator();
 						}
-						ImGui::Text(a.name.c_str());
+						ImGui::Text("%s", a.name.c_str());
 						ImGui::SameLine(100);
 						ImGui::Text("%d, %s", a.dimensionality, ((a.dimensionSize > 0) ? "Dim" : " "));
 						ImGui::SameLine(150);
@@ -7792,7 +7792,7 @@ int main(int, char**)
 				}
 
 				if (ImGui::BeginMenu("Brush Combination")) {
-					static char* const combinations[] = { "OR","AND" };
+					static char const* combinations[] = { "OR","AND" };
 					if (ImGui::Combo("brushCombination", &pcSettings.brushCombination, combinations, sizeof(combinations) / sizeof(*combinations))) {
 						pcPlotRender = updateAllActiveIndices();
 					}
@@ -7811,7 +7811,7 @@ int main(int, char**)
 					if (pcSettings.outlierRank < 1) pcSettings.outlierRank = 1;
 				}
 
-				static char* boundsTypes[] = { "No adjustment","Pull in outside", "Pull in both sides" };
+				static char const* boundsTypes[] = { "No adjustment","Pull in outside", "Pull in both sides" };
 				if (ImGui::BeginCombo("Bounds behaviour", boundsTypes[pcSettings.boundsBehaviour])) {
 					for (int i = 0; i < 3; i++) {
 						if (ImGui::MenuItem(boundsTypes[i])) pcSettings.boundsBehaviour = i;
@@ -7819,7 +7819,7 @@ int main(int, char**)
 					ImGui::EndCombo();
 				}
 
-				static char* splitTypes[] = { "Split half","SAH" };
+				static char const* splitTypes[] = { "Split half","SAH" };
 				if (ImGui::BeginCombo("Split behaviour", splitTypes[pcSettings.splitBehaviour])) {
 					for (int i = 0; i < 2; ++i) {
 						if (ImGui::MenuItem(splitTypes[i])) pcSettings.splitBehaviour = i;
@@ -8062,7 +8062,7 @@ int main(int, char**)
 		if (ImGui::BeginPopupModal("Manage attribute settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			std::string del;
 			for (SettingsManager::Setting* s : *settingsManager->getSettingsType("AttributeSetting")) {
-				ImGui::Text(s->id.c_str());
+				ImGui::Text("%s", s->id.c_str());
 				ImGui::SameLine(200);
 				if (ImGui::Button(("Delete##" + s->id).c_str())) {
 					del = s->id;
@@ -8118,7 +8118,7 @@ int main(int, char**)
 				s.type = "AttributeSetting";
 				settingsManager->addSetting(s);
 
-				delete[] s.data;
+				delete[] static_cast<char*>(s.data);
 			}
 			ImGui::SetItemDefaultFocus();
 			ImGui::SameLine();
@@ -8240,7 +8240,7 @@ int main(int, char**)
 					ImGui::Button(name.c_str(), buttonSize);
 					if (name != pcAttributes[i].originalName && ImGui::IsItemHovered()) {
 						ImGui::BeginTooltip();
-						ImGui::Text(pcAttributes[i].originalName.c_str());
+						ImGui::Text("%s", pcAttributes[i].originalName.c_str());
 						ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
 						ImGui::EndTooltip();
 					}
@@ -8908,7 +8908,7 @@ int main(int, char**)
 				//int hover = ImGui::PlotHistogramVertical("##testHistogramm", histogrammdata, 10, 0, NULL, 0, 1.0f, ImVec2(50, 200));
 				for (auto& brush : globalBrushes) {
 					ImGui::BeginChild(("##brushStat" + brush.id).c_str(), ImVec2(400, 0), true);
-					ImGui::Text(brush.nam.c_str());
+					ImGui::Text("%s", brush.nam.c_str());
 					float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 					static std::vector<float> ratios;
 					ImVec2 defaultCursorPos = ImGui::GetCursorPos();
@@ -8927,12 +8927,12 @@ int main(int, char**)
 							ImGui::Text("Drawlist %d", c);
 							if (ImGui::IsItemHovered()) {
 								ImGui::BeginTooltip();
-								ImGui::Text(ratio.first.c_str());
+								ImGui::Text("%s", ratio.first.c_str());
 								ImGui::EndTooltip();
 							}
 						}
 						else {
-							ImGui::Text(ratio.first.c_str());
+							ImGui::Text("%s", ratio.first.c_str());
 						}
 						DrawList* dl;
 						for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
@@ -9056,7 +9056,7 @@ int main(int, char**)
                                     caseDependentString +=  "Ratio is  " + sstr.str() + "%. Less points were selected.";
 
 //                                    ImGui::Text(std::strcat(caseDependentString.c_str(), "Ratio is  %2.1f%%. Less points were selected", ((linepos / (width / 2))) * 100));
-                                    ImGui::Text(caseDependentString.c_str());
+                                    ImGui::Text("%s", caseDependentString.c_str());
 								}
                                 else {// y = w/2 - (1-x)*w/2
 
@@ -9066,7 +9066,7 @@ int main(int, char**)
 
 //                                    ImGui::Text(cDS + "Ratio is  %2.1f% to 1. More points were selected.", 1.0/ ((1 - ((linepos - width / 2) / (width / 2)))));
 
-                                    ImGui::Text(caseDependentString.c_str());
+                                    ImGui::Text("%s", caseDependentString.c_str());
 								}
 								ImGui::EndTooltip();
 							}
@@ -9099,7 +9099,7 @@ int main(int, char**)
 					for (auto& ratio : activeBrushRatios) {
 						ratios.push_back(ratio.second);
 						ImGui::SetCursorPos(cursorPos);
-						ImGui::Text(ratio.first.c_str());
+						ImGui::Text("%s", ratio.first.c_str());
 						cursorPos.y += lineHeight;
 					}
 					ImGui::SetCursorPos(defaultCursorPos);
@@ -9160,7 +9160,7 @@ int main(int, char**)
 								b.y -= lineHeight;
 								if (i == amtOfLabels - 1) b.x -= ImGui::CalcTextSize(str).x;
 								ImGui::SetCursorScreenPos(b);
-								ImGui::Text(str);
+								ImGui::Text("%s", str);
 							}
 
 							ImGui::SetCursorPos(oldCoursor);
@@ -9253,7 +9253,7 @@ int main(int, char**)
 							ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
 							ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
 							ImGui::Begin(("Tooltip Categorie" + categorie.first + pcAttributes[i].originalName).c_str(), NULL, flags);
-							ImGui::Text(categorie.first.c_str());
+							ImGui::Text("%s", categorie.first.c_str());
 							ImGui::End();
                             prev_y = y;
 						}
@@ -10318,12 +10318,12 @@ int main(int, char**)
 							if(ImGui::BeginTabBar("Destination")){
 								if(ImGui::BeginTabItem("Drawlist")){
 									destination = 0;
-									ImGui::Text((std::string("Creating a DRAWLIST list from ") + tl.name).c_str());
+									ImGui::Text("%s", (std::string("Creating a DRAWLIST list from ") + tl.name).c_str());
 									ImGui::EndTabItem();
 								}
 								if(ImGui::BeginTabItem("TemplateList")){
 									destination = 1;
-									ImGui::Text((std::string("Creating a TEMPLATELIST from ") + tl.name).c_str());
+									ImGui::Text("%s", (std::string("Creating a TEMPLATELIST from ") + tl.name).c_str());
 									ImGui::EndTabItem();
 								}
 								ImGui::EndTabBar();
@@ -10555,7 +10555,7 @@ int main(int, char**)
 						}
 
 						for (int i = 0; i < droppedPaths.size(); i++) {
-							ImGui::Text(droppedPaths[i].c_str());
+							ImGui::Text("%s", droppedPaths[i].c_str());
 							ImGui::SameLine();
 							ImGui::Checkbox(("##" + droppedPaths[i]).c_str(), &createDLForDrop[i]);
 						}
@@ -10930,9 +10930,9 @@ int main(int, char**)
 			ImGui::NextColumn();
 			ImGui::Text("Draw");
 			ImGui::NextColumn();
-			ImGui::Text("");
+			ImGui::Text(" ");
 			ImGui::NextColumn();
-			ImGui::Text("");
+			ImGui::Text(" ");
 			ImGui::NextColumn();
 			ImGui::Text("Delete");
 			ImGui::NextColumn();
@@ -11327,8 +11327,8 @@ int main(int, char**)
 				ImGui::InputText("Name for new Drawlist", name, 250);
 				ImGui::BeginChild("A", ImVec2(400, 200));
 				ImGui::Text("Statistics for %s", drawListComparator.a.c_str());
-				ImGui::Text("Contains %8d points.", drawListComparator.aInd.size());
-				ImGui::Text("The intersection has %d points.", drawListComparator.aAndb.size());
+				ImGui::Text("Contains %8d points.", static_cast<int>(drawListComparator.aInd.size()));
+				ImGui::Text("The intersection has %d points.", static_cast<int>(drawListComparator.aAndb.size()));
 				if (ImGui::Button("Create intersection##a")) {
 					TemplateList tl = {};
 					DataSet& parent = g_PcPlotDataSets.front();
@@ -11344,7 +11344,7 @@ int main(int, char**)
 					createPcPlotDrawList(tl, parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
-				ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
+				ImGui::Text("Union has %8d points", static_cast<int>(drawListComparator.aOrB.size()));
 				if (ImGui::Button("Create union##a")) {
 					TemplateList tl = {};
 					DataSet& parent = g_PcPlotDataSets.front();
@@ -11360,7 +11360,7 @@ int main(int, char**)
 					createPcPlotDrawList(tl, parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
-				ImGui::Text("Difference has %8d points", drawListComparator.aMinusB.size());
+				ImGui::Text("Difference has %8d points", static_cast<int>(drawListComparator.aMinusB.size()));
 				if (ImGui::Button("Create difference##a")) {
 					TemplateList tl = {};
 					DataSet& parent = g_PcPlotDataSets.front();
@@ -11381,8 +11381,8 @@ int main(int, char**)
 
 				ImGui::BeginChild("B", ImVec2(400, 200));
 				ImGui::Text("Statistics for %s", drawListComparator.b.c_str());
-				ImGui::Text("Contains %8d points.", drawListComparator.bInd.size());
-				ImGui::Text("The intersection has %d points.", drawListComparator.aAndb.size());
+				ImGui::Text("Contains %8d points.", static_cast<int>(drawListComparator.bInd.size()));
+				ImGui::Text("The intersection has %d points.", static_cast<int>(drawListComparator.aAndb.size()));
 				if (ImGui::Button("Create intersection##b")) {
 					TemplateList tl = {};
 					DataSet& parent = g_PcPlotDataSets.front();
@@ -11398,7 +11398,7 @@ int main(int, char**)
 					createPcPlotDrawList(tl, parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
-				ImGui::Text("Union has %8d points", drawListComparator.aOrB.size());
+				ImGui::Text("Union has %8d points", static_cast<int>(drawListComparator.aOrB.size()));
 				if (ImGui::Button("Create union##b")) {
 					TemplateList tl = {};
 					DataSet& parent = g_PcPlotDataSets.front();
@@ -11414,7 +11414,7 @@ int main(int, char**)
 					createPcPlotDrawList(tl, parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
-				ImGui::Text("Difference has %8d points", drawListComparator.bMinusA.size());
+				ImGui::Text("Difference has %8d points", static_cast<int>(drawListComparator.bMinusA.size()));
 				if (ImGui::Button("Create difference##b")) {
 					TemplateList tl = {};
 					DataSet& parent = g_PcPlotDataSets.front();
@@ -11655,7 +11655,7 @@ int main(int, char**)
 					bubblePlotter->render();
 				}
 				ImGui::NextColumn();
-				static char* scales[] = { "Normal","Squareroot","Logarithmic" };
+				static char const* scales[] = { "Normal","Squareroot","Logarithmic" };
 				static int selectedScale = 0;
 				if (ImGui::BeginCombo(("Scale##" + std::to_string(i)).c_str(), scales[bubblePlotter->attributeScales[i]])) {
 					for (int j = 0; j < 3; ++j) {
@@ -12011,9 +12011,9 @@ int main(int, char**)
 			int index = 0;
 			int del = -1;
 			for (IsoSurfRenderer::DrawlistBrush& db : isoSurfaceRenderer->drawlistBrushes) {
-				ImGui::Text(db.drawlist.c_str());
+				ImGui::Text("%s", db.drawlist.c_str());
 				ImGui::NextColumn();
-				ImGui::Text(db.brush.c_str());
+				ImGui::Text("%s", db.brush.c_str());
 				ImGui::NextColumn();
 				if (ImGui::ColorEdit4((std::string("##col") + db.drawlist + db.brush).c_str(), (float*)&db.brushSurfaceColor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_AlphaBar)) {
 					isoSurfaceRenderer->render();
@@ -12512,7 +12512,7 @@ int main(int, char**)
 						updateAllViolinPlotMaxValues(violinPlotAttributeSettings.renderOrderBasedOnFirstAtt);
 						for(auto& plot: violinAttributePlots) updateSummedBins(plot);
 					}
-					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
+					static char const* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
 					if (ImGui::BeginCombo("Y Scale", violinYs[violinPlotAttributeSettings.violinYScale])) {
                         ImGui::SetTooltip("This only affects to which range the bins are fitted. The y min and max are the PCPlot axis borders.");
 						for (int v = 0; v < 4; ++v) {
@@ -12548,7 +12548,7 @@ int main(int, char**)
 				//drawing uniform settings
 				ImGui::Text("Uniform Settings");
 				ImGui::SameLine(200);
-				static char* plotPositions[] = { "Left","Right","Middle" };
+				static char const* plotPositions[] = { "Left","Right","Middle" };
 				static int uniformPlotPosition = 0;
 				if (ImGui::BeginCombo("Position##uniform", plotPositions[uniformPlotPosition])) {
 					for (int k = 0; k < 3; ++k) {
@@ -12562,7 +12562,7 @@ int main(int, char**)
 					ImGui::EndCombo();
 				}
 				ImGui::SameLine(480);
-				static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
+				static char const* violinScales[] = { "Self","Local","Global","Global Attribute" };
 				static int uniformPlotScale = 3;
 				if (ImGui::BeginCombo("Scale##uniform", violinScales[uniformPlotScale])) {
 					for (int k = 0; k < 4; ++k) {
@@ -12819,7 +12819,7 @@ int main(int, char**)
 						if (c1 != 0) {
 							ImGui::SameLine(c1 * xGap + 10);
 						}
-						ImGui::Text((std::to_string(pcAttributes[j].max)).c_str());
+						ImGui::Text("%s", (std::to_string(pcAttributes[j].max)).c_str());
 
 						c++;
 						c1++;
@@ -13129,7 +13129,7 @@ int main(int, char**)
 						if (c1 != 0) {
 							ImGui::SameLine(c1 * xGap + 10);
 						}
-						ImGui::Text((std::to_string(pcAttributes[j].min)).c_str());
+						ImGui::Text("%s", (std::to_string(pcAttributes[j].min)).c_str());
 
 						c++;
 						c1++;
@@ -13253,7 +13253,7 @@ int main(int, char**)
 						updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
                         for (unsigned int cpdlI; cpdlI < violinDrawlistPlots.size(); ++cpdlI){updateHistogramComparisonDL(cpdlI);}
 					}
-					static char* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
+					static char const* violinYs[] = { "Standard","Local brush","Global brush","All brushes" };
 
 					ImGui::Columns(2);
 					if (ImGui::BeginCombo("Y Scale", violinYs[violinPlotDrawlistSettings.violinYScale])) {
@@ -13302,7 +13302,7 @@ int main(int, char**)
 					ImGui::Separator();
 					ImGui::Columns(3);
 
-					static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
+					static char const* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
 					if (ImGui::BeginCombo("ChangePosition", plotPositions[0])) {
 						for (int k = 0; k < 7; ++k) {
 							if (ImGui::MenuItem(plotPositions[k], nullptr)) {
@@ -13317,7 +13317,7 @@ int main(int, char**)
 						ImGui::EndCombo();
 					}
 					ImGui::NextColumn();
-					static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
+					static char const* violinScales[] = { "Self","Local","Global","Global Attribute" };
 					if (ImGui::BeginCombo("ChangeScale", violinScales[0])) {
 						for (int k = 0; k < 4; ++k) {
 							if (ImGui::MenuItem(violinScales[k], nullptr)) {
@@ -13387,7 +13387,7 @@ int main(int, char**)
 					ImGui::PopStyleColor();
 					ImGui::NextColumn();
 					static int general_plot_pos = 0;
-					static char* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
+					static char const* plotPositions[] = { "Left","Right","Middle","Middle|Left","Middle|Right","Left|Half","Right|Half" };
 					if (ImGui::BeginCombo("##generalpos", plotPositions[general_plot_pos])) {
 						for (int k = 0; k < 7; ++k) {
 							if (ImGui::MenuItem(plotPositions[k])) {
@@ -13400,7 +13400,7 @@ int main(int, char**)
 						ImGui::EndCombo();
 					}
 					ImGui::NextColumn();
-					static char* violinScales[] = { "Self","Local","Global","Global Attribute" };
+					static char const* violinScales[] = { "Self","Local","Global","Global Attribute" };
 					static int general_plot_scale = 0;
 					if (ImGui::BeginCombo("##generalscale", violinScales[general_plot_scale])) {
 						for (int k = 0; k < 4; ++k) {
@@ -13782,12 +13782,12 @@ int main(int, char**)
                             // Here, the text above each MPVP is written.
 
 
-							ImGui::Text(violinDrawlistPlots[i].drawLists[j].c_str());
+							ImGui::Text("%s", violinDrawlistPlots[i].drawLists[j].c_str());
                             if (violinPlotDLIdxInListForHistComparison[i] != -1){
                                 ImVec2 textPosCurr = textPos;
                                 textPosCurr.y += 1.1*ImGui::GetTextLineHeight();
                                 ImGui::SetCursorScreenPos(textPosCurr);
-                                ImGui::Text(std::to_string(violinDrawlistPlots[i].histDistToRepresentative[j]).c_str());
+                                ImGui::Text("%s", std::to_string(violinDrawlistPlots[i].histDistToRepresentative[j]).c_str());
                             }
 
 							ImGui::PushClipRect(framePos, framePos + size, false);

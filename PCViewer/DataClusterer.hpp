@@ -111,6 +111,7 @@ protected:
             case DistanceMetric::SquaredNorm: return (a - b).squaredNorm();
             case DistanceMetric::L1Norm: return (a - b).lpNorm<1>();
         }
+        return 0;
     }
 
     void updateStepKMeans(){
