@@ -59,8 +59,10 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "LineBundles.hpp"
 #include "ClusteringWorkbench.hpp"
 #include "ScatterplotWorkbench.hpp"
+#include "CorrelationMatrixWorkbench.hpp"
 
 #include "ColorPalette.h"
+#include "ColorMaps.hpp"
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -539,128 +541,6 @@ static char						g_densFragPath[] = "shader/densFrag.spv";
 static char						g_densVertPath[] = "shader/densVert.spv";
 static char						c_indexShaderPath[] = "shader/indexComp.spv";
 
-//color palette for density
-static const unsigned char		colorPalette[] = { 0, 0, 0		,255
-												,0, 0, 36		,255
-												,0, 0, 51		,255
-												,0, 0, 66		,255
-												,0, 0, 81		,255
-												,2, 0, 90		,255
-												,4, 0, 99		,255
-												,7, 0, 106		,255
-												,11, 0, 115		,255
-												,14, 0, 119		,255
-												,20, 0, 123		,255
-												,27, 0, 128		,255
-												,33, 0, 133		,255
-												,41, 0, 137		,255
-												,48, 0, 140		,255
-												,55, 0, 143		,255
-												,61, 0, 146		,255
-												,66, 0, 149		,255
-												,72, 0, 150		,255
-												,78, 0, 151		,255
-												,84, 0, 152		,255
-												,91, 0, 153		,255
-												,97, 0, 155		,255
-												,104, 0, 155	,255
-												,110, 0, 156	,255
-												,115, 0, 157	,255
-												,122, 0, 157	,255
-												,128, 0, 157	,255
-												,134, 0, 157	,255
-												,139, 0, 157	,255
-												,146, 0, 156	,255
-												,152, 0, 155	,255
-												,157, 0, 155	,255
-												,162, 0, 155	,255
-												,167, 0, 154	,255
-												,171, 0, 153	,255
-												,175, 1, 152	,255
-												,178, 1, 151	,255
-												,182, 2, 149	,255
-												,185, 4, 149	,255
-												,188, 5, 147	,255
-												,191, 6, 146	,255
-												,193, 8, 144	,255
-												,195, 11, 142	,255
-												,198, 13, 139	,255
-												,201, 17, 135	,255
-												,203, 20, 132	,255
-												,206, 23, 127	,255
-												,208, 26, 121	,255
-												,210, 29, 116	,255
-												,212, 33, 111	,255
-												,214, 37, 103	,255
-												,217, 41, 97	,255
-												,219, 46, 89	,255
-												,221, 49, 78	,255
-												,223, 53, 66	,255
-												,224, 56, 54	,255
-												,226, 60, 42	,255
-												,228, 64, 30	,255
-												,229, 68, 25	,255
-												,231, 72, 20	,255
-												,232, 76, 16	,255
-												,234, 78, 12	,255
-												,235, 82, 10	,255
-												,236, 86, 8		,255
-												,237, 90, 7		,255
-												,238, 93, 5		,255
-												,239, 96, 4		,255
-												,240, 100, 3	,255
-												,241, 103, 3	,255
-												,241, 106, 2	,255
-												,242, 109, 1	,255
-												,243, 113, 1	,255
-												,244, 116, 0	,255
-												,244, 120, 0	,255
-												,245, 125, 0	,255
-												,246, 129, 0	,255
-												,247, 133, 0	,255
-												,248, 136, 0	,255
-												,248, 139, 0	,255
-												,249, 142, 0	,255
-												,249, 145, 0	,255
-												,250, 149, 0	,255
-												,251, 154, 0	,255
-												,252, 159, 0	,255
-												,253, 163, 0	,255
-												,253, 168, 0	,255
-												,253, 172, 0	,255
-												,254, 176, 0	,255
-												,254, 179, 0	,255
-												,254, 184, 0	,255
-												,254, 187, 0	,255
-												,254, 191, 0	,255
-												,254, 195, 0	,255
-												,254, 199, 0	,255
-												,254, 202, 1	,255
-												,254, 205, 2	,255
-												,254, 208, 5	,255
-												,254, 212, 9	,255
-												,254, 216, 12	,255
-												,255, 219, 15	,255
-												,255, 221, 23	,255
-												,255, 224, 32	,255
-												,255, 227, 39	,255
-												,255, 229, 50	,255
-												,255, 232, 63	,255
-												,255, 235, 75	,255
-												,255, 238, 88	,255
-												,255, 239, 102	,255
-												,255, 241, 116	,255
-												,255, 242, 134	,255
-												,255, 244, 149	,255
-												,255, 245, 164	,255
-												,255, 247, 179	,255
-												,255, 248, 192	,255
-												,255, 249, 203	,255
-												,255, 251, 216	,255
-												,255, 253, 228	,255
-												,255, 254, 239	,255
-												,255, 255, 249 ,255 };
-
 static bool* pcAttributeEnabled = NULL;											//Contains whether a specific attribute is enabled
 static std::vector<Attribute> pcAttributes = std::vector<Attribute>();			//Contains the attributes and its bounds	
 static std::vector<int> pcAttributesSorted;
@@ -801,6 +681,7 @@ struct IsoSettings {
 static IsoSettings isoSurfSettings;
 
 static ScatterplotWorkbench* scatterplotWorkbench;
+static std::unique_ptr<CorrelationMatrixWorkbench> correlationMatrixWorkbench;
 
 //variables for animation
 static std::chrono::steady_clock::time_point animationStart(std::chrono::duration<int>(0));
@@ -1295,7 +1176,7 @@ static void createPcPlotImageView() {
 	allocInfo.allocationSize += memRequirements.size;
 
 	//creating the Image and imageview for the iron map
-	VkUtil::createImage(g_Device, sizeof(colorPalette) / sizeof(*colorPalette) / 4, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityIronMap);
+	VkUtil::createImage(g_Device, sizeof(heatmap) / sizeof(*heatmap) / 4, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityIronMap);
 	g_PcPlotDensityIronMapOffset = allocInfo.allocationSize;
 	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityIronMap, &memRequirements);
 	allocInfo.allocationSize += memRequirements.size;
@@ -1325,7 +1206,7 @@ static void createPcPlotImageView() {
 	//uploading the iron map via a staging buffer
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	VkUtil::createBuffer(g_Device, sizeof(colorPalette), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
+	VkUtil::createBuffer(g_Device, sizeof(heatmap), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer);
 
 	VkMemoryRequirements memReq = {};
 	vkGetBufferMemoryRequirements(g_Device, stagingBuffer, &memReq);
@@ -1340,15 +1221,15 @@ static void createPcPlotImageView() {
 
 	vkBindBufferMemory(g_Device, stagingBuffer, stagingBufferMemory, 0);
 	void* d;
-	vkMapMemory(g_Device, stagingBufferMemory, 0, sizeof(colorPalette), 0, &d);
-	memcpy(d, colorPalette, sizeof(colorPalette));
+	vkMapMemory(g_Device, stagingBufferMemory, 0, sizeof(heatmap), 0, &d);
+	memcpy(d, heatmap, sizeof(heatmap));
 	vkUnmapMemory(g_Device, stagingBufferMemory);
 
 	VkCommandBuffer stagingCommandBuffer;
 	VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &stagingCommandBuffer);
 
 	VkUtil::transitionImageLayout(stagingCommandBuffer, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	VkUtil::copyBufferToImage(stagingCommandBuffer, stagingBuffer, g_PcPlotDensityIronMap, sizeof(colorPalette) / sizeof(*colorPalette) / 4, 1);
+	VkUtil::copyBufferToImage(stagingCommandBuffer, stagingBuffer, g_PcPlotDensityIronMap, sizeof(heatmap) / sizeof(*heatmap) / 4, 1);
 	VkUtil::transitionImageLayout(stagingCommandBuffer, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	VkUtil::commitCommandBuffer(g_Queue, stagingCommandBuffer);
@@ -2148,6 +2029,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	DrawList dl = {};
 	dl.parentTemplateList = &tl;
 	dl.data = &ds.data;
+	dl.attributes = &pcAttributes;
 	UniformBufferObject ubo;
 	ubo.vertTransformations.resize(pcAttributes.size());
 	//uniformBuffer for pcPlot Drawing
@@ -7396,6 +7278,10 @@ int main(int, char**)
 		scatterplotWorkbench = new ScatterplotWorkbench({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, pcAttributes);
 	}
 
+	{// correlation matrix workbench
+		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(VkUtil::Context{});
+	}
+
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	transferFunctionEditor = new TransferFunctionEditor(g_Device, g_PhysicalDevice, g_PcPlotCommandPool, g_Queue, g_DescriptorPool);
@@ -7895,6 +7781,7 @@ int main(int, char**)
 				}
 				ImGui::MenuItem("Clustering workbench", "", &clusteringWorkbench.active);
 				ImGui::MenuItem("Scatterplot workbench", "", &scatterplotWorkbench->active);
+				ImGui::MenuItem("Correlation matrix workbench", "", &correlationMatrixWorkbench->active);
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Options")) {
@@ -14296,6 +14183,8 @@ int main(int, char**)
 			scatterplotWorkbench->updatedDrawlists.clear();
 			pcPlotRender = true;		//updating the pcPlot to show new brushed lines
 		}
+
+		correlationMatrixWorkbench->draw();
 
 		pcSettings.rescaleTableColumns = false;
 

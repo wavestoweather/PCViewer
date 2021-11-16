@@ -58,11 +58,21 @@ struct Brush {
 	std::pair<float, float> minMax;
 };
 
+struct Attribute {
+	std::string name;
+	std::string originalName;
+	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.
+	std::vector<std::pair<std::string, float>> categories_ordered; // used to show the categories not cluttered
+	float min;			//min value of all values
+	float max;			//max value of all values
+};
+
 struct DrawList {
 	std::string name;
 	std::string parentDataSet;
 	TemplateList* parentTemplateList;
 	const Data* data;
+	const std::vector<Attribute>* attributes;
 	Vec4 color;
 	Vec4 prefColor;
 	bool show;
@@ -103,13 +113,4 @@ struct DrawList {
 	LineBundles* lineBundles;
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
-};
-
-struct Attribute {
-	std::string name;
-	std::string originalName;
-	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.
-	std::vector<std::pair<std::string, float>> categories_ordered; // used to show the categories not cluttered
-	float min;			//min value of all values
-	float max;			//max value of all values
 };

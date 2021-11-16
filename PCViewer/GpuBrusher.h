@@ -12,7 +12,7 @@
 #include "LassoBrush.hpp"
 
 #define BRUSHERLOCALSIZE 256
-#define SHADERPATH "shader/brushComp.spv"
+#define SHADERPATHCOMP "shader/brushComp.spv"
 #define SHADERPATHFRACTURE "shader/brushFractureComp.spv"
 #define SHADERPATHMULTIVARIATE "shader/brushMultvarComp.spv"
 #define SHADERPATHLASSO "shader/brushLasso.spv"
@@ -91,7 +91,7 @@ public:
 	GpuBrusher(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool) : device(device), physicalDevice(physicalDevice), commandPool(commandPool), queue(queue), descriptorPool(descriptorPool) {
 		VkResult err;
 
-		VkShaderModule module = VkUtil::createShaderModule(device, PCUtil::readByteFile(std::string(SHADERPATH)));
+		VkShaderModule module = VkUtil::createShaderModule(device, PCUtil::readByteFile(std::string(SHADERPATHCOMP)));
 
 		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
 		VkDescriptorSetLayoutBinding binding = {};

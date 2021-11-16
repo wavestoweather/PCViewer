@@ -26,8 +26,8 @@ public:
             ImGui::Text("Data Projection:");
             static int datasetIndex = 0;
             static int templateListIndex = 0;
-            static char* defaultName = "No datasets available";
-            static char* defaultTemplate = "Dataset has to be selected";
+            static char const* defaultName = "No datasets available";
+            static char const* defaultTemplate = "Dataset has to be selected";
             auto ds = datasets.begin(); std::advance(ds, datasetIndex);
             if(ImGui::BeginCombo("Dataset to cluster", datasetIndex < datasets.size() ? ds->name.c_str(): defaultName)){
                 int c = 0;
@@ -111,7 +111,7 @@ public:
             if(ImGui::BeginTabBar("ClusteringTabBar")){
                 if(ImGui::BeginTabItem("KMeans")){
                     clusterMethod = DataClusterer::Method::KMeans;
-                    static char* distanceMetrics[3]{"Norm", "SquaredNorm", "L1Norm"};
+                    static char const* distanceMetrics[3]{"Norm", "SquaredNorm", "L1Norm"};
                     if(ImGui::BeginCombo("Distance Metric", distanceMetrics[(int)clusterSettings.distanceMetric])){
                         for(int i = 0; i < std::size(distanceMetrics); ++i){
                             if(ImGui::MenuItem(distanceMetrics[i])) clusterSettings.distanceMetric = DataClusterer::DistanceMetric(i);
@@ -121,14 +121,14 @@ public:
 
                     if(ImGui::InputInt("Amount of clusters", &clusterSettings.kmeansClusters)) clusterSettings.kmeansClusters = std::clamp(clusterSettings.kmeansClusters, 1, 100);
                     if(ImGui::InputInt("Amount of iterations", &clusterSettings.maxIterations)) clusterSettings.maxIterations = std::clamp(clusterSettings.maxIterations, 1, 100);
-                    static char* initMethods[]{"Forgy", "Uniform Random", "Normal Random", "PlusPlus"};
+                    static char const* initMethods[]{"Forgy", "Uniform Random", "Normal Random", "PlusPlus"};
                     if(ImGui::BeginCombo("Init method", initMethods[int(clusterSettings.kmeansInitMethod)])){
                         for(int i = 0; i < 4; ++i){
                             if(ImGui::MenuItem(initMethods[i])) clusterSettings.kmeansInitMethod = DataClusterer::InitMethod(i);
                         }
                         ImGui::EndCombo();
                     }
-                    static char* kMethods[]{"Mean", "Median", "Mediod"};
+                    static char const* kMethods[]{"Mean", "Median", "Mediod"};
                     if(ImGui::BeginCombo("K Method", kMethods[(int)clusterSettings.kmeansMethod])){
                         for(int i = 0; i < 3; ++i)
                             if(ImGui::MenuItem(kMethods[i])) clusterSettings.kmeansMethod = DataClusterer::KMethod(i);
@@ -146,7 +146,7 @@ public:
                 if(ImGui::BeginTabItem("HClustering")){
                     clusterMethod = DataClusterer::Method::Hirarchical;
                     if(ImGui::InputInt("ClusterAmt", &clusterSettings.hclusteringClusters)) clusterSettings.hclusteringClusters = std::clamp(clusterSettings.hclusteringClusters, 1, 100);
-                    static char* hLinkages[]{"Single", "Complete", "Weighted", "Median", "Average", "Ward", "Centroid"};
+                    static char const* hLinkages[]{"Single", "Complete", "Weighted", "Median", "Average", "Ward", "Centroid"};
                     if(ImGui::BeginCombo("Clustering Linkage", hLinkages[(int)clusterSettings.hclusteringLinkage])){
                         for(int i = 0; i < 7; ++i){
                             if(ImGui::MenuItem(hLinkages[i])) clusterSettings.hclusteringLinkage = DataClusterer::HClusteringLinkage(i);

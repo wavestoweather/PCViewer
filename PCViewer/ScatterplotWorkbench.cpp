@@ -295,8 +295,8 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
     ImGui::SetCursorPosY(curY);
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + leftSpace);
     ImVec2 imagePos = ImGui::GetCursorScreenPos();
-    ImVec2 imageSize{curWidth, curHeight};
-    ImGui::Image(static_cast<ImTextureID>(resultImageSet), ImVec2{curWidth, curHeight});
+    ImVec2 imageSize{static_cast<float>(curWidth), static_cast<float>(curHeight)};
+    ImGui::Image(static_cast<ImTextureID>(resultImageSet), ImVec2{static_cast<float>(curWidth), static_cast<float>(curHeight)});
     if(ImGui::BeginDragDropTarget()){
         if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")){
             DrawList* dl = *((DrawList**)payload->Data);
@@ -446,9 +446,9 @@ void ScatterplotWorkbench::ScatterPlot::updateRender(VkCommandBuffer commandBuff
     VkUtil::transitionImageLayout(commandBuffer, resultImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkUtil::beginRenderPass(commandBuffer, {{0,0,0,1}}, renderPass, framebuffer, {uint32_t(curWidth), uint32_t(curHeight)});
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    VkViewport viewport{0, 0, curWidth, curHeight, 0,1};
+    VkViewport viewport{0, 0, static_cast<float>(curWidth), static_cast<float>(curHeight), 0,1};
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    VkRect2D scissor{{0,0}, {curWidth, curHeight}};
+    VkRect2D scissor{{0,0}, {static_cast<float>(curWidth), static_cast<float>(curHeight)}};
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
     for(DrawListInstance& dl: dls){
         if(!dl.active) continue;
@@ -458,7 +458,7 @@ void ScatterplotWorkbench::ScatterPlot::updateRender(VkCommandBuffer commandBuff
         dl.updateUniformBufferData(attributes);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &dl.descSet, 0, nullptr);
         //draw inactive points
-        int posX = 0, posY = matrixSize - 2;
+        uint32_t posX = 0, posY = matrixSize - 2;
         if(dl.uniformBuffer.showInactivePoints){
             for(int i = 0; i < attributes.size(); ++i){
                 if(!activeAttributes[i]) continue;
