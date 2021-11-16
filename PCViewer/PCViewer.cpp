@@ -681,7 +681,6 @@ struct IsoSettings {
 static IsoSettings isoSurfSettings;
 
 static ScatterplotWorkbench* scatterplotWorkbench;
-static std::unique_ptr<CorrelationMatrixWorkbench> correlationMatrixWorkbench;
 
 //variables for animation
 static std::chrono::steady_clock::time_point animationStart(std::chrono::duration<int>(0));
@@ -7021,7 +7020,7 @@ int main(int, char**)
 #ifdef DETECTMEMLEAK
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
-
+	std::unique_ptr<CorrelationMatrixWorkbench> correlationMatrixWorkbench;
 	engine.seed(15);
 
 	//test of multivariate gauss calculations
@@ -7279,7 +7278,7 @@ int main(int, char**)
 	}
 
 	{// correlation matrix workbench
-		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(VkUtil::Context{});
+		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(VkUtil::Context{0, 0, 0, g_Device});
 	}
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -14185,6 +14184,9 @@ int main(int, char**)
 		}
 
 		correlationMatrixWorkbench->draw();
+		if(correlationMatrixWorkbench->requestUpdate){
+			correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists);
+		}
 
 		pcSettings.rescaleTableColumns = false;
 

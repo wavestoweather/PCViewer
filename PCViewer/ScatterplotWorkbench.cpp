@@ -288,7 +288,7 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
     for(int i = startInd; activeAttributes.size() && i < attributes.size(); ++i){
         int curAttr = i;
         if(!activeAttributes[curAttr] || curPlace == activeAttributesCount - 1) continue;
-        ImGui::Text(attributes[curAttr].name.c_str());
+        ImGui::Text("%s", attributes[curAttr].name.c_str());
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + xSpacing - ImGui::GetTextLineHeightWithSpacing());
         ++curPlace;
     }
@@ -341,7 +341,7 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
     //lasso selection
     ImVec2 mousePos = ImGui::GetMousePos();
     bool inside = mousePos.x > imagePos.x && mousePos.x < imagePos.x + imageSize.x
-                    && mousePos.y > imagePos.y && mousePos.y < imagePos.y + imageSize.y;
+                    && mousePos.y > imagePos.y && mousePos.y < imagePos.y + imageSize.y && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
     static int attr1 = -1, attr2 = -1, plotId = -1;
     static ImVec2 borderMin, borderMax;
     static ScatterPlot* curPlot{};
@@ -423,7 +423,7 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
         if(!activeAttributes[i] || curPlace == activeAttributesCount - 1) continue;
         if(!firstLabel) ImGui::SameLine(curSpace); 
         if(firstLabel) firstLabel = false;
-        ImGui::Text(attributes[i].name.c_str());
+        ImGui::Text("%s", attributes[i].name.c_str());
         curSpace += xSpacing;
         ++curPlace;
     }
@@ -448,7 +448,7 @@ void ScatterplotWorkbench::ScatterPlot::updateRender(VkCommandBuffer commandBuff
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     VkViewport viewport{0, 0, static_cast<float>(curWidth), static_cast<float>(curHeight), 0,1};
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    VkRect2D scissor{{0,0}, {static_cast<float>(curWidth), static_cast<float>(curHeight)}};
+    VkRect2D scissor{{0,0}, {static_cast<uint32_t>(curWidth), static_cast<uint32_t>(curHeight)}};
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
     for(DrawListInstance& dl: dls){
         if(!dl.active) continue;
@@ -460,9 +460,9 @@ void ScatterplotWorkbench::ScatterPlot::updateRender(VkCommandBuffer commandBuff
         //draw inactive points
         uint32_t posX = 0, posY = matrixSize - 2;
         if(dl.uniformBuffer.showInactivePoints){
-            for(int i = 0; i < attributes.size(); ++i){
+            for(uint32_t i = 0; i < attributes.size(); ++i){
                 if(!activeAttributes[i]) continue;
-                for(int j = attributes.size() - 1; j > i; --j){
+                for(uint32_t j = attributes.size() - 1; j > i; --j){
                     if(!activeAttributes[j]) continue;
                     PushConstant pc{posX, posY, i, j, 1};
                     vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pc);
@@ -476,9 +476,9 @@ void ScatterplotWorkbench::ScatterPlot::updateRender(VkCommandBuffer commandBuff
         //draw active points
         posX = 0;
         posY = matrixSize - 2;
-        for(int i = 0; i < attributes.size(); ++i){
+        for(uint32_t i = 0; i < attributes.size(); ++i){
             if(!activeAttributes[i]) continue;
-            for(int j = attributes.size() - 1; j > i; --j){
+            for(uint32_t j = attributes.size() - 1; j > i; --j){
                 if(!activeAttributes[j]) continue;
                 PushConstant pc{posX, posY, i, j, 2};
                 vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pc);
