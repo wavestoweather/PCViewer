@@ -84,6 +84,8 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw()
     // labels
     int activeAttributesCount = 0;
     for(auto& a: attributes) if(a.active) activeAttributesCount++;
+    int activeDrawlistCount = 0;
+    for(auto& d: drawlists) if(d.active) activeDrawlistCount++;
     float curY = ImGui::GetCursorPosY();
     float xSpacing = matrixPixelWidth / (activeAttributesCount - 1);
     float xSpacingMargin = xSpacing * (1.0 - matrixSpacing);
@@ -122,12 +124,14 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw()
             ImGui::GetWindowDrawList()->AddRect({curX, curY}, {curX + xSpacingMargin, curY + xSpacingMargin}, ImGui::GetColorU32(matrixBorderColor), 0, ImDrawCornerFlags_All, matrixBorderWidth);
             //pie
             while(!attributes[curAttr2].active && curAttr2 < attributes.size()) ++curAttr2;
-            std::vector<float> percentages(correlationManager->correlations.size());
+            std::vector<float> percentages(activeDrawlistCount);
             std::vector<ImU32> colors(percentages.size());
             int d = 0;
-            for(auto& dlCorr: correlationManager->correlations){
-                percentages[d] = 1.0 / correlationManager->correlations.size();
-                int idx = (dlCorr.second.attributeCorrelations[curAttr2].correlationScores[curAttr] * .5 + .5) * sizeof(diverging_blue_red_map) / 4;
+            for(auto& dl: drawlists){
+                if(!dl.active) continue;
+                auto& corr = correlationManager->correlations[dl.drawlist];
+                percentages[d] = 1.0 / activeDrawlistCount;
+                int idx = (corr.attributeCorrelations[curAttr2].correlationScores[curAttr] * .5 + .5) * sizeof(diverging_blue_red_map) / 4;
                 colors[d] = ImGui::GetColorU32({diverging_blue_red_map[idx * 4] / 255.0f,
                                                 diverging_blue_red_map[idx * 4 + 1] / 255.0f,
                                                 diverging_blue_red_map[idx * 4 + 2] / 255.0f,

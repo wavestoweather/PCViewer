@@ -1342,17 +1342,19 @@ void  ImDrawList::AddPie(const ImVec2& center, float radius, ImU32* cols, float*
             num_segments = ImClamp(num_segments, 3, IM_DRAWLIST_CIRCLE_AUTO_SEGMENT_MAX);  
     }
     
-    float a_min = 0;
+    float a_min = -.1f;
     float a_max = (IM_PI * 2.0f) * percentages[0];
     ImVec2 points[3]{};
     points[0] = center;
-    points[1] = ImVec2(center.x + ImCos(a_min) * radius, center.y + ImSin(a_min) * radius);
     for (int p = 0; p < pieCount; ++p)
     {
+        points[1] = ImVec2(center.x + ImCos(a_min) * radius, center.y + ImSin(a_min) * radius);
         int curSegAmt = ceilf(num_segments * percentages[p]);
-        for (int i = 1; i <= num_segments; i++)
+        for (int i = 1; i <= curSegAmt; i++)
         {
-            const float a = a_min + ((float)i / (float)num_segments) * (a_max - a_min);
+            float a = a_min + ((float)i / (float)curSegAmt) * (a_max - a_min);
+            if(p + 1 != pieCount || i != curSegAmt)
+                a += .1f;
             points[2] = ImVec2(center.x + ImCos(a) * radius, center.y + ImSin(a) * radius);
             AddConvexPolyFilled(points, 3, cols[p]);
             points[1] = ImVec2(center.x + ImCos(a - .1f) * radius, center.y + ImSin(a - .1f) * radius);
@@ -1360,6 +1362,8 @@ void  ImDrawList::AddPie(const ImVec2& center, float radius, ImU32* cols, float*
         a_min = a_max;
         if(p + 1 < pieCount)
             a_max += (IM_PI * 2.0f) * percentages[p + 1];
+        if(p + 1 == pieCount - 1)
+            a_max = IM_PI * 2.0f;
     }
 }
 
