@@ -17,7 +17,6 @@ void CorrelationMatrixWorkbench::draw()
         for(auto& correlationMatrix: correlationMatrices){
             correlationMatrix.draw();
             requestUpdate |= correlationMatrix.requestCorrelationUpdate;
-            correlationMatrix.requestCorrelationUpdate = false;
         }
 
         if(ImGui::Button("+##cormatwork", {500, 50})){
@@ -36,6 +35,12 @@ void CorrelationMatrixWorkbench::updateCorrelationScores(const std::list<DrawLis
         }
     }
     requestUpdate = false;
+}
+
+void CorrelationMatrixWorkbench::updateCorrelationScores(const std::list<DrawList>& dls, const std::vector<std::string>& dlNames){
+    for(auto& mat:correlationMatrices){
+        mat.updateAllCorrelationScores(dls, dlNames);
+    }
 }
 
 CorrelationMatrixWorkbench::CorrelationMatrix::CorrelationMatrix(const std::shared_ptr<CorrelationManager>& correlationManager):correlationManager(correlationManager), id(idCounter++)
@@ -66,8 +71,9 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw()
         for(int i = 0; i < 3; ++i){
             if(ImGui::MenuItem(metrics[i])) 
             {
+                auto prevMetric = currentMetric;
                 currentMetric = static_cast<CorrelationManager::CorrelationMetric>(i);
-                requestCorrelationUpdate = true;
+                requestCorrelationUpdate = prevMetric != currentMetric; // only reuqest when the metric changed
             }
         }
         ImGui::EndCombo();
@@ -154,7 +160,7 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw()
     ImGui::EndChild();
 }
 
-void CorrelationMatrixWorkbench::CorrelationMatrix::updateAllCorrelationScores(const std::list<DrawList>& dls)
+void CorrelationMatrixWorkbench::CorrelationMatrix::updateAllCorrelationScores(const std::list<DrawList>& dls, const std::vector<std::string>& drawlistNames)
 {
     std::vector<std::string> deletes;
     for(auto& dl: drawlists){
@@ -165,6 +171,8 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::updateAllCorrelationScores(c
         correlationManager->correlations.erase(s);
     }
     for(auto& dl: drawlists){
+        // ignore drawlist if it is not in the drawlistNames vector
+        if(drawlistNames.size() && std::find_if(drawlistNames.begin(), drawlistNames.end(), [&](auto& n){return n == dl.drawlist;}) == drawlistNames.end()) continue;
         auto d = std::find_if(dls.begin(), dls.end(), [&](auto& draw){return draw.name == dl.drawlist;});
         for(int i = 0; i < attributes.size(); ++i)
             correlationManager->calculateCorrelation(*d, currentMetric, i);

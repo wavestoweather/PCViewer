@@ -682,6 +682,8 @@ static IsoSettings isoSurfSettings;
 
 static ScatterplotWorkbench* scatterplotWorkbench;
 
+static std::unique_ptr<CorrelationMatrixWorkbench> correlationMatrixWorkbench;
+
 //variables for animation
 static std::chrono::steady_clock::time_point animationStart(std::chrono::duration<int>(0));
 static bool* animationActiveDatasets = nullptr;
@@ -5989,6 +5991,10 @@ static bool updateActiveIndices(DrawList& dl) {
 		scatterplotWorkbench->updateRenders(indices);
 	}
 
+	if (correlationMatrixWorkbench->active){
+		correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists, {dl.name});
+	}
+
 	//setting the median to no median to enforce median recalculation
 	dl.activeMedian = 0;
 	return true;
@@ -7020,7 +7026,6 @@ int main(int, char**)
 #ifdef DETECTMEMLEAK
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
-	std::unique_ptr<CorrelationMatrixWorkbench> correlationMatrixWorkbench;
 	engine.seed(15);
 
 	//test of multivariate gauss calculations
@@ -8661,16 +8666,21 @@ int main(int, char**)
 									}
 									index++;
 								}
+								if(!globalBrushes[i].parentDataset){
+									std::cout << "Parent dataset has to be set for global brush." << std::endl;
+								}
+								else{
 #ifdef _DEBUG
-								std::cout << "Starting to build the kd tree for fracturing." << std::endl;
+									std::cout << "Starting to build the kd tree for fracturing." << std::endl;
 #endif
-								if(globalBrushes[i].edited)
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour)pcSettings.boundsBehaviour, (KdTree::SplitBehaviour)pcSettings.splitBehaviour);
-								else
-									globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour)pcSettings.boundsBehaviour, (KdTree::SplitBehaviour)pcSettings.splitBehaviour);
+									if(globalBrushes[i].edited)
+										globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parentDataset->drawLists.front().indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour)pcSettings.boundsBehaviour, (KdTree::SplitBehaviour)pcSettings.splitBehaviour);
+									else
+										globalBrushes[i].kdTree = new KdTree(globalBrushes[i].parent->indices, globalBrushes[i].parentDataset->data, globalBrushes[i].attributes, bounds, pcSettings.maxFractionDepth, (KdTree::BoundsBehaviour)pcSettings.boundsBehaviour, (KdTree::SplitBehaviour)pcSettings.splitBehaviour);
 #ifdef _DEBUG
-								std::cout << "Kd tree done." << std::endl;
+									std::cout << "Kd tree done." << std::endl;
 #endif
+								}
 							}
 						}
 						ImGui::MenuItem("Brush edited", "", &globalBrushes[i].edited);

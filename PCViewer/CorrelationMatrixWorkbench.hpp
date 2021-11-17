@@ -26,7 +26,7 @@ public:
         void draw();
         void addDrawlist(const DrawList& dl);
         // if a drawlist is not anymore int the dls array, that drawlist will be deleted
-        void updateAllCorrelationScores(const std::list<DrawList>& dls);
+        void updateAllCorrelationScores(const std::list<DrawList>& dls, const std::vector<std::string>& drawlistNames = {});
 
         std::vector<DrawlistRef> drawlists;
         std::vector<AttributeRef> attributes;
@@ -46,6 +46,7 @@ public:
 
     void draw();    //draw Imgui window
     void updateCorrelationScores(const std::list<DrawList>& dls, bool force = false);   // force can be used to update drawlsits when a brush update came
+    void updateCorrelationScores(const std::list<DrawList>& dls, const std::vector<std::string>& dlNames);  //only update correlation scores for specific drawlists
 
     bool active{false};
     bool requestUpdate{false};
