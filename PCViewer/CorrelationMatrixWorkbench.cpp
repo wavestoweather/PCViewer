@@ -194,7 +194,7 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::addDrawlist(const DrawList& 
     }
     if(std::find_if(drawlists.begin(), drawlists.end(), [&](auto& d){return d.drawlist == dl.name;}) == drawlists.end())
         drawlists.push_back({dl.name, true});
-    for(int i = 0; i < attributes.size(); ++i) correlationManager->calculateCorrelation(dl, CorrelationManager::CorrelationMetric::Pearson, i);
+    for(int i = 0; i < attributes.size(); ++i) correlationManager->calculateCorrelation(dl, currentMetric, i);
 }
 
 uint32_t CorrelationMatrixWorkbench::CorrelationMatrix::idCounter = 0;
