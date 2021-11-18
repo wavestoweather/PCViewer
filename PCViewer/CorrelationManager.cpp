@@ -10,9 +10,25 @@ CorrelationManager::CorrelationManager(const VkUtil::Context& context): _vkConte
     if(context.device){
         VkShaderModule shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_pearsonShader));
         std::vector<VkDescriptorSetLayoutBinding> bindings;
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = 0;
+        binding.descriptorCount = 1;
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        bindings.push_back(binding);
+        binding.binding = 1;
+        bindings.push_back(binding);
+        binding.binding = 3;
+        bindings.push_back(binding);
+        binding.binding = 2;
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+        bindings.push_back(binding);
         VkUtil::createDescriptorSetLayout(context.device, bindings, &_pearsonPipeline.descriptorSetLayout);
         VkUtil::createComputePipeline(context.device, shader, {_pearsonPipeline.descriptorSetLayout}, &_pearsonPipeline.pipelineLayout, &_pearsonPipeline.pipeline);
     
+        shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_meanShader));
+        VkUtil::createComputePipeline(context.device, shader, {_pearsonPipeline.descriptorSetLayout}, &_meanPipeline.pipelineLayout, &_meanPipeline.pipeline);
+        
         shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_spearmanShader));
         VkUtil::createDescriptorSetLayout(context.device, bindings, &_spearmanPipeline.descriptorSetLayout);
         VkUtil::createComputePipeline(context.device, shader, {_spearmanPipeline.descriptorSetLayout}, &_spearmanPipeline.pipelineLayout, &_spearmanPipeline.pipeline);
@@ -20,9 +36,6 @@ CorrelationManager::CorrelationManager(const VkUtil::Context& context): _vkConte
         shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_kendallShader));
         VkUtil::createDescriptorSetLayout(context.device, bindings, &_kendallPipeline.descriptorSetLayout);
         VkUtil::createComputePipeline(context.device, shader, {_kendallPipeline.descriptorSetLayout}, &_kendallPipeline.pipelineLayout, &_kendallPipeline.pipeline);
-    
-        shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_meanShader));
-        VkUtil::createComputePipeline(context.device, shader, {_pearsonPipeline.descriptorSetLayout}, &_meanPipeline.pipelineLayout, &_meanPipeline.pipeline);
     }
 }
 
@@ -37,7 +50,7 @@ CorrelationManager::~CorrelationManager()
 void CorrelationManager::calculateCorrelation(const DrawList& dl, CorrelationMetric metric, int baseAttribute, bool useGpu) 
 {
     if(baseAttribute < 0) return;
-    if(useGpu)
+    if(useGpu && _vkContext.screenSize[0] != 0xffffffff)
         _execCorrelationGPU(dl, metric, baseAttribute);
     else 
         _execCorrelationCPU(dl, metric, baseAttribute);

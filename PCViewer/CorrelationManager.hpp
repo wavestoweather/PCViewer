@@ -31,10 +31,10 @@ public:
 private:
     uint32_t compLocalSize = 256;
     VkUtil::Context _vkContext{};
-    std::string _pearsonShader = "shaders/corrPearson.comp.spv";
-    std::string _spearmanShader = "shaders/corrSpearman.comp.spv";
-    std::string _kendallShader = "shaders/corrKendall.comp.spv";
-    std::string _meanShader = "shaders/corrMean.comp.spv";
+    std::string _pearsonShader = "shader/corrPearson.comp.spv";
+    std::string _spearmanShader = "shader/corrSpearman.comp.spv";
+    std::string _kendallShader = "shader/corrKendall.comp.spv";
+    std::string _meanShader = "shader/corrMean.comp.spv";
     VkUtil::PipelineInfo _pearsonPipeline{}, _spearmanPipeline{}, _kendallPipeline{}, _meanPipeline{};
     void _execCorrelationCPU(const DrawList& dl, CorrelationMetric metric, int baseAttribute);
     void _execCorrelationGPU(const DrawList& dl, CorrelationMetric metric, int baseAttribute);

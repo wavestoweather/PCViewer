@@ -556,6 +556,8 @@ static std::uniform_int_distribution<int> distribution(0, 35);
 static std::vector<int> pcPlotSelectedDrawList;									//Contains the index of the drawlist that is currently selected
 static std::map<std::string, std::pair<bool,std::vector<float>>> dimensionValues;//Contains the dimension values for each dimension. Dimension values SHOULD be read using the getDimensionValues method to secure that the dimension values for an attribute is available
 
+static bool atomicGpuFloatAddAvailable{};
+
 static PCViewerState pcViewerState = PCViewerState::Normal;
 struct PCSettings {
 	bool autoAlpha = true;
@@ -3160,10 +3162,15 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 
 	// Create Vulkan Instance
 	{
+		VkApplicationInfo appInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
+		appInfo.apiVersion = VK_API_VERSION_1_1;
+		appInfo.pApplicationName = "PCViewer";
+
 		VkInstanceCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		create_info.enabledExtensionCount = extensions_count;
 		create_info.ppEnabledExtensionNames = extensions;
+		create_info.pApplicationInfo = &appInfo;
 
 #ifdef IMGUI_VULKAN_DEBUG_REPORT
 		// Enabling multiple validation layers grouped as LunarG standard validation
@@ -3220,6 +3227,14 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 
 		VkPhysicalDeviceFeatures feat;
 		vkGetPhysicalDeviceFeatures(gpus[0], &feat);
+		VkPhysicalDeviceFeatures2 feat2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
+		feat2.pNext = &floatFeat;
+		vkGetPhysicalDeviceFeatures2(gpus[0], &feat2);
+		atomicGpuFloatAddAvailable = floatFeat.shaderImageFloat32AtomicAdd;
+		if(!floatFeat.shaderImageFloat32AtomicAdd){
+			std::cout << "Gpu does not support float atomic add -> gpu accelerated correlation calculations disabled" << std::endl;
+		}
 
 #ifdef _DEBUG
 		std::cout << "Gometry shader usable:" << feat.geometryShader << std::endl;
@@ -3267,11 +3282,16 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 	// Create Logical Device (with 2 queues)
 	{
 		int device_extension_count = 3;
-		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing" };
+		if(atomicGpuFloatAddAvailable) device_extension_count = 4;
+		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing", VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME };
+
+		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
+		floatFeat.shaderImageFloat32AtomicAdd = VK_TRUE;
 
 		VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexingFeatures{};
 		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
-		indexingFeatures.pNext = nullptr;
+		if(atomicGpuFloatAddAvailable)
+			indexingFeatures.pNext = &floatFeat;
 		indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
 		indexingFeatures.runtimeDescriptorArray = VK_TRUE;
 
@@ -7285,7 +7305,11 @@ int main(int, char**)
 	}
 
 	{// correlation matrix workbench
-		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(VkUtil::Context{0, 0, 0, g_Device});
+		VkUtil::Context c{0, 0, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue};
+		if(!atomicGpuFloatAddAvailable){
+			c.screenSize[0] = 0xffffffff;
+		}
+		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(c);
 	}
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -14308,6 +14332,7 @@ int main(int, char**)
 		delete gpuBrusher;
 		delete histogramManager;
 		delete scatterplotWorkbench;
+		correlationMatrixWorkbench.reset();
 
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.kdTree) delete gb.kdTree;
