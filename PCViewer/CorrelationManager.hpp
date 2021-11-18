@@ -25,7 +25,7 @@ public:
     CorrelationManager(const VkUtil::Context& context);
     ~CorrelationManager();
 
-    void calculateCorrelation(const DrawList& dl, CorrelationMetric metric = CorrelationMetric::Pearson, int baseAttribute = -1, bool useGpu = false);
+    void calculateCorrelation(const DrawList& dl, CorrelationMetric metric = CorrelationMetric::Pearson, int baseAttribute = -1, bool useGpu = true);
 
     std::map<std::string, DrawlistCorrelations> correlations{};
 private:

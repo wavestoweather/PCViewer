@@ -5683,6 +5683,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	}
 
 	activeBrushRatios[dl.name] = globalRemainingLines;
+	dl.activeLinesAmt = globalRemainingLines;
 
 	// Computing ratios for the pie charts
 	if (pcSettings.computeRatioPtsInDLvsIn1axbrushedParent && pcSettings.drawHistogramm) {

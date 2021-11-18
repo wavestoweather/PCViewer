@@ -113,6 +113,7 @@ struct DrawList {
 	LineBundles* lineBundles;
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
+	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
 };
 
 struct DrawlistDragDropInfo{

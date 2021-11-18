@@ -22,6 +22,7 @@ layout(binding = 3) buffer pearson{
                     //          float[amtOfAttributes] nominator,
                     //          float[amtOfAttributes] denom1,
                     //          float[amtOfAttributes] denom2
+                    //          vec2[amtOfAttributes] mimas
 };
 
 #include "dataAccess.glsl"
@@ -34,8 +35,9 @@ void main(){
     bool ac = bool(imageLoad(act, int(index)).x);
     if(!ac) return;
     for(int a = 0; a < amtOfAttributes; ++a){
-        float aDiff = getPackedData(index, a) - res[a];
-        float bDiff = getPackedData(index, baseAttribute) - res[a];
+        float mean = res[a];
+        float aDiff = (getPackedData(index, a) - res[amtOfAttributes * 4 + 2 * a]) / (res[amtOfAttributes * 4 + 2 * a + 1] - res[amtOfAttributes * 4 + 2 * a]) - mean;
+        float bDiff = (getPackedData(index, baseAttribute) - res[amtOfAttributes * 4 + 2 * baseAttribute]) / (res[amtOfAttributes * 4 + 2 * baseAttribute + 1] - res[amtOfAttributes * 4 + 2 * baseAttribute]) - mean;
         float nominator = aDiff * bDiff;
         float denom1 = aDiff * aDiff;
         float denom2 = bDiff * bDiff;

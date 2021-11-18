@@ -4,6 +4,7 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
+#include <algorithm>
 
 CorrelationManager::CorrelationManager(const VkUtil::Context& context): _vkContext(context)
 {
@@ -171,13 +172,20 @@ void CorrelationManager::_execCorrelationGPU(const DrawList& dl, CorrelationMetr
     VkDescriptorSet descSet;
     switch(metric){
     case CorrelationMetric::Pearson:{
-        uint32_t bufferByteSize = (4 + dl.attributes->size() * 4) * sizeof(float);
+        uint32_t bufferByteSize = (4 + dl.attributes->size() * 6) * sizeof(float);
         std::vector<float> bufferData(bufferByteSize / sizeof(float));
         reinterpret_cast<uint32_t*>(bufferData.data())[0] = dl.indices.size();
         reinterpret_cast<uint32_t*>(bufferData.data())[1] = dl.attributes->size();
         reinterpret_cast<uint32_t*>(bufferData.data())[2] = static_cast<uint32_t>(baseAttribute);
-        reinterpret_cast<uint32_t*>(bufferData.data())[3] = 101; //todo right value
-        for(int i = 0; i < 4 * dl.attributes->size(); ++i) bufferData[4 + i] = 0;
+        reinterpret_cast<uint32_t*>(bufferData.data())[3] = dl.activeLinesAmt; //todo right value
+        for(int i = 0; i < 4 * dl.attributes->size(); ++i) 
+        {
+            bufferData[4 + i] = 0;
+            if(i < dl.attributes->size()){
+                bufferData[4 + 4 * amtOfAttributes + 2 * i] = dl.attributes->at(i).min;
+                bufferData[4 + 4 * amtOfAttributes + 2 * i + 1] = dl.attributes->at(i).max;
+            }
+        }
         VkBuffer buffer;
         VkUtil::createBuffer(_vkContext.device, bufferByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &buffer);
         VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
@@ -209,8 +217,13 @@ void CorrelationManager::_execCorrelationGPU(const DrawList& dl, CorrelationMetr
 
         // get data from gpu and write to correlation vector
         VkUtil::downloadData(_vkContext.device, memory, 0, bufferByteSize, bufferData.data());
+        std::vector<float> means(dl.attributes->size());
+        for(int i = 0; i < amtOfAttributes; ++i){
+            means[i] = bufferData[4 + i] * (dl.attributes->at(i).max - dl.attributes->at(i).min) + dl.attributes->at(i).min;
+        }
         for(int i = 0; i < amtOfAttributes; ++i){
             curAttCorrelation.correlationScores[i] = bufferData[4 + amtOfAttributes + i] / std::sqrt((bufferData[4 + 2 * amtOfAttributes + i] + 1e-5) * (bufferData[4 + 3 * amtOfAttributes + i] + 1e-5));
+            curAttCorrelation.correlationScores[i] = std::clamp(curAttCorrelation.correlationScores[i], -1.f, 1.f);
             assert(curAttCorrelation.correlationScores[i] >= -1 && curAttCorrelation.correlationScores[i] <= 1);
         }
 

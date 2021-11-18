@@ -21,7 +21,8 @@ layout(binding = 3) buffer pearson{
     float res[];    //contains: float[amtOfAttributes] means,  
                     //          float[amtOfAttributes] nominator,
                     //          float[amtOfAttributes] denom1,
-                    //          float[amtOfAttributes] denom2
+                    //          float[amtOfAttributes] denom2,
+                    //          vec2[amtOfAttributes] mimas
 };
 
 #include "dataAccess.glsl"
@@ -34,8 +35,9 @@ void main(){
     bool ac = bool(imageLoad(act, int(index)).x);
     if(!ac) return;
     for(int a = 0; a < amtOfAttributes; ++a){
-        float datum = getPackedData(index, a) / amtOfActiveIndices;
-        datum = subgroupAdd(datum);
+        float datum = getPackedData(index, a);
+        datum = (datum - res[amtOfAttributes * 4 + 2 * a]) / (res[amtOfAttributes * 4 + 2 * a + 1] - res[amtOfAttributes * 4 + 2 * a]);
+        datum = subgroupAdd(datum) / amtOfActiveIndices;
         if(subgroupElect()){
             atomicAdd(res[a], datum);
         }
