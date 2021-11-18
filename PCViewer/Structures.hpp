@@ -79,7 +79,7 @@ struct DrawList {
 	bool showHistogramm;
 	std::vector<float> brushedRatioToParent;     // Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
 	bool immuneToGlobalBrushes;
-	VkBuffer buffer;
+	VkBuffer buffer;								// vulkan data buffer
 	VkDescriptorSet dataDescriptorSet;				//is relesed when dataset is removed
 	VkBuffer indexBuffer;							//indexbuffer for line rendering!!!
 	uint32_t indexBufferOffset;

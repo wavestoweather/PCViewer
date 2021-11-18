@@ -29,6 +29,7 @@ public:
 
     std::map<std::string, DrawlistCorrelations> correlations{};
 private:
+    uint32_t compLocalSize = 256;
     VkUtil::Context _vkContext{};
     std::string _pearsonShader = "shaders/corrPearson.comp.spv";
     std::string _spearmanShader = "shaders/corrSpearman.comp.spv";
