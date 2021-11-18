@@ -23,7 +23,7 @@ public:
 
         CorrelationMatrix(const std::shared_ptr<CorrelationManager>& correlationManager);
 
-        void draw();
+        void draw(const DrawlistDragDropInfo& ddInfo = {});
         void addDrawlist(const DrawList& dl);
         // if a drawlist is not anymore int the dls array, that drawlist will be deleted
         void updateAllCorrelationScores(const std::list<DrawList>& dls, const std::vector<std::string>& drawlistNames = {});
@@ -44,7 +44,7 @@ public:
 
     CorrelationMatrixWorkbench(const VkUtil::Context& vkContext);
 
-    void draw();    //draw Imgui window
+    void draw(const DrawlistDragDropInfo& ddInfo = {});    //draw Imgui window, hand over drawlist drag and drop info
     void updateCorrelationScores(const std::list<DrawList>& dls, bool force = false);   // force can be used to update drawlsits when a brush update came
     void updateCorrelationScores(const std::list<DrawList>& dls, const std::vector<std::string>& dlNames);  //only update correlation scores for specific drawlists
 

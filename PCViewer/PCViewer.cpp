@@ -2278,6 +2278,7 @@ static void removePcPlotDrawList(DrawList& drawList) {
 		brush.lineRatios.erase(drawList.name);
 	}
 	activeBrushRatios.erase(drawList.name);
+	std::string name = drawList.name;
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ++it) {
 		if (it->name == drawList.name) {
 			it->indices.clear();
@@ -2333,6 +2334,7 @@ static void removePcPlotDrawList(DrawList& drawList) {
 			break;
 		}
 	}
+	correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists, {name});
 }
 
 static void removePcPlotDrawLists(DataSet dataSet) {
@@ -14193,7 +14195,7 @@ int main(int, char**)
 			pcPlotRender = true;		//updating the pcPlot to show new brushed lines
 		}
 
-		correlationMatrixWorkbench->draw();
+		correlationMatrixWorkbench->draw({&g_PcPlotDrawLists, &pcPlotSelectedDrawList});
 		if(correlationMatrixWorkbench->requestUpdate){
 			correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists);
 		}

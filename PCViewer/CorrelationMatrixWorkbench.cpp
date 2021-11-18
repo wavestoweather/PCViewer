@@ -9,13 +9,13 @@ CorrelationMatrixWorkbench::CorrelationMatrixWorkbench(const VkUtil::Context& vk
     correlationManager = std::make_shared<CorrelationManager>(vkContext);
 }
 
-void CorrelationMatrixWorkbench::draw()
+void CorrelationMatrixWorkbench::draw(const DrawlistDragDropInfo& ddInfo)
 {
     if(active){
         ImGui::Begin("Correlation Matrix", &active);
         int c = 0;
         for(auto& correlationMatrix: correlationMatrices){
-            correlationMatrix.draw();
+            correlationMatrix.draw(ddInfo);
             requestUpdate |= correlationMatrix.requestCorrelationUpdate;
         }
 
@@ -48,7 +48,7 @@ CorrelationMatrixWorkbench::CorrelationMatrix::CorrelationMatrix(const std::shar
     
 }
 
-void CorrelationMatrixWorkbench::CorrelationMatrix::draw() 
+void CorrelationMatrixWorkbench::CorrelationMatrix::draw(const DrawlistDragDropInfo& ddInfo) 
 {
     ImGui::BeginChild(("Correlation Matrix" + std::to_string(id)).c_str(), {}, true);
     ImGui::Text("Attribute activations:");
@@ -84,8 +84,6 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw()
     // labels
     int activeAttributesCount = 0;
     for(auto& a: attributes) if(a.active) activeAttributesCount++;
-    int activeDrawlistCount = 0;
-    for(auto& d: drawlists) if(d.active) activeDrawlistCount++;
     float curY = ImGui::GetCursorPosY();
     float xSpacing = matrixPixelWidth / (activeAttributesCount - 1);
     float xSpacingMargin = xSpacing * (1.0 - matrixSpacing);
@@ -108,10 +106,21 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw()
     ImGui::InvisibleButton(("cm" + std::to_string(id)).c_str(),matrixSize);
     if(ImGui::BeginDragDropTarget()){
         if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")){
-            DrawList* dl = *((DrawList**)payload->Data);
-            addDrawlist(*dl);
+            if(!ddInfo.drawlists){
+                DrawList* dl = *((DrawList**)payload->Data);
+                addDrawlist(*dl);
+            }
+            else{
+                for(int i : *ddInfo.selected){
+                    auto dl = ddInfo.drawlists->begin();
+                    std::advance(dl, i);
+                    addDrawlist(*dl);
+                }
+            }
         }
     }
+    int activeDrawlistCount = 0;
+    for(auto& d: drawlists) if(d.active) activeDrawlistCount++;
     // drawing the correlation pies
     float curX = matrixPos.x;
     int curAttr = 1; while(attributes.size() && !attributes[curAttr - 1].active) ++curAttr;

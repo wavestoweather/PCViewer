@@ -7,7 +7,7 @@
 #include "LineBundles.hpp"
 #include "ClusterBundles.hpp"
 #include "TemplateList.hpp"
-
+#include <optional>
 
 struct Vec4 {
 	float x;
@@ -113,4 +113,9 @@ struct DrawList {
 	LineBundles* lineBundles;
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
+};
+
+struct DrawlistDragDropInfo{
+	std::list<DrawList>* drawlists;
+	std::vector<int>* selected;
 };
