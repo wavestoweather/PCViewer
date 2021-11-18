@@ -19,10 +19,7 @@ public:
         SettingsManager::Setting& s = settingsManager->getSetting(settingId);
         if(s == settingsManager->notFound){
             //default colors are being filled
-            for(int h = 0; h < 36; h += colorDistance){
-                float hue = h * 10;
-                colors.push_back(Color(hsv2rgb({hue, saturation, value})));
-            }
+            resetPalette();
             SettingsManager::Setting set{};
             set.id = settingId;
             set.type = settingType;
@@ -61,10 +58,13 @@ public:
         if(ImGui::BeginPopup(popupName.c_str(), ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration)){
             float size = 400;
             int labelAmt = colors.size() * 2;
+            ImVec2 screenCorrection  = ImGui::GetCursorScreenPos() - ImGui::GetCursorPos();
             ImVec2 baseCursorPos = ImGui::GetCursorPos();
+            ImVec2 center{baseCursorPos.x + size / 2, baseCursorPos.y + size / 2} ;
             int del = -1;
             for(int i = 0; i < labelAmt; ++i){
-                ImGui::SetCursorPos({baseCursorPos.x + size / 2 + std::sin(float(i) / labelAmt * 2 * float(M_PI)) * size / 2, baseCursorPos.y + size / 2 + std::cos(float(i)/ labelAmt * 2 * float(M_PI)) * size / 2});
+                ImVec2 curPos{center.x + std::sin(float(i) / labelAmt * 2 * float(M_PI)) * size / 2, center.y + std::cos(float(i)/ labelAmt * 2 * float(M_PI)) * size / 2};
+                ImGui::SetCursorPos(curPos);
                 if(i & 1){ // + symbol to add a new color
                     if(ImGui::Button(("+##newColor" + std::to_string(i)).c_str())){
                         colors.insert(colors.begin() + (i >> 1) + 1, Color({1,1,1}));
@@ -72,13 +72,22 @@ public:
                     }
                 }
                 else{       //color widget
-                    if(ImGui::ColorEdit4(("##Editor" + std::to_string(i)).c_str(), &colors[i >> 1].x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel) && !ImGui::IsMouseDown(1)){
-                        savePalette();
+                    if(i == curColor){
+                        curPos = curPos + screenCorrection;
+                        ImGui::GetWindowDrawList()->AddRectFilled({curPos.x - 10, curPos.y - 10}, {curPos.x + 500, curPos.y + 500}, ImGui::GetColorU32({0, .7f, .7f, 1}), 2);
                     }
-                    if(ImGui::IsItemClicked() && ImGui::IsMouseClicked(0)){
+                    if(ImGui::ColorEdit4(("##Editor" + std::to_string(i)).c_str(), &colors[i >> 1].x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel) && !ImGui::IsMouseDown(1)){
+                       savePalette();
+                    }
+                    if(ImGui::IsItemClicked(1)){    //delete on rightclick
                         del = i >> 1;
                     }
                 }
+            }
+            const float buttonWidth = 200;
+            ImGui::SetCursorPos({center.x - buttonWidth / 2, center.y - ImGui::GetTextLineHeight() / 2});
+            if(ImGui::Button("reset palette", {buttonWidth, 0})){
+                resetPalette();
             }
             if(del >= 0){
                 colors.erase(colors.begin() + del);
@@ -112,5 +121,13 @@ public:
         set.byteLength = colors.size() * sizeof(Color);
         set.data = colors.data();
         settingsManager->addSetting(set);
+    }
+
+    void resetPalette(){
+        colors.clear();
+        for(int h = 0; h < 36; h += colorDistance){
+            float hue = h * 10;
+            colors.push_back(Color(hsv2rgb({hue, saturation, value})));
+        }
     }
 };

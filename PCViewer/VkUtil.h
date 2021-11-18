@@ -26,6 +26,18 @@ namespace VkUtil{
 		VkQueue queue;
 	};
 
+	struct PipelineInfo{
+		VkPipeline pipeline;
+		VkPipelineLayout pipelineLayout;
+		VkDescriptorSetLayout descriptorSetLayout;
+
+		void vkDestroy(const Context& c){
+			if(pipeline) vkDestroyPipeline(c.device, pipeline, nullptr);
+			if(pipelineLayout) vkDestroyPipelineLayout(c.device, pipelineLayout, nullptr);
+			if(descriptorSetLayout) vkDestroyDescriptorSetLayout(c.device, descriptorSetLayout, nullptr);
+		}
+	};
+
 	struct BlendInfo {
 		VkPipelineColorBlendAttachmentState blendAttachment;
 		VkPipelineColorBlendStateCreateInfo createInfo;

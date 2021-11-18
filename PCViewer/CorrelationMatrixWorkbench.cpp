@@ -140,7 +140,8 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw(const DrawlistDragDropI
                 if(!dl.active) continue;
                 auto& corr = correlationManager->correlations[dl.drawlist];
                 percentages[d] = 1.0 / activeDrawlistCount;
-                int idx = (corr.attributeCorrelations[curAttr2].correlationScores[curAttr] * .5 + .5) * sizeof(diverging_blue_red_map) / 4;
+                int idx = (corr.attributeCorrelations[curAttr2].correlationScores[curAttr] * .5 + .5) * (sizeof(diverging_blue_red_map) / 4 - 1) + .5f;
+                assert(idx * 4 + 3 < sizeof(diverging_blue_red_map));
                 colors[d] = ImGui::GetColorU32({diverging_blue_red_map[idx * 4] / 255.0f,
                                                 diverging_blue_red_map[idx * 4 + 1] / 255.0f,
                                                 diverging_blue_red_map[idx * 4 + 2] / 255.0f,

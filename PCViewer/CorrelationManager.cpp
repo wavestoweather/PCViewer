@@ -5,14 +5,47 @@
 #include <algorithm>
 #include <numeric>
 
-CorrelationManager::CorrelationManager(const VkUtil::Context& context): vkContext(context)
+CorrelationManager::CorrelationManager(const VkUtil::Context& context): _vkContext(context)
 {
-
+    if(context.device){
+        VkShaderModule shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_pearsonShader));
+        std::vector<VkDescriptorSetLayoutBinding> bindings;
+        VkUtil::createDescriptorSetLayout(context.device, bindings, &_pearsonPipeline.descriptorSetLayout);
+        VkUtil::createComputePipeline(context.device, shader, {_pearsonPipeline.descriptorSetLayout}, &_pearsonPipeline.pipelineLayout, &_pearsonPipeline.pipeline);
+    
+        shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_spearmanShader));
+        VkUtil::createDescriptorSetLayout(context.device, bindings, &_spearmanPipeline.descriptorSetLayout);
+        VkUtil::createComputePipeline(context.device, shader, {_spearmanPipeline.descriptorSetLayout}, &_spearmanPipeline.pipelineLayout, &_spearmanPipeline.pipeline);
+        
+        shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_kendallShader));
+        VkUtil::createDescriptorSetLayout(context.device, bindings, &_kendallPipeline.descriptorSetLayout);
+        VkUtil::createComputePipeline(context.device, shader, {_kendallPipeline.descriptorSetLayout}, &_kendallPipeline.pipelineLayout, &_kendallPipeline.pipeline);
+    
+        shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_meanShader));
+        VkUtil::createDescriptorSetLayout(context.device, bindings, &_meanPipeline.descriptorSetLayout);
+        VkUtil::createComputePipeline(context.device, shader, {_meanPipeline.descriptorSetLayout}, &_meanPipeline.pipelineLayout, &_meanPipeline.pipeline);
+    }
 }
 
-void CorrelationManager::calculateCorrelation(const DrawList& dl, CorrelationMetric metric, int baseAttribute) 
+CorrelationManager::~CorrelationManager()
+{
+    _pearsonPipeline.vkDestroy(_vkContext);
+    _spearmanPipeline.vkDestroy(_vkContext);
+    _kendallPipeline.vkDestroy(_vkContext);
+    _meanPipeline.vkDestroy(_vkContext);
+}
+
+void CorrelationManager::calculateCorrelation(const DrawList& dl, CorrelationMetric metric, int baseAttribute, bool useGpu) 
 {
     if(baseAttribute < 0) return;
+    if(useGpu)
+        _execCorrelationGPU(dl, metric, baseAttribute);
+    else 
+        _execCorrelationCPU(dl, metric, baseAttribute);
+}
+
+void CorrelationManager::_execCorrelationCPU(const DrawList& dl, CorrelationMetric metric, int baseAttribute) 
+{
     int amtOfAttributes = dl.data->columns.size();
     DrawlistCorrelations& dlCorrelations = correlations[dl.name];
     dlCorrelations.drawlist = dl.name;
@@ -21,7 +54,7 @@ void CorrelationManager::calculateCorrelation(const DrawList& dl, CorrelationMet
     curAttCorrelation.baseAttribute = baseAttribute;
     curAttCorrelation.correlationScores.resize(amtOfAttributes);
     std::vector<uint8_t> activations(dl.data->size());
-    VkUtil::downloadData(vkContext.device, dl.dlMem, dl.activeIndicesBufferOffset, activations.size(), activations.data());
+    VkUtil::downloadData(_vkContext.device, dl.dlMem, dl.activeIndicesBufferOffset, activations.size(), activations.data());
     std::vector<double> means(amtOfAttributes, 0);
     std::vector<double> nominator(amtOfAttributes, 0), denom1(amtOfAttributes, 0), denom2(amtOfAttributes, 0);
     switch(metric){
@@ -110,4 +143,21 @@ void CorrelationManager::calculateCorrelation(const DrawList& dl, CorrelationMet
         break;
     }
     };
+}
+
+void CorrelationManager::_execCorrelationGPU(const DrawList& dl, CorrelationMetric metric, int baseAttribute) 
+{
+    //TODO implement...
+    VkDescriptorSet descSet;
+    switch(metric){
+    case CorrelationMetric::Pearson:{
+        break;
+    }
+    case CorrelationMetric::SpearmanRank:{
+        break;
+    }
+    case CorrelationMetric::KendallRank:{
+        break;
+    }
+    }
 }

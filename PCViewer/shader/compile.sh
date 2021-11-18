@@ -38,3 +38,7 @@ glslangValidator -V -o cluster_band.vert.spv cluster_band.vert
 glslangValidator -V -o cluster_band.geom.spv cluster_band.geom
 glslangValidator -V -o scatter.vert.spv scatter.vert
 glslangValidator -V -o scatter.frag.spv scatter.frag
+glslangValidator -V --target-env vulkan1.1 -o corrKendall.comp.spv corrKendall.comp
+glslangValidator -V --target-env vulkan1.1 -o corrMean.comp.spv corrMean.comp
+glslangValidator -V --target-env vulkan1.1 -o corrPearson.comp.spv corrPearson.comp
+glslangValidator -V --target-env vulkan1.1 -o corrSpearman.comp.spv corrSpearman.comp

@@ -49,7 +49,7 @@ void TransferFunctionEditor::draw()
 	if (!active) return;
 	ImGui::SetNextWindowPos(pos, ImGuiCond_Appearing, pivot);
 	ImGui::Begin("Transfer Function Editor", nullptr, ImGuiWindowFlags_NoDocking| ImGuiWindowFlags_NoDecoration| ImGuiWindowFlags_NoResize);
-	static char* channels[4]{ "Red", "Green", "Blue", "Alpha" };
+	static char const* channels[4]{ "Red", "Green", "Blue", "Alpha" };
 	ImGui::Text("Select channel to edit:");
 	for (int i = 0; i < 4; ++i) {
 		if (i != 0) ImGui::SameLine();

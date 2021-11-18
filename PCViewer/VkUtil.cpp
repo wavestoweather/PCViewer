@@ -15,6 +15,7 @@ uint32_t VkUtil::findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFi
 	std::cerr << "The memory type which is needed is not available!" << std::endl;
 	exit(-1);
 #endif
+	return 0xffffffff;
 }
 
 void VkUtil::createMipMaps(VkCommandBuffer commandBuffer, VkImage image, uint32_t mipLevels, uint32_t imageWidth, uint32_t imageHeight, VkImageLayout oldLayout, VkAccessFlags oldAccess, VkPipelineStageFlags oldPipelineStage)

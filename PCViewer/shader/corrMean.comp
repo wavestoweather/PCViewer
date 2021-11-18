@@ -1,0 +1,43 @@
+#version 460
+#extension GL_EXT_shader_atomic_float : enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+
+layout (binding = 0) buffer Data{
+	float d[];
+}data;
+
+layout(binding = 1) buffer IndexBuffer{
+	uint ind[];
+};
+
+layout(binding = 2, r8 ) uniform imageBuffer act;
+
+layout(binding = 3) buffer pearson{
+    uint maxIndex;
+    uint amtOfAttributes;
+    uint baseAttribute;
+    uint amtOfActiveIndices;
+    float res[];    //contains: float[amtOfAttributes] means,  
+                    //          float[amtOfAttributes] nominator,
+                    //          float[amtOfAttributes] denom1,
+                    //          float[amtOfAttributes] denom2
+};
+
+#include "dataAccess.glsl"
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+void main(){
+    if(gl_GlobalInvocationID.x >= maxIndex) return;
+    uint index = ind[gl_GlobalInvocationID.x];
+    bool ac = bool(imageLoad(act, int(index)).x);
+    if(!ac) return;
+    for(int a = 0; a < amtOfAttributes; ++a){
+        float datum = getPackedData(index, a) / amtOfActiveIndices;
+        datum = subgroupAdd(datum);
+        if(subgroupElect()){
+            atomicAdd(res[a], datum);
+        }
+    }
+}
