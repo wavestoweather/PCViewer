@@ -1,0 +1,104 @@
+#define version 460
+#extension GL_GOOGLE_include_directive: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+
+#include "radixHeader.glsl"
+
+layout(local_size_x = TPB, local_size_y = 1, local_size_z = 1) in;
+
+void swap(uint v[], uint a, uint b){
+    uint t = min(v[a], v[b]);
+    v[b] = max(v[a], v[b]);
+    v[a] = t;
+}
+
+// v is the vector holding the numbers to sort, o is the start offset
+void sortingNetwork9(uint v[], uint o){
+    swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
+    swap(v, o + 1, o + 2); swap(v, o + 4, o + 5); swap(v, o + 7, o + 8);
+    swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
+    swap(v, o + 0, o + 3); swap(v, o + 3, o + 6); swap(v, o + 0, o + 3);
+    swap(v, o + 1, o + 4); swap(v, o + 4, o + 7); swap(v, o + 1, o + 4);
+    swap(v, o + 5, o + 8); swap(v, o + 2, o + 5); swap(v, o + 5, o + 8);
+    swap(v, o + 2, o + 4); swap(v, o + 4, o + 6); swap(v, o + 2, o + 4);
+    swap(v, o + 1, o + 3); swap(v, o + 2, o + 3);
+    swap(v, o + 5, o + 7); swap(v, o + 5, o + 6);
+}
+
+shared GroupInfo sharedInfo;
+void main(){
+    //parallel nulling shared memory
+    for(int i = 0; i < (NUMKEYS + TPB - 1) / TPB; ++i){
+        uint curIndex = i * TPB;
+        if(curIndex < NUMKEYS)
+            sharedInfo.keyCount[curIndex] = 0;
+    }
+    barrier();
+
+    uint front = uniformInfo.pass & 1;
+    uint back = front ^ 1;
+    uint startOffset = gl_GlobalInvocationID.x * KPT;
+    uint localBuf[KPT];
+    
+    for(int i = 0; i < KPT; ++i) localBuf[i] = keys[front].k[startOffset + i];
+    uint workGrup = gl_WorkGroupID.x;
+    //sorting the local Buf via sorting network
+    sortingNetwork9(localBuf, 0);
+    sortingNetwork9(localBuf, 9);
+    #ifdef HISTOGRAMSUBGROUPREDUCTION
+    //atomic add to the shared histogram with subgroup reduction
+    uint p1 = 0, p2 = 9;
+    while(p1 < 9 || p2 < 18){   // do while both pointers are not finished
+        uint curVal = 0;
+        if(p1 < 9 && p2 < 18)
+            curVal = min(localBuf[p1], localBuf[p2]);
+        else if(p1 < 9)
+            curVal = localBuf[p1];
+        else
+            curVal = localBuf[p2];
+        curVal = subgroupMin(curVal);
+        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+        uint c = 0;
+        while(localBuf[p1] == curVal) {++p1;++c;}
+        while(localBuf[p2] == curVal) {++p2;++c;}
+        c = subgroupAdd(c);
+        if(subgroupElect())
+            atomicAdd(sharedInfo.keyCount[curBucket], c);
+    }
+    #else
+    //normal atomic add
+    uint p1 = 0, p2 = 9;
+    while(p1 < 9 && p2 < 18){   // do while both pointers are not finished
+        uint curVal = min(localBuf[p1], localBuf[p2]);
+        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+        uint c = 0;
+        while(localBuf[p1] == curVal) {++p1;++c;}
+        while(localBuf[p2] == curVal) {++p2;++c;}
+        atomicAdd(sharedInfo.keyCount[curBucket], c);
+    }
+    //finishing one of the two arrays if not yet done
+    if(p1 < 9){
+        curVal = localBuf[p1++];
+        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+        uint c = 1;
+        while(localBuf[p1] == curVal) {++p1;++c;}
+        atomicAdd(sharedInfo.keyCount[curBucket], c);
+    }
+    if(p2 < 18){
+        curVal = localBuf[p2++];
+        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+        uint c = 1;
+        while(localBuf[p2] == curVal) {++p2;++c;}
+        atomicAdd(sharedInfo.keyCount[curBucket], c);
+    }
+    #endif
+    barrier();
+    // shared buffer writing to storage buffer and incrementing global histogram
+    for(int i = 0; i < (NUMKEYS + TPB - 1) / TPB; ++i){
+        uint curIndex = i * TPB;
+        if(curIndex < NUMKEYS){
+            groupInfos.i[workGrup].keyCount[curIndex] = localBuf[curIndex];
+            atomicAdd(uniformInfo.globalHistogram.keyCount[curIndex], localBuf[curIndex]);
+        }
+    }
+}

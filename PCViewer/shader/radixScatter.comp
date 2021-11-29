@@ -1,0 +1,44 @@
+#define version 460
+#extension GL_GOOGLE_include_directive: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+
+#include "radixHeader.glsl"
+
+layout(local_size_x = TPB, local_size_y = 1, local_size_z = 1) in;
+
+shared GroupInfo sharedInfo;
+shared uint sharedKeys[KPB];
+void main(){
+    //parallel loading of the group info (exclusive add offsets for key scattering)
+    for(int i = 0; i < (NUMKEYS + TPB - 1) / TPB; ++i){
+        uint curIndex = i * TPB;
+        if(curIndex < NUMKEYS)
+            sharedInfo.keyCount[curIndex] = uniformInfo.globalHistgram.keyCount[curIndex];
+    }
+    barrier();
+    
+    uint front = uniformInfo.pass & 1;
+    uint back = front ^ 1;
+    uint startOffset = gl_GlobalInvocationID.x * KPT;   //The offset has to be adjusted by the bucket offset
+    uint bucket = 0; //TODO: get bucket number
+    uint bucketOffset = 0; //TODO: get bucket offset
+    for(int i = 0; i < KPT; ++i){
+        uint k = keys[front].k[startOffset + i];
+        uint curBucket = getMaskedKey(k, uniformInfo.pass);
+        uint offset = atomicAdd(sharedInfo.keyCount[curBucket], 1);    // adding one to the bucket as an element is inserted
+        sharedKeys[offset] = k;
+    }
+    barrier(); // waiting for all workgroups to assign their keys to the shared key array
+    //care: TPB have to be more than there are buckets!!!!
+    if(gl_LocalInvocationID.x < NUMKEYS){
+        uint offset = sharedInfo.keyCount[gl_LocalInvocationID.x];
+        uint count = offset;
+        if(gl_LocalInvocationID.x != 0) count -= sharedInfo.keyCount[gl_LocalInvocationID.x - 1];
+        if(count > 0){
+            bucketPos = atomicAdd(uniformInfo.globalHistograms[bucket].keyCount[gl_LocalInvocationID.x], count);
+            for(int c = 0; c < count; ++c){
+                keys[back].k[bucketOffset + bucketPos + c] = sharedKeys[offset + c];
+            }
+        }
+    }
+}

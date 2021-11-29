@@ -45,4 +45,9 @@ E:/Vulkan/1.2.135.0/Bin32/glslangValidator -V -o cluster_band.vert.spv cluster_b
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator -V -o cluster_band.geom.spv cluster_band.geom
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o scatter.vert.spv scatter.vert
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o scatter.frag.spv scatter.frag
+
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixGlobalScan.comp.spv radixGlobalScan.comp
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixHistogram.comp.spv radixHistogram.comp
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixScatter.comp.spv radixScatter.comp
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixLocalSort.comp.spv radixLocalSort.comp
 pause
