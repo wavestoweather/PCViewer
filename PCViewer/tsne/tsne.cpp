@@ -685,16 +685,16 @@ bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta,
 		printf("Error: could not open data file.\n");
 		return false;
 	}
-	fread(n, sizeof(int), 1, h);											// number of datapoints
-	fread(d, sizeof(int), 1, h);											// original dimensionality
-    fread(theta, sizeof(double), 1, h);										// gradient accuracy
-	fread(perplexity, sizeof(double), 1, h);								// perplexity
-	fread(no_dims, sizeof(int), 1, h);                                      // output dimensionality
-    fread(max_iter, sizeof(int),1,h);                                       // maximum number of iterations
+	size_t ret = fread(n, sizeof(int), 1, h);											// number of datapoints
+	ret = fread(d, sizeof(int), 1, h);											// original dimensionality
+    ret = fread(theta, sizeof(double), 1, h);										// gradient accuracy
+	ret = fread(perplexity, sizeof(double), 1, h);								// perplexity
+	ret = fread(no_dims, sizeof(int), 1, h);                                      // output dimensionality
+    ret = fread(max_iter, sizeof(int),1,h);                                       // maximum number of iterations
 	*data = (double*) malloc(*d * *n * sizeof(double));
     if(*data == NULL) { printf("Memory allocation failed!\n"); exit(1); }
-    fread(*data, sizeof(double), *n * *d, h);                               // the data
-    if(!feof(h)) fread(rand_seed, sizeof(int), 1, h);                       // random seed
+    ret = fread(*data, sizeof(double), *n * *d, h);                               // the data
+    if(!feof(h)) ret = fread(rand_seed, sizeof(int), 1, h);                       // random seed
 	fclose(h);
 	printf("Read the %i x %i data matrix successfully!\n", *n, *d);
 	return true;

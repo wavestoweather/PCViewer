@@ -7317,7 +7317,8 @@ int main(int, char**)
 	//test of radix sort
 	GpuRadixSorter sorter({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
 	for(int i = 0; i < 20; ++i){
-		sorter.checkLocalSort();
+		sorter.checkHistogram();
+		//sorter.checkLocalSort();
 	}
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;

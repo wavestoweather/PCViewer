@@ -6,14 +6,19 @@
 
 layout(local_size_x = TPB, local_size_y = 1, local_size_z = 1) in;
 
-void swap(uint v[KPT], uint a, uint b){
-    uint t = min(v[a], v[b]);
-    v[b] = max(v[a], v[b]);
-    v[a] = t;
+void swap(inout uint v[KPT], uint a, uint b){
+    if(v[a] > v[b]){
+        uint t = v[a];
+        v[a] = v[b];
+        v[b] = t;
+    }
+    //uint t = min(v[a], v[b]);
+    //v[b] = max(v[a], v[b]);
+    //v[a] = t;
 }
 
 // v is the vector holding the numbers to sort, o is the start offset
-void sortingNetwork9(uint v[KPT], uint o){
+void sortingNetwork9(inout uint v[KPT], uint o){
     swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
     swap(v, o + 1, o + 2); swap(v, o + 4, o + 5); swap(v, o + 7, o + 8);
     swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
@@ -25,29 +30,50 @@ void sortingNetwork9(uint v[KPT], uint o){
     swap(v, o + 5, o + 7); swap(v, o + 5, o + 6);
 }
 
+void bitonicSortColumn(inout uint v[KPT]){
+    for(uint k = 2; k <= KPT; k *= 2){
+        for(uint j = k / 2; j > 0; j /= 2){
+            for(int i = 0; i < KPT; ++i){
+                uint l = i ^ j;
+                if(l > i){
+                    if((i & k) == 0 && (v[i] > v[l])||
+                        (i & k) != 0 && (v[i] < v[l]))
+                        swap(v, i, l);
+                }
+            }
+        }
+    }
+}
+
 shared GroupInfo sharedInfo;
 void main(){
     //parallel nulling shared memory
-    for(int i = 0; i < (NUMKEYS + TPB - 1) / TPB; ++i){
-        uint curIndex = i * TPB;
-        if(curIndex < NUMKEYS)
-            sharedInfo.keyCount[curIndex] = 0;
-    }
+    if(gl_LocalInvocationID.x < NUMKEYS)
+        sharedInfo.keyCount[gl_LocalInvocationID.x] = 0;
     barrier();
 
-    uint front = uniformInfo.pass & 1;
+    uint front = 0;//uniformInfo.pass & 1;
     uint back = front ^ 1;
-    uint startOffset = gl_GlobalInvocationID.x * KPT;
-    uint localBuf[KPT];
+    uint blockStart = 0; //TODO dynamic start
+    uint blockEnd = KPB; //TODO dynamic end
+    uint localBuf[KPT];     //in local buf onyl bucket values are stored
     
-    for(int i = 0; i < KPT; ++i) localBuf[i] = keys[front].k[startOffset + i];
-    uint workGrup = gl_WorkGroupID.x;
+    const uint subgroupStorage = SUBGROUP_SIZE * KPT;
+    for(int i = 0; i < KPT; ++i){
+        uint index = blockStart + gl_SubgroupID * subgroupStorage + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
+        if(index < blockEnd)
+            localBuf[i] = getMaskedKey(keys[front].k[index], uniformInfo.pass);
+        else
+            localBuf[i] = MAXVAL;
+    } 
+    uint workGroup = gl_WorkGroupID.x;
     //sorting the local Buf via sorting network
     sortingNetwork9(localBuf, 0);
     sortingNetwork9(localBuf, 9);
     #ifdef HISTOGRAMSUBGROUPREDUCTION
     //atomic add to the shared histogram with subgroup reduction
     uint p1 = 0, p2 = 9;
+    uint count = 0;
     while(p1 < 9 || p2 < 18){   // do while both pointers are not finished
         uint curVal = 0;
         if(p1 < 9 && p2 < 18)
@@ -59,47 +85,51 @@ void main(){
         curVal = subgroupMin(curVal);
         uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
         uint c = 0;
-        while(localBuf[p1] == curVal) {++p1;++c;}
-        while(localBuf[p2] == curVal) {++p2;++c;}
+        while(p1 < 9 && localBuf[p1] == curVal) {++p1;++c;}
+        while(p2 < 18 && localBuf[p2] == curVal) {++p2;++c;}
         c = subgroupAdd(c);
         if(subgroupElect())
             atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
-    #else
+    #elif defined(HISTOGRAMTHREADREDUCTION)
     //normal atomic add
     uint p1 = 0, p2 = 9;
     while(p1 < 9 && p2 < 18){   // do while both pointers are not finished
-        uint curVal = min(localBuf[p1], localBuf[p2]);
-        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+        uint curBucket = min(localBuf[p1], localBuf[p2]);
         uint c = 0;
-        while(localBuf[p1] == curVal) {++p1;++c;}
-        while(localBuf[p2] == curVal) {++p2;++c;}
+        while(p1 < 9 && localBuf[p1] == curBucket) {++p1;++c;}
+        while(p2 < 18 && localBuf[p2] == curBucket) {++p2;++c;}
         atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
     //finishing one of the two arrays if not yet done
-    if(p1 < 9){
-        curVal = localBuf[p1++];
-        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+    while(p1 < 9){
+        uint curBucket = localBuf[p1++];
         uint c = 1;
-        while(localBuf[p1] == curVal) {++p1;++c;}
+        while(p1 < 9 && localBuf[p1] == curBucket) {++p1;++c;}
         atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
-    if(p2 < 18){
-        curVal = localBuf[p2++];
-        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+    while(p2 < 18){
+        uint curBucket = localBuf[p2++];
         uint c = 1;
-        while(localBuf[p2] == curVal) {++p2;++c;}
+        while(p2 < 18 && localBuf[p2] == curBucket) {++p2;++c;}
         atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
+    #else
+    for(int i = 0; i < KPT; ++i)
+        if (localBuf[i] != MAXVAL)
+            atomicAdd(sharedInfo.keyCount[localBuf[i]], 1);
     #endif
     barrier();
     // shared buffer writing to storage buffer and incrementing global histogram
-    for(int i = 0; i < (NUMKEYS + TPB - 1) / TPB; ++i){
-        uint curIndex = i * TPB;
-        if(curIndex < NUMKEYS){
-            groupInfos.i[workGrup].keyCount[curIndex] = localBuf[curIndex];
-            //TODO correct histogram
-            atomicAdd(uniformInfo.globalHistograms[0].keyCount[curIndex], localBuf[curIndex]);
-        }
+    //for(int i = 0; i < (NUMKEYS + TPB - 1) / TPB; ++i){
+    //    uint curIndex = i * TPB;
+    //    if(curIndex < NUMKEYS){
+    //        groupInfos.i[workGrup].keyCount[curIndex] = localBuf[curIndex]; 
+    //        //TODO correct histogram
+    //        atomicAdd(uniformInfo.globalHistograms[0].keyCount[curIndex], localBuf[curIndex]);
+    //    }
+    //}
+    if(gl_LocalInvocationID.x < NUMKEYS){
+        atomicAdd(uniformInfo.globalHistograms[0].keyCount[gl_LocalInvocationID.x], sharedInfo.keyCount[gl_LocalInvocationID.x]);
     }
 }

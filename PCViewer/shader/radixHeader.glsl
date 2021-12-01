@@ -6,7 +6,8 @@
 #define TPLSB 512          //threads per local sort block
 #define KPB (TPB * KPT)
 #define KPLSB (TPLSB * KPLST)//keys per local sort block
-#define HISTOGRAMSUBGROUPREDUCTION
+//#define HISTOGRAMSUBGROUPREDUCTION
+#define HISTOGRAMTHREADREDUCTION    //no optimization .08 ms thread reduction .09 ms subgroup thread reduction .27 ms
 #define MAXVAL 0xffffffff
 
 struct GroupInfo{
@@ -35,6 +36,7 @@ uniformInfo;
 layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
 
 uint getMaskedKey(uint val, uint pass){
+    pass = 3 - pass; //inverting the pass to start from the front
     pass *= 8; // 8 bit per pass
     return (val >> pass) & 0xff;
 }

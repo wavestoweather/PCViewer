@@ -19,6 +19,7 @@ public:
 
     #ifdef ENABLE_TEST_SORT
     bool checkLocalSort();  //checks local sort on an array of uints the size of 
+    bool checkHistogram();  //checks histogram for a random uint array
     #endif
 private:
     std::string _shaderPath = "shader/radixSort.comp.spv";
@@ -31,4 +32,5 @@ private:
     VkUtil::Context _vkContext;
     VkUtil::PipelineInfo _pipelineInfo;
     VkUtil::PipelineInfo _localSortPipeline;
+    VkUtil::PipelineInfo _histogramPipeline;
 };

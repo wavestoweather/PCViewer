@@ -28,7 +28,7 @@ bool SettingsManager::addSetting(Setting s, bool autostore)
 	s.data = data;
 	bool exists = false;
 	if (settings.find(s.id) != settings.end()) {
-		delete settings[s.id].data;
+		delete static_cast<char*>(settings[s.id].data);
 		exists = true;
 	}
 	settings[s.id] = s;
@@ -50,7 +50,7 @@ bool SettingsManager::deleteSetting(std::string id)
 {
 	if (settings.find(id) == settings.end()) return false;
 	Setting s = settings[id];
-	delete[] s.data;
+	delete[] static_cast<char*>(s.data);
 
 	int i = 0;
 	for (; i < settingsType[s.type].size(); i++) {
@@ -148,7 +148,7 @@ void SettingsManager::loadSettings(const char* filename)
 		//for (int i = 0; i < s.byteLength; ++i)
 		//	std::cout << (int)((char*)s.data)[i];
 		
-		delete[] s.data;
+		delete[] static_cast<char*>(s.data);
 	}
 
 	file.close();
