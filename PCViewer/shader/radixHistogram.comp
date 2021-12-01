@@ -1,19 +1,19 @@
-#define version 460
-#extension GL_GOOGLE_include_directive: enable
-#extension GL_KHR_shader_subgroup_arithmetic: enable
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
 
 #include "radixHeader.glsl"
 
 layout(local_size_x = TPB, local_size_y = 1, local_size_z = 1) in;
 
-void swap(uint v[], uint a, uint b){
+void swap(uint v[KPT], uint a, uint b){
     uint t = min(v[a], v[b]);
     v[b] = max(v[a], v[b]);
     v[a] = t;
 }
 
 // v is the vector holding the numbers to sort, o is the start offset
-void sortingNetwork9(uint v[], uint o){
+void sortingNetwork9(uint v[KPT], uint o){
     swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
     swap(v, o + 1, o + 2); swap(v, o + 4, o + 5); swap(v, o + 7, o + 8);
     swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
@@ -98,7 +98,8 @@ void main(){
         uint curIndex = i * TPB;
         if(curIndex < NUMKEYS){
             groupInfos.i[workGrup].keyCount[curIndex] = localBuf[curIndex];
-            atomicAdd(uniformInfo.globalHistogram.keyCount[curIndex], localBuf[curIndex]);
+            //TODO correct histogram
+            atomicAdd(uniformInfo.globalHistograms[0].keyCount[curIndex], localBuf[curIndex]);
         }
     }
 }

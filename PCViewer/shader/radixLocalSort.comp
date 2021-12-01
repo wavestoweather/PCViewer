@@ -1,125 +1,194 @@
 #version 460
-#extension GL_GOOGLE_include_directive: enable
-#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_KHR_shader_subgroup_shuffle : enable
+#extension GL_EXT_control_flow_attributes : enable
 
 #include "radixHeader.glsl"
 
 //note: local size has to be 2^k, otherwise merging problems
-layout(local_size_x = TPLSB, local_size_y = 1, local_size_z = 1) in
+layout(local_size_x = TPLSB, local_size_y = 1, local_size_z = 1) in;
 
-void bitonicSort(inout uint localBuf[]){
+void bitonicSortRow(inout uint localBuf[KPLST], uint kCorr){
     //bitonic sort across subgroups for all local memory
     //no thread synchronization needed as subgroups run in lockstep
-    for(uint k = 2; k <= gl_SubgroupSize; k *= 2){
-        for(uint j = k / 2; j > 0; j /= 2){
-            for(int l = 0; l < KPLST; ++l){
-                uint other = subgroupShuffleXor(localBuf[l], k);
-                if(gl_SubgroupInvocationID & k) localBuf[l] = max(localBuf[l], other)
-                else localBuf[l] = min(localBuf[l], other);
+    const uint id = gl_SubgroupInvocationID;
+    [[unroll]]for(uint k = 2; k <= SUBGROUP_SIZE; k *= 2){
+        [[unroll]]for(uint j = k / 2; j > 0; j /= 2){
+            [[unroll]]for(int l = 0; l < KPLST; ++l){
+                uint other = subgroupShuffleXor(localBuf[l], j);
+                bool up = (id ^ j) > id ^^ bool(kCorr & l);
+                if(((id & k) == 0) && (up && localBuf[l] > other || !up && localBuf[l] < other) || 
+                    ((id & k) != 0) && (up && localBuf[l] < other || !up && localBuf[l] > other))
+                    localBuf[l] = other;
             }
         }
     }
 }
 
-void bitonicMerge(inout uint localBuf[]){
+void bitonicMergeRow(inout uint localBuf[KPLST], uint kCorr){
     //only bitonic merge of subgroup without "blowup" phase
-    const uint k = gl_SubgroupSize;
-    for(uint j = k / 2; j > 0; j /= 2){
-        for(int l = 0; l < KPLST; ++l){
-            uint other = subgroupShuffleXor(localBuf[l], k);
-            if(gl_SubgroupInvocationID & k) localBuf[l] = max(localBuf[l], other)
-            else localBuf[l] = min(localBuf[l], other);
+    const uint k = SUBGROUP_SIZE;
+    const uint id = gl_SubgroupInvocationID;
+    [[unroll]]for(uint j = k / 2; j > 0; j /= 2){
+        [[unroll]]for(int l = 0; l < KPLST; ++l){
+            uint other = subgroupShuffleXor(localBuf[l], j);
+            bool up = (id ^ j) > id ^^ bool(kCorr & l);
+            if(((id & k) == 0) && (up && localBuf[l] > other || !up && localBuf[l] < other) || 
+                ((id & k) != 0) && (up && localBuf[l] < other || !up && localBuf[l] > other))
+                localBuf[l] = other;
+        }
+    }
+}
+
+shared uint sorted[KPLSB];
+void swap(uint x, uint y){
+    uint tmp = sorted[x];
+    sorted[x] = sorted[y];
+    sorted[y] = tmp;
+}
+void bitonicSharedSort(){
+    const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
+    [[unroll]]for(uint k = 2; k <= KPLSB; k *= 2){
+        [[unroll]]for(uint j = k / 2; j > 0; j /= 2){
+            [[unroll]]for(int m = 0; m < KPLST; ++m){
+                uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * m + gl_SubgroupInvocationID;
+                uint ixj = index ^ j;
+                if(ixj > index){
+                    if((index & k) == 0 && sorted[index] > sorted[ixj]||
+                        (index & k) != 0 && sorted[index] < sorted[ixj])
+                        swap(index, ixj);
+                }
+            }
+            barrier();
         }
     }
 }
 
 // sorts a short region in the input via bitonic local sort in the current workGroup
-shared uint sorted[KPLSB];
 void main(){
     uint front = 0; // get front buffer from local sort info (local sorts should not be copied...)
     uint back = (uniformInfo.pass & 1) ^ 1;
     uint regionStart = 0; //TODO get region start
     uint regionEnd = KPLSB;//TODO get region end
 
+    for(int i = 0; i < KPLST; ++i){
+        const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
+        uint index = regionStart + gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
+        if(index < regionEnd)
+            sorted[index] = keys[front].k[index];
+        else
+            sorted[index] = MAXVAL;
+    }
+    barrier();  //waiting for all groups to complete
+    bitonicSharedSort();
+    for(int i = 0; i < KPLST; ++i){
+        const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
+        uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
+        //uint curIndex = regionStart + gl_SubgroupID.x * SUBGROUP_SIZE * KPLST + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
+        if(index < regionEnd)
+            //keys[front].k[curIndex] = localBuf[i];
+            keys[front].k[index] = sorted[index];
+    }
+    return;
+
     //loading into local memory
     uint localBuf[KPLST];
     for(int i = 0; i < KPLST; ++i){
-        uint curIndex = regionStart + KPLSB * i + gl_LocalInvocationID.x;
+        uint curIndex = regionStart + gl_SubgroupID.x * SUBGROUP_SIZE * KPLST + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         if(curIndex < regionEnd)
             localBuf[i] = keys[front].k[curIndex];
         else
             localBuf[i] = MAXVAL;
     }
+    
     //bitonic sort accross subroups to have gl_SubgroupSize large lists of sorted numbers
-    bitonicSort(localBuf);
+    bitonicSortRow(localBuf, 1);   //kCorr = SUBGROUP_SIZE / SUBGROUP_SIZE
     
     //bitonic sort of localBuf matrix:
-    uint curSortSize = gl_SubgroupSize * 2; //current size of sorted lists (Is being doubled each pass)
-    const uint keysPerSubgroup = KPLST * gl_SubgroupSize;
-    const bool startBack = bool(gl_SubgroupInvocationID / (gl_SubgroupSize / 2));
-    const uint shuffleID = 
-    for(uint laneStride = 1; laneStride < KPLST; laneStride *= 2){
-        //cross compare
-        for(uint lane = 0; lane < KPLST / laneStride; lane += laneStride){
-            uint bufOffset = lane * laneStride * 2;
-            if(startBack)  bufOffset += 2 * laneStride - 1;
-            for(int subLane = 0; subLane <= lane; ++subLane){
-                if(startBack) --bufOffset;
-                else ++bufOffset;
-                uint other = subgroupShuffleXor(localBuf[bufOffset], gl_SubgroupSize - 1); //31 inverts the current subgroupID
-                if(bufOffset & laneStride) localBuf[bufOffset] = min(localBuf[bufOffset], other);
-                else localBuf[bufOffset] = max(localBuf[bufOffset], other);
-            }
-        }
-        //symmetric compare (means we can compare elements in localBuf)
-        for(uint j = laneStride - 1; j > 0; j /= 2){
-            uint inc = 0;
-            int off = 0;
-            for(uint lane = 0; lane < KPLST / 2; ++lane){
-                uint indA = lane * laneStride * 2;
-                uint indB = indA  + laneStride;
-                if(localBuf[off + lane] > localBuf[off + lane + laneStride]){
-                    uint tmp = localBuf[off + lane + laneStride];
-                    localBuf[off + lane + laneStride] = localBuf[off + lane];
-                    localBuf[off + lane] = tmp;
+    uint curSortSize = SUBGROUP_SIZE * 2; //current size of sorted lists (Is being doubled each pass)
+    const uint keysPerSubgroup = KPLST * SUBGROUP_SIZE;
+    const bool startBack = bool(gl_SubgroupInvocationID / (SUBGROUP_SIZE / 2));
+    //for(uint laneStride = 1; laneStride < KPLST; laneStride *= 2){
+    //    //cross compare
+    //    for(uint lane = 0; lane < KPLST / laneStride / 2; lane += laneStride * 2){
+    //        uint bufOffset = lane * laneStride * 2;
+    //        if(startBack)  bufOffset += 2 * laneStride - 1;
+    //        for(int subLane = 0; subLane <= lane; ++subLane){
+    //            if(startBack) --bufOffset;
+    //            else ++bufOffset;
+    //            uint other = subgroupShuffleXor(localBuf[bufOffset], SUBGROUP_SIZE - 1); //31 inverts the current subgroupID
+    //            if(bool(bufOffset & laneStride)) localBuf[bufOffset] = min(localBuf[bufOffset], other);
+    //            else localBuf[bufOffset] = max(localBuf[bufOffset], other);
+    //        }
+    //    }
+    //    //symmetric compare (means we can compare elements in localBuf)
+    //    for(uint j = laneStride - 1; j > 0; j /= 2){
+    //        uint inc = 0;
+    //        int off = 0;
+    //        for(uint lane = 0; lane < KPLST / 2; ++lane){
+    //            uint indA = lane * laneStride * 2;
+    //            uint indB = indA  + laneStride;
+    //            if(localBuf[off + lane] > localBuf[off + lane + laneStride]){
+    //                uint tmp = localBuf[off + lane + laneStride];
+    //                localBuf[off + lane + laneStride] = localBuf[off + lane];
+    //                localBuf[off + lane] = tmp;
+    //            }
+    //            if(++inc >= laneStride){++off; inc = 0;}
+    //        }
+    //    }
+    //    bitonicMerge(localBuf); //doing a local per register merge
+    //}
+    for(uint k = SUBGROUP_SIZE * 2; k <= SUBGROUP_SIZE * KPLST; k *= 2){
+        for(uint j = k / 2; j > 0; j /= 2){
+            uint kCorr = k / SUBGROUP_SIZE;
+            if(j < SUBGROUP_SIZE) bitonicMergeRow(localBuf, kCorr); //local merge if smaller than group size
+            else{
+                for(int m = 0; m < KPLST; ++m){
+                    uint l = m ^ (j / SUBGROUP_SIZE);
+                    if(l > m){
+                        if(((m & kCorr) == 0) && (localBuf[m] > localBuf[l]) ||
+                            ((m & kCorr) !=0) && (localBuf[m] < localBuf[l])){
+                                uint tmp = localBuf[m]; 
+                                localBuf[m] = localBuf[l]; 
+                                localBuf[l] = tmp;
+                        }
+                    }
                 }
-                if(++inc >= laneStride){++off; inc = 0;}
             }
         }
-        bitonicMerge(localBuf); //doing a local per register merge
     }
+    
     //storing bitonic sorted lists in shared memory for merging
-    const uint subgroupStorage = gl_SubgroupSize * KPLST;
+    const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
     for(int i = 0; i < KPLST; ++i){
-        uint index = gl_SubgroupID * subgroupStorage  + gl_SubgroupSize * i + gl_SubgroupInvocationID;
+        uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         sorted[index] = localBuf[i];
     }
     barrier();  //waiting for all groups to complete
     // merging in the first subgroup
     if(gl_SubgroupID == 0 && gl_SubgroupInvocationID < gl_NumSubgroups){   // one thread for each subgroup list
         bool finished = false;
-        bool allFinished = false;
         uint pS = gl_SubgroupInvocationID * subgroupStorage;    //pointer to sorted array in shared memory
         const uint maxS = pS + subgroupStorage;
         uint pR = 0;                                            //pointer to place in result array
         uint curVal = sorted[pS];
         uint valCount = 1;
         while(sorted[++pS] == curVal && pS < maxS) ++valCount;
-        while(!allFinished){
+        while(true){
             uint minVal = subgroupMin(curVal);
             uint sum = 0;
             if(minVal == curVal) sum = valCount;
             sum = subgroupAdd(sum);
-            for(int i = pR + gl_SubgroupInvocationID; i < pR + sum; i += gl_NumSubgroups){ //parallel array store
-                keys[back][i] = minVal;
+            for(uint i = pR + gl_SubgroupInvocationID; i < pR + sum; i += gl_NumSubgroups){ //parallel array store
+                keys[back].k[i] = minVal;
             }
             pR += sum;  //advancing the result pointer
-            finished = pS == maxS;
-            allFinished = pR >= regionEnd;
-            if(curVal == minVal & !finished){   // push current pointer to the next number
+            if(curVal == minVal){   // push current pointer to the next number
+                if(pS == maxS) return;         // if done return
                 curVal = sorted[pS];
-                valueCount = 1;
-                while(sorted[++pS] == curVal && pS < maxS) ++valueCount;
+                valCount = 1;
+                while(sorted[++pS] == curVal && pS < maxS) ++valCount;
             }
         }
     }

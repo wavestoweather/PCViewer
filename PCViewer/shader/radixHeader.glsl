@@ -9,15 +9,15 @@
 #define HISTOGRAMSUBGROUPREDUCTION
 #define MAXVAL 0xffffffff
 
-structure GroupInfo{
+struct GroupInfo{
     uint keyCount[NUMKEYS];
 };
 
 // keys are always sorted from the front to the back buffer
-layout(binding = 0) buffer K{uint k[]}keys[2]; // front and back buffer for keys
+layout(binding = 0) buffer K{uint k[];}keys[2]; // front and back buffer for keys
 layout(binding = 1) buffer GI
 {
-    GroupInfo[] i;
+    GroupInfo i[];
 }
 groupInfos;   //contains group histograms
 layout(binding = 2) buffer DI
@@ -32,7 +32,9 @@ layout(binding = 3) buffer UI
 }
 uniformInfo;
 
+layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
+
 uint getMaskedKey(uint val, uint pass){
-    pass *=8; // 8 bit per pass
+    pass *= 8; // 8 bit per pass
     return (val >> pass) & 0xff;
 }

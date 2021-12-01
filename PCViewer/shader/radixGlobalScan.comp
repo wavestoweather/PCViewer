@@ -1,18 +1,19 @@
 #version 460
-#extension GL_GOOGLE_include_directive
-#extension GL_KHR_shader_subgroup_arithmetic: enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
 
 #include "radixHeader.glsl"
 
-layout(local_size_x = NUMKEYS, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = TPB, local_size_y = 1, local_size_z = 1) in;
 
-shared uint ma[gl_NumSubgroups];
-main(){
-    uint binVal = uniformInfo.globalHistogram.keyCount[gl_GlobalInvocationID.x];
+shared uint ma[TPB / SUBGROUP_SIZE];
+void main(){
+    //TODO
+    uint binVal = groupInfos.i[0].keyCount[gl_GlobalInvocationID.x];
     //in subgroup exclusive add
     uint offset = subgroupExclusiveAdd(binVal);
-    if(gl_SubgroupInvocationID == gl_SubgoupSize - 1)
-        ma[gl_SubgroupID].y = offset + binVal;
+    if(gl_SubgroupInvocationID == gl_SubgroupSize - 1)
+        ma[gl_SubgroupID] = offset + binVal;
     barrier();  // waiting for all subgroups to have filled the ma array
     if(gl_GlobalInvocationID.x < gl_NumSubgroups){
         uint maxes = ma[gl_GlobalInvocationID.x];
@@ -21,5 +22,6 @@ main(){
     }
     barrier();  //waiting for the exclusive add threads to finish
     offset += ma[gl_SubgroupID];
-    uniformInfo.bucketOffsets.keyCount[gl_GlobalInvocationID.x] = offset;
+    //TODO correct offset
+    uniformInfo.globalHistograms[0].keyCount[gl_GlobalInvocationID.x] = offset;
 }

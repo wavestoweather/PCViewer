@@ -60,6 +60,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "ClusteringWorkbench.hpp"
 #include "ScatterplotWorkbench.hpp"
 #include "CorrelationMatrixWorkbench.hpp"
+#include "GpuRadixSorter.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -7311,6 +7312,12 @@ int main(int, char**)
 			c.screenSize[0] = 0xffffffff;
 		}
 		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(c);
+	}
+
+	//test of radix sort
+	GpuRadixSorter sorter({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
+	for(int i = 0; i < 20; ++i){
+		sorter.checkLocalSort();
 	}
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
