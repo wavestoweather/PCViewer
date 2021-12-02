@@ -29,6 +29,7 @@ dispatchInfo; //contains dispatch info
 layout(binding = 3) buffer UI
 {
     uint pass;
+    uint amtOfGlobalHistograms;
     GroupInfo globalHistograms[]; //exlusive scan add of the global Histogram for each bucket. For each bucket an entry here exists
 }
 uniformInfo;

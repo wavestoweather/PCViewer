@@ -25,7 +25,7 @@ private:
     std::string _shaderPath = "shader/radixSort.comp.spv";
     std::string _shaderHistogramPath = "shader/radixHistogram.comp.spv";
     std::string _shaderGlobalScanPath = "shader/radixGlobalScan.comp.spv";
-    std::string _shaderScatteringPath = "shader/radixScattering.comp.spv";
+    std::string _shaderScatteringPath = "shader/radixScatter.comp.spv";
     std::string _shaderControlPath = "shader/radixControl.comp.spv";
     std::string _shaderLocalSortPath = "shader/radixLocalSort.comp.spv";
 
@@ -35,4 +35,5 @@ private:
     VkUtil::PipelineInfo _localSortPipeline;
     VkUtil::PipelineInfo _histogramPipeline;
     VkUtil::PipelineInfo _globalScanPipeline;
+    VkUtil::PipelineInfo _scatterPipeline;
 };

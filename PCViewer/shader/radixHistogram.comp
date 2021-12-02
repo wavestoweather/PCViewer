@@ -52,7 +52,7 @@ void main(){
         sharedInfo.keyCount[gl_LocalInvocationID.x] = 0;
     barrier();
 
-    uint front = 0;//uniformInfo.pass & 1;
+    uint front = uniformInfo.pass & 1;
     uint back = front ^ 1;
     uint blockStart = 0; //TODO dynamic start
     uint blockEnd = KPB; //TODO dynamic end
@@ -130,6 +130,7 @@ void main(){
     //    }
     //}
     if(gl_LocalInvocationID.x < NUMKEYS){
+        groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x] = sharedInfo.keyCount[gl_LocalInvocationID.x];
         atomicAdd(uniformInfo.globalHistograms[0].keyCount[gl_LocalInvocationID.x], sharedInfo.keyCount[gl_LocalInvocationID.x]);
     }
 }

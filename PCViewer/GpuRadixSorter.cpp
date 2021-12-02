@@ -48,10 +48,6 @@ _vkContext(context)
             sizeof(uint32_t),
             values.data()
         };
-        
-        //VkShaderModule shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderPath));
-        //VkUtil::createDescriptorSetLayout(context.device, bindings, &_pipelineInfo.descriptorSetLayout);
-        //VkUtil::createComputePipeline(context.device, shaderModule, {_pipelineInfo.descriptorSetLayout}, &_pipelineInfo.pipelineLayout, &_pipelineInfo.pipeline);
 
         VkShaderModule shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderLocalSortPath));
         VkUtil::createDescriptorSetLayout(context.device, bindings, &_localSortPipeline.descriptorSetLayout);
@@ -62,14 +58,17 @@ _vkContext(context)
 
         shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderGlobalScanPath));
         VkUtil::createComputePipeline(context.device, shaderModule, {_localSortPipeline.descriptorSetLayout}, & _globalScanPipeline.pipelineLayout, &_globalScanPipeline.pipeline, &specializationConstants);
+        
+        shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderScatteringPath));
+        VkUtil::createComputePipeline(context.device, shaderModule, {_localSortPipeline.descriptorSetLayout}, & _scatterPipeline.pipelineLayout, &_scatterPipeline.pipeline, &specializationConstants);
     }
 }
 
 GpuRadixSorter::~GpuRadixSorter(){
-    _pipelineInfo.vkDestroy(_vkContext);
     _localSortPipeline.vkDestroy(_vkContext);
     _localSortPipeline.vkDestroy(_vkContext);
     _globalScanPipeline.vkDestroy(_vkContext);
+    _scatterPipeline.vkDestroy(_vkContext);
 }
 
 bool GpuRadixSorter::checkLocalSort(){
@@ -153,14 +152,17 @@ bool GpuRadixSorter::checkHistogram(){
     const uint32_t threadsPerBlock = 384, keysPerThread = 18;
     const uint32_t uinformBufferSize = 320;
     const uint32_t keysSize = threadsPerBlock * keysPerThread;
+    const uint32_t numBuckets = 256;
+    const uint32_t numWorkGroups = threadsPerBlock / 32;
     const uint32_t pass = 3;
 
     // Buffer creation and filling -------------------------------------------------------------------------------------
-    VkBuffer uniform, keysFront, keysBack;
+    VkBuffer uniform, keysFront, keysBack, groupInfos;
     VkDeviceMemory memory;
     VkUtil::createBuffer(_vkContext.device, keysSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &keysFront);
     VkUtil::createBuffer(_vkContext.device, keysSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &keysBack);
     VkUtil::createBuffer(_vkContext.device, uinformBufferSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uniform);
+    VkUtil::createBuffer(_vkContext.device, numBuckets * numWorkGroups * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &groupInfos);
     VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
     VkMemoryRequirements memReq;
     uint32_t memBits{};
@@ -168,9 +170,12 @@ bool GpuRadixSorter::checkHistogram(){
     allocInfo.allocationSize = memReq.size;
     memBits |= memReq.memoryTypeBits;
     vkGetBufferMemoryRequirements(_vkContext.device, keysBack, &memReq);
-    allocInfo.allocationSize = memReq.size;
+    allocInfo.allocationSize += memReq.size;
     memBits |= memReq.memoryTypeBits;
     vkGetBufferMemoryRequirements(_vkContext.device, uniform, &memReq);
+    allocInfo.allocationSize += memReq.size;
+    memBits |= memReq.memoryTypeBits;
+    vkGetBufferMemoryRequirements(_vkContext.device, groupInfos, &memReq);
     allocInfo.allocationSize += memReq.size;
     memBits |= memReq.memoryTypeBits;
     allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -178,11 +183,13 @@ bool GpuRadixSorter::checkHistogram(){
     vkBindBufferMemory(_vkContext.device, uniform, memory, 0);
     vkBindBufferMemory(_vkContext.device, keysFront, memory, uinformBufferSize * sizeof(uint32_t));
     vkBindBufferMemory(_vkContext.device, keysBack, memory, uinformBufferSize * sizeof(uint32_t) + keysSize * sizeof(uint32_t));
+    vkBindBufferMemory(_vkContext.device, groupInfos, memory, uinformBufferSize * sizeof(uint32_t) + 2 * keysSize * sizeof(uint32_t));
     std::vector<uint32_t> cpuKeys(keysSize);
     for(auto& n: cpuKeys) {int r = rand() & 0xff; n = *reinterpret_cast<uint32_t*>(&r);}
-    VkUtil::uploadData(_vkContext.device, memory, uinformBufferSize * sizeof(uint32_t), cpuKeys.size() * sizeof(cpuKeys[0]), cpuKeys.data());
+    VkUtil::uploadData(_vkContext.device, memory, uinformBufferSize * sizeof(uint32_t) + keysSize * sizeof(uint32_t), cpuKeys.size() * sizeof(cpuKeys[0]), cpuKeys.data());
     std::vector<uint32_t> cpuUniform(uinformBufferSize, 0);
     cpuUniform[0] = pass;
+    cpuUniform[1] = 1; //1 global histogram
     VkUtil::uploadData(_vkContext.device, memory, 0, cpuUniform.size() * sizeof(cpuUniform[0]), cpuUniform.data());
 
     // Descriptorset setup filling -------------------------------------------------------------------------------------
@@ -191,6 +198,7 @@ bool GpuRadixSorter::checkHistogram(){
     VkUtil::updateDescriptorSet(_vkContext.device, keysFront, keysSize * sizeof(uint32_t), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
     VkUtil::updateArrayDescriptorSet(_vkContext.device, keysBack, keysSize * sizeof(uint32_t), 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, uniform, uinformBufferSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, groupInfos, numBuckets * numWorkGroups * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
 
     // Creating and submitting commands -------------------------------------------------------------------------------------
     VkCommandBuffer commands;
@@ -200,6 +208,9 @@ bool GpuRadixSorter::checkHistogram(){
     vkCmdDispatch(commands, 1, 1, 1);
     vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _globalScanPipeline.pipeline);
+    vkCmdDispatch(commands, 1 + 1, 1, 1);   // 1 local work group has to be reduced as well
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _scatterPipeline.pipeline);
     vkCmdDispatch(commands, 1, 1, 1);
     auto t1 = std::chrono::high_resolution_clock::now();
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
@@ -207,7 +218,8 @@ bool GpuRadixSorter::checkHistogram(){
     auto t2 = std::chrono::high_resolution_clock::now();
     VkUtil::downloadData(_vkContext.device, memory, 0 ,uinformBufferSize * sizeof(uint32_t), cpuUniform.data());
     std::vector<uint32_t> sortedGpu(keysSize);
-    VkUtil::downloadData(_vkContext.device, memory, (uinformBufferSize + keysSize) * sizeof(uint32_t), keysSize * sizeof(uint32_t), sortedGpu.data());
+    VkUtil::downloadData(_vkContext.device, memory, (uinformBufferSize) * sizeof(uint32_t), keysSize * sizeof(uint32_t), sortedGpu.data());
+
 
     //checking the results --------------------------------------------------------------------------------------------
     std::vector<uint32_t> hist(256);
@@ -229,7 +241,7 @@ bool GpuRadixSorter::checkHistogram(){
             }
         }
     }
-    if(true){   // exclusive summation
+    if(false){   // exclusive summation
         for(int i = 1; i < hist.size(); ++i){
             prefix[i] = prefix[i - 1] + hist[i - 1];
         }
@@ -241,12 +253,16 @@ bool GpuRadixSorter::checkHistogram(){
         }
     }
     if(true){   // key scattering
+        for(int i = 1; i < hist.size(); ++i){
+            prefix[i] = prefix[i - 1] + hist[i - 1];
+        }
         for(auto n: cpuKeys){
             sorted[prefix[getBin(n, pass)]++] = n;
         }
         for(int i = 0; i < sorted.size(); ++i){
             if(sorted[i] != sortedGpu[i]){
-
+                std::cout << "Miss: CPU " << sorted[i] << " | GPU " << sortedGpu[i] << std::endl;
+                correct = false;
             }
         }
     }
