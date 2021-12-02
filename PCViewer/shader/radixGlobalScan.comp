@@ -4,24 +4,23 @@
 
 #include "radixHeader.glsl"
 
-layout(local_size_x = TPB, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = NUMKEYS, local_size_y = 1, local_size_z = 1) in;
 
-shared uint ma[TPB / SUBGROUP_SIZE];
+shared uint ma[(NUMKEYS + SUBGROUP_SIZE - 1) / SUBGROUP_SIZE];
 void main(){
-    //TODO
-    uint binVal = groupInfos.i[0].keyCount[gl_GlobalInvocationID.x];
+    uint histogramIndex = gl_WorkGroupID.x;
+    uint binVal = uniformInfo.globalHistograms[histogramIndex].keyCount[gl_LocalInvocationID.x];
     //in subgroup exclusive add
     uint offset = subgroupExclusiveAdd(binVal);
-    if(gl_SubgroupInvocationID == gl_SubgroupSize - 1)
+    if(gl_SubgroupInvocationID == SUBGROUP_SIZE - 1)
         ma[gl_SubgroupID] = offset + binVal;
     barrier();  // waiting for all subgroups to have filled the ma array
-    if(gl_GlobalInvocationID.x < gl_NumSubgroups){
-        uint maxes = ma[gl_GlobalInvocationID.x];
-        maxes = subgroupExclusiveAdd(maxes);
-        ma[gl_GlobalInvocationID.x] = maxes;
+    if(gl_LocalInvocationID.x < gl_NumSubgroups){
+        uint maxes = ma[gl_LocalInvocationID.x];
+        maxes = subgroupExclusiveAdd(maxes);    //assumes that the second reduction can be done in subgroup memory. Possible if (subgroupsize)² >= NUMKEYS -> 16 wide (is ensured by cpp side)
+        ma[gl_LocalInvocationID.x] = maxes;
     }
     barrier();  //waiting for the exclusive add threads to finish
     offset += ma[gl_SubgroupID];
-    //TODO correct offset
-    uniformInfo.globalHistograms[0].keyCount[gl_GlobalInvocationID.x] = offset;
+    uniformInfo.globalHistograms[histogramIndex].keyCount[gl_LocalInvocationID.x] = offset;
 }
