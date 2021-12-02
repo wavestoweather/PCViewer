@@ -14,7 +14,9 @@ public:
     GpuRadixSorter(const VkUtil::Context& context);
     ~GpuRadixSorter();
 
+    // sorts a vector of uints via pu compute if available, falls back to std::sort if not available
     void sortUints(std::vector<uint32_t>& v);
+    // sorts a vector of uints via pu compute if available, falls back to std::sort if not available
     void sortFloats(std::vector<float>& v);
 
     #ifdef ENABLE_TEST_SORT
@@ -31,7 +33,7 @@ private:
 
     uint32_t _localSize = 256;
     VkUtil::Context _vkContext;
-    VkUtil::PipelineInfo _pipelineInfo;
+    VkUtil::PipelineInfo _controlPipeline;
     VkUtil::PipelineInfo _localSortPipeline;
     VkUtil::PipelineInfo _histogramPipeline;
     VkUtil::PipelineInfo _globalScanPipeline;

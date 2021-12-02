@@ -61,14 +61,94 @@ _vkContext(context)
         
         shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderScatteringPath));
         VkUtil::createComputePipeline(context.device, shaderModule, {_localSortPipeline.descriptorSetLayout}, & _scatterPipeline.pipelineLayout, &_scatterPipeline.pipeline, &specializationConstants);
+    
+        shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderControlPath));
+        VkUtil::createComputePipeline(context.device, shaderModule, {_localSortPipeline.descriptorSetLayout}, & _controlPipeline.pipelineLayout, &_controlPipeline.pipeline, &specializationConstants);
     }
 }
 
 GpuRadixSorter::~GpuRadixSorter(){
+    _controlPipeline.vkDestroy(_vkContext);
     _localSortPipeline.vkDestroy(_vkContext);
-    _localSortPipeline.vkDestroy(_vkContext);
+    _histogramPipeline.vkDestroy(_vkContext);
     _globalScanPipeline.vkDestroy(_vkContext);
     _scatterPipeline.vkDestroy(_vkContext);
+}
+
+void GpuRadixSorter::sortUints(std::vector<uint32_t>& v){
+    if(!_histogramPipeline.pipeline){
+        std::cout << "Gpu sorting not available, using standard c++ sort" << std::endl;
+        std::sort(v.begin(), v.end());
+        return;
+    }
+    uint32_t uniformBufferSize = 256;
+    uint32_t groupInfoSize = 1024;
+    const uint32_t controlSize = 64;
+
+    // Buffer creation and filling -------------------------------------------------------------------------------------
+    VkBuffer control, uniform, keysFront, keysBack, groupInfos;
+    VkDeviceMemory memory;
+    VkUtil::createBuffer(_vkContext.device, controlSize * sizeof(uint32_t), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, &control);
+    VkUtil::createBuffer(_vkContext.device, v.size() * sizeof(v[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &keysFront);
+    VkUtil::createBuffer(_vkContext.device, v.size() * sizeof(v[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &keysBack);
+    VkUtil::createBuffer(_vkContext.device, uniformBufferSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uniform);
+    VkUtil::createBuffer(_vkContext.device, groupInfoSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &groupInfos);
+    VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    VkMemoryRequirements memReq;
+    uint32_t memBits{};
+    vkGetBufferMemoryRequirements(_vkContext.device, control, &memReq);
+    allocInfo.allocationSize = memReq.size;
+    memBits |= memReq.memoryTypeBits;
+
+    uint32_t uniformOffset = allocInfo.allocationSize;
+    vkGetBufferMemoryRequirements(_vkContext.device, uniform, &memReq);
+    allocInfo.allocationSize += memReq.size;
+    memBits |= memReq.memoryTypeBits;
+
+    uint32_t keysFrontOffset = allocInfo.allocationSize;
+    vkGetBufferMemoryRequirements(_vkContext.device, keysFront, &memReq);
+    allocInfo.allocationSize += memReq.size;
+    memBits |= memReq.memoryTypeBits;
+
+    uint32_t keysBackOffset = allocInfo.allocationSize;
+    vkGetBufferMemoryRequirements(_vkContext.device, keysBack, &memReq);
+    allocInfo.allocationSize += memReq.size;
+    memBits |= memReq.memoryTypeBits;
+
+    uint32_t groupInfosOffset = allocInfo.allocationSize;
+    vkGetBufferMemoryRequirements(_vkContext.device, groupInfos, &memReq);
+    allocInfo.allocationSize += memReq.size;
+    memBits |= memReq.memoryTypeBits;
+    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &memory);
+    vkBindBufferMemory(_vkContext.device, control, memory, 0);
+    vkBindBufferMemory(_vkContext.device, uniform, memory, uniformOffset);
+    vkBindBufferMemory(_vkContext.device, keysFront, memory, keysFrontOffset);
+    vkBindBufferMemory(_vkContext.device, keysBack, memory, keysBackOffset);
+    vkBindBufferMemory(_vkContext.device, groupInfos, memory, groupInfosOffset);
+
+    VkUtil::uploadData(_vkContext.device, memory, keysFrontOffset, v.size() * sizeof(v[0]), v.data());
+    std::vector<uint32_t> cpuUniform(uniformBufferSize, 0);
+    cpuUniform[0] = 0;  //always start with pass nr 0
+    cpuUniform[1] = 1;  //1 global histogram in the beginning
+    VkUtil::uploadData(_vkContext.device, memory, uniformOffset, cpuUniform.size() * sizeof(cpuUniform[0]), cpuUniform.data());    
+}
+
+void GpuRadixSorter::sortFloats(std::vector<float>& v){
+    if(!_histogramPipeline.pipeline){
+        std::cout << "Gpu sorting not available, using standard c++ sort" << std::endl;
+        std::sort(v.begin(), v.end());
+        return;
+    }
+    // sorting floats simply by mappgin them to uints and then running sortUints
+    auto mapFloat2Uint = [](float n){uint32_t f = *reinterpret_cast<uint32_t*>(&n); uint32_t mask = -int(f >> 31) | 0x80000000; return f ^ mask;};
+    auto mapUint2Float = [](uint32_t n){uint32_t mask = ((n >> 31) - 1) | 0x80000000; n ^= mask; return *reinterpret_cast<float*>(&n);};
+    std::vector<uint32_t> m(v.size());
+    for(uint32_t i = 0; i < v.size(); ++i)
+        m[i] = mapFloat2Uint(v[i]);
+    sortUints(m);
+    for(uint32_t i = 0; i < m.size(); ++i)
+        v[i] = mapUint2Float(m[i]);
 }
 
 bool GpuRadixSorter::checkLocalSort(){
