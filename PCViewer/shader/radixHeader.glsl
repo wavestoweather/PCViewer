@@ -11,6 +11,14 @@
 #define MAXVAL 0xffffffff
 
 struct GroupInfo{
+    uint globalHistIndex;
+    uint startOffset;  //total start offset for this work group
+    uint keyCount[NUMKEYS];
+};
+
+struct GlobalHistogram{
+    uint startOffset;
+    uint endOffset;
     uint keyCount[NUMKEYS];
 };
 
@@ -23,16 +31,18 @@ layout(binding = 1) buffer GI
 groupInfos;   //contains group histograms
 layout(binding = 2) buffer DI
 {
-    uint xSize, ySize, zSize;
+    uint xSize, ySize, zSize, xSizeScan, ySizeScan, zSizScan, xCtrlSize, yCtrlSize, zCtrlSize;    //xSizeBack is used to atomicAdd up the amount of new shader invocations. Has to be copied via vkcmdcopybuffer
 }
 dispatchInfo; //contains dispatch info
 layout(binding = 3) buffer UI
 {
-    uint pass;
+    uint pass;                          //pass is always managed in the front uniform info, the back pass info is available for control shader as copy
     uint amtOfGlobalHistograms;
-    GroupInfo globalHistograms[]; //exlusive scan add of the global Histogram for each bucket. For each bucket an entry here exists
+    uint amtOfBlocks;                   //amt of blocks/workgroups that have to be executed
+    GlobalHistogram globalHistograms[]; //exlusive scan add of the global Histogram for each bucket. For each bucket an entry here exists
 }
-uniformInfo;
+uniformInfo[2]; //there exists front and back buffer to be able to append global histograms.
+                //first histogram is in uniformInfo[0]
 
 layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
 

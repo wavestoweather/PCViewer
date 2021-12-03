@@ -68,7 +68,7 @@ void bitonicSharedSort(){
 // sorts a short region in the input via bitonic local sort in the current workGroup
 void main(){
     uint front = 0; // get front buffer from local sort info (local sorts should not be copied...)
-    uint back = (uniformInfo.pass & 1) ^ 1;
+    uint back = (uniformInfo[0].pass & 1) ^ 1;
     uint regionStart = 0; //TODO get region start
     uint regionEnd = KPLSB;//TODO get region end
 

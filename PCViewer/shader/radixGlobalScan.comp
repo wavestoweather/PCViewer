@@ -8,10 +8,11 @@ layout(local_size_x = NUMKEYS, local_size_y = 1, local_size_z = 1) in;
 
 shared uint ma[(NUMKEYS + SUBGROUP_SIZE - 1) / SUBGROUP_SIZE];
 void main(){
-    uint histogramIndex = gl_WorkGroupID.x % uniformInfo.amtOfGlobalHistograms;
+    uint front = uniformInfo[0].pass & 1;
+    uint histogramIndex = gl_WorkGroupID.x % uniformInfo[front].amtOfGlobalHistograms;
     uint binVal;
-    if(gl_WorkGroupID.x < uniformInfo.amtOfGlobalHistograms)
-        binVal = uniformInfo.globalHistograms[histogramIndex].keyCount[gl_LocalInvocationID.x];
+    if(gl_WorkGroupID.x < uniformInfo[front].amtOfGlobalHistograms)
+        binVal = uniformInfo[front].globalHistograms[histogramIndex].keyCount[gl_LocalInvocationID.x];
     else
         binVal = groupInfos.i[histogramIndex].keyCount[gl_LocalInvocationID.x];
     //in subgroup exclusive add
@@ -26,8 +27,8 @@ void main(){
     }
     barrier();  //waiting for the exclusive add threads to finish
     offset += ma[gl_SubgroupID];
-    if(gl_WorkGroupID.x < uniformInfo.amtOfGlobalHistograms)
-        uniformInfo.globalHistograms[histogramIndex].keyCount[gl_LocalInvocationID.x] = offset;
+    if(gl_WorkGroupID.x < uniformInfo[front].amtOfGlobalHistograms)
+        uniformInfo[front].globalHistograms[histogramIndex].keyCount[gl_LocalInvocationID.x] = offset;
     else
         groupInfos.i[histogramIndex].keyCount[gl_LocalInvocationID.x] = offset;
 }

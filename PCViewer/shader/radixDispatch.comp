@@ -1,0 +1,20 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+
+#include "radixHeader.glsl"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main(){
+    uniformInfo[0].pass += 1;
+    uniformInfo[1].pass += 1;
+    uint front = uniformInfo[0].pass & 1;
+    uint back = front ^ 1;
+    uniformInfo[back].amtOfGlobalHistograms = 0;    //set to 0 te be loaded the next iteration
+    uniformInfo[back].amtOfBlocks = 0;              //set to 0 te be loaded the next iteration
+    dispatchInfo.xCtrlSize = uniformInfo[front].amtOfGlobalHistograms;
+    dispatchInfo.xSize = uniformInfo[front].amtOfBlocks;
+    dispatchInfo.xSizeScan = uniformInfo[front].amtOfGlobalHistograms + uniformInfo[front].amtOfBlocks; //reducing the wokrgroup blocks as well as the global histograms
+}

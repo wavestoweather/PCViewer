@@ -52,17 +52,18 @@ void main(){
         sharedInfo.keyCount[gl_LocalInvocationID.x] = 0;
     barrier();
 
-    uint front = uniformInfo.pass & 1;
+    uint front = uniformInfo[0].pass & 1;
     uint back = front ^ 1;
-    uint blockStart = 0; //TODO dynamic start
-    uint blockEnd = KPB; //TODO dynamic end
+    uint globalHistIndex = groupInfos.i[gl_WorkGroupID.x].globalHistIndex;
+    uint blockStart = groupInfos.i[gl_WorkGroupID.x].startOffset;
+    uint blockEnd = uniformInfo[front].globalHistograms[globalHistIndex].endOffset;
     uint localBuf[KPT];     //in local buf onyl bucket values are stored
     
     const uint subgroupStorage = SUBGROUP_SIZE * KPT;
     for(int i = 0; i < KPT; ++i){
         uint index = blockStart + gl_SubgroupID * subgroupStorage + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         if(index < blockEnd)
-            localBuf[i] = getMaskedKey(keys[front].k[index], uniformInfo.pass);
+            localBuf[i] = getMaskedKey(keys[front].k[index], uniformInfo[0].pass);
         else
             localBuf[i] = MAXVAL;
     } 
@@ -83,7 +84,7 @@ void main(){
         else
             curVal = localBuf[p2];
         curVal = subgroupMin(curVal);
-        uint curBucket = getMaskedKey(curVal, uniformInfo.pass);
+        uint curBucket = getMaskedKey(curVal, uniformInfo[0].pass);
         uint c = 0;
         while(p1 < 9 && localBuf[p1] == curVal) {++p1;++c;}
         while(p2 < 18 && localBuf[p2] == curVal) {++p2;++c;}
@@ -120,17 +121,8 @@ void main(){
             atomicAdd(sharedInfo.keyCount[localBuf[i]], 1);
     #endif
     barrier();
-    // shared buffer writing to storage buffer and incrementing global histogram
-    //for(int i = 0; i < (NUMKEYS + TPB - 1) / TPB; ++i){
-    //    uint curIndex = i * TPB;
-    //    if(curIndex < NUMKEYS){
-    //        groupInfos.i[workGrup].keyCount[curIndex] = localBuf[curIndex]; 
-    //        //TODO correct histogram
-    //        atomicAdd(uniformInfo.globalHistograms[0].keyCount[curIndex], localBuf[curIndex]);
-    //    }
-    //}
     if(gl_LocalInvocationID.x < NUMKEYS){
         groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x] = sharedInfo.keyCount[gl_LocalInvocationID.x];
-        atomicAdd(uniformInfo.globalHistograms[0].keyCount[gl_LocalInvocationID.x], sharedInfo.keyCount[gl_LocalInvocationID.x]);
+        atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], sharedInfo.keyCount[gl_LocalInvocationID.x]);
     }
 }

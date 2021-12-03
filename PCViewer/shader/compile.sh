@@ -43,6 +43,8 @@ glslangValidator -V --target-env vulkan1.1 -o corrMean.comp.spv corrMean.comp
 glslangValidator -V --target-env vulkan1.1 -o corrPearson.comp.spv corrPearson.comp
 glslangValidator -V --target-env vulkan1.1 -o corrSpearman.comp.spv corrSpearman.comp
 
+glslangValidator -V --target-env vulkan1.1 -o radixControl.comp.spv radixControl.comp
+glslangValidator -V --target-env vulkan1.1 -o radixDispatch.comp.spv radixDispatch.comp
 glslangValidator -V --target-env vulkan1.1 -o radixGlobalScan.comp.spv radixGlobalScan.comp
 glslangValidator -V --target-env vulkan1.1 -o radixHistogram.comp.spv radixHistogram.comp
 glslangValidator -V --target-env vulkan1.1 -o radixScatter.comp.spv radixScatter.comp

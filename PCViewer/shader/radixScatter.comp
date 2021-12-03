@@ -14,16 +14,16 @@ void main(){
         sharedInfo.keyCount[gl_LocalInvocationID.x] = groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x];
     barrier();
     
-    uint front = uniformInfo.pass & 1;
+    uint front = uniformInfo[0].pass & 1;
     uint back = front ^ 1;
-    uint blockStart = 0;   //The offset has to be adjusted by the bucket offset
-    uint blockEnd = KPB;    //read out of storage infos
-    uint globalHistogramIndex = 0;  //TODO: dynamic global histogram index
+    uint globalHistIndex = groupInfos.i[gl_WorkGroupID.x].globalHistIndex;
+    uint blockStart = groupInfos.i[gl_WorkGroupID.x].startOffset;
+    uint blockEnd = uniformInfo[front].globalHistograms[globalHistIndex].endOffset;
     const uint subgroupStorage = SUBGROUP_SIZE * KPT;
     for(int i = 0; i < KPT; ++i){
         uint index = blockStart + gl_SubgroupID * subgroupStorage + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         uint k = keys[front].k[index];
-        uint curBucket = getMaskedKey(k, uniformInfo.pass);
+        uint curBucket = getMaskedKey(k, uniformInfo[0].pass);
         uint offset = atomicAdd(sharedInfo.keyCount[curBucket], 1);    // adding one to the bucket as an element is inserted
         sharedKeys[offset] = k;
     }
@@ -34,7 +34,7 @@ void main(){
         if(gl_LocalInvocationID.x != 0) offset = sharedInfo.keyCount[gl_LocalInvocationID.x - 1];
         uint count = sharedInfo.keyCount[gl_LocalInvocationID.x] - offset;
         if(count > 0){
-            uint bucketPos = atomicAdd(uniformInfo.globalHistograms[globalHistogramIndex].keyCount[gl_LocalInvocationID.x], count);
+            uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], count);
             for(int c = 0; c < count; ++c){
                 keys[back].k[blockStart + bucketPos + c] = sharedKeys[offset + c];
             }
