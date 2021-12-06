@@ -31,7 +31,7 @@ layout(binding = 1) buffer GI
 groupInfos;   //contains group histograms
 layout(binding = 2) buffer DI
 {
-    uint xSize, ySize, zSize, xSizeScan, ySizeScan, zSizScan, xCtrlSize, yCtrlSize, zCtrlSize;    //xSizeBack is used to atomicAdd up the amount of new shader invocations. Has to be copied via vkcmdcopybuffer
+    uint xSize, ySize, zSize, pad, xSizeScan, ySizeScan, zSizScan, padding, xCtrlSize, yCtrlSize, zCtrlSize;    //xSizeBack is used to atomicAdd up the amount of new shader invocations. Has to be copied via vkcmdcopybuffer
 }
 dispatchInfo; //contains dispatch info
 layout(binding = 3) buffer UI

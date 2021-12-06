@@ -24,20 +24,21 @@ _vkContext(context)
 
         std::vector<VkDescriptorSetLayoutBinding> bindings;
         VkDescriptorSetLayoutBinding binding;
-        binding.binding = 0;
+        binding.binding = 0;                        //keys
         binding.descriptorCount = 2;
         binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         bindings.push_back(binding);
 
-        binding.binding = 1;
+        binding.binding = 1;                        //groupInfos
         binding.descriptorCount = 1;
         bindings.push_back(binding);
         
-        binding.binding = 2;
+        binding.binding = 2;                        //Dispatch infos
         bindings.push_back(binding);
 
-        binding.binding = 3;
+        binding.binding = 3;                        //global uniform info
+        binding.descriptorCount = 2;
         bindings.push_back(binding);
 
         std::vector<VkSpecializationMapEntry> entries{{0,0,sizeof(uint32_t)}};   // subgroup size
@@ -64,44 +65,57 @@ _vkContext(context)
     
         shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderControlPath));
         VkUtil::createComputePipeline(context.device, shaderModule, {_localSortPipeline.descriptorSetLayout}, & _controlPipeline.pipelineLayout, &_controlPipeline.pipeline, &specializationConstants);
+
+        shaderModule = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_shaderDispatchPath));
+        VkUtil::createComputePipeline(context.device, shaderModule, {_localSortPipeline.descriptorSetLayout}, & _dispatchPipeline.pipelineLayout, &_dispatchPipeline.pipeline, &specializationConstants);
     }
 }
 
 GpuRadixSorter::~GpuRadixSorter(){
     _controlPipeline.vkDestroy(_vkContext);
+    _dispatchPipeline.vkDestroy(_vkContext);
     _localSortPipeline.vkDestroy(_vkContext);
     _histogramPipeline.vkDestroy(_vkContext);
     _globalScanPipeline.vkDestroy(_vkContext);
     _scatterPipeline.vkDestroy(_vkContext);
 }
 
-void GpuRadixSorter::sortUints(std::vector<uint32_t>& v){
+void GpuRadixSorter::sort(std::vector<uint32_t>& v){
     if(!_histogramPipeline.pipeline){
         std::cout << "Gpu sorting not available, using standard c++ sort" << std::endl;
         std::sort(v.begin(), v.end());
         return;
     }
-    uint32_t uniformBufferSize = 256;
-    uint32_t groupInfoSize = 1024;
     const uint32_t controlSize = 64;
+    const uint32_t KPB = 384 * 18;  //keys per block/workgroup
+    uint32_t firstPassGroups = (v.size() + KPB - 1) / KPB; 
+    uint32_t uniformBufferSize = 258 * 258 * 258 + 4;   // current max amount of histograms (not histogram mergin currently possible)
+    uint32_t groupInfoSize = uniformBufferSize;         // in worst case for each global histogram a single worker...
+    uint32_t dispatchSize = 9;
 
     // Buffer creation and filling -------------------------------------------------------------------------------------
-    VkBuffer control, uniform, keysFront, keysBack, groupInfos;
+    VkBuffer dispatch, uniformFront, uniformBack, keysFront, keysBack, groupInfos;
     VkDeviceMemory memory;
-    VkUtil::createBuffer(_vkContext.device, controlSize * sizeof(uint32_t), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, &control);
+    VkUtil::createBuffer(_vkContext.device, controlSize * sizeof(uint32_t), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dispatch);
     VkUtil::createBuffer(_vkContext.device, v.size() * sizeof(v[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &keysFront);
     VkUtil::createBuffer(_vkContext.device, v.size() * sizeof(v[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &keysBack);
-    VkUtil::createBuffer(_vkContext.device, uniformBufferSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uniform);
+    VkUtil::createBuffer(_vkContext.device, uniformBufferSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uniformFront);
+    VkUtil::createBuffer(_vkContext.device, uniformBufferSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &uniformBack);
     VkUtil::createBuffer(_vkContext.device, groupInfoSize * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &groupInfos);
     VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
     VkMemoryRequirements memReq;
     uint32_t memBits{};
-    vkGetBufferMemoryRequirements(_vkContext.device, control, &memReq);
+    vkGetBufferMemoryRequirements(_vkContext.device, dispatch, &memReq);
     allocInfo.allocationSize = memReq.size;
     memBits |= memReq.memoryTypeBits;
 
-    uint32_t uniformOffset = allocInfo.allocationSize;
-    vkGetBufferMemoryRequirements(_vkContext.device, uniform, &memReq);
+    uint32_t uniformFrontOffset = allocInfo.allocationSize;
+    vkGetBufferMemoryRequirements(_vkContext.device, uniformFront, &memReq);
+    allocInfo.allocationSize += memReq.size;
+    memBits |= memReq.memoryTypeBits;
+
+    uint32_t uniformBackOffset = allocInfo.allocationSize;
+    vkGetBufferMemoryRequirements(_vkContext.device, uniformBack, &memReq);
     allocInfo.allocationSize += memReq.size;
     memBits |= memReq.memoryTypeBits;
 
@@ -121,20 +135,71 @@ void GpuRadixSorter::sortUints(std::vector<uint32_t>& v){
     memBits |= memReq.memoryTypeBits;
     allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &memory);
-    vkBindBufferMemory(_vkContext.device, control, memory, 0);
-    vkBindBufferMemory(_vkContext.device, uniform, memory, uniformOffset);
+    vkBindBufferMemory(_vkContext.device, dispatch, memory, 0);
+    vkBindBufferMemory(_vkContext.device, uniformFront, memory, uniformFrontOffset);
+    vkBindBufferMemory(_vkContext.device, uniformBack, memory, uniformBackOffset);
     vkBindBufferMemory(_vkContext.device, keysFront, memory, keysFrontOffset);
     vkBindBufferMemory(_vkContext.device, keysBack, memory, keysBackOffset);
     vkBindBufferMemory(_vkContext.device, groupInfos, memory, groupInfosOffset);
 
     VkUtil::uploadData(_vkContext.device, memory, keysFrontOffset, v.size() * sizeof(v[0]), v.data());
-    std::vector<uint32_t> cpuUniform(uniformBufferSize, 0);
+    std::vector<uint32_t> cpuUniform(5, 0);
     cpuUniform[0] = 0;  //always start with pass nr 0
     cpuUniform[1] = 1;  //1 global histogram in the beginning
-    VkUtil::uploadData(_vkContext.device, memory, uniformOffset, cpuUniform.size() * sizeof(cpuUniform[0]), cpuUniform.data());    
+    cpuUniform[2] = firstPassGroups;
+    cpuUniform[3] = 0;  //beginning of the list to sort
+    cpuUniform[4] = v.size(); //end of the list to sort
+    VkUtil::uploadData(_vkContext.device, memory, uniformFrontOffset, cpuUniform.size() * sizeof(cpuUniform[0]), cpuUniform.data());
+    VkUtil::uploadData(_vkContext.device, memory, uniformBackOffset, cpuUniform.size() * sizeof(cpuUniform[0]), cpuUniform.data());
+    std::vector<uint32_t> controlBytes(controlSize, 1);
+    controlBytes[0] = (v.size() + KPB - 1) / KPB;
+    controlBytes[4] = 1 + controlBytes[0];  //one reduction of the global histogram, + reduction of all local groups
+    controlBytes[8] = 1;
+    VkUtil::uploadData(_vkContext.device, memory, 0, controlBytes.size() * sizeof(uint32_t), controlBytes.data());
+
+    // Descriptorset setup filling -------------------------------------------------------------------------------------
+    VkDescriptorSet descSet;
+    VkUtil::createDescriptorSets(_vkContext.device, {_localSortPipeline.descriptorSetLayout}, _vkContext.descriptorPool, &descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, keysFront, v.size() * sizeof(uint32_t), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+    VkUtil::updateArrayDescriptorSet(_vkContext.device, keysBack, v.size() * sizeof(uint32_t), 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, groupInfos, groupInfoSize * sizeof(uint32_t), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, dispatch, controlSize * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, uniformFront, uniformBufferSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+    VkUtil::updateArrayDescriptorSet(_vkContext.device, uniformBack, uniformBufferSize * sizeof(uint32_t), 3, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+
+    // Creating and submitting commands -------------------------------------------------------------------------------------
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    for(int i = 0; i < 4; ++i){
+        vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _localSortPipeline.pipelineLayout, 0, 1, &descSet, 0, nullptr);
+        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _histogramPipeline.pipeline);
+        vkCmdDispatchIndirect(commands, dispatch, 0);
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _globalScanPipeline.pipeline);
+        vkCmdDispatchIndirect(commands, dispatch, 4);
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _scatterPipeline.pipeline);
+        vkCmdDispatchIndirect(commands, dispatch, 0);
+        if(i != 3){
+            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+            vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _controlPipeline.pipeline);
+            vkCmdDispatchIndirect(commands, dispatch, 8);
+            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+            vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _dispatchPipeline.pipeline);
+            vkCmdDispatch(commands, 1, 1, 1);
+        }
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    VkResult res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+    auto t2 = std::chrono::high_resolution_clock::now();
+    VkUtil::downloadData(_vkContext.device, memory, keysFrontOffset, v.size() * sizeof(v[0]), v.data());
+    #ifdef ENABLE_TEST_SORT
+    std::cout << "Sorting " << v.size() << " elements took " << std::chrono::duration<double, std::milli>(t2 - t1).count() << " ms" << std::endl;
+    #endif
 }
 
-void GpuRadixSorter::sortFloats(std::vector<float>& v){
+void GpuRadixSorter::sort(std::vector<float>& v){
     if(!_histogramPipeline.pipeline){
         std::cout << "Gpu sorting not available, using standard c++ sort" << std::endl;
         std::sort(v.begin(), v.end());
@@ -146,7 +211,7 @@ void GpuRadixSorter::sortFloats(std::vector<float>& v){
     std::vector<uint32_t> m(v.size());
     for(uint32_t i = 0; i < v.size(); ++i)
         m[i] = mapFloat2Uint(v[i]);
-    sortUints(m);
+    sort(m);
     for(uint32_t i = 0; i < m.size(); ++i)
         v[i] = mapUint2Float(m[i]);
 }

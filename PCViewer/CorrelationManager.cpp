@@ -228,6 +228,8 @@ void CorrelationManager::_execCorrelationGPU(const DrawList& dl, CorrelationMetr
         }
 
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &descSet);
+        vkFreeMemory(_vkContext.device, memory, nullptr);
+        vkDestroyBuffer(_vkContext.device, buffer, nullptr);
         break;
     }
     case CorrelationMetric::SpearmanRank:{

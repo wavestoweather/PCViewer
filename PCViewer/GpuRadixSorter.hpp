@@ -15,9 +15,9 @@ public:
     ~GpuRadixSorter();
 
     // sorts a vector of uints via pu compute if available, falls back to std::sort if not available
-    void sortUints(std::vector<uint32_t>& v);
+    void sort(std::vector<uint32_t>& v);
     // sorts a vector of uints via pu compute if available, falls back to std::sort if not available
-    void sortFloats(std::vector<float>& v);
+    void sort(std::vector<float>& v);
 
     #ifdef ENABLE_TEST_SORT
     bool checkLocalSort();  //checks local sort on an array of uints the size of 
@@ -29,11 +29,13 @@ private:
     std::string _shaderGlobalScanPath = "shader/radixGlobalScan.comp.spv";
     std::string _shaderScatteringPath = "shader/radixScatter.comp.spv";
     std::string _shaderControlPath = "shader/radixControl.comp.spv";
+    std::string _shaderDispatchPath = "shader/radixDispatch.comp.spv";
     std::string _shaderLocalSortPath = "shader/radixLocalSort.comp.spv";
 
     uint32_t _localSize = 256;
     VkUtil::Context _vkContext;
     VkUtil::PipelineInfo _controlPipeline;
+    VkUtil::PipelineInfo _dispatchPipeline;
     VkUtil::PipelineInfo _localSortPipeline;
     VkUtil::PipelineInfo _histogramPipeline;
     VkUtil::PipelineInfo _globalScanPipeline;
