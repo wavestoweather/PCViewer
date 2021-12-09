@@ -46,6 +46,7 @@ void bitonicSortColumn(inout uint v[KPT]){
 }
 
 shared GroupInfo sharedInfo;
+shared uint ma[(NUMKEYS + SUBGROUP_SIZE - 1) / SUBGROUP_SIZE];
 void main(){
     //parallel nulling shared memory
     if(gl_LocalInvocationID.x < NUMKEYS)
@@ -121,8 +122,22 @@ void main(){
             atomicAdd(sharedInfo.keyCount[localBuf[i]], 1);
     #endif
     barrier();
+    //doing an exclusive scan for the shared histogram
     if(gl_LocalInvocationID.x < NUMKEYS){
-        groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x] = sharedInfo.keyCount[gl_LocalInvocationID.x];
-        atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], sharedInfo.keyCount[gl_LocalInvocationID.x]);
+        uint binVal = sharedInfo.keyCount[gl_LocalInvocationID.x];
+        uint offset = subgroupExclusiveAdd(binVal);
+        if(gl_SubgroupInvocationID == SUBGROUP_SIZE - 1)
+            ma[gl_SubgroupID] = offset + binVal;
+        barrier();
+        if(gl_LocalInvocationID.x < gl_NumSubgroups){
+            uint maxes = ma[gl_LocalInvocationID.x];
+            maxes = subgroupExclusiveAdd(maxes);
+            ma[gl_LocalInvocationID.x] = maxes;
+        }
+        barrier();
+        offset += ma[gl_SubgroupID];
+
+        groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x] = offset;
+        atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], binVal);
     }
 }

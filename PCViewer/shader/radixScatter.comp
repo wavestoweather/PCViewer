@@ -18,26 +18,43 @@ void main(){
     uint back = front ^ 1;
     uint globalHistIndex = groupInfos.i[gl_WorkGroupID.x].globalHistIndex;
     uint blockStart = groupInfos.i[gl_WorkGroupID.x].startOffset;
+    uint globalStart = uniformInfo[front].globalHistograms[globalHistIndex].startOffset;
     uint blockEnd = uniformInfo[front].globalHistograms[globalHistIndex].endOffset;
+    uint maxElem = blockEnd - blockStart;
     const uint subgroupStorage = SUBGROUP_SIZE * KPT;
     for(int i = 0; i < KPT; ++i){
         uint index = blockStart + gl_SubgroupID * subgroupStorage + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
-        uint k = keys[front].k[index];
-        uint curBucket = getMaskedKey(k, uniformInfo[0].pass);
-        uint offset = atomicAdd(sharedInfo.keyCount[curBucket], 1);    // adding one to the bucket as an element is inserted
-        sharedKeys[offset] = k;
+        if(index < blockEnd){
+            uint k = keys[front].k[index];
+            uint curBucket = getMaskedKey(k, uniformInfo[0].pass);
+            uint offset = atomicAdd(sharedInfo.keyCount[curBucket], 1);    // adding one to the bucket as an element is inserted
+            sharedKeys[offset] = k;
+        }
     }
     barrier(); // waiting for all workgroups to assign their keys to the shared key array
     //care: TPB have to be more than there are buckets!!!!
-    if(gl_LocalInvocationID.x < NUMKEYS){
-        uint offset = 0;
-        if(gl_LocalInvocationID.x != 0) offset = sharedInfo.keyCount[gl_LocalInvocationID.x - 1];
-        uint count = sharedInfo.keyCount[gl_LocalInvocationID.x] - offset;
-        if(count > 0){
-            uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], count);
-            for(int c = 0; c < count; ++c){
-                keys[back].k[blockStart + bucketPos + c] = sharedKeys[offset + c];
-            }
-        }
+    //if(gl_LocalInvocationID.x < NUMKEYS){
+    //    uint offset = 0;
+    //    if(gl_LocalInvocationID.x != 0) offset = sharedInfo.keyCount[gl_LocalInvocationID.x - 1];
+    //    uint count = sharedInfo.keyCount[gl_LocalInvocationID.x] - offset;
+    //    if(count > 0){
+    //        uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], count);
+    //        for(int c = 0; c < count; ++c){
+    //            keys[back].k[blockStart + bucketPos + c] = sharedKeys[offset + c];
+    //        }
+    //    }
+    //}
+    //better implementation: every thread writes KPT konsecutive keys from shared memory to the final list
+    uint startIndex = gl_LocalInvocationID.x * KPT;
+    uint curBucket;
+    uint bucketCount = 0;
+    for(int i = 0; i < KPT && startIndex + i < maxElem;){
+        int startInd = i;
+        curBucket = getMaskedKey(sharedKeys[startIndex + i++], uniformInfo[0].pass);
+        bucketCount = 1;
+        while(i < KPT && startIndex + i < maxElem && getMaskedKey(sharedKeys[startIndex + i++], uniformInfo[0].pass) == curBucket) ++bucketCount;
+        uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], bucketCount);
+        for(int j = 0; j < bucketCount; ++j)
+            keys[back].k[globalStart + bucketPos + j] = sharedKeys[startInd + j];
     }
 }

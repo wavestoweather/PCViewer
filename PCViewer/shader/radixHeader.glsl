@@ -31,7 +31,7 @@ layout(binding = 1) buffer GI
 groupInfos;   //contains group histograms
 layout(binding = 2) buffer DI
 {
-    uint xSize, ySize, zSize, pad, xSizeScan, ySizeScan, zSizScan, padding, xCtrlSize, yCtrlSize, zCtrlSize;    //xSizeBack is used to atomicAdd up the amount of new shader invocations. Has to be copied via vkcmdcopybuffer
+    uint xSize, ySize, zSize, pad, xSizeScan, ySizeScan, zSizScan, padding, xCtrlSize, yCtrlSize, zCtrlSize, padding1, xLocalSortSize, yLocalSortSize, zLocalSortSize;
 }
 dispatchInfo; //contains dispatch info
 layout(binding = 3) buffer UI
@@ -43,6 +43,14 @@ layout(binding = 3) buffer UI
 }
 uniformInfo[2]; //there exists front and back buffer to be able to append global histograms.
                 //first histogram is in uniformInfo[0]
+
+struct LocalSort{
+    uint begin, end, front;     //begin and end are pointers to the array bounds, front is the data array where the data is stored
+};
+layout(binding = 4) buffer LI
+{
+    LocalSort sorts[];
+}localSortInfo;
 
 layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
 

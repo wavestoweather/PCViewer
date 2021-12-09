@@ -6,6 +6,9 @@
 
 #include "radixHeader.glsl"
 
+//uncomment to enable only shared sort. Only shared memory sort time: ~.53ms. Sort with localBuf ~.71ms
+#define ONLY_SHARED_SORT
+
 //note: local size has to be 2^k, otherwise merging problems
 layout(local_size_x = TPLSB, local_size_y = 1, local_size_z = 1) in;
 
@@ -41,6 +44,112 @@ void bitonicMergeRow(inout uint localBuf[KPLST], uint kCorr){
     }
 }
 
+// single compute invocation 20 iterations -> avg 0.6ms
+void bitonicSortCol(inout uint localBuf[KPLST], uint kCorr, uint subgroupCorr){
+    for(uint k = 2; k <= KPLST; k *= 2){
+        for(uint j = k / 2; j > 0; j /= 2){
+            for(uint i = 0; i < KPLST; ++i){
+                uint l = i ^ j;
+                bool up = bool(i & k) ^^ bool(kCorr & gl_SubgroupInvocationID) ^^ bool (subgroupCorr & gl_SubgroupID);
+                if(l > i && (up && localBuf[i] < localBuf[l] || !up && localBuf[i] > localBuf[l])){
+                    uint t = localBuf[i];
+                    localBuf[i] = localBuf[l];
+                    localBuf[l] = t;
+                }
+            }
+        }
+    }
+}
+
+void bitonicMergeCol(inout uint localBuf[KPLST], uint kCorr, uint subgroupCorr){
+    const uint k = KPLST;{   // k is constant as no buil up phase exists
+        for(uint j = k / 2; j > 0; j /= 2){
+            for(uint i = 0; i < KPLST; ++i){
+                uint l = i ^ j;
+                bool up = bool(i & k) ^^ bool(kCorr & gl_SubgroupInvocationID) ^^ bool (subgroupCorr & gl_SubgroupID);
+                if(l > i && (up && localBuf[i] < localBuf[l] || !up && localBuf[i] > localBuf[l])){
+                    uint t = localBuf[i];
+                    localBuf[i] = localBuf[l];
+                    localBuf[l] = t;
+                }
+            }
+        }
+    }
+}
+
+void bitonicSortSubgroupCol(inout uint localBuf[KPLST], uint subgroupCorr){
+    for(uint k = KPLST * 2; k <= SUBGROUP_SIZE * KPLST; k *= 2){
+        for(uint j = k / 2; j >= KPLST / 2; j /= 2){
+            uint kCorr = k / KPLST;
+            if(j < KPLST) bitonicMergeCol(localBuf, kCorr, subgroupCorr);     //merge in thread itself if possible
+            else{
+                for(int i = 0; i < KPLST; ++i){
+                    uint other = subgroupShuffleXor(localBuf[i], j / KPLST);
+                    uint l = gl_SubgroupInvocationID ^ (j / KPLST); //done in the line above
+                    bool up = gl_SubgroupInvocationID > l ^^ bool(kCorr & gl_SubgroupInvocationID) ^^ bool (subgroupCorr & gl_SubgroupID);
+                    if(up && localBuf[i] < other || !up && localBuf[i] > other)
+                        localBuf[i] = other;
+                }
+            }
+        }
+    }
+}
+
+void bitonicMergeSubgroupCol(inout uint localBuf[KPLST], uint subgroupCorr){
+    uint k = SUBGROUP_SIZE * KPLST;{
+        for(uint j = k / 2; j >= KPLST / 2; j /= 2){
+            uint kCorr = k / KPLST;
+            if(j < KPLST) bitonicMergeCol(localBuf, kCorr, subgroupCorr);     //merge in thread itself if possible
+            else{
+                for(int i = 0; i < KPLST; ++i){
+                    uint other = subgroupShuffleXor(localBuf[i], j / KPLST);
+                    uint l = gl_SubgroupInvocationID ^ (j / KPLST); //done in the line above
+                    bool up = gl_SubgroupInvocationID > l ^^ bool(kCorr & gl_SubgroupInvocationID) ^^ bool (subgroupCorr & gl_SubgroupID);
+                    if(up && localBuf[i] < other || !up && localBuf[i] > other)
+                        localBuf[i] = other;
+                }
+            }
+        }
+    }
+}
+
+void maxHeapSink(uint x, inout uint localBuf[KPLST], uint maxInd) {
+    uint c; // Child
+    while((c = 2 * x + 1) < maxInd) {
+        // While children exist
+        if(c + 1 < maxInd && localBuf[c] < localBuf[c+1]) {
+            // Find the biggest of both
+            ++c;
+        }
+
+        if(localBuf[x] >= localBuf[c]) {
+            // Does it have to sink
+            return;
+        } else {
+            uint t = localBuf[x];
+            localBuf[x] = localBuf[c];
+            localBuf[c] = t;
+            x = c; // Swap and sink again
+        }
+    }
+}
+
+// single compute invocation 20 iterations -> avg 3.3ms
+void heapSort(inout uint localBuf[KPLST]) {
+    uint i;
+    for (i = (KPLST + 1)/2 ; i > 0 ; --i) {
+        // Bring it to heap structure
+        maxHeapSink(i-1, localBuf, KPLST); // Sink all inner nodes
+    }
+    // Heap => Sorted List
+    for (i=1;i<KPLST;++i) {
+        uint t = localBuf[0];
+        localBuf[0] = localBuf[KPLST - i];
+        localBuf[KPLST - i] = t;
+        maxHeapSink(0, localBuf, KPLST-i); // Sink the max to obtain correct heap
+    }
+}
+
 shared uint sorted[KPLSB];
 void swap(uint x, uint y){
     uint tmp = sorted[x];
@@ -65,13 +174,71 @@ void bitonicSharedSort(){
     }
 }
 
+//requires the subgroup to be already sorted
+void bitonicSharedColSort(inout uint localBuf[KPLST]){
+    const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
+    uint c = 0;
+    for(uint k = 2 * subgroupStorage; k <= KPLSB; k *= 2){
+        uint subgroupCorr = k / subgroupStorage;
+        for(uint j = k / 2; j >= subgroupStorage / 2; j /= 2){
+            if(j < subgroupStorage){    //put shared data into local data and back again
+                uint baseIndex = subgroupStorage * gl_SubgroupID + gl_SubgroupInvocationID * KPLST;
+                for(int i = 0; i < KPLST; ++i) localBuf[i] = sorted[baseIndex + i];
+                bitonicMergeSubgroupCol(localBuf, subgroupCorr);
+                if(k < KPLSB);  // in the last iteration dont copy back to shared memory
+                    for(int i = 0; i < KPLST; ++i) sorted[baseIndex + i] = localBuf[i];
+            }
+            else{
+                for(int m = 0; m < KPLST; ++m){
+                    uint index = gl_SubgroupID * subgroupStorage + SUBGROUP_SIZE * m + gl_SubgroupInvocationID;
+                    uint ixj = index ^ j;
+                    bool up = bool(index & k) ^^ bool (subgroupCorr & gl_SubgroupID);
+                    if(ixj > index){
+                        if((index & k) == 0 && sorted[index] > sorted[ixj]||
+                            (index & k) != 0 && sorted[index] < sorted[ixj])
+                        //if(up && sorted[index] < sorted[ixj] || !up && sorted[index] > sorted[ixj])
+                            swap(index, ixj);
+                    }
+                }
+            }
+            barrier();
+        }
+    }
+}
+
 // sorts a short region in the input via bitonic local sort in the current workGroup
 void main(){
-    uint front = 0; // get front buffer from local sort info (local sorts should not be copied...)
+    uint front = localSortInfo.sorts[gl_WorkGroupID.x].front;
     uint back = (uniformInfo[0].pass & 1) ^ 1;
-    uint regionStart = 0; //TODO get region start
-    uint regionEnd = KPLSB;//TODO get region end
+    uint regionStart = localSortInfo.sorts[gl_WorkGroupID.x].begin; //TODO get region start
+    uint regionEnd = localSortInfo.sorts[gl_WorkGroupID.x].end;//TODO get region end
 
+    uint localBuf[KPLST];
+    const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
+#ifndef ONLY_SHARED_SORT
+    //loading into local memory
+    for(int i = 0; i < KPLST; ++i){
+        uint curIndex = regionStart + gl_SubgroupID.x * SUBGROUP_SIZE * KPLST + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
+        if(curIndex < regionEnd)
+            localBuf[i] = keys[front].k[curIndex];
+        else
+            localBuf[i] = MAXVAL;
+    }
+    //first pass bitonic sort of local buf
+    bitonicSortCol(localBuf, 1, 1);
+    //second pass bitonic sort of subgroup
+    bitonicSortSubgroupCol(localBuf, 1);
+    //putting sorted things into shared memory and sorting shared memory
+    uint baseIndex = subgroupStorage * gl_SubgroupID + gl_SubgroupInvocationID * KPLST;
+    for(int i = 0; i < KPLST; ++i) sorted[baseIndex + i] = localBuf[i];
+    barrier();
+    //sorting in shared combined with local sorts
+    bitonicSharedColSort(localBuf);
+    //storing all sorted lists
+    for(int i = 0; i < KPLST; ++i) keys[front].k[baseIndex + i] = localBuf[i];
+
+    return;//-----------------------------------------------------------------------------------
+#else
     for(int i = 0; i < KPLST; ++i){
         const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
         uint index = regionStart + gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
@@ -91,9 +258,9 @@ void main(){
             keys[front].k[index] = sorted[index];
     }
     return;
-
+#endif
     //loading into local memory
-    uint localBuf[KPLST];
+    //uint localBuf[KPLST];
     for(int i = 0; i < KPLST; ++i){
         uint curIndex = regionStart + gl_SubgroupID.x * SUBGROUP_SIZE * KPLST + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         if(curIndex < regionEnd)
@@ -160,7 +327,7 @@ void main(){
     }
     
     //storing bitonic sorted lists in shared memory for merging
-    const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
+    //const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
     for(int i = 0; i < KPLST; ++i){
         uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         sorted[index] = localBuf[i];

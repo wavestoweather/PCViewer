@@ -16,5 +16,5 @@ void main(){
     uniformInfo[back].amtOfBlocks = 0;              //set to 0 te be loaded the next iteration
     dispatchInfo.xCtrlSize = uniformInfo[front].amtOfGlobalHistograms;
     dispatchInfo.xSize = uniformInfo[front].amtOfBlocks;
-    dispatchInfo.xSizeScan = uniformInfo[front].amtOfGlobalHistograms + uniformInfo[front].amtOfBlocks; //reducing the wokrgroup blocks as well as the global histograms
+    dispatchInfo.xSizeScan = uniformInfo[front].amtOfGlobalHistograms;
 }

@@ -7,31 +7,54 @@
 #include "radixHeader.glsl"
 
 layout(local_size_x_id = 0, local_size_y = 1, local_size_z = 1) in;
+const uint binsPerThread = NUMKEYS / SUBGROUP_SIZE;
 
 // one controlshader invocation is done per global histogram
 // ctl sizes in the dispatch info 
+shared uint localSortAmt;
+shared uint localSortOffset;
+shared LocalSort sharedLocalSorts[NUMKEYS];
 void main(){
     uint front = uniformInfo[0].pass & 1;   //make sure to have the correct pass number by using the back uniformInfo
     uint back = front ^ 1;
     uint curStart = uniformInfo[front].globalHistograms[gl_WorkGroupID.x].startOffset;
     uint curEnd = uniformInfo[front].globalHistograms[gl_WorkGroupID.x].endOffset;
 
-    const uint binsPerThread = NUMKEYS / SUBGROUP_SIZE;
     uint localBins[binsPerThread];
     uint binsSizes[binsPerThread];
     uint binsGroups[binsPerThread];
+    LocalSort localSorts[binsPerThread];
     uint newBinCount = 0;
     uint amtGroups = 0; //sum of the needed work groups for the histogram calculation
+    uint amtLocalSorts = 0; //sum of needed local sort groups
+    uint curLocalSortSize = 0;
     for(int i = 0; i < binsPerThread; ++i){
         localBins[i] = uniformInfo[front].globalHistograms[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x * binsPerThread + i];
         uint curBinSize = localBins[i];
         if(gl_LocalInvocationID.x * binsPerThread + i != 0)
             curBinSize -= uniformInfo[front].globalHistograms[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x * binsPerThread + i - 1];
-        if(curBinSize != 0)
+        //check if local sort is sufficient or another radix sort is needed
+        if(curBinSize > KPLSB){
             ++newBinCount;
-        binsSizes[i] = curBinSize;
-        binsGroups[i] = (curBinSize + KPB - 1) / KPB;
-        amtGroups += binsGroups[i];
+            binsSizes[i] = curBinSize;
+            binsGroups[i] = (curBinSize + KPB - 1) / KPB;
+            amtGroups += binsGroups[i];
+        }
+        else if (curBinSize > 0){   //sorting done in local sorts
+            binsSizes[i] = 0;
+            binsGroups[i] = 0;
+            if(amtLocalSorts != 0 && curLocalSortSize + curBinSize <= KPLSB){ //add to previous localSort
+                localSorts[amtLocalSorts - 1].end += curBinSize;
+                curLocalSortSize += curBinSize;
+            }
+            else{            //new local sort thread
+                localSorts[amtLocalSorts].begin = curStart + localBins[i] - curBinSize;
+                localSorts[amtLocalSorts].end = curStart + localBins[i];
+                localSorts[amtLocalSorts].front = back; //the sorted bin resides in the back buffer. The front buffer indicates where the keys are lying...
+                ++amtLocalSorts;
+                curLocalSortSize = curBinSize;
+            }
+        }
     }
     //subgroup reduction for absolute new bin count + exclusive add to have the correct offsets
     uint bucketHistogramOffset = subgroupExclusiveAdd(newBinCount);
@@ -66,6 +89,38 @@ void main(){
                 ++blockOffset;
             }
             ++binHistOffset;
+        }
+    }
+
+    //add local sort to the local sort array(offset is taken by atomic adding to the xLocalSortSize dispatch size)
+    if(amtLocalSorts > 0){
+        //reduce local sorts accross subgroups
+        uint offset = subgroupExclusiveAdd(amtLocalSorts);
+        uint localSortSum = subgroupAdd(amtLocalSorts);
+        for(int i = 0; i < amtLocalSorts; ++i)
+            sharedLocalSorts[offset + i] = localSorts[i];
+        // no barrier needed as only a single subgroup exists
+        barrier();
+        if(subgroupElect()){    //single thread reduction
+            amtLocalSorts = 1;
+            for(int i = 1; i < localSortSum; ++i){
+                if(sharedLocalSorts[i].end - sharedLocalSorts[amtLocalSorts - 1].begin <= KPLSB){
+                    sharedLocalSorts[amtLocalSorts - 1].end = sharedLocalSorts[i].end;
+                }
+                else{
+                    sharedLocalSorts[amtLocalSorts] = sharedLocalSorts[i];
+                    amtLocalSorts++;
+                }
+            }
+            localSortAmt = amtLocalSorts;
+            localSortOffset = atomicAdd(dispatchInfo.xLocalSortSize, amtLocalSorts);
+        }
+        barrier();
+        for(uint i = gl_LocalInvocationID.x; i < localSortAmt; i += SUBGROUP_SIZE){
+            LocalSort l = sharedLocalSorts[i];
+            l.begin += curStart;
+            l.end += curStart;
+            localSortInfo.sorts[localSortOffset + i] = l;
         }
     }
 }
