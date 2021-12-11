@@ -46,15 +46,40 @@ void main(){
     //}
     //better implementation: every thread writes KPT konsecutive keys from shared memory to the final list
     uint startIndex = gl_LocalInvocationID.x * KPT;
-    uint curBucket;
+    uint curBucket = getMaskedKey(sharedKeys[startIndex], uniformInfo[0].pass);
+    uint iKeyStart = 0;
     uint bucketCount = 0;
     for(int i = 0; i < KPT && startIndex + i < maxElem;){
         int startInd = i;
         curBucket = getMaskedKey(sharedKeys[startIndex + i++], uniformInfo[0].pass);
         bucketCount = 1;
-        while(i < KPT && startIndex + i < maxElem && getMaskedKey(sharedKeys[startIndex + i++], uniformInfo[0].pass) == curBucket) ++bucketCount;
+        while(i < KPT && startIndex + i < maxElem && getMaskedKey(sharedKeys[startIndex + i], uniformInfo[0].pass) == curBucket) {++bucketCount; ++i;}
         uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], bucketCount);
-        for(int j = 0; j < bucketCount; ++j)
-            keys[back].k[globalStart + bucketPos + j] = sharedKeys[startInd + j];
+        for(int j = 0; j < bucketCount; ++j){
+            keys[back].k[globalStart + bucketPos + j] = sharedKeys[startIndex + startInd + j];
+        }
     }
+    //for(int i = 0; i < KPT && startIndex + i < maxElem; ++i){
+    //    uint b = getMaskedKey(sharedKeys[startIndex + i], uniformInfo[0].pass);
+    //    if(b == curBucket) ++bucketCount;
+    //    else{
+    //        uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], bucketCount);
+    //        for(int j = 0; j < bucketCount; ++j){
+    //            keys[back].k[globalStart + bucketPos + j] = sharedKeys[startIndex + iKeyStart + j];
+    //        }
+    //        curBucket = b;
+    //        bucketCount = 1;
+    //        iKeyStart = i;
+    //    }
+    //}
+    //adding the last bucket
+    //uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], bucketCount);
+    //for(int j = 0; j < bucketCount; ++j){
+    //    keys[back].k[globalStart + bucketPos + j] = sharedKeys[startIndex + iKeyStart + j];
+    //}
+    //for(int i = 0; i < KPT && startIndex + i < maxElem; ++i){
+    //    curBucket = getMaskedKey(sharedKeys[startIndex + i], uniformInfo[0].pass);
+    //    uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], 1);
+    //    keys[back].k[globalStart + bucketPos] = sharedKeys[startIndex + i];
+    //}
 }

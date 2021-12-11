@@ -31,7 +31,7 @@ layout(binding = 1) buffer GI
 groupInfos;   //contains group histograms
 layout(binding = 2) buffer DI
 {
-    uint xSize, ySize, zSize, pad, xSizeScan, ySizeScan, zSizScan, padding, xCtrlSize, yCtrlSize, zCtrlSize, padding1, xLocalSortSize, yLocalSortSize, zLocalSortSize;
+    uint xSize, ySize, zSize, xSizeScan, ySizeScan, zSizScan, xCtrlSize, yCtrlSize, zCtrlSize, xLocalSortSize, yLocalSortSize, zLocalSortSize;
 }
 dispatchInfo; //contains dispatch info
 layout(binding = 3) buffer UI

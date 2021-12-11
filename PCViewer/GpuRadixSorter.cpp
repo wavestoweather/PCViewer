@@ -87,6 +87,8 @@ GpuRadixSorter::~GpuRadixSorter()
 
 void GpuRadixSorter::sort(std::vector<uint32_t> &v)
 {
+    //v.resize(100000);
+    //std::iota(v.rbegin(), v.rend(), 230);
     if (!_histogramPipeline.pipeline)
     {
         std::cout << "Gpu sorting not available, using standard c++ sort" << std::endl;
@@ -96,12 +98,21 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     const uint32_t controlSize = 64;
     const uint32_t KPB = 384 * 18; // keys per block/workgroup
     uint32_t firstPassGroups = (v.size() + KPB - 1) / KPB;
-    uint32_t uniformBufferSize = .1f * v.size() * sizeof(uint32_t); // current max amount of histograms (not histogram mergin currently possible)
+    uint32_t uniformBufferSize = std::max(.1f * v.size() * sizeof(uint32_t), 500.f * sizeof(uint32_t)); // current max amount of histograms (not histogram mergin currently possible)
     uint32_t groupInfoSize = uniformBufferSize;                     // in worst case for each global histogram a single worker...
     uint32_t localInfoSize = uniformBufferSize;
     uint32_t dispatchSize = 9;
+    uint32_t timestampAmt = 20;
 
     // Buffer creation and filling -------------------------------------------------------------------------------------
+    VkQueryPool qPool;
+    VkQueryPoolCreateInfo qPoolInfo{};
+    qPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    qPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    qPoolInfo.queryCount = 20;
+    VkResult t = vkCreateQueryPool(_vkContext.device, &qPoolInfo, nullptr, &qPool);
+    //vkResetQueryPool(_vkContext.device, qPool, 0, 1);
+    
     VkBuffer dispatch, uniformFront, uniformBack, keysFront, keysBack, groupInfos, localInfos;
     VkDeviceMemory memory;
     VkUtil::createBuffer(_vkContext.device, controlSize * sizeof(uint32_t), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dispatch);
@@ -170,9 +181,9 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     VkUtil::uploadData(_vkContext.device, memory, uniformBackOffset, cpuUniform.size() * sizeof(cpuUniform[0]), cpuUniform.data());
     std::vector<uint32_t> controlBytes(controlSize, 1);
     controlBytes[0] = firstPassGroups;
-    controlBytes[4] = 1; // one reduction of the global histogram
-    controlBytes[8] = 1;
-    controlBytes[12] = 0; // by default no local sorts have to be done
+    controlBytes[3] = 1; // one reduction of the global histogram
+    controlBytes[6] = 1;
+    controlBytes[9] = 0; // by default no local sorts have to be done
     VkUtil::uploadData(_vkContext.device, memory, 0, controlBytes.size() * sizeof(uint32_t), controlBytes.data());
     std::vector<uint32_t> cpuGroupInfos(groupInfoSize, 0);
     for (int i = 0; i < firstPassGroups; ++i)
@@ -192,34 +203,47 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     VkUtil::updateDescriptorSet(_vkContext.device, uniformFront, uniformBufferSize * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
     VkUtil::updateArrayDescriptorSet(_vkContext.device, uniformBack, uniformBufferSize * sizeof(uint32_t), 3, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, localInfos, localInfoSize * sizeof(uint32_t), 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+    
 
     // Creating and submitting commands -------------------------------------------------------------------------------------
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _localSortPipeline.pipelineLayout, 0, 1, &descSet, 0, nullptr);
-    for (int i = 0; i < 2; ++i)
+    int query = 0;
+    for (int i = 0; i < 4; ++i)
     {
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _histogramPipeline.pipeline);
         vkCmdDispatchIndirect(commands, dispatch, 0);
-        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+        
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _globalScanPipeline.pipeline);
-        vkCmdDispatchIndirect(commands, dispatch, 4);
-        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdDispatchIndirect(commands, dispatch, 12);
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+        
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _scatterPipeline.pipeline);
         vkCmdDispatchIndirect(commands, dispatch, 0);
-        if (i != 3)
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+        if (i < 3)
         {
-            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+            vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _controlPipeline.pipeline);
-            vkCmdDispatchIndirect(commands, dispatch, 8);
-            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, {}, 0, {}, 0, {});
+            vkCmdDispatchIndirect(commands, dispatch, 24);
+            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+            
+            vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _dispatchPipeline.pipeline);
             vkCmdDispatch(commands, 1, 1, 1);
+            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
         }
     }
     // last but not least submit local sorts
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _localSortPipeline.pipeline);
-    //vkCmdDispatchIndirect(commands, dispatch, 12);
+    vkCmdDispatchIndirect(commands, dispatch, 36);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);    
     auto t1 = std::chrono::high_resolution_clock::now();
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
     VkResult res = vkQueueWaitIdle(_vkContext.queue);
@@ -228,7 +252,21 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     std::vector<uint32_t> cpuUniformInfoFront(uniformBufferSize);
     std::vector<uint32_t> cpuUniformInfoBack(uniformBufferSize);
     std::vector<uint32_t> cpuLocalInfo(localInfoSize);
-    VkUtil::downloadData(_vkContext.device, memory, keysBackOffset, v.size() * sizeof(v[0]), v.data());
+    VkUtil::downloadData(_vkContext.device, memory, keysFrontOffset, v.size() * sizeof(v[0]), v.data());
+    std::vector<int> places0;
+    for(int i = 0; i < v.size(); ++i)if(!v[i]) places0.push_back(i);
+    std::vector<int> placesWrong;
+    std::vector<int> placesWrong1;
+    std::vector<int> wrongNumbers;
+    for(int i = 1; i < v.size(); ++i)if(v[i] <= v[i - 1]) placesWrong.push_back(i);
+    std::vector<bool> alreadyFound(v.size(), false);
+    for(int i = 0; i < v.size(); ++i){
+        if(alreadyFound[v[i] % v.size()]) {
+            placesWrong1.push_back(i);
+            wrongNumbers.push_back(v[i]);
+        }
+        alreadyFound[v[i] % v.size()] = true;
+    }
     VkUtil::downloadData(_vkContext.device, memory, 0, controlBytes.size() * sizeof(uint32_t), controlBytes.data());
     VkUtil::downloadData(_vkContext.device, memory, groupInfosOffset, cpuGroupInfos.size() * sizeof(uint32_t), cpuGroupInfos.data());
     VkUtil::downloadData(_vkContext.device, memory, uniformFrontOffset, cpuUniformInfoFront.size() * sizeof(uint32_t), cpuUniformInfoFront.data());
@@ -236,6 +274,12 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     VkUtil::downloadData(_vkContext.device, memory, localInfosOffset, cpuLocalInfo.size() * sizeof(uint32_t), cpuLocalInfo.data());
 #ifdef ENABLE_TEST_SORT
     std::cout << "Sorting " << v.size() << " elements took " << std::chrono::duration<double, std::milli>(t2 - t1).count() << " ms" << std::endl;
+    std::cout << "Timing differences in the pipelines itself were:" << std::endl;
+    std::vector<uint32_t> timestamps(timestampAmt);
+    vkGetQueryPoolResults(_vkContext.device, qPool, 0, timestampAmt, timestamps.size() * sizeof(uint32_t), timestamps.data(), sizeof(uint32_t), 0);
+    for(int i = 1; i < timestampAmt - 1; ++i){
+        std::cout << (timestamps[i] - timestamps[i - 1]) / 1e6 << std::endl;
+    }
 #endif
 
     // Cleaning everything up -------------------------------------------------------------------------------------

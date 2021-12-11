@@ -209,13 +209,14 @@ void bitonicSharedColSort(inout uint localBuf[KPLST]){
 // sorts a short region in the input via bitonic local sort in the current workGroup
 void main(){
     uint front = localSortInfo.sorts[gl_WorkGroupID.x].front;
-    uint back = (uniformInfo[0].pass & 1) ^ 1;
-    uint regionStart = localSortInfo.sorts[gl_WorkGroupID.x].begin; //TODO get region start
-    uint regionEnd = localSortInfo.sorts[gl_WorkGroupID.x].end;//TODO get region end
+    uint back = 0;//always in the front buffer(uniformInfo[0].pass & 1) ^ 1;
+    uint regionStart = localSortInfo.sorts[gl_WorkGroupID.x].begin; 
+    uint regionEnd = localSortInfo.sorts[gl_WorkGroupID.x].end;
 
     uint localBuf[KPLST];
     const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
 #ifndef ONLY_SHARED_SORT
+#error "Bad sort"
     //loading into local memory
     for(int i = 0; i < KPLST; ++i){
         uint curIndex = regionStart + gl_SubgroupID.x * SUBGROUP_SIZE * KPLST + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
@@ -241,9 +242,9 @@ void main(){
 #else
     for(int i = 0; i < KPLST; ++i){
         const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
-        uint index = regionStart + gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
-        if(index < regionEnd)
-            sorted[index] = keys[front].k[index];
+        uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
+        if(regionStart + index < regionEnd)
+            sorted[index] = keys[front].k[regionStart + index];
         else
             sorted[index] = MAXVAL;
     }
@@ -253,9 +254,9 @@ void main(){
         const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
         uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         //uint curIndex = regionStart + gl_SubgroupID.x * SUBGROUP_SIZE * KPLST + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
-        if(index < regionEnd)
+        if(regionStart + index < regionEnd)
             //keys[front].k[curIndex] = localBuf[i];
-            keys[front].k[index] = sorted[index];
+            keys[back].k[regionStart + index] = sorted[index];
     }
     return;
 #endif
