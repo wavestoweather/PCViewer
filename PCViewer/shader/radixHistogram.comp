@@ -59,65 +59,71 @@ void main(){
     uint blockStart = groupInfos.i[gl_WorkGroupID.x].startOffset;
     uint blockEnd = uniformInfo[front].globalHistograms[globalHistIndex].endOffset;
     uint localBuf[KPT];     //in local buf onyl bucket values are stored
-    
+
     const uint subgroupStorage = SUBGROUP_SIZE * KPT;
+    int maxI = -1;
     for(int i = 0; i < KPT; ++i){
         uint index = blockStart + gl_SubgroupID * subgroupStorage + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
         if(index < blockEnd)
             localBuf[i] = getMaskedKey(keys[front].k[index], uniformInfo[0].pass);
-        else
+        else{
+            if(maxI == -1)
+                maxI = i;
             localBuf[i] = MAXVAL;
-    } 
+        }
+    }
+    if(maxI < 0) maxI = 18;
     uint workGroup = gl_WorkGroupID.x;
     //sorting the local Buf via sorting network
-    sortingNetwork9(localBuf, 0);
-    sortingNetwork9(localBuf, 9);
+    if(maxI > 1);
+        sortingNetwork9(localBuf, 0);
+    if(maxI > 10)
+        sortingNetwork9(localBuf, 9);
+    uint p1 = 0, p2 = 9, p1Stop = min(maxI, 9), p2Stop = min(maxI, 18);
     #ifdef HISTOGRAMSUBGROUPREDUCTION
     //atomic add to the shared histogram with subgroup reduction
-    uint p1 = 0, p2 = 9;
     uint count = 0;
-    while(p1 < 9 || p2 < 18){   // do while both pointers are not finished
+    while(p1 < p1Stop || p2 < p2Stop){   // do while both pointers are not finished
         uint curVal = 0;
-        if(p1 < 9 && p2 < 18)
+        if(p1 < p1Stop && p2 < p2Stop)
             curVal = min(localBuf[p1], localBuf[p2]);
-        else if(p1 < 9)
+        else if(p1 < p1Stop)
             curVal = localBuf[p1];
         else
             curVal = localBuf[p2];
         curVal = subgroupMin(curVal);
         uint curBucket = getMaskedKey(curVal, uniformInfo[0].pass);
         uint c = 0;
-        while(p1 < 9 && localBuf[p1] == curVal) {++p1;++c;}
-        while(p2 < 18 && localBuf[p2] == curVal) {++p2;++c;}
+        while(p1 < p1Stop && localBuf[p1] == curVal) {++p1;++c;}
+        while(p2 < p2Stop && localBuf[p2] == curVal) {++p2;++c;}
         c = subgroupAdd(c);
         if(subgroupElect())
             atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
     #elif defined(HISTOGRAMTHREADREDUCTION)
     //normal atomic add
-    uint p1 = 0, p2 = 9;
-    while(p1 < 9 && p2 < 18){   // do while both pointers are not finished
+    while(p1 < p1Stop && p2 < p2Stop){   // do while both pointers are not finished
         uint curBucket = min(localBuf[p1], localBuf[p2]);
         uint c = 0;
-        while(p1 < 9 && localBuf[p1] == curBucket) {++p1;++c;}
-        while(p2 < 18 && localBuf[p2] == curBucket) {++p2;++c;}
+        while(p1 < p1Stop && localBuf[p1] == curBucket) {++p1;++c;}
+        while(p2 < p2Stop && localBuf[p2] == curBucket) {++p2;++c;}
         atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
     //finishing one of the two arrays if not yet done
-    while(p1 < 9){
+    while(p1 < p1Stop){
         uint curBucket = localBuf[p1++];
         uint c = 1;
-        while(p1 < 9 && localBuf[p1] == curBucket) {++p1;++c;}
+        while(p1 < p1Stop && localBuf[p1] == curBucket) {++p1;++c;}
         atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
-    while(p2 < 18){
+    while(p2 < p2Stop){
         uint curBucket = localBuf[p2++];
         uint c = 1;
-        while(p2 < 18 && localBuf[p2] == curBucket) {++p2;++c;}
+        while(p2 < p2Stop && localBuf[p2] == curBucket) {++p2;++c;}
         atomicAdd(sharedInfo.keyCount[curBucket], c);
     }
     #else
-    for(int i = 0; i < KPT; ++i)
+    for(int i = 0; i < KPT && i < iMax; ++i)
         if (localBuf[i] != MAXVAL)
             atomicAdd(sharedInfo.keyCount[localBuf[i]], 1);
     #endif
@@ -138,6 +144,7 @@ void main(){
         offset += ma[gl_SubgroupID];
 
         groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x] = offset;
-        atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], binVal);
+        if(binVal > 0)
+            atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], binVal);
     }
 }

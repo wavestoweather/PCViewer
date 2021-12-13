@@ -11,6 +11,11 @@ IF (WIN32)
     set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/PCViewer/cmake/Win/")
 ENDIF ()
 
+IF (UNIX AND CMAKE_BUILD_TYPE MATCHES Debug)
+    message("Enabling gcc stl debug checks")
+    add_compile_options(-D_GLIBCXX_DEBUG)
+ENDIF()
+
 # enable jpeg and png support for CImg library
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_png")
 

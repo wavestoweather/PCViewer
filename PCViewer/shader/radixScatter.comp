@@ -6,12 +6,17 @@
 
 layout(local_size_x = TPB, local_size_y = 1, local_size_z = 1) in;
 
+#define SUBGROUP_WISE_WRITE
+
 shared GroupInfo sharedInfo;
+shared GroupInfo sharedBucketOffsets;
 shared uint sharedKeys[KPB];
 void main(){
     //parallel loading of the group info (exclusive add offsets for key scattering)
     if(gl_LocalInvocationID.x < NUMKEYS)
         sharedInfo.keyCount[gl_LocalInvocationID.x] = groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x];
+    
+    for(uint i = gl_LocalInvocationID.x; i < KPB; i+=TPB) sharedKeys[i] = 0;
     barrier();
     
     uint front = uniformInfo[0].pass & 1;
@@ -44,6 +49,28 @@ void main(){
     //        }
     //    }
     //}
+#ifdef SUBGROUP_WISE_WRITE
+    //reserving space in the global bucket for the subbuckets
+    if(gl_LocalInvocationID.x < NUMKEYS){
+        uint bucketSize = sharedInfo.keyCount[gl_LocalInvocationID.x] - groupInfos.i[gl_WorkGroupID.x].keyCount[gl_LocalInvocationID.x];
+        if(bucketSize > 0){
+            sharedBucketOffsets.keyCount[gl_LocalInvocationID.x] = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[gl_LocalInvocationID.x], bucketSize);
+        }
+        else{
+            sharedBucketOffsets.keyCount[gl_LocalInvocationID.x] = 0;
+        }
+    }
+    barrier();
+    //copying the values fo shared memory to the global subbuckets
+    for(uint i = gl_LocalInvocationID.x; i < KPB && i < maxElem ; i += TPB){ // i is the index in the shared keys array
+        uint k = sharedKeys[i];
+        uint bucket = getMaskedKey(k, uniformInfo[0].pass);
+        uint bucketPlace = i - groupInfos.i[gl_WorkGroupID.x].keyCount[bucket]; // place of the key in the local bucket
+        //if(bucket > 0) bucketPlace -= sharedInfo.keyCount[bucket - 1];   // offset to the beginning by substracting the end of the previous bucket(end of previous = start of current)
+        keys[back].k[globalStart + sharedBucketOffsets.keyCount[bucket] + bucketPlace] = k;
+    }
+
+#elif defined(THREADWISE_GROUPING)
     //better implementation: every thread writes KPT konsecutive keys from shared memory to the final list
     uint startIndex = gl_LocalInvocationID.x * KPT;
     uint curBucket = getMaskedKey(sharedKeys[startIndex], uniformInfo[0].pass);
@@ -59,27 +86,13 @@ void main(){
             keys[back].k[globalStart + bucketPos + j] = sharedKeys[startIndex + startInd + j];
         }
     }
-    //for(int i = 0; i < KPT && startIndex + i < maxElem; ++i){
-    //    uint b = getMaskedKey(sharedKeys[startIndex + i], uniformInfo[0].pass);
-    //    if(b == curBucket) ++bucketCount;
-    //    else{
-    //        uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], bucketCount);
-    //        for(int j = 0; j < bucketCount; ++j){
-    //            keys[back].k[globalStart + bucketPos + j] = sharedKeys[startIndex + iKeyStart + j];
-    //        }
-    //        curBucket = b;
-    //        bucketCount = 1;
-    //        iKeyStart = i;
-    //    }
-    //}
-    //adding the last bucket
-    //uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], bucketCount);
-    //for(int j = 0; j < bucketCount; ++j){
-    //    keys[back].k[globalStart + bucketPos + j] = sharedKeys[startIndex + iKeyStart + j];
-    //}
-    //for(int i = 0; i < KPT && startIndex + i < maxElem; ++i){
-    //    curBucket = getMaskedKey(sharedKeys[startIndex + i], uniformInfo[0].pass);
-    //    uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], 1);
-    //    keys[back].k[globalStart + bucketPos] = sharedKeys[startIndex + i];
-    //}
+#else
+    uint startIndex = gl_LocalInvocationID.x * KPT;
+    uint curBucket = getMaskedKey(sharedKeys[startIndex], uniformInfo[0].pass);
+    for(int i = 0; i < KPT && startIndex + i < maxElem; ++i){
+        curBucket = getMaskedKey(sharedKeys[startIndex + i], uniformInfo[0].pass);
+        uint bucketPos = atomicAdd(uniformInfo[front].globalHistograms[globalHistIndex].keyCount[curBucket], 1);
+        keys[back].k[globalStart + bucketPos] = sharedKeys[startIndex + i];
+    }
+#endif
 }

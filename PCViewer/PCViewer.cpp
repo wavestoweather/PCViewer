@@ -7315,14 +7315,17 @@ int main(int, char**)
 	}
 
 	//test of radix sort
-	GpuRadixSorter sorter({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
-	for(int i = 0; i < 20; ++i){
-	//	sorter.checkHistogram();
-	//	sorter.checkLocalSort();
+	{
+		GpuRadixSorter sorter({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
+		for(int i = 0; i < 20; ++i){
+		//	sorter.checkHistogram();
+		//	sorter.checkLocalSort();
+		}
+		std::vector<uint32_t> nums(4e8);
+		std::iota(nums.rbegin(), nums.rend(), 0);
+		sorter.sort(nums);
+		bool done = true;
 	}
-	std::vector<uint32_t> nums(1e7);
-	std::iota(nums.rbegin(), nums.rend(), 0);
-	sorter.sort(nums);
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);

@@ -33,11 +33,11 @@ private:
     std::string _shaderLocalSortPath = "shader/radixLocalSort.comp.spv";
 
     uint32_t _localSize = 256;
-    VkUtil::Context _vkContext;
-    VkUtil::PipelineInfo _controlPipeline;
-    VkUtil::PipelineInfo _dispatchPipeline;
-    VkUtil::PipelineInfo _localSortPipeline;
-    VkUtil::PipelineInfo _histogramPipeline;
-    VkUtil::PipelineInfo _globalScanPipeline;
-    VkUtil::PipelineInfo _scatterPipeline;
+    VkUtil::Context _vkContext{};
+    VkUtil::PipelineInfo _controlPipeline{};
+    VkUtil::PipelineInfo _dispatchPipeline{};
+    VkUtil::PipelineInfo _localSortPipeline{};
+    VkUtil::PipelineInfo _histogramPipeline{};
+    VkUtil::PipelineInfo _globalScanPipeline{};
+    VkUtil::PipelineInfo _scatterPipeline{};
 };

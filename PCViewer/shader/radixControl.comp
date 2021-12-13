@@ -48,7 +48,7 @@ void main(){
             else{            //new local sort thread
                 localSorts[amtLocalSorts].begin = curStart + localBins[i] - curBinSize;
                 localSorts[amtLocalSorts].end = curStart + localBins[i];
-                localSorts[amtLocalSorts].front = front; //the sorted bin resides in the back buffer. The front buffer indicates where the keys are lying...
+                localSorts[amtLocalSorts].front = back; //the sorted bin resides in the back buffer. The front buffer indicates where the keys are lying...
                 ++amtLocalSorts;
             }
         }

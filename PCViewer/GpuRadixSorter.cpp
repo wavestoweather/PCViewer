@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <numeric>
+#include <set>
 
 GpuRadixSorter::GpuRadixSorter(const VkUtil::Context &context) : _vkContext(context)
 {
@@ -87,8 +88,6 @@ GpuRadixSorter::~GpuRadixSorter()
 
 void GpuRadixSorter::sort(std::vector<uint32_t> &v)
 {
-    //v.resize(100000);
-    //std::iota(v.rbegin(), v.rend(), 230);
     if (!_histogramPipeline.pipeline)
     {
         std::cout << "Gpu sorting not available, using standard c++ sort" << std::endl;
@@ -111,7 +110,6 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     qPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
     qPoolInfo.queryCount = 20;
     VkResult t = vkCreateQueryPool(_vkContext.device, &qPoolInfo, nullptr, &qPool);
-    //vkResetQueryPool(_vkContext.device, qPool, 0, 1);
     
     VkBuffer dispatch, uniformFront, uniformBack, keysFront, keysBack, groupInfos, localInfos;
     VkDeviceMemory memory;
@@ -169,6 +167,7 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     vkBindBufferMemory(_vkContext.device, localInfos, memory, localInfosOffset);
 
     VkUtil::uploadData(_vkContext.device, memory, keysFrontOffset, v.size() * sizeof(v[0]), v.data());
+    VkUtil::uploadData(_vkContext.device, memory, keysBackOffset, v.size() * sizeof(v[0]), v.data());
     std::vector<uint32_t> cpuUniform(5, 0);
     cpuUniform[0] = 0; // always start with pass nr 0
     cpuUniform[1] = 1; // 1 global histogram in the beginning
@@ -206,72 +205,106 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     
 
     // Creating and submitting commands -------------------------------------------------------------------------------------
+    VkMemoryBarrier memBarrier{};
+    memBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    memBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    memBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    VkMemoryBarrier memBarrierIndirect{};
+    memBarrierIndirect.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    memBarrierIndirect.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    memBarrierIndirect.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    vkCmdResetQueryPool(commands, qPool, 0, timestampAmt);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _localSortPipeline.pipelineLayout, 0, 1, &descSet, 0, nullptr);
     int query = 0;
-    for (int i = 0; i < 4; ++i)
+    const int passes = 4;
+    for (int i = 0; i < passes; ++i)
     {
-        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _histogramPipeline.pipeline);
         vkCmdDispatchIndirect(commands, dispatch, 0);
-        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
         
-        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _globalScanPipeline.pipeline);
         vkCmdDispatchIndirect(commands, dispatch, 12);
-        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
         
-        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _scatterPipeline.pipeline);
         vkCmdDispatchIndirect(commands, dispatch, 0);
-        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
-        if (i < 3)
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
+        if (i < passes - 1)
         {
-            vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
+            vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _controlPipeline.pipeline);
             vkCmdDispatchIndirect(commands, dispatch, 24);
-            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
             
-            vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);
+            vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _dispatchPipeline.pipeline);
             vkCmdDispatch(commands, 1, 1, 1);
-            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 1, &memBarrierIndirect, 0, {}, 0, {});
         }
     }
     // last but not least submit local sorts
-    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, {}, 0, {}, 0, {});
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _localSortPipeline.pipeline);
     vkCmdDispatchIndirect(commands, dispatch, 36);
-    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, qPool, query++);    
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);    
     auto t1 = std::chrono::high_resolution_clock::now();
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
     VkResult res = vkQueueWaitIdle(_vkContext.queue);
     check_vk_result(res);
     auto t2 = std::chrono::high_resolution_clock::now();
-    std::vector<uint32_t> cpuUniformInfoFront(uniformBufferSize);
-    std::vector<uint32_t> cpuUniformInfoBack(uniformBufferSize);
-    std::vector<uint32_t> cpuLocalInfo(localInfoSize);
     VkUtil::downloadData(_vkContext.device, memory, keysFrontOffset, v.size() * sizeof(v[0]), v.data());
-    std::vector<int> places0;
-    for(int i = 0; i < v.size(); ++i)if(!v[i]) places0.push_back(i);
-    std::vector<int> placesWrong;
-    std::vector<int> placesWrong1;
-    std::vector<int> wrongNumbers;
-    for(int i = 1; i < v.size(); ++i)if(v[i] <= v[i - 1]) placesWrong.push_back(i);
-    std::vector<bool> alreadyFound(v.size(), false);
-    for(int i = 0; i < v.size(); ++i){
-        if(alreadyFound[v[i] % v.size()]) {
-            placesWrong1.push_back(i);
-            wrongNumbers.push_back(v[i]);
-        }
-        alreadyFound[v[i] % v.size()] = true;
-    }
-    VkUtil::downloadData(_vkContext.device, memory, 0, controlBytes.size() * sizeof(uint32_t), controlBytes.data());
-    VkUtil::downloadData(_vkContext.device, memory, groupInfosOffset, cpuGroupInfos.size() * sizeof(uint32_t), cpuGroupInfos.data());
-    VkUtil::downloadData(_vkContext.device, memory, uniformFrontOffset, cpuUniformInfoFront.size() * sizeof(uint32_t), cpuUniformInfoFront.data());
-    VkUtil::downloadData(_vkContext.device, memory, uniformBackOffset, cpuUniformInfoBack.size() * sizeof(uint32_t), cpuUniformInfoBack.data());
-    VkUtil::downloadData(_vkContext.device, memory, localInfosOffset, cpuLocalInfo.size() * sizeof(uint32_t), cpuLocalInfo.data());
+    
+    // debugging code.... ---------------------------------------------------------------------------------------------------------
+    //std::vector<uint32_t> cpuUniformInfoFront(uniformBufferSize);
+    //std::vector<uint32_t> cpuUniformInfoBack(uniformBufferSize);
+    //std::vector<uint32_t> cpuLocalInfo(localInfoSize);
+    //if(passes & 1)
+    //    VkUtil::downloadData(_vkContext.device, memory, keysBackOffset, v.size() * sizeof(v[0]), v.data());
+    //else
+    //    VkUtil::downloadData(_vkContext.device, memory, keysFrontOffset, v.size() * sizeof(v[0]), v.data());
+    //std::vector<int> places0;
+    //for(int i = 0; i < v.size(); ++i)if(!v[i]) places0.push_back(i);
+    //std::vector<int> placesWrong;
+    //std::vector<uint32_t> missingNumbers;
+    //for(int i = 1; i < v.size(); ++i)if(v[i] >> ((4 - passes) * 8) < v[i - 1] >> ((4 - passes) * 8)) placesWrong.push_back(i);
+    //std::vector<bool> alreadyFound(v.size(), false);
+    //for(int i = 0; i < v.size(); ++i){
+    //    if(origV.find(v[i]) == origV.end()) missingNumbers.push_back(i);
+    //}
+    //std::sort(placesWrong.begin(), placesWrong.end());
+    //std::sort(missingNumbers.begin(), missingNumbers.end());
+    //VkUtil::downloadData(_vkContext.device, memory, 0, controlBytes.size() * sizeof(uint32_t), controlBytes.data());
+    //VkUtil::downloadData(_vkContext.device, memory, groupInfosOffset, cpuGroupInfos.size() * sizeof(uint32_t), cpuGroupInfos.data());
+    //VkUtil::downloadData(_vkContext.device, memory, uniformFrontOffset, cpuUniformInfoFront.size() * sizeof(uint32_t), cpuUniformInfoFront.data());
+    //VkUtil::downloadData(_vkContext.device, memory, uniformBackOffset, cpuUniformInfoBack.size() * sizeof(uint32_t), cpuUniformInfoBack.data());
+    //VkUtil::downloadData(_vkContext.device, memory, localInfosOffset, cpuLocalInfo.size() * sizeof(uint32_t), cpuLocalInfo.data());
+    //std::vector<std::pair<uint32_t, uint32_t>> bucketBounds;
+    //std::vector<std::pair<uint32_t, uint32_t>> groupI;
+    //std::vector<uint32_t> bucketControl(256, 0);
+    //auto getBucket = [&](uint32_t val){return (val >> ((4-passes) * 8)) & 0xff;};
+    //while(cpuUniformInfoFront[bucketBounds.size() * 258 + 4] != 0){
+    //    bucketBounds.push_back({cpuUniformInfoFront[bucketBounds.size() * 258 + 3], cpuUniformInfoFront[bucketBounds.size() * 258 + 4]});
+    //}
+    //for(int i = 0; i < controlBytes[0]; ++i){
+    //    groupI.push_back({cpuGroupInfos[i * 258], cpuGroupInfos[i * 258 + 1]});
+    //    //check group info
+    //    int groupStart = groupI.back().second;
+    //    int histIndex = groupI.back().first;
+    //    if(groupStart < bucketBounds[histIndex].first || groupStart >= bucketBounds[histIndex].second){
+    //        bool nope = true;
+    //    }
+    //    if(i > 1 && groupStart - groupI[i - 1].second < KPB && histIndex == groupI[i - 1].first){
+    //        bool hell = true;
+    //    }
+    //}
+    //for(auto val: v) if(val >> ((5 - passes) * 8) == 138)bucketControl[getBucket(val)]++;
+    //for(int i = 1; i < 256; ++i) bucketControl[i] += bucketControl[i - 1];
 #ifdef ENABLE_TEST_SORT
     std::cout << "Sorting " << v.size() << " elements took " << std::chrono::duration<double, std::milli>(t2 - t1).count() << " ms" << std::endl;
     std::cout << "Timing differences in the pipelines itself were:" << std::endl;
@@ -293,6 +326,7 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     vkFreeMemory(_vkContext.device, memory, nullptr);
     vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &descSet);
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+    vkDestroyQueryPool(_vkContext.device, qPool, nullptr);
 }
 
 void GpuRadixSorter::sort(std::vector<float> &v)
