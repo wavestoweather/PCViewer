@@ -125,6 +125,8 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw(const DrawlistDragDropI
     float curX = matrixPos.x;
     int curAttr = 1; while(attributes.size() && !attributes[curAttr - 1].active) ++curAttr;
     curY = matrixPos.y;
+    int hoverIndex = -1;
+    int hoverAttributes[2]{};
     for(int i = 0; i < activeAttributesCount - 1; ++i){
         while(!attributes[curAttr].active && curAttr < attributes.size()) ++curAttr;
         int curAttr2 = 0;
@@ -149,13 +151,24 @@ void CorrelationMatrixWorkbench::CorrelationMatrix::draw(const DrawlistDragDropI
                 ++d;
             }
             
-            ImGui::GetWindowDrawList()->AddPie(ImVec2{curX + xSpacingMargin / 2, curY + xSpacingMargin / 2}, xSpacingMargin / 2.0, colors.data(), percentages.data(), percentages.size());
+            int ind = ImGui::GetWindowDrawList()->AddPie(ImVec2{curX + xSpacingMargin / 2, curY + xSpacingMargin / 2}, xSpacingMargin / 2.0, colors.data(), percentages.data(), percentages.size(), -1, 3.f, hoveredPieIndex);
+            if(ind >= 0){
+                hoverIndex = ind;
+                hoverAttributes[0] = curAttr2;
+                hoverAttributes[1] = curAttr;
+            }
             curX += xSpacing;
             ++curAttr2;
         }
         curX = matrixPos.x;
         curY += xSpacing;
         ++curAttr;
+    }
+    hoveredPieIndex = hoverIndex;
+    if(hoveredPieIndex != -1){
+        ImGui::BeginTooltip();
+        ImGui::Text("%s\nScore: %.2f", drawlists[hoveredPieIndex].drawlist.c_str(), correlationManager->correlations[drawlists[hoveredPieIndex].drawlist].attributeCorrelations[hoverAttributes[0]].correlationScores[hoverAttributes[1]]);
+        ImGui::EndTooltip();
     }
 
     float curSpace = xSpacing / 2 + leftSpace;

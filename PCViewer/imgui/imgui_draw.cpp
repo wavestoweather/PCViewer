@@ -1322,8 +1322,8 @@ void ImDrawList::AddPie(const ImVec2& center, float radius, ImU32 col, float per
     }
 }
 
-void  ImDrawList::AddPie(const ImVec2& center, float radius, ImU32* cols, float* percentages, int pieCount, int num_segments, float border){
-    if (radius <= 2 || pieCount < 1) return;
+int  ImDrawList::AddPie(const ImVec2& center, float radius, ImU32* cols, float* percentages, int pieCount, int num_segments, float border, int highlight_hover){
+    if (radius <= 2 || pieCount < 1) return -1;
     AddCircleFilled(center, radius, IM_COL32(0, 0, 0, 255), num_segments);
     AddCircle(center, radius - 1, IM_COL32(255, 255, 255, 255), num_segments, border);
     radius -= border - 1.0f;
@@ -1341,11 +1341,28 @@ void  ImDrawList::AddPie(const ImVec2& center, float radius, ImU32* cols, float*
        	// Explicit segment count (still clamp to avoid drawing insanely tessellated shapes)
             num_segments = ImClamp(num_segments, 3, IM_DRAWLIST_CIRCLE_AUTO_SEGMENT_MAX);  
     }
-    
+
+    // traingle test adopted from https://stackoverflow.com/a/2049593
+    auto hoversTri = [](const ImVec2& mPos, const ImVec2& a, const ImVec2& b, const ImVec2& c){
+        auto sign = [](const ImVec2& a, const ImVec2& b, const ImVec2& c){return (a.x - c.x) * (b.y - c.y) - (b.x - c.x) * (a.y - c.y);};
+        float d1, d2, d3;
+        bool has_neg, has_pos;
+        d1 = sign(mPos, a, b);
+        d2 = sign(mPos, b, c);
+        d3 = sign(mPos, c, a);
+        has_neg = d1 < 0 || d2 < 0 || d3 < 0;
+        has_pos = d1 > 0 || d2 > 0 || d3 > 0;
+        return !(has_neg && has_pos) && !isnan(d1 + d2 + d3) && !isinf(d1 + d2 + d3);
+    };
+
+    int hoverIndex = -1;
     float a_min = -.1f;
     float a_max = (IM_PI * 2.0f) * percentages[0];
     ImVec2 points[3]{};
+    ImVec2 lineStrip[IM_DRAWLIST_CIRCLE_AUTO_SEGMENT_MAX]{};
+    int lineStripSize = 1;
     points[0] = center;
+    lineStrip[0] = center;
     for (int p = 0; p < pieCount; ++p)
     {
         points[1] = ImVec2(center.x + ImCos(a_min) * radius, center.y + ImSin(a_min) * radius);
@@ -1357,6 +1374,21 @@ void  ImDrawList::AddPie(const ImVec2& center, float radius, ImU32* cols, float*
                 a += .1f;
             points[2] = ImVec2(center.x + ImCos(a) * radius, center.y + ImSin(a) * radius);
             AddConvexPolyFilled(points, 3, cols[p]);
+            if(hoversTri(ImGui::GetMousePos(), points[0], points[1], points[2])){
+                hoverIndex = p;
+            }
+            if(highlight_hover == p){
+                if(i == 1) {
+                    if(p == 0)
+                        lineStrip[lineStripSize++] = ImVec2(center.x + ImCos(0) * radius, center.y + ImSin(0) * radius);
+                    else
+                        lineStrip[lineStripSize++] = points[1];
+                }
+                if(i == curSegAmt && p + 1 != pieCount)
+                    lineStrip[lineStripSize++] = ImVec2(center.x + ImCos(a - .1f) * radius, center.y + ImSin(a - .1f) * radius);
+                else
+                    lineStrip[lineStripSize++] = points[2];
+            }
             points[1] = ImVec2(center.x + ImCos(a - .1f) * radius, center.y + ImSin(a - .1f) * radius);
         }
         a_min = a_max;
@@ -1365,6 +1397,9 @@ void  ImDrawList::AddPie(const ImVec2& center, float radius, ImU32* cols, float*
         if(p + 1 == pieCount - 1)
             a_max = IM_PI * 2.0f;
     }
+    if(lineStripSize > 1)
+        AddPolyline(lineStrip, lineStripSize, ImGui::GetColorU32(ImGuiCol_PlotHistogramHovered, 1.f), true, border);
+    return hoverIndex;
 }
 
 // Guaranteed to honor 'num_segments'

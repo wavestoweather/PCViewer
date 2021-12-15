@@ -36,6 +36,7 @@ public:
         float matrixBorderWidth{1};
         CorrelationManager::CorrelationMetric currentMetric{CorrelationManager::CorrelationMetric::Pearson};
         bool requestCorrelationUpdate{};    // correlation updates have to be started from outside with the list of all drawlists
+        int hoveredPieIndex{-1};
     private:
         static uint32_t idCounter;
         uint32_t id;
