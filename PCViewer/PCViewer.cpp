@@ -3232,9 +3232,9 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
 		feat2.pNext = &floatFeat;
 		vkGetPhysicalDeviceFeatures2(gpus[0], &feat2);
-		atomicGpuFloatAddAvailable = floatFeat.shaderImageFloat32AtomicAdd;
+		atomicGpuFloatAddAvailable = feat.shaderFloat64 && floatFeat.shaderBufferFloat32AtomicAdd && floatFeat.shaderBufferFloat64AtomicAdd;
 		if(!floatFeat.shaderImageFloat32AtomicAdd){
-			std::cout << "Gpu does not support float atomic add -> gpu accelerated correlation calculations disabled" << std::endl;
+			std::cout << "Gpu does not support float64 atomic add -> gpu accelerated correlation calculations disabled" << std::endl;
 		}
 
 #ifdef _DEBUG
@@ -3287,7 +3287,8 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing", VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME };
 
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
-		floatFeat.shaderImageFloat32AtomicAdd = VK_TRUE;
+		floatFeat.shaderBufferFloat32AtomicAdd = VK_TRUE;
+		floatFeat.shaderBufferFloat64AtomicAdd = VK_TRUE;
 
 		VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexingFeatures{};
 		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
@@ -3305,6 +3306,8 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.shaderStorageImageExtendedFormats = VK_TRUE;
 		deviceFeatures.shaderTessellationAndGeometryPointSize = VK_TRUE;
 		deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
+		if(atomicGpuFloatAddAvailable)
+			deviceFeatures.shaderFloat64 = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
 		VkDeviceQueueCreateInfo queue_info[1] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;

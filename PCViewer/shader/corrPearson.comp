@@ -18,7 +18,7 @@ layout(binding = 3) buffer pearson{
     uint amtOfAttributes;
     uint baseAttribute;
     uint amtOfActiveIndices;
-    float res[];    //contains: float[amtOfAttributes] means,  
+    double res[];    //contains: float[amtOfAttributes] means,  
                     //          float[amtOfAttributes] nominator,
                     //          float[amtOfAttributes] denom1,
                     //          float[amtOfAttributes] denom2
@@ -33,18 +33,22 @@ void main(){
     if(gl_GlobalInvocationID.x >= maxIndex) return;
     uint index = ind[gl_GlobalInvocationID.x];
     bool ac = bool(imageLoad(act, int(index)).x);
-    if(!ac) return;
     for(int a = 0; a < amtOfAttributes; ++a){
-        float mean = res[a];
-        float aDiff = (getPackedData(index, a) - res[amtOfAttributes * 4 + 2 * a]) / (res[amtOfAttributes * 4 + 2 * a + 1] - res[amtOfAttributes * 4 + 2 * a]) - mean;
-        float bDiff = (getPackedData(index, baseAttribute) - res[amtOfAttributes * 4 + 2 * baseAttribute]) / (res[amtOfAttributes * 4 + 2 * baseAttribute + 1] - res[amtOfAttributes * 4 + 2 * baseAttribute]) - mean;
-        float nominator = aDiff * bDiff;
-        float denom1 = aDiff * aDiff;
-        float denom2 = bDiff * bDiff;
+        double aDiff = 0;
+        double bDiff = 0;
+        if(ac){
+            aDiff = (getPackedData(index, a) - res[amtOfAttributes * 4 + 2 * a]) / (res[amtOfAttributes * 4 + 2 * a + 1] - res[amtOfAttributes * 4 + 2 * a]) - res[a];
+            bDiff = (getPackedData(index, baseAttribute) - res[amtOfAttributes * 4 + 2 * baseAttribute]) / (res[amtOfAttributes * 4 + 2 * baseAttribute + 1] - res[amtOfAttributes * 4 + 2 * baseAttribute]) - res[baseAttribute];
+        }
+        //double aDiff = getPackedData(index, a) - res[a];
+        //double bDiff = getPackedData(index, baseAttribute) - res[baseAttribute];
+        double nominator = aDiff * bDiff;
+        double denom1 = aDiff * aDiff;
+        double denom2 = bDiff * bDiff;
         nominator = subgroupAdd(nominator);
         denom1 = subgroupAdd(denom1);
         denom2 = subgroupAdd(denom2);
-        if(subgroupElect()){
+        if(subgroupElect() && denom1 != 0 && denom2 != 0){
             atomicAdd(res[amtOfAttributes + a], nominator);
             atomicAdd(res[2 * amtOfAttributes + a], denom1);
             atomicAdd(res[3 * amtOfAttributes + a], denom2);
