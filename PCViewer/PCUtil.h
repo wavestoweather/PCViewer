@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <imgui.h>
 
 class PCUtil {
 public:
@@ -16,6 +17,8 @@ public:
 	static void matrixdump(const std::vector<std::vector<double>>& matrix);
 	static float getVectorIndex(const std::vector<float>& values, float v);
 	static bool vectorEqual(const std::vector<float>& a, const std::vector<float>& b);
+	static ImVec2 distance2(const ImVec2& a, const ImVec2& b);
+	static ImVec2 distance(const ImVec2& a, const ImVec2& b);
 };
 
 #endif
