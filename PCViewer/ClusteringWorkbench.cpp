@@ -1,6 +1,10 @@
+#define NOSTATICS
 #include "ClusteringWorkbench.hpp"
+#undef NOSTATICS
+#include "imgui/imgui_internal.h"
 
-ClusteringWorkbench::ClusteringWorkbench(const std::vector<Attribute>& attributes, std::list<DataSet>& datasets): datasets(datasets), attributes(attributes), activations(attributes.size(), 1){
+ClusteringWorkbench::ClusteringWorkbench(const std::vector<Attribute>& attributes, std::list<DataSet>& datasets, std::list<DrawList>& drawLists): 
+datasets(datasets), attributes(attributes), _drawLists(drawLists), activations(attributes.size(), 1){
     clusterSettings.kmeansClusters = 10;
     clusterSettings.kmeansInitMethod = DataClusterer::InitMethod::PlusPlus;
     clusterSettings.maxIterations = 20;
@@ -13,37 +17,20 @@ void ClusteringWorkbench::draw(){
     if(!active) return;
         if(ImGui::Begin("Clustering Workbench", &active)){
             ImGui::Text("Data Projection:");
-            static int datasetIndex = 0;
-            static int templateListIndex = 0;
-            static char const* defaultName = "No datasets available";
+            static int drawlistIndex = -1;
+            static char const* defaultName = "No drawlist available";
             static char const* defaultTemplate = "Dataset has to be selected";
-            auto ds = datasets.begin(); std::advance(ds, datasetIndex);
-            if(ImGui::BeginCombo("Dataset to cluster", datasetIndex < datasets.size() ? ds->name.c_str(): defaultName)){
-                int c = 0;
-                for(auto& ds: datasets){
-                    if(ImGui::MenuItem(ds.name.c_str())){
-                        datasetIndex = c;
+            auto dl = _drawLists.begin(); if(drawlistIndex >= 0) std::advance(dl, drawlistIndex);
+            if(ImGui::BeginCombo("Select drawlist", drawlistIndex >= 0 ? dl->name.c_str(): defaultName)){
+                int i = 0;
+                for(auto it = _drawLists.begin(); it != _drawLists.end(); ++it, ++i){
+                    if(ImGui::MenuItem(it->name.c_str())){
+                        drawlistIndex = i;
                     }
-                    ++c;
                 }
                 ImGui::EndCombo();
             }
-            std::list<TemplateList>::iterator tl;
-            if(datasetIndex < datasets.size()){
-                templateListIndex = std::min(templateListIndex, int(ds->drawLists.size() - 1));
-                tl = ds->drawLists.begin(); std::advance(tl, templateListIndex);
-            }
-            if(ImGui::BeginCombo("Templatelist to cluster", datasetIndex < datasets.size() ? tl->name.c_str() : defaultTemplate)){
-                int c = 0;
-                for(auto& tl: ds->drawLists){
-                    if(ImGui::MenuItem(tl.name.c_str())){
-                        templateListIndex = c;
-                    }
-                    ++c;
-                }
-                ImGui::EndCombo();
-            }
-            if(datasetIndex < datasets.size()){
+            if(drawlistIndex < datasets.size() && drawlistIndex >= 0){
                 activations.resize(attributes.size(), 1);
                 ImGui::Text("Attributes active for projection:");
                 for(int i = 0; i < activations.size(); ++i){
@@ -72,21 +59,19 @@ void ClusteringWorkbench::draw(){
                 }
                 ImGui::EndTabBar();
             }
-            bool disabled = datasetIndex >= datasets.size() || (projector && !projector->projected && !projector->interrupted);
+            bool disabled = drawlistIndex >= _drawLists.size() || drawlistIndex < 0 || (projector && !projector->projected && !projector->interrupted);
             if(disabled){ 
                 ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
                 ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
             }
             if(ImGui::Button("Project")){
-                if(projector) delete projector;
-                if(clusterer) delete clusterer;
                 std::vector<uint32_t> indices;
                 int c = 0;
                 for(uint8_t n: activations){
                     if(n) indices.push_back(c);
                     ++c;
                 }
-                projector = new DataProjector(datasets.front().data, projectionDimension, projectorMethod, projectionSettings, tl->indices, indices);
+                projector = std::make_shared<DataProjector>(*dl->data, projectionDimension, projectorMethod, projectionSettings, dl->indices, indices);
             }
             if(disabled) {
                 ImGui::PopItemFlag();
@@ -153,8 +138,7 @@ void ClusteringWorkbench::draw(){
                 ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
             }
             if(ImGui::Button("Cluster") && projector &&projector->projected){
-                if(clusterer) delete clusterer;
-                clusterer = new DataClusterer(projector->projectedPoints, clusterMethod, clusterSettings);
+                clusterer = std::make_shared<DataClusterer>(projector->projectedPoints, clusterMethod, clusterSettings);
             }
             if(disabled) {
                 ImGui::PopItemFlag();
@@ -193,7 +177,7 @@ void ClusteringWorkbench::draw(){
                         ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                     }
                     ImVec2 a{lassoSelection.borderPoints[0].x * projectPlotWidth, lassoSelection.borderPoints[0].y * -projectPlotWidth + projectPlotWidth};
-                    ImVec2 b{lassoSelection.borderPoints.back().x * projectPlotWidth, lassoSelection.borderPoints.bakc().y * -projectPlotWidth + projectPlotWidth};
+                    ImVec2 b{lassoSelection.borderPoints.back().x * projectPlotWidth, lassoSelection.borderPoints.back().y * -projectPlotWidth + projectPlotWidth};
                     ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                 }
                 //checking for lasso selection
@@ -214,11 +198,11 @@ void ClusteringWorkbench::draw(){
                         ImVec2 relativePos{mousePos - min};
                         relativePos.y = projectPlotWidth - relativePos.y;   //invert y position
                         if(lassoSelection.borderPoints.empty()){//first point
-                            lassoSelection.borderPoints.push_back({relativePos / projectPlotWidth});
+                            lassoSelection.borderPoints.push_back({relativePos.x / projectPlotWidth, relativePos.y / projectPlotWidth});
                             prevPointsPos = mousePos;
                         }
                         else if(PCUtil::distance2(mousePos, prevPointsPos) > 25){   //if distance is high enough, spawn new point
-                            lassoSelection.borderPoints.push_back({relativePos / projectPlotWidth});
+                            lassoSelection.borderPoints.push_back({relativePos.x / projectPlotWidth, relativePos.y / projectPlotWidth});
                             prevPointsPos = mousePos;
                         }
                     }
@@ -233,22 +217,23 @@ void ClusteringWorkbench::draw(){
                 for(int i = 0; i < clusterer->clusters.size(); ++i){
                     //ds->drawLists.push_back(TemplateList{})
                     TemplateList tl{};
-                    tl.name = clusterName + std::to_string(i);
-                    tl.buffer = ds->buffer.buffer;
+                    tl.name = clusterName + std::to_string(i);              
+                    tl.buffer = dl->buffer;
                     tl.indices = clusterer->clusters[i];
                     tl.minMax = std::vector<std::pair<float, float>>(attributes.size(), std::pair{std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()});
                     for(int a = 0; a < attributes.size(); ++a){
                         for(auto index: clusterer->clusters[i]){
-                            const auto& d = ds->data(index, a);
+                            const auto& d = (*dl->data)(index, a);
                             if(d < tl.minMax[a].first) tl.minMax[a].first = d;
                             if(d > tl.minMax[a].second) tl.minMax[a].second = d;
                         }
                     }
-                    tl.pointRatio = clusterer->clusters[i].size() / float(ds->data.size());
-                    tl.parentDataSetName = ds->name;
+                    tl.pointRatio = clusterer->clusters[i].size() / float(dl->data->size());
+                    tl.parentDataSetName = dl->parentDataSet;
+                    auto ds = std::find_if(datasets.begin(), datasets.end(), [&](const DataSet& d){return d.name == dl->parentDataSet;});
                     ds->drawLists.push_back(tl);
                 }
             }
         }
-        ImGui::End();
+    ImGui::End();
 }

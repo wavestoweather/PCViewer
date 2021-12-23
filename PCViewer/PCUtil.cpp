@@ -1,4 +1,5 @@
 #include "PCUtil.h"
+#include <cmath>
 
 std::vector<char> PCUtil::readByteFile(const std::string& filename)
 {
@@ -100,11 +101,11 @@ bool PCUtil::vectorEqual(const std::vector<float>& a, const std::vector<float>& 
 	return true;
 }
 
-ImVec2 PCUtil::distance2(const ImVec2& a, const ImVec2& b){
-	float x = a.x - b.x, y = a.y - b-y;
+float PCUtil::distance2(const ImVec2& a, const ImVec2& b){
+	float x = a.x - b.x, y = a.y - b.y;
 	return {x * x + y * y};
 }
 
-ImVec2 PCUtil::distance(const ImVec2& a, const ImVec2& b){
+float PCUtil::distance(const ImVec2& a, const ImVec2& b){
 	return std::sqrt(distance2(a, b));
 }

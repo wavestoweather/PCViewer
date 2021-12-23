@@ -752,7 +752,7 @@ std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
 
 static TransferFunctionEditor* transferFunctionEditor;
-static ClusteringWorkbench clusteringWorkbench(pcAttributes, g_PcPlotDataSets);
+static ClusteringWorkbench clusteringWorkbench(pcAttributes, g_PcPlotDataSets, g_PcPlotDrawLists);
 
 //method declarations
 template <typename T,typename T2>
