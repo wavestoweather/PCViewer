@@ -3,10 +3,12 @@
 #undef NOSTATICS
 #include "imgui/imgui_internal.h"
 
-ClusteringWorkbench::ClusteringWorkbench(const std::vector<Attribute>& attributes, std::list<DataSet>& datasets, std::list<DrawList>& drawLists): 
-datasets(datasets), attributes(attributes), _drawLists(drawLists), activations(attributes.size(), 1){
+ClusteringWorkbench::ClusteringWorkbench(VkDevice device, const std::vector<Attribute>& attributes, std::list<DataSet>& datasets, std::list<DrawList>& drawLists): 
+_device(device), datasets(datasets), attributes(attributes), _drawLists(drawLists), activations(attributes.size(), 1){
     clusterSettings.kmeansClusters = 10;
+    clusterSettings.kmeansMethod = DataClusterer::KMethod::Mean;
     clusterSettings.kmeansInitMethod = DataClusterer::InitMethod::PlusPlus;
+    clusterSettings.distanceMetric = DataClusterer::DistanceMetric::Norm;
     clusterSettings.maxIterations = 20;
     
     clusterSettings.dbscanEpsilon = .01f;
@@ -18,9 +20,13 @@ void ClusteringWorkbench::draw(){
         if(ImGui::Begin("Clustering Workbench", &active)){
             ImGui::Text("Data Projection:");
             static int drawlistIndex = -1;
-            static char const* defaultName = "No drawlist available";
+            static char const* defaultName = "Select drawlist";
             static char const* defaultTemplate = "Dataset has to be selected";
-            auto dl = _drawLists.begin(); if(drawlistIndex >= 0) std::advance(dl, drawlistIndex);
+            auto dl = _drawLists.begin(); 
+            if(drawlistIndex >= 0){
+                std::advance(dl, drawlistIndex);
+                _activations.resize(dl->data->size(), 1);
+            } 
             if(ImGui::BeginCombo("Select drawlist", drawlistIndex >= 0 ? dl->name.c_str(): defaultName)){
                 int i = 0;
                 for(auto it = _drawLists.begin(); it != _drawLists.end(); ++it, ++i){
@@ -156,14 +162,18 @@ void ClusteringWorkbench::draw(){
                 //rendering the projected points
                 if(!clusterer || !clusterer->clustered){
                     for(int i = 0; i < projector->projectedPoints.rows(); ++i){
-                        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(projector->projectedPoints(i,0) * projectPlotWidth, projector->projectedPoints(i,1) * -projectPlotWidth) + ImVec2(0,projectPlotWidth) + min, 2, ImGui::ColorConvertFloat4ToU32(colors[0]));
+                        ImU32 col = ImGui::ColorConvertFloat4ToU32(colors[0]);
+                        if(!_activations[dl->indices[i]]) col = ImGui::ColorConvertFloat4ToU32(inactiveColor);
+                        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(projector->projectedPoints(i,0) * projectPlotWidth, projector->projectedPoints(i,1) * -projectPlotWidth) + ImVec2(0,projectPlotWidth) + min, 2, col);
                     }
                 }
                 else{
                     int clus = 0;
                     for(auto& c: clusterer->clusters){
                         for(auto i: c){
-                            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(projector->projectedPoints(i,0) * projectPlotWidth, projector->projectedPoints(i,1) * -projectPlotWidth) + ImVec2(0,projectPlotWidth) + min, 2, ImGui::ColorConvertFloat4ToU32(colors[clus % colors.size()]));
+                            ImU32 col = ImGui::ColorConvertFloat4ToU32(colors[clus % colors.size()]);
+                            if(!_activations[dl->indices[i]]) col = ImGui::ColorConvertFloat4ToU32(inactiveColor);
+                            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(projector->projectedPoints(i,0) * projectPlotWidth, projector->projectedPoints(i,1) * -projectPlotWidth) + ImVec2(0,projectPlotWidth) + min, 2, col);
                         }
                         ++clus;
                     }
@@ -174,10 +184,12 @@ void ClusteringWorkbench::draw(){
                     for(int i = 1; i < lassoSelection.borderPoints.size(); ++i){
                         ImVec2 a{lassoSelection.borderPoints[i - 1].x * projectPlotWidth, lassoSelection.borderPoints[i - 1].y * -projectPlotWidth + projectPlotWidth};
                         ImVec2 b{lassoSelection.borderPoints[i].x * projectPlotWidth, lassoSelection.borderPoints[i].y * -projectPlotWidth + projectPlotWidth};
+                        a = a + min; b = b + min;
                         ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                     }
                     ImVec2 a{lassoSelection.borderPoints[0].x * projectPlotWidth, lassoSelection.borderPoints[0].y * -projectPlotWidth + projectPlotWidth};
                     ImVec2 b{lassoSelection.borderPoints.back().x * projectPlotWidth, lassoSelection.borderPoints.back().y * -projectPlotWidth + projectPlotWidth};
+                    a = a + min; b = b + min;
                     ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                 }
                 //checking for lasso selection
@@ -193,6 +205,8 @@ void ClusteringWorkbench::draw(){
                     if(!ImGui::IsMouseDown(0)){ //stop lasso selection
                         if(lassoSelection.borderPoints.size() < 3) lassoSelection.borderPoints.clear();
                         drawingLasso = false;
+                        //update active lines
+                        updateActiveLines(*dl);
                     }
                     else{
                         ImVec2 relativePos{mousePos - min};
@@ -236,4 +250,28 @@ void ClusteringWorkbench::draw(){
             }
         }
     ImGui::End();
+}
+
+void ClusteringWorkbench::updateActiveLines(DrawList& dl){
+    //VkUtil::downloadData(_device, dl.dlMem, dl.activeIndicesBufferOffset, _activations.size(), _activations.data());
+    std::fill(_activations.begin(), _activations.end(), 1); //reset all points to active
+    for(int i = 0; i < dl.indices.size() && lassoSelection.borderPoints.size(); ++i){
+        auto row = projector->projectedPoints.row(i);
+        //lasso selection check only for first 2 dimensions
+        bool inLasso = false;
+        for(int a = 0; a  < lassoSelection.borderPoints.size(); ++a){
+            ImVec2 aP = lassoSelection.borderPoints[a];
+            int b = (a + 1) % lassoSelection.borderPoints.size();
+            ImVec2 bP = lassoSelection.borderPoints[b];
+            // intersection check via https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            if( ((aP.y > row[1]) != (bP.y > row[1])) &&
+                (row[0] < (bP.x - aP.x) * (row[1] - aP.y) / (bP.y - aP.y) + aP.x)){
+                inLasso = !inLasso;
+            }
+        }
+        _activations[dl.indices[i]] &= inLasso;
+    }
+    requestPcPlotUpdate = true;
+    updateDl = &dl;
+    VkUtil::uploadData(_device, dl.dlMem, dl.activeIndicesBufferOffset, _activations.size(), _activations.data());
 }

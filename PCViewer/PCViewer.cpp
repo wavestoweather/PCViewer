@@ -752,7 +752,7 @@ std::vector<ViolinDrawlistPlot> violinDrawlistPlots;
 AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
 
 static TransferFunctionEditor* transferFunctionEditor;
-static ClusteringWorkbench clusteringWorkbench(pcAttributes, g_PcPlotDataSets, g_PcPlotDrawLists);
+static std::shared_ptr<ClusteringWorkbench> clusteringWorkbench;
 
 //method declarations
 template <typename T,typename T2>
@@ -3828,7 +3828,7 @@ static bool openCsv(const char* filename) {
     for (unsigned int k = 0; k < pcAttributes.size(); ++k){
 		if (pcAttributes[k].categories.size()) {
 			pcAttributes[k].categories_ordered = std::vector<std::pair<std::string, float>>(pcAttributes[k].categories.begin(), pcAttributes[k].categories.end());
-			std::sort(pcAttributes[k].categories_ordered.begin(), pcAttributes[k].categories_ordered.end(), [](auto& first, auto& second) {return first.second <= second.second; });
+			std::sort(pcAttributes[k].categories_ordered.begin(), pcAttributes[k].categories_ordered.end(), [](auto& first, auto& second) {return first.second < second.second; });
 			float diff = (pcAttributes[k].categories_ordered.back().second - pcAttributes[k].categories_ordered.front().second) * 0.05f;
 			pcAttributes[k].min = pcAttributes[k].categories_ordered.front().second - diff;
 			pcAttributes[k].max = pcAttributes[k].categories_ordered.back().second + diff;
@@ -5424,6 +5424,59 @@ static void updateIsoSurface(DrawList& dl) {
 	}
 }
 
+static void updateWorkbenchRenderings(DrawList& dl){
+	//rendering the updated active points in the bubble plotter
+	if (bubbleWindowSettings.coupleToBrushing) {
+		bubblePlotter->render();
+	}
+
+	if ((violinPlotDrawlistSettings.coupleViolinPlots || violinPlotAttributeSettings.coupleViolinPlots) && histogramManager->containsHistogram(dl.name)) {
+		std::vector<std::pair<float, float>> minMax;
+		for (Attribute& a : pcAttributes) {
+			minMax.push_back({ a.min,a.max });
+		}
+		DataSet* ds;
+		for (DataSet& d : g_PcPlotDataSets) {
+			if (d.name == dl.parentDataSet) {
+				ds = &d;
+				break;
+			}
+		}
+		exeComputeHistogram(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+
+		//histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
+		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
+		updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
+        for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
+			bool contains = false;
+			for (auto& s : violinDrawlistPlots[i].drawLists) {
+				if (s == dl.name) {
+					contains = true;
+					break;
+				}
+			}
+			if (!contains) continue;
+
+			updateMaxHistogramValues(violinDrawlistPlots[i]);
+            updateHistogramComparisonDL(i);
+		}
+	}
+
+	if (isoSurfSettings.coupleIsoSurfaceRenderer && isoSurfSettings.enabled) {
+		updateIsoSurface(dl);
+	}
+
+	if (scatterplotWorkbench->active){
+		std::vector<int> indices(pcAttributes.size());
+		for(int i = 0; i < pcAttributes.size(); ++i) indices[i] = i;
+		scatterplotWorkbench->updateRenders(indices);
+	}
+
+	if (correlationMatrixWorkbench->active){
+		correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists, {dl.name});
+	}
+}
+
 static bool updateActiveIndices(DrawList& dl) {
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
@@ -5971,56 +6024,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	//updating the standard indexbuffer
 	updateDrawListIndexBuffer(dl);
 
-	//rendering the updated active points in the bubble plotter
-	if (bubbleWindowSettings.coupleToBrushing) {
-		bubblePlotter->render();
-	}
-
-	if ((violinPlotDrawlistSettings.coupleViolinPlots || violinPlotAttributeSettings.coupleViolinPlots) && histogramManager->containsHistogram(dl.name)) {
-		std::vector<std::pair<float, float>> minMax;
-		for (Attribute& a : pcAttributes) {
-			minMax.push_back({ a.min,a.max });
-		}
-		DataSet* ds;
-		for (DataSet& d : g_PcPlotDataSets) {
-			if (d.name == dl.parentDataSet) {
-				ds = &d;
-				break;
-			}
-		}
-		exeComputeHistogram(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
-
-		//histogramManager->computeHistogramm(dl.name, minMax, dl.buffer, ds->data.size(), dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView);
-		HistogramManager::Histogram& hist = histogramManager->getHistogram(dl.name);
-		updateAllViolinPlotMaxValues(violinPlotDrawlistSettings.renderOrderBasedOnFirstDL);
-        for (unsigned int i = 0; i < violinDrawlistPlots.size(); ++i) {
-			bool contains = false;
-			for (auto& s : violinDrawlistPlots[i].drawLists) {
-				if (s == dl.name) {
-					contains = true;
-					break;
-				}
-			}
-			if (!contains) continue;
-
-			updateMaxHistogramValues(violinDrawlistPlots[i]);
-            updateHistogramComparisonDL(i);
-		}
-	}
-
-	if (isoSurfSettings.coupleIsoSurfaceRenderer && isoSurfSettings.enabled) {
-		updateIsoSurface(dl);
-	}
-
-	if (scatterplotWorkbench->active){
-		std::vector<int> indices(pcAttributes.size());
-		for(int i = 0; i < pcAttributes.size(); ++i) indices[i] = i;
-		scatterplotWorkbench->updateRenders(indices);
-	}
-
-	if (correlationMatrixWorkbench->active){
-		correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists, {dl.name});
-	}
+	updateWorkbenchRenderings(dl);
 
 	//setting the median to no median to enforce median recalculation
 	dl.activeMedian = 0;
@@ -7316,6 +7320,10 @@ int main(int, char**)
 		}
 		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(c);
 	}
+
+	{// clustering workbench
+		clusteringWorkbench = std::make_shared<ClusteringWorkbench>(g_Device, pcAttributes, g_PcPlotDataSets, g_PcPlotDrawLists);
+	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -7814,7 +7822,7 @@ int main(int, char**)
 					ImGui::MenuItem("Violin drawlist major", "", &violinPlotDrawlistSettings.enabled);
 					ImGui::EndMenu();
 				}
-				ImGui::MenuItem("Clustering workbench", "", &clusteringWorkbench.active);
+				ImGui::MenuItem("Clustering workbench", "", &clusteringWorkbench->active);
 				ImGui::MenuItem("Scatterplot workbench", "", &scatterplotWorkbench->active);
 				ImGui::MenuItem("Correlation matrix workbench", "", &correlationMatrixWorkbench->active);
 				ImGui::EndMenu();
@@ -14210,7 +14218,13 @@ int main(int, char**)
 
 		transferFunctionEditor->draw();
 
-		clusteringWorkbench.draw();
+		clusteringWorkbench->draw();
+		if(clusteringWorkbench->requestPcPlotUpdate){
+			pcPlotRender = true;
+			updateDrawListIndexBuffer(*clusteringWorkbench->updateDl);
+			updateWorkbenchRenderings(*clusteringWorkbench->updateDl);
+			clusteringWorkbench->requestPcPlotUpdate = false;
+		}
 
 		scatterplotWorkbench->draw();
 		// checking for lasso selections update
