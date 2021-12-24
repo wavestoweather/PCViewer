@@ -109,3 +109,14 @@ float PCUtil::distance2(const ImVec2& a, const ImVec2& b){
 float PCUtil::distance(const ImVec2& a, const ImVec2& b){
 	return std::sqrt(distance2(a, b));
 }
+
+PCUtil::Stopwatch::Stopwatch(std::ostream& stream):
+_ostream(stream)
+{
+	_start = std::chrono::high_resolution_clock::now();
+}
+
+PCUtil::Stopwatch::~Stopwatch(){
+	auto end = std::chrono::high_resolution_clock::now();
+	_ostream << std::chrono::duration_cast<std::chrono::milliseconds>(end - _start).count() << " ms" << std::endl;
+}

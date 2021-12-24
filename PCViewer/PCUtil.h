@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <chrono>
 #include "imgui/imgui.h"
 
 class PCUtil {
@@ -19,6 +20,15 @@ public:
 	static bool vectorEqual(const std::vector<float>& a, const std::vector<float>& b);
 	static float distance2(const ImVec2& a, const ImVec2& b);
 	static float distance(const ImVec2& a, const ImVec2& b);
+
+	class Stopwatch{
+		public:
+		Stopwatch(std::ostream& stream);
+		~Stopwatch();
+		private:
+		std::ostream& _ostream;
+		std::chrono::high_resolution_clock::time_point _start;
+	};
 };
 
 #endif

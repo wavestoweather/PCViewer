@@ -255,6 +255,7 @@ void ClusteringWorkbench::draw(){
 void ClusteringWorkbench::updateActiveLines(DrawList& dl){
     //VkUtil::downloadData(_device, dl.dlMem, dl.activeIndicesBufferOffset, _activations.size(), _activations.data());
     std::fill(_activations.begin(), _activations.end(), 1); //reset all points to active
+    dl.activeLinesAmt = 0;
     for(int i = 0; i < dl.indices.size() && lassoSelection.borderPoints.size(); ++i){
         auto row = projector->projectedPoints.row(i);
         //lasso selection check only for first 2 dimensions
@@ -270,6 +271,7 @@ void ClusteringWorkbench::updateActiveLines(DrawList& dl){
             }
         }
         _activations[dl.indices[i]] &= inLasso;
+        dl.activeLinesAmt += _activations[dl.indices[i]];
     }
     requestPcPlotUpdate = true;
     updateDl = &dl;

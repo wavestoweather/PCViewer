@@ -35,8 +35,7 @@ CorrelationManager::CorrelationManager(const VkUtil::Context& context): _vkConte
         VkUtil::createComputePipeline(context.device, shader, {_spearmanPipeline.descriptorSetLayout}, &_spearmanPipeline.pipelineLayout, &_spearmanPipeline.pipeline);
         
         shader = VkUtil::createShaderModule(context.device, PCUtil::readByteFile(_kendallShader));
-        VkUtil::createDescriptorSetLayout(context.device, bindings, &_kendallPipeline.descriptorSetLayout);
-        VkUtil::createComputePipeline(context.device, shader, {_kendallPipeline.descriptorSetLayout}, &_kendallPipeline.pipelineLayout, &_kendallPipeline.pipeline);
+        VkUtil::createComputePipeline(context.device, shader, {_pearsonPipeline.descriptorSetLayout}, &_kendallPipeline.pipelineLayout, &_kendallPipeline.pipeline);
     }
 }
 
@@ -51,8 +50,8 @@ CorrelationManager::~CorrelationManager()
 void CorrelationManager::calculateCorrelation(const DrawList& dl, CorrelationMetric metric, int baseAttribute, bool useGpu) 
 {
     if(baseAttribute < 0) return;
-    if(useGpu && _vkContext.screenSize[0] != 0xffffffff)
-        _execCorrelationGPU(dl, metric, baseAttribute);
+    if(useGpu && _vkContext.screenSize[0] != 0xffffffff && metric != CorrelationMetric::SpearmanRank)
+        _execCorrelationGPU(dl, metric, baseAttribute); //currently only pearson metric doable on gpu
     else 
         _execCorrelationCPU(dl, metric, baseAttribute);
 }
@@ -149,6 +148,7 @@ void CorrelationManager::_execCorrelationCPU(const DrawList& dl, CorrelationMetr
             }
         }
         bin = bin * (bin - 1) / 2;
+        if(bin == 0) bin = 1;
         for(int i = 0; i < amtOfAttributes; ++i){
             assert(nominator[i] / bin >= -1 && nominator[i] / bin <= 1);
             curAttCorrelation.correlationScores[i] = nominator[i] / bin;
@@ -177,7 +177,7 @@ void CorrelationManager::_execCorrelationGPU(const DrawList& dl, CorrelationMetr
         reinterpret_cast<uint32_t*>(bufferData.data())[0] = dl.indices.size();
         reinterpret_cast<uint32_t*>(bufferData.data())[1] = dl.attributes->size();
         reinterpret_cast<uint32_t*>(bufferData.data())[2] = static_cast<uint32_t>(baseAttribute);
-        reinterpret_cast<uint32_t*>(bufferData.data())[3] = dl.activeLinesAmt; //todo right value
+        reinterpret_cast<uint32_t*>(bufferData.data())[3] = dl.activeLinesAmt;
         for(int i = 0; i < 4 * dl.attributes->size(); ++i) 
         {
             bufferData[2 + i] = 0;
@@ -233,9 +233,61 @@ void CorrelationManager::_execCorrelationGPU(const DrawList& dl, CorrelationMetr
         break;
     }
     case CorrelationMetric::SpearmanRank:{
+        std::cout << "Not yet implemented !" << std::endl;
         break;
     }
     case CorrelationMetric::KendallRank:{
+        uint32_t bufferByteSize = (4 + dl.attributes->size()) * sizeof(float);
+        std::vector<float> bufferData(bufferByteSize / sizeof(float), 0);
+        reinterpret_cast<uint32_t*>(bufferData.data())[0] = dl.indices.size();
+        reinterpret_cast<uint32_t*>(bufferData.data())[1] = dl.attributes->size();
+        reinterpret_cast<uint32_t*>(bufferData.data())[2] = static_cast<uint32_t>(baseAttribute);
+        reinterpret_cast<uint32_t*>(bufferData.data())[3] = dl.activeLinesAmt;
+
+        VkBuffer buffer;
+        VkUtil::createBuffer(_vkContext.device, bufferByteSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &buffer);
+        VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        VkMemoryRequirements memReq; vkGetBufferMemoryRequirements(_vkContext.device, buffer, &memReq);
+        allocInfo.allocationSize = memReq.size;
+        allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        VkDeviceMemory memory;
+        VkResult res = vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &memory); check_vk_result(res);
+        res = vkBindBufferMemory(_vkContext.device, buffer, memory, 0); check_vk_result(res);
+        VkUtil::uploadData(_vkContext.device, memory, 0, bufferByteSize, bufferData.data());
+        VkUtil::createDescriptorSets(_vkContext.device, {_pearsonPipeline.descriptorSetLayout}, _vkContext.descriptorPool, &descSet);
+        VkUtil::updateDescriptorSet(_vkContext.device, dl.buffer, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+        VkUtil::updateDescriptorSet(_vkContext.device, dl.indicesBuffer, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+        VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, dl.activeIndicesBufferView, 2, descSet);
+        VkUtil::updateDescriptorSet(_vkContext.device, buffer, bufferByteSize, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descSet);
+
+        uint32_t workAmt = (dl.indices.size() + compLocalSize - 1) / compLocalSize;
+        VkCommandBuffer commands; 
+        VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+        vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _kendallPipeline.pipelineLayout, 0, 1, &descSet, 0, {});
+        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _kendallPipeline.pipeline);
+        vkCmdDispatch(commands, workAmt, 1, 1);
+        if(printTimings)
+        {
+            PCUtil::Stopwatch s(std::cout);
+            VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+            res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+        }
+        else{
+            VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+            res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+        }
+        VkUtil::downloadData(_vkContext.device, memory, 0, bufferByteSize, bufferData.data());
+
+        double bin = dl.activeLinesAmt * (dl.activeLinesAmt - 1) / 2;
+        if(bin == 0) bin = 1;
+        for(int i = 0; i < amtOfAttributes; ++i){
+            assert(bufferData[4 + i] / bin >= -1 && bufferData[4 + i] / bin <= 1);
+            curAttCorrelation.correlationScores[i] = bufferData[4 + i] / bin;
+        }
+        
+        vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &descSet);
+        vkFreeMemory(_vkContext.device, memory, nullptr);
+        vkDestroyBuffer(_vkContext.device, buffer, nullptr);
         break;
     }
     }

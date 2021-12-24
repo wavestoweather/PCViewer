@@ -331,11 +331,11 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
                     ImGui::GetWindowDrawList()->AddLine(a, b, ImGui::GetColorU32({0,0,1,1}), 2);
                 }
             }
-            curX += xSpacing;
+            curX = imagePos.x + curWidth * (j + 1) / (activeAttributesCount - 1);
             ++curAttr2;
         }
         curX = imagePos.x;
-        curY += xSpacing;
+        curY = imagePos.y + curWidth * (i + 1) / (activeAttributesCount - 1);
         ++curAttr;
     }
     //lasso selection

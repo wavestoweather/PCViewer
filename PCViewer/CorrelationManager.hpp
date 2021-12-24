@@ -28,6 +28,7 @@ public:
     void calculateCorrelation(const DrawList& dl, CorrelationMetric metric = CorrelationMetric::Pearson, int baseAttribute = -1, bool useGpu = true);
 
     std::map<std::string, DrawlistCorrelations> correlations{};
+    bool printTimings = false;
 private:
     uint32_t compLocalSize = 256;
     VkUtil::Context _vkContext{};

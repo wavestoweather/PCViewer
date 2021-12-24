@@ -1,5 +1,49 @@
 #version 460
+#extension GL_EXT_shader_atomic_float: enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+
+layout (binding = 0) buffer Data{
+	float d[];
+}data;
+
+layout(binding = 1) buffer IndexBuffer{
+	uint ind[];
+};
+
+layout(binding = 2, r8 ) uniform imageBuffer act;
+
+layout(binding = 3) buffer kendall{
+    uint maxIndex;
+    uint amtOfAttributes;
+    uint baseAttribute;
+    uint amtOfActiveIndices;
+    float res[];    //contains: float[amtOfAttributes] numer
+};
+
+#include "dataAccess.glsl"
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
-    
+    if(gl_GlobalInvocationID.x >= maxIndex) return;
+    uint index1 = ind[gl_GlobalInvocationID.x];
+    bool ac1 = bool(imageLoad(act, int(index1)).x);
+    for(int i = 0; i < gl_GlobalInvocationID.x; ++i){
+        uint index2 = ind[i];
+        bool ac2 = bool(imageLoad(act, int(index2)).x);
+        for(int a = 0; a < amtOfAttributes; ++a){
+            float summand = 0;
+            if(ac1 && ac2){
+                float aDiff = sign(getPackedData(index1, baseAttribute) - getPackedData(index2, baseAttribute));
+                float bDiff = sign(getPackedData(index1, a) - getPackedData(index2, a));
+                summand = aDiff * bDiff;
+            }
+            summand = subgroupAdd(summand);
+            uint off = subgroupExclusiveAdd(1);
+            if(off == 0){
+                atomicAdd(res[a], summand);
+            }
+        }
+    }
 }
