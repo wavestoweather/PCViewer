@@ -12,7 +12,7 @@
 *   The data is stored dimension bound, meaning that for each attribute/column
 *   it is stored for which dimension it is defined
 *
-*   A dimension is simply an size, describin how large a dimension is.
+*   A dimension is simply a size, describin how large a dimension is.
 +
 +   The overall size of a dataset is the multiplication of all dimensions
 *

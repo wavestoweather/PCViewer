@@ -56,7 +56,11 @@ file(GLOB tsne_SRC
     "tsne/*.cpp"
 )
 
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC})
+file(GLOB rtree_SRC
+    "rTree/*.h"
+)
+
+add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC})
 
 if(WIN32)
     set(netCDF_LIBRARIES netCDF::netcdf)
