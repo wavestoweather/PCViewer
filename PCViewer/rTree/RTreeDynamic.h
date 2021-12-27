@@ -167,7 +167,7 @@ public:
     bool operator++()                             { return FindNextData(); }
 
     /// Get the bounds for this node
-    void GetBounds(ELEMTYPE a_min[NUMDIMS], ELEMTYPE a_max[NUMDIMS])
+    void GetBounds(ELEMTYPE *a_min, ELEMTYPE *a_max)
     {
       ASSERT(IsNotNull());
       StackElement& curTos = m_stack[m_tos - 1];
@@ -289,8 +289,8 @@ protected:
   /// Minimal bounding rectangle (n-dimensional)
   struct Rect
   {
-    ELEMTYPE m_min[NUMDIMS];                      ///< Min dimensions of bounding box
-    ELEMTYPE m_max[NUMDIMS];                      ///< Max dimensions of bounding box
+    std::vector<ELEMTYPE> m_min;                      ///< Min dimensions of bounding box
+    std::vector<ELEMTYPE> m_max;                      ///< Max dimensions of bounding box
   };
 
   /// May be data or may be another subtree
@@ -530,6 +530,8 @@ void RTREE_QUAL::Remove(const ELEMTYPE *a_min, const ELEMTYPE *a_max, const DATA
 #endif //_DEBUG
 
   Rect rect;
+  rect.m_min.resize(NUMDIMS);
+  rect.m_max.resize(NUMDIMS);
 
   for(int axis=0; axis<NUMDIMS; ++axis)
   {
@@ -552,6 +554,8 @@ int RTREE_QUAL::Search(const ELEMTYPE *a_min, const ELEMTYPE *a_max, std::functi
 #endif //_DEBUG
 
   Rect rect;
+  rect.m_min.resize(NUMDIMS);
+  rect.m_max.resize(NUMDIMS);
 
   for(int axis=0; axis<NUMDIMS; ++axis)
   {
@@ -928,6 +932,8 @@ void RTREE_QUAL::InitNode(Node* a_node)
 RTREE_TEMPLATE
 void RTREE_QUAL::InitRect(Rect* a_rect)
 {
+  a_rect.m_min.resize(NUMDIMS);
+  a_rect.m_max.resize(NUMDIMS);
   for(int index = 0; index < NUMDIMS; ++index)
   {
     a_rect->m_min[index] = (ELEMTYPE)0;
@@ -1121,6 +1127,8 @@ int RTREE_QUAL::PickBranch(const Rect* a_rect, Node* a_node)
   ELEMTYPEREAL bestArea;
   int best = 0;
   Rect tempRect;
+  tempRect.m_min.resize(NUMDIMS);
+  tempRect.m_max.resize(NUMDIMS);
 
   for(int index=0; index < a_node->m_count; ++index)
   {
@@ -1153,6 +1161,8 @@ typename RTREE_QUAL::Rect RTREE_QUAL::CombineRect(const Rect* a_rectA, const Rec
   ASSERT(a_rectA && a_rectB);
 
   Rect newRect;
+  newRect.m_min.resize(NUMDIMS);
+  newRect.m_max.resize(NUMDIMS);
 
   for(int index = 0; index < NUMDIMS; ++index)
   {
