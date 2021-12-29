@@ -7,6 +7,7 @@
 
 GpuRadixSorter::GpuRadixSorter(const VkUtil::Context &context) : _vkContext(context)
 {
+    sortStats.resize(_timestepCount, 0);
     if (context.device)
     {
         // query subgroup size to set the specialization constant correctly
@@ -23,6 +24,7 @@ GpuRadixSorter::GpuRadixSorter(const VkUtil::Context &context) : _vkContext(cont
             std::cout << "Gpu sorter falls back to c++ <algorithm>std::sort for sorting" << std::endl;
             return;
         }
+        _timeMultiplier =  physicalDeviceProperties.properties.limits.timestampPeriod;
 
         std::vector<VkDescriptorSetLayoutBinding> bindings;
         VkDescriptorSetLayoutBinding binding;
@@ -101,7 +103,7 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     uint32_t groupInfoSize = uniformBufferSize;                     // in worst case for each global histogram a single worker...
     uint32_t localInfoSize = uniformBufferSize;
     uint32_t dispatchSize = 9;
-    uint32_t timestampAmt = 20;
+    uint32_t timestampAmt = _timestepCount;
 
     // Buffer creation and filling -------------------------------------------------------------------------------------
     VkQueryPool qPool;
@@ -227,11 +229,6 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
         vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
         
         vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);
-        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _globalScanPipeline.pipeline);
-        vkCmdDispatchIndirect(commands, dispatch, 12);
-        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
-        
-        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _scatterPipeline.pipeline);
         vkCmdDispatchIndirect(commands, dispatch, 0);
         vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
@@ -249,6 +246,7 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
         }
     }
     // last but not least submit local sorts
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, qPool, query++);    
     vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &memBarrier, 0, {}, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _localSortPipeline.pipeline);
     vkCmdDispatchIndirect(commands, dispatch, 36);
@@ -305,13 +303,18 @@ void GpuRadixSorter::sort(std::vector<uint32_t> &v)
     //}
     //for(auto val: v) if(val >> ((5 - passes) * 8) == 138)bucketControl[getBucket(val)]++;
     //for(int i = 1; i < 256; ++i) bucketControl[i] += bucketControl[i - 1];
+    std::vector<uint32_t> timestamps(timestampAmt);
+    vkGetQueryPoolResults(_vkContext.device, qPool, 0, timestampAmt, timestamps.size() * sizeof(uint32_t), timestamps.data(), sizeof(uint32_t), 0);
+    for(int i = 0; i < timestampAmt - 1; ++i){
+        float a = _runs / (_runs + 1.0f);
+        sortStats[i] = a * sortStats[i] + (1.0f - a) * (timestamps[i + 1] - timestamps[i]) * _timeMultiplier / 1e6;
+    }
+    _runs++;
 #ifdef ENABLE_TEST_SORT
     std::cout << "Sorting " << v.size() << " elements took " << std::chrono::duration<double, std::milli>(t2 - t1).count() << " ms" << std::endl;
     std::cout << "Timing differences in the pipelines itself were:" << std::endl;
-    std::vector<uint32_t> timestamps(timestampAmt);
-    vkGetQueryPoolResults(_vkContext.device, qPool, 0, timestampAmt, timestamps.size() * sizeof(uint32_t), timestamps.data(), sizeof(uint32_t), 0);
-    for(int i = 1; i < timestampAmt - 1; ++i){
-        std::cout << (timestamps[i] - timestamps[i - 1]) / 1e6 << std::endl;
+    for(int i = 0; i < timestampAmt - 1; ++i){
+        std::cout << sortStats[i] << std::endl;
     }
 #endif
 

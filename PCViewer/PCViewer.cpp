@@ -7324,6 +7324,18 @@ int main(int, char**)
 	{// clustering workbench
 		clusteringWorkbench = std::make_shared<ClusteringWorkbench>(g_Device, pcAttributes, g_PcPlotDataSets, g_PcPlotDrawLists);
 	}
+
+	{// testing sorter
+		GpuRadixSorter sorter({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
+		std::vector<uint32_t> nums(1e8);
+		std::iota(nums.rbegin(), nums.rend(), 0);
+		for(int i = 0; i < 10; ++i){
+			std::cout << "Iteration: " << i << std::endl;
+			sorter.sort(nums);
+		}
+		
+		bool ok = true;
+	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);

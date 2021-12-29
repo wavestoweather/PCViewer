@@ -19,6 +19,8 @@ public:
     // sorts a vector of uints via pu compute if available, falls back to std::sort if not available
     void sort(std::vector<float>& v);
 
+    std::vector<float> sortStats;
+
     #ifdef ENABLE_TEST_SORT
     bool checkLocalSort();  //checks local sort on an array of uints the size of 
     bool checkHistogram();  //checks histogram, prefix sum, scattering for a random uint array
@@ -40,4 +42,8 @@ private:
     VkUtil::PipelineInfo _histogramPipeline{};
     VkUtil::PipelineInfo _globalScanPipeline{};
     VkUtil::PipelineInfo _scatterPipeline{};
+
+    int _runs{0};
+    int _timestepCount{16};
+    float _timeMultiplier{.0f};
 };
