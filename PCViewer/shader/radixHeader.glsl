@@ -9,6 +9,7 @@
 //#define HISTOGRAMSUBGROUPREDUCTION
 #define HISTOGRAMTHREADREDUCTION    //no optimization .08 ms thread reduction .09 ms subgroup thread reduction .27 ms
 #define MAXVAL 0xffffffff
+#define LOADVERSION1
 
 struct GroupInfo{
     uint globalHistIndex;

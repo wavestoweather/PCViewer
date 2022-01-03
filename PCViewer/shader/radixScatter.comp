@@ -26,6 +26,18 @@ void main(){
     uint globalStart = uniformInfo[front].globalHistograms[globalHistIndex].startOffset;
     uint blockEnd = uniformInfo[front].globalHistograms[globalHistIndex].endOffset;
     uint maxElem = blockEnd - blockStart;
+    #ifdef LOADVERSION1
+    uint l = 0;
+    for(uint i = gl_LocalInvocationID.x; i < KPB; i += TPB, ++l){
+        uint index = blockStart + i;
+        if(index < blockEnd){
+            uint k = keys[front].k[index];
+            uint curBucket = getMaskedKey(k, uniformInfo[0].pass);
+            uint offset = atomicAdd(sharedInfo.keyCount[curBucket], 1);    // adding one to the bucket as an element is inserted
+            sharedKeys[offset] = k;
+        }
+    }
+    #elif
     const uint subgroupStorage = SUBGROUP_SIZE * KPT;
     for(int i = 0; i < KPT; ++i){
         uint index = blockStart + gl_SubgroupID * subgroupStorage + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
@@ -36,6 +48,7 @@ void main(){
             sharedKeys[offset] = k;
         }
     }
+    #endif
     barrier(); // waiting for all workgroups to assign their keys to the shared key array
     //care: TPB have to be more than there are buckets!!!!
     //if(gl_LocalInvocationID.x < NUMKEYS){

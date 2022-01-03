@@ -151,6 +151,7 @@ void heapSort(inout uint localBuf[KPLST]) {
 }
 
 shared uint sorted[KPLSB];
+shared uint maxIndex;
 void swap(uint x, uint y){
     uint tmp = sorted[x];
     sorted[x] = sorted[y];
@@ -158,7 +159,7 @@ void swap(uint x, uint y){
 }
 void bitonicSharedSort(){
     const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
-    [[unroll]]for(uint k = 2; k <= KPLSB; k *= 2){
+    [[unroll]]for(uint k = 2; k <= maxIndex; k *= 2){
         [[unroll]]for(uint j = k / 2; j > 0; j /= 2){
             [[unroll]]for(int m = 0; m < KPLST; ++m){
                 uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * m + gl_SubgroupInvocationID;
@@ -208,6 +209,9 @@ void bitonicSharedColSort(inout uint localBuf[KPLST]){
 
 // sorts a short region in the input via bitonic local sort in the current workGroup
 void main(){
+    if(gl_LocalInvocationID.x == 0)
+        maxIndex = 0;
+    barrier();
     uint front = localSortInfo.sorts[gl_WorkGroupID.x].front;
     uint back = 0;//always in the front buffer(uniformInfo[0].pass & 1) ^ 1;
     uint regionStart = localSortInfo.sorts[gl_WorkGroupID.x].begin; 
@@ -240,14 +244,28 @@ void main(){
 
     return;//-----------------------------------------------------------------------------------
 #else
+    uint ma = 1;
     for(int i = 0; i < KPLST; ++i){
         const uint subgroupStorage = SUBGROUP_SIZE * KPLST;
         uint index = gl_SubgroupID * subgroupStorage  + SUBGROUP_SIZE * i + gl_SubgroupInvocationID;
-        if(regionStart + index < regionEnd)
+        if(regionStart + index < regionEnd){
             sorted[index] = keys[front].k[regionStart + index];
-        else
+            ma = index;
+        }
+        else{
             sorted[index] = MAXVAL;
+        }
     }
+    // taken from bit twiddling hacks https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
+    ma--;
+    ma |= ma >> 1;
+    ma |= ma >> 2;
+    ma |= ma >> 4;
+    ma |= ma >> 8;
+    ma |= ma >> 16;
+    ma++;
+    ma = subgroupMax(ma);
+    if(subgroupElect()) atomicMax(maxIndex, ma);
     barrier();  //waiting for all groups to complete
     bitonicSharedSort();
     for(int i = 0; i < KPLST; ++i){
