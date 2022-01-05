@@ -1,3 +1,7 @@
+/*
+    This header is for indirect data sorting of drawlist data.
+    The data has to be provided by a binding holding a storage buffer with the name "data"
+*/
 
 #define NUMKEYS 256        //2^8 -> resutlts in 4 passes for 32 bit keys (If higher than 1024 global scan has to be updated)
 #define KPT 18             //keys per thread
@@ -52,10 +56,26 @@ layout(binding = 4) buffer LI
     LocalSort sorts[];
 }localSortInfo;
 
+layout (binding = 0, set = 1) buffer Data{
+	float d[];
+}data;
+
 layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
 
 uint getMaskedKey(uint val, uint pass){
     pass = 3 - pass; //inverting the pass to start from the front
     pass *= 8; // 8 bit per pass
     return (val >> pass) & 0xff;
+}
+
+#include "dataAccess.glsl"
+
+uint float2Uint(float f){
+    uint i = floatBitsToUint(f);
+    uint mask = uint(-int(i >> 31)) | 0x80000000;
+    return i ^ mask;
+}
+
+uint getPackedDataUint(uint index, uint column){
+    return float2Uint(getPackedData(index, column));
 }
