@@ -4,7 +4,7 @@
 #extension GL_KHR_shader_subgroup_shuffle : enable
 #extension GL_EXT_control_flow_attributes : enable
 
-#include "radixHeader.glsl"
+#include "radixDsHeader.glsl"
 
 //uncomment to enable only shared sort. Only shared memory sort time: ~.53ms. Sort with localBuf ~.71ms
 #define ONLY_SHARED_SORT

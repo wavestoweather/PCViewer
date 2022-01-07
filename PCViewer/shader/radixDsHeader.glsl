@@ -1,5 +1,5 @@
 /*
-    This header is for indirect data sorting of drawlist data.
+    This header is for indirect data sorting of drawlist data (sorts increasing according to a single attribute).
     The data has to be provided by a binding holding a storage buffer with the name "data"
 */
 
