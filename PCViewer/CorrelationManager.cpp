@@ -268,7 +268,7 @@ void CorrelationManager::_execCorrelationGPU(const DrawList& dl, CorrelationMetr
         vkCmdDispatch(commands, workAmt, 1, 1);
         if(printTimings)
         {
-            PCUtil::Stopwatch s(std::cout);
+            PCUtil::Stopwatch s(std::cout, "CorrelationMetric::KendallRank()");
             VkUtil::commitCommandBuffer(_vkContext.queue, commands);
             res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
         }

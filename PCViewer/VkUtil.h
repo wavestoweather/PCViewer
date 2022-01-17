@@ -51,7 +51,8 @@ namespace VkUtil{
 		PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR,
 		PASS_TYPE_DEPTH_OFFLINE,
 		PASS_TYPE_DEPTH_STENCIL_OFFLINE,
-		PASS_TYPE_UINT32
+		PASS_TYPE_UINT32,
+		PASS_TYPE_NONE
 	};
 
 	uint32_t findMemoryType(VkPhysicalDevice physicalDevice ,uint32_t typeFilter, VkMemoryPropertyFlags properties);

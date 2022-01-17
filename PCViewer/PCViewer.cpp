@@ -61,6 +61,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "ScatterplotWorkbench.hpp"
 #include "CorrelationMatrixWorkbench.hpp"
 #include "GpuRadixSorter.hpp"
+#include "PCRenderer.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -277,19 +278,6 @@ struct Vertex {			//currently holds just the y coordinate. The x computed in the
 struct RectVertex {		//struct which describes the vertecies for the rects
 	Vec4 pos;
 	Vec4 col;
-};
-
-struct UniformBufferObject {
-	float alpha;
-	uint32_t amtOfVerts;
-	uint32_t amtOfAttributes;
-	float padding;
-	Vec4 color;
-	std::vector<Vec4> vertTransformations;
-	//Vec4 VertexTransormations[];			//is now a variable length array at the end of the UBO
-	uint32_t size(){
-		return sizeof(UniformBufferObject) - sizeof(vertTransformations) + sizeof(vertTransformations[0]) * vertTransformations.size();
-	}
 };
 
 //uniform Buffer for the histogramms
@@ -753,6 +741,7 @@ AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
 
 static TransferFunctionEditor* transferFunctionEditor;
 static std::shared_ptr<ClusteringWorkbench> clusteringWorkbench;
+static std::shared_ptr<PCRenderer> pcRenderer;
 
 //method declarations
 template <typename T,typename T2>
@@ -2552,6 +2541,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 #ifdef PRINTRENDERTIME
 	uint32_t amtOfLines = 0;
 #endif
+	PCRenderer::GlobalPCSettings settings{pcAttributes, pcAttributeEnabled, pcAttrOrd, pcSettings.renderSplines, pcSettings.medianLineWidth};
+	pcRenderer->renderPCPlots(g_PcPlotDrawLists, settings);
+	PCUtil::Stopwatch stopwatch(std::cout, "drawPcPlot(...)");
 
 	VkResult err;
 
@@ -7325,16 +7317,20 @@ int main(int, char**)
 		clusteringWorkbench = std::make_shared<ClusteringWorkbench>(g_Device, pcAttributes, g_PcPlotDataSets, g_PcPlotDrawLists);
 	}
 
-	{// testing sorter
-		GpuRadixSorter sorter({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
-		std::vector<uint32_t> nums(1e8);
-		std::iota(nums.rbegin(), nums.rend(), 0);
-		for(int i = 0; i < 10; ++i){
-			std::cout << "Iteration: " << i << std::endl;
-			sorter.sort(nums);
-		}
-		
-		bool ok = true;
+	//{// testing sorter
+	//	GpuRadixSorter sorter({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
+	//	std::vector<uint32_t> nums(1e8);
+	//	std::iota(nums.rbegin(), nums.rend(), 0);
+	//	for(int i = 0; i < 10; ++i){
+	//		std::cout << "Iteration: " << i << std::endl;
+	//		sorter.sort(nums);
+	//	}
+	//	
+	//	bool ok = true;
+	//}
+
+	{
+		pcRenderer = std::make_shared<PCRenderer>(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, g_PcPlotWidth, g_PcPlotHeight);
 	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -14364,6 +14360,8 @@ int main(int, char**)
 		delete histogramManager;
 		delete scatterplotWorkbench;
 		correlationMatrixWorkbench.reset();
+		pcRenderer.reset();
+		clusteringWorkbench.reset();
 
 		for (GlobalBrush& gb : globalBrushes) {
 			if (gb.kdTree) delete gb.kdTree;

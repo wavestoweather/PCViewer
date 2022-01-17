@@ -583,6 +583,10 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentRef;
+		break;
+	case VkUtil::PASS_TYPE_NONE:
+
+		break;
 	}
 	VkRenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;

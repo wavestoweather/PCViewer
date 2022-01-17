@@ -10,6 +10,7 @@ public:
     void operator=(PCRenderer const&) = delete;
     
     PCRenderer(const VkUtil::Context& context, uint32_t width, uint32_t height);
+    ~PCRenderer();
 
     void renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSettings& globalSettings);
 
@@ -29,8 +30,6 @@ private:
     VkImage         _intermediateImage{}, _plotImage{}; //intermediat image holds the uint32 iamge with the counts
     VkImageView     _intermediateView{}, _plotView{};
     VkDeviceMemory  _imageMemory{};                   //meory for all images
-
-    ~PCRenderer();
 
     class PipelineSingleton{    //provides a safe pipeline singleton
     public:
@@ -66,9 +65,9 @@ private:
         VkRenderPass renderPass{};
         VkUtil::Context context{};
     private:
-        const std::string _vertexShader = "";    //standard vertex shader to transform line vertices
-        const std::string _geometryShader = "";  //optional geometry shader for spline rendering
-        const std::string _fragmentShader = "";  //fragment shader to output line count to framebuffer
+        const std::string _vertexShader = "shader/vert.spv";    //standard vertex shader to transform line vertices
+        const std::string _geometryShader = "shader/geom.spv";  //optional geometry shader for spline rendering
+        const std::string _fragmentShader = "shader/frag.spv";  //fragment shader to output line count to framebuffer
 
         const std::string _computeShader = "";   //shader which resolves density values to true color
         static int _usageCount;
