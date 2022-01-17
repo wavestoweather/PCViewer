@@ -1403,3 +1403,14 @@ void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice,
 	vkFreeMemory(device, stagingMemory, nullptr);
 	vkFreeCommandBuffers(device, commandPool, 1, &commands);
 }
+
+namespace VkUtil
+{
+	void addImageToAllocInfo(VkDevice device, VkImage image, VkMemoryAllocateInfo& allocInfo) 
+	{
+		VkMemoryRequirements memReq{};
+		vkGetImageMemoryRequirements(device, image, &memReq);
+		allocInfo.allocationSize += memReq.size;
+		allocInfo.memoryTypeIndex |= memReq.memoryTypeBits;
+	}
+}

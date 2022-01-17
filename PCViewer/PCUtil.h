@@ -23,10 +23,11 @@ public:
 
 	class Stopwatch{
 		public:
-		Stopwatch(std::ostream& stream);
+		Stopwatch(std::ostream& stream, const std::string& displayName);
 		~Stopwatch();
 		private:
 		std::ostream& _ostream;
+		std::string _name;
 		std::chrono::high_resolution_clock::time_point _start;
 	};
 };

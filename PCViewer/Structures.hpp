@@ -120,3 +120,16 @@ struct DrawlistDragDropInfo{
 	std::list<DrawList>* drawlists;
 	std::vector<int>* selected;
 };
+
+struct UniformBufferObject {
+	float alpha;
+	uint32_t amtOfVerts;
+	uint32_t amtOfAttributes;
+	float padding;
+	Vec4 color;
+	std::vector<Vec4> vertTransformations;
+	//Vec4 VertexTransormations[];			//is now a variable length array at the end of the UBO
+	uint32_t size(){
+		return sizeof(UniformBufferObject) - sizeof(vertTransformations) + sizeof(vertTransformations[0]) * vertTransformations.size();
+	}
+};

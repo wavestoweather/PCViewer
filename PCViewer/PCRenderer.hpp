@@ -11,21 +11,38 @@ public:
     
     PCRenderer(const VkUtil::Context& context, uint32_t width, uint32_t height);
 
-    VkResult renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSettings& globalSettings);
+    void renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSettings& globalSettings);
 
     struct GlobalPCSettings{
-
+        std::vector<Attribute>& attributes;
+        bool* attributeEnabled;
+        std::vector<int>& attributeOrder;
+        bool renderSplines;
+        float medianLineWidth;
     };
 private:
     class PipelineSingleton;    //forward declare
-    PipelineSingleton& pipelineInstance;    //holds a reference to the pipeline singleton
+    PipelineSingleton& _pipelineInstance;    //holds a reference to the pipeline singleton for all rendering pipelines
 
+    //vulkan resources for the output image
+    VkFramebuffer   _framebuffer{};
+    VkImage         _intermediateImage{}, _plotImage{}; //intermediat image holds the uint32 iamge with the counts
+    VkImageView     _intermediateView{}, _plotView{};
+    VkDeviceMemory  _imageMemory{};                   //meory for all images
+
+    ~PCRenderer();
 
     class PipelineSingleton{    //provides a safe pipeline singleton
     public:
+        struct PipelineInput{
+            uint32_t width;
+            uint32_t height;
+            VkRenderPass renderPass;
+        };
+
         //singleton access
-        static PipelineSingleton& getInstance(const VkUtil::Context& context){
-            static PipelineSingleton instance(context);
+        static PipelineSingleton& getInstance(const VkUtil::Context& context, const PipelineInput& input){
+            static PipelineSingleton instance(context, input);
             ++_usageCount;
             return instance;
         }
@@ -34,6 +51,8 @@ private:
             --_usageCount;
             if(_usageCount == 0){
                 singleton.pipelineInfo.vkDestroy(singleton.context);
+                if(singleton.storageLayout) vkDestroyDescriptorSetLayout(singleton.context.device, singleton.storageLayout, nullptr);
+                if(singleton.renderPass) vkDestroyRenderPass(singleton.context.device, singleton.renderPass, nullptr);
             }
         }
 
@@ -42,8 +61,10 @@ private:
         void operator=(PipelineSingleton const&) = delete;
 
         //publicly available info
-        VkUtil::PipelineInfo pipelineInfo;
-        VkUtil::Context context;
+        VkUtil::PipelineInfo pipelineInfo{};
+        VkDescriptorSetLayout storageLayout{};
+        VkRenderPass renderPass{};
+        VkUtil::Context context{};
     private:
         const std::string _vertexShader = "";    //standard vertex shader to transform line vertices
         const std::string _geometryShader = "";  //optional geometry shader for spline rendering
@@ -51,6 +72,6 @@ private:
 
         const std::string _computeShader = "";   //shader which resolves density values to true color
         static int _usageCount;
-        PipelineSingleton(const VkUtil::Context& inContext);
+        PipelineSingleton(const VkUtil::Context& inContext, const PipelineInput& input);
     };
 };
