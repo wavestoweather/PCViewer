@@ -2541,9 +2541,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 #ifdef PRINTRENDERTIME
 	uint32_t amtOfLines = 0;
 #endif
-	PCRenderer::GlobalPCSettings settings{pcAttributes, pcAttributeEnabled, pcAttrOrd, pcSettings.renderSplines, pcSettings.medianLineWidth};
-	pcRenderer->renderPCPlots(g_PcPlotDrawLists, settings);
-	PCUtil::Stopwatch stopwatch(std::cout, "drawPcPlot(...)");
+	//PCRenderer::GlobalPCSettings settings{pcAttributes, pcAttributeEnabled, pcAttrOrd, pcSettings.renderSplines, pcSettings.medianLineWidth};
+	//pcRenderer->renderPCPlots(g_PcPlotDrawLists, settings);
+	//PCUtil::Stopwatch stopwatch(std::cout, "drawPcPlot(...)");
 
 	VkResult err;
 
@@ -7331,7 +7331,7 @@ int main(int, char**)
 	//}
 
 	{
-		pcRenderer = std::make_shared<PCRenderer>(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, g_PcPlotWidth, g_PcPlotHeight, g_PcPlotDescriptorLayout, g_PcPlotDataSetLayout);
+		//pcRenderer = std::make_shared<PCRenderer>(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, g_PcPlotWidth, g_PcPlotHeight, g_PcPlotDescriptorLayout, g_PcPlotDataSetLayout);
 	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -14361,7 +14361,7 @@ int main(int, char**)
 		delete histogramManager;
 		delete scatterplotWorkbench;
 		correlationMatrixWorkbench.reset();
-		pcRenderer.reset();
+		//pcRenderer.reset();
 		clusteringWorkbench.reset();
 
 		for (GlobalBrush& gb : globalBrushes) {
