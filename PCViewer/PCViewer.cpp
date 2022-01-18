@@ -1468,7 +1468,7 @@ static void createPcPlotPipeline() {
 	uboLayoutBindings[0].binding = 0;
 	uboLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	uboLayoutBindings[0].descriptorCount = 1;
-	uboLayoutBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	uboLayoutBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
 
 	uboLayoutBindings[1].binding = 1;
 	uboLayoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -2605,7 +2605,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	ubo.amtOfAttributes = attributes.size();
 	ubo.color = { 1,1,1,1 };
 	ubo.vertTransformations.resize(ubo.amtOfAttributes);
-	ubo.vertTransformations[0].w = (priorityAttribute != -1) ? 1.f : 0;
+	if(ubo.amtOfAttributes)
+		ubo.vertTransformations[0].w = (priorityAttribute != -1) ? 1.f : 0;
 	if (pcSettings.drawHistogramm) {
 		ubo.padding = pcSettings.histogrammWidth / 2;
 	}
@@ -4130,14 +4131,14 @@ static std::vector<QueryAttribute> queryCSV(const char* filename) {
 static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 	int fileId, retval;
 	if ((retval = nc_open(filename, NC_NOWRITE, &fileId))) {
-		std::cout << "Error at opening the file" << std::endl;
+		std::cout << "Error opening the file" << std::endl;
 		nc_close(fileId);
 		return {};
 	}
 
 	int ndims, nvars, ngatts, unlimdimid;
 	if ((retval = nc_inq(fileId, &ndims, &nvars, &ngatts, &unlimdimid))) {
-		std::cout << "Error at reading out viariable information" << std::endl;
+		std::cout << "Error reading out viariable information" << std::endl;
 		nc_close(fileId);
 		return {};
 	}
@@ -4150,7 +4151,7 @@ static std::vector<QueryAttribute> queryNetCDF(const char* filename) {
 	for (int i = 0; i < ndims; ++i) {
 		size_t dim_size;
 		if ((retval = nc_inq_dimlen(fileId, i, &dim_size))) {
-			std::cout << "Error at reading out dimension size" << std::endl;
+			std::cout << "Error reading out dimension size" << std::endl;
 			nc_close(fileId);
 			return {};
 		}
@@ -4267,7 +4268,7 @@ std::vector<QueryAttribute> queryFileAttributes(const char* filename){
 static bool openNetCDF(const char* filename){
     int fileId, retval;
     if((retval = nc_open(filename, NC_NOWRITE,&fileId))){
-        std::cout << "Error at opening the file" << std::endl;
+        std::cout << "Error opening the file" << std::endl;
         nc_close(fileId);
         return false;
     }
@@ -7330,7 +7331,7 @@ int main(int, char**)
 	//}
 
 	{
-		pcRenderer = std::make_shared<PCRenderer>(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, g_PcPlotWidth, g_PcPlotHeight);
+		pcRenderer = std::make_shared<PCRenderer>(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, g_PcPlotWidth, g_PcPlotHeight, g_PcPlotDescriptorLayout, g_PcPlotDataSetLayout);
 	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;

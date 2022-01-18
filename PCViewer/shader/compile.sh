@@ -3,6 +3,8 @@
 glslangValidator -V shader.vert
 glslangValidator -V shader.geom
 glslangValidator -V shader.frag
+glslangValidator -V -o fragUint.spv shaderUint.frag
+glslangValidator -V -o pcResolve.comp.spv pcResolve.comp
 glslangValidator -V -o histVert.spv histo.vert
 glslangValidator -V -o histFrag.spv histo.frag
 glslangValidator -V -o histGeo.spv histo.geom

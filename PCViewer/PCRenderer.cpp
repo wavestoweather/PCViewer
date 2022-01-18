@@ -3,23 +3,38 @@
 #undef NOSTATICS
 #include "PCUtil.h"
 
-PCRenderer::PCRenderer(const VkUtil::Context& context, uint32_t width, uint32_t height):
-_pipelineInstance(PipelineSingleton::getInstance(context, {width, height}))
+PCRenderer::PCRenderer(const VkUtil::Context& context, uint32_t width, uint32_t height, VkDescriptorSetLayout uniformLayout, VkDescriptorSetLayout dataLayout):
+_pipelineInstance(PipelineSingleton::getInstance(context, {width, height, uniformLayout, dataLayout}))
 {
     //creating the render resources
     VkFormat intermediateFormat = VK_FORMAT_R32_UINT;
-    VkUtil::createImage(context.device, width, height, intermediateFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &_intermediateImage);
+	VkFormat plotFormat = VK_FORMAT_R8G8B8A8_UNORM;
+    VkUtil::createImage(context.device, width, height, intermediateFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, &_intermediateImage);
+    VkUtil::createImage(context.device, width, height, plotFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, &_plotImage);
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     VkUtil::addImageToAllocInfo(context.device, _intermediateImage, allocInfo);
+	uint32_t plotImageOffset = allocInfo.allocationSize;
+    VkUtil::addImageToAllocInfo(context.device, _plotImage, allocInfo);
     allocInfo.memoryTypeIndex = VkUtil::findMemoryType(context.physicalDevice, allocInfo.memoryTypeIndex, 0);
     VkResult res = vkAllocateMemory(context.device, &allocInfo, nullptr, &_imageMemory); check_vk_result(res);
 	res = vkBindImageMemory(context.device, _intermediateImage, _imageMemory, 0);
+	res = vkBindImageMemory(context.device, _plotImage, _imageMemory, plotImageOffset);
 
     VkUtil::createImageView(context.device, _intermediateImage, intermediateFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, &_intermediateView);
+    VkUtil::createImageView(context.device, _plotImage, plotFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, &_plotView);
     
     std::vector<VkImageView> attachments{};
     VkUtil::createFrameBuffer(context.device, _pipelineInstance.renderPass, attachments, width, height, &_framebuffer);
+
+	VkUtil::transitionImageLayoutDirect(context.device, context.commandPool, context.queue, {_intermediateImage, _plotImage}, {intermediateFormat, plotFormat}, {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_UNDEFINED}, {VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL});
+
+	VkUtil::createDescriptorSets(context.device, {_pipelineInstance.pipelineInfo.descriptorSetLayout}, context.descriptorPool, &_intermediateSet);
+	VkUtil::updateStorageImageDescriptorSet(context.device, _intermediateView, VK_IMAGE_LAYOUT_GENERAL, 0, _intermediateSet);
+
+	VkUtil::createDescriptorSets(context.device, {_pipelineInstance.computeInfo.descriptorSetLayout}, context.descriptorPool, &_computeSet);
+	VkUtil::updateStorageImageDescriptorSet(context.device, _intermediateView, VK_IMAGE_LAYOUT_GENERAL, 0, _computeSet);
+	VkUtil::updateStorageImageDescriptorSet(context.device, _plotView, VK_IMAGE_LAYOUT_GENERAL, 1, _computeSet);
 }
 
 PCRenderer::~PCRenderer(){
@@ -31,6 +46,8 @@ PCRenderer::~PCRenderer(){
     if(_intermediateView) vkDestroyImageView(device, _intermediateView, nullptr);
     if(_plotView) vkDestroyImageView(device, _plotView, nullptr);
     if(_imageMemory) vkFreeMemory(device, _imageMemory, nullptr);
+	if(_intermediateSet) vkFreeDescriptorSets(device, _pipelineInstance.context.descriptorPool, 1, &_intermediateSet);
+	if(_computeSet) vkFreeDescriptorSets(device, _pipelineInstance.context.descriptorPool, 1, &_computeSet);
 }
 
 void PCRenderer::renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSettings& globalSettings){
@@ -75,7 +92,7 @@ void PCRenderer::renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSet
 	use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	use_barrier[0].subresourceRange.levelCount = 1;
 	use_barrier[0].subresourceRange.layerCount = 1;
-	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+	//vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 
 	//drawing via copying the indeces into the index buffer
 	//the indeces have to have just the right ordering for the vertices
@@ -151,7 +168,23 @@ void PCRenderer::renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSet
 	//counting the amount of active drawLists for histogramm rendering
 	int activeDrawLists = 0;
 
+	VkRenderPassBeginInfo passInfo{};
+	passInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	passInfo.renderPass = _pipelineInstance.renderPass;
+	passInfo.framebuffer = _framebuffer;
+	uint32_t width = _pipelineInstance.context.screenSize[0], height = _pipelineInstance.context.screenSize[1];
+	passInfo.renderArea = {0, 0, width, height};
+
+	//clearing the final color image
+	VkClearColorValue clear{};
+	VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+	vkCmdClearColorImage(command_buffer, _plotImage, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
 	for (auto drawList = drawlists.rbegin(); drawlists.rend() != drawList; ++drawList) {
+		vkCmdClearColorImage(command_buffer, _intermediateImage, VK_IMAGE_LAYOUT_GENERAL, &clear, 1, &range);
+		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, {}, 0, {}, 0, {});
+		vkCmdBeginRenderPass(command_buffer, &passInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineInstance.pipelineInfo.pipeline);
+
 		if (!drawList->show)
 			continue;
 
@@ -160,17 +193,29 @@ void PCRenderer::renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSet
 		vkCmdBindIndexBuffer(command_buffer, drawList->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 		//binding the right ubo
-		VkDescriptorSet descSets[2]{drawList->uboDescSet, drawList->dataDescriptorSet};
+		VkDescriptorSet descSets[3]{drawList->uboDescSet, drawList->dataDescriptorSet, _intermediateSet};
 		if (globalSettings.renderSplines)
-			vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineInstance.pipelineInfo.pipelineLayout, 0, 2, descSets, 0, nullptr);
+			vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineInstance.pipelineInfo.pipelineLayout, 0, 3, descSets, 0, nullptr);
 		else
-			vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineInstance.pipelineInfo.pipelineLayout, 0, 2, descSets, 0, nullptr);
+			vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineInstance.pipelineInfo.pipelineLayout, 0, 3, descSets, 0, nullptr);
 
 		vkCmdSetLineWidth(command_buffer, 1.0f);
 
 		//ready to draw with draw indexed
 		uint32_t amtOfI = drawList->indices.size() * (order.size() + 3);
 		vkCmdDrawIndexed(command_buffer, amtOfI, 1, 0, 0, 0);
+		vkCmdEndRenderPass(command_buffer);
+
+		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+
+		//resolving to the final image
+		descSets[0] = _computeSet;
+		descSets[1] = drawList->uboDescSet;
+		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineInstance.computeInfo.pipeline);
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineInstance.computeInfo.pipelineLayout, 0, 2, descSets, 0, nullptr);
+
+		const uint32_t workWidth = 256, workHeight = 1;
+		vkCmdDispatch(command_buffer, (width + workWidth - 1) / workWidth, (height + workHeight - 1) / workHeight, 1);
 
 #ifdef PRINTRENDERTIME
 		uint32_t boolSize;
@@ -198,6 +243,8 @@ void PCRenderer::renderPCPlots(std::list<DrawList>& drawlists, const GlobalPCSet
 
 PCRenderer::PipelineSingleton::PipelineSingleton(const VkUtil::Context& inContext, const PipelineInput& input){
     context = inContext;
+	context.screenSize[0] = input.width;
+	context.screenSize[1] = input.height;
     //----------------------------------------------------------------------------------------------
 	//creating the pipeline for spline rendering
 	//----------------------------------------------------------------------------------------------
@@ -272,29 +319,38 @@ PCRenderer::PipelineSingleton::PipelineSingleton(const VkUtil::Context& inContex
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
     uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     bindings.push_back(uboLayoutBinding);
 
-    uboLayoutBinding.binding = 1;
-    bindings.push_back(uboLayoutBinding);
-
-    uboLayoutBinding.binding = 2;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    bindings.push_back(uboLayoutBinding);
     VkUtil::createDescriptorSetLayout(context.device, bindings, &pipelineInfo.descriptorSetLayout);
 
-    bindings.resize(1);
-    VkUtil::createDescriptorSetLayout(context.device, bindings, &storageLayout);
-
-    std::vector<VkDescriptorSetLayout> descriptorSetLayouts{pipelineInfo.descriptorSetLayout, storageLayout};
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts{input.uniformLayout, input.dataLayout, pipelineInfo.descriptorSetLayout};
     
     std::vector<VkDynamicState> dynamicStateVec{VK_DYNAMIC_STATE_LINE_WIDTH};
 
     VkUtil::createRenderPass(context.device, VkUtil::PASS_TYPE_NONE, &renderPass);
 
     VkUtil::createPipeline(context.device, &vertexInfo, input.width, input.height, dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &renderPass, &pipelineInfo.pipelineLayout, &pipelineInfo.pipeline);
+
+	//----------------------------------------------------------------------------------------------
+	//creating resolve compute pipeline
+	//----------------------------------------------------------------------------------------------
+	auto computeBytes = PCUtil::readByteFile(_computeShader);
+	auto computeModule = VkUtil::createShaderModule(context.device, computeBytes);
+	bindings.clear();
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	bindings.push_back(uboLayoutBinding);
+
+	uboLayoutBinding.binding = 1;
+	bindings.push_back(uboLayoutBinding);
+
+	VkUtil::createDescriptorSetLayout(context.device, bindings, &computeInfo.descriptorSetLayout);
+
+	descriptorSetLayouts = {computeInfo.descriptorSetLayout, input.uniformLayout};
+
+	VkUtil::createComputePipeline(context.device, computeModule, descriptorSetLayouts, &computeInfo.pipelineLayout, &computeInfo.pipeline);
 }
 
 int PCRenderer::PipelineSingleton::_usageCount = 0;

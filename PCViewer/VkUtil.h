@@ -92,6 +92,7 @@ namespace VkUtil{
 	void copyBufferTo3dImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t depth);
 	void copy3dImageToBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, VkImageLayout imageLayout, uint32_t width, uint32_t height, uint32_t depth);
 	void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+	void transitionImageLayoutDirect(VkDevice device, VkCommandPool pool, VkQueue queue, const std::vector<VkImage>& images, const std::vector<VkFormat>& formats, const std::vector<VkImageLayout>& oldLayouts, const std::vector<VkImageLayout>& newLayouts);
 	void createImage(VkDevice device, uint32_t width, uint32_t height, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);
 	void create1dImage(VkDevice device, uint32_t width, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);
 	void create3dImage(VkDevice device, uint32_t width, uint32_t height, uint32_t depth, VkFormat imageFormat, VkImageUsageFlags usageFlags, VkImage* image);

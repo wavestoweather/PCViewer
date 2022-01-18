@@ -1417,4 +1417,15 @@ namespace VkUtil
 		allocInfo.allocationSize += memReq.size;
 		allocInfo.memoryTypeIndex |= memReq.memoryTypeBits;
 	}
+
+	void transitionImageLayoutDirect(VkDevice device, VkCommandPool pool, VkQueue queue, const std::vector<VkImage>& images, const std::vector<VkFormat>& formats, const std::vector<VkImageLayout>& oldLayouts, const std::vector<VkImageLayout>& newLayouts) 
+	{
+		VkCommandBuffer commands;
+		createCommandBuffer(device, pool, &commands);
+		for(int i = 0; i < images.size(); ++i){
+			transitionImageLayout(commands, images[i], formats[i], oldLayouts[i], newLayouts[i]);
+		}
+		commitCommandBuffer(queue, commands);
+		VkResult res = vkQueueWaitIdle(queue); check_vk_result(res);
+	}
 }

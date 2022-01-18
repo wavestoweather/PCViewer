@@ -1,0 +1,30 @@
+#version 450
+
+layout(binding = 0, r32ui) uniform readonly uimage2D densityImage;
+
+layout(binding = 1, rgba8) uniform image2D finalImage;
+
+layout(set = 1, binding = 2) buffer UBO{
+    float alpha;
+	uint amtOfVerts;
+	uint amtOfAttributes;
+	float padding;
+	vec4 color;
+	vec4 vertexTransformations[];		//x holds the x position, y and z hold the lower and the upper bound respectivley
+};
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+void main(){
+    ivec2 imSize = imageSize(densityImage);
+    if(gl_GlobalInvocationID.x >= imSize.x || gl_GlobalInvocationID.y >= imSize.y)
+        return;
+
+    vec4 col = imageLoad(finalImage, ivec2(gl_GlobalInvocationID.xy));
+    uint amt = imageLoad(densityImage, ivec2(gl_GlobalInvocationID.xy)).x;
+    if(amt > 0)
+        col = vec4(1, 0, 0, 1);
+    else
+        col = vec4(1,1,1,1);
+    imageStore(finalImage, ivec2(gl_GlobalInvocationID.xy), vec4(col.xyz, 1));
+}
