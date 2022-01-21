@@ -60,7 +60,11 @@ file(GLOB rtree_SRC
     "rTree/*.h"
 )
 
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC})
+file(GLOB compress_SRC
+    "compression/*.cpp"
+)
+
+add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC})
 
 if(WIN32)
     set(netCDF_LIBRARIES netCDF::netcdf)

@@ -252,24 +252,8 @@ std::vector<double> divide(float* arr, float num, int size) {
 	return result;
 }
 
-struct QueryAttribute {
-	std::string name;
-	int dimensionSize;	//size of the dimension, 0 if not a dimension, negative if stringlength dimension
-	int dimensionality; //amt of dimensions the attribute is dependant on
-	int dimensionSubsample; //sampling rate of the dimension to reduce its size
-	int dimensionSlice; //if < 0 the whole dimension should be taken, otherwise the dimension is disabled and sliced at the index indicated here
-	int trimIndices[2];
-	bool active;
-	bool linearize;
-
-	bool operator==(const QueryAttribute& other) const {
-		return name == other.name && dimensionSize == other.dimensionSize && dimensionality == other.dimensionality;
-	}
-};
-
 static std::vector<QueryAttribute> queryAttributes;
 static bool queryAttributesCsv;		//indicates if the quried attributes are from a csv file (Only subsampling is available, as the table size is not known prior to read out)
-
 
 struct Vertex {			//currently holds just the y coordinate. The x computed in the vertex shader via the index
 	float y;
