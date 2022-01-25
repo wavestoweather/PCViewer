@@ -62,7 +62,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "CorrelationMatrixWorkbench.hpp"
 #include "GpuRadixSorter.hpp"
 #include "PCRenderer.hpp"
-#include "compression/NetCdfLoader.hpp"
+#include "compression/CompressionWorkbench.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -727,6 +727,7 @@ AdaptViolinSidesAutoStruct violinAdaptSidesAutoObj;
 static TransferFunctionEditor* transferFunctionEditor;
 static std::shared_ptr<ClusteringWorkbench> clusteringWorkbench;
 static std::shared_ptr<PCRenderer> pcRenderer;
+static std::shared_ptr<CompressionWorkbench> compressionWorkbench;
 
 //method declarations
 template <typename T,typename T2>
@@ -7318,6 +7319,10 @@ int main(int, char**)
 	{
 		//pcRenderer = std::make_shared<PCRenderer>(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, g_PcPlotWidth, g_PcPlotHeight, g_PcPlotDescriptorLayout, g_PcPlotDataSetLayout);
 	}
+
+	{
+		compressionWorkbench = std::make_shared<CompressionWorkbench>();
+	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -7819,6 +7824,7 @@ int main(int, char**)
 				ImGui::MenuItem("Clustering workbench", "", &clusteringWorkbench->active);
 				ImGui::MenuItem("Scatterplot workbench", "", &scatterplotWorkbench->active);
 				ImGui::MenuItem("Correlation matrix workbench", "", &correlationMatrixWorkbench->active);
+				ImGui::MenuItem("Compression workbench", "", &compressionWorkbench->active);
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Options")) {
@@ -14236,6 +14242,8 @@ int main(int, char**)
 		if(correlationMatrixWorkbench->requestUpdate){
 			correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists);
 		}
+
+		compressionWorkbench->draw();
 
 		pcSettings.rescaleTableColumns = false;
 

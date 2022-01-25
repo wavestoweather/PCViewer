@@ -5,7 +5,7 @@
 #include <iostream>
 #include "../PCUtil.h"
 
-NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores):
+NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores)
 {
     // searching all files in the given directory (also in the subdirectories) and append all found netCdf files to the _files variable
     // all files and folders given in ignores will be skipped
@@ -77,6 +77,7 @@ void NetCdfLoader::dataAnalysis(size_t& dataSize, std::vector<Attribute>& attrib
         std::cout << "\rData analysis: " << _progress * 100 << "%";
         std::cout.flush();
     }
+    std::cout << std::endl;
     attributes = _attributes;
     dataSize = _dataSize;
 }

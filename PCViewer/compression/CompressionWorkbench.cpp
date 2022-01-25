@@ -2,15 +2,21 @@
 #include "../imgui/imgui_stdlib.h"
 #include "NetCdfLoader.hpp"
 #include "../PCUtil.h"
+#include <thread>
+
+void analyse(std::shared_ptr<DataLoader> loader, size_t* dataSize, std::vector<Attribute>* attributes){
+    loader->dataAnalysis(*dataSize, *attributes);
+}
 
 void CompressionWorkbench::draw() 
 {
     if(!active) return;
 
-    if(ImGui::Begin("CompresssionWorkbench")){
+    if(ImGui::Begin("CompresssionWorkbench", &active)){
         ImGui::Text("Open data files:");
         ImGui::InputText("Src Directory/File", &_inputFiles);
-        if(ImGui::CollapsingHeader("Include Formats"));
+        ImGui::BeginChild("includes", {ImGui::GetWindowWidth() / 2.2f, 200});
+        if(ImGui::CollapsingHeader("Include Formats"))
         {
             for(int i = 0; i < _includedFiles.size(); ++i){
                 ImGui::InputText(("##inc" + std::to_string(i)).c_str(), &_includedFiles[i]);
@@ -22,33 +28,40 @@ void CompressionWorkbench::draw()
                 _includedFiles.push_back({});
             }
         }
+        ImGui::EndChild();
         ImGui::SameLine();
-        if(ImGui::CollapsingHeader("Exclude Formats"));
+        ImGui::BeginChild("excludes", {ImGui::GetWindowWidth() / 2.2f, 200});
+        if(ImGui::CollapsingHeader("Exclude Formats"))
         {
             for(int i = 0; i < _excludedFiles.size(); ++i){
                 ImGui::InputText(("##exc" + std::to_string(i)).c_str(), &_excludedFiles[i]);
             }
-            if(_includedFiles.size() && ImGui::Button("Remove last Format")){
+            if(_excludedFiles.size() && ImGui::Button("Remove last Format")){
                 _excludedFiles.pop_back();
             }
             if(ImGui::Button("Add Exclude Format")){
                 _excludedFiles.push_back({});
             }
         }
+        ImGui::EndChild();
         if(ImGui::Button("Create data loader")){
-            _loader = std::make_shared<NetCdfLoader>(_inputFiles, _includedFiles, _excludedFiles);
+            std::vector<std::string_view> includeView(_includedFiles.begin(), _includedFiles.end());
+            std::vector<std::string_view> excludeView(_excludedFiles.begin(), _excludedFiles.end());
+            _loader = std::make_shared<NetCdfLoader>(_inputFiles, includeView, excludeView);
         }
         if(_loader){
             ImGui::Text("Hier könnte jetzt eine subselektion der dimensionen ausgeführt werden...");
         }
         if(_loader && ImGui::Button("Analyze")){
-            _loader->dataAnalysis(_dataSize, _attributes);
+            _analysisFuture = std::async(analyse, _loader, &_dataSize, &_attributes);
+            //_loader->dataAnalysis(_dataSize, _attributes);
         }
         ImGui::Text(("Analyzed data size: " + std::to_string(_dataSize)).c_str());
         for(auto& a: _attributes){
             ImGui::Text(a.name.c_str());
         }
-        ImGui::Text(("Loader Fortschritt: " + std::to_string(_loader->progress())).c_str());
+        if(_loader)
+            ImGui::Text(("Loader Fortschritt: " + std::to_string(_loader->progress())).c_str());
     }
     ImGui::End();
 }

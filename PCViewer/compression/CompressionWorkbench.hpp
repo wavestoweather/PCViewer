@@ -3,10 +3,11 @@
 #include "../imgui/imgui.h"
 #include "DataLoader.hpp"
 #include <memory>
+#include <future>
 
 class CompressionWorkbench{
 public:
-    CompressionWorkbench();
+    CompressionWorkbench(){};
 
     void draw();
 
@@ -18,4 +19,6 @@ private:
 
     std::vector<Attribute> _attributes{};
     size_t _dataSize{};
+
+    std::future<void> _analysisFuture;
 };
