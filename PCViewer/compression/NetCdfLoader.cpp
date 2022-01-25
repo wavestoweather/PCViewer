@@ -5,30 +5,21 @@
 #include <iostream>
 #include "../PCUtil.h"
 
-NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::string_view>& ignores,  const std::vector<QueryAttribute>& queriedAttributes):
-_queryAttributes(queriedAttributes)
+NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores):
 {
     // searching all files in the given directory (also in the subdirectories) and append all found netCdf files to the _files variable
     // all files and folders given in ignores will be skipped
     // if path is a netCdf file, only add the netcdf file
-    if(path.substr(path.find_last_of(".")) == ".nc"){
-        _files.push_back(path);
+    if(path.find_last_of(".") <= path.size() && path.substr(path.find_last_of(".")) == ".nc"){
+        _files.push_back(std::string(path));
     }
     else{
-        auto compareString = [](const std::string_view& s, const std::string_view& form){
-            std::size_t curPos = 0, sPos = 0;
-            while(curPos != std::string_view::npos){
-                std::size_t nextPos = form.find("*", curPos);
-                std::string_view curPart = form.substr(curPos, nextPos);
-                if(s.find(curPart, sPos) == std::string_view::npos)
-                    return false;
-                sPos += curPart.size();
-                curPos = nextPos + 1;
-            }
-            return true;
+        auto isIgnored = [&](const std::string_view& n, const std::vector<std::string_view>& ignores){
+            return std::find_if(ignores.begin(), ignores.end(), [&](const std::string_view& s){return PCUtil::compareStringFormat(n, s);}) != ignores.end();
         };
-        auto isIgnored = [compareString](const std::string_view& n, const std::vector<std::string_view>& ignores){
-            return std::find_if(ignores.begin(), ignores.end(), [&](std::string_view& s){return compareString(n, s);}) != ignores.end();
+        auto isIncluded = [&](const std::string_view& n, const std::vector<std::string_view>& includes){
+            if(includes.empty()) return true;
+            return std::find_if(includes.begin(), includes.end(), [&](const std::string_view& s){return PCUtil::compareStringFormat(n, s);}) != includes.end();
         };
         std::vector<std::string_view> folders{path};
         while(!folders.empty()){
@@ -39,13 +30,13 @@ _queryAttributes(queriedAttributes)
                 // get all contents and iterate over them
                 for(const auto& entry: std::filesystem::directory_iterator(curFolder)){
                     if(entry.is_directory()){
-                        folders.push_back(entry.path().c_str());
+                        folders.push_back(entry.path().string());
                     }
                     else if(entry.is_regular_file()){
                         // check if should be ignored
                         std::string_view filename = entry.path().string().substr(entry.path().string().find_last_of("/\\"));
-                        if(!isIgnored(filename, ignores) && filename.substr(filename.find_last_of(".")) == "nc"){
-                            _files.push_back(entry.path().c_str());
+                        if(isIncluded(filename, includes) && !isIgnored(filename, ignores) && filename.substr(filename.find_last_of(".")) == ".nc"){
+                            _files.push_back(entry.path().string());
                         }
                     }
                 }
@@ -53,10 +44,12 @@ _queryAttributes(queriedAttributes)
         }
     }
     
-    std::cout << "Found " << _files.size() << " netCdf files in the given path";
+    std::cout << "Found " << _files.size() << " netCdf files in the given path" << std::endl;
 
     if(_files.empty())
         throw std::runtime_error("NetCdfLoader::NetCdfLoader(...) Could not find any files.");
+    
+    queryAttributes = PCUtil::queryNetCDF(_files.front());
 }
 
 void NetCdfLoader::reset() 
@@ -69,11 +62,17 @@ void NetCdfLoader::reset()
 
 void NetCdfLoader::dataAnalysis(size_t& dataSize, std::vector<Attribute>& attributes) 
 {
+    if(_attributes.size()){
+        dataSize = _dataSize;
+        attributes = _attributes;
+        return;
+    }
     std::cout << "Data analysis: 0%";
+    std::cout.flush();
     _dataSize = 0;
     for(int i = 0; i < _files.size(); ++i){
         _progress = (i + 1.0) / _files.size();
-        Data d = PCUtil::openNetCdf(_files[i], _attributes, _queryAttributes);  //parses netcdf file and updates the _attributes vector
+        Data d = PCUtil::openNetCdf(_files[i], _attributes, queryAttributes);  //parses netcdf file and updates the _attributes vector
         _dataSize += d.size();
         std::cout << "\rData analysis: " << _progress * 100 << "%";
         std::cout.flush();
@@ -85,12 +84,12 @@ void NetCdfLoader::dataAnalysis(size_t& dataSize, std::vector<Attribute>& attrib
 bool NetCdfLoader::getNext(std::vector<float>& d) 
 {
     if(_curData.size() == 0){
-        _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, _queryAttributes);
+        _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, queryAttributes);
     }
     else if(_curData.size() == _curDataIndex){
         if(++_curFile == _files.size()) 
             return false;
-        _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, _queryAttributes);
+        _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, queryAttributes);
         _curDataIndex = 0;
     }
     _progress = ++_curTotalIndex / static_cast<float>(_dataSize);

@@ -62,6 +62,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "CorrelationMatrixWorkbench.hpp"
 #include "GpuRadixSorter.hpp"
 #include "PCRenderer.hpp"
+#include "compression/NetCdfLoader.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"

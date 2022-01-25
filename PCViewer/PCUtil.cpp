@@ -112,6 +112,23 @@ float PCUtil::distance(const ImVec2& a, const ImVec2& b){
 	return std::sqrt(distance2(a, b));
 }
 
+bool PCUtil::compareStringFormat(const std::string_view& s, const std::string_view& form) 
+{
+	std::size_t curPos = 0, sPos = 0;
+    while(true){
+        std::size_t nextPos = form.find("*", curPos);
+		if(nextPos == std::string_view::npos)
+			break;
+        std::string_view curPart = form.substr(curPos, nextPos - curPos);
+		sPos = s.find(curPart, sPos);
+        if(sPos == std::string_view::npos)
+            return false;
+        sPos += curPart.size();
+        curPos = nextPos + 1;
+    }
+    return true;
+}
+
 std::vector<QueryAttribute> PCUtil::queryNetCDF(const std::string_view& filename) 
 {
 	int fileId, retval;

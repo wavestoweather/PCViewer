@@ -8,6 +8,7 @@
 #include <chrono>
 #include "imgui/imgui.h"
 #include "Data.hpp"
+#include "Attribute.hpp"
 
 class PCUtil {
 public:
@@ -21,6 +22,7 @@ public:
 	static bool vectorEqual(const std::vector<float>& a, const std::vector<float>& b);
 	static float distance2(const ImVec2& a, const ImVec2& b);
 	static float distance(const ImVec2& a, const ImVec2& b);
+	static bool compareStringFormat(const std::string_view& s, const std::string_view& form);
 	static std::vector<QueryAttribute> queryNetCDF(const std::string_view& filename);
 	static std::vector<int> checkAttributes(std::vector<std::string>& a, std::vector<Attribute>& ref);
 	static Data openNetCdf(const std::string_view& filename, /*inout*/ std::vector<Attribute>& attributes, const std::vector<QueryAttribute>& queryAttributes);

@@ -47,6 +47,7 @@ class Data{
         dimensionSizes(dimensionSizes), columnDimensions(columnDimensions), columns(columns){};
 
     uint64_t size() const{
+        if(dimensionSizes.empty()) return 0;
         uint64_t ret = 1;
         for(int i: dimensionSizes) ret *= i;
         return ret;
