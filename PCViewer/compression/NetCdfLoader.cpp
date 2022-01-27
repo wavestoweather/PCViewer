@@ -100,3 +100,15 @@ bool NetCdfLoader::getNext(std::vector<float>& d)
     }
     return true;
 }
+
+bool NetCdfLoader::getNextNormalized(std::vector<float>& d) 
+{
+    //getting normal data
+    bool n = getNext(d);
+    if(!n) return false;
+    //normalizing
+    for(int i = 0; i < _attributes.size(); ++i){
+        d[i] = (d[i] - _attributes[i].min) / (_attributes[i].max - _attributes[i].min + NORM_EPS);
+    }
+    return true;
+}

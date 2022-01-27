@@ -27,7 +27,7 @@ void LeaderClustering::cluster(const Data& in, Data& out, const std::vector<floa
         else{                //new leader
             leaders[i].data = mins;
             for(int a = 0; a < numDims; ++a){
-                mins[a] -= epsilon[a] / 2;
+                mins[a] -= epsilon[a] / 2;      // for normal leaders clustering epsilon is the radius, so add and substract full epsilon
                 maxs[a] += epsilon[a] / 2;
             }
             tree.Insert(mins.data(), maxs.data(), i);

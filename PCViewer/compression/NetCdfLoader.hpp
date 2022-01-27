@@ -4,6 +4,8 @@
 #include "DataLoader.hpp"
 #include "../Data.hpp"
 
+#define NORM_EPS  1e-8
+
 class NetCdfLoader: public DataLoader{
 public:
     NetCdfLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores);
@@ -11,6 +13,7 @@ public:
     const float& progress() const {return _progress;};
     void dataAnalysis(size_t& dataSize, std::vector<Attribute>& attributes);
     bool getNext(std::vector<float>& d);
+    bool getNextNormalized(std::vector<float>& d);
     void reset();
 private:
     // file information

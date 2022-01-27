@@ -12,5 +12,6 @@ public:
     virtual const float& progress() const = 0;
     virtual void dataAnalysis(size_t& dataSize, std::vector<Attribute>& attributes) = 0;
     virtual bool getNext(std::vector<float>& d) = 0;
+    virtual bool getNextNormalized(std::vector<float>& d) = 0;
     virtual void reset() = 0;
 };
