@@ -42,6 +42,7 @@ namespace compression
             }
 
             //final writeout to disk
+            bool hellYeah = true;
         }
         catch(std::filesystem::filesystem_error err){
             std::cout << "Error trying to open output folder " << err.path1() << " with code: " << err.code() << std::endl;

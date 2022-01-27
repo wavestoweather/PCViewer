@@ -2,7 +2,10 @@
 #include "../imgui/imgui_stdlib.h"
 #include "NetCdfLoader.hpp"
 #include "../PCUtil.h"
+#include "HirarchyCreation.hpp"
 #include <thread>
+#include <chrono>
+#include <algorithm>
 
 void analyse(std::shared_ptr<DataLoader> loader, size_t* dataSize, std::vector<Attribute>* attributes){
     loader->dataAnalysis(*dataSize, *attributes);
@@ -56,12 +59,19 @@ void CompressionWorkbench::draw()
             _analysisFuture = std::async(analyse, _loader, &_dataSize, &_attributes);
             //_loader->dataAnalysis(_dataSize, _attributes);
         }
-        ImGui::Text(("Analyzed data size: " + std::to_string(_dataSize)).c_str());
-        for(auto& a: _attributes){
-            ImGui::Text(a.name.c_str());
-        }
+        ImGui::Text("Analyzed data size: %d", _dataSize);
         if(_loader)
             ImGui::Text(("Loader Fortschritt: " + std::to_string(_loader->progress())).c_str());
+        
+        ImGui::Separator();
+        ImGui::InputText("Output path", &_outputFolder);
+        if(ImGui::InputFloat("Epsilon start", &_epsStart, .01f, .1f)) _epsStart = std::clamp(_epsStart, 1e-6f, 1.0f);
+        if(ImGui::InputInt("Lines per level", reinterpret_cast<int*>(&_linesPerLvl))) _linesPerLvl = std::clamp<uint32_t>(_linesPerLvl, 1, 1e7);
+        if(ImGui::InputInt("Levels", reinterpret_cast<int*>(&_levels))) _levels = std::clamp<uint32_t>(_levels, 1, 20);
+        using namespace std::chrono_literals;
+        if(_analysisFuture.valid() && _analysisFuture.wait_for(0s) == std::future_status::ready && ImGui::Button("Build Hierarchy")){
+            compression::createHirarchy(_outputFolder, *_loader, _epsStart, _levels, _linesPerLvl);
+        }
     }
     ImGui::End();
 }

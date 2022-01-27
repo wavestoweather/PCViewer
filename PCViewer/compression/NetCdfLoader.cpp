@@ -71,9 +71,9 @@ void NetCdfLoader::dataAnalysis(size_t& dataSize, std::vector<Attribute>& attrib
     std::cout.flush();
     _dataSize = 0;
     for(int i = 0; i < _files.size(); ++i){
-        _progress = (i + 1.0) / _files.size();
         Data d = PCUtil::openNetCdf(_files[i], _attributes, queryAttributes);  //parses netcdf file and updates the _attributes vector
         _dataSize += d.size();
+        _progress = (i + 1.0) / _files.size();
         std::cout << "\rData analysis: " << _progress * 100 << "%";
         std::cout.flush();
     }
@@ -98,6 +98,7 @@ bool NetCdfLoader::getNext(std::vector<float>& d)
     for(int i = 0; i < _attributes.size(); ++i){
         d[i] = _curData(_curDataIndex, i);
     }
+    ++_curDataIndex;
     return true;
 }
 

@@ -507,6 +507,8 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max, const DATA
 
   Branch branch;
   branch.m_data = a_dataId;
+  branch.m_rect.m_min.resize(NUMDIMS);
+  branch.m_rect.m_max.resize(NUMDIMS);
   branch.m_child = NULL;
 
   for(int axis=0; axis<NUMDIMS; ++axis)
@@ -680,6 +682,8 @@ bool RTREE_QUAL::LoadRec(Node* a_node, RTFileStream& a_stream)
     {
       Branch* curBranch = &a_node->m_branch[index];
 
+      curBranch->m_rect.m_min.resize(NUMDIMS);
+      curBranch->m_rect.m_max.resize(NUMDIMS);
       a_stream.ReadArray(curBranch->m_rect.m_min.data(), NUMDIMS);
       a_stream.ReadArray(curBranch->m_rect.m_max.data(), NUMDIMS);
 
@@ -693,6 +697,8 @@ bool RTREE_QUAL::LoadRec(Node* a_node, RTFileStream& a_stream)
     {
       Branch* curBranch = &a_node->m_branch[index];
 
+      curBranch->m_rect.m_min.resize(NUMDIMS);
+      curBranch->m_rect.m_max.resize(NUMDIMS);
       a_stream.ReadArray(curBranch->m_rect.m_min.data(), NUMDIMS);
       a_stream.ReadArray(curBranch->m_rect.m_max.data(), NUMDIMS);
 
@@ -717,6 +723,8 @@ void RTREE_QUAL::CopyRec(Node* current, Node* other)
       Branch* currentBranch = &current->m_branch[index];
       Branch* otherBranch = &other->m_branch[index];
 
+      currentBranch->m_rect.m_min.resize(NUMDIMS);
+      currentBranch->m_rect.m_max.resize(NUMDIMS);
       std::copy(otherBranch->m_rect.m_min.data(),
                 otherBranch->m_rect.m_min.data() + NUMDIMS,
                 currentBranch->m_rect.m_min.data());
@@ -736,6 +744,8 @@ void RTREE_QUAL::CopyRec(Node* current, Node* other)
       Branch* currentBranch = &current->m_branch[index];
       Branch* otherBranch = &other->m_branch[index];
 
+      currentBranch->m_rect.m_min.resize(NUMDIMS);
+      currentBranch->m_rect.m_max.resize(NUMDIMS);
       std::copy(otherBranch->m_rect.m_min.data(),
                 otherBranch->m_rect.m_min.data() + NUMDIMS,
                 currentBranch->m_rect.m_min.data());
