@@ -21,9 +21,12 @@ private:
     size_t _dataSize{};
 
     std::future<void> _analysisFuture;
+    std::future<void> _buildHierarchyFuture;
 
     std::string _outputFolder{};
     float _epsStart{.1f};
     uint32_t _linesPerLvl{static_cast<uint32_t>(1e6)};
     uint32_t _levels{3};
+    uint32_t _maxWorkingMemory{16000};
+    uint32_t _amtOfThreads{8};
 };

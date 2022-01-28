@@ -3,6 +3,8 @@
 #include <string_view>
 #include "DataLoader.hpp"
 #include "../Data.hpp"
+#include <mutex>
+#include <shared_mutex>
 
 #define NORM_EPS  1e-8
 
@@ -28,4 +30,6 @@ private:
     std::vector<Attribute> _attributes;
 
     float _progress{};
+
+    std::shared_mutex _readMutex;
 };

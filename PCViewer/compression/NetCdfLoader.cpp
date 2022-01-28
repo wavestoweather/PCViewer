@@ -84,6 +84,7 @@ void NetCdfLoader::dataAnalysis(size_t& dataSize, std::vector<Attribute>& attrib
 
 bool NetCdfLoader::getNext(std::vector<float>& d) 
 {
+    std::unique_lock<std::shared_mutex> lock(_readMutex);   //making the method thread safe at reading, only letting a single thread read at a time
     if(_curData.size() == 0){
         _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, queryAttributes);
     }
