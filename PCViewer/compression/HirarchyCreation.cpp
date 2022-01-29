@@ -9,6 +9,7 @@
 #include <queue>
 #include <atomic>
 #include <future>
+#include <fstream>
 
 namespace compression
 {
@@ -36,6 +37,7 @@ namespace compression
             // converting lvl multiplier to epsilon multiplier
             double epsMult = pow(1.0/lvlMultiplier, 1.0/dataPoint.size());
             HirarchyNode root(dataPoint, lvl0eps, epsMult, 0, levels);   //constructor automatically inserts the first data point
+            std::shared_mutex cacheMutex;                            //mutex for the root node to control insert/cache access
 
             const int checkInterval = 1000;
             std::atomic<int> sizeCheck = checkInterval;
@@ -43,11 +45,13 @@ namespace compression
                 std::vector<float> threadData;
                 while(loader->getNextNormalized(threadData)){
                     //insert into the hirarchy
+                    std::shared_lock<std::shared_mutex> insertLock(cacheMutex);
                     root.addDataPoint(threadData);
+                    insertLock.unlock();
 
                     //should add caching strategies to avoid memory overflow and inbetween writeouts
                     if(--sizeCheck < 0 && threadId == 0){
-                        std::unique_lock<std::shared_mutex> lock(root.getMutex()); // locking the root node to do caching
+                        std::unique_lock<std::shared_mutex> lock(cacheMutex); // locking the root node unique to do caching
                         sizeCheck = checkInterval;
                         size_t structureSize = root.getByteSize();
                         if(structureSize > maxMemoryMB * 1024 * 1024){
@@ -71,8 +75,17 @@ namespace compression
             
             //final writeout to disk
             bool hellYeah = true;
-            std::vector<float> half(.5f, dataPoint.size());
+            std::vector<float> half(dataPoint.size(), .5f);
             root.cacheNode(tempPath, "", half.data(), .5f, &root);
+            //info file containing 
+            std::ofstream file(tempPath + "/attr.info", std::ios_base::binary);
+            file.clear();
+            std::vector<Attribute> attributes;
+            size_t tmp;
+            loader->dataAnalysis(tmp, attributes);
+            for(auto& a: attributes){
+                file << a.name << " " << a.min << " " << a.max << "\n"; 
+            }
         }
         catch(std::filesystem::filesystem_error err){
             std::cout << "Error trying to open output folder " << err.path1() << " with code: " << err.code() << std::endl;

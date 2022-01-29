@@ -54,6 +54,7 @@ NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::
 
 void NetCdfLoader::reset() 
 {
+    std::unique_lock<std::shared_mutex> lock(_readMutex);
     _curFile = {};
     _curData = {};
     _curDataIndex = {};
@@ -89,7 +90,7 @@ bool NetCdfLoader::getNext(std::vector<float>& d)
         _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, queryAttributes);
     }
     else if(_curData.size() == _curDataIndex){
-        if(++_curFile == _files.size()) 
+        if(++_curFile >= _files.size()) 
             return false;
         _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, queryAttributes);
         _curDataIndex = 0;

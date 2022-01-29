@@ -34,7 +34,6 @@ void HirarchyNode::addDataPoint(const std::vector<float>& d){
         rTree.Insert(mins.data(), maxs.data(), newId);
         followerData.insert(followerData.end(), d.begin(), d.end());
         followerData.push_back(1);  //adding the counter for each row
-        lock.unlock();     //can release the lock, all critical things already done
         if(int x  = followerData.size() / d.size(); x > 2e6){
             std::cout << "\rNote: large HirarchyNode with " << x << "elements";
         }
@@ -42,6 +41,7 @@ void HirarchyNode::addDataPoint(const std::vector<float>& d){
         if(depth < maxDepth){   //only create new child and propagate data if not at leaf nodes
             leaders.try_emplace(newId, d, eps * epsMul, epsMul, depth + 1, maxDepth);
         }
+        lock.unlock();     //can release the lock, all critical things already done
     }
     _updateStamp = ++_globalUpdateStamp;
 }

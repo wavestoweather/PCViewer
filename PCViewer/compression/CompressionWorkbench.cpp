@@ -53,7 +53,14 @@ void CompressionWorkbench::draw()
             _loader = std::make_shared<NetCdfLoader>(_inputFiles, includeView, excludeView);
         }
         if(_loader){
-            ImGui::Text("Hier könnte jetzt eine subselektion der dimensionen ausgeführt werden...");
+            ImGui::Text("Loader contains %i files", _loader->getFileAmt());
+            if(ImGui::CollapsingHeader("Data dimension settings")){
+                ImGui::Text("Hier könnte jetzt eine subselektion der dimensionen ausgeführt werden...");
+                for(auto& e: _loader->queryAttributes){
+                    if(e.dimensionSize == 0) 
+                        ImGui::Checkbox(e.name.c_str(), &e.active);
+                }
+            }
         }
         if(_loader && ImGui::Button("Analyze")){
             _analysisFuture = std::async(analyse, _loader, &_dataSize, &_attributes);
@@ -61,7 +68,7 @@ void CompressionWorkbench::draw()
         }
         ImGui::Text("Analyzed data size: %d", _dataSize);
         if(_loader)
-            ImGui::Text(("Loader Fortschritt: " + std::to_string(_loader->progress())).c_str());
+            ImGui::Text("Loader progress: %.2f%%", _loader->progress() * 100);
         
         ImGui::Separator();
         ImGui::InputText("Output path", &_outputFolder);
@@ -79,4 +86,17 @@ void CompressionWorkbench::draw()
         }
     }
     ImGui::End();
+}
+
+void CompressionWorkbench::stopThreads() 
+{
+    //canelling loading to also stop hirarchy building
+    using namespace std::chrono_literals;
+    if(_analysisFuture.valid() && _analysisFuture.wait_for(0s) == std::future_status::ready)
+        _loader->reset();
+}
+
+CompressionWorkbench::~CompressionWorkbench() 
+{
+    
 }

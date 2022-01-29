@@ -8,8 +8,10 @@
 class CompressionWorkbench{
 public:
     CompressionWorkbench(){};
+    ~CompressionWorkbench();
 
     void draw();
+    void stopThreads();
 
     bool active{};
 private:

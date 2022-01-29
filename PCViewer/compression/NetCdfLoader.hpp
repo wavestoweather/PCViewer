@@ -17,6 +17,7 @@ public:
     bool getNext(std::vector<float>& d);
     bool getNextNormalized(std::vector<float>& d);
     void reset();
+    size_t getFileAmt(){return _files.size();};
 private:
     // file information
     int _curFile{};

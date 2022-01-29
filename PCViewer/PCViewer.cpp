@@ -14324,6 +14324,10 @@ int main(int, char**)
 		if (vp.attributeNames.size()) delete[] vp.activeAttributes;
 	}
 
+	if(compressionWorkbench){
+		compressionWorkbench->stopThreads();
+	}
+
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);

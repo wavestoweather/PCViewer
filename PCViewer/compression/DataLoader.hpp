@@ -14,4 +14,5 @@ public:
     virtual bool getNext(std::vector<float>& d) = 0;
     virtual bool getNextNormalized(std::vector<float>& d) = 0;
     virtual void reset() = 0;
+    virtual size_t getFileAmt() = 0;
 };
