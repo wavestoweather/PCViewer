@@ -62,6 +62,7 @@ file(GLOB rtree_SRC
 
 file(GLOB compress_SRC
     "compression/*.cpp"
+    "compression/cpuCompression/*.cpp"
 )
 
 add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC})
