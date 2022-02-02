@@ -1,9 +1,9 @@
-#include "HirarchyNode.hpp"
+#include "LeaderNode.hpp"
 #include <iostream>
 #include <limits>
 #include <fstream>
 
-HirarchyNode::HirarchyNode(const std::vector<float>& pos, float inEps, float inEpsMul, uint32_t inDepth, uint32_t inMaxDepth):
+LeaderNode::LeaderNode(const std::vector<float>& pos, float inEps, float inEpsMul, uint32_t inDepth, uint32_t inMaxDepth):
 rTree(pos.size()),
 eps(inEps),
 epsMul(inEpsMul),
@@ -13,7 +13,7 @@ maxDepth(inMaxDepth)
     addDataPoint(pos);  //automatically adds itself to the follower data
 }
 
-void HirarchyNode::addDataPoint(const std::vector<float>& d){
+void LeaderNode::addDataPoint(const std::vector<float>& d){
     std::vector<uint32_t> closest;
     auto backInsert = [&](const uint32_t& id){closest.push_back(id); return false;}; // return false to quit when first was found
     std::unique_lock<std::shared_mutex> lock(_insertLock);
@@ -46,13 +46,13 @@ void HirarchyNode::addDataPoint(const std::vector<float>& d){
     _updateStamp = ++_globalUpdateStamp;
 }
 
-int HirarchyNode::calcCacheScore(){
+int LeaderNode::calcCacheScore(){
     return followerData.size() / rTree.NUMDIMS - _updateStamp;
 }
 
-HirarchyNode* HirarchyNode::getCacheNode(int& cacheScore){
+HierarchyCreateNode* LeaderNode::getCacheNode(int& cacheScore){
     int bestCache{std::numeric_limits<int>::max()};
-    HirarchyNode* bestNode{};
+    HierarchyCreateNode* bestNode{};
     for(auto& f: leaders){
         int tmpCache;
         f.second.getCacheNode(tmpCache);
@@ -69,7 +69,7 @@ HirarchyNode* HirarchyNode::getCacheNode(int& cacheScore){
     return bestNode;
 }
 
-void HirarchyNode::cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HirarchyNode* chacheNode){
+void LeaderNode::cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){
     uint32_t curInd{};
     uint32_t maxLeadersPerAx = static_cast<uint32_t>(ceil(parentEps / eps));
     uint32_t multiplier = 1;
@@ -102,7 +102,7 @@ void HirarchyNode::cacheNode(const std::string_view& cachePath, const std::strin
     }
 }
 
-size_t HirarchyNode::getByteSize(){
+size_t LeaderNode::getByteSize(){
     size_t size = followerData.size() * sizeof(followerData[0]);
     size += 2 * size;   //byte size of r tree is around double the size of the follower data
     for(auto& f: leaders){
@@ -111,4 +111,4 @@ size_t HirarchyNode::getByteSize(){
     return size;
 }
 
-uint32_t HirarchyNode::_globalUpdateStamp = 0;
+uint32_t LeaderNode::_globalUpdateStamp = 0;
