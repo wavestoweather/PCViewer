@@ -2,6 +2,7 @@
 
 #include "LeaderNode.hpp"
 #include "../rTree/RTreeDynamic.h"
+#include "cpuCompression/EncodeCPU.h"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -95,6 +96,44 @@ namespace compression
     
     void compressTempHirarchy(const std::string_view& outputFolder, int amtOfThreads) 
     {
-        
+        std::string tempPath = std::string(outputFolder) + "/temp";
+        std::vector<std::string> cacheFiles;
+        // getting all cache files
+        for(const auto& entry: std::filesystem::directory_iterator(tempPath)){
+            if(entry.is_regular_file() && entry.path().string().find('.') == std::string::npos){    // is cache file
+                cacheFiles.push_back(entry.path().string());
+            }
+        }
+
+        // compressing the cache files
+        auto compressThread = [&](const std::vector<std::string>& files){
+            for(auto& f: files){
+                std::ifstream fs(f, std::ios_base::binary);
+                std::vector<float> data;
+                int rowLength;
+                while(!fs.eof() && fs.good()){
+                    int dataSize;
+                    fs >> rowLength >> dataSize;
+                    //reading the data
+                    std::vector<float> d(dataSize);
+                    fs.read(reinterpret_cast<char*>(d.data()), dataSize * sizeof(d[0]));
+                    data.insert(data.end(), d.begin(), d.end());
+                }
+                //converting from row major to column major
+                std::vector<float> col(data.size());
+                uint32_t colInd = 0;
+                for(uint32_t curInd = 0; curInd != data.size() - 1; curInd += rowLength){
+                    if(curInd >= data.size()) curInd %= data.size();
+                    col[colInd++] = data[curInd];
+                }
+                //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
+                
+
+                std::string outName = f.substr(f.find_last_of("/\\") + 1);  //should there be no /, then npos + 1  = 0, so the whole string is taken
+                outName = std::string(outputFolder) + "/" + outName;
+                std::ofstream out(outName);
+                out.write(reinterpret_cast<char*>(col.data()), col.size() * sizeof(col[0]));
+            }
+        };
     }
 }

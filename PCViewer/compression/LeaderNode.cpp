@@ -70,11 +70,11 @@ HierarchyCreateNode* LeaderNode::getCacheNode(int& cacheScore){
 }
 
 void LeaderNode::cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){
-    uint32_t curInd{};
+    size_t curInd{};
     uint32_t maxLeadersPerAx = static_cast<uint32_t>(ceil(parentEps / eps));
     uint32_t multiplier = 1;
     for(int i = 0; i < rTree.NUMDIMS; ++i){
-        curInd += static_cast<uint32_t>((followerData[i] - parentCenter[i] + parentEps)  / (2 * parentEps) * (maxLeadersPerAx - 1)+ .5) * multiplier;
+        curInd += static_cast<size_t>((followerData[i] - parentCenter[i] + parentEps)  / (2 * parentEps) * (maxLeadersPerAx - 1)+ .5) * multiplier;
         multiplier *= maxLeadersPerAx;
     }
     std::string curId = parentId + "_" + std::to_string(curInd);
@@ -85,7 +85,7 @@ void LeaderNode::cacheNode(const std::string_view& cachePath, const std::string&
         leaders.clear();    //deleting all leader nodes
         std::ofstream f(std::string(cachePath) + "/" + curId, std::ios_base::app | std::ios_base::binary);    //opening an append filestream
         // adding fixed size information header
-        f << rTree.NUMDIMS << " " << followerData.size() << "\n";   //space needed to easily be able to parse the file again
+        f << rTree.NUMDIMS + 1 << " " << followerData.size() << "\n";   //space needed to easily be able to parse the file again
         f.write(reinterpret_cast<char*>(followerData.data()), followerData.size() * sizeof(followerData[0]));
         f << "\n";
     }
