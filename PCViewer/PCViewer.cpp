@@ -35,6 +35,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
 #include "cimg/CImg.h"
+#include <fstream>
 #ifdef Success
 #undef Success
 #endif
@@ -65,6 +66,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "compression/CompressionWorkbench.hpp"
 #include "compression/cpuCompression/DWTCpu.h"
 #include "compression/cpuCompression/EncodeCPU.h"
+#include "compression/HirarchyCreation.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -7040,29 +7042,12 @@ int main(int, char**)
 #endif
 	engine.seed(15);
 
-	std::vector<float> nums{10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5};
-	std::vector<float> res(nums.size());
-	cudaCompress::util::dwtFloatForwardCPU(res.data(), nums.data(), nums.size());
-	nums = res;
-	cudaCompress::util::dwtFloatForwardCPU(nums.data(), res.data(), nums.size() / 2, nums.size() / 2, nums.size() / 2);
-	// multi level dwt done
-
-	std::vector<ushort> symbols(nums.size());
-	cudaCompress::util::quantizeToSymbols(symbols.data(), nums.data(), nums.size(), .001f);
-	//quantization done
-
-	cudaCompress::BitStream bitStream;
-	cudaCompress::BitStream* arr[]{&bitStream};
-	std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
-	cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
-	//run length + huffman encoding done
-
-	// decomression
-	cudaCompress::BitStreamReadOnly* arr2[]{&bitStream};
-	cudaCompress::decodeRLHuffCPU(arr2, sArr, 1, symbols.size(), symbols.size());
-	cudaCompress::util::unquantizeFromSymbols(nums.data(), symbols.data(), nums.size(), .001f);
-	cudaCompress::util::dwtFloatInverseCPU(res.data(), nums.data(), nums.size() / 2, nums.size() / 2, nums.size() / 2);
-	cudaCompress::util::dwtFloatInverseCPU(nums.data(), res.data(), nums.size());
+	//std::vector<float> numbers(100);
+	//std::iota(numbers.begin(), numbers.end(), 0);
+	//std::ofstream tes("/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/test/temp/1");
+	//tes << 5 << " " << numbers.size() << "\n";
+	//tes.write(reinterpret_cast<char*>(numbers.data()), numbers.size() * sizeof(numbers[0]));
+	//tes.close();
 
 	//test of multivariate gauss calculations
 	//float determinant;

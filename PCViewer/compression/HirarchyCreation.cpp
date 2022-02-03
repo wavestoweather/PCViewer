@@ -3,6 +3,7 @@
 #include "LeaderNode.hpp"
 #include "../rTree/RTreeDynamic.h"
 #include "cpuCompression/EncodeCPU.h"
+#include "cpuCompression/DWTCpu.h"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -15,10 +16,10 @@
 
 namespace compression
 {
-    void createHirarchy(const std::string_view& outputFolder, DataLoader* loader, float lvl0eps, int levels, int lvlMultiplier, int maxMemoryMB, int amtOfThreads) 
+    void createHirarchy(const std::string_view& outputFolder, DataLoader* loader, float lvl0eps, int levels, int lvlMultiplier, int maxMemoryMB, int amtOfThreads, float quantizationStep) 
     {
         createTempHirarchy(outputFolder, loader, lvl0eps, levels, lvlMultiplier, maxMemoryMB, amtOfThreads);
-        compressTempHirarchy(outputFolder, amtOfThreads);
+        compressTempHirarchy(outputFolder, amtOfThreads, quantizationStep);
     }
 
     void createTempHirarchy(const std::string_view& outputFolder, DataLoader* loader, float lvl0eps, int levels, int lvlMultiplier, int maxMemoryMB, int amtOfThreads) 
@@ -80,8 +81,7 @@ namespace compression
             std::vector<float> half(dataPoint.size(), .5f);
             root->cacheNode(tempPath, "", half.data(), .5f, root.get());
             //info file containing 
-            std::ofstream file(tempPath + "/attr.info", std::ios_base::binary);
-            file.clear();
+            std::ofstream file(std::string(outputFolder) + "/attr.info", std::ios_base::binary);
             std::vector<Attribute> attributes;
             size_t tmp;
             loader->dataAnalysis(tmp, attributes);
@@ -94,7 +94,7 @@ namespace compression
         }
     }
     
-    void compressTempHirarchy(const std::string_view& outputFolder, int amtOfThreads) 
+    void compressTempHirarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep) 
     {
         std::string tempPath = std::string(outputFolder) + "/temp";
         std::vector<std::string> cacheFiles;
@@ -114,26 +114,95 @@ namespace compression
                 while(!fs.eof() && fs.good()){
                     int dataSize;
                     fs >> rowLength >> dataSize;
+                    fs.get();   //newline char
                     //reading the data
                     std::vector<float> d(dataSize);
                     fs.read(reinterpret_cast<char*>(d.data()), dataSize * sizeof(d[0]));
                     data.insert(data.end(), d.begin(), d.end());
+                    fs.get();   //newline char
                 }
                 //converting from row major to column major
                 std::vector<float> col(data.size());
                 uint32_t colInd = 0;
-                for(uint32_t curInd = 0; curInd != data.size() - 1; curInd += rowLength){
-                    if(curInd >= data.size()) curInd %= data.size();
+                for(uint32_t curInd = 0; colInd < data.size(); curInd += rowLength){
+                    if(curInd >= data.size()) ++curInd %= data.size();
                     col[colInd++] = data[curInd];
                 }
                 //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
-                
+                //padding to size % 4 size
+                uint originalLength = col.size();
+                uint paddedLength = ((4 - (col.size() & 0b11)) & 0b11) + col.size();
+                col.resize(paddedLength); data.resize(paddedLength);
+                cudaCompress::util::dwtFloatForwardCPU(data.data(), col.data(), data.size(), 0, 0);
+                std::copy(data.begin(), data.begin() + paddedLength / 2, col.begin());
+                cudaCompress::util::dwtFloatForwardCPU(col.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
+                std::vector<cudaCompress::Symbol16> symbols(col.size());
+                cudaCompress::util::quantizeToSymbols(symbols.data(), col.data(), col.size(), quantizationStep);
+                cudaCompress::BitStream bitStream;
+	            cudaCompress::BitStream* arr[]{&bitStream};
+                std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
+                cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
 
                 std::string outName = f.substr(f.find_last_of("/\\") + 1);  //should there be no /, then npos + 1  = 0, so the whole string is taken
                 outName = std::string(outputFolder) + "/" + outName;
                 std::ofstream out(outName);
-                out.write(reinterpret_cast<char*>(col.data()), col.size() * sizeof(col[0]));
+                out << bitStream.getRawSizeBytes() << " " << symbols.size() << " " << originalLength << " " << quantizationStep << "\n";
+                int s = bitStream.getRawSizeBytes();
+                out.write(reinterpret_cast<char*>(bitStream.getRaw()), bitStream.getRawSizeBytes());
             }
         };
+
+        {
+            std::vector<std::future<void>> futures(amtOfThreads);
+            auto curStart = cacheFiles.begin();
+            for(int i = 0; i < amtOfThreads; ++i){
+                auto curEnd = cacheFiles.begin() + (i + 1) * cacheFiles.size() / amtOfThreads;
+                std::vector<std::string> subSet(curStart, curEnd);
+                curStart = curEnd;
+                futures[i] = std::async(compressThread, subSet);
+            }
+        }
+    }
+    
+    void loadAndDecompress(const std::string_view& file, Data& data) 
+    {
+	    std::ifstream in(file.data());
+	    uint byteSize, symbolsSize, dataSize;
+	    float quantizationStep;
+	    in >> byteSize >> symbolsSize >> dataSize >> quantizationStep;
+	    in.get();	//skipping newline
+	    std::vector<uint> bytes(byteSize / 4);
+	    in.read(reinterpret_cast<char*>(bytes.data()), byteSize);
+	    cudaCompress::BitStreamReadOnly bs(bytes.data(), byteSize * 8);
+	    cudaCompress::BitStreamReadOnly* dec[]{&bs};
+	    std::vector<cudaCompress::Symbol16> nS(symbolsSize);
+	    std::vector<cudaCompress::Symbol16>* ss[]{&nS};
+	    cudaCompress::decodeRLHuffCPU(dec, ss, symbolsSize, 1, symbolsSize);
+	    std::vector<float> result(symbolsSize), result2(symbolsSize);
+	    cudaCompress::util::unquantizeFromSymbols(result.data(), nS.data(), nS.size(), quantizationStep);
+	    result2 = result;
+	    cudaCompress::util::dwtFloatInverseCPU(result2.data(), result.data(), result.size() / 2, result.size() / 2, result.size() / 2);
+	    cudaCompress::util::dwtFloatInverseCPU(result.data(), result2.data(), result.size());
+
+        // getting attribute infos to get the columns amount
+        std::string base(file.substr(0, file.find_last_of("/\\")));
+        std::ifstream info(base + "/attr.info");
+        int colCount = 0;
+        while(!info.eof() && info.good()){
+            std::string name;
+            float min, max;
+            info >> name >> min >> max;
+            info.get(); //skip newline
+            ++colCount;
+        }
+        data.columns.resize(colCount);
+        data.columnDimensions.resize(colCount);
+        uint32_t colSize = dataSize / colCount;
+        data.dimensionSizes = {colSize};
+        for(int i = 0; i < colCount; ++i){
+            data.columns[i].resize(colSize);
+            std::copy_n(result.begin() + i * colSize, colSize, data.columns[i].begin());
+            data.columnDimensions[i] = {0};     //dependant only on the first dimension, which is the linear index dimension
+        }   
     }
 }

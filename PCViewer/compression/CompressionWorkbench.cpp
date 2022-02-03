@@ -79,7 +79,7 @@ void CompressionWorkbench::draw()
         if(ImGui::InputInt("Amt of threads", reinterpret_cast<int*>(&_amtOfThreads))) _amtOfThreads = std::max(1u, _amtOfThreads);
         using namespace std::chrono_literals;
         if(_analysisFuture.valid() && _analysisFuture.wait_for(0s) == std::future_status::ready && ImGui::Button("Build Hierarchy")){
-            _buildHierarchyFuture = std::async(compression::createHirarchy, std::string_view(_outputFolder), _loader.get(), _epsStart, _levels, _linesPerLvl, _maxWorkingMemory, _amtOfThreads);
+            _buildHierarchyFuture = std::async(compression::createHirarchy, std::string_view(_outputFolder), _loader.get(), _epsStart, _levels, _linesPerLvl, _maxWorkingMemory, _amtOfThreads, _quantizationStep);
         }
         if(_buildHierarchyFuture.valid()){
             ImGui::Text("Hierarchy creation at %.2f%%", _loader->progress() * 100);

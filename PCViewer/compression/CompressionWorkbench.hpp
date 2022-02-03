@@ -31,4 +31,5 @@ private:
     uint32_t _levels{3};
     uint32_t _maxWorkingMemory{16000};
     uint32_t _amtOfThreads{8};
+    float _quantizationStep{.001f};
 };
