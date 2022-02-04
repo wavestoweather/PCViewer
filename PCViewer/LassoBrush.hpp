@@ -1,7 +1,6 @@
 #pragma once
 #include <vector>
-#include <map>
-#include <string>
+#include "imgui/imgui.h"
 
 struct Polygon{
     int attr1, attr2;

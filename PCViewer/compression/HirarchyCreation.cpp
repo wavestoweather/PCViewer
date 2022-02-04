@@ -205,4 +205,14 @@ namespace compression
             data.columnDimensions[i] = {0};     //dependant only on the first dimension, which is the linear index dimension
         }   
     }
+
+    void combineData(std::vector<Data>& data, Data& dst){
+        dst.columnDimensions = data[0].columnDimensions;
+        for(int i = 0; i < data.size(); ++i){
+            dst.dimensionSizes[0] += data[i].dimensionSizes[0];
+            for(int c = 0; c < data.front().columns.size(); ++c){
+                dst.columns[c].insert(dst.columns[c].begin(), data[i].columns.begin(), data[i].columns.end());
+            }
+        }
+    }
 }

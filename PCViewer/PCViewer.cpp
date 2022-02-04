@@ -35,7 +35,6 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
 #include "cimg/CImg.h"
-#include <fstream>
 #ifdef Success
 #undef Success
 #endif
@@ -64,9 +63,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "GpuRadixSorter.hpp"
 #include "PCRenderer.hpp"
 #include "compression/CompressionWorkbench.hpp"
-#include "compression/cpuCompression/DWTCpu.h"
-#include "compression/cpuCompression/EncodeCPU.h"
-#include "compression/HirarchyCreation.hpp"
+#include "compression/HierarchyImportManager.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
