@@ -3,7 +3,15 @@
 #include "../Data.hpp"
 #include <string_view>
 
+// functions for creating the compressed hierarchy
+// the compressed hierarchy files have the following format:
+// [number]dimensions [number]compressedByteLength [number]symbolsSize [number]fullDataSize [number]quantizationStep [number]epsilon \n //Note: newline character has to be taken into account for reading
+// [vector<byte>]compressedBytes
 namespace compression{
+    // creates ready to use compressed hierarchy in the 'outputfolder' 
+    // with the data given in 'loader'
+    // Note: This method uses 'createTempHirarchy' and 'compressTempHirarchy' to create temporary hierarchy files to cope with large datasets
+    // TODO: add Hierarchy create node pointer to the function to be able ot exchange the hierarchy creation to any method
     void createHirarchy(const std::string_view& outputFolder, DataLoader* loader, float lvl0eps, int levels, int lvlMultiplier, int maxMemoryMB, int amtOfThreads, float quantizationStep);
     void createTempHirarchy(const std::string_view& outputFolder, DataLoader* loader, float lvl0eps, int levels, int lvlMultiplier, int maxMemoryMB, int amtOfThreads);
     void compressTempHirarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep);

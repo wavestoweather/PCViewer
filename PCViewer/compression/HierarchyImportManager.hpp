@@ -33,6 +33,7 @@ private:
     std::string _hierarchyFolder;
     std::vector<std::string> _hierarchyFiles;       //contains all hierarchy files
     std::vector<std::vector<std::string_view>> _levelFiles;    //contains for each hierarchy level the files which are in that level
+    std::vector<float> _levelEpsilons;
     std::vector<Attribute> _attributes;
     std::vector<Attribute> _reservedAttributes;
 

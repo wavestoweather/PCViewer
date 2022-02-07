@@ -111,9 +111,10 @@ namespace compression
                 std::ifstream fs(f, std::ios_base::binary);
                 std::vector<float> data;
                 int rowLength;
+                float eps;
                 while(!fs.eof() && fs.good()){
                     int dataSize;
-                    fs >> rowLength >> dataSize;
+                    fs >> rowLength >> dataSize >> eps;
                     fs.get();   //newline char
                     //reading the data
                     std::vector<float> d(dataSize);
@@ -146,7 +147,7 @@ namespace compression
                 std::string outName = f.substr(f.find_last_of("/\\") + 1);  //should there be no /, then npos + 1  = 0, so the whole string is taken
                 outName = std::string(outputFolder) + "/" + outName;
                 std::ofstream out(outName);
-                out << bitStream.getRawSizeBytes() << " " << symbols.size() << " " << originalLength << " " << quantizationStep << "\n";
+                out << rowLength << " " << bitStream.getRawSizeBytes() << " " << symbols.size() << " " << originalLength << " " << quantizationStep << " " << eps << "\n";
                 int s = bitStream.getRawSizeBytes();
                 out.write(reinterpret_cast<char*>(bitStream.getRaw()), bitStream.getRawSizeBytes());
             }
@@ -167,9 +168,9 @@ namespace compression
     void loadAndDecompress(const std::string_view& file, Data& data) 
     {
 	    std::ifstream in(file.data());
-	    uint byteSize, symbolsSize, dataSize;
-	    float quantizationStep;
-	    in >> byteSize >> symbolsSize >> dataSize >> quantizationStep;
+	    uint colCount, byteSize, symbolsSize, dataSize;
+	    float quantizationStep, eps;
+	    in >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
 	    in.get();	//skipping newline
 	    std::vector<uint> bytes(byteSize / 4);
 	    in.read(reinterpret_cast<char*>(bytes.data()), byteSize);
@@ -184,17 +185,6 @@ namespace compression
 	    cudaCompress::util::dwtFloatInverseCPU(result2.data(), result.data(), result.size() / 2, result.size() / 2, result.size() / 2);
 	    cudaCompress::util::dwtFloatInverseCPU(result.data(), result2.data(), result.size());
 
-        // getting attribute infos to get the columns amount
-        std::string base(file.substr(0, file.find_last_of("/\\")));
-        std::ifstream info(base + "/attr.info");
-        int colCount = 0;
-        while(!info.eof() && info.good()){
-            std::string name;
-            float min, max;
-            info >> name >> min >> max;
-            info.get(); //skip newline
-            ++colCount;
-        }
         data.columns.resize(colCount);
         data.columnDimensions.resize(colCount);
         uint32_t colSize = dataSize / colCount;

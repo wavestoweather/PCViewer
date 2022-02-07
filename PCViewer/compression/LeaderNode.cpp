@@ -85,7 +85,7 @@ void LeaderNode::cacheNode(const std::string_view& cachePath, const std::string&
         leaders.clear();    //deleting all leader nodes
         std::ofstream f(std::string(cachePath) + "/" + curId, std::ios_base::app | std::ios_base::binary);    //opening an append filestream
         // adding fixed size information header
-        f << rTree.NUMDIMS + 1 << " " << followerData.size() << "\n";   //space needed to easily be able to parse the file again
+        f << rTree.NUMDIMS + 1 << " " << followerData.size() << " " << eps << "\n";   //space needed to easily be able to parse the file again
         f.write(reinterpret_cast<char*>(followerData.data()), followerData.size() * sizeof(followerData[0]));
         f << "\n";
     }
