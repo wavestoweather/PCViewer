@@ -1,4 +1,6 @@
+#define NOSTATICS
 #include "HierarchyImportManager.hpp"
+#undef NOSTATICS
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
