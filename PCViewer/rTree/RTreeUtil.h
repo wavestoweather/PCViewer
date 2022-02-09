@@ -35,4 +35,32 @@ namespace RTreeUtil{
         RTree<dataType, elemType, 25>,
         RTreeDynamic<dataType, elemType>
     >;
+
+    template<class dataType, class elemType>
+    class RTreeAPI{
+    public:
+        virtual int Search(const elemType* a_min, const elemType* a_max, std::function<bool (const dataType&)> callback) const = 0;
+        virtual void Remove(const elemType* a_min, const elemType* a_max, const dataType& a_dataId) = 0;
+        virtual void Insert(const elemType* a_min, const elemType* a_max, const dataType& a_dataId) = 0;
+        virtual int NumDims() const = 0;
+    };
+
+    template<class dataType, class elemType, int numDims>
+    class RTreeS: public RTreeAPI<dataType, elemType>, public RTree<dataType, elemType, numDims>{
+    public:
+        int Search(const elemType* a_min, const elemType* a_max, std::function<bool (const dataType&)> callback) const{return RTree<dataType, elemType, numDims>::Search(a_max, a_min, callback);};
+        void Remove(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTree<dataType, elemType, numDims>::Remove(a_min, a_max, a_dataId);};
+        void Insert(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTree<dataType, elemType, numDims>::Insert(a_min, a_max, a_dataId);};
+        int NumDims() const {return numDims;};
+    };
+
+    template<class dataType, class elemType>
+    class RTreeD: public RTreeAPI<dataType, elemType>, public RTreeDynamic<dataType, elemType>{
+    public:
+        RTreeD(int numDims):RTreeDynamic<dataType, elemType>::RTreeDynamic<dataType, elemType>(numDims){};
+        int Search(const elemType* a_min, const elemType* a_max, std::function<bool (const dataType&)> callback) const{return RTreeDynamic<dataType, elemType>::Search(a_max, a_min, callback);};
+        void Remove(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTreeDynamic<dataType, elemType>::Remove(a_min, a_max, a_dataId);};
+        void Insert(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTreeDynamic<dataType, elemType>::Insert(a_min, a_max, a_dataId);};
+        int NumDims() const{return RTreeDynamic<dataType, elemType>::NUMDIMS;};
+    };
 }

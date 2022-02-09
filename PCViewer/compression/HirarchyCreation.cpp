@@ -201,7 +201,7 @@ namespace compression
         for(int i = 0; i < data.size(); ++i){
             dst.dimensionSizes[0] += data[i].dimensionSizes[0];
             for(int c = 0; c < data.front().columns.size(); ++c){
-                dst.columns[c].insert(dst.columns[c].begin(), data[i].columns.begin(), data[i].columns.end());
+                dst.columns[c].insert(dst.columns[c].begin(), data[i].columns[c].begin(), data[i].columns[c].end());
             }
         }
     }
