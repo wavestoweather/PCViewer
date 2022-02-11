@@ -31,6 +31,8 @@ public:
     void cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode);
     size_t getByteSize();
     std::shared_mutex& getMutex(){return _insertLock;};
+
+    static uint32_t getChildIndex(uint32_t dimensionality, float* parentCenter, float* childCenter, float parentEps, float childEps);
 private:
     static uint32_t _globalUpdateStamp;
     uint32_t _updateStamp{};

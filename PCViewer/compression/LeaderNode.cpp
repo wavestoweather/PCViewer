@@ -103,13 +103,8 @@ HierarchyCreateNode* LeaderNode::getCacheNode(int& cacheScore){
 }
 
 void LeaderNode::cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){
-    size_t curInd{};
-    uint32_t maxLeadersPerAx = static_cast<uint32_t>(ceil(parentEps / eps));
-    uint32_t multiplier = 1;
-    for(int i = 0; i < rTree->NumDims(); ++i){
-        curInd += static_cast<size_t>((followerData[i] - parentCenter[i] + parentEps)  / (2 * parentEps) * (maxLeadersPerAx - 1)+ .5) * multiplier;
-        multiplier *= maxLeadersPerAx;
-    }
+    size_t curInd = getChildIndex(rTree->NumDims(), parentCenter, followerData.data(), parentEps, eps);
+    std::vector<float> gridCenter(rTree->NumDims());
     std::string curId = parentId + "_" + std::to_string(curInd);
     if(this == chacheNode){
         for(auto& f: leaders){
@@ -142,6 +137,17 @@ size_t LeaderNode::getByteSize(){
         size += f.second.getByteSize();
     }
     return size;
+}
+
+uint32_t LeaderNode::getChildIndex(uint32_t dimensionality, float* parentCenter, float* childCenter, float parentEps, float childEps){
+    size_t curInd{};
+    uint32_t maxLeadersPerAx = static_cast<uint32_t>(ceil(parentEps / childEps));
+    uint32_t multiplier = 1;
+    for(int i = 0; i < dimensionality; ++i){
+        curInd += static_cast<size_t>((childCenter[i] - parentCenter[i] + parentEps)  / (2 * parentEps) * (maxLeadersPerAx - 1)+ .5) * multiplier;
+        multiplier *= maxLeadersPerAx;
+    }
+    return curInd;
 }
 
 uint32_t LeaderNode::_globalUpdateStamp = 0;

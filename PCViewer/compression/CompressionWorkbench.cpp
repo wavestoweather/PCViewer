@@ -55,7 +55,6 @@ void CompressionWorkbench::draw()
         if(_loader){
             ImGui::Text("Loader contains %i files", _loader->getFileAmt());
             if(ImGui::CollapsingHeader("Data dimension settings")){
-                ImGui::Text("Hier könnte jetzt eine subselektion der dimensionen ausgeführt werden...");
                 for(auto& e: _loader->queryAttributes){
                     if(e.dimensionSize == 0) 
                         ImGui::Checkbox(e.name.c_str(), &e.active);

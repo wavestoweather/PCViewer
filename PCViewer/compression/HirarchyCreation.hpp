@@ -6,6 +6,7 @@
 // functions for creating the compressed hierarchy
 // the compressed hierarchy files have the following format:
 // [number]dimensions [number]compressedByteLength [number]symbolsSize [number]fullDataSize [number]quantizationStep [number]epsilon \n //Note: newline character has to be taken into account for reading
+// [vector<float>]centerOfLevel             //note: the centerOfLevel point contaings ALL columns (including counts), compressedBytes also include the center of this livel to avoid special treatments
 // [vector<byte>]compressedBytes
 namespace compression{
     // creates ready to use compressed hierarchy in the 'outputfolder' 

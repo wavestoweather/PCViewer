@@ -5,23 +5,20 @@
 #include "../LassoBrush.hpp"
 #include "../Attribute.hpp"
 #include "../Structures.hpp"
+#include "../Brushing.hpp"
 #include "Constants.hpp"
 #include <atomic>
 #include <future>
 
 class HierarchyImportManager{
 public:
-    struct AxisRange{
-        uint32_t axis;
-        float min;
-        float max;
-    };
-    using RangeBrush = std::vector<AxisRange>;
+    using RangeBrush = brushing::RangeBrush;
 
-    HierarchyImportManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines = 1e6);
+    HierarchyImportManager(const std::string_view& hierarchyFolder, std::function<uint32_t (uint32_t, float*, float*, float, float)> indexFunc, uint32_t maxDrawLines = 1e6);
 
     void notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes);
     void updateDrawList(DrawList& dl);
+    void checkPendingFiles();
 
     // bool which indicates new data was loaded
     std::atomic<bool> newDataLoaded{false};
@@ -29,6 +26,7 @@ private:
     bool _hierarchyValid{true};
     uint32_t _baseLevel{0};
     uint32_t _maxLines;
+    std::function<uint32_t (uint32_t, float*, float*, float, float)> _indexFunc;
 
     std::string _hierarchyFolder;
     std::vector<std::string> _hierarchyFiles;       //contains all hierarchy files
@@ -38,6 +36,7 @@ private:
     std::vector<Attribute> _reservedAttributes;
 
     std::future<void> _dataLoadFuture;
+    std::vector<std::string_view> _enqueuedFiles;  //if a new openHierarchyFiles call is issued while data is loaded, the new files are stored in this vector to be loaded when the previous load is done
     Data _nextData;
 
     void openHierarchyFiles(const std::vector<std::string_view>& files);

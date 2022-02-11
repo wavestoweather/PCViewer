@@ -4820,7 +4820,7 @@ static bool openDataset(const char* filename) {
 	s.type = "AttributeSetting";
 	settingsManager->addSetting(s);
 
-	sortAttributes();		//sortin the attributes to display in alphabetical order
+	sortAttributes();		//sorting the attributes to display in alphabetical order
 
 	delete[] static_cast<char*>(s.data);
     return true;

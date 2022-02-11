@@ -122,6 +122,8 @@ namespace compression
                     data.insert(data.end(), d.begin(), d.end());
                     fs.get();   //newline char
                 }
+                //copying the first datarow as it is the center of the group
+                std::vector<float> center(data.begin(), data.begin() + rowLength);
                 //converting from row major to column major
                 std::vector<float> col(data.size());
                 uint32_t colInd = 0;
@@ -148,6 +150,12 @@ namespace compression
                 outName = std::string(outputFolder) + "/" + outName;
                 std::ofstream out(outName);
                 out << rowLength << " " << bitStream.getRawSizeBytes() << " " << symbols.size() << " " << originalLength << " " << quantizationStep << " " << eps << "\n";
+                for(int i = 0; i < center.size(); ++i){
+                    out << center[i];
+                    if(i != center.size() - 1)
+                        out << " ";
+                }
+                out << "\n";
                 int s = bitStream.getRawSizeBytes();
                 out.write(reinterpret_cast<char*>(bitStream.getRaw()), bitStream.getRawSizeBytes());
             }
@@ -172,6 +180,10 @@ namespace compression
 	    float quantizationStep, eps;
 	    in >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
 	    in.get();	//skipping newline
+        float t;
+        for(int i = 0; i < colCount; ++i)
+            in >> t;
+        in.get();   //skipping newline
 	    std::vector<uint> bytes(byteSize / 4);
 	    in.read(reinterpret_cast<char*>(bytes.data()), byteSize);
 	    cudaCompress::BitStreamReadOnly bs(bytes.data(), byteSize * 8);
