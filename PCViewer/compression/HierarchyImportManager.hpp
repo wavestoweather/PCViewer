@@ -14,7 +14,7 @@ class HierarchyImportManager{
 public:
     using RangeBrush = brushing::RangeBrush;
 
-    HierarchyImportManager(const std::string_view& hierarchyFolder, std::function<uint32_t (uint32_t, float*, float*, float, float)> indexFunc, uint32_t maxDrawLines = 1e6);
+    HierarchyImportManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines = 1e6);
 
     void notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes);
     void updateDrawList(DrawList& dl);

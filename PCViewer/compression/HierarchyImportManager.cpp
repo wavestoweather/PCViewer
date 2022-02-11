@@ -7,10 +7,11 @@
 #include <iostream>
 #include "HirarchyCreation.hpp"
 
-HierarchyImportManager::HierarchyImportManager(const std::string_view& hierarchyFolder, std::function<uint32_t (uint32_t, float*, float*, float, float)> indexFunc, uint32_t maxDrawLines) :
-_maxLines(maxDrawLines), _indexFunc(indexFunc), _hierarchyFolder(hierarchyFolder)
+HierarchyImportManager::HierarchyImportManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines) :
+_maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
 {
     // loading all hierarchy files
+    bool foundInfoFile{false};
     for(const auto& entry: std::filesystem::directory_iterator(hierarchyFolder)){
         if(entry.is_regular_file()){
             if(!entry.path().has_extension())   //standard compressed hierarchy file
@@ -38,6 +39,11 @@ _maxLines(maxDrawLines), _indexFunc(indexFunc), _hierarchyFolder(hierarchyFolder
                 }
             }
         }
+    }
+    if(!foundInfoFile){
+        std::cout << "HierarchyImportManager::HierarchyImportManager(): There was no .info file found in the given directory. Nothing loaded" << std::endl;
+        _hierarchyFiles.clear();
+        return;
     }
     // starting to find the base layer (last hierarchy layer with less than a million lines)
     uint32_t maxDepth = 0;

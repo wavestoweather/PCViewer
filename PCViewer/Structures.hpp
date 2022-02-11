@@ -41,13 +41,19 @@ struct Buffer {
 	}
 };
 
+enum class DataType{
+	Continuous,
+	ContinuousDlf,
+	Hierarchichal
+};
+
 struct DataSet {
 	std::string name;
 	Buffer buffer;
 	Data data;
 	std::list<TemplateList> drawLists;
 	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
-	bool dlfData;
+	DataType dataType;
 
 	bool operator==(const DataSet& other) const {
 		return this->name == other.name;

@@ -3990,7 +3990,7 @@ static bool openDlf(const char* filename) {
 
 			//after Attribute collection reading in the data
 			DataSet ds;
-			ds.dlfData = true;
+			ds.dataType = DataType::ContinuousDlf;
 			if (tmp != std::string("Data:")) {
 				std::cout << "Data Section not found. Got " << tmp << " instead." << std::endl;
 				pcAttributes.clear();
@@ -8456,7 +8456,7 @@ int main(int, char**)
 							}
 						}
 						for (DataSet& ds : g_PcPlotDataSets) {
-							if (ds.dlfData) {			//oneData indicates a .dlf data -> template brushes are available
+							if (ds.dataType == DataType::ContinuousDlf) {			//oneData indicates a .dlf data -> template brushes are available
 								for (TemplateList& tl : ds.drawLists) {
 									//checking if the template list is in the correct subspace and if so adding it to the template Brushes
 									std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']') - tl.name.find_first_of('[') - 1);
@@ -8484,7 +8484,7 @@ int main(int, char**)
 									}
 								}
 							}
-							else if (pcSettings.showCsvTemplates && !ds.dlfData) {
+							else if (pcSettings.showCsvTemplates && ds.dataType != DataType::ContinuousDlf) {
 								auto tl = ++ds.drawLists.begin();
 								for (; tl != ds.drawLists.end(); ++tl) {
 									TemplateBrush t = {};
