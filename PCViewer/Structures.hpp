@@ -8,6 +8,7 @@
 #include "ClusterBundles.hpp"
 #include "TemplateList.hpp"
 #include "Attribute.hpp"
+#include "compression/HierarchyImportManager.hpp"
 #include <optional>
 
 struct Vec4 {
@@ -65,17 +66,31 @@ struct Brush {
 	std::pair<float, float> minMax;
 };
 
+enum class InheritanceFlags{
+	dlf = 1,
+	hierarchical = 1 << 1
+};
+
+// struct holding the information for a drawable instance of a TemplateList
+//
+// The id of the Drawlist is its name!
+//
+// The inheritedFlags field contains important information inherited from the dataset and template list this drawlistis created from
+// Such inheritance bits can be:
+//	- Hierarchical: Instead of creating buffers which are sized to hold the data information, the buffers have a size to be able to hold as much lines as set in maxHierarchyLines
+//
 struct DrawList {
 	std::string name;
 	std::string parentDataSet;
 	TemplateList* parentTemplateList;
 	const Data* data;
 	const std::vector<Attribute>* attributes;
+	InheritanceFlags inheritanceFlags;
 	Vec4 color;
 	Vec4 prefColor;
 	bool show;
 	bool showHistogramm;
-	std::vector<float> brushedRatioToParent;     // Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
+	std::vector<float> brushedRatioToParent;     	// Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
 	bool immuneToGlobalBrushes;
 	VkBuffer buffer;								// vulkan data buffer
 	VkDescriptorSet dataDescriptorSet;				//is relesed when dataset is removed
@@ -112,6 +127,7 @@ struct DrawList {
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
 	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
+	std::optional<HierarchyImportManager> hierarchImportManager;	//optional import manger for hierarchy files
 };
 
 struct DrawlistDragDropInfo{
@@ -130,4 +146,10 @@ struct UniformBufferObject {
 	uint32_t size(){
 		return sizeof(UniformBufferObject) - sizeof(vertTransformations) + sizeof(vertTransformations[0]) * vertTransformations.size();
 	}
+};
+
+struct VertexBufferCreateInfo{
+	DataType dataType;
+	uint32_t maxLines;
+	uint32_t additionalAttributeStorage;
 };

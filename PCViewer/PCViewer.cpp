@@ -596,6 +596,9 @@ struct PCSettings {
 
 	//variables for band rendering
 	float haloWidth = .1f;
+
+	//variables for hierarchical data
+	uint32_t maxHierarchyLines = 1000000;
 }static pcSettings;
 
 //variables for brush templates
@@ -1743,47 +1746,20 @@ static void cleanupPcPlotCommandPool() {
 	vkDestroyFence(g_Device, g_PcPlotRenderFence, nullptr);
 }
 
-static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, const Data& data) {
-	VkResult err;
-
-	//creating the command buffer as its needed to do all the operations in here
-	//createPcPlotCommandBuffer();
-
-	Buffer vertexBuffer, stagingBuffer;
-
-	uint64_t bufferSize = data.packedByteSize();
-
-	VkBufferCreateInfo bufferInfo = {};
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = bufferSize;
-	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
-	check_vk_result(err);
+static void fillVertexBuffer(Buffer vertexBuffer, const Data& data){
+	uint32_t bufferSize = data.packedByteSize();
+	Buffer stagingBuffer;
 	VkUtil::createBuffer(g_Device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,&stagingBuffer.buffer);
-
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(g_Device, vertexBuffer.buffer, &memRequirements);
 	vkGetBufferMemoryRequirements(g_Device, stagingBuffer.buffer, &memRequirements);
-
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &stagingBuffer.memory);
+	VkResult err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &stagingBuffer.memory);
 	check_vk_result(err);
-
 	vkBindBufferMemory(g_Device, stagingBuffer.buffer, stagingBuffer.memory, 0);
 
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &vertexBuffer.memory);
-	check_vk_result(err);
-
-	vkBindBufferMemory(g_Device, vertexBuffer.buffer, vertexBuffer.memory, 0);
-
-	//filling the Vertex Buffer with all Datapoints
 	void* mem;
 	vkMapMemory(g_Device, stagingBuffer.memory, 0, bufferSize, 0, &mem);
 	data.packData(mem);
@@ -1797,6 +1773,58 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &copyComm);
 	vkDestroyBuffer(g_Device, stagingBuffer.buffer, nullptr);
 	vkFreeMemory(g_Device, stagingBuffer.memory, nullptr);
+}
+
+static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, const Data& data, const std::optional<VertexBufferCreateInfo> info = {}) {
+	VkResult err;
+
+	//creating the command buffer as its needed to do all the operations in here
+	//createPcPlotCommandBuffer();
+
+	Buffer vertexBuffer;
+
+	uint64_t bufferSize{};
+	if(info){
+		// standard data -> standard data byte size
+		if(info->dataType == DataType::Continuous || info->dataType == DataType::ContinuousDlf){
+			bufferSize = data.packedByteSize();
+		}
+		// hierarchical data -> reserving memory according to size given in info with 20% overhead for safety
+		else if(info->dataType == DataType::Hierarchichal){
+			bufferSize = (Attributes.size() + info->additionalAttributeStorage) * (info->maxLines) * 1.2;
+		}
+	}
+	else{
+		bufferSize = data.packedByteSize();
+	}
+
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = bufferSize;
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
+	check_vk_result(err);
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(g_Device, vertexBuffer.buffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &vertexBuffer.memory);
+	check_vk_result(err);
+
+	vkBindBufferMemory(g_Device, vertexBuffer.buffer, vertexBuffer.memory, 0);
+
+	//filling the Vertex Buffer with all Datapoints
+	if(!info || info->dataType == DataType::Continuous || info->dataType == DataType::ContinuousDlf){
+		fillVertexBuffer(vertexBuffer, data);
+	}
 
 	std::vector<VkDescriptorSetLayout> layouts{g_PcPlotDataSetLayout};
 	VkUtil::createDescriptorSets(g_Device, layouts, g_PcPlotDescriptorPool, &vertexBuffer.descriptorSet);
@@ -3577,6 +3605,72 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 	return std::vector<int>();
 }
 
+static bool openHierarchy(const char* filename, const char* attributeInfo){
+	//opening the info file to get attribute information
+	std::vector<Attribute> infoAttributes;				//note that there is indeed one extra attribute available for the cluster counts which is not inside this vector
+	std::vector<std::string> infoAttributeNames;
+	std::ifstream info(attributeInfo, std::ios::binary);
+	if(!info){
+		std::cout << "The .info file for the hierarchical dataset could not be opened";
+		return false;
+	}
+	while(info.good() && !info.eof()){
+		infoAttributes.push_back({});
+		info >> infoAttributes.back().name >> infoAttributes.back().min >> infoAttributes.back().max;
+		infoAttributes.back().originalName = infoAttributes.back().name;
+		infoAttributeNames.push_back(infoAttributes.back().name);
+		info.get();		//jumping over the newline character to get proper eof notification
+	}
+
+	//checking attributes correctnes
+	auto permutation = checkAttriubtes(infoAttributeNames);	//note: permutation is currently not used, as its thought that the dataest will always have the same structure
+	if(!pcAttributes.empty() && permutation.empty()){
+		std::cout << "The attributes of the hierarchical data set are not the same as the ones already loaded in the program." << std::endl;
+		return false;
+	}
+	if(pcAttributes.empty()){
+		pcAttributes = infoAttributes;
+
+		//setting up the boolarray and setting all the attributes to true
+		pcAttributeEnabled = new bool[pcAttributes.size()];
+		activeBrushAttributes = new bool[pcAttributes.size()];
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			pcAttributeEnabled[i] = true;
+			activeBrushAttributes[i] = false;
+			pcAttrOrd.push_back(i);
+		}
+	}
+
+	DataSet ds{};			//the data variable of the dataset will stay empty
+	std::string sFilename(filename);
+	ds.name = sFilename.substr(sFilename.find_last_of("/\\") + 1);
+	if(ds.name.empty()){
+		sFilename.pop_back();
+		ds.name = sFilename.substr(sFilename.find_last_of("/\\") + 1);
+	}
+	ds.dataType = DataType::Hierarchichal;	//setting the hierarchical type to indicate hierarchical data
+	VertexBufferCreateInfo cI{};
+	cI.maxLines = pcSettings.maxHierarchyLines;
+	cI.additionalAttributeStorage = 1;
+	cI.dataType = DataType::Hierarchichal;
+	createPcPlotVertexBuffer(pcAttributes, ds.data, cI);
+	ds.buffer = g_PcPlotVertexBuffers.back();
+
+	// adding the default template list
+	TemplateList tl = {};
+	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
+	tl.name = "Default Templatelist";
+	tl.isIndexRange = true;
+	tl.indices = {0,0};
+	for(auto& a: infoAttributes)
+		tl.minMax.push_back({a.min, a.max});
+	tl.parentDataSetName = ds.name;
+	ds.drawLists.push_back(tl);
+
+	g_PcPlotDataSets.push_back(ds);
+	return true;
+}
+
 static bool openCsv(const char* filename) {
 
 	std::ifstream f(filename, std::ios::in | std::ios::binary);
@@ -4752,6 +4846,18 @@ static bool openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
     bool opened = false;
+	if(std::string_view(file).substr(file.find_last_of("/\\")).find_last_of(".") == std::string_view::npos){	//no file but a folder
+		std::string hierarchyInfo;
+		for(const auto& entry: std::filesystem::directory_iterator(filename)){
+			if(entry.is_regular_file() && entry.path().extension() == "info"){
+				hierarchyInfo = entry.path();
+				break;
+			}
+		}
+		if(hierarchyInfo.size()){	//opening hierarchy dataset
+			opened = openHierarchy(filename, hierarchyInfo.c_str());
+		}
+	}
 	if (file.substr(file.find_last_of(".") + 1) == "csv") {
 		opened = openCsv(filename);
 	}
