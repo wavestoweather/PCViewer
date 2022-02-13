@@ -38,7 +38,7 @@ namespace compression
             }
 
             // converting lvl multiplier to epsilon multiplier
-            double epsMult = pow(1.0/lvlMultiplier, 1.0/dataPoint.size());
+            double epsMult = ceil(pow(1.0/lvlMultiplier, 1.0/dataPoint.size()));
             std::unique_ptr<HierarchyCreateNode> root = std::make_unique<LeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels);   //constructor automatically inserts the first data point
             std::shared_mutex cacheMutex;                            //mutex for the root node to control insert/cache access
 

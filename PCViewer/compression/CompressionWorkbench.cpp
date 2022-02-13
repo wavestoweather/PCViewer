@@ -50,7 +50,12 @@ void CompressionWorkbench::draw()
         if(ImGui::Button("Create data loader")){
             std::vector<std::string_view> includeView(_includedFiles.begin(), _includedFiles.end());
             std::vector<std::string_view> excludeView(_excludedFiles.begin(), _excludedFiles.end());
-            _loader = std::make_shared<NetCdfLoader>(_inputFiles, includeView, excludeView);
+            try{
+                _loader = std::make_shared<NetCdfLoader>(_inputFiles, includeView, excludeView);
+            }
+            catch(std::runtime_error e){
+                std::cout << e.what() << std::endl;
+            }
         }
         if(_loader){
             ImGui::Text("Loader contains %i files", _loader->getFileAmt());

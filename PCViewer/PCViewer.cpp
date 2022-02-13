@@ -2103,7 +2103,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//Indexbuffer
-	bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)
+		bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t);
+	else
+		bufferInfo.size = pcSettings.maxHierarchyLines * (pcAttributes.size() + 3) * sizeof(uint32_t);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.indexBuffer);
 	check_vk_result(err);
@@ -2117,7 +2120,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	vkBindBufferMemory(g_Device, dl.indexBuffer, dl.indexBufferMemory, 0);
 
 	//priority rendering color buffer
-	bufferInfo.size = ds.data.size() * sizeof(float);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)
+		bufferInfo.size = ds.data.size() * sizeof(float);
+	else
+		bufferInfo.size = pcSettings.maxHierarchyLines * sizeof(float);
 	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.priorityColorBuffer);
 	check_vk_result(err);
@@ -2129,7 +2135,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//active indices buffer
-	VkUtil::createBuffer(g_Device, ds.data.size() * sizeof(bool), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dl.activeIndicesBuffer);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)
+		VkUtil::createBuffer(g_Device, ds.data.size() * sizeof(bool), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dl.activeIndicesBuffer);
+	else
+		VkUtil::createBuffer(g_Device, pcSettings.maxHierarchyLines * sizeof(bool), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dl.activeIndicesBuffer);
 
 	dl.activeIndicesBufferOffset = allocInfo.allocationSize;
 	vkGetBufferMemoryRequirements(g_Device, dl.activeIndicesBuffer, &memRequirements);
@@ -2137,7 +2146,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//indices buffer
-	VkUtil::createBuffer(g_Device, tl.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)	
+		VkUtil::createBuffer(g_Device, tl.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
+	else
+		VkUtil::createBuffer(g_Device, pcSettings.maxHierarchyLines * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
 
 	dl.indicesBufferOffset = allocInfo.allocationSize;
 	vkGetBufferMemoryRequirements(g_Device, dl.indicesBuffer, &memRequirements);
@@ -2202,15 +2214,20 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	//binding the active indices buffer, creating the buffer view and uploading the correct indices to the graphicscard
 	vkBindBufferMemory(g_Device, dl.activeIndicesBuffer, dl.dlMem, dl.activeIndicesBufferOffset);
 	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, ds.data.size() * sizeof(bool), &dl.activeIndicesBufferView);
-	std::vector<uint8_t> actives(ds.data.size(), 0);			//vector with 0 initialized everywhere
-	for (int i : tl.indices) {									//setting all active indices to true
-		actives[i] = 1;
-	}
+	std::vector<uint8_t> actives(ds.data.size(), 1);			//vector with 0 initialized everywhere
+	if(ds.dataType == DataType::Hierarchichal)
+		actives.resize(pcSettings.maxHierarchyLines, 1);
 	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, ds.data.size() * sizeof(bool), actives.data());
 
 	//binding indices buffer and uploading the indices
 	vkBindBufferMemory(g_Device, dl.indicesBuffer, dl.dlMem, dl.indicesBufferOffset);
-	VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tl.indices.size() * sizeof(uint32_t), tl.indices.data());
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)	
+		VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tl.indices.size() * sizeof(uint32_t), tl.indices.data());
+	else{
+		std::vector<uint32_t> tI(pcSettings.maxHierarchyLines);
+		std::iota(tI.begin(), tI.end(), 0);
+		VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tI.size() * sizeof(uint32_t), tI.data());
+	}
 
 	//creating the Descriptor sets for the histogramm uniform buffers
 	layouts = std::vector<VkDescriptorSetLayout>(dl.histogramUbos.size());
@@ -2270,6 +2287,9 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.parentDataSet = ds.name;
 	dl.indices = std::vector<uint32_t>(tl.indices);
 	dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), 1);
+	if(ds.dataType == DataType::Hierarchichal){
+		dl.inheritanceFlags = InheritanceFlags::hierarchical;
+	}
 
 	//adding a standard brush for every attribute
 	for (Attribute a : pcAttributes) {
