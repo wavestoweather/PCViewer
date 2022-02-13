@@ -96,6 +96,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include <netcdf.h>
 #include <filesystem>
 #include <memory>
+#include <optional>
 	
 
 #ifdef DETECTMEMLEAK

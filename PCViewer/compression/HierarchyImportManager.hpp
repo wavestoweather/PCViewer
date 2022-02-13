@@ -10,6 +10,9 @@
 #include <atomic>
 #include <future>
 
+//forwad decl
+struct DrawList;
+
 class HierarchyImportManager{
 public:
     using RangeBrush = brushing::RangeBrush;

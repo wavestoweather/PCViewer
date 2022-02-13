@@ -9,7 +9,10 @@
 #include "TemplateList.hpp"
 #include "Attribute.hpp"
 #include "compression/HierarchyImportManager.hpp"
-#include <optional>
+#include <memory>
+
+//forward declaration
+class HierarchyImportManager;
 
 struct Vec4 {
 	float x;
@@ -127,7 +130,7 @@ struct DrawList {
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
 	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
-	std::optional<HierarchyImportManager> hierarchImportManager;	//optional import manger for hierarchy files
+	std::shared_ptr<HierarchyImportManager> hierarchImportManager;	//optional import manger for hierarchy files
 };
 
 struct DrawlistDragDropInfo{
