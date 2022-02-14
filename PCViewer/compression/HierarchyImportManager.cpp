@@ -16,7 +16,8 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
         if(entry.is_regular_file()){
             if(!entry.path().has_extension())   //standard compressed hierarchy file
                 _hierarchyFiles.push_back(entry.path().string());
-            else if(entry.path().extension().string() == "info"){ //configuration file containing column information
+            else if(entry.path().extension().string() == ".info"){ //configuration file containing column information
+                foundInfoFile = true;
                 std::ifstream info(entry.path());
                 int colCount = 0;
                 bool foundReserverdAttribute = false;
@@ -45,6 +46,7 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
         _hierarchyFiles.clear();
         return;
     }
+    _reservedAttributes.push_back({});
     // starting to find the base layer (last hierarchy layer with less than a million lines)
     uint32_t maxDepth = 0;
     std::vector<uint32_t> levelLineCount;
@@ -56,8 +58,8 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
             if(s[curPos] == '_') ++hierarchyDepth;
             --curPos;
         }
-        --hierarchyDepth;
         if(hierarchyDepth > maxDepth) maxDepth = hierarchyDepth;
+        hierarchyDepth--;
         levelLineCount.resize(maxDepth, 0);
         //loading the file header and getting the data point sizes
         std::ifstream f(s, std::ios_base::binary);

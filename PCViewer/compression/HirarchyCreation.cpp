@@ -38,7 +38,7 @@ namespace compression
             }
 
             // converting lvl multiplier to epsilon multiplier
-            double epsMult = ceil(pow(1.0/lvlMultiplier, 1.0/dataPoint.size()));
+            double epsMult = std::min(pow(1.0/lvlMultiplier, 1.0/dataPoint.size()), .5);
             std::unique_ptr<HierarchyCreateNode> root = std::make_unique<LeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels);   //constructor automatically inserts the first data point
             std::shared_mutex cacheMutex;                            //mutex for the root node to control insert/cache access
 
@@ -210,6 +210,8 @@ namespace compression
 
     void combineData(std::vector<Data>& data, Data& dst){
         dst.columnDimensions = data[0].columnDimensions;
+        dst.dimensionSizes = {0};
+        dst.columns.clear(); dst.columns.resize(data[0].columns.size());
         for(int i = 0; i < data.size(); ++i){
             dst.dimensionSizes[0] += data[i].dimensionSizes[0];
             for(int c = 0; c < data.front().columns.size(); ++c){

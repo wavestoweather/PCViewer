@@ -88,6 +88,9 @@ void CompressionWorkbench::draw()
         if(_buildHierarchyFuture.valid()){
             ImGui::Text("Hierarchy creation at %.2f%%", _loader->progress() * 100);
         }
+        if(ImGui::Button("Compress")){
+            compression::compressTempHirarchy(_outputFolder, _amtOfThreads, _quantizationStep);
+        }
     }
     ImGui::End();
 }

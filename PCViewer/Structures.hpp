@@ -56,8 +56,9 @@ struct DataSet {
 	Buffer buffer;
 	Data data;
 	std::list<TemplateList> drawLists;
-	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
+	int reducedDataSetSize;					//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
 	DataType dataType;
+	std::vector<uint8_t> additionalData;	//byte vector for additional data. For Hierarchical data this is where teh hierarchy folder is stored
 
 	bool operator==(const DataSet& other) const {
 		return this->name == other.name;
@@ -130,7 +131,7 @@ struct DrawList {
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
 	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
-	std::shared_ptr<HierarchyImportManager> hierarchImportManager;	//optional import manger for hierarchy files
+	std::shared_ptr<HierarchyImportManager> hierarchyImportManager;	//optional import manger for hierarchy files
 };
 
 struct DrawlistDragDropInfo{

@@ -1792,7 +1792,7 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 		}
 		// hierarchical data -> reserving memory according to size given in info with 20% overhead for safety
 		else if(info->dataType == DataType::Hierarchichal){
-			bufferSize = (Attributes.size() + info->additionalAttributeStorage) * (info->maxLines) * 1.2;
+			bufferSize = (Attributes.size() + info->additionalAttributeStorage) * (info->maxLines) * 1.2 * sizeof(float);
 		}
 	}
 	else{
@@ -2213,11 +2213,13 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	//binding the active indices buffer, creating the buffer view and uploading the correct indices to the graphicscard
 	vkBindBufferMemory(g_Device, dl.activeIndicesBuffer, dl.dlMem, dl.activeIndicesBufferOffset);
-	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, ds.data.size() * sizeof(bool), &dl.activeIndicesBufferView);
 	std::vector<uint8_t> actives(ds.data.size(), 1);			//vector with 0 initialized everywhere
-	if(ds.dataType == DataType::Hierarchichal)
+	if(ds.dataType == DataType::Hierarchichal){
 		actives.resize(pcSettings.maxHierarchyLines, 1);
-	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, ds.data.size() * sizeof(bool), actives.data());
+	}
+	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, actives.size() * sizeof(bool), &dl.activeIndicesBufferView);
+	
+	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, actives.size() * sizeof(bool), actives.data());
 
 	//binding indices buffer and uploading the indices
 	vkBindBufferMemory(g_Device, dl.indicesBuffer, dl.dlMem, dl.indicesBufferOffset);
@@ -2238,11 +2240,15 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.histogrammDescSets = std::vector<VkDescriptorSet>(layouts.size());
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, dl.histogrammDescSets.data());
 
+	size_t dataByteSize = ds.data.packedByteSize();
+	if(ds.dataType == DataType::Hierarchichal){
+		dataByteSize = (pcAttributes.size() + 1) * (pcSettings.maxHierarchyLines) * 1.2 * sizeof(float);
+	}
 	//updating the descriptor sets
 	for (int i = 0; i < layouts.size(); i++) {
 		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
 		VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 1, dl.histogrammDescSets[i]);
-		VkUtil::updateDescriptorSet(g_Device, tl.buffer, ds.data.packedByteSize(), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
+		VkUtil::updateDescriptorSet(g_Device, tl.buffer, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
 	}
 
 	//specifying the uniform buffer location
@@ -2269,10 +2275,16 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	descriptorWrite.pBufferInfo = desBufferInfos;
 
 	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
-	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+	if(ds.dataType == DataType::Hierarchichal)
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, pcSettings.maxHierarchyLines * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+	else
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
 	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.uboDescSet);
 
-	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+	if(ds.dataType == DataType::Hierarchichal)
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, pcSettings.maxHierarchyLines * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+	else
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
 	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.medianUboDescSet);
 
 	rgb col = drawListColorPalette->getNextColor();
@@ -2285,10 +2297,16 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.show = true;
 	dl.showHistogramm = true;
 	dl.parentDataSet = ds.name;
-	dl.indices = std::vector<uint32_t>(tl.indices);
+	
 	dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), 1);
 	if(ds.dataType == DataType::Hierarchichal){
 		dl.inheritanceFlags = InheritanceFlags::hierarchical;
+		dl.indices = {};		//nothing yet loaded
+		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
+		dl.hierarchyImportManager= std::make_shared<HierarchyImportManager>(hierarchy, pcSettings.maxHierarchyLines);
+	}
+	else{
+		dl.indices = std::vector<uint32_t>(tl.indices);
 	}
 
 	//adding a standard brush for every attribute
@@ -3672,10 +3690,12 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 	ds.dataType = DataType::Hierarchichal;	//setting the hierarchical type to indicate hierarchical data
 	VertexBufferCreateInfo cI{};
 	cI.maxLines = pcSettings.maxHierarchyLines;
-	cI.additionalAttributeStorage = 1;
+	cI.additionalAttributeStorage = 1;		//TODO: change to a variable size
 	cI.dataType = DataType::Hierarchichal;
 	createPcPlotVertexBuffer(pcAttributes, ds.data, cI);
 	ds.buffer = g_PcPlotVertexBuffers.back();
+	std::string_view fileView(filename);
+	ds.additionalData.insert(ds.additionalData.begin(), reinterpret_cast<const uint8_t*>(fileView.begin()), reinterpret_cast<const uint8_t*>(fileView.end()));
 
 	// adding the default template list
 	TemplateList tl = {};
@@ -4870,7 +4890,10 @@ static bool openDataset(const char* filename) {
 	if(std::string_view(file).substr(file.find_last_of("/\\")).find_last_of(".") == std::string_view::npos){	//no file but a folder
 		std::string hierarchyInfo;
 		for(const auto& entry: std::filesystem::directory_iterator(filename)){
-			if(entry.is_regular_file() && entry.path().extension() == "info"){
+			//auto ext = entry.path().extension();
+			//if(ext.string().size())
+			//	std::cout << ext.string() << std::endl;
+			if(entry.is_regular_file() && entry.path().extension() == ".info"){
 				hierarchyInfo = entry.path();
 				break;
 			}
@@ -4879,7 +4902,7 @@ static bool openDataset(const char* filename) {
 			opened = openHierarchy(filename, hierarchyInfo.c_str());
 		}
 	}
-	if (file.substr(file.find_last_of(".") + 1) == "csv") {
+	else if (file.substr(file.find_last_of(".") + 1) == "csv") {
 		opened = openCsv(filename);
 	}
 	else if (file.substr(file.find_last_of(".") + 1) == "dlf") {
@@ -5585,6 +5608,7 @@ static void updateWorkbenchRenderings(DrawList& dl){
 }
 
 static bool updateActiveIndices(DrawList& dl) {
+	if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
 		if (ImGui::GetIO().MouseDown[0] && !ImGui::IsMouseDoubleClicked(0)) return false;
@@ -14379,6 +14403,20 @@ int main(int, char**)
 		}
 
 		compressionWorkbench->draw();
+
+		//checking data from hierarch importer
+		for(auto& dl: g_PcPlotDrawLists){
+			if(dl.hierarchyImportManager && dl.hierarchyImportManager->newDataLoaded){
+				auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& ds){return ds.name == dl.parentDataSet;});
+				ds->data = dl.hierarchyImportManager->retrieveNewData();
+				//todo upload new data, set index list ...
+				fillVertexBuffer(ds->buffer, ds->data);
+				dl.indices.resize(ds->data.size());
+				std::iota(dl.indices.begin(), dl.indices.end(), 0);
+				updateActiveIndices(dl);
+				pcPlotRender = true;
+			}
+		}
 
 		pcSettings.rescaleTableColumns = false;
 
