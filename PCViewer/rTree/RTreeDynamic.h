@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
+#include <inttypes.h>
 
 #define ASSERT assert // RTreeDynamic uses ASSERT( condition )
 #ifndef Min
@@ -370,6 +371,13 @@ protected:
   void RemoveAllRec(Node* a_node);
   void Reset();
   void CountRec(Node* a_node, int& a_count);
+  inline uint64_t factorial(uint32_t x){
+    uint64_t res = 1;
+    for(;x > 1; x--){
+      res *= x;
+    }
+    return res;
+  }
 
   bool SaveRec(Node* a_node, RTDFileStream& a_stream);
   bool LoadRec(Node* a_node, RTDFileStream& a_stream);
@@ -477,7 +485,12 @@ RTREE_QUAL::RTreeDynamic(int numDims):NUMDIMS(numDims)
 
   m_root = AllocNode();
   m_root->m_level = 0;
-  m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[NUMDIMS];
+  if(NUMDIMS < 21)
+    m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[NUMDIMS];
+  else{
+    float t = pow(M_PI, NUMDIMS / 2.f);
+    m_unitSphereVolume = t / factorial(NUMDIMS / 2);
+  }
 }
 
 

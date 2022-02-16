@@ -1,6 +1,7 @@
 #include "HirarchyCreation.hpp"
 
 #include "LeaderNode.hpp"
+#include "HashNode.hpp"
 #include "../rTree/RTreeDynamic.h"
 #include "cpuCompression/EncodeCPU.h"
 #include "cpuCompression/DWTCpu.h"
@@ -57,11 +58,12 @@ namespace compression
                         std::unique_lock<std::shared_mutex> lock(cacheMutex); // locking the root node unique to do caching
                         sizeCheck = checkInterval;
                         size_t structureSize = root->getByteSize();
-                        if(structureSize > maxMemoryMB * 1024 * 1024){
-                            int dummy;
+                        while(structureSize > size_t(maxMemoryMB) * 1024 * 1024){
+                            long dummy;
                             HierarchyCreateNode* cache = root->getCacheNode(dummy);
-                            std::vector<float> half(.5f, threadData.size());
+                            std::vector<float> half(threadData.size(), .5f);
                             root->cacheNode(tempPath, "", half.data(), .5f, cache);
+                            size_t structureSize = root->getByteSize();
                         }
                     }
                 }
@@ -112,9 +114,8 @@ namespace compression
                 std::vector<float> data;
                 int rowLength;
                 float eps;
-                while(!fs.eof() && fs.good()){
-                    int dataSize;
-                    fs >> rowLength >> dataSize >> eps;
+                int dataSize;
+                while(fs >> rowLength >> dataSize >> eps){
                     fs.get();   //newline char
                     //reading the data
                     std::vector<float> d(dataSize);

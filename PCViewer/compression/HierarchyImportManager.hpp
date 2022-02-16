@@ -43,5 +43,8 @@ private:
     std::vector<std::string_view> _enqueuedFiles;  //if a new openHierarchyFiles call is issued while data is loaded, the new files are stored in this vector to be loaded when the previous load is done
     Data _nextData;
 
+    std::vector<RangeBrush> _curRangeBrushes;       //these are stored in normalized form, to be able to be reapplied if ther eshoudl ever be the need
+    Polygons _curLassoBrushes;
+
     void openHierarchyFiles(const std::vector<std::string_view>& files);
 };

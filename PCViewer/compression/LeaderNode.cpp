@@ -52,10 +52,15 @@ void LeaderNode::addDataPoint(const std::vector<float>& d){
     std::unique_lock<std::shared_mutex> lock(_insertLock);
     rTree->Search(d.data(), d.data(), backInsert);
     if(closest.size()){         //found leader
-        lock.unlock();         //can release lock already
+        //lock.unlock();         //can release lock already
         followerData[closest.front() * (rTree->NumDims() + 1) + rTree->NumDims()] += 1;
-        if(depth < maxDepth)    //only push down the hirarchy if not at leaf nodes
-            leaders[closest.front()].addDataPoint(d);
+        if(depth < maxDepth){    //only push down the hirarchy if not at leaf nodes
+            auto& l = leaders[closest[0]];
+            lock.unlock();
+            l.addDataPoint(d);
+        }
+        else
+            lock.unlock();
     }
     else{                       //new leader/child has to be created
         std::vector<float> mins(d), maxs(d);
@@ -79,22 +84,22 @@ void LeaderNode::addDataPoint(const std::vector<float>& d){
     _updateStamp = ++_globalUpdateStamp;
 }
 
-int LeaderNode::calcCacheScore(){
-    return followerData.size() / rTree->NumDims() - _updateStamp;
+long LeaderNode::calcCacheScore(){
+    return long(_updateStamp);
 }
 
-HierarchyCreateNode* LeaderNode::getCacheNode(int& cacheScore){
-    int bestCache{std::numeric_limits<int>::max()};
+HierarchyCreateNode* LeaderNode::getCacheNode(long& cacheScore){
+    long bestCache{std::numeric_limits<long>::max()};
     HierarchyCreateNode* bestNode{};
     for(auto& f: leaders){
-        int tmpCache;
+        long tmpCache;
         f.second.getCacheNode(tmpCache);
         if(tmpCache < bestCache){
             bestCache = tmpCache;
             bestNode = &f.second;
         }
     }
-    if(int c = calcCacheScore(); c < bestCache){
+    if(long c = calcCacheScore(); c < bestCache){
         bestCache = c;
         bestNode = this;
     }
@@ -133,6 +138,7 @@ void LeaderNode::cacheNode(const std::string_view& cachePath, const std::string&
 size_t LeaderNode::getByteSize(){
     size_t size = followerData.size() * sizeof(followerData[0]);
     size += 2 * size;   //byte size of r tree is around double the size of the follower data
+    size *= 5;          //realized that the produced size was only 1/5 of the true size
     for(auto& f: leaders){
         size += f.second.getByteSize();
     }

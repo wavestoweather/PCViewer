@@ -275,7 +275,7 @@ struct HistogramUniformBuffer {
 	float minVal;
 	uint32_t attributeInd;
 	uint32_t amtOfAttributes;
-	uint32_t pad;
+	uint32_t dataFlags;
 	uint32_t padding;
 	Vec4 color;
 };
@@ -2292,7 +2292,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
 	dl.dataDescriptorSet = ds.buffer.descriptorSet;
-	dl.color = { (float)col.r,(float)col.g,(float)col.b,pcSettings.autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, 1.f) : pcSettings.alphaDrawLists };
+	dl.color = { (float)col.r,(float)col.g,(float)col.b,pcSettings.autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, .99f) : pcSettings.alphaDrawLists };
 	dl.prefColor = dl.color;
 	dl.show = true;
 	dl.showHistogramm = true;
@@ -2728,6 +2728,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		uint32_t trafoSize = sizeof(ubo.vertTransformations[0]) * ubo.vertTransformations.size();
 		std::vector<uint8_t> bits(uboSize + trafoSize);
 		ubo.vertTransformations[0].w = (priorityAttribute != -1 && c == priorityListIndex) ? 1.f : 0;
+		ubo.dataFlags = static_cast<uint32_t>(ds.inheritanceFlags);
 		ubo.color = ds.color;
 		std::copy_n(reinterpret_cast<uint8_t*>(&ubo), uboSize, bits.data());
 		std::copy_n(reinterpret_cast<uint8_t*>(ubo.vertTransformations.data()), trafoSize, bits.data() + uboSize);
@@ -3657,9 +3658,15 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 		infoAttributes.push_back({});
 		info >> infoAttributes.back().name >> infoAttributes.back().min >> infoAttributes.back().max;
 		infoAttributes.back().originalName = infoAttributes.back().name;
+		if(infoAttributes.back().min == infoAttributes.back().max){
+			infoAttributes.back().min -= .1f;
+			infoAttributes.back().max += .1f;
+		}
 		infoAttributeNames.push_back(infoAttributes.back().name);
 		info.get();		//jumping over the newline character to get proper eof notification
 	}
+	if(infoAttributes.back().name.empty()) 
+		infoAttributes.pop_back();
 
 	//checking attributes correctnes
 	auto permutation = checkAttriubtes(infoAttributeNames);	//note: permutation is currently not used, as its thought that the dataest will always have the same structure
@@ -4887,7 +4894,7 @@ static bool openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
     bool opened = false;
-	if(std::string_view(file).substr(file.find_last_of("/\\")).find_last_of(".") == std::string_view::npos){	//no file but a folder
+	if(std::string_view(file).substr(file.find_last_of("/\\") + 1).find_last_of(".") == std::string_view::npos){	//no file but a folder
 		std::string hierarchyInfo;
 		for(const auto& entry: std::filesystem::directory_iterator(filename)){
 			//auto ext = entry.path().extension();
@@ -5612,6 +5619,22 @@ static bool updateActiveIndices(DrawList& dl) {
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
 		if (ImGui::GetIO().MouseDown[0] && !ImGui::IsMouseDoubleClicked(0)) return false;
+	}
+
+	//reloading data points if brush has changed
+	if(dl.hierarchyImportManager){
+		std::vector<brushing::RangeBrush> rangeBrushes;
+		//adding local brushes
+		for(auto& b:dl.brushes){
+			brushing::RangeBrush brush;
+			for(auto& range: b){
+				brush.push_back({static_cast<uint32_t>(range.id), range.minMax.first, range.minMax.second});
+			}
+			rangeBrushes.push_back(std::move(brush));
+		}
+		//adding global brushes
+		//TODO: global brushes
+		dl.hierarchyImportManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
 	}
 
 	//getting the parent dataset data
@@ -11105,7 +11128,7 @@ int main(int, char**)
 			ImGui::Text("Draw lists");
 			ImGui::SameLine();
 			static float uniform_alpha = .5f;
-			if (ImGui::SliderFloat("Set uniform alpha", &uniform_alpha, 0.003f, 1.0f)) {	//when changed set alpha for each dl
+			if (ImGui::SliderFloat("Set uniform alpha", &uniform_alpha, 0.003f, .99f)) {	//when changed set alpha for each dl
 				for (DrawList& dl : g_PcPlotDrawLists) {
 					dl.color.w = uniform_alpha;
 				}

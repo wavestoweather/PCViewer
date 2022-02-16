@@ -35,7 +35,7 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
                     }
                     if(reserverdAttribute)
                         _reservedAttributes.push_back(a);
-                    else
+                    else if(a.name.size())
                         _attributes.push_back(a);
                 }
             }
@@ -110,6 +110,43 @@ void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& ra
         }
         normalizedLassos.push_back(p);
     }
+
+    //checking if something changed from last notifyBrushUpdate() call
+    bool change = false;
+    if(normalizedBrushes.size() != _curRangeBrushes.size())
+        change = true;
+    for(int i = 0; !change && i < normalizedBrushes.size(); ++i){
+        if(normalizedBrushes[i].size() != _curRangeBrushes[i].size()){
+            change = true;
+            break;
+        }
+        for(int j = 0;!change && j < normalizedBrushes[i].size(); ++j){
+            if(normalizedBrushes[i][j].axis != _curRangeBrushes[i][j].axis ||
+                normalizedBrushes[i][j].min != _curRangeBrushes[i][j].min ||
+                normalizedBrushes[i][j].max != _curRangeBrushes[i][j].max)
+                change = true;
+        }
+    }
+    if(normalizedLassos.size() != _curLassoBrushes.size())
+        change = true;
+    for(int i = 0;!change && i < normalizedLassos.size(); ++i){
+        if(normalizedLassos[i].attr1 != normalizedLassos[i].attr2 || 
+            normalizedLassos[i].borderPoints.size() != _curLassoBrushes[i].borderPoints.size()){
+            change = true;
+            break;
+        }
+        for(int j = 0; !change && j < normalizedLassos[i].borderPoints.size(); ++j){
+            if(normalizedLassos[i].borderPoints[j].x != _curLassoBrushes[i].borderPoints[j].x ||
+                normalizedLassos[i].borderPoints[j].y != _curLassoBrushes[i].borderPoints[j].y)
+                change = true;
+        }
+    }
+    if(!change)     //don't do any updates if nothing has changed
+        return;
+
+    _curRangeBrushes = normalizedBrushes;
+    _curLassoBrushes = normalizedLassos;
+
     //after normalization go through the hierarchy to check the level sizes beginning at the top most level
     std::vector<std::string_view> bestFiles;
     for(int i = _baseLevel; i < _levelFiles.size(); ++i){
@@ -160,6 +197,13 @@ void HierarchyImportManager::openHierarchyFiles(const std::vector<std::string_vi
             compression::loadAndDecompress(f, dataVec[i++]);
         }
         compression::combineData(dataVec, m->_nextData);
+        //denormalizing from [0,1] to [min,max]
+        for(int a = 0; a < m->_attributes.size(); ++a){
+            float diff = m->_attributes[a].max - m->_attributes[a].min;
+            for(i = 0; i < m->_nextData.columns[a].size(); ++i)
+                m->_nextData.columns[a][i] = m->_nextData.columns[a][i] * diff + m->_attributes[a].min;
+        }
+        std::cout << "HierarchyImportManager::openHierarchyFiles() loaded new data with " << m->_nextData.size() << " datapoints" << std::endl;
         m->newDataLoaded = true;
     };
 

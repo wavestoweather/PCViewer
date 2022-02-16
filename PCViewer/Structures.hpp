@@ -144,11 +144,27 @@ struct UniformBufferObject {
 	uint32_t amtOfVerts;
 	uint32_t amtOfAttributes;
 	float padding;
+	uint32_t dataFlags, fill, fill1, fill2;
 	Vec4 color;
 	std::vector<Vec4> vertTransformations;
 	//Vec4 VertexTransormations[];			//is now a variable length array at the end of the UBO
 	uint32_t size(){
 		return sizeof(UniformBufferObject) - sizeof(vertTransformations) + sizeof(vertTransformations[0]) * vertTransformations.size();
+	}
+};
+
+template<typename Infos, typename TArray>
+struct ArrayStruct: public Infos{
+	std::vector<TArray> array;
+	uint32_t size(){
+		return sizeof(ArrayStruct) - sizeof(array) + sizeof(array[0]) * array.size();
+	}
+	std::vector<uint8_t> toByteArray(){
+		std::vector<uint8_t> bytes(size());
+		const uint32_t infoSize = sizeof(ArrayStruct) - sizeof(array);
+		std::memcpy(bytes.data(), this, infoSize);
+		std::memcpy(bytes.data() + infoSize, array.data(), sizeof(array[0] * array.size()));
+		return bytes;
 	}
 };
 
