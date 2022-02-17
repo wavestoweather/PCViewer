@@ -79,7 +79,7 @@ void CompressionWorkbench::draw()
         if(ImGui::InputFloat("Epsilon start", &_epsStart, .01f, .1f)) _epsStart = std::clamp(_epsStart, 1e-6f, 1.0f);
         if(ImGui::InputInt("Lines per level", reinterpret_cast<int*>(&_linesPerLvl))) _linesPerLvl = std::clamp<uint32_t>(_linesPerLvl, 1, 1e7);
         if(ImGui::InputInt("Levels", reinterpret_cast<int*>(&_levels))) _levels = std::clamp<uint32_t>(_levels, 1, 20);
-        if(ImGui::InputInt("Max ram usage in MBytes", reinterpret_cast<int*>(&_maxWorkingMemory))) _maxWorkingMemory = std::max(1000u, _maxWorkingMemory);
+        if(ImGui::InputInt("Max ram usage in MBytes", reinterpret_cast<int*>(&_maxWorkingMemory))) _maxWorkingMemory = std::max(10u, _maxWorkingMemory);
         if(ImGui::InputInt("Amt of threads", reinterpret_cast<int*>(&_amtOfThreads))) _amtOfThreads = std::max(1u, _amtOfThreads);
         using namespace std::chrono_literals;
         if(_analysisFuture.valid() && _analysisFuture.wait_for(0s) == std::future_status::ready && ImGui::Button("Build Hierarchy")){

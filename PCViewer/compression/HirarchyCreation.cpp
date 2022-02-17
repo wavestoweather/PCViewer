@@ -58,12 +58,13 @@ namespace compression
                         std::unique_lock<std::shared_mutex> lock(cacheMutex); // locking the root node unique to do caching
                         sizeCheck = checkInterval;
                         size_t structureSize = root->getByteSize();
-                        while(structureSize > size_t(maxMemoryMB) * 1024 * 1024){
+                        bool doCache = structureSize > size_t(maxMemoryMB) * 1024 * 1024;
+                        while(doCache && structureSize > size_t(maxMemoryMB) * 1024 * 1024 / 2){
                             long dummy;
                             HierarchyCreateNode* cache = root->getCacheNode(dummy);
                             std::vector<float> half(threadData.size(), .5f);
                             root->cacheNode(tempPath, "", half.data(), .5f, cache);
-                            size_t structureSize = root->getByteSize();
+                            structureSize = root->getByteSize();
                         }
                     }
                 }
