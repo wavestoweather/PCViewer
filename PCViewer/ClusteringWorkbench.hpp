@@ -31,7 +31,7 @@ public:
     std::vector<ImVec4> colors{{1,1,0,.2f}, {0,1,0,.2f}, {0,1,1,.2f}, {1,0,1,.2f}, {1,0,0,.2f}};
     ImVec4 inactiveColor{.5f, .5f, .5f, .1f};
 
-    Polygon lassoSelection;
+    struct Polygon lassoSelection;
 
 protected:
     void updateActiveLines(DrawList& dl);

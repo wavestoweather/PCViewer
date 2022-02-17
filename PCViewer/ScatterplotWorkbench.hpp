@@ -74,7 +74,7 @@ public:
         VkFramebuffer framebuffer{};
         VkDeviceMemory imageMemory{};
         VkDescriptorSet resultImageSet{};
-        uint activeAttributesCount{};
+        uint32_t activeAttributesCount{};
         std::vector<uint8_t> activeAttributes;
         std::vector<Attribute>& attributes;
         std::vector<DrawListInstance> dls;

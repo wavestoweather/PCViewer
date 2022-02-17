@@ -6,6 +6,7 @@
 #include<random>
 #include<utility>
 #include<Eigen/Dense>
+#include<numeric>
 #include "Data.hpp"
 #include "DBScan.hpp"
 

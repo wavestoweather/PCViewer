@@ -63,7 +63,7 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
         levelLineCount.resize(maxDepth, 0);
         //loading the file header and getting the data point sizes
         std::ifstream f(s, std::ios_base::binary);
-        uint colCount, byteSize, symbolsSize, dataSize;
+        uint32_t colCount, byteSize, symbolsSize, dataSize;
 	    float quantizationStep, eps;
 	    f >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
         f.close();
@@ -155,7 +155,7 @@ void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& ra
         for(auto& f: _levelFiles[i]){
             //getting the header informations
             std::ifstream in(std::string(f), std::ios_base::binary);
-            uint colCount, byteSize, symbolsSize, dataSize;
+            uint32_t colCount, byteSize, symbolsSize, dataSize;
 	        float quantizationStep, eps;
 	        in >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
             std::vector<float> center(colCount);

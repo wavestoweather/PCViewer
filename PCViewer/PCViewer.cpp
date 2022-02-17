@@ -3699,10 +3699,10 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 	cI.maxLines = pcSettings.maxHierarchyLines;
 	cI.additionalAttributeStorage = 1;		//TODO: change to a variable size
 	cI.dataType = DataType::Hierarchichal;
-	createPcPlotVertexBuffer(pcAttributes, ds.data, cI);
+	createPcPlotVertexBuffer(pcAttributes, ds.data, std::optional<VertexBufferCreateInfo>(cI));
 	ds.buffer = g_PcPlotVertexBuffers.back();
 	std::string_view fileView(filename);
-	ds.additionalData.insert(ds.additionalData.begin(), reinterpret_cast<const uint8_t*>(fileView.begin()), reinterpret_cast<const uint8_t*>(fileView.end()));
+	ds.additionalData.insert(ds.additionalData.begin(), reinterpret_cast<const uint8_t*>(&fileView.front()), reinterpret_cast<const uint8_t*>(&fileView.front()));
 
 	// adding the default template list
 	TemplateList tl = {};
@@ -3711,7 +3711,7 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 	tl.isIndexRange = true;
 	tl.indices = {0,0};
 	for(auto& a: infoAttributes)
-		tl.minMax.push_back({a.min, a.max});
+		tl.minMax.push_back(std::pair<float, float>{a.min, a.max});
 	tl.parentDataSetName = ds.name;
 	ds.drawLists.push_back(tl);
 
@@ -4901,7 +4901,7 @@ static bool openDataset(const char* filename) {
 			//if(ext.string().size())
 			//	std::cout << ext.string() << std::endl;
 			if(entry.is_regular_file() && entry.path().extension() == ".info"){
-				hierarchyInfo = entry.path();
+				hierarchyInfo = entry.path().string();
 				break;
 			}
 		}

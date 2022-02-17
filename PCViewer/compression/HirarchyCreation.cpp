@@ -59,7 +59,7 @@ namespace compression
                         sizeCheck = checkInterval;
                         size_t structureSize = root->getByteSize();
                         bool doCache = structureSize > size_t(maxMemoryMB) * 1024 * 1024;
-                        while(doCache && structureSize > size_t(maxMemoryMB) * 1024 * 1024 / 2){
+                        while(doCache && structureSize > size_t(maxMemoryMB) * 1024 * 1024 / 1.3){
                             long dummy;
                             HierarchyCreateNode* cache = root->getCacheNode(dummy);
                             std::vector<float> half(threadData.size(), .5f);
@@ -91,6 +91,7 @@ namespace compression
             for(auto& a: attributes){
                 file << a.name << " " << a.min << " " << a.max << "\n"; 
             }
+            std::cout << "Hierarchy writeout done" << std::endl;
         }
         catch(std::filesystem::filesystem_error err){
             std::cout << "Error trying to open output folder " << err.path1() << " with code: " << err.code() << std::endl;
@@ -135,8 +136,8 @@ namespace compression
                 }
                 //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
                 //padding to size % 4 size
-                uint originalLength = col.size();
-                uint paddedLength = ((4 - (col.size() & 0b11)) & 0b11) + col.size();
+                uint32_t originalLength = col.size();
+                uint32_t paddedLength = ((4 - (col.size() & 0b11)) & 0b11) + col.size();
                 col.resize(paddedLength); data.resize(paddedLength);
                 cudaCompress::util::dwtFloatForwardCPU(data.data(), col.data(), data.size(), 0, 0);
                 std::copy(data.begin(), data.begin() + paddedLength / 2, col.begin());
@@ -165,6 +166,7 @@ namespace compression
 
         {
             std::vector<std::future<void>> futures(amtOfThreads);
+            std::cout << "Starging Tmp compression" << std::endl;
             auto curStart = cacheFiles.begin();
             for(int i = 0; i < amtOfThreads; ++i){
                 auto curEnd = cacheFiles.begin() + (i + 1) * cacheFiles.size() / amtOfThreads;
@@ -172,13 +174,14 @@ namespace compression
                 curStart = curEnd;
                 futures[i] = std::async(compressThread, subSet);
             }
+            std::cout << "Tmp compression done" << std::endl;
         }
     }
     
     void loadAndDecompress(const std::string_view& file, Data& data) 
     {
 	    std::ifstream in(file.data());
-	    uint colCount, byteSize, symbolsSize, dataSize;
+	    uint32_t colCount, byteSize, symbolsSize, dataSize;
 	    float quantizationStep, eps;
 	    in >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
 	    in.get();	//skipping newline
@@ -186,7 +189,7 @@ namespace compression
         for(int i = 0; i < colCount; ++i)
             in >> t;
         in.get();   //skipping newline
-	    std::vector<uint> bytes(byteSize / 4);
+	    std::vector<uint32_t> bytes(byteSize / 4);
 	    in.read(reinterpret_cast<char*>(bytes.data()), byteSize);
 	    cudaCompress::BitStreamReadOnly bs(bytes.data(), byteSize * 8);
 	    cudaCompress::BitStreamReadOnly* dec[]{&bs};

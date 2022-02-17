@@ -12,6 +12,7 @@
 
 // NOTE These next few lines may be win32 specific, you may need to modify them to compile on other platform
 #include <stdio.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <assert.h>
 #include <stdlib.h>
