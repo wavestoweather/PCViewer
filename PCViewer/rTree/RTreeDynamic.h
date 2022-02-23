@@ -286,6 +286,7 @@ public:
   DATATYPE& GetAt(Iterator& a_it)                 { return *a_it; }
 
   int NUMDIMS;
+  uint32_t BYTE_SIZE{};
 
 protected:
   /// Minimal bounding rectangle (n-dimensional)
@@ -499,6 +500,7 @@ RTREE_TEMPLATE
 RTREE_QUAL::RTreeDynamic(const RTreeDynamic& other) : RTreeDynamic(other.NUMDIMS)
 {
   CopyRec(m_root, other.m_root);
+  BYTE_SIZE = other.BYTE_SIZE;
 }
 
 
@@ -523,6 +525,7 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max, const DATA
   branch.m_data = a_dataId;
   branch.m_rect.m_min.resize(NUMDIMS);
   branch.m_rect.m_max.resize(NUMDIMS);
+  BYTE_SIZE += 2 * NUMDIMS * sizeof(branch.m_rect.m_min[0]);
   branch.m_child = NULL;
 
   for(int axis=0; axis<NUMDIMS; ++axis)
@@ -904,6 +907,7 @@ typename RTREE_QUAL::Node* RTREE_QUAL::AllocNode()
   // EXAMPLE
 #endif // RTREE_DONT_USE_MEMPOOLS
   InitNode(newNode);
+  BYTE_SIZE += sizeof(Node);
   return newNode;
 }
 

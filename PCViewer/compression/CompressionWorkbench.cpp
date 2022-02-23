@@ -105,5 +105,5 @@ void CompressionWorkbench::stopThreads()
 
 CompressionWorkbench::~CompressionWorkbench() 
 {
-    
+
 }

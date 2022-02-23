@@ -381,6 +381,9 @@ protected:
 
   Node* m_root;                                    ///< Root of tree
   ELEMTYPEREAL m_unitSphereVolume;                 ///< Unit sphere constant for required number of dimensions
+
+public:
+  uint32_t BYTE_SIZE{};                            /// currently only supports insertion!!!
 };
 
 
@@ -885,6 +888,7 @@ typename RTREE_QUAL::Node* RTREE_QUAL::AllocNode()
   // EXAMPLE
 #endif // RTREE_DONT_USE_MEMPOOLS
   InitNode(newNode);
+  BYTE_SIZE += sizeof(Node);
   return newNode;
 }
 

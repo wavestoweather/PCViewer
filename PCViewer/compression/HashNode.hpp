@@ -29,6 +29,7 @@ public:
     long calcCacheScore();
     HierarchyCreateNode* getCacheNode(long& cacheScore);                    //returns the node of the whole tree with the highest cache score which is stored in cacheScore
     void cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode);
+    void cacheNode(CacheManagerInterface& cacheManager, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){throw std::runtime_error{"Cache manager not supported for hash node"};};
     size_t getByteSize();
     std::shared_mutex& getMutex(){return _insertLock;};
 

@@ -2,9 +2,11 @@
 
 #include "LeaderNode.hpp"
 #include "HashNode.hpp"
+#include "VectorLeaderNode.hpp"
 #include "../rTree/RTreeDynamic.h"
 #include "cpuCompression/EncodeCPU.h"
 #include "cpuCompression/DWTCpu.h"
+#include "BundlingCacheManager.hpp"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -14,6 +16,36 @@
 #include <future>
 #include <fstream>
 #include <memory>
+
+
+//private functions ----------------------------------------------------------------------------
+static void row2Col(const std::vector<float>& rowMajor, uint32_t rowLength, std::vector<float>& col){
+    col.resize(rowMajor.size());
+    uint32_t colInd = 0;
+    for(uint32_t curInd = 0; colInd < rowMajor.size(); curInd += rowLength){
+        if(curInd >= rowMajor.size()) ++curInd %= rowMajor.size();
+        col[colInd++] = rowMajor[curInd];
+    }
+}
+
+static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
+    //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
+    //padding to size % 4 size
+    uint32_t originalLength = src.size();
+    uint32_t paddedLength = ((4 - (src.size() & 0b11)) & 0b11) + src.size();
+    src.resize(paddedLength); 
+    std::vector<float> tmp(paddedLength);
+    cudaCompress::util::dwtFloatForwardCPU(tmp.data(), src.data(), src.size(), 0, 0);
+    std::copy(tmp.begin(), tmp.begin() + paddedLength / 2, src.begin());
+    cudaCompress::util::dwtFloatForwardCPU(src.data(), tmp.data(), tmp.size() / 2, tmp.size() / 2, tmp.size() / 2);
+    std::vector<cudaCompress::Symbol16> symbols(src.size());
+    cudaCompress::util::quantizeToSymbols(symbols.data(), src.data(), src.size(), quantizationStep);
+	cudaCompress::BitStream* arr[]{&bitStream};
+    std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
+    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
+    symbolsSize = symbols.size();
+}
+//private functions end ------------------------------------------------------------------------
 
 namespace compression
 {
@@ -40,30 +72,47 @@ namespace compression
 
             // converting lvl multiplier to epsilon multiplier
             double epsMult = std::min(pow(1.0/lvlMultiplier, 1.0/dataPoint.size()), .5);
-            std::unique_ptr<HierarchyCreateNode> root = std::make_unique<LeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels);   //constructor automatically inserts the first data point
+            std::shared_ptr<HierarchyCreateNode> root;
+            CompressionMethod compressionMethod{CompressionMethod::VectorLeaders};
+            switch(compressionMethod){
+                case CompressionMethod::Leaders: root = std::make_shared<LeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+                case CompressionMethod::VectorLeaders: root = std::make_shared<VectorLeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+                case CompressionMethod::Hash: root = std::make_shared<HashNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+            }
+            std::shared_ptr<CacheManagerInterface> cacheManager{};
+            CachingMethod cachingMethod{CachingMethod::Bundled};
+            switch(cachingMethod){
+                case CachingMethod::Native: break;
+                case CachingMethod::Bundled: cacheManager = std::make_shared<BundlingCacheManager>(std::string(outputFolder) + "/temp"); break;
+                case CachingMethod::Single: break;
+            }
             std::shared_mutex cacheMutex;                            //mutex for the root node to control insert/cache access
 
             const int checkInterval = 1000;
             std::atomic<int> sizeCheck = checkInterval;
-            auto threadFunc = [&](int threadId){
+            auto threadFunc = [](int threadId, DataLoader* loader, HierarchyCreateNode* root, std::shared_mutex* cacheMutex, uint32_t maxMemoryMB, std::string tempPath, std::atomic<int>* sizeCheckk, CacheManagerInterface* cacheManager){
+                auto& sizeCheck = *sizeCheckk;
                 std::vector<float> threadData;
                 while(loader->getNextNormalized(threadData)){
                     //insert into the hirarchy
-                    std::shared_lock<std::shared_mutex> insertLock(cacheMutex);
+                    std::shared_lock<std::shared_mutex> insertLock(*cacheMutex);
                     root->addDataPoint(threadData);
                     insertLock.unlock();
 
                     //should add caching strategies to avoid memory overflow and inbetween writeouts
                     if(--sizeCheck < 0 && threadId == 0){
-                        std::unique_lock<std::shared_mutex> lock(cacheMutex); // locking the root node unique to do caching
+                        std::unique_lock<std::shared_mutex> lock(*cacheMutex); // locking the root node unique to do caching
                         sizeCheck = checkInterval;
                         size_t structureSize = root->getByteSize();
                         bool doCache = structureSize > size_t(maxMemoryMB) * 1024 * 1024;
-                        while(doCache && structureSize > size_t(maxMemoryMB) * 1024 * 1024 / 1.3){
+                        while(doCache && structureSize > size_t(maxMemoryMB) * 1024 * 1024 * .7){   //shrink to 70%
                             long dummy;
                             HierarchyCreateNode* cache = root->getCacheNode(dummy);
                             std::vector<float> half(threadData.size(), .5f);
-                            root->cacheNode(tempPath, "", half.data(), .5f, cache);
+                            if(cacheManager)
+                                dynamic_cast<VectorLeaderNode*>(root)->cacheNode(*cacheManager, "", half.data(), .5f, cache);
+                            else
+                                root->cacheNode(tempPath, "", half.data(), .5f, cache);
                             structureSize = root->getByteSize();
                         }
                     }
@@ -73,7 +122,7 @@ namespace compression
                 std::cout << "Creating all threds" << std::endl;
                 std::vector<std::future<void>> threads(amtOfThreads);
                 for(int i = 0; i < amtOfThreads; ++i){
-                    threads[i] = std::async(threadFunc, i);
+                    threads[i] = std::async(threadFunc, i, loader, root.get(), &cacheMutex, maxMemoryMB, tempPath, &sizeCheck, cacheManager.get());
                 }
                 std::cout << "Threads up and running" << std::endl;
             }   // all futures are automatically joined at the end of the section
@@ -83,8 +132,10 @@ namespace compression
             bool hellYeah = true;
             std::vector<float> half(dataPoint.size(), .5f);
             root->cacheNode(tempPath, "", half.data(), .5f, root.get());
-            //info file containing 
+
+            //info file containing caching strategy and attributes
             std::ofstream file(std::string(outputFolder) + "/attr.info", std::ios_base::binary);
+            file << CachingMethodNames[static_cast<int>(cachingMethod)] << "\n";
             std::vector<Attribute> attributes;
             size_t tmp;
             loader->dataAnalysis(tmp, attributes);
@@ -100,6 +151,11 @@ namespace compression
     
     void compressTempHirarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep) 
     {
+        //if other types of caching was used automatically adopt to other strategies
+        std::ifstream info(std::string(outputFolder) + "/attr.info");
+        std::string cachingMethod; info >> cachingMethod;
+        if(cachingMethod == CachingMethodNames[static_cast<int>(CachingMethod::Bundled)])
+            return compressBundledTempHierarchy(outputFolder, amtOfThreads, quantizationStep);
         std::string tempPath = std::string(outputFolder) + "/temp";
         std::vector<std::string> cacheFiles;
         // getting all cache files
@@ -110,7 +166,7 @@ namespace compression
         }
 
         // compressing the cache files
-        auto compressThread = [&](const std::vector<std::string>& files){
+        auto compressThread = [](const std::vector<std::string>& files, const std::string& outputFolder, float quantizationStep){
             for(auto& f: files){
                 std::ifstream fs(f, std::ios_base::binary);
                 std::vector<float> data;
@@ -159,9 +215,9 @@ namespace compression
                         out << " ";
                 }
                 out << "\n";
-                int s = bitStream.getRawSizeBytes();
                 out.write(reinterpret_cast<char*>(bitStream.getRaw()), bitStream.getRawSizeBytes());
             }
+            std::cout << "Thread done compressing and merging" << std::endl;
         };
 
         {
@@ -172,10 +228,114 @@ namespace compression
                 auto curEnd = cacheFiles.begin() + (i + 1) * cacheFiles.size() / amtOfThreads;
                 std::vector<std::string> subSet(curStart, curEnd);
                 curStart = curEnd;
-                futures[i] = std::async(compressThread, subSet);
+                futures[i] = std::async(compressThread, subSet, std::string(outputFolder), quantizationStep);
             }
-            std::cout << "Tmp compression done" << std::endl;
         }
+        std::cout << "Tmp compression done" << std::endl;
+    }
+
+    void compressBundledTempHierarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep){
+        struct MutexPair{std::mutex info, data;};       //struct for holding two mutexes for the level files
+        
+        std::string tempPath = std::string(outputFolder) + "/temp";
+        std::map<std::string, std::vector<std::string>> cacheElements;  //stores for each cache id the files in which a bundle is located
+        uint32_t levelCount = 0;
+        // getting all cache files and extracting cluster from the headerinformation
+        for(const auto& entry: std::filesystem::directory_iterator(tempPath)){
+            if(entry.is_regular_file() && entry.path().string().find('.') == std::string::npos){    // is cache file
+                std::ifstream file(entry.path());
+                int cacheBundles; file >> cacheBundles;
+                for(int i = 0; i < cacheBundles; ++i){
+                    std::string id;
+                    file >> id;
+                    cacheElements[id].push_back(entry.path().string());
+                    levelCount = std::max(levelCount, static_cast<uint32_t>(std::count(id.begin(), id.end(), '_')));
+                    file >> id >> id;   // ignoring the next two arguments;
+                }
+            }
+        }
+        assert(levelCount < 4); //debugassert
+
+        auto compressThread = [](std::map<std::string, std::vector<std::string>>* cacheElements, std::vector<std::string> compressElements, const std::string& outputFolder, float quantizationStep, std::vector<MutexPair>* mutexes){
+            auto& mutes = *mutexes;
+            for(const auto& id: compressElements){
+                std::vector<float> data;
+                //combining the data fragments from all files for the cluster file
+                uint32_t rowLength; //needed for column to row major conversion
+                float eps;          //needed for writeout information
+                for(auto& file: (*cacheElements)[id]){
+                    std::ifstream bundleInfo(file);
+                    int amtOfBundles; bundleInfo >> amtOfBundles; bundleInfo.get();
+                    std::size_t start; size_t size;
+                    for(int i = 0; i < amtOfBundles; ++i){
+                        std::string infoId;
+                        bundleInfo >> infoId >> start >> size;
+                        if(id == infoId)
+                            break;
+                    }
+                    std::string bin(size, ' ');
+                    bundleInfo.seekg(start);            //going to the start of the sequence
+                    bundleInfo.read(bin.data(), size);  //reading out the data
+                    std::stringstream curFragment;
+                    curFragment.str(bin);               //setting the streambuffer to the binary data
+                    uint32_t dataSize;
+                    curFragment >> rowLength >> dataSize >> eps;
+                    curFragment.get();   //newline char
+                    //reading the data
+                    auto insertPointer = &data.back();
+                    data.resize(data.size() + dataSize);
+                    curFragment.read(reinterpret_cast<char*>(insertPointer), dataSize * sizeof(data[0]));
+                }
+
+                std::vector<float> center(data.begin(), data.begin() + rowLength);
+                //having all data in row major order inside the data vector -> reorder to column major format
+                std::vector<float> col;
+                row2Col(data, rowLength, col);
+                cudaCompress::BitStream compressed;
+                uint32_t symbolsSize;
+                compressVector(col, quantizationStep, compressed, symbolsSize);
+
+                {
+                    //appending the data to the correct file
+                    uint32_t level = std::count(id.begin(), id.end(), '_') - 1;
+                    std::unique_lock<std::mutex> infoLock(mutes[level].info);        //exclusively locking the level files
+                    std::unique_lock<std::mutex> dataLock(mutes[level].data);
+
+                    //writing the infos
+                    std::string outNameBase = std::string(outputFolder) + "/level" + std::to_string(level);
+                    std::ofstream infos(outNameBase + ".info", std::ios_base::app | std::ios_base::binary);
+                    std::ofstream dataFile(outNameBase, std::ios_base::app | std::ios_base::binary);
+                    uint32_t offset = dataFile.tellp();
+                    infos << rowLength << " " << offset << " " << compressed.getRawSizeBytes() << " " << symbolsSize << " " << data.size() << " " << quantizationStep << " " << eps << "\n";
+                    for(int i = 0; i < center.size(); ++i){
+                        infos << center[i];
+                        if(i != center.size() - 1)
+                            infos << " ";
+                    }
+                    infos << "\n";
+                    infos.close();                                                  //closing the info file to release the lock
+                    infoLock.unlock();                                              //unlocking infos after they have been written to allow following processes to instantly also update the info
+                    //writing the compressed data;
+                    dataFile.write(reinterpret_cast<char*>(compressed.getRaw()), compressed.getRawSizeBytes());
+                    dataFile.close();                                               //manually closing the data file to avoid unlock errors with the mutex
+                }
+            }
+        };
+        {
+            std::vector<MutexPair> levelMutexes(levelCount);
+            std::vector<std::future<void>> futures(amtOfThreads);
+            std::cout << "Starging Tmp compression" << std::endl;
+            auto curStart = cacheElements.begin();
+            for(int i = 0; i < amtOfThreads; ++i){
+                auto curEnd = cacheElements.begin();
+                std::advance(curEnd, (i + 1) * cacheElements.size() / amtOfThreads);
+                std::vector<std::string> subSet;
+                while(curStart != curEnd)
+                    subSet.push_back(curStart++->first);
+                futures[i] = std::async(compressThread, &cacheElements, subSet, std::string(outputFolder), quantizationStep, &levelMutexes);
+            }
+        }
+        std::cout << "Tmp compression done" << std::endl;
     }
     
     void loadAndDecompress(const std::string_view& file, Data& data) 

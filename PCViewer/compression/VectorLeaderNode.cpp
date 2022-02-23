@@ -1,9 +1,10 @@
-#include "LeaderNode.hpp"
+#include "VectorLeaderNode.hpp"
 #include <iostream>
 #include <limits>
 #include <fstream>
+#include <sstream>
 
-LeaderNode::LeaderNode(const std::vector<float>& pos, float inEps, float inEpsMul, uint32_t inDepth, uint32_t inMaxDepth):
+VectorLeaderNode::VectorLeaderNode(const std::vector<float>& pos, float inEps, float inEpsMul, uint32_t inDepth, uint32_t inMaxDepth):
 eps(inEps),
 epsMul(inEpsMul),
 depth(inDepth),
@@ -46,58 +47,64 @@ maxDepth(inMaxDepth)
     addDataPoint(pos);  //automatically adds itself to the follower data
 }
 
-void LeaderNode::addDataPoint(const std::vector<float>& d){
-    std::vector<uint32_t> closest;
-    auto backInsert = [&](const uint32_t& id){closest.push_back(id); return false;}; // return false to quit when first was found
+void VectorLeaderNode::addDataPoint(const std::vector<float>& d){
+    uint32_t closest; bool leaderFound{false};
+    auto searchCallback = [&](const uint32_t& id){closest = id; leaderFound = true; return false;}; // return false to quit when first was found
     std::unique_lock<std::shared_mutex> lock(_insertLock);
-    assert(d.size() == rTree->NumDims());   //safety check
-    rTree->Search(d.data(), d.data(), backInsert);
-    if(closest.size()){         //found leader
-        //lock.unlock();         //can release lock already
-        followerData[closest.front() * (rTree->NumDims() + 1) + rTree->NumDims()] += 1;
-        if(depth < maxDepth){    //only push down the hirarchy if not at leaf nodes
-            auto& l = leaders[closest[0]];
-            lock.unlock();
-            l.addDataPoint(d);
+    assert(d.size() == rTree->NumDims());                                                           //safety check
+    rTree->Search(d.data(), d.data(), searchCallback);
+    if(leaderFound){    
+        followerCounts[closest]++;                                                                  //found leader
+        if(depth < maxDepth){                                                                       //only push down the hirarchy if not at leaf nodes
+            auto& f = follower[closest];
+            if(f){
+                lock.unlock();
+                f->addDataPoint(d);
+            }
+            else{
+                f = std::make_shared<VectorLeaderNode>(d, eps * epsMul, epsMul, depth + 1, maxDepth);
+                lock.unlock();
+            }
         }
         else
             lock.unlock();
     }
-    else{                       //new leader/child has to be created
-        std::vector<float> mins(d), maxs(d);
+    else{                                                                                           //new leader/child has to be created
+        std::vector<float> minsMaxs(2 * d.size());
         for(int i = 0; i < d.size(); ++i){
-            mins[i] -= eps;
-            maxs[i] += eps;
+            minsMaxs[i] = d[i] - eps;
+            minsMaxs[i + d.size()] = d[i] + eps;
         }
         uint32_t newId = _leaderId++;
-        rTree->Insert(mins.data(), maxs.data(), newId);
+        rTree->Insert(minsMaxs.data(), minsMaxs.data() + d.size(), newId);
         followerData.insert(followerData.end(), d.begin(), d.end());
-        followerData.push_back(1);  //adding the counter for each row
+        followerCounts.push_back(1);                                                                //adding the counter for each row
+        if(depth < maxDepth)
+            follower.push_back(std::make_shared<VectorLeaderNode>(d, eps * epsMul, epsMul, depth + 1, maxDepth));
+        
+        lock.unlock();     //can release the lock, all critical things already done
+
         if(int x  = followerData.size() / d.size(); x > 2e6){
             std::cout << "\rNote: large HirarchyNode with " << x << "elements";
         }
-        
-        if(depth < maxDepth){   //only create new child and propagate data if not at leaf nodes
-            leaders.try_emplace(newId, d, eps * epsMul, epsMul, depth + 1, maxDepth);
-        }
-        lock.unlock();     //can release the lock, all critical things already done
     }
     _updateStamp = ++_globalUpdateStamp;
 }
 
-long LeaderNode::calcCacheScore(){
-    return long(_updateStamp);
+long VectorLeaderNode::calcCacheScore(){
+    return long(_updateStamp) - long(followerCounts.size());
 }
 
-HierarchyCreateNode* LeaderNode::getCacheNode(long& cacheScore){
+HierarchyCreateNode* VectorLeaderNode::getCacheNode(long& cacheScore){
     long bestCache{std::numeric_limits<long>::max()};
     HierarchyCreateNode* bestNode{};
-    for(auto& f: leaders){
+    for(auto& f: follower){
         long tmpCache;
-        f.second.getCacheNode(tmpCache);
+        if(f)
+            f->getCacheNode(tmpCache);
         if(tmpCache < bestCache){
             bestCache = tmpCache;
-            bestNode = &f.second;
+            bestNode = f.get();
         }
     }
     if(long c = calcCacheScore(); c < bestCache){
@@ -108,45 +115,53 @@ HierarchyCreateNode* LeaderNode::getCacheNode(long& cacheScore){
     return bestNode;
 }
 
-void LeaderNode::cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){
-    size_t curInd = getChildIndex(rTree->NumDims(), parentCenter, followerData.data(), parentEps, eps);
-    std::vector<float> gridCenter(rTree->NumDims());
+void VectorLeaderNode::cacheNode(CacheManagerInterface& cacheManager, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){
+    uint32_t rowSize = followerData.size() / followerCounts.size();
+    uint32_t finalRowSize = rowSize + 1;
+    size_t curInd = getChildIndex(rowSize, parentCenter, followerData.data(), parentEps, eps);
     std::string curId = parentId + "_" + std::to_string(curInd);
     if(this == chacheNode){
-        for(auto& f: leaders){
-            f.second.cacheNode(cachePath, curId, followerData.data(), eps, &f.second);
+        rTree = {};
+        for(auto& f: follower){
+            f->cacheNode(cacheManager, curId, followerData.data(), eps, f.get());
         }
-        leaders.clear();    //deleting all leader nodes
-        std::ofstream f(std::string(cachePath) + "/" + curId, std::ios_base::app | std::ios_base::binary);    //opening an append filestream
+        follower = std::vector<std::shared_ptr<VectorLeaderNode>>();    //deleting all leader nodes
+        
+        std::vector<float> outData(followerCounts.size() * finalRowSize);
+        for(int i = 0; i < followerCounts.size(); ++i){
+            for(int j = 0; j < rowSize; ++j)
+                outData[i * finalRowSize + j] = followerData[i * rowSize + j];
+            outData[i * finalRowSize + rowSize] = followerCounts[i];
+        }
+        followerData = std::vector<float>();
+        followerCounts = std::vector<uint32_t>();
+        std::stringstream f;    //creating the data stream
         // adding fixed size information header
-        f << rTree->NumDims() + 1 << " " << followerData.size() << " " << eps << "\n";   //space needed to easily be able to parse the file again
-        f.write(reinterpret_cast<char*>(followerData.data()), followerData.size() * sizeof(followerData[0]));
+        f << finalRowSize << " " << outData.size() << " " << eps << "\n";   //space needed to easily be able to parse the file again
+        f.write(reinterpret_cast<char*>(outData.data()), outData.size() * sizeof(outData[0]));
         f << "\n";
+        cacheManager.addData(curId, f);
     }
-    int del = -1;
-    for(auto& f: leaders){
-        f.second.cacheNode(cachePath, curId, followerData.data(), eps, chacheNode);
-        if(&f.second == chacheNode)
-            del = f.first;
-    }
-    if(del >= 0) //removing child if cached
-    {
-        rTree->Remove(leaders[del].followerData.data(), leaders[del].followerData.data(), del);
-        leaders.erase(del);
+    for(auto& f: follower){
+        if(f)
+            f->cacheNode(cacheManager, curId, followerData.data(), eps, chacheNode);
+        if(f.get() == chacheNode)
+            f = {};         //setting the follower to a null ptr
     }
 }
 
-size_t LeaderNode::getByteSize(){
-    size_t size = followerData.size() * sizeof(followerData[0]);
-    size += 2 * size;   //byte size of r tree is around double the size of the follower data
-    size *= 5;          //realized that the produced size was only 1/5 of the true size
-    for(auto& f: leaders){
-        size += f.second.getByteSize();
+size_t VectorLeaderNode::getByteSize(){
+    //size from arrays in the class
+    size_t size = followerData.size() * sizeof(followerData[0]) + follower.size() * sizeof(follower[0]) + followerCounts.size() * sizeof(followerCounts[0]);
+    size +=  rTree->ByteSize();           //size from rTree (is being tracked inside the rTree)
+    for(auto& f: follower){
+        if(f)
+            size += f->getByteSize();
     }
     return size;
 }
 
-uint32_t LeaderNode::getChildIndex(uint32_t dimensionality, float* parentCenter, float* childCenter, float parentEps, float childEps){
+uint32_t VectorLeaderNode::getChildIndex(uint32_t dimensionality, float* parentCenter, float* childCenter, float parentEps, float childEps){
     size_t curInd{};
     uint32_t maxLeadersPerAx = static_cast<uint32_t>(ceil(parentEps / childEps));
     uint32_t multiplier = 1;
@@ -157,4 +172,4 @@ uint32_t LeaderNode::getChildIndex(uint32_t dimensionality, float* parentCenter,
     return curInd;
 }
 
-uint32_t LeaderNode::_globalUpdateStamp = 0;
+std::atomic<size_t> VectorLeaderNode::_globalUpdateStamp{0};
