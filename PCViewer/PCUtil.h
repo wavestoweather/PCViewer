@@ -36,6 +36,16 @@ public:
 		std::string _name;
 		std::chrono::high_resolution_clock::time_point _start;
 	};
+
+	class AverageWatch{
+		public:
+		AverageWatch(float& average, uint32_t& count);
+		~AverageWatch();
+		private:
+		float& _a;
+		uint32_t& _c;
+		std::chrono::high_resolution_clock::time_point _start;
+	};
 };
 
 #endif

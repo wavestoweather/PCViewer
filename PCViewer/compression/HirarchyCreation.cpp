@@ -7,6 +7,7 @@
 #include "cpuCompression/EncodeCPU.h"
 #include "cpuCompression/DWTCpu.h"
 #include "BundlingCacheManager.hpp"
+#include "../PCUtil.h"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -105,16 +106,32 @@ namespace compression
                         sizeCheck = checkInterval;
                         size_t structureSize = root->getByteSize();
                         bool doCache = structureSize > size_t(maxMemoryMB) * 1024 * 1024;
+                        float get{}, cacheT{}, size{};
+                        uint32_t getC{}, cacheC{}, sizeC{};
                         while(doCache && structureSize > size_t(maxMemoryMB) * 1024 * 1024 * .7){   //shrink to 70%
-                            long dummy;
-                            HierarchyCreateNode* cache = root->getCacheNode(dummy);
+                            HierarchyCreateNode::HierarchyCacheInfo cacheInfo{};
+                            cacheInfo.cachingSize = structureSize -  size_t(maxMemoryMB) * 1024 * 1024 * .7;
+                            {
+                                PCUtil::AverageWatch watch(get, getC);
+                                root->getCacheNodes(cacheInfo);
+                            }
                             std::vector<float> half(threadData.size(), .5f);
-                            if(cacheManager)
-                                dynamic_cast<VectorLeaderNode*>(root)->cacheNode(*cacheManager, "", half.data(), .5f, cache);
-                            else
-                                root->cacheNode(tempPath, "", half.data(), .5f, cache);
-                            structureSize = root->getByteSize();
+                            {
+                                std::set<HierarchyCreateNode*> cacheNodes;
+                                while(cacheInfo.queue.size()){
+                                    cacheNodes.insert(cacheInfo.queue.top().node);
+                                    cacheInfo.queue.pop();
+                                }
+                                PCUtil::AverageWatch watch(cacheT, cacheC);
+                                dynamic_cast<VectorLeaderNode*>(root)->cacheNodes(*cacheManager, "", half.data(), .5f, cacheNodes);
+                            }
+                            {
+                                PCUtil::AverageWatch w(size, sizeC);
+                                structureSize = root->getByteSize();
+                            }
                         }
+                        if(doCache && cacheManager)
+                            cacheManager->postDataInsert();
                     }
                 }
             };
@@ -131,7 +148,13 @@ namespace compression
             //final writeout to disk
             bool hellYeah = true;
             std::vector<float> half(dataPoint.size(), .5f);
-            root->cacheNode(tempPath, "", half.data(), .5f, root.get());
+            if(cacheManager){
+                dynamic_cast<VectorLeaderNode*>(root.get())->cacheNodes(*cacheManager, "", half.data(), .5f, {});
+                cacheManager->postDataInsert();
+                cacheManager->finish();
+            }
+            else
+                root->cacheNode(tempPath, "", half.data(), .5f, root.get());
 
             //info file containing caching strategy and attributes
             std::ofstream file(std::string(outputFolder) + "/attr.info", std::ios_base::binary);

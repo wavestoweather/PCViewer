@@ -859,6 +859,7 @@ bool RTREE_QUAL::SaveRec(Node* a_node, RTDFileStream& a_stream)
 RTREE_TEMPLATE
 void RTREE_QUAL::RemoveAll()
 {
+  BYTE_SIZE = 0;
   // Delete all existing nodes
   Reset();
 

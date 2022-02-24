@@ -42,6 +42,7 @@ namespace RTreeUtil{
         virtual int Search(const elemType* a_min, const elemType* a_max, std::function<bool (const dataType&)> callback) const = 0;
         virtual void Remove(const elemType* a_min, const elemType* a_max, const dataType& a_dataId) = 0;
         virtual void Insert(const elemType* a_min, const elemType* a_max, const dataType& a_dataId) = 0;
+        virtual void RemoveAll() = 0;
         virtual int NumDims() const = 0;
         virtual uint32_t ByteSize() const = 0;
     };
@@ -52,6 +53,7 @@ namespace RTreeUtil{
         int Search(const elemType* a_min, const elemType* a_max, std::function<bool (const dataType&)> callback) const{return RTree<dataType, elemType, numDims>::Search(a_max, a_min, callback);};
         void Remove(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTree<dataType, elemType, numDims>::Remove(a_min, a_max, a_dataId);};
         void Insert(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTree<dataType, elemType, numDims>::Insert(a_min, a_max, a_dataId);};
+        void RemoveAll() {RTree<dataType, elemType, numDims>::RemoveAll();};
         int NumDims() const {return numDims;};
         uint32_t ByteSize() const{return RTree<dataType, elemType, numDims>::BYTE_SIZE;};
     };
@@ -63,6 +65,7 @@ namespace RTreeUtil{
         int Search(const elemType* a_min, const elemType* a_max, std::function<bool (const dataType&)> callback) const{return RTreeDynamic<dataType, elemType>::Search(a_max, a_min, callback);};
         void Remove(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTreeDynamic<dataType, elemType>::Remove(a_min, a_max, a_dataId);};
         void Insert(const elemType* a_min, const elemType* a_max, const dataType& a_dataId){RTreeDynamic<dataType, elemType>::Insert(a_min, a_max, a_dataId);};
+        void RemoveAll() {RTreeDynamic<dataType, elemType>::RemoveAll();};
         int NumDims() const{return RTreeDynamic<dataType, elemType>::NUMDIMS;};
         uint32_t ByteSize() const{return RTreeDynamic<dataType, elemType>::BYTE_SIZE;};
     };

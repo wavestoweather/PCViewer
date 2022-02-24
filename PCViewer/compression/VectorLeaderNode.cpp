@@ -75,7 +75,7 @@ void VectorLeaderNode::addDataPoint(const std::vector<float>& d){
             minsMaxs[i] = d[i] - eps;
             minsMaxs[i + d.size()] = d[i] + eps;
         }
-        uint32_t newId = _leaderId++;
+        uint32_t newId = followerCounts.size();
         rTree->Insert(minsMaxs.data(), minsMaxs.data() + d.size(), newId);
         followerData.insert(followerData.end(), d.begin(), d.end());
         followerCounts.push_back(1);                                                                //adding the counter for each row
@@ -115,15 +115,35 @@ HierarchyCreateNode* VectorLeaderNode::getCacheNode(long& cacheScore){
     return bestNode;
 }
 
-void VectorLeaderNode::cacheNode(CacheManagerInterface& cacheManager, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){
+void VectorLeaderNode::getCacheNodes(HierarchyCacheInfo& info){
+    for(auto& f: follower){
+        if(f)
+            f->getCacheNodes(info);
+    }
+    if(long c = calcCacheScore(); info.queue.empty() || info.curByteSize < info.cachingSize || c < info.queue.top().score){    //push the current node
+        size_t size = followerData.size() * sizeof(followerData[0]) + follower.size() * sizeof(follower[0]) + followerCounts.size() * sizeof(followerCounts[0]);
+        size +=  rTree->ByteSize();           //size from rTree (is being tracked inside the rTree)
+        info.curByteSize += size;
+        //deleting the topmost NodeInfo if enough nodes have been gathered to have more than cachingSize bytes
+        if(info.queue.size() && info.curByteSize - info.queue.top().byteSize > info.cachingSize){
+            info.curByteSize -= info.queue.top().byteSize;
+            info.queue.pop();
+        }
+        info.queue.push({this, c, size});
+    }
+};
+
+void VectorLeaderNode::cacheNodes(CacheManagerInterface& cacheManager, const std::string& parentId, float* parentCenter, float parentEps, const  std::set<HierarchyCreateNode*>& cacheNodes){
     uint32_t rowSize = followerData.size() / followerCounts.size();
     uint32_t finalRowSize = rowSize + 1;
     size_t curInd = getChildIndex(rowSize, parentCenter, followerData.data(), parentEps, eps);
     std::string curId = parentId + "_" + std::to_string(curInd);
-    if(this == chacheNode){
-        rTree = {};
+    bool found = cacheNodes.empty() || cacheNodes.find(this) != cacheNodes.end();
+    if(found){
+        rTree->RemoveAll();
         for(auto& f: follower){
-            f->cacheNode(cacheManager, curId, followerData.data(), eps, f.get());
+            if(f)
+                f->cacheNodes(cacheManager, curId, followerData.data(), eps, {});
         }
         follower = std::vector<std::shared_ptr<VectorLeaderNode>>();    //deleting all leader nodes
         
@@ -144,8 +164,8 @@ void VectorLeaderNode::cacheNode(CacheManagerInterface& cacheManager, const std:
     }
     for(auto& f: follower){
         if(f)
-            f->cacheNode(cacheManager, curId, followerData.data(), eps, chacheNode);
-        if(f.get() == chacheNode)
+            f->cacheNodes(cacheManager, curId, followerData.data(), eps, cacheNodes);
+        if(cacheNodes.empty() || cacheNodes.find(f.get()) != cacheNodes.end())
             f = {};         //setting the follower to a null ptr
     }
 }

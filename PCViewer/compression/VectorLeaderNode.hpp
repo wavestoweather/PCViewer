@@ -33,8 +33,9 @@ public:
     void addDataPoint(const std::vector<float>& d);
     long calcCacheScore();      //returns teh score for the current node. The lower the number, the more likely it is this node is being cached
     HierarchyCreateNode* getCacheNode(long& cacheScore);                    //returns the node of the whole tree with the highest cache score which is stored in cacheScore
+    void getCacheNodes(HierarchyCacheInfo& info);
     void cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode){throw std::runtime_error{"Standard caching not supported"};};
-    void cacheNode(CacheManagerInterface& cacheManager, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode);
+    void cacheNodes(CacheManagerInterface& cacheManager, const std::string& parentId, float* parentCenter, float parentEps, const std::set<HierarchyCreateNode*>& cacheNodes);
     size_t getByteSize();
     std::shared_mutex& getMutex(){return _insertLock;};
 

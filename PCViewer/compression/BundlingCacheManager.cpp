@@ -17,17 +17,30 @@ void BundlingCacheManager::postDataInsert()
     //getting the filenumber (Might change this to using a static variable for this)
     uint32_t fileNumber = 0;
     for(auto const& entry: std::filesystem::directory_iterator(_outputFolder)){
-        if(entry.is_regular_file() && entry.path().filename().string().find("bundle"))
+        if(entry.is_regular_file() && entry.path().filename().string().find("bundle") != std::string::npos)
             ++fileNumber;
     }
     //opening the filestream and writing the data
     std::ofstream file(std::string(_outputFolder) + "/bundle" + std::to_string(fileNumber));
     file << _headerInfo.size() << "\n";
     size_t offset = file.tellp();
+    size_t headerSize = offset + 40 * _headerInfo.size(), prevSize = 0;
+    while(headerSize != prevSize){
+        prevSize = headerSize;
+        std::stringstream t;
+        for(const auto& i: _headerInfo){
+            file << i.id << " " << static_cast<size_t>(i.start) + offset + headerSize << " " << i.size << "\n";   // the offset is directly added to make the reading easier
+        }
+        headerSize = t.str().size();
+    }
+    offset += headerSize;
     for(const auto& i: _headerInfo){
         file << i.id << " " << static_cast<size_t>(i.start) + offset << " " << i.size << "\n";   // the offset is directly added to make the reading easier
     }
     file << _dataStream.str();
+    //clearing everything after writeout
+    _headerInfo.clear();
+    _dataStream = {};
 }
 
 void BundlingCacheManager::finish(){

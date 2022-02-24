@@ -684,3 +684,17 @@ PCUtil::Stopwatch::~Stopwatch(){
 	auto end = std::chrono::high_resolution_clock::now();
 	_ostream << "Stopwatch " << _name << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - _start).count() << " ms" << std::endl;
 }
+
+PCUtil::AverageWatch::AverageWatch(float& average, uint32_t& count) :
+_a(average),
+_c(count)
+{
+	_start = std::chrono::high_resolution_clock::now();
+}
+
+PCUtil::AverageWatch::~AverageWatch() 
+{
+	auto end = std::chrono::high_resolution_clock::now();
+	float t = _c / float(++_c);
+	_a = t * _a + (1 - t) * std::chrono::duration_cast<std::chrono::milliseconds>(end - _start).count();
+}
