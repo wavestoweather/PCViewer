@@ -3654,6 +3654,7 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 		std::cout << "The .info file for the hierarchical dataset could not be opened";
 		return false;
 	}
+	std::string tmp; info >> tmp;
 	while(info.good() && !info.eof()){
 		infoAttributes.push_back({});
 		info >> infoAttributes.back().name >> infoAttributes.back().min >> infoAttributes.back().max;
@@ -3702,7 +3703,7 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 	createPcPlotVertexBuffer(pcAttributes, ds.data, std::optional<VertexBufferCreateInfo>(cI));
 	ds.buffer = g_PcPlotVertexBuffers.back();
 	std::string_view fileView(filename);
-	ds.additionalData.insert(ds.additionalData.begin(), reinterpret_cast<const uint8_t*>(&fileView.front()), reinterpret_cast<const uint8_t*>(&fileView.front()));
+	ds.additionalData.insert(ds.additionalData.begin(), reinterpret_cast<const uint8_t*>(&fileView.front()), reinterpret_cast<const uint8_t*>(&fileView.back() + 1));
 
 	// adding the default template list
 	TemplateList tl = {};
@@ -4900,7 +4901,7 @@ static bool openDataset(const char* filename) {
 			//auto ext = entry.path().extension();
 			//if(ext.string().size())
 			//	std::cout << ext.string() << std::endl;
-			if(entry.is_regular_file() && entry.path().extension() == ".info"){
+			if(entry.is_regular_file() && entry.path().filename() == "attr.info"){
 				hierarchyInfo = entry.path().string();
 				break;
 			}
@@ -5615,6 +5616,7 @@ static void updateWorkbenchRenderings(DrawList& dl){
 }
 
 static bool updateActiveIndices(DrawList& dl) {
+	std::cout << dl.data->size() << std::endl;
 	if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {

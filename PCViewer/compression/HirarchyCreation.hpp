@@ -17,7 +17,8 @@ namespace compression{
     enum class CachingMethod{
         Native,
         Bundled,
-        Single
+        Single,
+        MethodCount
     };
     const std::string_view CachingMethodNames[3]{"NativeCaching", "BundledCaching", "SingleCaching"};
 

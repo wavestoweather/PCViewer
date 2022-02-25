@@ -5,7 +5,6 @@
 #include <fstream>
 #include <algorithm>
 #include <iostream>
-#include "HirarchyCreation.hpp"
 
 HierarchyImportManager::HierarchyImportManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines) :
 _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
@@ -14,11 +13,19 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     bool foundInfoFile{false};
     for(const auto& entry: std::filesystem::directory_iterator(hierarchyFolder)){
         if(entry.is_regular_file()){
-            if(!entry.path().has_extension())   //standard compressed hierarchy file
+            if(!entry.path().has_extension() || entry.path().filename().string().find("level") != std::string::npos)   //standard compressed hierarchy file
                 _hierarchyFiles.push_back(entry.path().string());
-            else if(entry.path().extension().string() == ".info"){ //configuration file containing column information
+            else if(entry.path().filename().string() == "attr.info"){ //configuration file containing column information
                 foundInfoFile = true;
                 std::ifstream info(entry.path());
+                std::string cachingMethod;
+                info >> cachingMethod;
+                _cachingMethod = static_cast<compression::CachingMethod>(std::find(compression::CachingMethodNames, compression::CachingMethodNames + static_cast<int>(compression::CachingMethod::MethodCount), cachingMethod) - compression::CachingMethodNames);
+                if(_cachingMethod == compression::CachingMethod::MethodCount){
+                    std::cout << "HierarchyImportManager::HierarchyImportManager(): Not known compression method \"" << cachingMethod << "\" encountered. Nothing loaded" << std::endl;
+                    _hierarchyFiles.clear();
+                    return;
+                }
                 int colCount = 0;
                 bool foundReserverdAttribute = false;
                 while(!info.eof() && info.good()){
@@ -48,41 +55,101 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     }
     _reservedAttributes.push_back({});
     // starting to find the base layer (last hierarchy layer with less than a million lines)
-    uint32_t maxDepth = 0;
-    std::vector<uint32_t> levelLineCount;
-    uint32_t columnAmt = _reservedAttributes.size() + _attributes.size();
-    for(auto& s: _hierarchyFiles){
-        uint32_t curPos = s.size() - 1;
-        uint32_t hierarchyDepth = 0;
-        while(curPos >= 0 && s[curPos] != '/' && s[curPos] != '\\'){
-            if(s[curPos] == '_') ++hierarchyDepth;
-            --curPos;
+    std::vector<std::vector<size_t>> bundleOffsets;
+    switch(_cachingMethod){
+    case compression::CachingMethod::Bundled:{
+        for(auto& str: _hierarchyFiles){
+            if(size_t p = str.find(".info"); p != std::string::npos){
+                size_t levelEnd = str.find("level") + std::string("level").size();
+                int lvl = atoi(str.substr(levelEnd, p).c_str());
+                _levelInfos.resize(lvl + 1);
+                _levelInfos[lvl].push_back(str);
+            }
+            else{
+                size_t levelEnd = str.find("level") + std::string("level").size();
+                int lvl = atoi(str.substr(levelEnd, p).c_str());
+                _levelFiles.resize(lvl + 1);
+                _levelFiles[lvl].push_back(str);
+            }
         }
-        if(hierarchyDepth > maxDepth) maxDepth = hierarchyDepth;
-        hierarchyDepth--;
-        levelLineCount.resize(maxDepth, 0);
-        //loading the file header and getting the data point sizes
-        std::ifstream f(s, std::ios_base::binary);
-        uint32_t colCount, byteSize, symbolsSize, dataSize;
-	    float quantizationStep, eps;
-	    f >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
-        f.close();
-        levelLineCount[hierarchyDepth] += dataSize / colCount;
-        _levelFiles.resize(maxDepth);
-        _levelFiles[hierarchyDepth].push_back(std::string_view(s));
+        //getting the best base level
+        for(auto& levelInfo: _levelInfos){
+            std::vector<std::vector<size_t>> curOffsets{{0}};
+            std::ifstream file(std::string(levelInfo[0]), std::ios_base::binary);
+            uint32_t curLineCount = 0;
+            uint32_t rowLength, offset, byteSize, symbolSize, dataSize;
+            float quantizationStep, eps;
+            while(file >> rowLength >> offset >> byteSize >> symbolSize >> dataSize >> quantizationStep >> eps){
+                // ignoring the center values
+                for(int a = 0; a < rowLength; ++a) file >> eps;
+                curLineCount += dataSize / rowLength;
+                if(curLineCount > _maxLines)
+                    break;
+                file.get(); //skipping newline for security
+                curOffsets[0].push_back(file.tellg());
+            }
+            curOffsets[0].pop_back();
+            if(curLineCount < _maxLines){
+                bundleOffsets = curOffsets;
+                ++_baseLevel;
+            }
+            else{
+                if(_baseLevel == 0)
+                    bundleOffsets = curOffsets;
+                break;
+            }
+        }
+        if(_baseLevel > 0)
+            --_baseLevel;
+        break;
+    }
+    default:{
+        uint32_t maxDepth = 0;
+        std::vector<uint32_t> levelLineCount;
+        uint32_t columnAmt = _reservedAttributes.size() + _attributes.size();
+        for(auto& s: _hierarchyFiles){
+            uint32_t curPos = s.size() - 1;
+            uint32_t hierarchyDepth = 0;
+            while(curPos >= 0 && s[curPos] != '/' && s[curPos] != '\\'){
+                if(s[curPos] == '_') ++hierarchyDepth;
+                --curPos;
+            }
+            if(hierarchyDepth > maxDepth) maxDepth = hierarchyDepth;
+            hierarchyDepth--;
+            levelLineCount.resize(maxDepth, 0);
+            //loading the file header and getting the data point sizes
+            std::ifstream f(s, std::ios_base::binary);
+            uint32_t colCount, byteSize, symbolsSize, dataSize;
+	        float quantizationStep, eps;
+	        f >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
+            f.close();
+            levelLineCount[hierarchyDepth] += dataSize / colCount;
+            _levelFiles.resize(maxDepth);
+            _levelFiles[hierarchyDepth].push_back(std::string_view(s));
+        }
+
+        //setting the base level
+        for(int i = 0; i < levelLineCount.size(); ++i){
+            if(levelLineCount[i] < _maxLines)
+                _baseLevel = i;
+        }
+    }
     }
 
-    //setting the base level
-    for(int i = 0; i < levelLineCount.size(); ++i){
-        if(levelLineCount[i] < _maxLines)
-            _baseLevel = i;
+    switch(_cachingMethod){
+    case compression::CachingMethod::Bundled:
+        openHierarchyFiles(_levelInfos[_baseLevel], bundleOffsets);
+        break;
+    default:
+        openHierarchyFiles(_levelFiles[_baseLevel]);
     }
-
-    openHierarchyFiles(_levelFiles[_baseLevel]);
 }
 
 void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes) 
 {
+    if(_cachingMethod == compression::CachingMethod::Bundled)
+        return;
+    
     //converting the brushes to local coordinates (the normalized coordinates)
     std::vector<RangeBrush> normalizedBrushes;
     for(auto& b: rangeBrushes){
@@ -179,14 +246,15 @@ void HierarchyImportManager::checkPendingFiles()
 {
     using namespace std::chrono_literals;
     if(_dataLoadFuture.valid() && _dataLoadFuture.wait_for(0s) != std::future_status::timeout && _enqueuedFiles.size() != 0)
-        openHierarchyFiles(_enqueuedFiles);
+        openHierarchyFiles(_enqueuedFiles, _enqueuedBundles);
 }
 
-void HierarchyImportManager::openHierarchyFiles(const std::vector<std::string_view>& files){
+void HierarchyImportManager::openHierarchyFiles(const std::vector<std::string_view>& files, const std::vector<std::vector<size_t>> bundleOffsets){
     using namespace std::chrono_literals;
     // if loading is still active return and dont open new hierarchy files, but cache new files
     if(_dataLoadFuture.valid() && _dataLoadFuture.wait_for(0s) == std::future_status::timeout) {
         _enqueuedFiles = files;
+        _enqueuedBundles = bundleOffsets;
         return;
     }
     
@@ -207,5 +275,33 @@ void HierarchyImportManager::openHierarchyFiles(const std::vector<std::string_vi
         m->newDataLoaded = true;
     };
 
-    _dataLoadFuture = std::async(exec, files, this);
+    auto execBundled = [](std::vector<std::string_view> infos, std::vector<std::vector<size_t>> bundleOffsets, HierarchyImportManager* m){
+        uint32_t dataBlocks{}; for(const auto& e: bundleOffsets) dataBlocks += e.size();
+        std::vector<Data> dataVec(dataBlocks);
+        uint32_t dataIndex{};
+        for(int i = 0; i < infos.size(); ++i){
+            for(int j = 0; j < bundleOffsets[i].size(); ++j){
+                compression::loadAndDecompressBundled(infos[i], bundleOffsets[i][j], dataVec[dataIndex++]);
+            }
+        }
+
+        compression::combineData(dataVec, m->_nextData);
+        //denormalizing from [0,1] to [min,max]
+        for(int a = 0; a < m->_attributes.size(); ++a){
+            float diff = m->_attributes[a].max - m->_attributes[a].min;
+            for(int i = 0; i < m->_nextData.columns[a].size(); ++i)
+                m->_nextData.columns[a][i] = m->_nextData.columns[a][i] * diff + m->_attributes[a].min;
+        }
+        std::cout << "HierarchyImportManager::openHierarchyFiles() loaded new data with " << m->_nextData.size() << " datapoints" << std::endl;
+        m->newDataLoaded = true;
+    };
+
+    switch(_cachingMethod){
+    case compression::CachingMethod::Bundled:
+        _dataLoadFuture = std::async(execBundled, files, bundleOffsets, this);
+        break;
+    default:
+        _dataLoadFuture = std::async(exec, files, this);
+        break;
+    } 
 }
