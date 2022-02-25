@@ -1,6 +1,7 @@
 #include"BundlingCacheManager.hpp"
 #include<filesystem>
 #include<fstream>
+#include<cassert>
 BundlingCacheManager::BundlingCacheManager(const std::string_view& temp) :_outputFolder(temp)
 {
     
@@ -29,7 +30,7 @@ void BundlingCacheManager::postDataInsert()
         prevSize = headerSize;
         std::stringstream t;
         for(const auto& i: _headerInfo){
-            file << i.id << " " << static_cast<size_t>(i.start) + offset + headerSize << " " << i.size << "\n";   // the offset is directly added to make the reading easier
+            t << i.id << " " << static_cast<size_t>(i.start) + offset + headerSize << " " << i.size << "\n";   // the offset is directly added to make the reading easier
         }
         headerSize = t.str().size();
     }
@@ -37,7 +38,9 @@ void BundlingCacheManager::postDataInsert()
     for(const auto& i: _headerInfo){
         file << i.id << " " << static_cast<size_t>(i.start) + offset << " " << i.size << "\n";   // the offset is directly added to make the reading easier
     }
-    file << _dataStream.str();
+    int p = file.tellp();
+    assert(file.tellp() == offset);
+    file << _dataStream.rdbuf();    //put contents into file without copying
     //clearing everything after writeout
     _headerInfo.clear();
     _dataStream = {};

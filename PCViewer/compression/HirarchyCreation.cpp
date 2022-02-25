@@ -305,8 +305,8 @@ namespace compression
                     curFragment >> rowLength >> dataSize >> eps;
                     curFragment.get();   //newline char
                     //reading the data
-                    auto insertPointer = &data.back();
                     data.resize(data.size() + dataSize);
+                    auto insertPointer = &*(data.end() - dataSize);
                     curFragment.read(reinterpret_cast<char*>(insertPointer), dataSize * sizeof(data[0]));
                 }
 
