@@ -46,6 +46,20 @@ static void compressVector(std::vector<float>& src, float quantizationStep, /*ou
     cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
     symbolsSize = symbols.size();
 }
+
+static void decompressVector(std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize, /*out*/ std::vector<float>& data){
+    cudaCompress::BitStreamReadOnly bs(src.data(), src.size() * sizeof(src[0]) * 8);
+	cudaCompress::BitStreamReadOnly* dec[]{&bs};
+	std::vector<cudaCompress::Symbol16> nS(symbolsSize);
+	std::vector<cudaCompress::Symbol16>* ss[]{&nS};
+	cudaCompress::decodeRLHuffCPU(dec, ss, symbolsSize, 1, symbolsSize);
+	std::vector<float> result2(symbolsSize);
+    data.resize(symbolsSize);
+	cudaCompress::util::unquantizeFromSymbols(data.data(), nS.data(), nS.size(), quantizationStep);
+	result2 = data;
+	cudaCompress::util::dwtFloatInverseCPU(result2.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
+	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
+}
 //private functions end ------------------------------------------------------------------------
 
 namespace compression
@@ -394,6 +408,35 @@ namespace compression
             std::copy_n(result.begin() + i * colSize, colSize, data.columns[i].begin());
             data.columnDimensions[i] = {0};     //dependant only on the first dimension, which is the linear index dimension
         }   
+    }
+
+    void loadAndDecompressBundled(const std::string_view& levelFile, size_t offset, Data& data){
+        std::string dataFile(levelFile.substr(0, levelFile.find(".info")));
+
+        //reading infos from the infos file
+        std::ifstream info(std::string(levelFile), std::ios_base::binary);
+        info.seekg(offset);
+        size_t rowLength, dataOffset, compressedByteSize, symbolSize, dataSize;
+        float quantizationStep, eps;
+        info >> rowLength >> dataOffset >> compressedByteSize >> symbolSize >> dataSize >> quantizationStep >> eps;
+        info.close();
+
+        //loading and decompressing the data
+        std::ifstream dataF(dataFile, std::ios_base::binary);
+        std::vector<uint32_t> bytes(compressedByteSize / sizeof(uint32_t));
+        dataF.seekg(dataOffset);
+        dataF.read(reinterpret_cast<char*>(bytes.data()), compressedByteSize);
+        std::vector<float> decompressedData;
+        decompressVector(bytes, quantizationStep, symbolSize, decompressedData);
+        
+        //assigning the data to the data object coming in
+        data.columns.resize(rowLength);
+        data.columnDimensions.resize(rowLength, {0});
+        uint32_t colSize = dataSize / rowLength;
+        data.dimensionSizes = {colSize};
+        for(int i = 0; i < rowLength; ++i){
+            data.columns[i] = std::vector<float>(decompressedData.begin() + i * colSize, decompressedData.begin() + (i + 1) * colSize);
+        }
     }
 
     void combineData(std::vector<Data>& data, Data& dst){

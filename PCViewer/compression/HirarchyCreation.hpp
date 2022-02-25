@@ -30,6 +30,7 @@ namespace compression{
     void compressTempHirarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep);
     void compressBundledTempHierarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep);
     void loadAndDecompress(const std::string_view& file, Data& data);
+    void loadAndDecompressBundled(const std::string_view& levelFile, size_t offset, Data& data);    //levelFile is the levelX.info file because the extra information is needed
     void loadHirarchy(const std::string_view& outputFolder, Data& data);
     // combines all data objects into a single one, with the first in the vector being the resulting Data object
     void combineData(std::vector<Data>& data, Data& dst);
