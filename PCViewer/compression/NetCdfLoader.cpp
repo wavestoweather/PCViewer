@@ -34,7 +34,7 @@ NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::
                     }
                     else if(entry.is_regular_file()){
                         // check if should be ignored
-                        std::string_view filename = entry.path().string().substr(entry.path().string().find_last_of("/\\"));
+                        std::string filename = entry.path().filename().string();
                         if(isIncluded(filename, includes) && !isIgnored(filename, ignores) && filename.substr(filename.find_last_of(".")) == ".nc"){
                             _files.push_back(entry.path().string());
                         }

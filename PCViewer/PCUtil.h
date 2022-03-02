@@ -41,6 +41,7 @@ public:
 		public:
 		AverageWatch(float& average, uint32_t& count);
 		~AverageWatch();
+		AverageWatch& operator=(const PCUtil::AverageWatch & o);
 		private:
 		float& _a;
 		uint32_t& _c;

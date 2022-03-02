@@ -147,7 +147,7 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
 
 void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes) 
 {
-    if(_cachingMethod == compression::CachingMethod::Bundled)
+    if(_cachingMethod != compression::CachingMethod::Bundled)
         return;
     
     //converting the brushes to local coordinates (the normalized coordinates)
@@ -216,30 +216,66 @@ void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& ra
 
     //after normalization go through the hierarchy to check the level sizes beginning at the top most level
     std::vector<std::string_view> bestFiles;
-    for(int i = _baseLevel; i < _levelFiles.size(); ++i){
-        std::vector<std::string_view> curFiles;
-        size_t curLineCount{};
-        for(auto& f: _levelFiles[i]){
-            //getting the header informations
-            std::ifstream in(std::string(f), std::ios_base::binary);
-            uint32_t colCount, byteSize, symbolsSize, dataSize;
-	        float quantizationStep, eps;
-	        in >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
-            std::vector<float> center(colCount);
-            for(int i = 0; i < colCount; ++i)
-                in >> center[i];
-            in.close();
-            if(inBrush(rangeBrushes, lassoBrushes, center, eps)){
-                curLineCount += dataSize / colCount;
-                curFiles.push_back(f);
+    std::vector<std::vector<size_t>> bestFileOffsets;
+    switch(_cachingMethod){
+    case compression::CachingMethod::Bundled: {
+        for(int i = _baseLevel; i < _levelFiles.size(); ++i){
+            std::vector<std::string_view> curFiles;
+            std::vector<size_t> curFileOffsets;
+            size_t curLineCount{};
+            for(auto& f: _levelFiles[i]){
+                std::ifstream in(std::string(f) + ".info", std::ios_base::binary);
+                //getting the header informations
+                uint32_t colCount, dataOffset, byteSize, symbolsSize, dataSize, o;
+                float quantizationStep, eps;
+                o = in.tellg();
+                while(in >> colCount >> dataOffset >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps){
+                    std::vector<float> center(colCount);
+                    for(int i = 0; i < colCount; ++i)
+                        in >> center[i];
+                    if(inBrush(rangeBrushes, lassoBrushes, center, eps)){
+                        curLineCount += dataSize / colCount;
+                        curFiles.push_back(f);
+                        curFileOffsets.push_back(size_t(o));
+                    }
+                    if(curLineCount > _maxLines)
+                        goto doneFinding;           //exits both loops
+                    o = in.tellg();
+                } 
             }
-            if(curLineCount > _maxLines)
-                goto doneFinding;           //exits both loops
+            bestFiles = curFiles;
+            bestFileOffsets.clear();
+            bestFileOffsets.push_back(curFileOffsets);
         }
-        bestFiles = curFiles;
+        break;
+    }
+    default:
+        for(int i = _baseLevel; i < _levelFiles.size(); ++i){
+            std::vector<std::string_view> curFiles;
+            size_t curLineCount{};
+            for(auto& f: _levelFiles[i]){
+                //getting the header informations
+                std::ifstream in(std::string(f), std::ios_base::binary);
+                uint32_t colCount, byteSize, symbolsSize, dataSize;
+                float quantizationStep, eps;
+                in >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
+                std::vector<float> center(colCount);
+                for(int i = 0; i < colCount; ++i)
+                    in >> center[i];
+                in.close();
+                if(inBrush(rangeBrushes, lassoBrushes, center, eps)){
+                    curLineCount += dataSize / colCount;
+                    curFiles.push_back(f);
+                }
+                if(curLineCount > _maxLines)
+                    goto doneFinding;           //exits both loops
+            }
+            bestFiles = curFiles;
+        } 
+        break;
     }
     doneFinding:
-    openHierarchyFiles(bestFiles);          //opens the new hierarchy level
+    openHierarchyFiles(bestFiles, bestFileOffsets);          //opens the new hierarchy level
 }
 
 void HierarchyImportManager::checkPendingFiles() 

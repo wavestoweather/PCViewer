@@ -698,3 +698,11 @@ PCUtil::AverageWatch::~AverageWatch()
 	float t = _c / float(++_c);
 	_a = t * _a + (1 - t) * std::chrono::duration_cast<std::chrono::milliseconds>(end - _start).count();
 }
+
+PCUtil::AverageWatch& PCUtil::AverageWatch::operator=(const PCUtil::AverageWatch & o) 
+{
+	this->_a = o._a;
+	this->_c = o._c;
+	this->_start = o._start;
+	return *this;
+}

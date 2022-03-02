@@ -56,7 +56,7 @@ void VectorLeaderNode::addDataPoint(const std::vector<float>& d){
     if(leaderFound){    
         followerCounts[closest]++;                                                                  //found leader
         if(depth < maxDepth){                                                                       //only push down the hirarchy if not at leaf nodes
-            auto& f = follower[closest];
+            auto f = follower[closest];
             if(f){
                 lock.unlock();
                 f->addDataPoint(d);

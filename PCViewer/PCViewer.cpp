@@ -5616,7 +5616,7 @@ static void updateWorkbenchRenderings(DrawList& dl){
 }
 
 static bool updateActiveIndices(DrawList& dl) {
-	std::cout << dl.data->size() << std::endl;
+	//std::cout << dl.data->size() << std::endl;
 	if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {

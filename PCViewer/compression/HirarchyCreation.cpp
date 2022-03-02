@@ -8,6 +8,7 @@
 #include "cpuCompression/DWTCpu.h"
 #include "BundlingCacheManager.hpp"
 #include "../PCUtil.h"
+#include "../robin_hood_map/robin_hood.h"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -273,9 +274,10 @@ namespace compression
 
     void compressBundledTempHierarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep){
         struct MutexPair{std::mutex info, data;};       //struct for holding two mutexes for the level files
-        
+        struct CacheInfo{std::string file; uint64_t offset, size;};
+
         std::string tempPath = std::string(outputFolder) + "/temp";
-        std::map<std::string, std::vector<std::string>> cacheElements;  //stores for each cache id the files in which a bundle is located
+        robin_hood::unordered_map<std::string, std::vector<CacheInfo>> cacheElements;  //stores for each cache id the files in which a bundle is located
         uint32_t levelCount = 0;
         // getting all cache files and extracting cluster from the headerinformation
         for(const auto& entry: std::filesystem::directory_iterator(tempPath)){
@@ -285,31 +287,29 @@ namespace compression
                 for(int i = 0; i < cacheBundles; ++i){
                     std::string id;
                     file >> id;
-                    cacheElements[id].push_back(entry.path().string());
+                    CacheInfo info;
+                    info.file = entry.path();
+                    file >> info.offset >> info.size;
+                    cacheElements[id].push_back(std::move(info));
                     levelCount = std::max(levelCount, static_cast<uint32_t>(std::count(id.begin(), id.end(), '_')));
-                    file >> id >> id;   // ignoring the next two arguments;
                 }
             }
         }
-        assert(levelCount < 4); //debugassert
+        assert(levelCount < 5); //debugassert
 
-        auto compressThread = [](std::map<std::string, std::vector<std::string>>* cacheElements, std::vector<std::string> compressElements, const std::string& outputFolder, float quantizationStep, std::vector<MutexPair>* mutexes){
+        auto compressThread = [](robin_hood::unordered_map<std::string, std::vector<CacheInfo>>* cacheElements, std::vector<std::string> compressElements, const std::string& outputFolder, float quantizationStep, std::vector<MutexPair>* mutexes){
             auto& mutes = *mutexes;
             for(const auto& id: compressElements){
                 std::vector<float> data;
                 //combining the data fragments from all files for the cluster file
                 uint32_t rowLength; //needed for column to row major conversion
                 float eps;          //needed for writeout information
+                cudaCompress::BitStream compressed;
+                uint32_t symbolsSize;
+                std::vector<float> center;
                 for(auto& file: (*cacheElements)[id]){
-                    std::ifstream bundleInfo(file);
-                    int amtOfBundles; bundleInfo >> amtOfBundles; bundleInfo.get();
-                    std::size_t start; size_t size;
-                    for(int i = 0; i < amtOfBundles; ++i){
-                        std::string infoId;
-                        bundleInfo >> infoId >> start >> size;
-                        if(id == infoId)
-                            break;
-                    }
+                    std::size_t start = file.offset; size_t size = file.size;
+                    std::ifstream bundleInfo(file.file);
                     std::string bin(size, ' ');
                     bundleInfo.seekg(start);            //going to the start of the sequence
                     bundleInfo.read(bin.data(), size);  //reading out the data
@@ -324,12 +324,10 @@ namespace compression
                     curFragment.read(reinterpret_cast<char*>(insertPointer), dataSize * sizeof(data[0]));
                 }
 
-                std::vector<float> center(data.begin(), data.begin() + rowLength);
+                center = std::vector<float>(data.begin(), data.begin() + rowLength);
                 //having all data in row major order inside the data vector -> reorder to column major format
                 std::vector<float> col;
                 row2Col(data, rowLength, col);
-                cudaCompress::BitStream compressed;
-                uint32_t symbolsSize;
                 compressVector(col, quantizationStep, compressed, symbolsSize);
 
                 {
@@ -411,10 +409,13 @@ namespace compression
     }
 
     void loadAndDecompressBundled(const std::string_view& levelFile, size_t offset, Data& data){
-        std::string dataFile(levelFile.substr(0, levelFile.find(".info")));
+        auto extensionPos = levelFile.find(".info");
+        std::string dataFile(levelFile.substr(0, extensionPos));
 
         //reading infos from the infos file
-        std::ifstream info(std::string(levelFile), std::ios_base::binary);
+        std::string levlFileC(levelFile);
+        if(extensionPos == std::string::npos) levlFileC += ".info";
+        std::ifstream info(levlFileC, std::ios_base::binary);
         info.seekg(offset);
         size_t rowLength, dataOffset, compressedByteSize, symbolSize, dataSize;
         float quantizationStep, eps;
