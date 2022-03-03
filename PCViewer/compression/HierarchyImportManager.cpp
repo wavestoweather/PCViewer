@@ -147,6 +147,7 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
 
 void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes) 
 {
+    std::cout << "HierarchyImportManager::notifyBrushUpdate(): updating..." << std::endl;
     if(_cachingMethod != compression::CachingMethod::Bundled)
         return;
     
@@ -159,7 +160,7 @@ void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& ra
             ar.axis = r.axis;
             double diff = _attributes[r.axis].max - _attributes[r.axis].min;
             ar.min = (r.min - _attributes[r.axis].min) / diff;
-            ar.max = (r.max - _attributes[r.axis].max) / diff;
+            ar.max = (r.max - _attributes[r.axis].min) / diff;
             rb.push_back(ar);
         }
         normalizedBrushes.push_back(rb);
@@ -211,7 +212,16 @@ void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& ra
     if(!change)     //don't do any updates if nothing has changed
         return;
 
+    std::cout << "HierarchyImportManager::notifyBrushUpdate(): brushChanged..." << std::endl;
+
     _curRangeBrushes = normalizedBrushes;
+    std::cout << "RangeBrushes:" << std::endl;
+    for(auto& b: _curRangeBrushes){
+        std::cout << "RangeBrush:" << std::endl;
+        for(auto& r: b){
+            std::cout<< "    " << r.axis << ":" << r.min << "|" << r.max << std::endl;
+        }
+    }
     _curLassoBrushes = normalizedLassos;
 
     //after normalization go through the hierarchy to check the level sizes beginning at the top most level
@@ -220,11 +230,11 @@ void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& ra
     switch(_cachingMethod){
     case compression::CachingMethod::Bundled: {
         for(int i = _baseLevel; i < _levelFiles.size(); ++i){
-            std::vector<std::string_view> curFiles;
-            std::vector<size_t> curFileOffsets;
+            std::vector<std::string_view> curFiles{};
+            std::vector<size_t> curFileOffsets{};
             size_t curLineCount{};
-            for(auto& f: _levelFiles[i]){
-                std::ifstream in(std::string(f) + ".info", std::ios_base::binary);
+            for(auto& f: _levelInfos[i]){
+                std::ifstream in(std::string(f), std::ios_base::binary);
                 //getting the header informations
                 uint32_t colCount, dataOffset, byteSize, symbolsSize, dataSize, o;
                 float quantizationStep, eps;
@@ -233,13 +243,16 @@ void HierarchyImportManager::notifyBrushUpdate(const std::vector<RangeBrush>& ra
                     std::vector<float> center(colCount);
                     for(int i = 0; i < colCount; ++i)
                         in >> center[i];
-                    if(inBrush(rangeBrushes, lassoBrushes, center, eps)){
+                    if(inBrush(_curRangeBrushes, _curLassoBrushes, center, eps)){
                         curLineCount += dataSize / colCount;
-                        curFiles.push_back(f);
+                        if(curFiles.empty())
+                            curFiles.push_back(f);
                         curFileOffsets.push_back(size_t(o));
                     }
-                    if(curLineCount > _maxLines)
+                    if(curLineCount > _maxLines){
+                        std::cout << "HierarchyImportManager::notifyBrushUpdate(): _maxLines reached at level " << i << " with " << curLineCount << "lines" << std::endl;
                         goto doneFinding;           //exits both loops
+                    }
                     o = in.tellg();
                 } 
             }
@@ -312,9 +325,12 @@ void HierarchyImportManager::openHierarchyFiles(const std::vector<std::string_vi
     };
 
     auto execBundled = [](std::vector<std::string_view> infos, std::vector<std::vector<size_t>> bundleOffsets, HierarchyImportManager* m){
+        if(infos.empty())
+            return;
         uint32_t dataBlocks{}; for(const auto& e: bundleOffsets) dataBlocks += e.size();
         std::vector<Data> dataVec(dataBlocks);
         uint32_t dataIndex{};
+        assert(infos.size() == bundleOffsets.size());
         for(int i = 0; i < infos.size(); ++i){
             for(int j = 0; j < bundleOffsets[i].size(); ++j){
                 compression::loadAndDecompressBundled(infos[i], bundleOffsets[i][j], dataVec[dataIndex++]);

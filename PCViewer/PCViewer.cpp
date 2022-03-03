@@ -5627,16 +5627,22 @@ static bool updateActiveIndices(DrawList& dl) {
 	if(dl.hierarchyImportManager){
 		std::vector<brushing::RangeBrush> rangeBrushes;
 		//adding local brushes
+		uint32_t axis = 0;
 		for(auto& b:dl.brushes){
 			brushing::RangeBrush brush;
 			for(auto& range: b){
-				brush.push_back({static_cast<uint32_t>(range.id), range.minMax.first, range.minMax.second});
+				brush.push_back({axis, range.minMax.first, range.minMax.second});
 			}
-			rangeBrushes.push_back(std::move(brush));
+			if(brush.size())
+				rangeBrushes.push_back(std::move(brush));
+			++axis;
 		}
 		//adding global brushes
 		//TODO: global brushes
-		dl.hierarchyImportManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
+		static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
+		if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
+			dl.hierarchyImportManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
+		prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 	}
 
 	//getting the parent dataset data

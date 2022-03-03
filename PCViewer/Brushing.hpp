@@ -12,7 +12,7 @@ namespace brushing{
     using RangeBrush = std::vector<AxisRange>;
 
     static bool inBrush(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes, const std::vector<float>& data, float eps = 0 /*maximum distance from data*/, bool andBrushes = false /*If true point has ot be in all ranges*/){
-        bool a{false};
+        bool a{rangeBrushes.empty()};
         for(auto& b: rangeBrushes){
             bool inRange{true};
             for(auto& r: b){
