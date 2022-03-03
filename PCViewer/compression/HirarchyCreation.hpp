@@ -29,6 +29,8 @@ namespace compression{
     void createHirarchy(const std::string_view& outputFolder, DataLoader* loader, float lvl0eps, int levels, int lvlMultiplier, int maxMemoryMB, int amtOfThreads, float quantizationStep);
     void createTempHirarchy(const std::string_view& outputFolder, DataLoader* loader, float lvl0eps, int levels, int lvlMultiplier, int maxMemoryMB, int amtOfThreads);
     void compressTempHirarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep);
+    //does the same as compressTempHierarchy but without compression. Is tried to evaluate if compression is beneficial
+    void convertTempHierarchy(const std::string_view& outputFolder, int amtOfThreads);
     void compressBundledTempHierarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep);
     void loadAndDecompress(const std::string_view& file, Data& data);
     void loadAndDecompressBundled(const std::string_view& levelFile, size_t offset, Data& data);    //levelFile is the levelX.info file because the extra information is needed

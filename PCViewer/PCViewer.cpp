@@ -9514,7 +9514,7 @@ int main(int, char**)
 							}
 						}
 					}
-					else {
+					else if(pcAttributeEnabled){	//safetycheck if any attributes are available
 						bool anyHover = false;
 						static bool newBrush = false;
 						std::set<int> brushDelete;

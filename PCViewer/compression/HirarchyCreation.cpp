@@ -21,6 +21,10 @@
 
 
 //private functions ----------------------------------------------------------------------------
+struct CacheInfo{std::string file; uint64_t offset, size;};
+struct MutexPair{std::mutex info, data;};       //struct for holding two mutexes for the level files
+struct CachingElementsInfo{uint32_t levelCount; robin_hood::unordered_map<std::string, std::vector<CacheInfo>> cacheElements;};
+
 static void row2Col(const std::vector<float>& rowMajor, uint32_t rowLength, std::vector<float>& col){
     col.resize(rowMajor.size());
     uint32_t colInd = 0;
@@ -60,6 +64,28 @@ static void decompressVector(std::vector<uint32_t> src, float quantizationStep, 
 	result2 = data;
 	cudaCompress::util::dwtFloatInverseCPU(result2.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
 	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
+}
+
+static CachingElementsInfo getCachingElements(const std::string_view& tempPath){
+    robin_hood::unordered_map<std::string, std::vector<CacheInfo>> cacheElements;  //stores for each cache id the files in which a bundle is located
+    uint32_t levelCount = 0;
+    // getting all cache files and extracting cluster from the headerinformation
+    for(const auto& entry: std::filesystem::directory_iterator(tempPath)){
+        if(entry.is_regular_file() && entry.path().string().find('.') == std::string::npos){    // is cache file
+            std::ifstream file(entry.path());
+            int cacheBundles; file >> cacheBundles;
+            for(int i = 0; i < cacheBundles; ++i){
+                std::string id;
+                file >> id;
+                CacheInfo info;
+                info.file = entry.path();
+                file >> info.offset >> info.size;
+                cacheElements[id].push_back(std::move(info));
+                levelCount = std::max(levelCount, static_cast<uint32_t>(std::count(id.begin(), id.end(), '_')));
+            }
+        }
+    }
+    return {levelCount, cacheElements};
 }
 //private functions end ------------------------------------------------------------------------
 
@@ -272,10 +298,94 @@ namespace compression
         std::cout << "Tmp compression done" << std::endl;
     }
 
-    void compressBundledTempHierarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep){
-        struct MutexPair{std::mutex info, data;};       //struct for holding two mutexes for the level files
-        struct CacheInfo{std::string file; uint64_t offset, size;};
+    void convertTempHierarchy(const std::string_view& outputFolder, int amtOfThreads){
+        //adopt to different types of strategies
+        std::ifstream info(std::string(outputFolder) + "/attr.info");
+        std::string cachingMethod; info >> cachingMethod;
+        std::string tempFolder(outputFolder); tempFolder += "/temp";
+        if(cachingMethod == CachingMethodNames[static_cast<int>(CachingMethod::Bundled)]){
+            auto [levelCount, cacheElements] = getCachingElements(tempFolder);
+            using robin_hood_iter = robin_hood::unordered_map<std::string, std::vector<CacheInfo>>::iterator;
+            auto compressThread = [](robin_hood::unordered_map<std::string, std::vector<CacheInfo>>* cacheElements, robin_hood_iter begin, robin_hood_iter end, const std::string& outputFolder, std::vector<MutexPair>* mutexes){
+                auto& mutes = *mutexes;
+                for(;begin != end; ++begin){
+                    const auto& id = begin->first;
+                    std::vector<float> data;
+                    //combining the data fragments from all files for the cluster file
+                    uint32_t rowLength; //needed for column to row major conversion
+                    float eps;          //needed for writeout information
+                    std::vector<float> center;
+                    for(auto& file: (*cacheElements)[id]){
+                        std::size_t start = file.offset; size_t size = file.size;
+                        std::ifstream bundleInfo(file.file);
+                        std::string bin(size, ' ');
+                        bundleInfo.seekg(start);            //going to the start of the sequence
+                        bundleInfo.read(bin.data(), size);  //reading out the data
+                        std::stringstream curFragment;
+                        curFragment.str(bin);               //setting the streambuffer to the binary data
+                        uint32_t dataSize;
+                        curFragment >> rowLength >> dataSize >> eps;
+                        curFragment.get();   //newline char
+                        //reading the data
+                        data.resize(data.size() + dataSize);
+                        auto insertPointer = &*(data.end() - dataSize);
+                        curFragment.read(reinterpret_cast<char*>(insertPointer), dataSize * sizeof(data[0]));
+                    }
 
+                    center = std::vector<float>(data.begin(), data.begin() + rowLength);
+                    //having all data in row major order inside the data vector -> reorder to column major format
+                    std::vector<float> col;
+                    row2Col(data, rowLength, col);
+
+                    //skipping compression and instantly writing back data
+                    {
+                        //appending the data to the correct file
+                        uint32_t level = std::count(id.begin(), id.end(), '_') - 1;
+                        std::unique_lock<std::mutex> infoLock(mutes[level].info);        //exclusively locking the level files
+                        std::unique_lock<std::mutex> dataLock(mutes[level].data);
+
+                        //writing the infos
+                        std::string outNameBase = std::string(outputFolder) + "/UnCompLevel" + std::to_string(level);
+                        std::ofstream infos(outNameBase + ".info", std::ios_base::app | std::ios_base::binary);
+                        std::ofstream dataFile(outNameBase, std::ios_base::app | std::ios_base::binary);
+                        uint32_t offset = dataFile.tellp();
+                        infos << rowLength << " " << offset << " " << col.size() << " " << col.size() << " " << data.size() << " " << 0 << " " << eps << "\n";
+                        for(int i = 0; i < center.size(); ++i){
+                            infos << center[i];
+                            if(i != center.size() - 1)
+                                infos << " ";
+                        }
+                        infos << "\n";
+                        infos.close();                                                  //closing the info file to release the lock
+                        infoLock.unlock();                                              //unlocking infos after they have been written to allow following processes to instantly also update the info
+                        //writing the compressed data;
+                        dataFile.write(reinterpret_cast<char*>(col.data()), col.size() * sizeof(col[0]));
+                        dataFile.close();                                               //manually closing the data file to avoid unlock errors with the mutex
+                    }
+                }
+            };
+            {
+                std::vector<MutexPair> levelMutexes(levelCount);
+                std::vector<std::future<void>> futures(amtOfThreads);
+                std::cout << "compression::convertTempHierarchy(): Starting conversion" << std::endl;
+                auto curStart = cacheElements.begin();
+                for(int i = 0; i < amtOfThreads; ++i){
+                    auto curEnd = cacheElements.begin();
+                    std::advance(curEnd, (i + 1) * cacheElements.size() / amtOfThreads);
+                    futures[i] = std::async(compressThread, &cacheElements, curStart, curEnd, std::string(outputFolder), &levelMutexes);
+                    curStart = curEnd;
+                }
+            }
+        }
+        else{
+            std::cout << "compression::convertTempHierarchy(): conversion for caching method " << cachingMethod << " not implemented! Aborting..." << std::endl;
+            return;
+        }
+        
+        std::cout << "compression::convertTempHierarchy(): done" << std::endl;
+    }
+
+    void compressBundledTempHierarchy(const std::string_view& outputFolder, int amtOfThreads, float quantizationStep){
         std::string tempPath = std::string(outputFolder) + "/temp";
         robin_hood::unordered_map<std::string, std::vector<CacheInfo>> cacheElements;  //stores for each cache id the files in which a bundle is located
         uint32_t levelCount = 0;
