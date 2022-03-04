@@ -3,6 +3,7 @@
 #include <limits>
 #include <fstream>
 #include <sstream>
+#include "../PCUtil.h"
 
 VectorLeaderNode::VectorLeaderNode(const std::vector<float>& pos, float inEps, float inEpsMul, uint32_t inDepth, uint32_t inMaxDepth):
 eps(inEps),
@@ -48,15 +49,31 @@ maxDepth(inMaxDepth)
 }
 
 void VectorLeaderNode::addDataPoint(const std::vector<float>& d){
+    //tmp varialbes for stopwatches
+    static uint32_t searchC{}, followerIncC{}, followerRetC{}, addC{}, insertC{}, insertDataCountC{}, insertTreeC{};
+    static float searchT{}, followerIncT{}, followerRetT{}, addT{}, insertT{}, insertDataCountT{}, insertTreeT{};
+    //end tmp variables
+    PCUtil::AverageWatch addWatch(addT, addC);
+
     uint32_t closest; bool leaderFound{false};
     auto searchCallback = [&](const uint32_t& id){closest = id; leaderFound = true; return false;}; // return false to quit when first was found
     std::unique_lock<std::shared_mutex> lock(_insertLock);
     assert(d.size() == rTree->NumDims());                                                           //safety check
+    {
+    PCUtil::AverageWatch searchWatch(searchT, searchC);
     rTree->Search(d.data(), d.data(), searchCallback);
-    if(leaderFound){    
-        followerCounts[closest]++;                                                                  //found leader
+    }
+    if(leaderFound){ 
+        {   
+        PCUtil::AverageWatch followerWatch(followerIncT, followerIncC);
+        followerCounts[closest]++; 
+        }                                                                 //found leader
         if(depth < maxDepth){                                                                       //only push down the hirarchy if not at leaf nodes
-            auto f = follower[closest];
+            std::shared_ptr<VectorLeaderNode> f;
+            {
+            PCUtil::AverageWatch accessFollowerWatch(followerRetT, followerRetC); 
+            f = follower[closest];
+            }
             if(f){
                 lock.unlock();
                 f->addDataPoint(d);
@@ -70,6 +87,9 @@ void VectorLeaderNode::addDataPoint(const std::vector<float>& d){
             lock.unlock();
     }
     else{                                                                                           //new leader/child has to be created
+        PCUtil::AverageWatch insertWatch(insertT, insertC);
+        {
+        PCUtil::AverageWatch rtreeInsertWatch(insertTreeT, insertTreeC);
         std::vector<float> minsMaxs(2 * d.size());
         for(int i = 0; i < d.size(); ++i){
             minsMaxs[i] = d[i] - eps;
@@ -77,8 +97,12 @@ void VectorLeaderNode::addDataPoint(const std::vector<float>& d){
         }
         uint32_t newId = followerCounts.size();
         rTree->Insert(minsMaxs.data(), minsMaxs.data() + d.size(), newId);
+        }
+        {
+        PCUtil::AverageWatch datainsertWatch(insertDataCountT, insertDataCountC);
         followerData.insert(followerData.end(), d.begin(), d.end());
         followerCounts.push_back(1);                                                                //adding the counter for each row
+        }
         if(depth < maxDepth)
             follower.push_back(std::make_shared<VectorLeaderNode>(d, eps * epsMul, epsMul, depth + 1, maxDepth));
         

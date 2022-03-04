@@ -12,7 +12,8 @@ namespace compression{
     enum class CompressionMethod{
         Leaders,
         VectorLeaders,
-        Hash
+        Hash,
+        HashVectorLeaders
     };
     enum class CachingMethod{
         Native,

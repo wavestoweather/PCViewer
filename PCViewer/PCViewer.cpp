@@ -5878,7 +5878,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	}
 
 	//apply lasso brushes
-	bool lassoBrushExists = scatterplotWorkbench->lassoSelections.find(dl.name) != scatterplotWorkbench->lassoSelections.end();
+	bool lassoBrushExists = scatterplotWorkbench->lassoSelections.find(dl.name) != scatterplotWorkbench->lassoSelections.end() && scatterplotWorkbench->lassoSelections.find(dl.name)->second.size();
 	if(lassoBrushExists){
 		GpuBrusher::ReturnStruct res = gpuBrusher->brushIndices(scatterplotWorkbench->lassoSelections[dl.name], data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, true);
 		firstBrush = false;
@@ -5894,10 +5894,10 @@ static bool updateActiveIndices(DrawList& dl) {
 				break;
 			}
 		}
-		std::vector<uint8_t> actives(data->size(), 0);			//vector with 0 initialized everywhere
-		for (int i : dl.indices) {								//setting all active indices to true
-			actives[i] = 1;
-		}
+		std::vector<uint8_t> actives(data->size(), 1);			//vector with 1 initialized everywhere
+		//for (int i : dl.indices) {								//setting all active indices to true
+		//	actives[i] = 1;
+		//}
 		VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, data->size() * sizeof(bool), actives.data());
 	}
 
@@ -9952,6 +9952,34 @@ int main(int, char**)
 						brushDragIds.clear();
 						pcPlotRender = updateActiveIndices(*dl);
 						updateIsoSurface(*dl);
+					}
+				}
+				if(ImGui::MenuItem("Fit axis to bounds", "", false, (bool)brushDragIds.size())){
+					if (selectedGlobalBrush >= 0){
+						for(auto& gb: globalBrushes[selectedGlobalBrush].brushes){
+							for (int br = 0; br < gb.second.size(); ++br){
+								if(brushDragIds.find(gb.second[br].first) != brushDragIds.end()){
+									pcAttributes[gb.first].min = gb.second[br].second.first;
+									pcAttributes[gb.first].max = gb.second[br].second.second;
+									pcPlotRender = true;
+								}
+							}
+						}
+					}
+					else{
+						auto dl = g_PcPlotDrawLists.begin();
+						std::advance(dl, pcPlotSelectedDrawList[0]);
+						uint32_t axis = 0;
+						for (auto& gb: dl->brushes) {
+							for (int br = 0; br < gb.size(); ++br){
+								if(brushDragIds.find(gb[br].id) != brushDragIds.end()){
+									pcAttributes[axis].min = gb[br].minMax.first;
+									pcAttributes[axis].max = gb[br].minMax.second;
+									pcPlotRender = true;
+								}
+							}
+							++axis;
+						}
 					}
 				}
 				ImGui::DragInt("LiveBrushThreshold", &pcSettings.liveBrushThreshold, 1000, 0, 10000000);

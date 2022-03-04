@@ -696,7 +696,7 @@ PCUtil::AverageWatch::~AverageWatch()
 {
 	auto end = std::chrono::high_resolution_clock::now();
 	float t = _c / float(++_c);
-	_a = t * _a + (1 - t) * std::chrono::duration_cast<std::chrono::milliseconds>(end - _start).count();
+	_a = t * _a + (1 - t) * std::chrono::duration_cast<std::chrono::nanoseconds>(end - _start).count() * 1e-3;
 }
 
 PCUtil::AverageWatch& PCUtil::AverageWatch::operator=(const PCUtil::AverageWatch & o) 

@@ -3,6 +3,7 @@
 #include "LeaderNode.hpp"
 #include "HashNode.hpp"
 #include "VectorLeaderNode.hpp"
+#include "HashVectorLeaderNode.hpp"
 #include "../rTree/RTreeDynamic.h"
 #include "cpuCompression/EncodeCPU.h"
 #include "cpuCompression/DWTCpu.h"
@@ -115,11 +116,12 @@ namespace compression
             // converting lvl multiplier to epsilon multiplier
             double epsMult = std::min(pow(1.0/lvlMultiplier, 1.0/dataPoint.size()), .5);
             std::shared_ptr<HierarchyCreateNode> root;
-            CompressionMethod compressionMethod{CompressionMethod::VectorLeaders};
+            CompressionMethod compressionMethod{CompressionMethod::HashVectorLeaders};
             switch(compressionMethod){
-                case CompressionMethod::Leaders: root = std::make_shared<LeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
-                case CompressionMethod::VectorLeaders: root = std::make_shared<VectorLeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
-                case CompressionMethod::Hash: root = std::make_shared<HashNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+                case CompressionMethod::Leaders:            root = std::make_shared<LeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+                case CompressionMethod::VectorLeaders:      root = std::make_shared<VectorLeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+                case CompressionMethod::Hash:               root = std::make_shared<HashNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+                case CompressionMethod::HashVectorLeaders:  root = std::make_shared<HashVectorLeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
             }
             std::shared_ptr<CacheManagerInterface> cacheManager{};
             CachingMethod cachingMethod{CachingMethod::Bundled};
@@ -556,7 +558,7 @@ namespace compression
         dst.columns.clear(); dst.columns.resize(data[0].columns.size());
         for(int i = 0; i < data.size(); ++i){
             dst.dimensionSizes[0] += data[i].dimensionSizes[0];
-            for(int c = 0; c < data.front().columns.size(); ++c){
+            for(int c = 0; c < data[i].columns.size(); ++c){
                 dst.columns[c].insert(dst.columns[c].begin(), data[i].columns[c].begin(), data[i].columns[c].end());
             }
         }
