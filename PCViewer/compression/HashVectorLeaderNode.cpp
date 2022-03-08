@@ -18,26 +18,26 @@ maxDepth(inMaxDepth)
 
 void HashVectorLeaderNode::addDataPoint(const std::vector<float>& d){
     //tmp varialbes for stopwatches
-    static uint32_t searchC{}, followerIncC{}, followerRetC{}, addC{}, insertC{}, insertDataCountC{}, insertTreeC{};
-    static float searchT{}, followerIncT{}, followerRetT{}, addT{}, insertT{}, insertDataCountT{}, insertTreeT{};
+    //static uint32_t searchC{}, followerIncC{}, followerRetC{}, addC{}, insertC{}, insertDataCountC{}, insertTreeC{};
+    //static float searchT{}, followerIncT{}, followerRetT{}, addT{}, insertT{}, insertDataCountT{}, insertTreeT{};
     uint64_t childIndex = getChildIndex(d.size(), nullptr, d.data(), eps, eps * epsMul);
     //end tmp variables
-    PCUtil::AverageWatch addWatch(addT, addC);
+    //PCUtil::AverageWatch addWatch(addT, addC);
 
     std::unique_lock<std::shared_mutex> lock(_insertLock);
     bool found;
     {
-    PCUtil::AverageWatch searchWatch(searchT, searchC);
+    //PCUtil::AverageWatch searchWatch(searchT, searchC);
     found = map.contains(childIndex);
     }
     if(!found){
-        PCUtil::AverageWatch addWatch(insertT, insertC);
+        //PCUtil::AverageWatch addWatch(insertT, insertC);
         {
-        PCUtil::AverageWatch insTreeWatch(insertTreeT, insertTreeC);
+        //PCUtil::AverageWatch insTreeWatch(insertTreeT, insertTreeC);
         map[childIndex] = followerCounts.size();
         }
         {
-        PCUtil::AverageWatch insertDataWatch(insertDataCountT, insertDataCountC);
+        //PCUtil::AverageWatch insertDataWatch(insertDataCountT, insertDataCountC);
         for(float f: d)
             followerData.push_back(f);
         followerCounts.push_back(1);
@@ -49,7 +49,7 @@ void HashVectorLeaderNode::addDataPoint(const std::vector<float>& d){
     else{
         uint32_t ind = map[childIndex];
         {
-        PCUtil::AverageWatch followerIncWatch(followerIncT, followerIncC);
+        //PCUtil::AverageWatch followerIncWatch(followerIncT, followerIncC);
         float a = float(followerCounts[ind]) / float(++followerCounts[ind]);  //automatically increments the counter
         for(int i = 0; i < d.size(); ++i){
             followerData[ind * d.size() + i] = a * followerData[ind * d.size() + i] + (1.f - a) * d[i];
@@ -58,7 +58,7 @@ void HashVectorLeaderNode::addDataPoint(const std::vector<float>& d){
         if(depth < maxDepth){
             std::shared_ptr<HashVectorLeaderNode> fol;
             {
-            PCUtil::AverageWatch folloerRecWatch(followerRetT, followerRetC);
+            //PCUtil::AverageWatch folloerRecWatch(followerRetT, followerRetC);
             fol = follower[ind];
             }
             if(fol){

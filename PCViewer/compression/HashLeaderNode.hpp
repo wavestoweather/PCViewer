@@ -11,18 +11,21 @@
 #include "../robin_hood_map/robin_hood.h"
 
 // class which represents a single node in the compression hirarchy.
-class HashVectorLeaderNode: public HierarchyCreateNode{
+class HashLeaderNode: public HierarchyCreateNode{
 public:
-    HashVectorLeaderNode(): eps(0), epsMul(0), depth(0), maxDepth(0){};
-    HashVectorLeaderNode(const std::vector<float>& pos, float inEps, float inEpsMul, uint32_t inDepth, uint32_t inMaxDepth);
+    struct FollowerInfo{
+        std::shared_ptr<HashLeaderNode> follower;
+        std::vector<float> pos;
+        uint32_t count;
+    };
+
+    HashLeaderNode(): eps(0), epsMul(0), depth(0), maxDepth(0){};
+    HashLeaderNode(const std::vector<float>& pos, float inEps, float inEpsMul, uint32_t inDepth, uint32_t inMaxDepth);
 
     //Hash vector leader node stores all follower data in vectors to provide fast access
     //Further we are using a structure of arrays to provide faster access for random accesses
     //None of the below vectors deletes data when a child is being cached, except that in follower the pointer is set to a nullptr
-    robin_hood::unordered_map<uint64_t, uint32_t> map;              //the hash map is the spatial index for the follower
-    std::vector<std::shared_ptr<HashVectorLeaderNode>> follower;    //these are the children of the current node. If a child is being cached and should be destroyed, the pionter is simply set to nullptr
-    std::vector<float> followerData;                                //stores all centers of the children nodes. The center is appended only once, then only the counts are increased
-    std::vector<uint32_t> followerCounts;                           //stores for each child the count. This is also kept track fo for leaf nodes
+    robin_hood::unordered_map<uint64_t, std::shared_ptr<FollowerInfo>> map;              //the hash map is the spatial index for the follower
     const float eps, epsMul;
     const uint32_t depth, maxDepth;
 

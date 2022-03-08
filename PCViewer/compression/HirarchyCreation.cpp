@@ -4,6 +4,7 @@
 #include "HashNode.hpp"
 #include "VectorLeaderNode.hpp"
 #include "HashVectorLeaderNode.hpp"
+#include "HashLeaderNode.hpp"
 #include "../rTree/RTreeDynamic.h"
 #include "cpuCompression/EncodeCPU.h"
 #include "cpuCompression/DWTCpu.h"
@@ -122,6 +123,7 @@ namespace compression
                 case CompressionMethod::VectorLeaders:      root = std::make_shared<VectorLeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
                 case CompressionMethod::Hash:               root = std::make_shared<HashNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
                 case CompressionMethod::HashVectorLeaders:  root = std::make_shared<HashVectorLeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
+                case CompressionMethod::HashLeader:         root = std::make_shared<HashLeaderNode>(dataPoint, lvl0eps, epsMult, 0, levels); break;
             }
             std::shared_ptr<CacheManagerInterface> cacheManager{};
             CachingMethod cachingMethod{CachingMethod::Bundled};
