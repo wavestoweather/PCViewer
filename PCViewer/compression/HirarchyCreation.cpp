@@ -20,6 +20,7 @@
 #include <future>
 #include <fstream>
 #include <memory>
+#include <numeric>
 
 
 //private functions ----------------------------------------------------------------------------
@@ -88,6 +89,25 @@ static CachingElementsInfo getCachingElements(const std::string_view& tempPath){
         }
     }
     return {levelCount, cacheElements};
+}
+
+static std::vector<std::vector<int>> getCombinations(int eN, int n){
+    // code by https://stackoverflow.com/a/9430993
+    std::vector<std::vector<int>> ret;
+    if(n > eN)
+        throw std::runtime_error{"The elements vector has less elements than the permutation dimension should have"};
+    
+    std::vector<bool> v(eN, false);
+    std::fill(v.begin(), v.begin() + n, true);
+    do{
+        ret.push_back({});
+        for(int i = 0; i < eN; ++i){
+            if(v[i]){
+                ret.back().push_back(i);
+            }
+        }
+    } while(std::prev_permutation(v.begin(), v.end()));
+    return ret;
 }
 //private functions end ------------------------------------------------------------------------
 
@@ -564,5 +584,23 @@ namespace compression
                 dst.columns[c].insert(dst.columns[c].begin(), data[i].columns[c].begin(), data[i].columns[c].end());
             }
         }
+    }
+
+    void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int maxMb, int amtOfThreads){
+        size_t dataSize;
+        std::vector<Attribute> attributes;
+        loader->dataAnalysis(dataSize, attributes);
+        auto combinationIndices = getCombinations(attributes.size(), dimensionality);
+        //for(const auto& comb: combinationIndices){
+        //    std::cout << "[";
+        //    for(int i: comb){
+        //        std::cout << i << ",";
+        //    }
+        //    std::cout << "\b]" << std::endl;
+        //}
+    }
+
+    void convertNDHierarchy(const std::string_view& outputFolder, int amtOfThreads){
+        
     }
 }

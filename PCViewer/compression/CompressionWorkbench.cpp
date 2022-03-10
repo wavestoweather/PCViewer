@@ -95,6 +95,13 @@ void CompressionWorkbench::draw()
         if(ImGui::Button("Convert")){
             compression::convertTempHierarchy(_outputFolder, _amtOfThreads);
         }
+        ImGui::Separator();
+        if(ImGui::InputInt("Start Cluster Amount", reinterpret_cast<int*>(&_startCluster))) _startCluster = std::clamp<uint32_t>(_startCluster, 1, 20);
+        if(ImGui::InputInt("Cluster Multiplier", reinterpret_cast<int*>(&_clusterMultiplicator))) _clusterMultiplicator = std::clamp<uint32_t>(_clusterMultiplicator, 1, 20);
+        if(ImGui::InputInt("Cluster Dimensionality", reinterpret_cast<int*>(&_dimensionality))) _dimensionality = std::clamp<uint32_t>(_dimensionality, 1, 20);
+        if(ImGui::Button("Cluster ND hierarchy")){
+            compression::createNDHierarchy("", _loader.get(), compression::CachingMethod::Bundled, _startCluster, _clusterMultiplicator, _dimensionality, _maxWorkingMemory, _amtOfThreads);
+        }
     }
     ImGui::End();
 }

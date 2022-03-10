@@ -40,4 +40,25 @@ namespace compression{
     // combines all data objects into a single one, with the first in the vector being the resulting Data object
     void combineData(std::vector<Data>& data, Data& dst);
     // checks for a folder
+
+    //--------------------------------------------------------------------------------
+    // section for n-dimensional hierarchy creation
+    //--------------------------------------------------------------------------------
+    // These hierarchies are created as follows:
+    //      For each attribute axis the hierarchy points are created (independent of all other axes). This enables extremely efficient storage of the cluster at each axis combined with a very efficient check for point size for single attribute brushing
+    //      The n-dimensional clusters are then only counts for each cluster between n axes for all possible cluster pairs.
+    // Stored is this structure as followes:
+    //      A .axis file contains all hierarchy points for all axes (This information is assumed to be holdable in memory, as the memory footprint ~ N * C * 3 * sizeof(float)), with C being the max number of clusters. 
+    
+    // method to create a NDHierarchy
+    // outputFolder     : Folder name where the resulting hierarchy will be put
+    // loader           : DataLoader which contains the data to be converted
+    // cachingMethod    : Caching method to be used for inbetween writeouts, should the memory be not large enough
+    // startCluster     : Amt of cluster per axis at hierarchy level 0
+    // clusterMultiplic.: Multiplicator for the cluster amt per level
+    // dimensionality   : Dimensionality of the resulting hierarchy clusters (2d cluster for example can not be used for spline rendering)
+    // maxMb            : Maximum available RAM for hierarchy creation (is used to trigger caching events)
+    // amtOfThreads     : Amount of threads to be used for hierarchy creation
+    void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int maxMb, int amtOfThreads);
+    void convertNDHierarchy(const std::string_view& outputFolder, int amtOfThreads);
 };

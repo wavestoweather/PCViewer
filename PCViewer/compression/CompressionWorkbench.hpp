@@ -32,4 +32,8 @@ private:
     uint32_t _maxWorkingMemory{16000};
     uint32_t _amtOfThreads{8};
     float _quantizationStep{.001f};
+
+    uint32_t _startCluster{10};
+    uint32_t _clusterMultiplicator{10};
+    uint32_t _dimensionality{2};
 };
