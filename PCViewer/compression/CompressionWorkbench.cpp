@@ -100,7 +100,7 @@ void CompressionWorkbench::draw()
         if(ImGui::InputInt("Cluster Multiplier", reinterpret_cast<int*>(&_clusterMultiplicator))) _clusterMultiplicator = std::clamp<uint32_t>(_clusterMultiplicator, 1, 20);
         if(ImGui::InputInt("Cluster Dimensionality", reinterpret_cast<int*>(&_dimensionality))) _dimensionality = std::clamp<uint32_t>(_dimensionality, 1, 20);
         if(ImGui::Button("Cluster ND hierarchy")){
-            compression::createNDHierarchy("", _loader.get(), compression::CachingMethod::Bundled, _startCluster, _clusterMultiplicator, _dimensionality, _maxWorkingMemory, _amtOfThreads);
+            compression::createNDHierarchy("", _loader.get(), compression::CachingMethod::Bundled, _startCluster, _clusterMultiplicator, _dimensionality, _levels, _maxWorkingMemory, _amtOfThreads);
         }
     }
     ImGui::End();

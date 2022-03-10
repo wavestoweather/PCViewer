@@ -57,8 +57,9 @@ namespace compression{
     // startCluster     : Amt of cluster per axis at hierarchy level 0
     // clusterMultiplic.: Multiplicator for the cluster amt per level
     // dimensionality   : Dimensionality of the resulting hierarchy clusters (2d cluster for example can not be used for spline rendering)
+    // levels           : Amount of levels
     // maxMb            : Maximum available RAM for hierarchy creation (is used to trigger caching events)
     // amtOfThreads     : Amount of threads to be used for hierarchy creation
-    void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int maxMb, int amtOfThreads);
+    void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int levels, int maxMb, int amtOfThreads);
     void convertNDHierarchy(const std::string_view& outputFolder, int amtOfThreads);
 };

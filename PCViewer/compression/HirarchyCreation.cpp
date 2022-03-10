@@ -586,7 +586,7 @@ namespace compression
         }
     }
 
-    void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int maxMb, int amtOfThreads){
+    void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int levels, int maxMb, int amtOfThreads){
         size_t dataSize;
         std::vector<Attribute> attributes;
         loader->dataAnalysis(dataSize, attributes);
@@ -598,6 +598,70 @@ namespace compression
         //    }
         //    std::cout << "\b]" << std::endl;
         //}
+        std::vector<std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>> attributeHierarchyCenters(attributes.size(), std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>(levels));
+        struct CenterData{
+            float val, min, max;
+            uint32_t count;
+        };
+        std::vector<CenterData> data;                    //data contains all data points for attributeHierarchyCreationCenters
+
+        std::vector<float> p;
+        loader->reset();
+        while(loader->getNextNormalized(p)){
+            //inserting into the hierarchy levels
+            for(int a = 0; a < attributes.size(); ++a){
+                float axisValue = p[a];
+                for(int l = 0; l < levels; ++l){
+                    float diff = 1. / (startCluster * pow(clusterMultiplikator, l));
+                    uint32_t childId = axisValue / diff;
+                    if(attributeHierarchyCenters[a][l].contains(childId)){
+                        CenterData& cd = data[attributeHierarchyCenters[a][l][childId]];
+                        float a = float(cd.count) / float(++cd.count);
+                        cd.val = a * cd.val + (1. - a) * axisValue;
+                        if(axisValue < cd.min)
+                            cd.min = axisValue;
+                        if(axisValue > cd.max)
+                            cd.max = axisValue;
+                    }
+                    else{
+                        attributeHierarchyCenters[a][l][data.size()];
+                        data.push_back({axisValue, axisValue, axisValue, 1});
+                    }
+                }
+            }
+        }
+
+        //writeout of the attribute Hierarchy
+        std::ofstream acFile(std::string(outputFolder) + "attributeCenters.ac", std::ios_base::binary);
+        //writing header information
+        //header information contains the offsets for each attribute centers at each hierarchy levels
+        //specifically the hierarchy contains the following iformation
+        //  info: [[uint, uint] offset, size] for each attribute the list of offsets and sizes is placed in the beginning
+        //  data: [[float, float, float, uint] center, min, max, count] all centers and their counts are then put in sequence
+        std::vector<char> writeBuffer;
+        std::vector<uint32_t> headerInfo;
+        uint32_t offset = attributeHierarchyCenters.front().size() * 2 * sizeof(uint32_t);
+        for(const auto& att: attributeHierarchyCenters){
+            for(const auto& lvl: att){
+                uint32_t size = lvl.size() * sizeof(CenterData);
+                headerInfo.push_back(offset);
+                headerInfo.push_back(size);
+                offset += size;
+            }
+        }
+        acFile.write(reinterpret_cast<char*>(headerInfo.data()), headerInfo.size() * sizeof(headerInfo[0]));
+        //writing data information
+        for(const auto& att: attributeHierarchyCenters){
+            for (const auto& lvl: att){
+                std::vector<CenterData> linData(lvl.size());
+                uint32_t ind{0};
+                for(auto [id, i]: lvl){
+                    linData[ind++] = data[i];
+                }
+                acFile.write(reinterpret_cast<char*>(linData.data()), linData.size() * sizeof(linData[0]));
+            }
+        }
+        std::cout << "Donesen!" << std::endl;
     }
 
     void convertNDHierarchy(const std::string_view& outputFolder, int amtOfThreads){
