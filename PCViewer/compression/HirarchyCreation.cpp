@@ -587,10 +587,12 @@ namespace compression
     }
 
     void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int levels, int maxMb, int amtOfThreads){
+        //Cluster indices are stored for teh cluster counts, so max number of clusters has to be smaller than max uint16_t to be able to store the things
+        assert(startCluster * pow(clusterMultiplikator, levels - 1) < std::numeric_limits<uint16_t>::max());
         size_t dataSize;
         std::vector<Attribute> attributes;
         loader->dataAnalysis(dataSize, attributes);
-        auto combinationIndices = getCombinations(attributes.size(), dimensionality);
+        const auto combinationIndices = getCombinations(attributes.size(), dimensionality);
         //for(const auto& comb: combinationIndices){
         //    std::cout << "[";
         //    for(int i: comb){
@@ -598,7 +600,21 @@ namespace compression
         //    }
         //    std::cout << "\b]" << std::endl;
         //}
+        struct ShortVecHasher{
+            size_t operator()(const std::vector<uint16_t>& v)const{
+                size_t hash =v.size();
+                for(const auto& k: v){
+                    hash ^= k + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+                }
+                return hash;
+            }
+        };
         std::vector<std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>> attributeHierarchyCenters(attributes.size(), std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>(levels));
+        std::vector<robin_hood::unordered_map<std::vector<uint16_t>, uint32_t, ShortVecHasher>> clusterCounts(combinationIndices.size());   // for each attribute combination one clustering exists
+        std::vector<uint32_t> clusterLevelSizes(levels);
+        for(int l = 0; l < levels; ++l)
+            clusterLevelSizes[l] = startCluster * pow(clusterMultiplikator, l);
+        
         struct CenterData{
             float val, min, max;
             uint32_t count;
@@ -607,13 +623,14 @@ namespace compression
 
         std::vector<float> p;
         loader->reset();
+        uint32_t centers{};
         while(loader->getNextNormalized(p)){
             //inserting into the hierarchy levels
             for(int a = 0; a < attributes.size(); ++a){
                 float axisValue = p[a];
                 for(int l = 0; l < levels; ++l){
-                    float diff = 1. / (startCluster * pow(clusterMultiplikator, l));
-                    uint32_t childId = axisValue / diff;
+                    float clustAmt = clusterLevelSizes[l];
+                    uint32_t childId = axisValue * clustAmt;
                     if(attributeHierarchyCenters[a][l].contains(childId)){
                         CenterData& cd = data[attributeHierarchyCenters[a][l][childId]];
                         float a = float(cd.count) / float(++cd.count);
@@ -624,15 +641,29 @@ namespace compression
                             cd.max = axisValue;
                     }
                     else{
-                        attributeHierarchyCenters[a][l][data.size()];
+                        attributeHierarchyCenters[a][l][childId] = data.size();
                         data.push_back({axisValue, axisValue, axisValue, 1});
+                        ++centers;
                     }
                 }
             }
+
+            // doing clustering
+            // clustering is only done on the lowest level. The higher levels are then abstracted on compression
+            for(int c = 0; c < combinationIndices.size(); ++c){
+                std::vector<uint16_t> k(dimensionality);
+                for(int d = 0; d < dimensionality; ++d){
+                    int a = combinationIndices[c][d];
+                    k[d] = p[a] * clusterLevelSizes.back();
+                }
+                ++clusterCounts[c][k];
+            }
         }
 
-        //writeout of the attribute Hierarchy
-        std::ofstream acFile(std::string(outputFolder) + "attributeCenters.ac", std::ios_base::binary);
+        // ----------------------------------------------------------------------------------------------
+        // writeout of the attribute Hierarchy
+        // ----------------------------------------------------------------------------------------------
+        std::ofstream acFile(std::string(outputFolder) + "/attributeCenters.ac", std::ios_base::binary);
         //writing header information
         //header information contains the offsets for each attribute centers at each hierarchy levels
         //specifically the hierarchy contains the following iformation
@@ -640,7 +671,7 @@ namespace compression
         //  data: [[float, float, float, uint] center, min, max, count] all centers and their counts are then put in sequence
         std::vector<char> writeBuffer;
         std::vector<uint32_t> headerInfo;
-        uint32_t offset = attributeHierarchyCenters.front().size() * 2 * sizeof(uint32_t);
+        uint32_t offset = attributeHierarchyCenters.size() * attributeHierarchyCenters.front().size() * 2 * sizeof(uint32_t);
         for(const auto& att: attributeHierarchyCenters){
             for(const auto& lvl: att){
                 uint32_t size = lvl.size() * sizeof(CenterData);
@@ -660,6 +691,57 @@ namespace compression
                 }
                 acFile.write(reinterpret_cast<char*>(linData.data()), linData.size() * sizeof(linData[0]));
             }
+        }
+        acFile.close();     // closing early to safe ram
+
+        // ----------------------------------------------------------------------------------------------
+        // writeout of the cluster information 
+        // ----------------------------------------------------------------------------------------------
+        std::ofstream combinationInfo(std::string(outputFolder) + "/combination.info", std::ios_base::binary);
+        for(const auto& comb: combinationIndices){
+            for(auto ind: comb)
+                combinationInfo << ind << " ";
+            combinationInfo << "\n";
+        }
+        combinationInfo.close();
+
+        std::ofstream clusterData(std::string(outputFolder) + "/cluster.cd", std::ios_base::binary);
+        // writing header information for cluster data
+        // header information contains the offsets for each index-combination found in the combanitaoin.info file
+        // specifically the cluster fiel is built up as
+        //  [info<cluster1>, info<cluster2>, ..., info<cluster3>][data<cluster1>, data<cluster2>, ..., data<cluster3>]
+        //  info: [uint, uint] offset and size in bytes for each block of index combination
+        //  data: [vector<uint16_t>, uint] variable length cluster id (length is padded to 32 bit dimensionality) uint for cluster counts
+        uint32_t paddedIndexSize = (combinationIndices[0].size() + 1) >> 1;
+        offset = combinationIndices.size() * 2 * sizeof(uint32_t);
+        headerInfo.clear();
+        for(int comb = 0; comb < combinationIndices.size(); ++comb){
+            uint32_t size = clusterCounts[comb].size() * (paddedIndexSize + 1) * sizeof(uint32_t);
+            headerInfo.push_back(offset);
+            headerInfo.push_back(size);
+            offset += size;
+        }
+        clusterData.write(reinterpret_cast<char*>(headerInfo.data()), headerInfo.size() * sizeof(headerInfo[0]));
+        assert(clusterData.tellp() == combinationIndices.size() * 2 * sizeof(uint32_t));
+        // writing data information
+        for(const auto& comb: clusterCounts){
+            std::vector<uint32_t> clusterWrite{};
+            for(const auto& [id, count]: comb){
+                std::vector<uint16_t> idc(id.begin(), id.end());
+                idc.resize(paddedIndexSize * 2, 0);  //filling with 0
+                clusterWrite.insert(clusterWrite.end(), reinterpret_cast<uint32_t*>(idc.data()), reinterpret_cast<uint32_t*>(idc.data()) + paddedIndexSize);
+                clusterWrite.push_back(count);
+            }
+            clusterData.write(reinterpret_cast<char*>(clusterWrite.data()), clusterWrite.size() * sizeof(clusterWrite[0]));
+        }
+        assert(clusterData.tellp() == offset);  //checking if the counting from before is correct 
+        clusterData.close();
+
+        //info file containing caching strategy and attributes
+        std::ofstream file(std::string(outputFolder) + "/attr.info", std::ios_base::binary);
+        file << CachingMethodNames[static_cast<int>(cachingMethod)] << "\n";
+        for(auto& a: attributes){
+            file << a.name << " " << a.min << " " << a.max << "\n"; 
         }
         std::cout << "Donesen!" << std::endl;
     }
