@@ -667,7 +667,7 @@ namespace compression
                 s.release();
             //inserting into the hierarchy levels
             {
-            PCUtil::AverageWatch centerAd(centerAdoptionT, centerAdoptionC);
+            //PCUtil::AverageWatch centerAd(centerAdoptionT, centerAdoptionC);
             for(int a = 0; a < attributes.size(); ++a){
                 float axisValue = p[a];
                 for(int l = 0; l < levels; ++l){
@@ -693,7 +693,7 @@ namespace compression
             // doing clustering
             // clustering is only done on the lowest level. The higher levels are then abstracted on compression
             {
-            PCUtil::AverageWatch clusterWatch(clusteringT, clusteringC);
+            //PCUtil::AverageWatch clusterWatch(clusteringT, clusteringC);
             for(int c = 0; c < mainEnd; ++c){
                 std::vector<uint16_t> k(dimensionality);
                 for(int d = 0; d < dimensionality; ++d){
