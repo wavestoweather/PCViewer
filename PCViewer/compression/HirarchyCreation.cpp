@@ -593,6 +593,7 @@ namespace compression
         std::vector<Attribute> attributes;
         loader->dataAnalysis(dataSize, attributes);
         const auto combinationIndices = getCombinations(attributes.size(), dimensionality);
+        std::cout << "Amount of dimension combinations: " << combinationIndices.size() << std::endl;
         //for(const auto& comb: combinationIndices){
         //    std::cout << "[";
         //    for(int i: comb){
@@ -610,7 +611,8 @@ namespace compression
             }
         };
         std::vector<std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>> attributeHierarchyCenters(attributes.size(), std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>(levels));
-        std::vector<robin_hood::unordered_map<std::vector<uint16_t>, uint32_t, ShortVecHasher>> clusterCounts(combinationIndices.size());   // for each attribute combination one clustering exists
+        using ClusterCounts = std::vector<robin_hood::unordered_map<std::vector<uint16_t>, uint32_t, ShortVecHasher>> ;
+        ClusterCounts clusterCounts(combinationIndices.size());   // for each attribute combination one clustering exists
         std::vector<uint32_t> clusterLevelSizes(levels);
         for(int l = 0; l < levels; ++l)
             clusterLevelSizes[l] = startCluster * pow(clusterMultiplikator, l);
@@ -623,9 +625,49 @@ namespace compression
 
         std::vector<float> p;
         loader->reset();
-        uint32_t centers{};
+
+        std::vector<std::pair<int, int>> bounds;
+        std::vector<std::thread> clusterThreads(amtOfThreads - 1);
+        int mainEnd = combinationIndices.size() / amtOfThreads;
+        int prev = mainEnd;
+        for(int i = 1; i < amtOfThreads; ++i){
+            int start = prev;
+            int end = combinationIndices.size() * (i + 1) / amtOfThreads;
+            prev = end;
+            bounds.push_back({start, end});
+        }
+        std::vector<PCUtil::Semaphore> threadStartSemaphores(amtOfThreads - 1);
+        std::vector<PCUtil::Semaphore> threadFinishedSemaphores(amtOfThreads - 1);
+        std::atomic_bool done{false};
+        auto threadEx = [&](const std::vector<float>* p, std::pair<int,int> ind, const std::vector<std::vector<int>>* combinations, ClusterCounts* clusterCounts, int baseClusterSize, int threadInd){
+            while(!done){
+                threadStartSemaphores[threadInd].acquire();    //wait for main thread
+                if(done)
+                    break;
+                int dimensionality = (*combinations)[0].size();
+                    for(int c = ind.first; c < ind.second; ++c){
+                    std::vector<uint16_t> k(dimensionality);
+                    for(int d = 0; d < dimensionality; ++d){
+                        int a = (*combinations)[c][d];
+                        k[d] = (*p)[a] * baseClusterSize;
+                    }
+                    ++((*clusterCounts)[c][k]);
+                }
+                threadFinishedSemaphores[threadInd].release();  //signaling finish
+            }
+        };
+        for(int t = 0; t < clusterThreads.size(); ++t){
+            clusterThreads[t] = std::thread(threadEx, &p, bounds[t], &combinationIndices, &clusterCounts, clusterLevelSizes.back(), t);
+        }
+
+        uint32_t centerAdoptionC, clusteringC;
+        float centerAdoptionT, clusteringT;
         while(loader->getNextNormalized(p)){
+            for(auto& s: threadStartSemaphores)  //running clustering threads
+                s.release();
             //inserting into the hierarchy levels
+            {
+            PCUtil::AverageWatch centerAd(centerAdoptionT, centerAdoptionC);
             for(int a = 0; a < attributes.size(); ++a){
                 float axisValue = p[a];
                 for(int l = 0; l < levels; ++l){
@@ -643,14 +685,16 @@ namespace compression
                     else{
                         attributeHierarchyCenters[a][l][childId] = data.size();
                         data.push_back({axisValue, axisValue, axisValue, 1});
-                        ++centers;
                     }
                 }
+            }
             }
 
             // doing clustering
             // clustering is only done on the lowest level. The higher levels are then abstracted on compression
-            for(int c = 0; c < combinationIndices.size(); ++c){
+            {
+            PCUtil::AverageWatch clusterWatch(clusteringT, clusteringC);
+            for(int c = 0; c < mainEnd; ++c){
                 std::vector<uint16_t> k(dimensionality);
                 for(int d = 0; d < dimensionality; ++d){
                     int a = combinationIndices[c][d];
@@ -658,7 +702,16 @@ namespace compression
                 }
                 ++clusterCounts[c][k];
             }
+            //waiting clustering threads
+            for(int s = 0; s < threadFinishedSemaphores.size(); ++s)
+                threadFinishedSemaphores[s].acquire();
+            }
         }
+        done = true;
+        for(auto& s: threadStartSemaphores)
+            s.release();
+        for(auto& t: clusterThreads)
+            t.join();
 
         // ----------------------------------------------------------------------------------------------
         // writeout of the attribute Hierarchy

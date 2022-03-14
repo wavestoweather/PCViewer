@@ -1,6 +1,8 @@
 #include "PCUtil.h"
 #include <cmath>
 #include <netcdf.h>
+#include <mutex>
+#include <condition_variable>
 #include "Attribute.hpp"
 
 std::vector<char> PCUtil::readByteFile(const std::string& filename)
@@ -705,4 +707,26 @@ PCUtil::AverageWatch& PCUtil::AverageWatch::operator=(const PCUtil::AverageWatch
 	this->_c = o._c;
 	this->_start = o._start;
 	return *this;
+}
+
+void PCUtil::Semaphore::release() 
+{
+	std::lock_guard<decltype(_mutex)> lock(_mutex);
+	++_count;
+	_cv.notify_one();
+}
+
+void PCUtil::Semaphore::releaseN(int n) 
+{
+	std::lock_guard<decltype(_mutex)> lock(_mutex);
+	_count = n;
+	_cv.notify_all();
+}
+
+void PCUtil::Semaphore::acquire() 
+{
+	std::unique_lock<decltype(_mutex)> lock(_mutex);
+	while(!_count)
+		_cv.wait(lock);
+	--_count;
 }

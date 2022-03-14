@@ -6,6 +6,7 @@
 #include <vector>
 #include <iostream>
 #include <chrono>
+#include <condition_variable>
 #include "imgui/imgui.h"
 #include "Data.hpp"
 #include "Attribute.hpp"
@@ -46,6 +47,16 @@ public:
 		float& _a;
 		uint32_t& _c;
 		std::chrono::high_resolution_clock::time_point _start;
+	};
+
+	class Semaphore{
+		std::mutex _mutex;
+		std::condition_variable _cv;
+		unsigned long _count = 0;
+	public:
+		void release();
+		void releaseN(int n);
+		void acquire();
 	};
 };
 
