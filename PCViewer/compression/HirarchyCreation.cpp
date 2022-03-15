@@ -617,10 +617,6 @@ namespace compression
         for(int l = 0; l < levels; ++l)
             clusterLevelSizes[l] = startCluster * pow(clusterMultiplikator, l);
         
-        struct CenterData{
-            float val, min, max;
-            uint32_t count;
-        };
         std::vector<CenterData> data;                    //data contains all data points for attributeHierarchyCreationCenters
 
         std::vector<float> p;

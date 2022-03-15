@@ -50,6 +50,11 @@ namespace compression{
     // Stored is this structure as followes:
     //      A .axis file contains all hierarchy points for all axes (This information is assumed to be holdable in memory, as the memory footprint ~ N * C * 3 * sizeof(float)), with C being the max number of clusters. 
     
+    struct CenterData{
+        float val, min, max;
+        uint32_t count;
+    };
+
     // method to create a NDHierarchy
     // outputFolder     : Folder name where the resulting hierarchy will be put
     // loader           : DataLoader which contains the data to be converted
