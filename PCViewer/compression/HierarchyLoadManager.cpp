@@ -92,10 +92,39 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
 
         // loading the center data and converting it to cluster indices (from bin values) plus adding the subdim index
         // everything is stored in a Data object with all subdim indices etc. in one row follwed by rows with other data
-        m->_clusterData.columns.resize(2 + m->_clusterDim);
+        std::ifstream clusterData(m->_hierarchyFolder + "/cluster.cd", std::ios_base::binary);
+        std::vector<std::pair<uint32_t, uint32_t>> clusterOffsetSizes(m->_dimensionCombinations[0].size()); //all kept in bytes
+        auto& cData = m->_clusterData;
+        cData.columns.resize(2 + m->_clusterDim);
+        uint32_t paddedDim = ((m->_clusterDim + 1) >> 1) << 1;
+        uint32_t paddedDimBytes = paddedDim * sizeof(uint16_t);
+        uint32_t clusterBytes = paddedDimBytes + sizeof(uint32_t); // cluster size is sizeof bins + sizeof counter
         for(int i = 0; i < m->_dimensionCombinations[0].size(); ++i){
-            
+            clusterData.read(reinterpret_cast<char*>(&clusterOffsetSizes[i]), sizeof(clusterOffsetSizes[0]));
         }
+        for(int i = 0; i < clusterOffsetSizes.size(); ++i){
+            uint32_t amtOfCluster = clusterOffsetSizes[i].second / (paddedDimBytes + 1) / 4; //division by 4 as each element has 4 bytes
+            size_t offset = cData.columns[0].size();
+            for(int c = 0; c < cData.columns.size(); ++c)
+                cData.columns[c].resize(cData.columns[c].size() + amtOfCluster);
+            //single read of cluster data
+            std::vector<uint32_t> data(clusterOffsetSizes[i].second / sizeof(uint32_t));
+            clusterData.read(reinterpret_cast<char*>(data.data()), data.size() / sizeof(data[0]));
+            std::vector<uint16_t> dimBins(paddedDim);
+            for(int c = 0; c < amtOfCluster; ++c){
+                uint32_t clusterBase = c * clusterBytes / sizeof(uint32_t);
+                std::memcpy(dimBins.data(), &data[clusterBase], paddedDimBytes);
+                cData.columns[0][offset + c] = i;   
+                for(int d = 0; d < m->_clusterDim; ++d){
+                    int dim = m->_dimensionCombinations[d][i];
+                    assert(binToCl[dim].contains(dimBins[d]));
+                    cData.columns[1 + d][offset + c] = binToCl[dim][dimBins[d]];
+                }
+                cData.columns[m->_clusterDim + 1][offset + c] = data[clusterBase + paddedDim / 2]; // plus paddedDim / 2 as per uint 2 dimension bins are stored
+            }
+        }
+        clusterData.close();
+        // I think i am done ...
     };
     execLoading(this);
 }

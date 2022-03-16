@@ -48,7 +48,7 @@ private:
     std::atomic<bool> _prepareThreadActive{false};
     std::vector<std::string_view> _enqueuedFiles;  //if a new openHierarchyFiles call is issued while data is loaded, the new files are stored in this vector to be loaded when the previous load is done
     std::vector<std::vector<size_t>> _enqueuedBundles;
-    std::vector<std::vector<uint32_t>> _dimensionCombinations;  //stored in column major format. on row is (_dC[0][0], _dC[1][0], ..., _dC[n][0])
+    std::vector<std::vector<uint32_t>> _dimensionCombinations;  //stored in column major format. One row is (_dC[0][0], _dC[1][0], ..., _dC[n][0])
     std::vector<std::vector<std::vector<compression::CenterData>>> _attributeCenters; // for each level for all attributes a singel list with the centers exists 
     Data _clusterData;                              //loaded data wich was already preloaded from disk
     Data _nextData;
