@@ -63,7 +63,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "GpuRadixSorter.hpp"
 #include "PCRenderer.hpp"
 #include "compression/CompressionWorkbench.hpp"
-#include "compression/HierarchyImportManager.hpp"
+#include "compression/HierarchyLoadManager.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -2303,7 +2303,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		dl.inheritanceFlags = InheritanceFlags::hierarchical;
 		dl.indices = {};		//nothing yet loaded
 		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
-		dl.hierarchyImportManager= std::make_shared<HierarchyImportManager>(hierarchy, pcSettings.maxHierarchyLines);
+		dl.hierarchyLoadManager= std::make_shared<HierarchyLoadManager>(hierarchy, pcSettings.maxHierarchyLines);
 	}
 	else{
 		dl.indices = std::vector<uint32_t>(tl.indices);
@@ -5624,7 +5624,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	}
 
 	//reloading data points if brush has changed
-	if(dl.hierarchyImportManager){
+	if(dl.hierarchyLoadManager){
 		std::vector<brushing::RangeBrush> rangeBrushes;
 		//adding local brushes
 		uint32_t axis = 0;
@@ -5641,7 +5641,7 @@ static bool updateActiveIndices(DrawList& dl) {
 		//TODO: global brushes
 		static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 		if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
-			dl.hierarchyImportManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
+			dl.hierarchyLoadManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
 		prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 	}
 
@@ -14465,9 +14465,9 @@ int main(int, char**)
 
 		//checking data from hierarch importer
 		for(auto& dl: g_PcPlotDrawLists){
-			if(dl.hierarchyImportManager && dl.hierarchyImportManager->newDataLoaded){
+			if(dl.hierarchyLoadManager && dl.hierarchyLoadManager->newDataLoaded){
 				auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& ds){return ds.name == dl.parentDataSet;});
-				ds->data = dl.hierarchyImportManager->retrieveNewData();
+				ds->data = dl.hierarchyLoadManager->retrieveNewData();
 				//todo upload new data, set index list ...
 				fillVertexBuffer(ds->buffer, ds->data);
 				dl.indices.resize(ds->data.size());

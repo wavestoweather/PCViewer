@@ -4,9 +4,6 @@
 #include <vector>
 
 struct Attribute {
-	Attribute() = default;
-	Attribute(const std::string& n, float mi, float ma): name(n), originalName(n), min(mi), max(ma){};
-
 	std::string name;
 	std::string originalName;
 	std::map<std::string, float> categories;	//if data has a categorical structure the categories map will be filled.

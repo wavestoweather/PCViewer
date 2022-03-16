@@ -22,16 +22,20 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     
     std::string a; float aMin, aMax;
     while(attributeInfos >> a >> aMin >> aMax){
-        _attributes.push_back(Attribute(a, aMin, aMax));
+        _attributes.push_back({a, a, {}, {}, aMin, aMax});
     }
     attributeInfos.close();
 
     std::ifstream clusterInfos(_hierarchyFolder + "/hierarchy.info", std::ios_base::binary);
+    assert(clusterInfos);
     clusterInfos >> _hierarchyLevels;
     clusterInfos >> _clusterDim;
+    _dimensionCombinations.resize(_clusterDim);
     uint32_t clusterLevelSize;
-    while(clusterInfos >> clusterLevelSize)
+    for(int l = 0; l < _hierarchyLevels; ++l){
+        clusterInfos >> clusterLevelSize;
         _clusterLevelSizes.push_back(clusterLevelSize);
+    }
     assert(_clusterLevelSizes.size() == _hierarchyLevels);
     clusterInfos.close();
 
@@ -103,13 +107,13 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
             clusterData.read(reinterpret_cast<char*>(&clusterOffsetSizes[i]), sizeof(clusterOffsetSizes[0]));
         }
         for(int i = 0; i < clusterOffsetSizes.size(); ++i){
-            uint32_t amtOfCluster = clusterOffsetSizes[i].second / (paddedDimBytes + 1) / 4; //division by 4 as each element has 4 bytes
+            uint32_t amtOfCluster = clusterOffsetSizes[i].second / (clusterBytes);
             size_t offset = cData.columns[0].size();
             for(int c = 0; c < cData.columns.size(); ++c)
                 cData.columns[c].resize(cData.columns[c].size() + amtOfCluster);
             //single read of cluster data
             std::vector<uint32_t> data(clusterOffsetSizes[i].second / sizeof(uint32_t));
-            clusterData.read(reinterpret_cast<char*>(data.data()), data.size() / sizeof(data[0]));
+            clusterData.read(reinterpret_cast<char*>(data.data()), data.size() * sizeof(data[0]));
             std::vector<uint16_t> dimBins(paddedDim);
             for(int c = 0; c < amtOfCluster; ++c){
                 uint32_t clusterBase = c * clusterBytes / sizeof(uint32_t);
@@ -124,7 +128,7 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
             }
         }
         clusterData.close();
-        // I think i am done ...
+        // I think i am done ... already tested and it seems pog
     };
     execLoading(this);
 }

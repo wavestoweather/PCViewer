@@ -6,7 +6,6 @@
 #include "../Attribute.hpp"
 #include "../Structures.hpp"
 #include "../Brushing.hpp"
-#include "Constants.hpp"
 #include "HirarchyCreation.hpp"
 #include <atomic>
 #include <future>
