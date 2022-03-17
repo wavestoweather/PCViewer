@@ -1794,7 +1794,9 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 		}
 		// hierarchical data -> reserving memory according to size given in info with 20% overhead for safety
 		else if(info->dataType == DataType::Hierarchichal){
-			bufferSize = (Attributes.size() + info->additionalAttributeStorage) * (info->maxLines) * 1.2 * sizeof(float);
+			//bufferSize = (Attributes.size() + info->additionalAttributeStorage) * (info->maxLines) * 1.2 * sizeof(float);
+			//tmp replacement for tests
+			bufferSize = info->additionalAttributeStorage;
 		}
 	}
 	else{
@@ -2306,6 +2308,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		dl.indices = {};		//nothing yet loaded
 		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
 		dl.hierarchyLoadManager= std::make_shared<HierarchyLoadManager>(hierarchy, pcSettings.maxHierarchyLines);
+		fillVertexBuffer(ds.buffer, dl.hierarchyLoadManager->retrieveNewDataC());
 	}
 	else{
 		dl.indices = std::vector<uint32_t>(tl.indices);
@@ -3700,7 +3703,12 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 	ds.dataType = DataType::Hierarchichal;	//setting the hierarchical type to indicate hierarchical data
 	VertexBufferCreateInfo cI{};
 	cI.maxLines = pcSettings.maxHierarchyLines;
-	cI.additionalAttributeStorage = 1;		//TODO: change to a variable size
+	//cI.additionalAttributeStorage = 1;		//TODO: change to a variable size
+	{
+		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
+		HierarchyLoadManager man(hierarchy);
+		cI.additionalAttributeStorage = man.retrieveNewData().packedByteSize();
+	}
 	cI.dataType = DataType::Hierarchichal;
 	createPcPlotVertexBuffer(pcAttributes, ds.data, std::optional<VertexBufferCreateInfo>(cI));
 	ds.buffer = g_PcPlotVertexBuffers.back();

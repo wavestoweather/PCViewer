@@ -24,6 +24,7 @@ public:
     void notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes);
     void updateDrawList(DrawList& dl);
     void checkPendingFiles();
+    const Data& retrieveNewDataC() const {return _nextData;};
     Data retrieveNewData(){Data t = std::move(_nextData); _nextData = {}; newDataLoaded = false; return std::move(t);};
 
     // bool which indicates new data was loaded

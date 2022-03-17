@@ -131,6 +131,35 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
         // I think i am done ... already tested and it seems pog
     };
     execLoading(this);
+
+    // arranging everything in the _nextData data -------------------------------
+    _nextData.clear();
+    _nextData.columns.resize(_attributes.size() + _clusterDim + _clusterData.columns.size());
+    // attribute data (only centers)
+    for(int a = 0; a < _attributes.size(); ++a){
+        _nextData.columns[a].resize(_attributeCenters.back()[a].size());
+        for(int c = 0; c < _nextData.columns[a].size(); ++c){
+            _nextData.columns[a][c] = _attributeCenters.back()[a][c].val;
+        }
+    }
+    // subdimensions
+    uint columnOffset = _attributes.size();
+    for(int i = 0; i < _dimensionCombinations.size(); ++i)
+        _nextData.columns[columnOffset++] = std::vector<float>(_dimensionCombinations[i].begin(), _dimensionCombinations[i].end());
+    // line information. Only use lines which are at consecutive axes for now
+    for(uint i = 0; i < _clusterData.columns[0].size(); ++i){
+        int dimensionComb = _clusterData.columns[0][i];
+        if(_dimensionCombinations[0][dimensionComb] + 1 == _dimensionCombinations[1][dimensionComb]){
+            for(int j = 0; j < _clusterData.columns.size(); j++)
+                _nextData.columns[columnOffset + j].push_back(_clusterData.columns[j][i]);
+        }
+    }
+    uint32_t maxColumnSize = _nextData.columns[columnOffset].size();
+    // dimension information
+    _nextData.columnDimensions = {{0}};
+    _nextData.dimensionSizes = {maxColumnSize};
+
+    // done gettting all data into correct form
 }
 
 void HierarchyLoadManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes) 

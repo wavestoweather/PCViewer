@@ -46,6 +46,12 @@ class Data{
     Data(const std::vector<uint32_t>& dimensionSizes,const std::vector<std::vector<uint32_t>>& columnDimensions,const std::vector<std::vector<float>>& columns):
         dimensionSizes(dimensionSizes), columnDimensions(columnDimensions), columns(columns){};
 
+    void clear() {
+        dimensionSizes.clear();
+        columnDimensions.clear();
+        columns.clear();
+    }
+
     uint64_t size() const{
         if(dimensionSizes.empty()) return 0;
         uint64_t ret = 1;
