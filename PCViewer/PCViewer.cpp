@@ -64,6 +64,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "PCRenderer.hpp"
 #include "compression/CompressionWorkbench.hpp"
 #include "compression/HierarchyLoadManager.hpp"
+#include "compression/CompressionRenderer.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -733,6 +734,7 @@ static TransferFunctionEditor* transferFunctionEditor;
 static std::shared_ptr<ClusteringWorkbench> clusteringWorkbench;
 static std::shared_ptr<PCRenderer> pcRenderer;
 static std::shared_ptr<CompressionWorkbench> compressionWorkbench;
+static CompressionRenderer* compressionRenderer;
 
 //method declarations
 template <typename T,typename T2>
@@ -7512,6 +7514,22 @@ int main(int, char**)
 
 	{
 		compressionWorkbench = std::make_shared<CompressionWorkbench>();
+	}
+
+	{
+		CompressionRenderer::CreateInfo info{};
+		info.context.screenSize[0] = g_PcPlotWidth;
+		info.context.screenSize[0] = g_PcPlotHeight;
+		info.context.physicalDevice = g_PhysicalDevice;
+		info.context.device = g_Device;
+		info.context.descriptorPool = g_DescriptorPool;
+		info.context.commandPool = g_PcPlotCommandPool;
+		info.context.queue = g_Queue;
+		info.renderPass = g_PcPlotRenderPass_noClear;
+		info.dataLayout = g_PcPlotDataSetLayout;
+		info.uniformLayout = g_PcPlotDescriptorLayout;
+
+		compressionRenderer = CompressionRenderer::acquireReference(info);
 	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -14560,6 +14578,8 @@ int main(int, char**)
 		compressionWorkbench->stopThreads();
 	}
 
+	if(compressionRenderer)
+		compressionRenderer->release();
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);
