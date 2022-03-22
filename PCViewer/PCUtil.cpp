@@ -3,6 +3,7 @@
 #include <netcdf.h>
 #include <mutex>
 #include <condition_variable>
+#include <sstream>
 #include "Attribute.hpp"
 
 std::vector<char> PCUtil::readByteFile(const std::string& filename)
@@ -729,4 +730,18 @@ void PCUtil::Semaphore::acquire()
 	while(!_count)
 		_cv.wait(lock);
 	--_count;
+}
+template<typename T>
+std::stringstream& operator>>(std::stringstream& out, std::vector<T>& v) 
+{
+	std::string vec;
+	out >> vec;
+	v = PCUtil::fromReadableString<T>(vec);
+	return out;
+}
+
+template<typename T>
+std::stringstream& operator<<(std::stringstream& out, std::vector<T>& v) 
+{
+	return out << PCUtil::toReadableString(v);
 }

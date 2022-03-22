@@ -55,6 +55,26 @@ namespace compression{
         uint32_t count;
     };
 
+    struct IndexCenterData{
+        float val, min, max;
+        std::vector<uint32_t> indices;
+    };
+
+    struct IndexCenterFileData{
+        float val, min, max;
+        uint32_t offset, size;
+    };
+
+    struct ByteOffsetSize{
+        uint32_t offset;
+        uint32_t size;
+    };
+
+    struct UIntOffsetSize{  // same as byte offset size, but refers to offsets in uint format (4 * byte)
+        uint32_t offset;
+        uint32_t size;
+    };
+
     // method to create a NDHierarchy
     // outputFolder     : Folder name where the resulting hierarchy will be put
     // loader           : DataLoader which contains the data to be converted
@@ -67,4 +87,13 @@ namespace compression{
     // amtOfThreads     : Amount of threads to be used for hierarchy creation
     void createNDHierarchy(const std::string_view& outputFolder, DataLoader* loader, CachingMethod cachingMethod, int startCluster, int clusterMultiplikator, int dimensionality, int levels, int maxMb, int amtOfThreads);
     void convertNDHierarchy(const std::string_view& outputFolder, int amtOfThreads);
+
+    // method to create a 1 dimensional bin with corresponding data indices
+    // each of the bins contains the average position of the data it holds, a mi, max value and a list of indices fo its child data points
+    // outputFolder     : Folder name where the resulting hierarchy will be put
+    // loader           : DataLoader which contains the data to be converted
+    // binsAmt          : Amount of bins on the finest layer
+    // maxMb            : Maximum available RAM for hierarchy creation (is used to trigger caching events)
+    // amtOfThreads     : Amount of threads to be used for hierarchy creation
+    void create1DBinIndex(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t maxMb, int amtOfThreads);
 };

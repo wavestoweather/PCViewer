@@ -34,3 +34,28 @@ private:
 
     std::shared_mutex _readMutex;
 };
+
+class NetCdfColumnLoader: public ColumnLoader{
+public:
+    NetCdfColumnLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores);
+
+    const float& progress() const {return _progress;};
+    DataInfo dataAnalysis();
+    void normalize();
+    Data& curData(){return _curData;};
+    bool loadNextData();
+    size_t getFileAmt(){return _files.size();};
+
+private:
+    float _progress{0};
+    int _curFile{};
+    std::vector<std::string> _files;
+    bool _normalized{false};
+    Data _curData{};
+    size_t curDataIndex{};
+    size_t _curTotalIndex{};
+
+    // data analysis information
+    size_t _dataSize{};
+    std::vector<Attribute> _attributes{};
+};
