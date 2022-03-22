@@ -63,7 +63,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "GpuRadixSorter.hpp"
 #include "PCRenderer.hpp"
 #include "compression/CompressionWorkbench.hpp"
-#include "compression/HierarchyLoadManager.hpp"
+#include "compression/HierarchyBinManager.hpp"
 #include "compression/CompressionRenderer.hpp"
 
 #include "ColorPalette.h"
@@ -2307,8 +2307,8 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		dl.inheritanceFlags = InheritanceFlags::hierarchical;
 		dl.indices = {};		//nothing yet loaded
 		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
-		dl.hierarchyLoadManager= std::make_shared<HierarchyLoadManager>(hierarchy, pcSettings.maxHierarchyLines);
-		fillVertexBuffer(ds.buffer, dl.hierarchyLoadManager->retrieveNewDataC());
+		dl.hierarchyBinManager= std::make_shared<HierarchyBinManager>(hierarchy, pcSettings.maxHierarchyLines);
+		fillVertexBuffer(ds.buffer, dl.hierarchyBinManager->retrieveNewDataC());
 	}
 	else{
 		dl.indices = std::vector<uint32_t>(tl.indices);
@@ -3706,8 +3706,8 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 	//cI.additionalAttributeStorage = 1;		//TODO: change to a variable size
 	{
 		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
-		HierarchyLoadManager man(hierarchy);
-		cI.additionalAttributeStorage = man.retrieveNewData().packedByteSize();
+		//HierarchyBinManager man(hierarchy);
+		cI.additionalAttributeStorage = 1e6;//man.retrieveNewData().packedByteSize();
 	}
 	cI.dataType = DataType::Hierarchichal;
 	createPcPlotVertexBuffer(pcAttributes, ds.data, std::optional<VertexBufferCreateInfo>(cI));
@@ -5634,7 +5634,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	}
 
 	//reloading data points if brush has changed
-	if(dl.hierarchyLoadManager){
+	if(dl.hierarchyBinManager){
 		std::vector<brushing::RangeBrush> rangeBrushes;
 		//adding local brushes
 		uint32_t axis = 0;
@@ -5651,7 +5651,7 @@ static bool updateActiveIndices(DrawList& dl) {
 		//TODO: global brushes
 		static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 		if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
-			dl.hierarchyLoadManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
+			dl.hierarchyBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
 		prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 	}
 
@@ -14491,9 +14491,9 @@ int main(int, char**)
 
 		//checking data from hierarch importer
 		for(auto& dl: g_PcPlotDrawLists){
-			if(dl.hierarchyLoadManager && dl.hierarchyLoadManager->newDataLoaded){
+			if(dl.hierarchyBinManager && dl.hierarchyBinManager->newDataLoaded){
 				auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& ds){return ds.name == dl.parentDataSet;});
-				ds->data = dl.hierarchyLoadManager->retrieveNewData();
+				ds->data = dl.hierarchyBinManager->retrieveNewData();
 				//todo upload new data, set index list ...
 				fillVertexBuffer(ds->buffer, ds->data);
 				dl.indices.resize(ds->data.size());

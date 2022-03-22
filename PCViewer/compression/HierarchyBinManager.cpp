@@ -1,5 +1,5 @@
 #define NOSTATICS
-#include "HierarchyLoadManager.hpp"
+#include "HierarchyBinManager.hpp"
 #undef NOSTATICS
 #include <filesystem>
 #include <fstream>
@@ -7,7 +7,7 @@
 #include <iostream>
 #include "../robin_hood_map/robin_hood.h"
 
-HierarchyLoadManager::HierarchyLoadManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines) :
+HierarchyBinManager::HierarchyBinManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines) :
 _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
 {
     // loading attribute info and data
@@ -18,11 +18,14 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     // --------------------------------------------------------------------------------
     std::ifstream attributeInfos(_hierarchyFolder + "/attr.info", std::ios_base::binary);
     std::string cacheMethod; attributeInfos >> cacheMethod;
+    std::string vec; attributeInfos >> vec;
+    _dimensionSizes = PCUtil::fromReadableString<uint32_t>(vec);
     assert(cacheMethod == compression::CachingMethodNames[int(compression::CachingMethod::Bundled)]);
     
     std::string a; float aMin, aMax;
-    while(attributeInfos >> a >> aMin >> aMax){
+    while(attributeInfos >> a >> aMin >> aMax >> vec){
         _attributes.push_back({a, a, {}, {}, aMin, aMax});
+        _attributeDimensions.push_back(PCUtil::fromReadableString<uint32_t>(vec));
     }
     attributeInfos.close();
 
@@ -40,129 +43,35 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     clusterInfos.close();
 
     // --------------------------------------------------------------------------------
-    // clustering data
+    // center infos
     // --------------------------------------------------------------------------------
-    // creating an extra maybe delay opening to an extra thread should runtime problems occur
-    auto execLoading = [](HierarchyLoadManager* m){
-        // getting the subdimensions
-        std::ifstream combinationInfo(m->_hierarchyFolder + "/combination.info", std::ios_base::binary);
-        std::string firstLine; std::getline(combinationInfo, firstLine);
-        m->_clusterDim = std::count(firstLine.begin(), firstLine.end(), ' ');
-        combinationInfo.seekg(0);
-        std::vector<uint32_t> line(m->_clusterDim);
-        while(combinationInfo){
-            for(int i = 0; i < line.size(); ++i) 
-                combinationInfo >> line[i];
-            if(!combinationInfo)
-                break;
-            for(int i = 0; i < line.size(); ++i)
-                m->_dimensionCombinations[i].push_back(line[i]);
-        }
-        combinationInfo.close();
-
-        // loading the attribute center data
-        std::string acFilePath = m->_hierarchyFolder + "/attributeCenters.ac";
-        std::ifstream acFile(acFilePath, std::ios_base::binary);
-        auto byteSize = std::filesystem::file_size(acFilePath);
-        std::vector<uint32_t> binaryData(byteSize / sizeof(uint32_t));
-        acFile.read(reinterpret_cast<char*>(binaryData.data()), byteSize);
-        acFile.close();
-
-        std::vector<std::vector<std::pair<size_t, size_t>>> attributeCenterOffsets(m->_hierarchyLevels);
-        size_t curInd = 0;
-        for(int i = 0; i < m->_attributes.size(); ++i){
-            for(int l = 0; l < m->_hierarchyLevels; ++l){
-                attributeCenterOffsets[l].push_back({binaryData[curInd++] / 4, binaryData[curInd++] / 4});  // instantly converting from byte offset to uint32_t offset
-            }
-        }
-        m->_attributeCenters.resize(m->_hierarchyLevels, std::vector<std::vector<compression::CenterData>>(m->_attributes.size()));
-        for(int l = 0; l < m->_hierarchyLevels; ++l){
-            for(int a = 0; a < m->_attributes.size(); ++a){
-                auto [offset, size] = attributeCenterOffsets[l][a];
-                m->_attributeCenters[l][a].resize(size * 4 / sizeof(compression::CenterData));   // * 4 to get to byte size and / sizeof(..) to get to center data counts
-                std::memcpy(m->_attributeCenters[l][a].data(), &binaryData[offset], size * 4);
-            }
-        }
-        binaryData.clear();
-
-        // creating map to map bin index on each axis to cluster index
-        std::vector<robin_hood::unordered_map<uint32_t, uint32_t>> binToCl(m->_attributes.size());
-        for(int a = 0; a < m->_attributes.size(); ++a){
-            for(int c = 0; c < m->_attributeCenters.back()[a].size(); ++c){
-                uint32_t bin = m->_attributeCenters.back()[a][c].val * m->_clusterLevelSizes.back();
-                binToCl[a][bin] = c;
-            }
-        }
-
-        // loading the center data and converting it to cluster indices (from bin values) plus adding the subdim index
-        // everything is stored in a Data object with all subdim indices etc. in one row follwed by rows with other data
-        std::ifstream clusterData(m->_hierarchyFolder + "/cluster.cd", std::ios_base::binary);
-        std::vector<std::pair<uint32_t, uint32_t>> clusterOffsetSizes(m->_dimensionCombinations[0].size()); //all kept in bytes
-        auto& cData = m->_clusterData;
-        cData.columns.resize(2 + m->_clusterDim);
-        uint32_t paddedDim = ((m->_clusterDim + 1) >> 1) << 1;
-        uint32_t paddedDimBytes = paddedDim * sizeof(uint16_t);
-        uint32_t clusterBytes = paddedDimBytes + sizeof(uint32_t); // cluster size is sizeof bins + sizeof counter
-        for(int i = 0; i < m->_dimensionCombinations[0].size(); ++i){
-            clusterData.read(reinterpret_cast<char*>(&clusterOffsetSizes[i]), sizeof(clusterOffsetSizes[0]));
-        }
-        for(int i = 0; i < clusterOffsetSizes.size(); ++i){
-            uint32_t amtOfCluster = clusterOffsetSizes[i].second / (clusterBytes);
-            size_t offset = cData.columns[0].size();
-            for(int c = 0; c < cData.columns.size(); ++c)
-                cData.columns[c].resize(cData.columns[c].size() + amtOfCluster);
-            //single read of cluster data
-            std::vector<uint32_t> data(clusterOffsetSizes[i].second / sizeof(uint32_t));
-            clusterData.read(reinterpret_cast<char*>(data.data()), data.size() * sizeof(data[0]));
-            std::vector<uint16_t> dimBins(paddedDim);
-            for(int c = 0; c < amtOfCluster; ++c){
-                uint32_t clusterBase = c * clusterBytes / sizeof(uint32_t);
-                std::memcpy(dimBins.data(), &data[clusterBase], paddedDimBytes);
-                cData.columns[0][offset + c] = i;   
-                for(int d = 0; d < m->_clusterDim; ++d){
-                    int dim = m->_dimensionCombinations[d][i];
-                    assert(binToCl[dim].contains(dimBins[d]));
-                    cData.columns[1 + d][offset + c] = binToCl[dim][dimBins[d]];
-                }
-                cData.columns[m->_clusterDim + 1][offset + c] = data[clusterBase + paddedDim / 2]; // plus paddedDim / 2 as per uint 2 dimension bins are stored
-            }
-        }
-        clusterData.close();
-        // I think i am done ... already tested and it seems pog
-    };
-    execLoading(this);
-
-    // arranging everything in the _nextData data -------------------------------
-    _nextData.clear();
-    _nextData.columns.resize(_attributes.size() + _clusterDim + _clusterData.columns.size());
-    // attribute data (only centers)
-    for(int a = 0; a < _attributes.size(); ++a){
-        _nextData.columns[a].resize(_attributeCenters.back()[a].size());
-        for(int c = 0; c < _nextData.columns[a].size(); ++c){
-            _nextData.columns[a][c] = _attributeCenters.back()[a][c].val;
-        }
+    std::ifstream attributeCenterFile(_hierarchyFolder + "/attr.ac", std::ios_base::binary);
+    std::vector<compression::ByteOffsetSize> offsetSizes(_attributes.size());
+    attributeCenterFile.read(reinterpret_cast<char*>(offsetSizes.data()), offsetSizes.size() * sizeof(offsetSizes[0]));
+    _attributeCenters.resize(_attributes.size());
+    for(int i = 0; i < _attributes.size(); ++i){
+        assert(attributeCenterFile.tellg() == offsetSizes[i].offset);
+        _attributeCenters[i].resize(offsetSizes[i].size / sizeof(_attributeCenters[0][0]));
+        attributeCenterFile.read(reinterpret_cast<char*>(_attributeCenters[i].data()), offsetSizes[i].size);
     }
-    // subdimensions
-    uint columnOffset = _attributes.size();
-    for(int i = 0; i < _dimensionCombinations.size(); ++i)
-        _nextData.columns[columnOffset++] = std::vector<float>(_dimensionCombinations[i].begin(), _dimensionCombinations[i].end());
-    // line information. Only use lines which are at consecutive axes for now
-    for(uint i = 0; i < _clusterData.columns[0].size(); ++i){
-        int dimensionComb = _clusterData.columns[0][i];
-        if(_dimensionCombinations[0][dimensionComb] + 1 == _dimensionCombinations[1][dimensionComb]){
-            for(int j = 0; j < _clusterData.columns.size(); j++)
-                _nextData.columns[columnOffset + j].push_back(_clusterData.columns[j][i]);
-        }
-    }
-    uint32_t maxColumnSize = _nextData.columns[columnOffset].size();
-    // dimension information
-    _nextData.columnDimensions = {{0}};
-    _nextData.dimensionSizes = {maxColumnSize};
 
-    // done gettting all data into correct form
+    // --------------------------------------------------------------------------------
+    // 1d index data
+    // --------------------------------------------------------------------------------
+    _attributeIndices.resize(_attributes.size());
+    uint32_t dataSize = 0;
+    for(int i = 0; _attributes.size(); ++i){
+        std::ifstream indicesData(_hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
+        uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;
+        if(indicesSize > dataSize)
+            dataSize = indicesSize;
+        indicesData.read(reinterpret_cast<char*>(_attributeIndices[i].data()), indicesSize * sizeof(_attributeIndices[0][0]));
+    }
+
+    _indexActivations.resize(dataSize, true);
 }
 
-void HierarchyLoadManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes) 
+void HierarchyBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes) 
 {
     std::cout << "HierarchyImportManager::notifyBrushUpdate(): updating..." << std::endl;
     
@@ -243,14 +152,14 @@ void HierarchyLoadManager::notifyBrushUpdate(const std::vector<RangeBrush>& rang
    
 }
 
-void HierarchyLoadManager::checkPendingFiles() 
+void HierarchyBinManager::checkPendingFiles() 
 {
     using namespace std::chrono_literals;
     if(!_loadThreadActive && _enqueuedFiles.size() != 0)
         openHierarchyFiles(_enqueuedFiles, _enqueuedBundles);
 }
 
-void HierarchyLoadManager::openHierarchyFiles(const std::vector<std::string_view>& files, const std::vector<std::vector<size_t>> bundleOffsets){
+void HierarchyBinManager::openHierarchyFiles(const std::vector<std::string_view>& files, const std::vector<std::vector<size_t>> bundleOffsets){
     using namespace std::chrono_literals;
     // if loading is still active return and dont open new hierarchy files, but cache new files
     bool prevValue = false;
@@ -260,7 +169,7 @@ void HierarchyLoadManager::openHierarchyFiles(const std::vector<std::string_view
         return;
     }
     
-    auto exec = [](std::vector<std::string_view> files, HierarchyLoadManager* m){
+    auto exec = [](std::vector<std::string_view> files, HierarchyBinManager* m){
         std::vector<Data> dataVec(files.size());
         uint32_t i = 0;
         for(auto& f: files){
@@ -279,4 +188,8 @@ void HierarchyLoadManager::openHierarchyFiles(const std::vector<std::string_view
     };
 
     _dataLoadThread = std::thread(exec, files, this);
+}
+
+void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> attributeOrder){
+
 }

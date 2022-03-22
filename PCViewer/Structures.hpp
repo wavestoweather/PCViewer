@@ -8,11 +8,11 @@
 #include "ClusterBundles.hpp"
 #include "TemplateList.hpp"
 #include "Attribute.hpp"
-#include "compression/HierarchyLoadManager.hpp"
+#include "compression/HierarchyBinManager.hpp"
 #include <memory>
 
 //forward declaration
-class HierarchyLoadManager;
+class HierarchyBinManager;
 
 struct Vec4 {
 	float x;
@@ -131,7 +131,7 @@ struct DrawList {
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
 	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
-	std::shared_ptr<HierarchyLoadManager> hierarchyLoadManager;	//optional import manger for hierarchy files
+	std::shared_ptr<HierarchyBinManager> hierarchyBinManager;	//optional import manger for hierarchy files
 };
 
 struct DrawlistDragDropInfo{

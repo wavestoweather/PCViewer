@@ -46,14 +46,14 @@ public:
 	};
 	template<typename T>
 	static std::vector<T> fromReadableString(const std::string& s){
-		if(s[0] == '[' || s.back() == ']')
+		if(s[0] != '[' || s.back() != ']')
 			throw std::runtime_error{"PCUtil::fromReadableString(): Parsing vector from string failed because the string is not sourrounded by brackets: " + s};
 		std::vector<T> res;
-		std::string_view elements(s.begin() + 1, s.end() - 1);
+		std::string_view elements = std::string_view{s}.substr(1, s.size() - 2);
 		auto curStart = elements.begin();
-		while(curStart != elements.end()){
-			auto nextStart = curStart;
-			while(*nextStart != ','){
+		while(curStart < elements.end()){
+			auto nextStart = curStart + 1;
+			while(*nextStart != ',' && nextStart < elements.end()){
 				if(*nextStart == '['){ // inner vector
 					int c = 0;
 					while(c > 0){
@@ -68,11 +68,12 @@ public:
 					++nextStart;
 			}
 			T e;
-			std::stringstream cur(curStart, nextStart);
+			std::stringstream cur(std::string(curStart, nextStart));
 			cur >> e;
 			res.push_back(e);
-			curStart = nextStart;
+			curStart = nextStart + 1;
 		}
+		return res;
 	};
 
 	class Stopwatch{
