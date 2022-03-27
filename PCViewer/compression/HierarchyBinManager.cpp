@@ -5,6 +5,8 @@
 #include <fstream>
 #include <algorithm>
 #include <iostream>
+#include <queue>
+#include <numeric>
 #include "../robin_hood_map/robin_hood.h"
 
 HierarchyBinManager::HierarchyBinManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines) :
@@ -191,5 +193,152 @@ void HierarchyBinManager::openHierarchyFiles(const std::vector<std::string_view>
 }
 
 void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> attributeOrder){
+    // ---------------------------------------------------------------------------
+    // clustering together all attribute clusters
+    // ---------------------------------------------------------------------------
+    struct Cluster{
+        uint32_t startIndex, endIndex; 
+        float span; 
+        bool operator>(const Cluster& other) const{return span > other.span;};
+    };
 
+    std::vector<std::vector<Cluster>> attributeCluster(_attributes.size()); //contains all cluster for all attributes
+
+    // going through all consecutive attributes and update clusters to get max amount of cluster combinations
+    uint32_t dimensionality = 2;
+    using  ClusterQueue = PCUtil::PriorityQueue<Cluster, std::vector<Cluster>, std::greater<Cluster>>;
+    for(int c = 0; c < _attributeOrdering.size() - 1; ++c){
+        std::vector<uint32_t> axes(dimensionality);
+        for(int d = std::max(c - d / 2 - 1, 0); d < std::min<uint32_t>(c + d / 2 + 1, _attributeOrdering.size()); ++d){
+            axes.push_back(_attributeOrdering[d]);
+        }
+        std::sort(axes.begin(), axes.end());    // ordering should always be increasing
+        std::vector<ClusterQueue> pQs(axes.size());  //for reach axis we are starting with the default cluster
+        for(int i = 0; i < axes.size(); ++i){
+            uint32_t a = axes[i];    
+            pQs[i].push(Cluster{0, static_cast<uint32_t>(_attributeCenters[a].size()), _attributeCenters[a].back().max - _attributeCenters[a].back().min});
+        }
+
+        uint32_t curCombinationCount = 1;   // always starts with one combination, as all queues have only a single element
+        while(1){
+            std::vector<uint32_t> sortedQueues; // indeces of the queues in pQs
+            std::iota(sortedQueues.begin(), sortedQueues.end(), 0); // fill with indices
+            std::sort(sortedQueues.begin(), sortedQueues.end(), [&](uint32_t a, uint32_t b){return pQs[a].top().span > pQs[b].top().span;});
+            int p = 0;
+            for(; p < sortedQueues.size(); ++p){
+                if(attributeCluster[axes[sortedQueues[p]]].empty() || pQs[sortedQueues[p]].size() < attributeCluster[axes[sortedQueues[p]]].size())
+                    break;      // found a priority queue that does not excced axis attribute limit from previouis iterations
+            }
+            // checking if split is possible accordint to max lines limit or other limits
+            if(p >= sortedQueues.size())
+                break;  // all attributes are constrained in terms of cluster counts
+            uint32_t nextCombCount = curCombinationCount / pQs[sortedQueues[p]].size() * (pQs[sortedQueues[p]].size() + 1);
+            if(nextCombCount > _maxLines)
+                break;  // the maximum number of lines is reached
+            // split the biggest gap for the attribute combination
+            auto& pQ = pQs[sortedQueues[p]];
+            auto cl = pQ.pop();
+            uint32_t clAxis = axes[sortedQueues[p]];
+            // finding the best split
+            uint32_t bestSplit = 0;
+            float maxGap = 0;
+            for(int i = cl.startIndex; i < cl.endIndex; ++i){
+                float gap = _attributeCenters[clAxis][i + 1].min - _attributeCenters[clAxis][i].max;
+                if(gap > maxGap){
+                    maxGap = gap;
+                    bestSplit = i;
+                }
+            }
+            // pushing the two new clusters
+            pQ.push(Cluster{cl.startIndex, bestSplit, _attributeCenters[clAxis][bestSplit].max - _attributeCenters[clAxis][cl.startIndex].min});
+            pQ.push(Cluster{bestSplit, cl.endIndex, _attributeCenters[clAxis][cl.endIndex].max - _attributeCenters[clAxis][bestSplit + 1].min});
+            // updating the cvurrent combination count
+            curCombinationCount = nextCombCount;
+        }
+        
+        // updating the axes cluster
+        for(int i = 0; i < axes.size(); ++i){
+            attributeCluster[axes[i]] = pQs[i].container();
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // updating combination counts
+    // --------------------------------------------------------------------------- 
+    _clusterData.clear();
+    _clusterData.columns.resize(2 * dimensionality + 1 + 1 + 1); // first all dimension combinations(including the x and y positions), then for each cluster a reference index to the dimensioncombinations followed by the active and overall count
+    // setting up index to cluster map for all attributes except one for quick lookup times
+    std::vector<std::vector<uint32_t>> indexClusterMap(_attributeOrdering.size() - 1, std::vector<uint32_t>(_indexActivations.size()));
+    for(int c = 0; c < _attributeOrdering.size() -1; ++c){
+        uint32_t axis = _attributeOrdering[c];
+        // for each index in each attributeCluster we write the cluster index in the index cluster map
+        for(int i = 0; i < attributeCluster[c].size(); ++i){
+            const auto& cl = attributeCluster[c][i];
+            for(int l = cl.startIndex; l < cl.endIndex; ++l){
+                uint32_t indexStart = _attributeCenters[axis][l].offset;
+                uint32_t indexSize = _attributeCenters[axis][l].offset;
+                for(int ind = indexStart; ind < indexStart + indexSize; ++ind){
+                    uint32_t index = _attributeIndices[axis][ind];
+                    indexClusterMap[c][index] = i;
+                }
+            }
+        }
+    }
+
+    // starting to counting the cluster counts
+    std::vector<uint32_t> axisToOrder(_attributes.size());
+    for(int a = 0; a < _attributeOrdering.size(); ++a)
+        axisToOrder[_attributeOrdering[a]] = a; 
+    for(int o = 0; o < _attributeOrdering.size() - 1; ++o){
+        std::vector<uint32_t> axes(dimensionality);
+        for(int d = std::max(o - d / 2 - 1, 0); d < std::min<uint32_t>(o + d / 2 + 1, _attributeOrdering.size()); ++d){
+            axes.push_back(_attributeOrdering[d]);
+        }
+        std::sort(axes.begin(), axes.end());
+        std::vector<uint32_t> curIndices(dimensionality, 0);
+
+        // adding dimension information
+        bool overflow = false;
+        while(!overflow){
+            // creating the intersection of the current cluster
+            // intersection is computed by going through the indices from the cluster to the very right of the plot
+            // and checking for each index in the cluster if the index on the other axes corresponds to the
+            // cluster indicated in axes
+            // also instantly checks if the index is active
+            uint32_t count{}, countSum{};
+            const auto& clusters = attributeCluster[axes.back()];
+            for(int c = 0; c < clusters.size(); ++c){
+                const auto& cluster = clusters[c];
+                const auto& indices = _attributeIndices[axes.back()];
+                for(int ind = cluster.startIndex; ind < cluster.endIndex; ++ind){
+                    countSum++;
+                    uint32_t index = indices[ind];
+                    if(_indexActivations[index]){   // only continue counting if index is active
+                        // going through other axes and check for the correct cluster
+                        for(int other = 0; other < axes.size() - 1; ++other){
+                            uint32_t otherCluster = indexClusterMap[axisToOrder[other]][index];
+                            if(otherCluster == curIndices[other]){
+                                ++count;    // we have another index found
+                            }
+                        }
+                    }
+                }
+            }
+            // adding the data to the final data for rendering
+            _clusterData.columns;
+
+            // incrementing the counter and propagating overflow
+            curIndices.back()++;
+
+            for(int i = curIndices.size() - 1; i >= 0 && (overflow || i == curIndices.size() - 1); --i){
+                if(overflow)
+                    curIndices[i]++;
+                if(curIndices[i] >= attributeCluster[i].size()){
+                    curIndices[i] = 0;  //reset counter to 0 to get cartesiaan product fo all cluster
+                }
+                else
+                    overflow = false;
+            }
+        }
+    }
 }

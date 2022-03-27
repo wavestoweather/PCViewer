@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <sstream>
+#include <algorithm>
 #include "imgui/imgui.h"
 #include "Data.hpp"
 #include "Attribute.hpp"
@@ -105,6 +106,33 @@ public:
 		void release();
 		void releaseN(int n);
 		void acquire();
+	};
+
+	// custom priority queue implementation to be able to access the underlying container
+	template<class T, class Container = std::vector<T>, class Compare = std::less<typename Container::value_type>>
+	class PriorityQueue{
+	public:
+		const Container& container() const {return _container;};
+		bool empty() const {return _container.empty();};
+		size_t size() const {return _container.size();};
+		const T& top() const{return _container[0];};
+		void push(const T& value){
+			_container.push_back(value);
+			std::push_heap(_container.begin(), _container.end(), Compare{});
+		}
+		void push(T&& value){
+			_container.push_back(std::move(value));
+			std::push_heap(_container.begin(), _container.end(), Compare{});
+		}
+		T pop(){
+			if(_container.empty())
+				return {};
+			T el = _container[0];
+			std::pop_heap(_container.begin(), _container.end(), Compare{});
+			_container.pop_back();
+		}
+	private:
+		Container _container;
 	};
 };
 
