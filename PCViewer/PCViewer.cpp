@@ -63,7 +63,8 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "GpuRadixSorter.hpp"
 #include "PCRenderer.hpp"
 #include "compression/CompressionWorkbench.hpp"
-#include "compression/HierarchyImportManager.hpp"
+#include "compression/HierarchyBinManager.hpp"
+#include "compression/CompressionRenderer.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -96,6 +97,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include <netcdf.h>
 #include <filesystem>
 #include <memory>
+#include <optional>
 	
 
 #ifdef DETECTMEMLEAK
@@ -274,7 +276,7 @@ struct HistogramUniformBuffer {
 	float minVal;
 	uint32_t attributeInd;
 	uint32_t amtOfAttributes;
-	uint32_t pad;
+	uint32_t dataFlags;
 	uint32_t padding;
 	Vec4 color;
 };
@@ -596,6 +598,9 @@ struct PCSettings {
 
 	//variables for band rendering
 	float haloWidth = .1f;
+
+	//variables for hierarchical data
+	uint32_t maxHierarchyLines = 1000000;
 }static pcSettings;
 
 //variables for brush templates
@@ -729,6 +734,7 @@ static TransferFunctionEditor* transferFunctionEditor;
 static std::shared_ptr<ClusteringWorkbench> clusteringWorkbench;
 static std::shared_ptr<PCRenderer> pcRenderer;
 static std::shared_ptr<CompressionWorkbench> compressionWorkbench;
+static CompressionRenderer* compressionRenderer;
 
 //method declarations
 template <typename T,typename T2>
@@ -1743,47 +1749,20 @@ static void cleanupPcPlotCommandPool() {
 	vkDestroyFence(g_Device, g_PcPlotRenderFence, nullptr);
 }
 
-static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, const Data& data) {
-	VkResult err;
-
-	//creating the command buffer as its needed to do all the operations in here
-	//createPcPlotCommandBuffer();
-
-	Buffer vertexBuffer, stagingBuffer;
-
-	uint64_t bufferSize = data.packedByteSize();
-
-	VkBufferCreateInfo bufferInfo = {};
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = bufferSize;
-	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
-	check_vk_result(err);
+static void fillVertexBuffer(Buffer vertexBuffer, const Data& data){
+	uint32_t bufferSize = data.packedByteSize();
+	Buffer stagingBuffer;
 	VkUtil::createBuffer(g_Device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,&stagingBuffer.buffer);
-
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(g_Device, vertexBuffer.buffer, &memRequirements);
 	vkGetBufferMemoryRequirements(g_Device, stagingBuffer.buffer, &memRequirements);
-
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &stagingBuffer.memory);
+	VkResult err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &stagingBuffer.memory);
 	check_vk_result(err);
-
 	vkBindBufferMemory(g_Device, stagingBuffer.buffer, stagingBuffer.memory, 0);
 
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &vertexBuffer.memory);
-	check_vk_result(err);
-
-	vkBindBufferMemory(g_Device, vertexBuffer.buffer, vertexBuffer.memory, 0);
-
-	//filling the Vertex Buffer with all Datapoints
 	void* mem;
 	vkMapMemory(g_Device, stagingBuffer.memory, 0, bufferSize, 0, &mem);
 	data.packData(mem);
@@ -1797,6 +1776,60 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &copyComm);
 	vkDestroyBuffer(g_Device, stagingBuffer.buffer, nullptr);
 	vkFreeMemory(g_Device, stagingBuffer.memory, nullptr);
+}
+
+static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, const Data& data, const std::optional<VertexBufferCreateInfo> info = {}) {
+	VkResult err;
+
+	//creating the command buffer as its needed to do all the operations in here
+	//createPcPlotCommandBuffer();
+
+	Buffer vertexBuffer;
+
+	uint64_t bufferSize{};
+	if(info){
+		// standard data -> standard data byte size
+		if(info->dataType == DataType::Continuous || info->dataType == DataType::ContinuousDlf){
+			bufferSize = data.packedByteSize();
+		}
+		// hierarchical data -> reserving memory according to size given in info with 20% overhead for safety
+		else if(info->dataType == DataType::Hierarchichal){
+			//bufferSize = (Attributes.size() + info->additionalAttributeStorage) * (info->maxLines) * 1.2 * sizeof(float);
+			//tmp replacement for tests
+			bufferSize = info->additionalAttributeStorage;
+		}
+	}
+	else{
+		bufferSize = data.packedByteSize();
+	}
+
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = bufferSize;
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &vertexBuffer.buffer);
+	check_vk_result(err);
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(g_Device, vertexBuffer.buffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	err = vkAllocateMemory(g_Device, &allocInfo, nullptr, &vertexBuffer.memory);
+	check_vk_result(err);
+
+	vkBindBufferMemory(g_Device, vertexBuffer.buffer, vertexBuffer.memory, 0);
+
+	//filling the Vertex Buffer with all Datapoints
+	if(!info || info->dataType == DataType::Continuous || info->dataType == DataType::ContinuousDlf){
+		fillVertexBuffer(vertexBuffer, data);
+	}
 
 	std::vector<VkDescriptorSetLayout> layouts{g_PcPlotDataSetLayout};
 	VkUtil::createDescriptorSets(g_Device, layouts, g_PcPlotDescriptorPool, &vertexBuffer.descriptorSet);
@@ -2074,7 +2107,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//Indexbuffer
-	bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)
+		bufferInfo.size = tl.indices.size() * (pcAttributes.size() + 3) * sizeof(uint32_t);
+	else
+		bufferInfo.size = pcSettings.maxHierarchyLines * (pcAttributes.size() + 3) * sizeof(uint32_t);
 	bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.indexBuffer);
 	check_vk_result(err);
@@ -2088,7 +2124,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	vkBindBufferMemory(g_Device, dl.indexBuffer, dl.indexBufferMemory, 0);
 
 	//priority rendering color buffer
-	bufferInfo.size = ds.data.size() * sizeof(float);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)
+		bufferInfo.size = ds.data.size() * sizeof(float);
+	else
+		bufferInfo.size = pcSettings.maxHierarchyLines * sizeof(float);
 	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &dl.priorityColorBuffer);
 	check_vk_result(err);
@@ -2100,7 +2139,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//active indices buffer
-	VkUtil::createBuffer(g_Device, ds.data.size() * sizeof(bool), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dl.activeIndicesBuffer);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)
+		VkUtil::createBuffer(g_Device, ds.data.size() * sizeof(bool), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dl.activeIndicesBuffer);
+	else
+		VkUtil::createBuffer(g_Device, pcSettings.maxHierarchyLines * sizeof(bool), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &dl.activeIndicesBuffer);
 
 	dl.activeIndicesBufferOffset = allocInfo.allocationSize;
 	vkGetBufferMemoryRequirements(g_Device, dl.activeIndicesBuffer, &memRequirements);
@@ -2108,7 +2150,10 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	memTypeBits |= memRequirements.memoryTypeBits;
 
 	//indices buffer
-	VkUtil::createBuffer(g_Device, tl.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)	
+		VkUtil::createBuffer(g_Device, tl.indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
+	else
+		VkUtil::createBuffer(g_Device, pcSettings.maxHierarchyLines * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dl.indicesBuffer);
 
 	dl.indicesBufferOffset = allocInfo.allocationSize;
 	vkGetBufferMemoryRequirements(g_Device, dl.indicesBuffer, &memRequirements);
@@ -2172,16 +2217,23 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 
 	//binding the active indices buffer, creating the buffer view and uploading the correct indices to the graphicscard
 	vkBindBufferMemory(g_Device, dl.activeIndicesBuffer, dl.dlMem, dl.activeIndicesBufferOffset);
-	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, ds.data.size() * sizeof(bool), &dl.activeIndicesBufferView);
-	std::vector<uint8_t> actives(ds.data.size(), 0);			//vector with 0 initialized everywhere
-	for (int i : tl.indices) {									//setting all active indices to true
-		actives[i] = 1;
+	std::vector<uint8_t> actives(ds.data.size(), 1);			//vector with 0 initialized everywhere
+	if(ds.dataType == DataType::Hierarchichal){
+		actives.resize(pcSettings.maxHierarchyLines, 1);
 	}
-	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, ds.data.size() * sizeof(bool), actives.data());
+	VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, actives.size() * sizeof(bool), &dl.activeIndicesBufferView);
+	
+	VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, actives.size() * sizeof(bool), actives.data());
 
 	//binding indices buffer and uploading the indices
 	vkBindBufferMemory(g_Device, dl.indicesBuffer, dl.dlMem, dl.indicesBufferOffset);
-	VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tl.indices.size() * sizeof(uint32_t), tl.indices.data());
+	if(ds.dataType == DataType::Continuous || ds.dataType == DataType::ContinuousDlf)	
+		VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tl.indices.size() * sizeof(uint32_t), tl.indices.data());
+	else{
+		std::vector<uint32_t> tI(pcSettings.maxHierarchyLines);
+		std::iota(tI.begin(), tI.end(), 0);
+		VkUtil::uploadData(g_Device, dl.dlMem, dl.indicesBufferOffset, tI.size() * sizeof(uint32_t), tI.data());
+	}
 
 	//creating the Descriptor sets for the histogramm uniform buffers
 	layouts = std::vector<VkDescriptorSetLayout>(dl.histogramUbos.size());
@@ -2192,11 +2244,15 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.histogrammDescSets = std::vector<VkDescriptorSet>(layouts.size());
 	VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, dl.histogrammDescSets.data());
 
+	size_t dataByteSize = ds.data.packedByteSize();
+	if(ds.dataType == DataType::Hierarchichal){
+		dataByteSize = (pcAttributes.size() + 1) * (pcSettings.maxHierarchyLines) * 1.2 * sizeof(float);
+	}
 	//updating the descriptor sets
 	for (int i = 0; i < layouts.size(); i++) {
 		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
 		VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 1, dl.histogrammDescSets[i]);
-		VkUtil::updateDescriptorSet(g_Device, tl.buffer, ds.data.packedByteSize(), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
+		VkUtil::updateDescriptorSet(g_Device, tl.buffer, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
 	}
 
 	//specifying the uniform buffer location
@@ -2223,10 +2279,16 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	descriptorWrite.pBufferInfo = desBufferInfos;
 
 	vkUpdateDescriptorSets(g_Device, 1, &descriptorWrite, 0, nullptr);
-	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+	if(ds.dataType == DataType::Hierarchichal)
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, pcSettings.maxHierarchyLines * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+	else
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
 	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.uboDescSet);
 
-	VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+	if(ds.dataType == DataType::Hierarchichal)
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, pcSettings.maxHierarchyLines * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+	else
+		VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds.data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
 	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.medianUboDescSet);
 
 	rgb col = drawListColorPalette->getNextColor();
@@ -2234,13 +2296,23 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 	dl.name = std::string(listName);
 	dl.buffer = tl.buffer;
 	dl.dataDescriptorSet = ds.buffer.descriptorSet;
-	dl.color = { (float)col.r,(float)col.g,(float)col.b,pcSettings.autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, 1.f) : pcSettings.alphaDrawLists };
+	dl.color = { (float)col.r,(float)col.g,(float)col.b,pcSettings.autoAlpha ? std::clamp(1.0f/ (tl.indices.size() * .001f),.004f, .99f) : pcSettings.alphaDrawLists };
 	dl.prefColor = dl.color;
 	dl.show = true;
 	dl.showHistogramm = true;
 	dl.parentDataSet = ds.name;
-	dl.indices = std::vector<uint32_t>(tl.indices);
+	
 	dl.brushedRatioToParent = std::vector<float>(pcAttributes.size(), 1);
+	if(ds.dataType == DataType::Hierarchichal){
+		dl.inheritanceFlags = InheritanceFlags::hierarchical;
+		dl.indices = {};		//nothing yet loaded
+		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
+		dl.hierarchyBinManager= std::make_shared<HierarchyBinManager>(hierarchy, pcSettings.maxHierarchyLines);
+		fillVertexBuffer(ds.buffer, dl.hierarchyBinManager->retrieveNewDataC());
+	}
+	else{
+		dl.indices = std::vector<uint32_t>(tl.indices);
+	}
 
 	//adding a standard brush for every attribute
 	for (Attribute a : pcAttributes) {
@@ -2661,6 +2733,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		uint32_t trafoSize = sizeof(ubo.vertTransformations[0]) * ubo.vertTransformations.size();
 		std::vector<uint8_t> bits(uboSize + trafoSize);
 		ubo.vertTransformations[0].w = (priorityAttribute != -1 && c == priorityListIndex) ? 1.f : 0;
+		ubo.dataFlags = static_cast<uint32_t>(ds.inheritanceFlags);
 		ubo.color = ds.color;
 		std::copy_n(reinterpret_cast<uint8_t*>(&ubo), uboSize, bits.data());
 		std::copy_n(reinterpret_cast<uint8_t*>(ubo.vertTransformations.data()), trafoSize, bits.data() + uboSize);
@@ -3577,6 +3650,86 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 	return std::vector<int>();
 }
 
+static bool openHierarchy(const char* filename, const char* attributeInfo){
+	//opening the info file to get attribute information
+	std::vector<Attribute> infoAttributes;				//note that there is indeed one extra attribute available for the cluster counts which is not inside this vector
+	std::vector<std::string> infoAttributeNames;
+	std::ifstream info(attributeInfo, std::ios::binary);
+	if(!info){
+		std::cout << "The .info file for the hierarchical dataset could not be opened";
+		return false;
+	}
+	std::string tmp; info >> tmp;
+	while(info.good() && !info.eof()){
+		infoAttributes.push_back({});
+		info >> infoAttributes.back().name >> infoAttributes.back().min >> infoAttributes.back().max;
+		infoAttributes.back().originalName = infoAttributes.back().name;
+		if(infoAttributes.back().min == infoAttributes.back().max){
+			infoAttributes.back().min -= .1f;
+			infoAttributes.back().max += .1f;
+		}
+		infoAttributeNames.push_back(infoAttributes.back().name);
+		info.get();		//jumping over the newline character to get proper eof notification
+	}
+	if(infoAttributes.back().name.empty()) 
+		infoAttributes.pop_back();
+
+	//checking attributes correctnes
+	auto permutation = checkAttriubtes(infoAttributeNames);	//note: permutation is currently not used, as its thought that the dataest will always have the same structure
+	if(!pcAttributes.empty() && permutation.empty()){
+		std::cout << "The attributes of the hierarchical data set are not the same as the ones already loaded in the program." << std::endl;
+		return false;
+	}
+	if(pcAttributes.empty()){
+		pcAttributes = infoAttributes;
+
+		//setting up the boolarray and setting all the attributes to true
+		pcAttributeEnabled = new bool[pcAttributes.size()];
+		activeBrushAttributes = new bool[pcAttributes.size()];
+		for (int i = 0; i < pcAttributes.size(); i++) {
+			pcAttributeEnabled[i] = true;
+			activeBrushAttributes[i] = false;
+			pcAttrOrd.push_back(i);
+		}
+	}
+
+	DataSet ds{};			//the data variable of the dataset will stay empty
+	std::string sFilename(filename);
+	ds.name = sFilename.substr(sFilename.find_last_of("/\\") + 1);
+	if(ds.name.empty()){
+		sFilename.pop_back();
+		ds.name = sFilename.substr(sFilename.find_last_of("/\\") + 1);
+	}
+	ds.dataType = DataType::Hierarchichal;	//setting the hierarchical type to indicate hierarchical data
+	VertexBufferCreateInfo cI{};
+	cI.maxLines = pcSettings.maxHierarchyLines;
+	//cI.additionalAttributeStorage = 1;		//TODO: change to a variable size
+	{
+		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
+		//HierarchyBinManager man(hierarchy);
+		cI.additionalAttributeStorage = 1e6;//man.retrieveNewData().packedByteSize();
+	}
+	cI.dataType = DataType::Hierarchichal;
+	createPcPlotVertexBuffer(pcAttributes, ds.data, std::optional<VertexBufferCreateInfo>(cI));
+	ds.buffer = g_PcPlotVertexBuffers.back();
+	std::string_view fileView(filename);
+	ds.additionalData.insert(ds.additionalData.begin(), reinterpret_cast<const uint8_t*>(&fileView.front()), reinterpret_cast<const uint8_t*>(&fileView.back() + 1));
+
+	// adding the default template list
+	TemplateList tl = {};
+	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
+	tl.name = "Default Templatelist";
+	tl.isIndexRange = true;
+	tl.indices = {0,0};
+	for(auto& a: infoAttributes)
+		tl.minMax.push_back(std::pair<float, float>{a.min, a.max});
+	tl.parentDataSetName = ds.name;
+	ds.drawLists.push_back(tl);
+
+	g_PcPlotDataSets.push_back(ds);
+	return true;
+}
+
 static bool openCsv(const char* filename) {
 
 	std::ifstream f(filename, std::ios::in | std::ios::binary);
@@ -3990,7 +4143,7 @@ static bool openDlf(const char* filename) {
 
 			//after Attribute collection reading in the data
 			DataSet ds;
-			ds.dlfData = true;
+			ds.dataType = DataType::ContinuousDlf;
 			if (tmp != std::string("Data:")) {
 				std::cout << "Data Section not found. Got " << tmp << " instead." << std::endl;
 				pcAttributes.clear();
@@ -4752,7 +4905,22 @@ static bool openDataset(const char* filename) {
 	//checking the datatype and calling the according method
 	std::string file = filename;
     bool opened = false;
-	if (file.substr(file.find_last_of(".") + 1) == "csv") {
+	if(std::string_view(file).substr(file.find_last_of("/\\") + 1).find_last_of(".") == std::string_view::npos){	//no file but a folder
+		std::string hierarchyInfo;
+		for(const auto& entry: std::filesystem::directory_iterator(filename)){
+			//auto ext = entry.path().extension();
+			//if(ext.string().size())
+			//	std::cout << ext.string() << std::endl;
+			if(entry.is_regular_file() && entry.path().filename() == "attr.info"){
+				hierarchyInfo = entry.path().string();
+				break;
+			}
+		}
+		if(hierarchyInfo.size()){	//opening hierarchy dataset
+			opened = openHierarchy(filename, hierarchyInfo.c_str());
+		}
+	}
+	else if (file.substr(file.find_last_of(".") + 1) == "csv") {
 		opened = openCsv(filename);
 	}
 	else if (file.substr(file.find_last_of(".") + 1) == "dlf") {
@@ -4820,7 +4988,7 @@ static bool openDataset(const char* filename) {
 	s.type = "AttributeSetting";
 	settingsManager->addSetting(s);
 
-	sortAttributes();		//sortin the attributes to display in alphabetical order
+	sortAttributes();		//sorting the attributes to display in alphabetical order
 
 	delete[] static_cast<char*>(s.data);
     return true;
@@ -5458,9 +5626,33 @@ static void updateWorkbenchRenderings(DrawList& dl){
 }
 
 static bool updateActiveIndices(DrawList& dl) {
+	//std::cout << dl.data->size() << std::endl;
+	if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
 		if (ImGui::GetIO().MouseDown[0] && !ImGui::IsMouseDoubleClicked(0)) return false;
+	}
+
+	//reloading data points if brush has changed
+	if(dl.hierarchyBinManager){
+		std::vector<brushing::RangeBrush> rangeBrushes;
+		//adding local brushes
+		uint32_t axis = 0;
+		for(auto& b:dl.brushes){
+			brushing::RangeBrush brush;
+			for(auto& range: b){
+				brush.push_back({axis, range.minMax.first, range.minMax.second});
+			}
+			if(brush.size())
+				rangeBrushes.push_back(std::move(brush));
+			++axis;
+		}
+		//adding global brushes
+		//TODO: global brushes
+		static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
+		if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
+			dl.hierarchyBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
+		prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 	}
 
 	//getting the parent dataset data
@@ -5696,7 +5888,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	}
 
 	//apply lasso brushes
-	bool lassoBrushExists = scatterplotWorkbench->lassoSelections.find(dl.name) != scatterplotWorkbench->lassoSelections.end();
+	bool lassoBrushExists = scatterplotWorkbench->lassoSelections.find(dl.name) != scatterplotWorkbench->lassoSelections.end() && scatterplotWorkbench->lassoSelections.find(dl.name)->second.size();
 	if(lassoBrushExists){
 		GpuBrusher::ReturnStruct res = gpuBrusher->brushIndices(scatterplotWorkbench->lassoSelections[dl.name], data->size(), dl.buffer, dl.indicesBuffer, dl.indices.size(), dl.activeIndicesBufferView, pcAttributes.size(), firstBrush, pcSettings.brushCombination == 1, true);
 		firstBrush = false;
@@ -5712,10 +5904,10 @@ static bool updateActiveIndices(DrawList& dl) {
 				break;
 			}
 		}
-		std::vector<uint8_t> actives(data->size(), 0);			//vector with 0 initialized everywhere
-		for (int i : dl.indices) {								//setting all active indices to true
-			actives[i] = 1;
-		}
+		std::vector<uint8_t> actives(data->size(), 1);			//vector with 1 initialized everywhere
+		//for (int i : dl.indices) {								//setting all active indices to true
+		//	actives[i] = 1;
+		//}
 		VkUtil::uploadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, data->size() * sizeof(bool), actives.data());
 	}
 
@@ -7331,6 +7523,22 @@ int main(int, char**)
 	{
 		compressionWorkbench = std::make_shared<CompressionWorkbench>();
 	}
+
+	{
+		CompressionRenderer::CreateInfo info{};
+		info.context.screenSize[0] = g_PcPlotWidth;
+		info.context.screenSize[0] = g_PcPlotHeight;
+		info.context.physicalDevice = g_PhysicalDevice;
+		info.context.device = g_Device;
+		info.context.descriptorPool = g_DescriptorPool;
+		info.context.commandPool = g_PcPlotCommandPool;
+		info.context.queue = g_Queue;
+		info.renderPass = g_PcPlotRenderPass_noClear;
+		info.dataLayout = g_PcPlotDataSetLayout;
+		info.uniformLayout = g_PcPlotDescriptorLayout;
+
+		compressionRenderer = CompressionRenderer::acquireReference(info);
+	}
 	
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -8456,7 +8664,7 @@ int main(int, char**)
 							}
 						}
 						for (DataSet& ds : g_PcPlotDataSets) {
-							if (ds.dlfData) {			//oneData indicates a .dlf data -> template brushes are available
+							if (ds.dataType == DataType::ContinuousDlf) {			//oneData indicates a .dlf data -> template brushes are available
 								for (TemplateList& tl : ds.drawLists) {
 									//checking if the template list is in the correct subspace and if so adding it to the template Brushes
 									std::string s = tl.name.substr(tl.name.find_first_of('[') + 1, tl.name.find_last_of(']') - tl.name.find_first_of('[') - 1);
@@ -8484,7 +8692,7 @@ int main(int, char**)
 									}
 								}
 							}
-							else if (pcSettings.showCsvTemplates && !ds.dlfData) {
+							else if (pcSettings.showCsvTemplates && ds.dataType != DataType::ContinuousDlf) {
 								auto tl = ++ds.drawLists.begin();
 								for (; tl != ds.drawLists.end(); ++tl) {
 									TemplateBrush t = {};
@@ -9338,7 +9546,7 @@ int main(int, char**)
 							}
 						}
 					}
-					else {
+					else if(pcAttributeEnabled){	//safetycheck if any attributes are available
 						bool anyHover = false;
 						static bool newBrush = false;
 						std::set<int> brushDelete;
@@ -9770,6 +9978,34 @@ int main(int, char**)
 						brushDragIds.clear();
 						pcPlotRender = updateActiveIndices(*dl);
 						updateIsoSurface(*dl);
+					}
+				}
+				if(ImGui::MenuItem("Fit axis to bounds", "", false, (bool)brushDragIds.size())){
+					if (selectedGlobalBrush >= 0){
+						for(auto& gb: globalBrushes[selectedGlobalBrush].brushes){
+							for (int br = 0; br < gb.second.size(); ++br){
+								if(brushDragIds.find(gb.second[br].first) != brushDragIds.end()){
+									pcAttributes[gb.first].min = gb.second[br].second.first;
+									pcAttributes[gb.first].max = gb.second[br].second.second;
+									pcPlotRender = true;
+								}
+							}
+						}
+					}
+					else{
+						auto dl = g_PcPlotDrawLists.begin();
+						std::advance(dl, pcPlotSelectedDrawList[0]);
+						uint32_t axis = 0;
+						for (auto& gb: dl->brushes) {
+							for (int br = 0; br < gb.size(); ++br){
+								if(brushDragIds.find(gb[br].id) != brushDragIds.end()){
+									pcAttributes[axis].min = gb[br].minMax.first;
+									pcAttributes[axis].max = gb[br].minMax.second;
+									pcPlotRender = true;
+								}
+							}
+							++axis;
+						}
 					}
 				}
 				ImGui::DragInt("LiveBrushThreshold", &pcSettings.liveBrushThreshold, 1000, 0, 10000000);
@@ -10954,7 +11190,7 @@ int main(int, char**)
 			ImGui::Text("Draw lists");
 			ImGui::SameLine();
 			static float uniform_alpha = .5f;
-			if (ImGui::SliderFloat("Set uniform alpha", &uniform_alpha, 0.003f, 1.0f)) {	//when changed set alpha for each dl
+			if (ImGui::SliderFloat("Set uniform alpha", &uniform_alpha, 0.003f, .99f)) {	//when changed set alpha for each dl
 				for (DrawList& dl : g_PcPlotDrawLists) {
 					dl.color.w = uniform_alpha;
 				}
@@ -14253,6 +14489,20 @@ int main(int, char**)
 
 		compressionWorkbench->draw();
 
+		//checking data from hierarch importer
+		for(auto& dl: g_PcPlotDrawLists){
+			if(dl.hierarchyBinManager && dl.hierarchyBinManager->newDataLoaded){
+				auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& ds){return ds.name == dl.parentDataSet;});
+				ds->data = dl.hierarchyBinManager->retrieveNewData();
+				//todo upload new data, set index list ...
+				fillVertexBuffer(ds->buffer, ds->data);
+				dl.indices.resize(ds->data.size());
+				std::iota(dl.indices.begin(), dl.indices.end(), 0);
+				updateActiveIndices(dl);
+				pcPlotRender = true;
+			}
+		}
+
 		pcSettings.rescaleTableColumns = false;
 
 		// Rendering
@@ -14336,6 +14586,8 @@ int main(int, char**)
 		compressionWorkbench->stopThreads();
 	}
 
+	if(compressionRenderer)
+		compressionRenderer->release();
 
 	err = vkDeviceWaitIdle(g_Device);
 	check_vk_result(err);

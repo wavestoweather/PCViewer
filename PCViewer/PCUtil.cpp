@@ -1,6 +1,9 @@
 #include "PCUtil.h"
 #include <cmath>
 #include <netcdf.h>
+#include <mutex>
+#include <condition_variable>
+#include <sstream>
 #include "Attribute.hpp"
 
 std::vector<char> PCUtil::readByteFile(const std::string& filename)
@@ -683,4 +686,62 @@ _name(displayName)
 PCUtil::Stopwatch::~Stopwatch(){
 	auto end = std::chrono::high_resolution_clock::now();
 	_ostream << "Stopwatch " << _name << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - _start).count() << " ms" << std::endl;
+}
+
+PCUtil::AverageWatch::AverageWatch(float& average, uint32_t& count) :
+_a(average),
+_c(count)
+{
+	_start = std::chrono::high_resolution_clock::now();
+}
+
+PCUtil::AverageWatch::~AverageWatch() 
+{
+	auto end = std::chrono::high_resolution_clock::now();
+	float t = _c / float(++_c);
+	_a = t * _a + (1 - t) * std::chrono::duration_cast<std::chrono::nanoseconds>(end - _start).count() * 1e-3;
+}
+
+PCUtil::AverageWatch& PCUtil::AverageWatch::operator=(const PCUtil::AverageWatch & o) 
+{
+	this->_a = o._a;
+	this->_c = o._c;
+	this->_start = o._start;
+	return *this;
+}
+
+void PCUtil::Semaphore::release() 
+{
+	std::lock_guard<decltype(_mutex)> lock(_mutex);
+	++_count;
+	_cv.notify_one();
+}
+
+void PCUtil::Semaphore::releaseN(int n) 
+{
+	std::lock_guard<decltype(_mutex)> lock(_mutex);
+	_count = n;
+	_cv.notify_all();
+}
+
+void PCUtil::Semaphore::acquire() 
+{
+	std::unique_lock<decltype(_mutex)> lock(_mutex);
+	while(!_count)
+		_cv.wait(lock);
+	--_count;
+}
+template<typename T>
+std::stringstream& operator>>(std::stringstream& out, std::vector<T>& v) 
+{
+	std::string vec;
+	out >> vec;
+	v = PCUtil::fromReadableString<T>(vec);
+	return out;
+}
+
+template<typename T>
+std::stringstream& operator<<(std::stringstream& out, std::vector<T>& v) 
+{
+	return out << PCUtil::toReadableString(v);
 }

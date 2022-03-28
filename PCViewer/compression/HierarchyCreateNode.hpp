@@ -2,6 +2,10 @@
 #include <vector>
 #include <cstring>
 #include <shared_mutex>
+#include <queue>
+#include <set>
+#include "CacheManagerInterface.hpp"
+
 
 
 // interface for the hierarchy create node. To cluster the dataset an instance from a class implementing this interface is being
@@ -25,9 +29,29 @@
 // [vector<CacheInstance]cacheInstances                                 //note:The final file is simply a vector of cache instances
 class HierarchyCreateNode{
 public:
+    struct NodeInfo{
+        HierarchyCreateNode* node;
+        long score;
+        size_t byteSize;
+        bool operator<(const NodeInfo& other) const{
+            return score < other.score;
+        }
+        bool operator>(const NodeInfo& other) const{
+            return score > other.score;
+        }
+    };
+
+    struct HierarchyCacheInfo{
+        std::priority_queue<NodeInfo, std::vector<NodeInfo>, std::greater<NodeInfo>> queue;
+        uint32_t curByteSize;
+        uint32_t cachingSize;
+    };
+
     virtual void addDataPoint(const std::vector<float>& d) = 0;
-    virtual HierarchyCreateNode* getCacheNode(int& cacheScore) = 0;
+    virtual HierarchyCreateNode* getCacheNode(long& cacheScore) = 0;
+    virtual void getCacheNodes(HierarchyCacheInfo& info) = 0;
     virtual void cacheNode(const std::string_view& cachePath, const std::string& parentId, float* parentCenter, float parentEps, HierarchyCreateNode* chacheNode) = 0;
+    virtual void cacheNodes(CacheManagerInterface& cacheInterfaceManager, const std::string& parentId, float* parentCenter, float parentEps, const std::set<HierarchyCreateNode*>& cacheNodes) = 0; //caches all nodes in the cacheNodes set. If cacheNodes set is empty, everything should be cached
     virtual size_t getByteSize() = 0;
     virtual std::shared_mutex& getMutex() = 0;
 };

@@ -530,7 +530,7 @@ bool GpuRadixSorter::checkHistogram()
     uint32_t bin = getBin(255, 3);
     for (auto n : cpuKeys)
         hist[getBin(n, pass)]++;
-    uint cpuBinCount = 0, gpuBinCount = 0;
+    uint32_t cpuBinCount = 0, gpuBinCount = 0;
     if (false)
     { // histogram computation
         for (int i = 0; i < hist.size(); ++i)

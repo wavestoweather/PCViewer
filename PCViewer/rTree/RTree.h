@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <inttypes.h>
 
 #define ASSERT assert // RTree uses ASSERT( condition )
 #ifndef Min
@@ -370,9 +371,19 @@ protected:
   bool SaveRec(Node* a_node, RTFileStream& a_stream);
   bool LoadRec(Node* a_node, RTFileStream& a_stream);
   void CopyRec(Node* current, Node* other);
+  inline uint64_t factorial(uint32_t x){
+    uint64_t res = 1;
+    for(;x > 1; x--){
+      res *= x;
+    }
+    return res;
+  }
 
   Node* m_root;                                    ///< Root of tree
   ELEMTYPEREAL m_unitSphereVolume;                 ///< Unit sphere constant for required number of dimensions
+
+public:
+  uint32_t BYTE_SIZE{};                            /// currently only supports insertion!!!
 };
 
 
@@ -473,7 +484,12 @@ RTREE_QUAL::RTree()
 
   m_root = AllocNode();
   m_root->m_level = 0;
-  m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[NUMDIMS];
+  if(NUMDIMS < 21)
+    m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[NUMDIMS];
+  else{
+    float t = pow(M_PI, NUMDIMS / 2.f);
+    m_unitSphereVolume = t / factorial(NUMDIMS / 2);
+  }
 }
 
 
@@ -824,6 +840,7 @@ bool RTREE_QUAL::SaveRec(Node* a_node, RTFileStream& a_stream)
 RTREE_TEMPLATE
 void RTREE_QUAL::RemoveAll()
 {
+  BYTE_SIZE = 0;
   // Delete all existing nodes
   Reset();
 
@@ -872,6 +889,7 @@ typename RTREE_QUAL::Node* RTREE_QUAL::AllocNode()
   // EXAMPLE
 #endif // RTREE_DONT_USE_MEMPOOLS
   InitNode(newNode);
+  BYTE_SIZE += sizeof(Node);
   return newNode;
 }
 

@@ -1,5 +1,5 @@
-#ifndef RTREE_H
-#define RTREE_H
+#ifndef RTREEDYNAMIC_H
+#define RTREEDYNAMIC_H
 
 /*
   This file originates from https://github.com/nushoin/RTreeDynamic and was implemented by AlexVonB
@@ -12,6 +12,7 @@
 
 // NOTE These next few lines may be win32 specific, you may need to modify them to compile on other platform
 #include <stdio.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
+#include <inttypes.h>
 
 #define ASSERT assert // RTreeDynamic uses ASSERT( condition )
 #ifndef Min
@@ -39,7 +41,7 @@
 #define RTREE_USE_SPHERICAL_VOLUME // Better split classification, may be slower on some systems
 
 // Fwd decl
-class RTFileStream;  // File I/O helper class, look below for implementation and notes.
+class RTDFileStream;  // File I/O helper class, look below for implementation and notes.
 
 
 /// \class RTreeDynamic
@@ -114,13 +116,13 @@ public:
   /// Load tree contents from file
   bool Load(const char* a_fileName);
   /// Load tree contents from stream
-  bool Load(RTFileStream& a_stream);
+  bool Load(RTDFileStream& a_stream);
 
 
   /// Save tree contents to file
   bool Save(const char* a_fileName);
   /// Save tree contents to stream
-  bool Save(RTFileStream& a_stream);
+  bool Save(RTDFileStream& a_stream);
 
   /// Iterator is not remove safe.
   class Iterator
@@ -284,6 +286,7 @@ public:
   DATATYPE& GetAt(Iterator& a_it)                 { return *a_it; }
 
   int NUMDIMS;
+  uint32_t BYTE_SIZE{};
 
 protected:
   /// Minimal bounding rectangle (n-dimensional)
@@ -370,9 +373,16 @@ protected:
   void RemoveAllRec(Node* a_node);
   void Reset();
   void CountRec(Node* a_node, int& a_count);
+  inline uint64_t factorial(uint32_t x){
+    uint64_t res = 1;
+    for(;x > 1; x--){
+      res *= x;
+    }
+    return res;
+  }
 
-  bool SaveRec(Node* a_node, RTFileStream& a_stream);
-  bool LoadRec(Node* a_node, RTFileStream& a_stream);
+  bool SaveRec(Node* a_node, RTDFileStream& a_stream);
+  bool LoadRec(Node* a_node, RTDFileStream& a_stream);
   void CopyRec(Node* current, Node* other);
 
   Node* m_root;                                    ///< Root of tree
@@ -382,19 +392,19 @@ protected:
 
 // Because there is not stream support, this is a quick and dirty file I/O helper.
 // Users will likely replace its usage with a Stream implementation from their favorite API.
-class RTFileStream
+class RTDFileStream
 {
   FILE* m_file;
 
 public:
 
 
-  RTFileStream()
+  RTDFileStream()
   {
     m_file = NULL;
   }
 
-  ~RTFileStream()
+  ~RTDFileStream()
   {
     Close();
   }
@@ -477,7 +487,12 @@ RTREE_QUAL::RTreeDynamic(int numDims):NUMDIMS(numDims)
 
   m_root = AllocNode();
   m_root->m_level = 0;
-  m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[NUMDIMS];
+  if(NUMDIMS < 21)
+    m_unitSphereVolume = (ELEMTYPEREAL)UNIT_SPHERE_VOLUMES[NUMDIMS];
+  else{
+    float t = pow(M_PI, NUMDIMS / 2.f);
+    m_unitSphereVolume = t / factorial(NUMDIMS / 2);
+  }
 }
 
 
@@ -485,6 +500,7 @@ RTREE_TEMPLATE
 RTREE_QUAL::RTreeDynamic(const RTreeDynamic& other) : RTreeDynamic(other.NUMDIMS)
 {
   CopyRec(m_root, other.m_root);
+  BYTE_SIZE = other.BYTE_SIZE;
 }
 
 
@@ -509,6 +525,7 @@ void RTREE_QUAL::Insert(const ELEMTYPE *a_min, const ELEMTYPE *a_max, const DATA
   branch.m_data = a_dataId;
   branch.m_rect.m_min.resize(NUMDIMS);
   branch.m_rect.m_max.resize(NUMDIMS);
+  BYTE_SIZE += 2 * NUMDIMS * sizeof(branch.m_rect.m_min[0]);
   branch.m_child = NULL;
 
   for(int axis=0; axis<NUMDIMS; ++axis)
@@ -607,7 +624,7 @@ bool RTREE_QUAL::Load(const char* a_fileName)
 {
   RemoveAll(); // Clear existing tree
 
-  RTFileStream stream;
+  RTDFileStream stream;
   if(!stream.OpenRead(a_fileName))
   {
     return false;
@@ -623,7 +640,7 @@ bool RTREE_QUAL::Load(const char* a_fileName)
 
 
 RTREE_TEMPLATE
-bool RTREE_QUAL::Load(RTFileStream& a_stream)
+bool RTREE_QUAL::Load(RTDFileStream& a_stream)
 {
   // Write some kind of header
   int _dataFileId = ('R'<<0)|('T'<<8)|('R'<<16)|('E'<<24);
@@ -671,7 +688,7 @@ bool RTREE_QUAL::Load(RTFileStream& a_stream)
 
 
 RTREE_TEMPLATE
-bool RTREE_QUAL::LoadRec(Node* a_node, RTFileStream& a_stream)
+bool RTREE_QUAL::LoadRec(Node* a_node, RTDFileStream& a_stream)
 {
   a_stream.Read(a_node->m_level);
   a_stream.Read(a_node->m_count);
@@ -763,7 +780,7 @@ void RTREE_QUAL::CopyRec(Node* current, Node* other)
 RTREE_TEMPLATE
 bool RTREE_QUAL::Save(const char* a_fileName)
 {
-  RTFileStream stream;
+  RTDFileStream stream;
   if(!stream.OpenWrite(a_fileName))
   {
     return false;
@@ -778,7 +795,7 @@ bool RTREE_QUAL::Save(const char* a_fileName)
 
 
 RTREE_TEMPLATE
-bool RTREE_QUAL::Save(RTFileStream& a_stream)
+bool RTREE_QUAL::Save(RTDFileStream& a_stream)
 {
   // Write some kind of header
   int dataFileId = ('R'<<0)|('T'<<8)|('R'<<16)|('E'<<24);
@@ -805,7 +822,7 @@ bool RTREE_QUAL::Save(RTFileStream& a_stream)
 
 
 RTREE_TEMPLATE
-bool RTREE_QUAL::SaveRec(Node* a_node, RTFileStream& a_stream)
+bool RTREE_QUAL::SaveRec(Node* a_node, RTDFileStream& a_stream)
 {
   a_stream.Write(a_node->m_level);
   a_stream.Write(a_node->m_count);
@@ -842,6 +859,7 @@ bool RTREE_QUAL::SaveRec(Node* a_node, RTFileStream& a_stream)
 RTREE_TEMPLATE
 void RTREE_QUAL::RemoveAll()
 {
+  BYTE_SIZE = 0;
   // Delete all existing nodes
   Reset();
 
@@ -890,6 +908,7 @@ typename RTREE_QUAL::Node* RTREE_QUAL::AllocNode()
   // EXAMPLE
 #endif // RTREE_DONT_USE_MEMPOOLS
   InitNode(newNode);
+  BYTE_SIZE += sizeof(Node);
   return newNode;
 }
 

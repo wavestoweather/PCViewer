@@ -5,13 +5,13 @@
 #include <iostream>
 #include "../PCUtil.h"
 
-NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores)
-{
+static std::vector<std::string> getDataFilenames(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores){
     // searching all files in the given directory (also in the subdirectories) and append all found netCdf files to the _files variable
     // all files and folders given in ignores will be skipped
     // if path is a netCdf file, only add the netcdf file
+    std::vector<std::string> files;
     if(path.find_last_of(".") <= path.size() && path.substr(path.find_last_of(".")) == ".nc"){
-        _files.push_back(std::string(path));
+        files.push_back(std::string(path));
     }
     else{
         auto isIgnored = [&](const std::string_view& n, const std::vector<std::string_view>& ignores){
@@ -34,15 +34,21 @@ NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::
                     }
                     else if(entry.is_regular_file()){
                         // check if should be ignored
-                        std::string_view filename = entry.path().string().substr(entry.path().string().find_last_of("/\\"));
+                        std::string filename = entry.path().filename().string();
                         if(isIncluded(filename, includes) && !isIgnored(filename, ignores) && filename.substr(filename.find_last_of(".")) == ".nc"){
-                            _files.push_back(entry.path().string());
+                            files.push_back(entry.path().string());
                         }
                     }
                 }
             }
         }
     }
+    return files;
+}
+
+NetCdfLoader::NetCdfLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores)
+{
+    _files = getDataFilenames(path, includes, ignores);
     
     std::cout << "Found " << _files.size() << " netCdf files in the given path" << std::endl;
 
@@ -114,4 +120,62 @@ bool NetCdfLoader::getNextNormalized(std::vector<float>& d)
         d[i] = (d[i] - _attributes[i].min) / (_attributes[i].max - _attributes[i].min + NORM_EPS);
     }
     return true;
+}
+
+NetCdfColumnLoader::NetCdfColumnLoader(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores) 
+{
+    _files = getDataFilenames(path, includes, ignores);
+    
+    std::cout << "Found " << _files.size() << " netCdf files in the given path" << std::endl;
+
+    if(_files.empty())
+        throw std::runtime_error("NetCdfLoader::NetCdfLoader(...) Could not find any files.");
+    
+    queryAttributes = PCUtil::queryNetCDF(_files.front());
+}
+
+NetCdfColumnLoader::DataInfo NetCdfColumnLoader::dataAnalysis(){
+    if(_attributes.size()){
+        return {_dataSize, _attributes};
+    }
+    std::cout << "Data analysis: 0%";
+    std::cout.flush();
+    _dataSize = 0;
+    for(int i = 0; i < _files.size(); ++i){
+        Data d = PCUtil::openNetCdf(_files[i], _attributes, queryAttributes);  //parses netcdf file and updates the _attributes vector
+        _dataSize += d.size();
+        _progress = (i + 1.0) / _files.size();
+        std::cout << "\rData analysis: " << _progress * 100 << "%";
+        std::cout.flush();
+    }
+    std::cout << std::endl;
+    return {_dataSize, _attributes};
+}
+
+void NetCdfColumnLoader::normalize() 
+{
+    if(!_normalized){
+        for(int c = 0; c < _curData.columns.size(); ++c){
+            float diff = _attributes[c].max - _attributes[c].min;
+            for(float& f: _curData.columns[c]){
+                f = (f - _attributes[c].min) / diff;
+            }
+        }
+    }
+    _normalized = true;
+}
+
+bool NetCdfColumnLoader::loadNextData() 
+{
+    if(_curData.size() == 0 || ++_curFile < _files.size()){
+        _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, queryAttributes);
+        if(_normalized){    // normalize if once normalized
+            _normalized = false;
+            normalize();
+        }
+        _progress = (_curFile + 1.0) / _files.size();
+        return true;
+    }
+    else
+        return false;
 }

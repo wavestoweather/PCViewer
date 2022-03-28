@@ -8,7 +8,11 @@
 #include "ClusterBundles.hpp"
 #include "TemplateList.hpp"
 #include "Attribute.hpp"
-#include <optional>
+#include "compression/HierarchyBinManager.hpp"
+#include <memory>
+
+//forward declaration
+class HierarchyBinManager;
 
 struct Vec4 {
 	float x;
@@ -41,13 +45,20 @@ struct Buffer {
 	}
 };
 
+enum class DataType{
+	Continuous,
+	ContinuousDlf,
+	Hierarchichal
+};
+
 struct DataSet {
 	std::string name;
 	Buffer buffer;
 	Data data;
 	std::list<TemplateList> drawLists;
-	int reducedDataSetSize;			//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
-	bool dlfData;
+	int reducedDataSetSize;					//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
+	DataType dataType;
+	std::vector<uint8_t> additionalData;	//byte vector for additional data. For Hierarchical data this is where teh hierarchy folder is stored
 
 	bool operator==(const DataSet& other) const {
 		return this->name == other.name;
@@ -59,17 +70,31 @@ struct Brush {
 	std::pair<float, float> minMax;
 };
 
+enum class InheritanceFlags{
+	dlf = 1,
+	hierarchical = 1 << 1
+};
+
+// struct holding the information for a drawable instance of a TemplateList
+//
+// The id of the Drawlist is its name!
+//
+// The inheritedFlags field contains important information inherited from the dataset and template list this drawlistis created from
+// Such inheritance bits can be:
+//	- Hierarchical: Instead of creating buffers which are sized to hold the data information, the buffers have a size to be able to hold as much lines as set in maxHierarchyLines
+//
 struct DrawList {
 	std::string name;
 	std::string parentDataSet;
 	TemplateList* parentTemplateList;
 	const Data* data;
 	const std::vector<Attribute>* attributes;
+	InheritanceFlags inheritanceFlags;
 	Vec4 color;
 	Vec4 prefColor;
 	bool show;
 	bool showHistogramm;
-	std::vector<float> brushedRatioToParent;     // Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
+	std::vector<float> brushedRatioToParent;     	// Stores the ratio of points of this data set and points going through the same 1D brushes of the parent.
 	bool immuneToGlobalBrushes;
 	VkBuffer buffer;								// vulkan data buffer
 	VkDescriptorSet dataDescriptorSet;				//is relesed when dataset is removed
@@ -106,6 +131,7 @@ struct DrawList {
 	ClusterBundles* clusterBundles;
 	bool renderBundles, renderClusterBundles;
 	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
+	std::shared_ptr<HierarchyBinManager> hierarchyBinManager;	//optional import manger for hierarchy files
 };
 
 struct DrawlistDragDropInfo{
@@ -118,10 +144,32 @@ struct UniformBufferObject {
 	uint32_t amtOfVerts;
 	uint32_t amtOfAttributes;
 	float padding;
+	uint32_t dataFlags, fill, fill1, fill2;
 	Vec4 color;
 	std::vector<Vec4> vertTransformations;
 	//Vec4 VertexTransormations[];			//is now a variable length array at the end of the UBO
 	uint32_t size(){
 		return sizeof(UniformBufferObject) - sizeof(vertTransformations) + sizeof(vertTransformations[0]) * vertTransformations.size();
 	}
+};
+
+template<typename Infos, typename TArray>
+struct ArrayStruct: public Infos{
+	std::vector<TArray> array;
+	uint32_t size(){
+		return sizeof(ArrayStruct) - sizeof(array) + sizeof(array[0]) * array.size();
+	}
+	std::vector<uint8_t> toByteArray(){
+		std::vector<uint8_t> bytes(size());
+		const uint32_t infoSize = sizeof(ArrayStruct) - sizeof(array);
+		std::memcpy(bytes.data(), this, infoSize);
+		std::memcpy(bytes.data() + infoSize, array.data(), sizeof(array[0] * array.size()));
+		return bytes;
+	}
+};
+
+struct VertexBufferCreateInfo{
+	DataType dataType;
+	uint32_t maxLines;
+	uint32_t additionalAttributeStorage;
 };
