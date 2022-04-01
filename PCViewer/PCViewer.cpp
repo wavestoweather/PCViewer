@@ -2309,6 +2309,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
 		dl.hierarchyBinManager= std::make_shared<HierarchyBinManager>(hierarchy, pcSettings.maxHierarchyLines);
 		fillVertexBuffer(ds.buffer, dl.hierarchyBinManager->retrieveNewDataC());
+		dl.hierarchyBinManager->updateLineCombinations(pcAttrOrd);
 	}
 	else{
 		dl.indices = std::vector<uint32_t>(tl.indices);

@@ -676,7 +676,7 @@ Data PCUtil::openNetCdf(const std::string_view& filename,  /*inout*/ std::vector
 	return ds;
 }
 
-PCUtil::Stopwatch::Stopwatch(std::ostream& stream, const std::string& displayName):
+PCUtil::Stopwatch::Stopwatch(std::ostream& stream, const std::string_view& displayName):
 _ostream(stream),
 _name(displayName)
 {

@@ -862,6 +862,7 @@ namespace compression
         // -----------------------------------------------------------------------------------------------
         // writeout of the indices per attribute in separate files
         // -----------------------------------------------------------------------------------------------
+        
         std::vector<ByteOffsetSize> attributeCenterOffsets; 
         std::vector<IndexCenterFileData> centerFileData;
         uint32_t curByteOffset = 0;

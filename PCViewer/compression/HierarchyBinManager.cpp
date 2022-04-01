@@ -20,29 +20,29 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     // --------------------------------------------------------------------------------
     std::ifstream attributeInfos(_hierarchyFolder + "/attr.info", std::ios_base::binary);
     std::string cacheMethod; attributeInfos >> cacheMethod;
-    std::string vec; attributeInfos >> vec;
-    _dimensionSizes = PCUtil::fromReadableString<uint32_t>(vec);
+    //std::string vec; attributeInfos >> vec;
+    //_dimensionSizes = PCUtil::fromReadableString<uint32_t>(vec);
     assert(cacheMethod == compression::CachingMethodNames[int(compression::CachingMethod::Bundled)]);
     
     std::string a; float aMin, aMax;
-    while(attributeInfos >> a >> aMin >> aMax >> vec){
+    while(attributeInfos >> a >> aMin >> aMax){
         _attributes.push_back({a, a, {}, {}, aMin, aMax});
-        _attributeDimensions.push_back(PCUtil::fromReadableString<uint32_t>(vec));
+        //_attributeDimensions.push_back(PCUtil::fromReadableString<uint32_t>(vec));
     }
     attributeInfos.close();
 
-    std::ifstream clusterInfos(_hierarchyFolder + "/hierarchy.info", std::ios_base::binary);
-    assert(clusterInfos);
-    clusterInfos >> _hierarchyLevels;
-    clusterInfos >> _clusterDim;
-    _dimensionCombinations.resize(_clusterDim);
-    uint32_t clusterLevelSize;
-    for(int l = 0; l < _hierarchyLevels; ++l){
-        clusterInfos >> clusterLevelSize;
-        _clusterLevelSizes.push_back(clusterLevelSize);
-    }
-    assert(_clusterLevelSizes.size() == _hierarchyLevels);
-    clusterInfos.close();
+    //std::ifstream clusterInfos(_hierarchyFolder + "/hierarchy.info", std::ios_base::binary);
+    //assert(clusterInfos);
+    //clusterInfos >> _hierarchyLevels;
+    //clusterInfos >> _clusterDim;
+    //_dimensionCombinations.resize(_clusterDim);
+    //uint32_t clusterLevelSize;
+    //for(int l = 0; l < _hierarchyLevels; ++l){
+    //    clusterInfos >> clusterLevelSize;
+    //    _clusterLevelSizes.push_back(clusterLevelSize);
+    //}
+    //assert(_clusterLevelSizes.size() == _hierarchyLevels);
+    //clusterInfos.close();
 
     // --------------------------------------------------------------------------------
     // center infos
@@ -62,11 +62,12 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     // --------------------------------------------------------------------------------
     _attributeIndices.resize(_attributes.size());
     uint32_t dataSize = 0;
-    for(int i = 0; _attributes.size(); ++i){
+    for(int i = 0; i < _attributes.size(); ++i){
         std::ifstream indicesData(_hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
         uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;
         if(indicesSize > dataSize)
             dataSize = indicesSize;
+        _attributeIndices[i].resize(indicesSize);
         indicesData.read(reinterpret_cast<char*>(_attributeIndices[i].data()), indicesSize * sizeof(_attributeIndices[0][0]));
     }
 
@@ -192,14 +193,16 @@ void HierarchyBinManager::openHierarchyFiles(const std::vector<std::string_view>
     _dataLoadThread = std::thread(exec, files, this);
 }
 
-void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> attributeOrder){
+void HierarchyBinManager::updateLineCombinations(const std::vector<int> attributeOrder){
+    PCUtil::Stopwatch updateLineCombWatch(std::cout, "upadteLineCombinations()");
+    _attributeOrdering = attributeOrder;
     // ---------------------------------------------------------------------------
     // clustering together all attribute clusters
     // ---------------------------------------------------------------------------
     struct Cluster{
         uint32_t startIndex, endIndex; 
         float span; 
-        bool operator>(const Cluster& other) const{return span > other.span;};
+        bool operator>(const Cluster& other) const{return other.span > span;};  // strangely has to be inverted
     };
 
     std::vector<std::vector<Cluster>> attributeCluster(_attributes.size()); //contains all cluster for all attributes
@@ -208,20 +211,20 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> att
     uint32_t dimensionality = 2;
     using  ClusterQueue = PCUtil::PriorityQueue<Cluster, std::vector<Cluster>, std::greater<Cluster>>;
     for(int c = 0; c < _attributeOrdering.size() - 1; ++c){
-        std::vector<uint32_t> axes(dimensionality);
-        for(int d = std::max(c - d / 2 - 1, 0); d < std::min<uint32_t>(c + d / 2 + 1, _attributeOrdering.size()); ++d){
+        std::vector<uint32_t> axes{};
+        for(int d = std::max<int>(c - dimensionality / 2 + 1, 0); d < std::min<int>(c + dimensionality / 2 + 1, _attributeOrdering.size()); ++d){
             axes.push_back(_attributeOrdering[d]);
         }
-        std::sort(axes.begin(), axes.end());    // ordering should always be increasing
+        //std::sort(axes.begin(), axes.end());    // ordering should always be increasing
         std::vector<ClusterQueue> pQs(axes.size());  //for reach axis we are starting with the default cluster
         for(int i = 0; i < axes.size(); ++i){
-            uint32_t a = axes[i];    
-            pQs[i].push(Cluster{0, static_cast<uint32_t>(_attributeCenters[a].size()), _attributeCenters[a].back().max - _attributeCenters[a].back().min});
+            uint32_t a = _attributeOrdering[axes[i]];    
+            pQs[i].push(Cluster{0, static_cast<uint32_t>(_attributeCenters[a].size()), _attributeCenters[a].back().max - _attributeCenters[a].front().min});
         }
 
         uint32_t curCombinationCount = 1;   // always starts with one combination, as all queues have only a single element
         while(1){
-            std::vector<uint32_t> sortedQueues; // indeces of the queues in pQs
+            std::vector<uint32_t> sortedQueues(axes.size()); // indeces of the queues in pQs
             std::iota(sortedQueues.begin(), sortedQueues.end(), 0); // fill with indices
             std::sort(sortedQueues.begin(), sortedQueues.end(), [&](uint32_t a, uint32_t b){return pQs[a].top().span > pQs[b].top().span;});
             int p = 0;
@@ -230,7 +233,7 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> att
                     break;      // found a priority queue that does not excced axis attribute limit from previouis iterations
             }
             // checking if split is possible accordint to max lines limit or other limits
-            if(p >= sortedQueues.size())
+            if(p >= sortedQueues.size() || pQs[sortedQueues[p]].top().endIndex - pQs[sortedQueues[p]].top().startIndex <= 1)
                 break;  // all attributes are constrained in terms of cluster counts
             uint32_t nextCombCount = curCombinationCount / pQs[sortedQueues[p]].size() * (pQs[sortedQueues[p]].size() + 1);
             if(nextCombCount > _maxLines)
@@ -238,20 +241,20 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> att
             // split the biggest gap for the attribute combination
             auto& pQ = pQs[sortedQueues[p]];
             auto cl = pQ.pop();
-            uint32_t clAxis = axes[sortedQueues[p]];
+            uint32_t clAxis = _attributeOrdering[axes[sortedQueues[p]]];
             // finding the best split
             uint32_t bestSplit = 0;
             float maxGap = 0;
-            for(int i = cl.startIndex; i < cl.endIndex; ++i){
+            for(int i = cl.startIndex; i < cl.endIndex - 1; ++i){
                 float gap = _attributeCenters[clAxis][i + 1].min - _attributeCenters[clAxis][i].max;
                 if(gap > maxGap){
                     maxGap = gap;
-                    bestSplit = i;
+                    bestSplit = i + 1;
                 }
             }
             // pushing the two new clusters
-            pQ.push(Cluster{cl.startIndex, bestSplit, _attributeCenters[clAxis][bestSplit].max - _attributeCenters[clAxis][cl.startIndex].min});
-            pQ.push(Cluster{bestSplit, cl.endIndex, _attributeCenters[clAxis][cl.endIndex].max - _attributeCenters[clAxis][bestSplit + 1].min});
+            pQ.push(Cluster{cl.startIndex, bestSplit, _attributeCenters[clAxis][bestSplit - 1].max - _attributeCenters[clAxis][cl.startIndex].min});
+            pQ.push(Cluster{bestSplit, cl.endIndex, _attributeCenters[clAxis][cl.endIndex - 1].max - _attributeCenters[clAxis][bestSplit].min});
             // updating the cvurrent combination count
             curCombinationCount = nextCombCount;
         }
@@ -266,7 +269,7 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> att
     // updating combination counts
     // --------------------------------------------------------------------------- 
     _clusterData.clear();
-    _clusterData.columns.resize(2 * dimensionality + 1 + 1 + 1); // first all dimension combinations(including the x and y positions), then for each cluster a reference index to the dimensioncombinations followed by the active and overall count
+    _clusterData.columns.resize(2 * dimensionality + 1 + 1 + 1); // is composed of [...subdimension[dimensionality], ...axisYValues[dimensionality], dimIndex, activeCount, totalCount]
     // setting up index to cluster map for all attributes except one for quick lookup times
     std::vector<std::vector<uint32_t>> indexClusterMap(_attributeOrdering.size() - 1, std::vector<uint32_t>(_indexActivations.size()));
     for(int c = 0; c < _attributeOrdering.size() -1; ++c){
@@ -276,7 +279,7 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> att
             const auto& cl = attributeCluster[c][i];
             for(int l = cl.startIndex; l < cl.endIndex; ++l){
                 uint32_t indexStart = _attributeCenters[axis][l].offset;
-                uint32_t indexSize = _attributeCenters[axis][l].offset;
+                uint32_t indexSize = _attributeCenters[axis][l].size;
                 for(int ind = indexStart; ind < indexStart + indexSize; ++ind){
                     uint32_t index = _attributeIndices[axis][ind];
                     indexClusterMap[c][index] = i;
@@ -290,11 +293,15 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> att
     for(int a = 0; a < _attributeOrdering.size(); ++a)
         axisToOrder[_attributeOrdering[a]] = a; 
     for(int o = 0; o < _attributeOrdering.size() - 1; ++o){
-        std::vector<uint32_t> axes(dimensionality);
-        for(int d = std::max(o - d / 2 - 1, 0); d < std::min<uint32_t>(o + d / 2 + 1, _attributeOrdering.size()); ++d){
+        std::vector<uint32_t> axes;
+        for(int d = std::max<int>(o - dimensionality / 2 + 1, 0); d < std::min<int>(o + dimensionality / 2 + 1, _attributeOrdering.size()); ++d){
             axes.push_back(_attributeOrdering[d]);
         }
         std::sort(axes.begin(), axes.end());
+        // adding the subdim to the data
+        for(int i = 0; i < axes.size(); ++i){
+            _clusterData.columns[i].push_back(axes[i]);
+        }
         std::vector<uint32_t> curIndices(dimensionality, 0);
 
         // adding dimension information
@@ -307,34 +314,41 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<uint32_t> att
             // also instantly checks if the index is active
             uint32_t count{}, countSum{};
             const auto& clusters = attributeCluster[axes.back()];
-            for(int c = 0; c < clusters.size(); ++c){
-                const auto& cluster = clusters[c];
-                const auto& indices = _attributeIndices[axes.back()];
-                for(int ind = cluster.startIndex; ind < cluster.endIndex; ++ind){
-                    countSum++;
+            const auto& cluster = clusters[curIndices.back()];
+            const auto& indices = _attributeIndices[axes.back()];
+            for(int i = cluster.startIndex; i < cluster.endIndex; ++i){
+                const auto& aCenter = _attributeCenters[axes.back()][i];
+                for(int ind = aCenter.offset; ind < aCenter.offset + aCenter.size; ++ind){
                     uint32_t index = indices[ind];
-                    if(_indexActivations[index]){   // only continue counting if index is active
-                        // going through other axes and check for the correct cluster
-                        for(int other = 0; other < axes.size() - 1; ++other){
-                            uint32_t otherCluster = indexClusterMap[axisToOrder[other]][index];
-                            if(otherCluster == curIndices[other]){
+                    // going through other axes and check for the correct cluster
+                    for(int other = 0; other < axes.size() - 1; ++other){
+                        uint32_t otherCluster = indexClusterMap[axisToOrder[axes[other]]][index];
+                        if(otherCluster == curIndices[other]){
+                            if(_indexActivations[index])   // only continue counting if index is active
                                 ++count;    // we have another index found
-                            }
+                            ++countSum;
                         }
                     }
-                }
+                } 
             }
             // adding the data to the final data for rendering
-            _clusterData.columns;
-
+            for(int i = 0; i < axes.size(); ++i){
+                float clusterCenter = _attributeCenters[axes[i]][attributeCluster[axes[i]].front().startIndex].val;
+                _clusterData.columns[axes.size() + i].push_back(clusterCenter);
+            }
+            _clusterData.columns[axes.size() * 2].push_back(o);         // o is the index of the current 2d subspace
+            _clusterData.columns[axes.size() * 2 + 1].push_back(count);
+            _clusterData.columns[axes.size() * 2 + 2].push_back(countSum);
+            
             // incrementing the counter and propagating overflow
             curIndices.back()++;
 
             for(int i = curIndices.size() - 1; i >= 0 && (overflow || i == curIndices.size() - 1); --i){
                 if(overflow)
                     curIndices[i]++;
-                if(curIndices[i] >= attributeCluster[i].size()){
-                    curIndices[i] = 0;  //reset counter to 0 to get cartesiaan product fo all cluster
+                if(curIndices[i] >= attributeCluster[axes[i]].size()){
+                    curIndices[i] = 0;  //reset counter to 0 to get cartesian product fo all cluster
+                    overflow = true;    //set overflow bit
                 }
                 else
                     overflow = false;

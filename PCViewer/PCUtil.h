@@ -79,7 +79,7 @@ public:
 
 	class Stopwatch{
 		public:
-		Stopwatch(std::ostream& stream, const std::string& displayName);
+		Stopwatch(std::ostream& stream, const std::string_view& displayName);
 		~Stopwatch();
 		private:
 		std::ostream& _ostream;
@@ -118,21 +118,23 @@ public:
 		const T& top() const{return _container[0];};
 		void push(const T& value){
 			_container.push_back(value);
-			std::push_heap(_container.begin(), _container.end(), Compare{});
+			std::push_heap(_container.begin(), _container.end(), _comp);
 		}
 		void push(T&& value){
 			_container.push_back(std::move(value));
-			std::push_heap(_container.begin(), _container.end(), Compare{});
+			std::push_heap(_container.begin(), _container.end(), _comp);
 		}
 		T pop(){
 			if(_container.empty())
 				return {};
 			T el = _container[0];
-			std::pop_heap(_container.begin(), _container.end(), Compare{});
+			std::pop_heap(_container.begin(), _container.end(), _comp);
 			_container.pop_back();
+			return el;
 		}
 	private:
-		Container _container;
+		Container _container{};
+		Compare _comp{};
 	};
 };
 

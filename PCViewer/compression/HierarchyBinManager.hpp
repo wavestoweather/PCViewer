@@ -26,6 +26,7 @@ public:
     void checkPendingFiles();
     const Data& retrieveNewDataC() const {return _nextData;};
     Data retrieveNewData(){Data t = std::move(_nextData); _nextData = {}; newDataLoaded = false; return std::move(t);};
+    void updateLineCombinations(const std::vector<int> attributeOrder);
 
     // bool which indicates new data was loaded
     std::atomic<bool> newDataLoaded{false};
@@ -62,5 +63,4 @@ private:
 
 
     void openHierarchyFiles(const std::vector<std::string_view>& files, const std::vector<std::vector<size_t>> bundleOffsets = {});
-    void updateLineCombinations(const std::vector<uint32_t> attributeOrder);
 };
