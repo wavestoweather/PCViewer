@@ -210,6 +210,7 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<int> attribut
     // going through all consecutive attributes and update clusters to get max amount of cluster combinations
     uint32_t dimensionality = 2;
     using  ClusterQueue = PCUtil::PriorityQueue<Cluster, std::vector<Cluster>, std::greater<Cluster>>;
+    std::vector<uint32_t> combinationCounts{};
     for(int c = 0; c < _attributeOrdering.size() - 1; ++c){
         std::vector<uint32_t> axes{};
         for(int d = std::max<int>(c - dimensionality / 2 + 1, 0); d < std::min<int>(c + dimensionality / 2 + 1, _attributeOrdering.size()); ++d){
@@ -263,6 +264,7 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<int> attribut
         for(int i = 0; i < axes.size(); ++i){
             attributeCluster[axes[i]] = pQs[i].container();
         }
+        combinationCounts.push_back(curCombinationCount);
     }
 
     // ---------------------------------------------------------------------------
@@ -290,6 +292,17 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<int> attribut
 
     // starting to counting the cluster counts
     std::vector<uint32_t> axisToOrder(_attributes.size());
+    struct CombinationInfo{uint32_t amtP, amtActive;};
+    std::vector<std::vector<CombinationInfo>> combInfos(combinationCounts.size()); //stores all combination informations for all subplots
+    size_t combinationSum{};
+    for(int i = 0; i < combInfos.size(); ++i){
+        combInfos[i].resize(combinationCounts[i]);
+        combinationSum += combinationCounts[i];
+    }
+    for(int i = 0; i < dimensionality; ++i){
+        _clusterData.columns[dimensionality + i].resize(combinationSum);
+    }
+    _clusterData.columns[dimensionality * 2].resize(combinationSum);
     for(int a = 0; a < _attributeOrdering.size(); ++a)
         axisToOrder[_attributeOrdering[a]] = a; 
     for(int o = 0; o < _attributeOrdering.size() - 1; ++o){
@@ -302,57 +315,51 @@ void HierarchyBinManager::updateLineCombinations(const std::vector<int> attribut
         for(int i = 0; i < axes.size(); ++i){
             _clusterData.columns[i].push_back(axes[i]);
         }
-        std::vector<uint32_t> curIndices(dimensionality, 0);
+        // creating the intersection of the current cluster
+        // intersection is computed by going through the indices from the cluster to the very right of the plot
+        // and checking for each index in the cluster if the index on the other axes corresponds to the
+        // cluster indicated in axes
+        // also instantly checks if the index is active
+        uint32_t count{}, countSum{};
+        const auto& clusters = attributeCluster[axes.back()];
+        const auto& indices = _attributeIndices[axes.back()];
 
-        // adding dimension information
-        bool overflow = false;
-        while(!overflow){
-            // creating the intersection of the current cluster
-            // intersection is computed by going through the indices from the cluster to the very right of the plot
-            // and checking for each index in the cluster if the index on the other axes corresponds to the
-            // cluster indicated in axes
-            // also instantly checks if the index is active
-            uint32_t count{}, countSum{};
-            const auto& clusters = attributeCluster[axes.back()];
-            const auto& cluster = clusters[curIndices.back()];
-            const auto& indices = _attributeIndices[axes.back()];
+        std::vector<float> yVals(dimensionality);
+        for(int c = 0; c < clusters.size(); ++c){
+            const auto& cluster = clusters[c];
             for(int i = cluster.startIndex; i < cluster.endIndex; ++i){
                 const auto& aCenter = _attributeCenters[axes.back()][i];
                 for(int ind = aCenter.offset; ind < aCenter.offset + aCenter.size; ++ind){
                     uint32_t index = indices[ind];
-                    // going through other axes and check for the correct cluster
-                    for(int other = 0; other < axes.size() - 1; ++other){
-                        uint32_t otherCluster = indexClusterMap[axisToOrder[axes[other]]][index];
-                        if(otherCluster == curIndices[other]){
-                            if(_indexActivations[index])   // only continue counting if index is active
-                                ++count;    // we have another index found
-                            ++countSum;
+                    // going through other axes and calculating cluster index
+                    uint32_t combInd{};
+                    for(int cur = 0; cur < axes.size() - 1; ++cur){ //the last addition is done outside, as we do not have indexClusterMap for the last attribute
+                        uint32_t multiplier = 1;
+                        for(int m = cur + 1; m < axes.size(); ++m){
+                            multiplier *= attributeCluster[axes[m]].size();
                         }
+                        auto curC = indexClusterMap[axisToOrder[axes[cur]]][index];
+                        combInd += multiplier * curC;
+                        yVals[cur] = _attributeCenters[axes[cur]][attributeCluster[axes[cur]][curC].startIndex].val;
+                    }
+                    combInd += c;
+                    // counting info
+                    ++combInfos[o][combInd].amtP;
+                    if(_indexActivations[index])
+                        ++combInfos[o][combInd].amtActive;
+                    // x placement info
+                    _clusterData.columns[axes.size() * 2][combInd] = o;
+                    // y placement info
+                    for(int y = 0; y < axes.size(); ++y){
+                        _clusterData.columns[axes.size() + y][combInd] = yVals[y];
                     }
                 } 
             }
-            // adding the data to the final data for rendering
-            for(int i = 0; i < axes.size(); ++i){
-                float clusterCenter = _attributeCenters[axes[i]][attributeCluster[axes[i]].front().startIndex].val;
-                _clusterData.columns[axes.size() + i].push_back(clusterCenter);
-            }
-            _clusterData.columns[axes.size() * 2].push_back(o);         // o is the index of the current 2d subspace
-            _clusterData.columns[axes.size() * 2 + 1].push_back(count);
-            _clusterData.columns[axes.size() * 2 + 2].push_back(countSum);
-            
-            // incrementing the counter and propagating overflow
-            curIndices.back()++;
-
-            for(int i = curIndices.size() - 1; i >= 0 && (overflow || i == curIndices.size() - 1); --i){
-                if(overflow)
-                    curIndices[i]++;
-                if(curIndices[i] >= attributeCluster[axes[i]].size()){
-                    curIndices[i] = 0;  //reset counter to 0 to get cartesian product fo all cluster
-                    overflow = true;    //set overflow bit
-                }
-                else
-                    overflow = false;
-            }
+        }
+        // adding the data to the final data for rendering
+        for(int i = 0; i < axes.size(); ++i){
+            float clusterCenter = _attributeCenters[axes[i]][attributeCluster[axes[i]].front().startIndex].val;
+            _clusterData.columns[axes.size() + i].push_back(clusterCenter);
         }
     }
 }
