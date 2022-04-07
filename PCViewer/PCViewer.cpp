@@ -65,6 +65,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "compression/CompressionWorkbench.hpp"
 #include "compression/HierarchyBinManager.hpp"
 #include "compression/CompressionRenderer.hpp"
+#include "largeVis/LineCounter.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -7523,6 +7524,10 @@ int main(int, char**)
 
 	{
 		compressionWorkbench = std::make_shared<CompressionWorkbench>();
+	}
+
+	{
+		LineCounter::tests(LineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
 	}
 
 	{

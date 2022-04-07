@@ -57,3 +57,5 @@ glslangValidator -V --target-env vulkan1.1 -o radixLocalSort.comp.spv radixLocal
 glslangValidator -V --target-env vulkan1.1 -o radixDsHistogram.comp.spv radixDsHistogram.comp
 glslangValidator -V --target-env vulkan1.1 -o radixDsScatter.comp.spv radixDsScatter.comp
 glslangValidator -V --target-env vulkan1.1 -o radixDsLocalSort.comp.spv radixDsLocalSort.comp
+
+glslangValidator -V --target-env vulkan1.1 -o lineCount.comp.spv lineCount.comp

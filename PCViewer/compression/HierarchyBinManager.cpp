@@ -71,6 +71,8 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
         indicesData.read(reinterpret_cast<char*>(_attributeIndices[i].data()), indicesSize * sizeof(_attributeIndices[0][0]));
     }
 
+    std::cout << "Data is " << dataSize << " elements per attribute" << std::endl;
+
     _indexActivations.resize(dataSize, true);
 }
 

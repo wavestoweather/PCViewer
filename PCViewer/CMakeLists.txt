@@ -65,7 +65,11 @@ file(GLOB compress_SRC
     "compression/cpuCompression/*.cpp"
 )
 
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC})
+file(GLOB largeVis_SRC
+    "largeVis/*.cpp"
+)
+
+add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC})
 
 if(WIN32)
     set(netCDF_LIBRARIES netCDF::netcdf)
