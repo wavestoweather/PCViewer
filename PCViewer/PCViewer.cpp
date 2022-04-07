@@ -66,6 +66,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "compression/HierarchyBinManager.hpp"
 #include "compression/CompressionRenderer.hpp"
 #include "largeVis/LineCounter.hpp"
+#include "largeVis/RenderLineCounter.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -7527,7 +7528,7 @@ int main(int, char**)
 	}
 
 	{
-		LineCounter::tests(LineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
+		RenderLineCounter::tests(RenderLineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
 	}
 
 	{
