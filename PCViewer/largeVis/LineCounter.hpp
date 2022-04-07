@@ -34,8 +34,7 @@ private:
     // vulkan resources that are destroyed externally
     VkUtil::Context _vkContext;
     VkRenderPass _renderPass;
-    VkDescriptorSetLayout _dataLayout;
-    VkDescriptorSetLayout _uniformLayout;
+    VkDescriptorSet _descSet; //only here for test purposes
 
     // vulkan resources that have to be destroyed
     VkUtil::PipelineInfo _countPipeInfo{};

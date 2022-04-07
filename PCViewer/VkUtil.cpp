@@ -169,7 +169,7 @@ void VkUtil::createBuffer(VkDevice device, VkDeviceSize size, VkBufferUsageFlags
 	check_vk_result(err);
 }
 
-void VkUtil::createBufferView(VkDevice device, VkBuffer buffer, VkFormat format, uint32_t offset, uint32_t range, VkBufferView *bufferView)
+void VkUtil::createBufferView(VkDevice device, VkBuffer buffer, VkFormat format, uint32_t offset, VkDeviceSize range, VkBufferView *bufferView)
 {
 	VkResult err;
 

@@ -3,6 +3,19 @@
 #extension GL_EXT_scalar_block_layout : enable
 
 // TODO: add bindings
+layout(binding = 0, r16) uniform imageBuffer vA; 
+
+layout(binding = 1, r16) uniform imageBuffer vB; 
+
+layout(binding = 2) buffer Lines{
+	uint counts[];
+};
+
+layout(binding = 3) uniform Infos{
+    uint amtOfDataPoints;
+    uint aBins, bBins;
+    uint padding;
+};
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 

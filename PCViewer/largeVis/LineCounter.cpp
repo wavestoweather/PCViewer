@@ -14,6 +14,26 @@ LineCounter::LineCounter(const CreateInfo& info):
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     // TODO: fill bindings map
+    VkDescriptorSetLayoutBinding b{};
+    // attr a values
+    b.binding = 0;
+    b.descriptorCount = 1;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER; // has to be texel buffer to support 16 bit readout
+    b.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    bindings.push_back(b);
+
+    // attr b values
+    b.binding = 1;
+    bindings.push_back(b);
+
+    // line counts
+    b.binding = 2;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings.push_back(b);
+
+    b.binding = 3;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings.push_back(b);
 
     VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_countPipeInfo.descriptorSetLayout);
 
@@ -21,7 +41,69 @@ LineCounter::LineCounter(const CreateInfo& info):
 }
 
 void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
-    
+    // test counting
+    const uint32_t size = 1 << 30;  // 2^30
+    const uint32_t aBins = 1 << 10, bBins = 1 << 10;
+    std::vector<uint16_t> a1(size), a2(size);
+    VkBuffer vA, vB, counts, infos;
+    VkDeviceMemory mA, mB, mOther;
+    VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &vA);
+    VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &vB);
+    VkUtil::createBuffer(_vkContext.device, (aBins * bBins) * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &counts);
+    VkUtil::createBuffer(_vkContext.device, 4 * sizeof(uint16_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &infos);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    VkMemoryRequirements memReq{};
+
+    vkGetBufferMemoryRequirements(_vkContext.device, vA, &memReq);
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &mA);
+    vkBindBufferMemory(_vkContext.device, vA, mA, 0);
+
+    vkGetBufferMemoryRequirements(_vkContext.device, vB, &memReq);
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &mB);
+    vkBindBufferMemory(_vkContext.device, vB, mB, 0);
+
+    vkGetBufferMemoryRequirements(_vkContext.device, counts, &memReq);
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = memReq.memoryTypeBits;
+    vkGetBufferMemoryRequirements(_vkContext.device, infos, &memReq);
+    uint32_t infoOffset = allocInfo.allocationSize;
+    allocInfo.allocationSize += memReq.size;
+    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, allocInfo.memoryTypeIndex | memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &mOther);
+    vkBindBufferMemory(_vkContext.device, counts, mOther, 0);
+    vkBindBufferMemory(_vkContext.device, infos, mOther, infoOffset);
+
+    struct Infos{
+        uint32_t amtofDataPoints, aBins, bBins, padding;
+    }cpuInfos {size, aBins, bBins, 0};
+    std::vector<uint32_t> zeros(aBins * bBins);
+    VkUtil::uploadData(_vkContext.device, mOther, infoOffset, sizeof(Infos), &cpuInfos);
+    VkUtil::uploadData(_vkContext.device, mOther, 0, zeros.size() * sizeof(zeros[0]), zeros.data());
+
+    VkBufferView aView, bView;
+    VkUtil::createBufferView(_vkContext.device, vA, VK_FORMAT_R16_SFLOAT, 0, VK_WHOLE_SIZE, &aView);
+    VkUtil::createBufferView(_vkContext.device, vA, VK_FORMAT_R16_SFLOAT, 0, VK_WHOLE_SIZE, &bView);
+
+    if(!_descSet)
+        VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_descSet);
+
+    VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, aView, 0, _descSet);
+    VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, bView, 1, _descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, counts, (aBins * bBins) * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, infos, sizeof(Infos), 3, _descSet);
+
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipelineLayout, 0, 1, &_descSet, 0, nullptr);
+    vkCmdDispatch(commands, size / 256, 1, 1);
+
+    // done filling hte command buffer.
+    // execution is done outside
 }
 
 LineCounter* LineCounter::_singleton = nullptr;    // init to nullptr
@@ -35,13 +117,30 @@ LineCounter* LineCounter::acquireReference(const CreateInfo& info){
 
 void LineCounter::tests(const CreateInfo& info){
     // small method to perform tests;
+    
+    // pipeline creation test
     auto t = acquireReference(info);
+
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(info.context.device, info.context.commandPool, &commands);
+    // record commands
+    t->countLines(commands, {});
+
+    // commit and wait (includes timing of everything)
+    {
+        PCUtil::Stopwatch stopwatch(std::cout, "Line counter runtime");
+        VkUtil::commitCommandBuffer(info.context.queue, commands);
+        vkQueueWaitIdle(info.context.queue);
+    }
+    
     t->release();
 }
 
 LineCounter::~LineCounter() 
 {
     _countPipeInfo.vkDestroy(_vkContext);
+    if(_descSet)
+        vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_descSet);
 }
 
 void LineCounter::release(){
