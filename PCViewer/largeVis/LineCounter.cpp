@@ -50,7 +50,7 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &vA);
     VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &vB);
     VkUtil::createBuffer(_vkContext.device, (aBins * bBins) * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &counts);
-    VkUtil::createBuffer(_vkContext.device, 4 * sizeof(uint16_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &infos);
+    VkUtil::createBuffer(_vkContext.device, 4 * sizeof(uint32_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &infos);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -95,7 +95,7 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
 
     VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, aView, 0, _descSet);
     VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, bView, 1, _descSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, counts, (aBins * bBins) * sizeof(uint32_t), 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, counts, (aBins * bBins) * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, infos, sizeof(Infos), 3, _descSet);
 
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
