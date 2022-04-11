@@ -2,6 +2,8 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
 
+#define maxDataPerThread (1 << 5)  // 2 ^ 5 = 32
+
 // TODO: add bindings
 layout(binding = 0, r16) uniform imageBuffer vA; 
 
@@ -14,17 +16,67 @@ layout(binding = 2) buffer Lines{
 layout(binding = 3) uniform Infos{
     uint amtOfDataPoints;
     uint aBins, bBins;
-    uint padding;
+    uint dataPerThread;
 };
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
+void swap(inout uint v[maxDataPerThread], uint a, uint b){
+    if(v[a] > v[b]){
+        uint t = v[a];
+        v[a] = v[b];
+        v[b] = t;
+    }
+    //uint t = min(v[a], v[b]);
+    //v[b] = max(v[a], v[b]);
+    //v[a] = t;
+}
+
+// v is the vector holding the numbers to sort, o is the start offset
+void sortingNetwork9(inout uint v[maxDataPerThread], uint o){
+    swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
+    swap(v, o + 1, o + 2); swap(v, o + 4, o + 5); swap(v, o + 7, o + 8);
+    swap(v, o + 0, o + 1); swap(v, o + 3, o + 4); swap(v, o + 6, o + 7);
+    swap(v, o + 0, o + 3); swap(v, o + 3, o + 6); swap(v, o + 0, o + 3);
+    swap(v, o + 1, o + 4); swap(v, o + 4, o + 7); swap(v, o + 1, o + 4);
+    swap(v, o + 5, o + 8); swap(v, o + 2, o + 5); swap(v, o + 5, o + 8);
+    swap(v, o + 2, o + 4); swap(v, o + 4, o + 6); swap(v, o + 2, o + 4);
+    swap(v, o + 1, o + 3); swap(v, o + 2, o + 3);
+    swap(v, o + 5, o + 7); swap(v, o + 5, o + 6);
+}
+
 void main(){
-    float t = imageLoad(vA, 6).x;
-    uint binA = uint(fract(imageLoad(vA, int(gl_GlobalInvocationID.x)).x) * float(aBins));
-    uint binB = uint(fract(imageLoad(vB, int(gl_GlobalInvocationID.x)).x) * float(bBins));
-    //binA = uint(float(gl_GlobalInvocationID.x) / float(amtOfDataPoints) * float(aBins));
-    //binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
-    uint finalBin = binA * bBins + binB;    // linear index
-    atomicAdd(counts[finalBin], 1);         // incrementing
+    uint data[maxDataPerThread];
+
+    if(gl_GlobalInvocationID.x * dataPerThread > amtOfDataPoints)
+        return;
+
+    for(int i = 0; i < dataPerThread; ++i){
+        uint binA = uint(fract(imageLoad(vA, int(gl_GlobalInvocationID.x * dataPerThread + i)).x) * float(aBins));
+        uint binB = uint(fract(imageLoad(vB, int(gl_GlobalInvocationID.x * dataPerThread + i)).x) * float(bBins));
+        binA = min(binA, aBins - 1);
+        binB = min(binB, bBins - 1);
+        uint finalBin = binA * bBins + binB;    // linear index
+        data[i] = finalBin;
+    }
+    sortingNetwork9(data, 0);
+    
+    //uint binA = uint(fract(imageLoad(vA, int(gl_GlobalInvocationID.x)).x) * float(aBins));
+    //uint binB = uint(fract(imageLoad(vB, int(gl_GlobalInvocationID.x)).x) * float(bBins));
+    ////binA = uint(float(gl_GlobalInvocationID.x) / float(amtOfDataPoints) * float(aBins));
+    ////binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
+    //uint finalBin = binA * bBins + binB;    // linear index
+    uint count = 1;
+    uint cur = data[0];
+    for(int i = 1; i < dataPerThread; ++i){
+        if(data[i] == cur){
+            ++count;
+        }
+        else{
+            atomicAdd(counts[cur], count);
+            count = 1;
+            cur = data[i];
+        }
+    }
+    atomicAdd(counts[cur], count);         // incrementing
 }

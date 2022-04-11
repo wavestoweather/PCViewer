@@ -44,6 +44,7 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     // test counting
     const uint32_t size = 1 << 30;  // 2^30
     const uint32_t aBins = 1 << 10, bBins = 1 << 10;
+    const uint32_t dataPerThread = 9;
     std::vector<uint16_t> a1(size), a2(size);
     VkBuffer vA, vB, counts, infos;
     VkDeviceMemory mA, mB, mOther;
@@ -80,8 +81,8 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     vkBindBufferMemory(_vkContext.device, infos, mOther, infoOffset);
 
     struct Infos{
-        uint32_t amtofDataPoints, aBins, bBins, padding;
-    }cpuInfos {size, aBins, bBins, 0};
+        uint32_t amtofDataPoints, aBins, bBins, dataPerThread;
+    }cpuInfos {size, aBins, bBins, dataPerThread};
     std::vector<uint32_t> zeros(aBins * bBins);
     VkUtil::uploadData(_vkContext.device, mOther, infoOffset, sizeof(Infos), &cpuInfos);
     VkUtil::uploadData(_vkContext.device, mOther, 0, zeros.size() * sizeof(zeros[0]), zeros.data());
@@ -96,8 +97,8 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     //filling with random numbers
     std::srand(std::time(nullptr));
     std::vector<uint16_t> aVals(size), bVals(size);
-    //for(auto& e: aVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
-    //for(auto& e: bVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    for(auto& e: aVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    for(auto& e: bVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
     VkUtil::uploadData(_vkContext.device, mA, 0, aVals.size() * sizeof(aVals[0]), aVals.data());
     VkUtil::uploadData(_vkContext.device, mB, 0, bVals.size() * sizeof(bVals[0]), bVals.data());
 
@@ -108,7 +109,7 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
 
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipelineLayout, 0, 1, &_descSet, 0, nullptr);
-    vkCmdDispatch(commands, size / 256, 1, 1);
+    vkCmdDispatch(commands, size / 256 / dataPerThread, 1, 1);
 
     // done filling hte command buffer.
     // execution is done outside
@@ -138,7 +139,8 @@ void LineCounter::tests(const CreateInfo& info){
     {
         PCUtil::Stopwatch stopwatch(std::cout, "Line counter runtime");
         VkUtil::commitCommandBuffer(info.context.queue, commands);
-        vkQueueWaitIdle(info.context.queue);
+        auto res = vkQueueWaitIdle(info.context.queue);
+        check_vk_result(res);
     }
     
     t->release();
