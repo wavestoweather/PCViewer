@@ -153,6 +153,14 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
 
     VkUtil::updateDescriptorSet(_vkContext.device, infos, sizeof(Infos), 0, _descSet);
 
+    //filling with random numbers
+    std::srand(std::time(nullptr));
+    std::vector<uint16_t> aVals(size), bVals(size);
+    //for(auto& e: aVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    //for(auto& e: bVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    VkUtil::uploadData(_vkContext.device, mA, 0, aVals.size() * sizeof(aVals[0]), aVals.data());
+    VkUtil::uploadData(_vkContext.device, mB, 0, bVals.size() * sizeof(bVals[0]), bVals.data());
+
     VkClearValue clear;
     clear.color = {0,0,0,0};
     clear.depthStencil = {0, 0};

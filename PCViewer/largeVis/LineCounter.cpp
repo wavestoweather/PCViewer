@@ -93,6 +93,14 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     if(!_descSet)
         VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_descSet);
 
+    //filling with random numbers
+    std::srand(std::time(nullptr));
+    std::vector<uint16_t> aVals(size), bVals(size);
+    //for(auto& e: aVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    //for(auto& e: bVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    VkUtil::uploadData(_vkContext.device, mA, 0, aVals.size() * sizeof(aVals[0]), aVals.data());
+    VkUtil::uploadData(_vkContext.device, mB, 0, bVals.size() * sizeof(bVals[0]), bVals.data());
+
     VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, aView, 0, _descSet);
     VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, bView, 1, _descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, (aBins * bBins) * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);

@@ -19,8 +19,8 @@ namespace compression
         std::vector<uint16_t> aVals(size), bVals(size);
         //filling with random numbers
         std::srand(std::time(nullptr));
-        for(auto& e: aVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
-        for(auto& e: bVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+        //for(auto& e: aVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
+        //for(auto& e: bVals) e = std::rand() & std::numeric_limits<uint16_t>::max();
 
         std::vector<std::thread> threads(amtOfThreads);
         

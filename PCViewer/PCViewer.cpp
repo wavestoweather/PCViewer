@@ -7530,7 +7530,8 @@ int main(int, char**)
 
 	{
 		//RenderLineCounter::tests(RenderLineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
-		compression::testCounting();
+		LineCounter::tests(LineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
+		//compression::testCounting();
 	}
 
 	{
