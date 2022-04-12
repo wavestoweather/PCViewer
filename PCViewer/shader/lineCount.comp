@@ -20,11 +20,10 @@ layout(binding = 3) uniform Infos{
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
-    float t = imageLoad(vA, 6).x;
-    uint binA = uint(fract(imageLoad(vA, int(gl_GlobalInvocationID.x)).x) * float(aBins));
-    uint binB = uint(fract(imageLoad(vB, int(gl_GlobalInvocationID.x)).x) * float(bBins));
-    binA = uint(float(gl_GlobalInvocationID.x) / float(amtOfDataPoints) * float(aBins));
-    binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
+    uint binA = min(uint(fract(imageLoad(vA, int(gl_GlobalInvocationID.x)).x) * float(aBins)), aBins);
+    uint binB = min(uint(fract(imageLoad(vB, int(gl_GlobalInvocationID.x)).x) * float(bBins)), bBins);
+    //binA = uint(float(gl_GlobalInvocationID.x) / float(amtOfDataPoints) * float(aBins));
+    //binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
     uint finalBin = binA * bBins + binB;    // linear index
     atomicAdd(counts[finalBin], 1);         // incrementing
 }

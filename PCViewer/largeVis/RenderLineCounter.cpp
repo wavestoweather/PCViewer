@@ -2,7 +2,7 @@
 #include "../PCUtil.h"
 
 RenderLineCounter::RenderLineCounter(const CreateInfo& info):
-    _vkContext(info.context)
+    _vkContext(info.context), _aBins(1 << 6), _bBins(1 << 6)
 {
     //----------------------------------------------------------------------------------------------
 	// creating the pipeline for line counting
@@ -113,7 +113,8 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
 
 void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
     // test counting
-    const uint32_t size = 1 << 30;  // 2^30
+    const uint32_t size = 1 << 29;  // 2^30
+    const uint32_t runs = 1;   //amount of separate draw calls to do the work
     std::vector<uint16_t> a1(size), a2(size);
     VkBuffer vA, vB, infos;
     VkDeviceMemory mA, mB, mOther;
@@ -147,6 +148,12 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
         uint32_t amtofDataPoints, aBins, bBins, padding;
     }cpuInfos {size, _aBins, _bBins, 0};
     VkUtil::uploadData(_vkContext.device, mOther, 0, sizeof(Infos), &cpuInfos);
+    //filling with random numbers
+    std::srand(std::time(nullptr));
+    for(auto& e: a1) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    for(auto& e: a2) e = std::rand() & std::numeric_limits<uint16_t>::max();
+    VkUtil::uploadData(_vkContext.device, mA, 0, a1.size() * sizeof(a1[0]), a1.data());
+    VkUtil::uploadData(_vkContext.device, mB, 0, a2.size() * sizeof(a2[0]), a2.data());
 
     if(!_descSet)
         VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_descSet);
@@ -162,7 +169,10 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     VkBuffer vertexBuffers[2]{vA, vB};
     VkDeviceSize offsets[2]{0, 0};
     vkCmdBindVertexBuffers(commands, 0, 2, vertexBuffers, offsets);
-    vkCmdDraw(commands, size, 1, 0, 0);
+    for(int i = 0; i < runs; ++i){
+        vkCmdDraw(commands, size / runs, 1, size_t(i * size) / runs, 0);
+    }
+    //vkCmdDraw(commands, size, 1, 0, 0);
     vkCmdEndRenderPass(commands);
 
     // done filling hte command buffer.

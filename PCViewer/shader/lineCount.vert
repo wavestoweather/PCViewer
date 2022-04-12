@@ -18,7 +18,7 @@ void main(){
     float y = fract(b) * 2 - 1;
     //x = float(gl_VertexIndex) / float(amtOfDataPoints) * 2 - 1;
     //y = float(gl_VertexIndex * 2 % amtOfDataPoints) / float(amtOfDataPoints) * 2 - 1;
-    //gl_Position.xy = vec2(0, 0);
+    gl_Position.xy = vec2(x, y);
     increment = 1;
     gl_PointSize = 1;
 }

@@ -12,7 +12,7 @@ namespace compression
     {
         std::cout << "Starting testCounting() setup ..." << std::endl;
         const uint32_t size = 1 << 30;
-        const uint32_t aBins = 1 <<10, bBins = 1 << 10;
+        const uint32_t aBins = 1 << 7, bBins = 1 << 7;
         const uint32_t amtOfThreads = 12;
         std::vector<std::atomic<uint32_t>> lineCounts(aBins * bBins);
 
