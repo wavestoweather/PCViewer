@@ -32,7 +32,6 @@ find_package(X11 REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 message("include dirs: ${netCDF_INCLUDE_DIR}")
 
-include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR})
 #include_directories(${Eigen3_DIR})
 
 file(GLOB pcviewer_SRC
@@ -40,51 +39,63 @@ file(GLOB pcviewer_SRC
     "*.cpp"
     "*.hpp"
 )
-
+    
 file(GLOB imgui_SRC
     "imgui/*.h"
     "imgui/*.cpp"
 	"imgui/*.hpp"
 )
-
+    
 file(GLOB cimg_SRC
     "cimg/*.h"
 )
-
+    
 file(GLOB tsne_SRC
     "tsne/*.h"
     "tsne/*.cpp"
 )
-
+    
 file(GLOB rtree_SRC
     "rTree/*.h"
 )
-
+    
 file(GLOB compress_SRC
     "compression/*.cpp"
     "compression/cpuCompression/*.cpp"
 )
-
+    
 file(GLOB largeVis_SRC
     "largeVis/*.cpp"
 )
+    
+file(GLOB roaring_SRC
+    "roaringc/src/*.c"
+    "roaringc/src/containers/*.c"
+)
+    
+set(roaring_HDR
+    "roaringc/include/"
+    "roaringc/cpp/"
+)
 
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC})
+include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR})
+add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC})
 
 if(WIN32)
-    set(netCDF_LIBRARIES netCDF::netcdf)
+set(netCDF_LIBRARIES netCDF::netcdf)
 endif()
 
 target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES})# Eigen3::Eigen
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS
-  "${CMAKE_CURRENT_SOURCE_DIR}/shader/*.spv"
+"${CMAKE_CURRENT_SOURCE_DIR}/shader/*.spv"
 )
 file(COPY ${MY_PUBLIC_HEADERS} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
 message (" Copying fonts")
 file(GLOB FONTS
-  "${CMAKE_CURRENT_SOURCE_DIR}/fonts/*.ttf"
+"${CMAKE_CURRENT_SOURCE_DIR}/fonts/*.ttf"
 )
 file(COPY ${FONTS} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/fonts)
+    

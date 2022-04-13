@@ -8,6 +8,7 @@
 #include <queue>
 #include <numeric>
 #include "../robin_hood_map/robin_hood.h"
+#include <roaring.hh>
 
 HierarchyBinManager::HierarchyBinManager(const std::string_view& hierarchyFolder, uint32_t maxDrawLines) :
 _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
@@ -72,6 +73,9 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
     }
 
     std::cout << "Data is " << dataSize << " elements per attribute" << std::endl;
+
+    roaring::Roaring bitmap;
+    bitmap.cardinality();
 
     _indexActivations.resize(dataSize, true);
 }
