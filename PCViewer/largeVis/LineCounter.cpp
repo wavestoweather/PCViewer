@@ -18,7 +18,7 @@ LineCounter::LineCounter(const CreateInfo& info):
     // attr a values
     b.binding = 0;
     b.descriptorCount = 1;
-    b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER; // has to be texel buffer to support 16 bit readout
+    b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; // has to be texel buffer to support 16 bit readout
     b.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     bindings.push_back(b);
 
@@ -42,14 +42,14 @@ LineCounter::LineCounter(const CreateInfo& info):
 
 void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
     // test counting
-    const uint32_t size = (1 << 30) / 10;  // 2^30
-    const uint32_t aBins = 1 << 6, bBins = 1 << 6;
-    const uint32_t iterations = 10;
+    const uint32_t size = (1 << 30);  // 2^30
+    const uint32_t aBins = 1 << 10, bBins = 1 << 10;
+    const uint32_t iterations = 1;
     std::vector<uint16_t> a1(size), a2(size);
     VkBuffer vA, vB, counts, infos;
     VkDeviceMemory mA, mB, mOther;
-    VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &vA);
-    VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, &vB);
+    VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &vA);
+    VkUtil::createBuffer(_vkContext.device, size * sizeof(uint16_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &vB);
     VkUtil::createBuffer(_vkContext.device, (aBins * bBins) * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &counts);
     VkUtil::createBuffer(_vkContext.device, 4 * sizeof(uint32_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &infos);
 
@@ -94,15 +94,11 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     VkUtil::uploadData(_vkContext.device, mA, 0, a1.size() * sizeof(a1[0]), a1.data());
     VkUtil::uploadData(_vkContext.device, mB, 0, a2.size() * sizeof(a2[0]), a2.data());
 
-    VkBufferView aView, bView;
-    VkUtil::createBufferView(_vkContext.device, vA, VK_FORMAT_R16_SFLOAT, 0, VK_WHOLE_SIZE, &aView);
-    VkUtil::createBufferView(_vkContext.device, vA, VK_FORMAT_R16_SFLOAT, 0, VK_WHOLE_SIZE, &bView);
-
     if(!_descSet)
         VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_descSet);
 
-    VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, aView, 0, _descSet);
-    VkUtil::updateTexelBufferDescriptorSet(_vkContext.device, bView, 1, _descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, vA, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, vB, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, (aBins * bBins) * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, infos, sizeof(Infos), 3, _descSet);
 
@@ -111,6 +107,8 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     for(int i = 0; i < iterations; ++i)
         vkCmdDispatch(commands, size / 256, 1, 1);
 
+    _bins = mOther;
+    _binsSize = (aBins * bBins) * sizeof(uint32_t);
     // done filling hte command buffer.
     // execution is done outside
 }
@@ -141,6 +139,12 @@ void LineCounter::tests(const CreateInfo& info){
         VkUtil::commitCommandBuffer(info.context.queue, commands);
         vkQueueWaitIdle(info.context.queue);
     }
+    //check for count sum
+    std::vector<uint32_t> counts(t->_binsSize / 4);
+    VkUtil::downloadData(t->_vkContext.device, t->_bins, 0, t->_binsSize, counts.data());
+    size_t sum = 0;
+    for(auto i: counts)
+        sum += i;
     
     t->release();
 }

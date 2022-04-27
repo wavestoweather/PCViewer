@@ -3,9 +3,9 @@
 #extension GL_EXT_scalar_block_layout : enable
 
 // TODO: add bindings
-layout(binding = 0, r16) uniform imageBuffer vA; 
+layout(binding = 0) buffer vA{uint aVals[];}; 
 
-layout(binding = 1, r16) uniform imageBuffer vB; 
+layout(binding = 1) buffer vB{uint bVals[];}; 
 
 layout(binding = 2) buffer Lines{
 	uint counts[];
@@ -19,9 +19,12 @@ layout(binding = 3) uniform Infos{
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
+// as each element of aVals and bVals contain two float16 we have to unpack
 void main(){
-    uint binA = min(uint(fract(imageLoad(vA, int(gl_GlobalInvocationID.x)).x) * float(aBins)), aBins);
-    uint binB = min(uint(fract(imageLoad(vB, int(gl_GlobalInvocationID.x)).x) * float(bBins)), bBins);
+    float aVal = unpackHalf2x16(aVals[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+    float bVal = unpackHalf2x16(bVals[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+    uint binA = min(uint(fract(aVal) * float(aBins)), aBins);
+    uint binB = min(uint(fract(bVal) * float(bBins)), bBins);
     //binA = uint(float(gl_GlobalInvocationID.x) / float(amtOfDataPoints) * float(aBins));
     //binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
     uint finalBin = binA * bBins + binB;    // linear index

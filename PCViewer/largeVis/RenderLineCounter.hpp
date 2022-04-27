@@ -41,6 +41,7 @@ private:
     VkImageView _countImageView{};
     VkDeviceMemory _countImageMem{};
     uint32_t _aBins, _bBins;
+    size_t _imageMemSize;
 
     // vulkan resources that have to be destroyed
     VkUtil::PipelineInfo _countPipeInfo{};

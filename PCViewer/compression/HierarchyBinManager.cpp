@@ -74,33 +74,33 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
 
     // test indexcompression
     // testing random indexlist compression with uniformly split clusters
-    {
-        std::vector<uint32_t> randomInts(_attributeIndices[4].size());
-        std::iota(randomInts.begin(), randomInts.end(), 0);
-        //std::random_shuffle(randomInts.begin(), randomInts.end());
-        size_t curStart{};
-        size_t binSize = 1 << 14;
-        size_t indexlistSize{randomInts.size() * sizeof(uint32_t)}, compressedSize{};
-        for(size_t i = 0; i < binSize; ++i){   //1024 bins
-            size_t end = (i + 1) * randomInts.size() / binSize;
-            auto compressed = roaring::Roaring(end - curStart, randomInts.data() + curStart);
-            compressed.runOptimize();
-            compressedSize += compressed.getSizeInBytes();
-            curStart = end;
-        }
-        std::cout << "Ordered indices " << binSize << " bins : Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
-    }
+    //{
+    //    std::vector<uint32_t> randomInts(_attributeIndices[4].size());
+    //    std::iota(randomInts.begin(), randomInts.end(), 0);
+    //    //std::random_shuffle(randomInts.begin(), randomInts.end());
+    //    size_t curStart{};
+    //    size_t binSize = 1 << 14;
+    //    size_t indexlistSize{randomInts.size() * sizeof(uint32_t)}, compressedSize{};
+    //    for(size_t i = 0; i < binSize; ++i){   //1024 bins
+    //        size_t end = (i + 1) * randomInts.size() / binSize;
+    //        auto compressed = roaring::Roaring(end - curStart, randomInts.data() + curStart);
+    //        compressed.runOptimize();
+    //        compressedSize += compressed.getSizeInBytes();
+    //        curStart = end;
+    //    }
+    //    std::cout << "Ordered indices " << binSize << " bins : Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
+    //}
 
-    for(uint32_t compInd = 4; compInd < _attributeCenters.size(); ++compInd){
-        std::vector<roaring::Roaring> compressed(_attributeCenters[compInd].size());
-        size_t indexlistSize{_attributeIndices[compInd].size() * sizeof(uint32_t)}, compressedSize{};
-        for(int i = 0; i < compressed.size(); ++i){
-            compressed[i] = roaring::Roaring(_attributeCenters[compInd][i].size, _attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset);
-            compressed[i].runOptimize();
-            compressedSize += compressed[i].getSizeInBytes();
-        }
-        std::cout << "Attribute " << _attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
-    }
+    //for(uint32_t compInd = 4; compInd < _attributeCenters.size(); ++compInd){
+    //    std::vector<roaring::Roaring> compressed(_attributeCenters[compInd].size());
+    //    size_t indexlistSize{_attributeIndices[compInd].size() * sizeof(uint32_t)}, compressedSize{};
+    //    for(int i = 0; i < compressed.size(); ++i){
+    //        compressed[i] = roaring::Roaring(_attributeCenters[compInd][i].size, _attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset);
+    //        compressed[i].runOptimize();
+    //        compressedSize += compressed[i].getSizeInBytes();
+    //    }
+    //    std::cout << "Attribute " << _attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
+    //}
     // end test
 
     std::cout << "Data is " << dataSize << " elements per attribute" << std::endl;

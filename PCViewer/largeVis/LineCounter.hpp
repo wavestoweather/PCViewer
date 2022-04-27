@@ -40,4 +40,7 @@ private:
     VkUtil::PipelineInfo _countPipeInfo{};
 
     const std::string _computeShader = "shader/lineCount.comp.spv";
+
+    VkDeviceMemory _bins;
+    size_t _binsSize;
 };

@@ -68,6 +68,8 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "largeVis/LineCounter.hpp"
 #include "largeVis/RenderLineCounter.hpp"
 #include "largeVis/CpuLineCounter.hpp"
+#include "largeVis/RoaringCounter.hpp"
+#include "Test.hpp"
 
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
@@ -7529,9 +7531,7 @@ int main(int, char**)
 	}
 
 	{
-		//RenderLineCounter::tests(RenderLineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
-		//LineCounter::tests(LineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
-		//compression::testCounting();
+		TEST(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
 	}
 
 	{

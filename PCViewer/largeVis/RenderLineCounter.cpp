@@ -97,10 +97,11 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
     
     std::vector<VkDynamicState> dynamicStateVec{};
 
-    VkUtil::createImage(info.context.device, _aBins, _bBins, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &_countImage);
+    VkUtil::createImage(info.context.device, _aBins, _bBins, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &_countImage);
     VkMemoryRequirements memReq{};
     vkGetImageMemoryRequirements(info.context.device, _countImage, &memReq);
     VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, memReq.size, VkUtil::findMemoryType(info.context.physicalDevice, memReq.memoryTypeBits, 0)};
+    _imageMemSize = memReq.size;
     vkAllocateMemory(info.context.device, &allocInfo, nullptr, &_countImageMem);
     vkBindImageMemory(info.context.device, _countImage, _countImageMem, 0);
     VkUtil::createImageView(info.context.device, _countImage, VK_FORMAT_R32_SFLOAT, 1, VK_IMAGE_ASPECT_COLOR_BIT, &_countImageView);
@@ -113,7 +114,7 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
 
 void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
     // test counting
-    const uint32_t size = 1 << 29;  // 2^30
+    const uint32_t size = 1 << 30;  // 2^30
     const uint32_t runs = 1;   //amount of separate draw calls to do the work
     std::vector<uint16_t> a1(size), a2(size);
     VkBuffer vA, vB, infos;
@@ -205,7 +206,15 @@ void RenderLineCounter::tests(const CreateInfo& info){
         VkUtil::commitCommandBuffer(info.context.queue, commands);
         vkQueueWaitIdle(info.context.queue);
     }
-    
+
+    //downloading results
+    std::vector<float> res(t->_imageMemSize / sizeof(float));
+    VkUtil::downloadImageData(t->_vkContext.device, t->_vkContext.physicalDevice, t->_vkContext.commandPool, t->_vkContext.queue, t->_countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, t->_aBins, t->_bBins, 1, res.data(), t->_imageMemSize / sizeof(float));
+    size_t count{};
+    for(auto f: res){
+        count += f;
+    }
+
     t->release();
 }
 
