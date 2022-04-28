@@ -68,7 +68,7 @@ void CompressionWorkbench::draw()
             }
         }
         if(_loader){
-            ImGui::Text("Loader contains %i files", _loader->getFileAmt());
+            ImGui::Text("Loader contains %i files", static_cast<int>(_loader->getFileAmt()));
             if(ImGui::CollapsingHeader("Data dimension settings")){
                 for(auto& e: _loader->queryAttributes){
                     if(e.dimensionSize == 0) 
@@ -77,7 +77,7 @@ void CompressionWorkbench::draw()
             }
         }
         if(_columnLoader){
-            ImGui::Text("Column loader contains %i files", _columnLoader->getFileAmt());
+            ImGui::Text("Column loader contains %i files", static_cast<int>(_columnLoader->getFileAmt()));
         }
         if(_loader || _columnLoader && ImGui::Button("Analyze")){
             if(_loader)
@@ -92,7 +92,7 @@ void CompressionWorkbench::draw()
             _dataSize = res.size;
             _attributes = res.attributes;
         }
-        ImGui::Text("Analyzed data size: %d", _dataSize);
+        ImGui::Text("Analyzed data size: %d", static_cast<int>(_dataSize));
         if(_loader)
             ImGui::Text("Loader progress: %.2f%%", _loader->progress() * 100);
         if(_columnLoader)
