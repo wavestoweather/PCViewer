@@ -61,3 +61,7 @@ glslangValidator -V --target-env vulkan1.1 -o radixDsLocalSort.comp.spv radixDsL
 glslangValidator -V --target-env vulkan1.1 -o lineCount.comp.spv lineCount.comp
 glslangValidator -V --target-env vulkan1.1 -o lineCount.vert.spv lineCount.vert
 glslangValidator -V --target-env vulkan1.1 -o lineCount.frag.spv lineCount.frag
+
+glslangValidator -V --target-env vulkan1.1 -o largeVis.vert.spv largeVis.vert
+glslangValidator -V --target-env vulkan1.1 -o largeVis.geom.spv largeVis.geom
+glslangValidator -V --target-env vulkan1.1 -o largeVis.frag.spv largeVis.frag

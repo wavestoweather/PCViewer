@@ -3,11 +3,12 @@
 #include "largeVis/RenderLineCounter.hpp"
 #include "largeVis/CpuLineCounter.hpp"
 #include "largeVis/RoaringCounter.hpp"
+#include "largeVis/Renderer.hpp"
 #include "range.hpp"
 #include "PCUtil.h"
 #include <iostream>
 
-void TEST(const VkUtil::Context& context){
+void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     // range testing ------------------------------
     //for(int i: range(0, 100)){
     //    std::cout << i << " ";
@@ -51,5 +52,8 @@ void TEST(const VkUtil::Context& context){
 	//LineCounter::tests(LineCounter::CreateInfo{context});
 	//compression::testCounting();
 	//compression::testRoaringCounting();
-    compression::testRoaringRealWorld();
+    //compression::testRoaringRealWorld();
+
+    // testing the rendering pipeline creation ----------------------------
+    auto renderer = compression::Renderer::acquireReference({context, testInfo.pcNoClearPass, testInfo.pcFramebuffer});
 }

@@ -7531,7 +7531,7 @@ int main(int, char**)
 	}
 
 	{
-		TEST(VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue});
+		TEST(VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, {g_PcPlotFramebuffer_noClear, g_PcPlotRenderPass_noClear});
 	}
 
 	{
