@@ -1,6 +1,7 @@
 #pragma once
 #include "DataLoader.hpp"
 #include "../Data.hpp"
+#include "Constants.hpp"
 #include <string_view>
 
 // functions for creating the compressed hierarchy
@@ -20,9 +21,10 @@ namespace compression{
         Native,
         Bundled,
         Single,
+        Roaring,
         MethodCount
     };
-    const std::string_view CachingMethodNames[3]{"NativeCaching", "BundledCaching", "SingleCaching"};
+    const std::string_view CachingMethodNames[4]{"NativeCaching", "BundledCaching", "SingleCaching", "Roaring"};
 
     // creates ready to use compressed hierarchy in the 'outputfolder' 
     // with the data given in 'loader'

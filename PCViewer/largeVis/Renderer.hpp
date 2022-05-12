@@ -19,6 +19,7 @@ public:
         VkFramebuffer framebuffer;
     };
     struct RenderInfo{
+        std::string drawListId;                             // drawlist id used for internal resource management
         RenderType renderType;
         std::vector<VkBuffer> counts;                       // the count buffer are expected to be in row major order (same order as for images)
         std::vector<std::pair<uint32_t, uint32_t>> axes;    // contains for each counts buffer the axes
