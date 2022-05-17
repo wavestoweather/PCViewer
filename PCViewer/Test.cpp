@@ -49,11 +49,11 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // line counting tests -------------------------------------
     //RenderLineCounter::tests(RenderLineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
-	//LineCounter::tests(LineCounter::CreateInfo{context});
+	LineCounter::tests(LineCounter::CreateInfo{context});
 	//compression::testCounting();
 	//compression::testRoaringCounting();
     //compression::testRoaringRealWorld();
 
     // testing the rendering pipeline creation ----------------------------
-    auto renderer = compression::Renderer::acquireReference({context, testInfo.pcNoClearPass, testInfo.pcFramebuffer});
+    //auto renderer = compression::Renderer::acquireReference({context, testInfo.pcNoClearPass, testInfo.pcFramebuffer});
 }

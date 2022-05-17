@@ -9,6 +9,9 @@
 #include "../robin_hood_map/robin_hood.h"
 #include "../VkUtil.h"
 #include "../compression/Constants.hpp"
+#include "RenderLineCounter.hpp"
+#include "Renderer.hpp"
+#include "LineCounter.hpp"
 #include <atomic>
 #include <future>
 #include <roaring.hh>
@@ -21,16 +24,39 @@
 //  3. render:                  A method to render the current active ordered attributes to the pc plot according to current 2d bin counts
 //  4. checkRenderRequest:      A method which indicates that updates have been processed which require a rerendering -> call render() to set to false
 class IndBinManager{
+private:
+    struct UVecHash{
+        std::size_t operator()(std::vector<uint32_t> const& vec) const{
+            std::size_t seed = vec.size();
+            for(const auto& i : vec){
+                seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
+            return seed;
+        }
+    };
+
 public:
     using RangeBrush = brushing::RangeBrush;
 
+    enum class CountingMethod{
+        CpuGeneric,
+        CpuRoaring,
+        GpuDrawPairwise,
+        GpuDrawMultiViewport,
+        GpuComputePairwise,
+        GpuComputeFull,
+        HybridRoaringGpuDraw
+    };
+
     struct CreateInfo{
         std::string_view hierarchyFolder;
-        uint32_t maxDrawLines = 1e6
-    }
+        uint32_t maxDrawLines = 1e6;
+    };
 
     // maxDrawLines describes the max lines inbetween two attributes
     IndBinManager(const CreateInfo& info);
+    IndBinManager(const IndBinManager&) = delete;   // no copy constructor
+    IndBinManager& operator=(const IndBinManager&) = delete;    // no copy assignment
     // destructor triggers vulkan resource destruction
     ~IndBinManager();
 
@@ -45,25 +71,25 @@ public:
 
     // bool which indicates render update should be done (by calling render())
     std::vector<Attribute> attributes;
-    std::vector<std::vector<roaring::Roaring>> attributeBucketIndices;  // contains for each attribute a vector of all bins with the corresponding indices
-    robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring>> intersectionIndices;    // contains preintersected values if available(these do ont change a s it is constant information)
+    robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
+    CountingMethod countingMethod{CountingMethod::HybridRoaringGpuDraw};    // variable to set the different counting techniques
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
     struct CountResource{
         VkBuffer countBuffer{};
-        VkMemory countMemory{};
+        VkDeviceMemory countMemory{};
         size_t brushingId;      // used to identify brushing state (when brushing state is not on the current state recalculation of indices is required)
 
         VkDevice _vkDevice{};     // device handle needed for destruction
-        ~CountResource{
+        ~CountResource(){
             if(countBuffer)
                 vkDestroyBuffer(_vkDevice, countBuffer, nullptr);
             if(countMemory)
-                vkFreeDeviceMemory(_vkDevice, countMemory, nullptr);
+                vkFreeMemory(_vkDevice, countMemory, nullptr);
         }
         CountResource(const CountResource&) = delete;           // type is not copyable, only movable
         CountResource& operator=(const CountResource&) = delete;
-    }
+    };
 
     std::atomic<bool> _requestRender{false};
     bool _hierarchyValid{true};
@@ -80,7 +106,12 @@ private:
     std::thread _dataLoadThread;
     std::atomic<bool> _loadThreadActive{false};
 
-    robin_hood::unordered_map<std::vector<uint32_t>, CountResource> _countResources; // map saving for each attribute combination the 2d bin counts. It saves additional information and keeps after order changes to avoid unnesecary recomputation
+    robin_hood::unordered_map<std::vector<uint32_t>, CountResource, UVecHash> _countResources; // map saving for each attribute combination the 2d bin counts. It saves additional information and keeps after order changes to avoid unnesecary recomputation
     
+    // gpu pipeline handles which have to be noticed for deconstruction
+    RenderLineCounter* _renderLineCounter{};
+    LineCounter* _lineCounter{};
+    compression::Renderer* _renderer{};
+
     uint32_t _managerByteSize{};                    // used to keep track of memory consumption to dynamically release intersection lists in "intersectionIndices"
 };

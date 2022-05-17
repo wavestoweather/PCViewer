@@ -6,19 +6,17 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
 _hierarchyFolder(info.hierarchyFolder)
 {
     // --------------------------------------------------------------------------------
-    // determine kind of stored data
+    // determine kind of stored data (used to convert internally to a unified represantation for further processing)
     // --------------------------------------------------------------------------------
-
+    std::ifstream dataInfo(_hierarchyFolder + "/data.info", std::ios::binary);
+    compression::DataStorageBits dataBits;
+    dataInfo >> dataBits;
+    dataInfo.close();
 
     // --------------------------------------------------------------------------------
     // attribute infos, cluster infos
     // --------------------------------------------------------------------------------
     std::ifstream attributeInfos(_hierarchyFolder + "/attr.info", std::ios_base::binary);
-    std::string cacheMethod; attributeInfos >> cacheMethod;
-    //std::string vec; attributeInfos >> vec;
-    //_dimensionSizes = PCUtil::fromReadableString<uint32_t>(vec);
-    assert(cacheMethod == compression::CachingMethodNames[int(compression::CachingMethod::Bundled)] || cacheMethod == compression::CachingMethodNames[int(compression::CachingMethod::Roaring)]);
-    
     std::string a; float aMin, aMax;
     while(attributeInfos >> a >> aMin >> aMax){
         attributes.push_back({a, a, {}, {}, aMin, aMax});
@@ -26,22 +24,15 @@ _hierarchyFolder(info.hierarchyFolder)
     }
     attributeInfos.close();
 
-    //std::ifstream clusterInfos(_hierarchyFolder + "/hierarchy.info", std::ios_base::binary);
-    //assert(clusterInfos);
-    //clusterInfos >> _hierarchyLevels;
-    //clusterInfos >> _clusterDim;
-    //_dimensionCombinations.resize(_clusterDim);
-    //uint32_t clusterLevelSize;
-    //for(int l = 0; l < _hierarchyLevels; ++l){
-    //    clusterInfos >> clusterLevelSize;
-    //    _clusterLevelSizes.push_back(clusterLevelSize);
-    //}
-    //assert(_clusterLevelSizes.size() == _hierarchyLevels);
-    //clusterInfos.close();
-
     // --------------------------------------------------------------------------------
     // center infos
     // --------------------------------------------------------------------------------
+    if((dataBits & compression::DataStorageBits::RawAttributeBins) != compression::DataStorageBits::None){
+        // uncompressed indices
+    }
+    else if((dataBits & compression::DataStorageBits::Roaring2dBins) != compression::DataStorageBits::None){
+        // compressed indices
+    }
     std::ifstream attributeCenterFile(_hierarchyFolder + "/attr.ac", std::ios_base::binary);
     std::vector<compression::ByteOffsetSize> offsetSizes(attributes.size());
     attributeCenterFile.read(reinterpret_cast<char*>(offsetSizes.data()), offsetSizes.size() * sizeof(offsetSizes[0]));
@@ -55,7 +46,7 @@ _hierarchyFolder(info.hierarchyFolder)
     // --------------------------------------------------------------------------------
     // 1d index data either compressed or not (automatic conversion if not compressed)
     // --------------------------------------------------------------------------------
-    if(cacheMethod == compression::CachingMethodNames[int(compression::CachingMethod::Bundled)]){
+    if(true){
         _attributeIndices.resize(attributes.size());
         uint32_t dataSize = 0;
         for(int i = 0; i < attributes.size(); ++i){
@@ -67,7 +58,7 @@ _hierarchyFolder(info.hierarchyFolder)
             indicesData.read(reinterpret_cast<char*>(_attributeIndices[i].data()), indicesSize * sizeof(_attributeIndices[0][0]));
         }
     }
-    else if(cacheMethod == compression::CachingMethodNames[int(compression::CachingMethod::Roaring)]){
+    else if(true){
         //TODO: simply load
     }
 
@@ -101,4 +92,14 @@ _hierarchyFolder(info.hierarchyFolder)
     //    std::cout << "Attribute " << _attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
     //}
     // end test
+}
+
+IndBinManager::~IndBinManager(){
+    // releasing the gpu pipeline singletons
+    if(_renderLineCounter)
+        _renderLineCounter->release();
+    if(_lineCounter)
+        _lineCounter->release();
+    if(_renderer)
+        _renderer->release();
 }

@@ -33,7 +33,7 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
                     info >> a.name >> a.min >> a.max;
                     a.originalName = a.name;
                     info.get(); //skip newline
-                    bool reserverdAttribute = std::find(compressionConstants::reservedAttributeNames.begin(), compressionConstants::reservedAttributeNames.end(), a.name) != compressionConstants::reservedAttributeNames.end();
+                    bool reserverdAttribute = false; // std::find(compressionConstants::reservedAttributeNames.begin(), compressionConstants::reservedAttributeNames.end(), a.name) != compressionConstants::reservedAttributeNames.end();
                     foundReserverdAttribute |= reserverdAttribute;
                     if(foundReserverdAttribute && !reserverdAttribute){
                         std::cout << "Attribute mangling in the compressed hierarchy. Nothing loaded" << std::endl;

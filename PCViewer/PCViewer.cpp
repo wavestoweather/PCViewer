@@ -3342,8 +3342,8 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 	// Create Logical Device (with 2 queues)
 	{
 		int device_extension_count = 3;
-		if(atomicGpuFloatAddAvailable) device_extension_count = 4;
-		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing", VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME };
+		if(atomicGpuFloatAddAvailable) device_extension_count = 5;
+		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing", VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME};
 
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
 		floatFeat.shaderBufferFloat32AtomicAdd = VK_TRUE;
