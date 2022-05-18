@@ -42,8 +42,8 @@ LineCounter::LineCounter(const CreateInfo& info):
 
 void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
     // test counting
-    const uint32_t size = (1 << 30);  // 2^30
-    const uint32_t aBins = 1 << 6, bBins = 1 << 6;
+    const uint32_t size = (1 << 27);  // 2^30
+    const uint32_t aBins = 1 << 10, bBins = 1 << 10;
     const uint32_t iterations = 1;
     std::vector<uint16_t> a1(size), a2(size);
     VkBuffer vA, vB, counts, infos;
@@ -146,6 +146,7 @@ void LineCounter::tests(const CreateInfo& info){
     for(auto i: counts)
         sum += i;
     
+    std::cout << "Counts sum: " << sum << std::endl;
     t->release();
 }
 

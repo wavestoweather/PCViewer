@@ -20,6 +20,8 @@ layout(binding = 3) uniform Infos{
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
+//#define USE_PARTITION
+
 // as each element of aVals and bVals contain two float16 we have to unpack
 void main(){
     float aVal = unpackHalf2x16(aVals[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
@@ -30,11 +32,13 @@ void main(){
     //binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
     uint finalBin = binA * bBins + binB;    // linear index
 
+#ifdef USE_PARTITION
     // Find subgroup ( sg ) indices with same pixelID
     uvec4 sg = subgroupPartitionNV(finalBin);
     uint count = subgroupPartitionedAddNV(1, sg);
     uint tId = subgroupPartitionedMinNV(gl_SubgroupInvocationID, sg);
-
     if(tId == gl_SubgroupInvocationID)
         atomicAdd(counts[finalBin], count);         // incrementing
+#endif
+    atomicAdd(counts[finalBin], 1);
 }
