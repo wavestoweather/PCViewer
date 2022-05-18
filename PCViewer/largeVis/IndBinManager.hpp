@@ -14,7 +14,7 @@
 #include "LineCounter.hpp"
 #include <atomic>
 #include <future>
-#include <roaring.hh>
+#include <roaring64map.hh>
 
 // loads the roaring bitmaps from memory and makes them easily accesisble
 // provides a general interface to be used in the main application for calculating the 2d bin counts as well as rendering them as pc plots
@@ -71,7 +71,7 @@ public:
 
     // bool which indicates render update should be done (by calling render())
     std::vector<Attribute> attributes;
-    robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
+    robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
     CountingMethod countingMethod{CountingMethod::HybridRoaringGpuDraw};    // variable to set the different counting techniques
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
@@ -101,7 +101,6 @@ private:
     std::vector<uint32_t> _dimensionSizes;
     std::vector<std::vector<uint32_t>> _attributeDimensions;
     std::vector<std::vector<compression::IndexCenterFileData>> _attributeCenters; // for each level for all attributes a singel list with the centers exists 
-    std::vector<std::vector<uint32_t>> _attributeIndices;
 
     std::thread _dataLoadThread;
     std::atomic<bool> _loadThreadActive{false};

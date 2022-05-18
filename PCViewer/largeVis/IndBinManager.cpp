@@ -1,6 +1,7 @@
 #define NOSTATICS
 #include "IndBinManager.hpp"
 #undef NOSTATICS
+#include "../range.hpp"
 
 IndBinManager::IndBinManager(const CreateInfo& info) :
 _hierarchyFolder(info.hierarchyFolder)
@@ -27,12 +28,6 @@ _hierarchyFolder(info.hierarchyFolder)
     // --------------------------------------------------------------------------------
     // center infos
     // --------------------------------------------------------------------------------
-    if((dataBits & compression::DataStorageBits::RawAttributeBins) != compression::DataStorageBits::None){
-        // uncompressed indices
-    }
-    else if((dataBits & compression::DataStorageBits::Roaring2dBins) != compression::DataStorageBits::None){
-        // compressed indices
-    }
     std::ifstream attributeCenterFile(_hierarchyFolder + "/attr.ac", std::ios_base::binary);
     std::vector<compression::ByteOffsetSize> offsetSizes(attributes.size());
     attributeCenterFile.read(reinterpret_cast<char*>(offsetSizes.data()), offsetSizes.size() * sizeof(offsetSizes[0]));
@@ -46,20 +41,51 @@ _hierarchyFolder(info.hierarchyFolder)
     // --------------------------------------------------------------------------------
     // 1d index data either compressed or not (automatic conversion if not compressed)
     // --------------------------------------------------------------------------------
-    if(true){
-        _attributeIndices.resize(attributes.size());
+    if((dataBits & compression::DataStorageBits::RawAttributeBins) != compression::DataStorageBits::None){
+        // reading index data
+        std::cout << "Loading indexdata..." << std::endl;
+        std::vector<std::vector<uint32_t>> attributeIndices;
+        attributeIndices.resize(attributes.size());
         uint32_t dataSize = 0;
         for(int i = 0; i < attributes.size(); ++i){
             std::ifstream indicesData(_hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
             uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;
             if(indicesSize > dataSize)
                 dataSize = indicesSize;
-            _attributeIndices[i].resize(indicesSize);
-            indicesData.read(reinterpret_cast<char*>(_attributeIndices[i].data()), indicesSize * sizeof(_attributeIndices[0][0]));
+            attributeIndices[i].resize(indicesSize);
+            indicesData.read(reinterpret_cast<char*>(attributeIndices[i].data()), indicesSize * sizeof(attributeIndices[0][0]));
+        }
+        // compressing index data
+        std::cout << "Compressing indexdata..."  << std::endl;
+        for(uint32_t compInd: irange(_attributeCenters)){
+            ndBuckets[{compInd}].resize(_attributeCenters[compInd].size());
+            size_t indexlistSize{attributeIndices[compInd].size() * sizeof(uint32_t)}, compressedSize{};
+            for(uint32_t bin: irange(ndBuckets[{compInd}])){
+                ndBuckets[{compInd}][bin] = roaring::Roaring64Map(_attributeCenters[compInd][bin].size, attributeIndices[compInd].data() + _attributeCenters[compInd][bin].offset);
+                ndBuckets[{compInd}][bin].runOptimize();
+                ndBuckets[{compInd}][bin].shrinkToFit();
+                compressedSize += ndBuckets[{compInd}][bin].getSizeInBytes();
+            }
+            std::cout << "Attribute " << attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
         }
     }
-    else if(true){
-        //TODO: simply load
+    else if((dataBits & compression::DataStorageBits::Roaring2dBins) != compression::DataStorageBits::None){
+        // compressed indices, can be read out directly
+        std::cout << "Loading compressed indexdata..." << std::endl;
+        uint32_t dataSize = 0;
+        for(uint32_t i: irange(attributes)){
+            std::ifstream indicesData(_hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
+            uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;
+            std::vector<uint32_t> indices(indicesSize);
+            if(indicesSize > dataSize)
+                dataSize = indicesSize;
+            indicesData.read(reinterpret_cast<char*>(indices.data()), indicesSize * sizeof(indices[0]));
+            //parse into roaring bitmaps
+            ndBuckets[{i}].resize(_attributeCenters[i].size());
+            for(uint32_t bin: irange(ndBuckets[{i}])){
+                ndBuckets[{i}][bin].readSafe(reinterpret_cast<char*>(indices.data() + _attributeCenters[i][bin].offset), _attributeCenters[i][bin].size * sizeof(indices[0]));
+            }
+        }
     }
 
     // test indexcompression
