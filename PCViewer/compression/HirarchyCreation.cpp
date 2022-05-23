@@ -11,6 +11,8 @@
 #include "BundlingCacheManager.hpp"
 #include "../PCUtil.h"
 #include "../robin_hood_map/robin_hood.h"
+#include "../half/half.hpp"
+#include "../range.hpp"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -843,6 +845,139 @@ namespace compression
                         data.push_back({axisVal, axisVal, axisVal, {i}});
                     }
                 }
+            }
+        }
+
+        // ----------------------------------------------------------------------------------------------
+        // writeout of the attribute Hierarchy
+        // ----------------------------------------------------------------------------------------------
+        // writing out attribute infos (including dimensionality information to decompress indices)
+        std::ofstream file(std::string(outputFolder) + "/attr.info", std::ios_base::binary);
+        assert(file);
+        file << CachingMethodNames[static_cast<int>(cachingMethod)] << "\n";
+        file << PCUtil::toReadableString(loader->curData().dimensionSizes) << "\n";
+        int c = 0;
+        for(auto& a: attributes){
+            file << a.name << " " << a.min << " " << a.max << " " << PCUtil::toReadableString(loader->curData().columnDimensions[c++]) << "\n";
+        }
+
+        // -----------------------------------------------------------------------------------------------
+        // writeout of the indices per attribute in separate files
+        // -----------------------------------------------------------------------------------------------
+        
+        std::vector<ByteOffsetSize> attributeCenterOffsets; 
+        std::vector<IndexCenterFileData> centerFileData;
+        uint32_t curByteOffset = 0;
+        for(int i = 0; i < attributeCenters.size(); ++i){
+            uint32_t startOffset = centerFileData.size();
+            // putting the centers into increasing value order and storing everything
+            std::vector<std::pair<float, const IndexCenterData*>> orderedCenters;
+            for(const auto& c: attributeCenters[i]){
+                const auto& d = data[c.second];
+                orderedCenters.push_back({d.val, &d});
+            }
+            std::sort(orderedCenters.begin(), orderedCenters.end(), [](const auto& a, const auto& b){return a.first < b.first;});
+            std::vector<uint32_t> indices;
+            for(const auto [val, c]: orderedCenters){
+                uint32_t start = indices.size();
+                indices.insert(indices.end(), c->indices.begin(), c->indices.end());
+                centerFileData.push_back({c->val, c->min, c->max, start, static_cast<uint32_t>(c->indices.size())});
+            }
+            std::ofstream indexFile(std::string(outputFolder) + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
+            assert(indexFile);
+            indexFile.write(reinterpret_cast<char*>(indices.data()), indices.size() * sizeof(indices[0]));
+            indexFile.close();
+            attributeCenterOffsets.push_back({static_cast<uint32_t>(startOffset * sizeof(centerFileData[0])), static_cast<uint32_t>((centerFileData.size() - startOffset) * sizeof(centerFileData[0]))});
+        }
+
+        // -----------------------------------------------------------------------------------------------
+        // writeout of the attribute centers (includes offsets and range for the indices)
+        // -----------------------------------------------------------------------------------------------
+        // first putting offset information offset by the header info
+        uint32_t headerByteSize = attributeCenterOffsets.size() * sizeof(attributeCenterOffsets[0]);
+        std::ofstream attributeCenterFile(std::string(outputFolder) + "/attr.ac", std::ios_base::binary);
+        assert(attributeCenterFile);
+        for(auto& o: attributeCenterOffsets){
+            o.offset += headerByteSize;
+        }
+        attributeCenterFile.write(reinterpret_cast<char*>(attributeCenterOffsets.data()), attributeCenterOffsets.size() * sizeof(attributeCenterOffsets[0]));
+        assert(attributeCenterOffsets.front().offset == attributeCenterFile.tellp());
+        // then putting the center infos
+        attributeCenterFile.write(reinterpret_cast<char*>(centerFileData.data()), centerFileData.size() * sizeof(centerFileData[0]));
+        assert(attributeCenterOffsets.back().offset + attributeCenterOffsets.back().size == attributeCenterFile.tellp());
+        std::cout << "Donesene" << std::endl;
+    }
+
+    void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, int amtOfThreads){
+        const uint32_t compressionIteration{1 << 10};   // each time and index is added and the cardinality of a roaring map is a multiple of this, the map is compressed
+        
+        std::cout << "Starting creation of Roaring bins with compressed column data" << std::endl;
+        compression::CachingMethod cachingMethod = compression::CachingMethod::Bundled;
+        auto [dataSize, attributes] = loader->dataAnalysis();
+        loader->normalize();
+
+        using AttributeCenters = std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>;
+        AttributeCenters attributeCenters(attributes.size());
+        std::vector<IndexCenterDataRoaring> data;
+        std::vector<std::vector<half>> columnData(attributes.size());
+
+        auto storageSize = [](AttributeCenters* attributeCenters, std::vector<IndexCenterData>* data){
+            size_t size{};
+            for(const auto& m: *attributeCenters){
+                size += m.calcNumBytesTotal(m.size());
+            }
+            size += data->size() * sizeof((*data)[0]);
+            for(const auto& c: *data){
+                size += c.indices.size() * sizeof(c.indices[0]);
+            }
+            return size;
+        };
+
+        auto appendColumnFile = [&](){
+            for(int i: irange(columnData)){
+                std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
+                columnFile.write(reinterpret_cast<char*>(columnData[i].data()), columnData[i].size() * sizeof(columnData[i][0]));
+                columnData[i].clear();
+            }
+        };
+        
+        // clustering and index storing
+        size_t offset{};
+        while(loader->loadNextData()){
+            Data& d = loader->curData();
+            for(uint32_t a = 0; a < d.columns.size(); ++a){
+                for(uint32_t i = 0; i < d.columns[a].size(); ++i){
+                    float axisVal = d.columns[a][i];
+                    // adding the axis val to the corresponding half values
+                    columnData[a].push_back(axisVal);
+                    // indices
+                    uint32_t childId = axisVal * binsAmt;
+                    if(childId == binsAmt) childId--;
+                    if(auto f = attributeCenters[a].find(childId); f != attributeCenters[a].end()){
+                        auto& cd = data[f->second];
+                        float a = cd.indices.cardinality() / float(cd.indices.cardinality() + 1);
+                        cd.val = a * cd.val + (1. - a) * axisVal;
+                        cd.indices.add(i + offset);
+                        if(axisVal < cd.min)
+                            cd.min = axisVal;
+                        if(axisVal > cd.max)
+                            cd.max = axisVal;
+                        if(data[f->second].indices.cardinality() % compressionIteration == 0){
+                            data[f->second].indices.runOptimize();
+                            data[f->second].indices.shrinkToFit();
+                        }
+                    }
+                    else{
+                        attributeCenters[a][childId] = data.size();
+                        data.push_back({axisVal, axisVal, axisVal, roaring::Roaring64Map()});
+                        data.back().indices.add(i + offset);
+                    }
+                }
+            }
+            offset += d.columns[0].size();
+            if(columnData[0].size() >= dataCompressionBlock){
+                // writeout of the column data (appended to the column files)
+                appendColumnFile();
             }
         }
 

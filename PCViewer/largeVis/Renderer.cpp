@@ -127,6 +127,20 @@ void Renderer::render(const RenderInfo& renderInfo)
     // note that this means that clearing the render target has to be done outside
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    if(renderInfo.clear){
+        VkClearAttachment attachment{};
+        attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        attachment.clearValue.color.float32[0] = .0;
+        attachment.clearValue.color.float32[1] = .0;
+        attachment.clearValue.color.float32[2] = .0;
+        attachment.clearValue.color.float32[3] = .0;
+        VkClearRect clearRect{};
+        clearRect.baseArrayLayer = 0;
+        clearRect.layerCount = 1;
+        clearRect.rect.extent.width = _vkContext.screenSize[0];
+        clearRect.rect.extent.height = _vkContext.screenSize[1];
+        vkCmdClearAttachments(commands, 1, &attachment, 1, &clearRect);
+    }
     VkUtil::beginRenderPass(commands, {}, _renderPass, _framebuffer, VkExtent2D{_vkContext.screenSize[0], _vkContext.screenSize[1]});
     
     switch(renderInfo.renderType){

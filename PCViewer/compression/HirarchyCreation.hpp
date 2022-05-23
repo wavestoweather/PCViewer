@@ -3,6 +3,7 @@
 #include "../Data.hpp"
 #include "Constants.hpp"
 #include <string_view>
+#include <roaring64map.hh>
 
 // functions for creating the compressed hierarchy
 // the compressed hierarchy files have the following format:
@@ -62,6 +63,11 @@ namespace compression{
         std::vector<uint32_t> indices;
     };
 
+    struct IndexCenterDataRoaring{
+        float val, min, max;
+        roaring::Roaring64Map indices;
+    };
+
     struct IndexCenterFileData{
         float val, min, max;
         uint32_t offset, size;
@@ -98,4 +104,13 @@ namespace compression{
     // maxMb            : Maximum available RAM for hierarchy creation (is used to trigger caching events)
     // amtOfThreads     : Amount of threads to be used for hierarchy creation
     void create1DBinIndex(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t maxMb, int amtOfThreads);
+
+    // method to create a 1 dimensional bin with corresponding data indices alongside column major data files with half precision compressed data
+    // each of the bins contains the average position of the data it holds, a mi, max value and a list of indices fo its child data points
+    // outputFolder     : Folder name where the resulting hierarchy will be put
+    // loader           : DataLoader which contains the data to be converted
+    // binsAmt          : Amount of bins on the finest layer
+    // dataCompressionBlock: Block size for compressing column data
+    // amtOfThreads     : Amount of threads to be used for hierarchy creation
+    void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, int amtOfThreads);
 };

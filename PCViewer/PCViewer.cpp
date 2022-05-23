@@ -69,6 +69,8 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "largeVis/RenderLineCounter.hpp"
 #include "largeVis/CpuLineCounter.hpp"
 #include "largeVis/RoaringCounter.hpp"
+#include "largeVis/IndBinManager.hpp"
+#include "range.hpp"
 #include "Test.hpp"
 
 #include "ColorPalette.h"
@@ -2312,9 +2314,24 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		dl.inheritanceFlags = InheritanceFlags::hierarchical;
 		dl.indices = {};		//nothing yet loaded
 		std::string_view hierarchy(reinterpret_cast<const char*>(ds.additionalData.data()), ds.additionalData.size());
-		dl.hierarchyBinManager= std::make_shared<HierarchyBinManager>(hierarchy, pcSettings.maxHierarchyLines);
-		fillVertexBuffer(ds.buffer, dl.hierarchyBinManager->retrieveNewDataC());
-		dl.hierarchyBinManager->updateLineCombinations(pcAttrOrd);
+		IndBinManager::CreateInfo createInfo{
+			hierarchy,
+			pcSettings.maxHierarchyLines,
+			VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue},
+			g_PcPlotRenderPass_noClear,
+			g_PcPlotFramebuffer_noClear
+		};
+		dl.indBinManager = std::make_shared<IndBinManager>(createInfo);
+		pcAttributes = dl.indBinManager->attributes;
+		pcAttrOrd.resize(pcAttributes.size());
+		std::iota(pcAttrOrd.begin(), pcAttrOrd.end(), 0);
+		if(!pcAttributeEnabled){
+			pcAttributeEnabled = new bool[pcAttributes.size()];
+			for(int i: irange(pcAttributes))
+				pcAttributeEnabled[i] = true;
+		}
+		//fillVertexBuffer(ds.buffer, dl.IndBinManager->retrieveNewDataC());
+		dl.indBinManager->notifyAttributeUpdate(pcAttrOrd, pcAttributes, pcAttributeEnabled);
 	}
 	else{
 		dl.indices = std::vector<uint32_t>(tl.indices);
@@ -5640,7 +5657,7 @@ static bool updateActiveIndices(DrawList& dl) {
 	}
 
 	//reloading data points if brush has changed
-	if(dl.hierarchyBinManager){
+	if(dl.indBinManager){
 		std::vector<brushing::RangeBrush> rangeBrushes;
 		//adding local brushes
 		uint32_t axis = 0;
@@ -5657,7 +5674,7 @@ static bool updateActiveIndices(DrawList& dl) {
 		//TODO: global brushes
 		static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 		if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
-			dl.hierarchyBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
+			dl.indBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
 		prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 	}
 
@@ -14501,16 +14518,16 @@ int main(int, char**)
 
 		//checking data from hierarch importer
 		for(auto& dl: g_PcPlotDrawLists){
-			if(dl.hierarchyBinManager && dl.hierarchyBinManager->newDataLoaded){
-				auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& ds){return ds.name == dl.parentDataSet;});
-				ds->data = dl.hierarchyBinManager->retrieveNewData();
-				//todo upload new data, set index list ...
-				fillVertexBuffer(ds->buffer, ds->data);
-				dl.indices.resize(ds->data.size());
-				std::iota(dl.indices.begin(), dl.indices.end(), 0);
-				updateActiveIndices(dl);
-				pcPlotRender = true;
-			}
+			//if(dl.hierarchyBinManager && dl.hierarchyBinManager->newDataLoaded){
+			//	auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](DataSet& ds){return ds.name == dl.parentDataSet;});
+			//	ds->data = dl.hierarchyBinManager->retrieveNewData();
+			//	//todo upload new data, set index list ...
+			//	fillVertexBuffer(ds->buffer, ds->data);
+			//	dl.indices.resize(ds->data.size());
+			//	std::iota(dl.indices.begin(), dl.indices.end(), 0);
+			//	updateActiveIndices(dl);
+			//	pcPlotRender = true;
+			//}
 		}
 
 		pcSettings.rescaleTableColumns = false;

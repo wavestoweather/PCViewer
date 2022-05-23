@@ -139,10 +139,17 @@ IndBinManager::~IndBinManager(){
         _renderer->release();
 }
 
-void IndBinManager::render(VkBuffer attributeInfos){
+void IndBinManager::notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* attributeActivations){
+    _attributeOrdering = attributeOrdering;
+    assert(attributes == this->attributes); // debug check
+    _attributeActivations = attributeActivations;
+    updateCounts();         // updating the counts if there are some missing and pushing a render call
+}
+
+void IndBinManager::render(VkBuffer attributeInfos, bool clear){
     std::vector<int> activeIndices; // these are already ordered
     for(auto i: _attributeOrdering){
-        if(_atttributeActivations[i])
+        if(_attributeActivations[i])
             activeIndices.push_back(i);
     }
     std::vector<VkBuffer> counts;
@@ -152,6 +159,9 @@ void IndBinManager::render(VkBuffer attributeInfos){
         uint32_t b = activeIndices[i + 1];
         if(a > b)
             std::swap(a, b);
+        if(!_countResources.contains({a,b})){
+
+        }
         counts.push_back(_countResources[{a,b}].countBuffer);
         axes.push_back({a,b});
     }
@@ -164,9 +174,10 @@ void IndBinManager::render(VkBuffer attributeInfos){
         columnBins * columnBins,
         _attributeOrdering,
         attributes,
-        _atttributeActivations,
+        _attributeActivations,
         columnBins,
-        attributeInfos
+        attributeInfos,
+        clear
     };
     
     _renderer->render(renderInfo);
@@ -174,11 +185,15 @@ void IndBinManager::render(VkBuffer attributeInfos){
 
 void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes){
     _currentBrushState = {rangeBrushes, lassoBrushes, _curBrushingId++};
+    updateCounts();
+}
+
+void IndBinManager::updateCounts(){
     bool prevValue{};
 
     std::vector<int> activeIndices; // these are already ordered
     for(auto i: _attributeOrdering){
-        if(_atttributeActivations[i])
+        if(_attributeActivations[i])
             activeIndices.push_back(i);
     }
     if(activeIndices.size() < 2){
@@ -195,9 +210,12 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    return;
                 std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterPair(t->columnData[a].columnData, t->columnData[b].columnData, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
         }
@@ -207,9 +225,12 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    return;
                 std::cout << "Counting pairwise (roaring) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterRoaring(t->ndBuckets[{a}], t->ndBuckets[{b}], t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
         }
@@ -223,8 +244,11 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    return;
                 std::cout << "Counting pairwise (compute pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 t->_lineCounter->countLinesPair(t->columnData[a].columnData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
         }
@@ -234,8 +258,11 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    return;
                 std::cout << "Counting pairwise (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 t->_lineCounter->countLinesPair(t->columnData[a].columnData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
         }

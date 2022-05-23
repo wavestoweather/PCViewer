@@ -9,6 +9,7 @@
 #include "../robin_hood_map/robin_hood.h"
 #include "../VkUtil.h"
 #include "../compression/Constants.hpp"
+#include "../compression/HirarchyCreation.hpp"
 #include "RenderLineCounter.hpp"
 #include "Renderer.hpp"
 #include "LineCounter.hpp"
@@ -76,7 +77,7 @@ public:
     // updates the attribute ordering of the attributes. Might trigger recalculation of 
     void notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* atttributeActivations);
     // renders the current 2d bin counts to the pc plot (is done on main thread, as the main framebuffer is locked)
-    void render(VkBuffer attributeInfos);
+    void render(VkBuffer attributeInfos, bool clear = false);
     // checks if pc plot should be updated
     bool checkRenderRequest()const {return _requestRender;}
     // checks if an update is enqueued
@@ -147,7 +148,7 @@ private:
     BrushState _countBrushState;    // used to check if it diverges from the current brush state. Happens when a brush update was entered while a count is still active
 
     std::vector<int> _attributeOrdering;
-    bool* _atttributeActivations;
+    bool* _attributeActivations;
 
     robin_hood::unordered_map<std::vector<uint32_t>, CountResource, UVecHash> _countResources; // map saving for each attribute combination the 2d bin counts. It saves additional information and keeps after order changes to avoid unnesecary recomputation
     
@@ -158,4 +159,6 @@ private:
 
     size_t _curBrushingId{};                        // brush id to check brush status and need for count update
     uint32_t _managerByteSize{};                    // used to keep track of memory consumption to dynamically release intersection lists in "intersectionIndices"
+
+    void updateCounts();
 };

@@ -29,8 +29,9 @@ public:
         std::vector<int>& order;
         std::vector<Attribute>& attributes;
         bool* attributeActive;
-        uint32_t attributeAxisSizes;                                 //contains for each axis how many bins exist.
+        uint32_t attributeAxisSizes;                        //contains for each axis how many bins exist.
         VkBuffer attributeInformation;                      // contains mapping information for axis scaling, axis positioning and padding
+        bool clear;                                         // indicates if the framebuffer should be cleared before rendered to
     };
 
     // compression renderer can only be created internally, can not be moved, copied or destoryed
