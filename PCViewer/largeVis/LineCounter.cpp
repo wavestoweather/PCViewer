@@ -38,6 +38,17 @@ LineCounter::LineCounter(const CreateInfo& info):
     VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_countPipeInfo.descriptorSetLayout);
 
     VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countPipeInfo.pipelineLayout, &_countPipeInfo.pipeline);
+
+    VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_pairSet);
+    VkUtil::createBuffer(_vkContext.device, sizeof(PairInfos), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &_pairUniform);
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    VkMemoryRequirements memReq{};
+    vkGetBufferMemoryRequirements(_vkContext.device, _pairUniform, &memReq);
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_pairUniformMem);
+    vkBindBufferMemory(_vkContext.device, _pairUniform, _pairUniformMem, 0);
 }
 
 void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
@@ -113,6 +124,30 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     // execution is done outside
 }
 
+void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) const{
+    VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _pairSet);
+
+    PairInfos infos{};
+    infos.amtofDataPoints = dataSize;
+    infos.aBins = aIndices;
+    infos.bBins = bIndices;
+    VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
+
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    if(clearCounts)
+        vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
+    vkCmdDispatch(commands, dataSize / 256, 1, 1);
+
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    vkQueueWaitIdle(_vkContext.queue);
+}
+
 LineCounter* LineCounter::_singleton = nullptr;    // init to nullptr
 
 LineCounter* LineCounter::acquireReference(const CreateInfo& info){
@@ -155,6 +190,12 @@ LineCounter::~LineCounter()
     _countPipeInfo.vkDestroy(_vkContext);
     if(_descSet)
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_descSet);
+    if(_pairSet)
+        vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_pairSet);
+    if(_pairUniform)
+        vkDestroyBuffer(_vkContext.device, _pairUniform, nullptr);
+    if(_pairUniformMem)
+        vkFreeMemory(_vkContext.device, _pairUniformMem, nullptr);
 }
 
 void LineCounter::release(){

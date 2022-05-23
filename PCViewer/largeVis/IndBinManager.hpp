@@ -60,6 +60,8 @@ public:
 
     struct CompressedColumnData{    // atm not compressed, future feature
         std::vector<half> columnData;
+        VkBuffer gpuData;
+        VkMemory memory;
     };
 
     // maxDrawLines describes the max lines inbetween two attributes

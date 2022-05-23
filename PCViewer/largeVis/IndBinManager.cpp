@@ -161,6 +161,7 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
+                std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterPair(t->columnData[a].columnData, t->columnData[b].columnData, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
             }
@@ -172,21 +173,40 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
+                std::cout << "Counting pairwise (roaring) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterRoaring(t->ndBuckets[{a}], t->ndBuckets[{b}], t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
             }
             break;
         }
         case CountingMethod::GpuComputeFull:{
+            //ToDo: implement full pipeline
             break;
         }
         case CountingMethod::GpuComputePairwise:{
+            for(int i: irange(activeIndices.size() -1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                std::cout << "Counting pairwise (compute pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
+                t->_lineCounter->countLinesPair(t->columnData[a].columnData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
+            }
             break;
         }
         case CountingMethod::GpuDrawPairwise:{
+            for(int i: irange(activeIndices.size() -1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                std::cout << "Counting pairwise (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
+                t->_lineCounter->countLinesPair(t->columnData[a].columnData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
+            }
             break;
         }
         case CountingMethod::GpuDrawMultiViewport:{
+            // ToDo
             break;
         }
         case CountingMethod::HybridRoaringGpuDraw:{
@@ -194,7 +214,7 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
         }
         };
         t->_requestRender = true;                   // ready to update rendering
-        t->_countUpdateThreadActive = false;        // releasing the 
+        t->_countUpdateThreadActive = false;        // releasing the update thread
     };
 
     if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies

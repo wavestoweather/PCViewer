@@ -25,7 +25,12 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
+    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false) const;
 private:
+    struct PairInfos{
+        uint32_t amtofDataPoints, aBins, bBins, padding;
+    };
+
     RenderLineCounter(const CreateInfo& info);
     ~RenderLineCounter();
 
@@ -37,6 +42,9 @@ private:
     VkRenderPass _renderPass;
     VkFramebuffer _framebuffer;
     VkDescriptorSet _descSet{}; //only here for test purposes
+    VkDescriptorSet _pairSet;
+    VkBuffer _pairUniform;
+    VkDeviceMemory _pairUniformMem;
     VkImage _countImage{};
     VkImageView _countImageView{};
     VkDeviceMemory _countImageMem{};

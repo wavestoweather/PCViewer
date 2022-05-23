@@ -23,8 +23,13 @@ public:
     static LineCounter* acquireReference(const CreateInfo& info); // acquire a reference (automatically creates renderer if not yet existing)
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
-    void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
+    void countLines(VkCommandBuffer commands, const CountLinesInfo& info);  // test function
+    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false) const;
 private:
+    struct PairInfos{
+        uint32_t amtofDataPoints, aBins, bBins, padding;
+    };
+
     LineCounter(const CreateInfo& info);
     ~LineCounter();
 
@@ -35,6 +40,9 @@ private:
     VkUtil::Context _vkContext;
     VkRenderPass _renderPass;
     VkDescriptorSet _descSet{}; //only here for test purposes
+    VkDescriptorSet _pairSet{};
+    VkBuffer _pairUniform{};
+    VkDeviceMemory _pairUniformMem{};
 
     // vulkan resources that have to be destroyed
     VkUtil::PipelineInfo _countPipeInfo{};
