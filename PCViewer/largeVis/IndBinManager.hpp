@@ -123,6 +123,7 @@ private:
     };
 
     const uint32_t _compressedBlockSize{1 << 20};
+    VkUtil::Context _vkContext;
 
     std::atomic<bool> _requestRender{false};
     bool _hierarchyValid{true};

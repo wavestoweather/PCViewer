@@ -3,6 +3,7 @@
 #undef NOSTATICS
 #include "../range.hpp"
 #include "CpuLineCounter.hpp"
+#include "RoaringCounter.hpp"
 
 IndBinManager::IndBinManager(const CreateInfo& info) :
 _hierarchyFolder(info.hierarchyFolder)
@@ -150,7 +151,9 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
         std::cout << "Less than 2 attribute active, not updating the counts" << std::endl;
         return;
     }
+
     auto execCountUpdate = [](IndBinManager* t, std::vector<int> activeIndices){
+        // Note: vulkan resources for the count images were already provided by main thread
         switch(t->countingMethod){
         case CountingMethod::CpuGeneric:{
             for(int i: irange(activeIndices.size() - 1)){
@@ -159,13 +162,19 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
                 if(a > b)
                     std::swap(a, b);
                 auto counts = compression::lineCounterPair(t->columnData[a].columnData, t->columnData[b].columnData, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
-                if(!t->_countResources[{a,b}].countBuffer){
-                    
-                }
+                VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
             }
             break;
         }
         case CountingMethod::CpuRoaring:{
+            for(int i: irange(activeIndices.size() -1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                auto counts = compression::lineCounterRoaring(t->ndBuckets[{a}], t->ndBuckets[{b}], t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
+                VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
+            }
             break;
         }
         case CountingMethod::GpuComputeFull:{
@@ -189,6 +198,26 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
     };
 
     if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies
+        // making shure the counting images are created and have the right size
+        for(int i: irange(activeIndices.size() - 1)){
+            uint32_t a = activeIndices[i];
+            uint32_t b = activeIndices[i + 1];
+            if(a > b)
+                std::swap(a, b);
+            if(!_countResources[{a,b}].countBuffer || _countResources[{a,b}].binAmt != columnBins * columnBins){
+                // create resource if not yet available
+                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &_countResources[{a,b}].countBuffer);
+                VkMemoryAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                VkMemoryRequirements memReq{};
+                vkGetBufferMemoryRequirements(_vkContext.device, _countResources[{a,b}].countBuffer, &memReq);
+                allocInfo.allocationSize = memReq.size;
+                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, 0);
+                vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_countResources[{a,b}].countMemory);
+                vkBindBufferMemory(_vkContext.device, _countResources[{a,b}].countBuffer, _countResources[{a,b}].countMemory, 0);
+                _countResources[{a,b}].binAmt = columnBins * columnBins;
+            }
+        }
         _countBrushState = _currentBrushState;
         _countUpdateThread = std::thread(execCountUpdate, this, activeIndices);
     }

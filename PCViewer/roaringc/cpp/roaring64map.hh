@@ -558,6 +558,18 @@ public:
     }
 
     /**
+     * Returns the cardinality of the intersection without computing it
+     */
+    uint64_t and_cardinality(const Roaring64Map &r) const{
+        uint64_t s{};
+        for (auto &map_entry : roarings) {
+            if (r.roarings.count(map_entry.first) == 1)
+                s += map_entry.second.and_cardinality(r.roarings.at(map_entry.first));
+        }
+        return s;
+    }
+
+    /**
      * Write a bitmap to a char buffer. This is meant to be compatible with
      * the Java and Go versions. Returns how many bytes were written which
      * should be getSizeInBytes().
