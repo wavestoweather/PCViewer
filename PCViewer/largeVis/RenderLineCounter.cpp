@@ -180,7 +180,7 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     // execution is done outside
 }
 
-void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false) const{
+void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) const{
     VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
 
     PairInfos infos{};
@@ -208,7 +208,9 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     //TODO: conversion pipeline from float image to uint buffer
 
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
-    vkQueueWaitIdle(_vkContext.queue);
+    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
 RenderLineCounter* RenderLineCounter::_singleton = nullptr;    // init to nullptr

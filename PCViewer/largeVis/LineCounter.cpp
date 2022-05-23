@@ -145,7 +145,9 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     vkCmdDispatch(commands, dataSize / 256, 1, 1);
 
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
-    vkQueueWaitIdle(_vkContext.queue);
+    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
 LineCounter* LineCounter::_singleton = nullptr;    // init to nullptr

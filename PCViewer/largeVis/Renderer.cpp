@@ -137,10 +137,10 @@ void Renderer::render(const RenderInfo& renderInfo)
             if(!renderInfo.attributeActive[aAxis] || !renderInfo.attributeActive[bAxis])
                 continue;
             assert(renderInfo.attributeAxisSizes[aAxis] * renderInfo.attributeAxisSizes[bAxis] == renderInfo.countSizes[i] || "Somethings wrong with the bins");
-            PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes[aAxis], renderInfo.attributeAxisSizes[bAxis]};
+            PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes, renderInfo.attributeAxisSizes};
             vkCmdPushConstants(commands, _polyPipeInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
             vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, {});
-            vkCmdDraw(commands, renderInfo.countSizes[i], 1, 0, 0);
+            vkCmdDraw(commands, renderInfo.countSizes, 1, 0, 0);
         }
         break;
         }
@@ -170,6 +170,8 @@ void Renderer::render(const RenderInfo& renderInfo)
     PCUtil::Stopwatch renderWatch(std::cout, "compression::Renderer::render()");
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
     auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
 void Renderer::updateFramebuffer(VkFramebuffer framebuffer, uint32_t newWidth, uint32_t newHeight){
