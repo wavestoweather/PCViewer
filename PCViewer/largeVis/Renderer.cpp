@@ -121,13 +121,16 @@ Renderer::~Renderer(){
     _splinePipeInfo.vkDestroy(_vkContext);
 }
 
-void Renderer::render(VkCommandBuffer commands,const RenderInfo& renderInfo) 
+void Renderer::render(const RenderInfo& renderInfo) 
 {
     // render pass will always be non clearing to keep the previous state of the framebuffer in tact
     // note that this means that clearing the render target has to be done outside
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     VkUtil::beginRenderPass(commands, {}, _renderPass, _framebuffer, VkExtent2D{_vkContext.screenSize[0], _vkContext.screenSize[1]});
     
-    if(renderInfo.renderType == RenderType::Polyline){
+    switch(renderInfo.renderType){
+    case RenderType::Polyline:{
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipeline);
         for(int i: irange(renderInfo.counts)){
             auto aAxis = renderInfo.axes[i].first, bAxis = renderInfo.axes[i].second;
@@ -139,8 +142,9 @@ void Renderer::render(VkCommandBuffer commands,const RenderInfo& renderInfo)
             vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, {});
             vkCmdDraw(commands, renderInfo.countSizes[i], 1, 0, 0);
         }
-    }
-    else if(renderInfo.renderType == RenderType::Spline){
+        break;
+        }
+    case RenderType::Spline: {
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _splinePipeInfo.pipeline);
         for(int i: irange(renderInfo.counts)){
             auto aAxis = renderInfo.axes[i].first, bAxis = renderInfo.axes[i].second;
@@ -149,10 +153,23 @@ void Renderer::render(VkCommandBuffer commands,const RenderInfo& renderInfo)
             vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, {});
 
         }
-    }
-    else{
+        break;
+        }
+    case RenderType::PriorityPolyline: {
+        // todo implement
+        }
+    case RenderType::PrioritySpline: {
+        // todo implement
+        }
+    default:{
         throw std::runtime_error{"LargeVis::Renderer::render(...) unknown render type requested: " + std::to_string(int(renderInfo.renderType))};
+        }
     }
+
+    vkCmdEndRenderPass(commands);
+    PCUtil::Stopwatch renderWatch(std::cout, "compression::Renderer::render()");
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
 }
 
 void Renderer::updateFramebuffer(VkFramebuffer framebuffer, uint32_t newWidth, uint32_t newHeight){

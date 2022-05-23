@@ -181,10 +181,7 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
 }
 
 void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false) const{
-    VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
 
     PairInfos infos{};
     infos.amtofDataPoints = dataSize;
@@ -196,9 +193,17 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     if(clearCounts)
         vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
+    VkClearValue clear;
+    clear.color = {0,0,0,0};
+    clear.depthStencil = {0, 0};
+    VkUtil::beginRenderPass(commands, {clear}, _renderPass, _framebuffer, VkExtent2D{_aBins, _bBins});
+    VkBuffer vertexBuffers[2]{aData, bData};
+    VkDeviceSize offsets[2]{0, 0};
+    vkCmdBindVertexBuffers(commands, 0, 2, vertexBuffers, offsets);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
-    vkCmdDispatch(commands, dataSize / 256, 1, 1);
+    vkCmdDraw(commands, dataSize, 1, 0, 0);
+    vkCmdEndRenderPass(commands);
 
     //TODO: conversion pipeline from float image to uint buffer
 

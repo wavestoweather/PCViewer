@@ -128,6 +128,7 @@ _hierarchyFolder(info.hierarchyFolder)
     _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.framebuffer});
 }
 
+
 IndBinManager::~IndBinManager(){
     // releasing the gpu pipeline singletons
     if(_renderLineCounter)
@@ -136,6 +137,39 @@ IndBinManager::~IndBinManager(){
         _lineCounter->release();
     if(_renderer)
         _renderer->release();
+}
+
+void IndBinManager::render(VkBuffer attributeInfos){
+    std::vector<int> activeIndices; // these are already ordered
+    for(auto i: _attributeOrdering){
+        if(_atttributeActivations[i])
+            activeIndices.push_back(i);
+    }
+    std::vector<VkBuffer> counts;
+    std::vector<std::pair<uint32_t, uint32_t>> axes;
+    for(int i: irange(activeIndices.size() - 1)){
+        uint32_t a = activeIndices[i];
+        uint32_t b = activeIndices[i + 1];
+        if(a > b)
+            std::swap(a, b);
+        counts.push_back(_countResources[{a,b}].countBuffer);
+        axes.push_back({a,b});
+    }
+
+    compression::Renderer::RenderInfo renderInfo{
+        "dummy",
+        compression::Renderer::RenderType::Polyline,
+        counts,
+        axes,
+        columnBins * columnBins,
+        _attributeOrdering,
+        attributes,
+        _atttributeActivations,
+        columnBins,
+        attributeInfos
+    };
+    
+    _renderer->render(renderInfo);
 }
 
 void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes){

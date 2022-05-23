@@ -10,7 +10,9 @@ class Renderer{
 public:
     enum class RenderType{
         Polyline,
-        Spline
+        Spline,
+        PriorityPolyline,
+        PrioritySpline
     };
     // struct holding information needed to create the vulkan pipeline
     struct CreateInfo{
@@ -21,14 +23,14 @@ public:
     struct RenderInfo{
         std::string drawListId;                             // drawlist id used for internal resource management
         RenderType renderType;
-        std::vector<VkBuffer> counts;                       // the count buffer are expected to be in row major order (same order as for images)
-        std::vector<std::pair<uint32_t, uint32_t>> axes;    // contains for each counts buffer the axes
-        std::vector<uint32_t> countSizes;                   // contains for each counts buffer the amount of values in it
-        std::vector<uint32_t>& order;
+        std::vector<VkBuffer>& counts;                      // the count buffer are expected to be in row major order (same order as for images)
+        std::vector<std::pair<uint32_t, uint32_t>>& axes;   // contains for each counts buffer the axes
+        uint32_t countSizes;                                // contains for each counts buffer the amount of values in it
+        std::vector<int>& order;
         std::vector<Attribute>& attributes;
         bool* attributeActive;
-        std::vector<uint32_t> attributeAxisSizes;   //contains for each axis how many bins exist.
-        VkBuffer attributeInformation;          // contains mapping information for axis scaling, axis positioning and padding
+        uint32_t attributeAxisSizes;                                 //contains for each axis how many bins exist.
+        VkBuffer attributeInformation;                      // contains mapping information for axis scaling, axis positioning and padding
     };
 
     // compression renderer can only be created internally, can not be moved, copied or destoryed
@@ -39,7 +41,7 @@ public:
     static Renderer* acquireReference(const CreateInfo& info);  // acquire a reference (automatically creates renderer if not yet existing)
     void release();                                             // has to be called to notify destruction before vulkan resources are destroyed
     void updateFramebuffer(VkFramebuffer framebuffer, uint32_t newWidth, uint32_t newHeight);   // used to update the framebuffer of the renderer incase of image resizing(future use)
-    void render(VkCommandBuffer commands,const RenderInfo& renderInfo);
+    void render(const RenderInfo& renderInfo);
 private:
     struct PushConstants{
         uint32_t aAxis, bAxis, aSize, bSize;

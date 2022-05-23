@@ -61,7 +61,7 @@ public:
     struct CompressedColumnData{    // atm not compressed, future feature
         std::vector<half> columnData;
         VkBuffer gpuData;
-        VkMemory memory;
+        VkDeviceMemory memory;
     };
 
     // maxDrawLines describes the max lines inbetween two attributes
@@ -76,7 +76,7 @@ public:
     // updates the attribute ordering of the attributes. Might trigger recalculation of 
     void notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* atttributeActivations);
     // renders the current 2d bin counts to the pc plot (is done on main thread, as the main framebuffer is locked)
-    void render();
+    void render(VkBuffer attributeInfos);
     // checks if pc plot should be updated
     bool checkRenderRequest()const {return _requestRender;}
     // checks if an update is enqueued
