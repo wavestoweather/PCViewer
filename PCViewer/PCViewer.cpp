@@ -11396,6 +11396,17 @@ int main(int, char**)
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::Separator();
+					if(dl.indBinManager){
+						if(ImGui::BeginCombo("Count technique", dl.indBinManager->countingMethodNames[int(dl.indBinManager->countingMethod)])){
+							for(int i: irange(int(IndBinManager::CountingMethod::Max))){
+								if(ImGui::MenuItem(dl.indBinManager->countingMethodNames[i])){
+									dl.indBinManager->countingMethod = static_cast<IndBinManager::CountingMethod>(i);
+								}
+							}
+							ImGui::EndCombo();
+						}
+						ImGui::Separator();
+					}
 					//if (ImGui::MenuItem("Send to Bubble plotter")) {
 					//	DataSet* parent;
 					//	for (auto it = g_PcPlotDataSets.begin(); it != g_PcPlotDataSets.end(); ++it) {

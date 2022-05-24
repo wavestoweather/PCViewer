@@ -47,7 +47,18 @@ public:
         GpuDrawMultiViewport,
         GpuComputePairwise,
         GpuComputeFull,
-        HybridRoaringGpuDraw
+        HybridRoaringGpuDraw,
+        Max
+    };
+
+    const char* countingMethodNames[7] = {
+        "CpuGeneric",
+        "CpuRoaring",
+        "GpuDrawPairwise",
+        "GpuDrawMultiViewport",
+        "GpuComputePairwise",
+        "GpuComputeFull",
+        "HybridRoaringGpuDraw"
     };
 
     struct CreateInfo{
