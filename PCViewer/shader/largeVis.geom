@@ -2,7 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 //resolution of the resulting spline
-const int res = 20;
+
 const float alpha = .5f;
 
 // 4 vertices per-primitive -- 2 for the line (1,2) and 2 for adjacency (0,3)
@@ -11,7 +11,7 @@ layout (location = 0)in vec4 col[];
 layout (location = 1)in vec4 aPosBPos[];
 
 // Standard fare for drawing lines
-layout (line_strip, max_vertices = res + 1) out;
+layout (line_strip, max_vertices = 2) out;
 layout (location = 0)out vec4 color;
 
 float getT(in float t,in vec2 p0,in vec2 p1);
@@ -52,6 +52,7 @@ void main (void) {
   color = col[0];
   gl_Position = vec4(aPosBPos[0].xy, 0, 1);
   EmitVertex();
+  color = col[0];
   gl_Position = vec4(aPosBPos[0].zw, 0, 1);
   EmitVertex();
 

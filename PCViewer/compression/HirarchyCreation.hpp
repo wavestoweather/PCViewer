@@ -70,7 +70,7 @@ namespace compression{
 
     struct IndexCenterFileData{
         float val, min, max;
-        uint32_t offset, size;
+        size_t offset, size;
     };
 
     struct ByteOffsetSize{

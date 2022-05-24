@@ -1,5 +1,6 @@
 #pragma once
 #include "../half/half.hpp"
+#include <vector>
 
 namespace compression{
 

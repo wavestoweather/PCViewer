@@ -204,13 +204,14 @@ namespace compression
                 counts[finalBuck] = aIndices[a].and_cardinality(bIndices[b]);
             }
         };
-        PCUtil::Stopwatch watch(std::cout, "Indexpair computation time");
         std::vector<std::thread> threads(amtOfThreads);
+        PCUtil::Stopwatch watch(std::cout, "Indexpair computation time");
         for(int cur: irange(0, amtOfThreads)){
             threads[cur] = std::thread(threadExec);
         }
         //join
         for(auto& t: threads)
             t.join();
+        return counts;
     }
 }

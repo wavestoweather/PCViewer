@@ -60,7 +60,7 @@ Renderer::Renderer(const CreateInfo& info) :
 	multisampling.alphaToOneEnable = VK_FALSE;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	colorBlendAttachment.blendEnable = VK_TRUE;
 	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -95,13 +95,13 @@ Renderer::Renderer(const CreateInfo& info) :
 
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts{_polyPipeInfo.descriptorSetLayout};
     
-    std::vector<VkDynamicState> dynamicStateVec{VK_DYNAMIC_STATE_LINE_WIDTH};
+    std::vector<VkDynamicState> dynamicStateVec{};
 
     std::vector<VkPushConstantRange> pushConstants{};
     pushConstants.push_back({VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants)});    // attribute a and b
     //pushConstants.push_back({VK_SHADER_STAGE_VERTEX_BIT, 4, 4});    // attribute b
 
-    VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &_renderPass, &_polyPipeInfo.pipelineLayout, &_polyPipeInfo.pipeline, pushConstants);
+    VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &_renderPass, &_polyPipeInfo.pipelineLayout, &_polyPipeInfo.pipeline, pushConstants);
 
     //----------------------------------------------------------------------------------------------
 	//creating the pipeline for spline rendering
@@ -114,6 +114,11 @@ Renderer::Renderer(const CreateInfo& info) :
     shaderModules[4] = VkUtil::createShaderModule(info.context.device, fragmentBytes);
 
     VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &_renderPass, &_splinePipeInfo.pipelineLayout, &_splinePipeInfo.pipeline, pushConstants);
+
+    //----------------------------------------------------------------------------------------------
+	//creating the descriptor set for rendering
+	//----------------------------------------------------------------------------------------------
+    VkUtil::createDescriptorSets(_vkContext.device, descriptorSetLayouts, _vkContext.descriptorPool, &_infoDescSet);
 }
 
 Renderer::~Renderer(){
@@ -123,10 +128,12 @@ Renderer::~Renderer(){
 
 void Renderer::render(const RenderInfo& renderInfo) 
 {
-    // render pass will always be non clearing to keep the previous state of the framebuffer in tact
-    // note that this means that clearing the render target has to be done outside
-    VkCommandBuffer commands;
-    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    // updating the descriptor set for the current attribute infos
+    VkUtil::updateDescriptorSet(_vkContext.device, renderInfo.attributeInformation, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _infoDescSet);
+    // render pass will clear the standard attachement if in renderInfo the clear bool is set
+    VkCommandBuffer commands = renderInfo.renderCommands;
+    //VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    //VkUtil::beginRenderPass(commands, {}, _renderPass, _framebuffer, VkExtent2D{_vkContext.screenSize[0], _vkContext.screenSize[1]});
     if(renderInfo.clear){
         VkClearAttachment attachment{};
         attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -139,9 +146,8 @@ void Renderer::render(const RenderInfo& renderInfo)
         clearRect.layerCount = 1;
         clearRect.rect.extent.width = _vkContext.screenSize[0];
         clearRect.rect.extent.height = _vkContext.screenSize[1];
-        vkCmdClearAttachments(commands, 1, &attachment, 1, &clearRect);
+        //vkCmdClearAttachments(commands, 1, &attachment, 1, &clearRect);
     }
-    VkUtil::beginRenderPass(commands, {}, _renderPass, _framebuffer, VkExtent2D{_vkContext.screenSize[0], _vkContext.screenSize[1]});
     
     switch(renderInfo.renderType){
     case RenderType::Polyline:{
@@ -150,10 +156,12 @@ void Renderer::render(const RenderInfo& renderInfo)
             auto aAxis = renderInfo.axes[i].first, bAxis = renderInfo.axes[i].second;
             if(!renderInfo.attributeActive[aAxis] || !renderInfo.attributeActive[bAxis])
                 continue;
-            assert(renderInfo.attributeAxisSizes[aAxis] * renderInfo.attributeAxisSizes[bAxis] == renderInfo.countSizes[i] || "Somethings wrong with the bins");
+            assert(renderInfo.attributeAxisSizes * renderInfo.attributeAxisSizes == renderInfo.countSizes || "Somethings wrong with the bins");
             PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes, renderInfo.attributeAxisSizes};
             vkCmdPushConstants(commands, _polyPipeInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-            vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, {});
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipelineLayout, 0, 1, &_infoDescSet, 0, {});
+            VkDeviceSize offsets[1]{0};
+            vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, offsets);
             vkCmdDraw(commands, renderInfo.countSizes, 1, 0, 0);
         }
         break;
@@ -180,12 +188,12 @@ void Renderer::render(const RenderInfo& renderInfo)
         }
     }
 
-    vkCmdEndRenderPass(commands);
-    PCUtil::Stopwatch renderWatch(std::cout, "compression::Renderer::render()");
-    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
-    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
-
-    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+    //vkCmdEndRenderPass(commands);
+    //PCUtil::Stopwatch renderWatch(std::cout, "compression::Renderer::render()");
+    //VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+//
+    //vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
 void Renderer::updateFramebuffer(VkFramebuffer framebuffer, uint32_t newWidth, uint32_t newHeight){

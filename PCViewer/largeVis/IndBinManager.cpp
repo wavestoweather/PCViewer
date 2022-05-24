@@ -6,7 +6,7 @@
 #include "RoaringCounter.hpp"
 
 IndBinManager::IndBinManager(const CreateInfo& info) :
-_hierarchyFolder(info.hierarchyFolder)
+_vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(info.context.screenSize[1])
 {
     // --------------------------------------------------------------------------------
     // determine kind of stored data (used to convert internally to a unified represantation for further processing)
@@ -22,6 +22,8 @@ _hierarchyFolder(info.hierarchyFolder)
     // attribute infos, cluster infos
     // --------------------------------------------------------------------------------
     std::ifstream attributeInfos(_hierarchyFolder + "/attr.info", std::ios_base::binary);
+    uint32_t maxCenterAmt;
+    attributeInfos >> maxCenterAmt; // first line contains the maximum amt of centers/bins
     std::string a; float aMin, aMax;
     while(attributeInfos >> a >> aMin >> aMax){
         attributes.push_back({a, a, {}, {}, aMin, aMax});
@@ -44,7 +46,7 @@ _hierarchyFolder(info.hierarchyFolder)
     // --------------------------------------------------------------------------------
     // 1d index data either compressed or not (automatic conversion if not compressed)
     // --------------------------------------------------------------------------------
-    uint32_t dataSize = 0;
+    size_t dataSize = 0;
     if((dataBits & compression::DataStorageBits::RawAttributeBins) != compression::DataStorageBits::None){
         // reading index data
         std::cout << "Loading indexdata..." << std::endl;
@@ -72,21 +74,26 @@ _hierarchyFolder(info.hierarchyFolder)
             std::cout << "Attribute " << attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
         }
     }
-    else if((dataBits & compression::DataStorageBits::Roaring2dBins) != compression::DataStorageBits::None){
+    else if((dataBits & compression::DataStorageBits::RoaringAttributeBins) != compression::DataStorageBits::None){
         // compressed indices, can be read out directly
         std::cout << "Loading compressed indexdata..." << std::endl;
         for(uint32_t i: irange(attributes)){
             std::ifstream indicesData(_hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
-            uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;
-            std::vector<uint32_t> indices(indicesSize);
-            if(indicesSize > dataSize)
-                dataSize = indicesSize;
-            indicesData.read(reinterpret_cast<char*>(indices.data()), indicesSize * sizeof(indices[0]));
-            //parse into roaring bitmaps
-            ndBuckets[{i}].resize(_attributeCenters[i].size());
-            for(uint32_t bin: irange(ndBuckets[{i}])){
-                ndBuckets[{i}][bin].readSafe(reinterpret_cast<char*>(indices.data() + _attributeCenters[i][bin].offset), _attributeCenters[i][bin].size * sizeof(indices[0]));
+            uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;   // size is given in bytes
+            std::vector<char> indices(indicesSize);
+            indicesData.read(indices.data(), indicesSize * sizeof(indices[0]));
+            // parse into roaring bitmaps
+            // filling only the attribute centers that are available, the other centers are empty
+            ndBuckets[{i}].resize(maxCenterAmt);
+            size_t curSize{};
+            for(uint32_t bin: irange(_attributeCenters[i])){
+                uint32_t b = _attributeCenters[i][bin].val * maxCenterAmt;
+                if(b == maxCenterAmt) --b;
+                ndBuckets[{i}][b] = roaring::Roaring64Map::readSafe(indices.data() + _attributeCenters[i][bin].offset, _attributeCenters[i][bin].size * sizeof(indices[0]));
+                curSize += ndBuckets[{i}][b].cardinality();
             }
+            if(curSize > dataSize)
+                dataSize = curSize;
         }
     }
 
@@ -137,6 +144,7 @@ IndBinManager::~IndBinManager(){
         _lineCounter->release();
     if(_renderer)
         _renderer->release();
+    //TODO: release all here created things
 }
 
 void IndBinManager::notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* attributeActivations){
@@ -146,7 +154,7 @@ void IndBinManager::notifyAttributeUpdate(const std::vector<int>& attributeOrder
     updateCounts();         // updating the counts if there are some missing and pushing a render call
 }
 
-void IndBinManager::render(VkBuffer attributeInfos, bool clear){
+void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, bool clear){
     std::vector<int> activeIndices; // these are already ordered
     for(auto i: _attributeOrdering){
         if(_attributeActivations[i])
@@ -167,6 +175,7 @@ void IndBinManager::render(VkBuffer attributeInfos, bool clear){
     }
 
     compression::Renderer::RenderInfo renderInfo{
+        commands,
         "dummy",
         compression::Renderer::RenderType::Polyline,
         counts,
@@ -181,6 +190,7 @@ void IndBinManager::render(VkBuffer attributeInfos, bool clear){
     };
     
     _renderer->render(renderInfo);
+    requestRender = false;
 }
 
 void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes){
@@ -274,7 +284,7 @@ void IndBinManager::updateCounts(){
             break;
         }
         };
-        t->_requestRender = true;                   // ready to update rendering
+        t->requestRender = true;                   // ready to update rendering
         t->_countUpdateThreadActive = false;        // releasing the update thread
     };
 
@@ -287,13 +297,13 @@ void IndBinManager::updateCounts(){
                 std::swap(a, b);
             if(!_countResources[{a,b}].countBuffer || _countResources[{a,b}].binAmt != columnBins * columnBins){
                 // create resource if not yet available
-                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &_countResources[{a,b}].countBuffer);
+                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &(_countResources[{a,b}].countBuffer));
                 VkMemoryAllocateInfo allocInfo{};
                 allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
                 VkMemoryRequirements memReq{};
                 vkGetBufferMemoryRequirements(_vkContext.device, _countResources[{a,b}].countBuffer, &memReq);
                 allocInfo.allocationSize = memReq.size;
-                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, 0);
+                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
                 vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_countResources[{a,b}].countMemory);
                 vkBindBufferMemory(_vkContext.device, _countResources[{a,b}].countBuffer, _countResources[{a,b}].countMemory, 0);
                 _countResources[{a,b}].binAmt = columnBins * columnBins;

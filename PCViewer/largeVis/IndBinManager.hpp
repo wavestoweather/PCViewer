@@ -77,9 +77,7 @@ public:
     // updates the attribute ordering of the attributes. Might trigger recalculation of 
     void notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* atttributeActivations);
     // renders the current 2d bin counts to the pc plot (is done on main thread, as the main framebuffer is locked)
-    void render(VkBuffer attributeInfos, bool clear = false);
-    // checks if pc plot should be updated
-    bool checkRenderRequest()const {return _requestRender;}
+    void render(VkCommandBuffer commands, VkBuffer attributeInfos, bool clear = false);
     // checks if an update is enqueued
     void checkUpdateQueue(){
         if(_currentBrushState != _countBrushState && !_countUpdateThreadActive)
@@ -90,9 +88,10 @@ public:
     std::vector<Attribute> attributes;
     robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
     std::vector<CompressedColumnData> columnData;
-    CountingMethod countingMethod{CountingMethod::HybridRoaringGpuDraw};    // variable to set the different counting techniques
+    CountingMethod countingMethod{CountingMethod::CpuGeneric};    // variable to set the different counting techniques
     uint32_t columnBins{1 << 10};
     uint32_t cpuLineCountingAmtOfThreads{12};
+    std::atomic<bool> requestRender{false};
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
     struct CountResource{
@@ -128,7 +127,6 @@ private:
     const uint32_t _compressedBlockSize{1 << 20};
     VkUtil::Context _vkContext;
 
-    std::atomic<bool> _requestRender{false};
     bool _hierarchyValid{true};
     uint32_t _baseLevel{0};
     uint32_t _hierarchyLevels;

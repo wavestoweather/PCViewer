@@ -130,8 +130,12 @@ void CompressionWorkbench::draw()
         }
         ImGui::Separator();
         if(ImGui::InputInt("1d cluster bin amount", reinterpret_cast<int*>(&_binsAmt))) _binsAmt = std::clamp<uint32_t>(_startCluster, 1, 1e6);
+        if(ImGui::InputScalar("Compression block size", ImGuiDataType_U32, &_compressionBlockSize)) _binsAmt = std::max(_compressionBlockSize, 1U);
         if(ImGui::Button("Cluster 1d indices")){
             _buildHierarchyFuture = std::async(compression::create1DBinIndex, _outputFolder, _columnLoader.get(), _binsAmt, _maxWorkingMemory, _amtOfThreads);
+        }
+        if(ImGui::Button("Cluster 1d with compressed columns")){
+            _buildHierarchyFuture = std::async(compression::createRoaringBinsColumnData, _outputFolder, _columnLoader.get(), _binsAmt, static_cast<size_t>(_compressionBlockSize), _amtOfThreads);
         }
     }
     ImGui::End();

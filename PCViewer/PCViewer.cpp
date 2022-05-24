@@ -2260,6 +2260,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
 		VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 1, dl.histogrammDescSets[i]);
 		VkUtil::updateDescriptorSet(g_Device, tl.buffer, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
+		//TODO:: correct dataByteSize required / delete update
 	}
 
 	//specifying the uniform buffer location
@@ -2331,7 +2332,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 				pcAttributeEnabled[i] = true;
 		}
 		//fillVertexBuffer(ds.buffer, dl.IndBinManager->retrieveNewDataC());
-		dl.indBinManager->notifyAttributeUpdate(pcAttrOrd, pcAttributes, pcAttributeEnabled);
+		dl.indBinManager->notifyAttributeUpdate(pcAttrOrd, pcAttributes, pcAttributeEnabled);	// notify the indBinManager to be able to create the counts
 	}
 	else{
 		dl.indices = std::vector<uint32_t>(tl.indices);
@@ -2810,6 +2811,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList) {
 			if (!drawList->show)
 				continue;
+			if (drawList->indBinManager){
+				drawList->indBinManager->render(line_batch_commands.back(), drawList->ubo, true);
+				continue;
+			}
 			if (drawList->renderBundles){
 				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, ubo.size());
 				vkCmdEndRenderPass(line_batch_commands.back());
@@ -2941,6 +2946,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			if (!drawList->show)
 				continue;
 
+			if (drawList->indBinManager){
+				drawList->indBinManager->render(g_PcPlotCommandBuffer, drawList->ubo, true);
+				continue;
+			}
 			if (drawList->renderBundles){
 				drawList->lineBundles->setAxisInfosBuffer(drawList->ubo, ubo.size());
 				vkCmdEndRenderPass(g_PcPlotCommandBuffer);
@@ -5658,6 +5667,7 @@ static bool updateActiveIndices(DrawList& dl) {
 
 	//reloading data points if brush has changed
 	if(dl.indBinManager){
+		return false;
 		std::vector<brushing::RangeBrush> rangeBrushes;
 		//adding local brushes
 		uint32_t axis = 0;
@@ -14528,6 +14538,9 @@ int main(int, char**)
 			//	updateActiveIndices(dl);
 			//	pcPlotRender = true;
 			//}
+			if(dl.indBinManager && dl.indBinManager->requestRender){
+				pcPlotRender = true;
+			}
 		}
 
 		pcSettings.rescaleTableColumns = false;

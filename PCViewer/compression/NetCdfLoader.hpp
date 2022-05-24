@@ -42,6 +42,7 @@ public:
     const float& progress() const {return _progress;};
     DataInfo dataAnalysis();
     void normalize();
+    void tabelize();
     Data& curData(){return _curData;};
     bool loadNextData();
     size_t getFileAmt(){return _files.size();};
@@ -51,6 +52,7 @@ private:
     int _curFile{};
     std::vector<std::string> _files;
     bool _normalized{false};
+    bool _tabelized{false};
     Data _curData{};
     size_t curDataIndex{};
     size_t _curTotalIndex{};

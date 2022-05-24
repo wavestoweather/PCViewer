@@ -10,6 +10,9 @@ struct Attribute {
 	std::vector<std::pair<std::string, float>> categories_ordered; // used to show the categories not cluttered
 	float min;			//min value of all values
 	float max;			//max value of all values
+	bool operator==(const Attribute& other) const{
+		return name == other.name;
+	}
 };
 
 struct QueryAttribute {

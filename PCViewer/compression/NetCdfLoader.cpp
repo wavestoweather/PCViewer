@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <iostream>
 #include "../PCUtil.h"
+#include "../range.hpp"
+#include <numeric>
 
 static std::vector<std::string> getDataFilenames(const std::string_view& path, const std::vector<std::string_view>& includes, const std::vector<std::string_view>& ignores){
     // searching all files in the given directory (also in the subdirectories) and append all found netCdf files to the _files variable
@@ -165,13 +167,35 @@ void NetCdfColumnLoader::normalize()
     _normalized = true;
 }
 
+void NetCdfColumnLoader::tabelize()
+{
+    if(!_tabelized){
+        std::vector<uint32_t> increasing(_curData.dimensionSizes.size());
+        std::iota(increasing.begin(), increasing.end(), 0); 
+        for(int i: irange(_curData.columns)){
+            if(_curData.columnDimensions[i] == increasing)
+                continue;
+            std::vector<float> newColumn(_curData.size());
+            for(int j: irange(newColumn)){
+                newColumn[j] = _curData(j, i);
+            }
+            _curData.columns[i] = newColumn;
+        }
+    }
+    _tabelized = true;
+}
+
 bool NetCdfColumnLoader::loadNextData() 
 {
     if(_curData.size() == 0 || ++_curFile < _files.size()){
         _curData = PCUtil::openNetCdf(_files[_curFile], _attributes, queryAttributes);
-        if(_normalized){    // normalize if once normalized
+        if(_normalized){    // normalize if normalization is set
             _normalized = false;
             normalize();
+        }
+        if(_tabelized){     // tabelize if tablization is set
+            _tabelized = false;
+            tabelize();
         }
         _progress = (_curFile + 1.0) / _files.size();
         return true;

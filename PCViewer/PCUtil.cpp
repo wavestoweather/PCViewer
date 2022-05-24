@@ -4,6 +4,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <sstream>
+#include <regex>
 #include "Attribute.hpp"
 
 std::vector<char> PCUtil::readByteFile(const std::string& filename)
@@ -117,19 +118,23 @@ float PCUtil::distance(const ImVec2& a, const ImVec2& b){
 
 bool PCUtil::compareStringFormat(const std::string_view& s, const std::string_view& form) 
 {
-	std::size_t curPos = 0, sPos = 0;
-    while(true){
-        std::size_t nextPos = form.find("*", curPos);
-		if(nextPos == std::string_view::npos)
-			break;
-        std::string_view curPart = form.substr(curPos, nextPos - curPos);
-		sPos = s.find(curPart, sPos);
-        if(sPos == std::string_view::npos)
-            return false;
-        sPos += curPart.size();
-        curPos = nextPos + 1;
-    }
-    return true;
+	//std::size_t curPos = 0, sPos = 0;
+    //while(true){
+    //    std::size_t nextPos = form.find("*", curPos);
+	//	if(nextPos == std::string_view::npos)
+	//		break;
+    //    std::string_view curPart = form.substr(curPos, nextPos - curPos);
+	//	sPos = s.find(curPart, sPos);
+    //    if(sPos == std::string_view::npos)
+    //        return false;
+    //    sPos += curPart.size();
+    //    curPos = nextPos + 1;
+    //}
+    //return true;
+	
+	// doing things instead with standard regex
+	std::regex r(form.begin());
+	return std::regex_search(s.begin(), s.end(), r);
 }
 
 std::vector<QueryAttribute> PCUtil::queryNetCDF(const std::string_view& filename) 

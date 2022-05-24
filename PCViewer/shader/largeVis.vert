@@ -27,8 +27,8 @@ layout(location = 1) out vec4 aPosBPos;	//containts 2 vec2: [aPos, bPos], with x
 void main() {
 	float gap = 2.0f/(ubo.amtOfVerts - 1.0f); //gap is tested, and is correct
 
-	uint aIndex = gl_VertexIndex % aSize;
-	uint bIndex = gl_VertexIndex / aSize;
+	uint aIndex = gl_VertexIndex / bSize;
+	uint bIndex = gl_VertexIndex % bSize;
 	
 	float x1 = -1.0f + ubo.vertexTransformations[aAxis].x * gap;
 	float x2 = -1.0f + ubo.vertexTransformations[bAxis].x * gap;

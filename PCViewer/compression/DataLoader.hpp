@@ -26,6 +26,7 @@ public:
     virtual const float& progress() const = 0;
     virtual DataInfo dataAnalysis() = 0;
     virtual void normalize() = 0;
+    virtual void tabelize() = 0;    // expandds all columns to stretch accross a whole 2d data table
     virtual Data& curData() = 0;
     virtual bool loadNextData() = 0;
     virtual size_t getFileAmt() = 0;

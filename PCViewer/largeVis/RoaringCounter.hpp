@@ -1,5 +1,6 @@
 #pragma once
 #include <roaring64map.hh>
+#include <vector>
 
 namespace compression{
     void testRoaringCounting();

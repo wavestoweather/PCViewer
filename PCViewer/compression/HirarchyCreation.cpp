@@ -915,6 +915,7 @@ namespace compression
         compression::CachingMethod cachingMethod = compression::CachingMethod::Bundled;
         auto [dataSize, attributes] = loader->dataAnalysis();
         loader->normalize();
+        loader->tabelize(); // tabelization as no additional information for the indices is stored for later matching
 
         using AttributeCenters = std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>;
         AttributeCenters attributeCenters(attributes.size());
@@ -934,6 +935,7 @@ namespace compression
         };
 
         auto appendColumnFile = [&](){
+            std::cout << "Appending column data to column file" << std::endl;
             for(int i: irange(columnData)){
                 std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
                 columnFile.write(reinterpret_cast<char*>(columnData[i].data()), columnData[i].size() * sizeof(columnData[i][0]));
@@ -980,19 +982,30 @@ namespace compression
                 appendColumnFile();
             }
         }
+        // ----------------------------------------------------------------------------------------------
+        // writeout of the data info
+        // ----------------------------------------------------------------------------------------------
+        std::ofstream dataInfo(std::string(outputFolder) + "/data.info", std::ios_base::binary);
+        assert(dataInfo);
+        // data info bits
+        dataInfo << static_cast<uint32_t>(compression::DataStorageBits::HalfColumnData | compression::DataStorageBits::RoaringAttributeBins) << "\n";
+        // column block size (in amt of elements which are put into a block)
+        dataInfo << dataCompressionBlock << "\n";
+
+        dataInfo.close();
 
         // ----------------------------------------------------------------------------------------------
         // writeout of the attribute Hierarchy
         // ----------------------------------------------------------------------------------------------
-        // writing out attribute infos (including dimensionality information to decompress indices)
+        // writing out attribute infos
         std::ofstream file(std::string(outputFolder) + "/attr.info", std::ios_base::binary);
         assert(file);
-        file << CachingMethodNames[static_cast<int>(cachingMethod)] << "\n";
         file << PCUtil::toReadableString(loader->curData().dimensionSizes) << "\n";
         int c = 0;
         for(auto& a: attributes){
-            file << a.name << " " << a.min << " " << a.max << " " << PCUtil::toReadableString(loader->curData().columnDimensions[c++]) << "\n";
+            file << a.name << " " << a.min << " " << a.max << "\n";
         }
+        file.close();
 
         // -----------------------------------------------------------------------------------------------
         // writeout of the indices per attribute in separate files
@@ -1004,21 +1017,25 @@ namespace compression
         for(int i = 0; i < attributeCenters.size(); ++i){
             uint32_t startOffset = centerFileData.size();
             // putting the centers into increasing value order and storing everything
-            std::vector<std::pair<float, const IndexCenterData*>> orderedCenters;
+            std::vector<std::pair<float, IndexCenterDataRoaring*>> orderedCenters;
             for(const auto& c: attributeCenters[i]){
-                const auto& d = data[c.second];
+                auto& d = data[c.second];
                 orderedCenters.push_back({d.val, &d});
             }
             std::sort(orderedCenters.begin(), orderedCenters.end(), [](const auto& a, const auto& b){return a.first < b.first;});
-            std::vector<uint32_t> indices;
-            for(const auto [val, c]: orderedCenters){
-                uint32_t start = indices.size();
-                indices.insert(indices.end(), c->indices.begin(), c->indices.end());
-                centerFileData.push_back({c->val, c->min, c->max, start, static_cast<uint32_t>(c->indices.size())});
-            }
+            //writing each roaring bitmap to the file
             std::ofstream indexFile(std::string(outputFolder) + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
             assert(indexFile);
-            indexFile.write(reinterpret_cast<char*>(indices.data()), indices.size() * sizeof(indices[0]));
+            for(auto [val, c]: orderedCenters){
+                size_t start = indexFile.tellp();
+                c->indices.runOptimize();
+                c->indices.shrinkToFit();
+                std::vector<char> serialized(c->indices.getSizeInBytes());
+                c->indices.write(serialized.data());
+                indexFile.write(serialized.data(), serialized.size() * sizeof(serialized[0]));
+                centerFileData.push_back({c->val, c->min, c->max, start, static_cast<size_t>(serialized.size())});
+            }
+            
             indexFile.close();
             attributeCenterOffsets.push_back({static_cast<uint32_t>(startOffset * sizeof(centerFileData[0])), static_cast<uint32_t>((centerFileData.size() - startOffset) * sizeof(centerFileData[0]))});
         }
