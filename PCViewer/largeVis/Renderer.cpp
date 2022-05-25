@@ -114,11 +114,6 @@ Renderer::Renderer(const CreateInfo& info) :
     shaderModules[4] = VkUtil::createShaderModule(info.context.device, fragmentBytes);
 
     VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &_renderPass, &_splinePipeInfo.pipelineLayout, &_splinePipeInfo.pipeline, pushConstants);
-
-    //----------------------------------------------------------------------------------------------
-	//creating the descriptor set for rendering
-	//----------------------------------------------------------------------------------------------
-    VkUtil::createDescriptorSets(_vkContext.device, descriptorSetLayouts, _vkContext.descriptorPool, &_infoDescSet);
 }
 
 Renderer::~Renderer(){
@@ -128,8 +123,11 @@ Renderer::~Renderer(){
 
 void Renderer::render(const RenderInfo& renderInfo) 
 {
-    // updating the descriptor set for the current attribute infos
-    VkUtil::updateDescriptorSet(_vkContext.device, renderInfo.attributeInformation, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _infoDescSet);
+	//creating the descriptor set for rendering if not available
+    if(_infoDescSets.count(renderInfo.drawListId) == 0){
+        VkUtil::createDescriptorSets(_vkContext.device, {_polyPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_infoDescSets[renderInfo.drawListId]);
+        VkUtil::updateDescriptorSet(_vkContext.device, renderInfo.attributeInformation, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _infoDescSets[renderInfo.drawListId]);
+    }
     // render pass will clear the standard attachement if in renderInfo the clear bool is set
     VkCommandBuffer commands = renderInfo.renderCommands;
     //VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
@@ -159,7 +157,7 @@ void Renderer::render(const RenderInfo& renderInfo)
             assert(renderInfo.attributeAxisSizes * renderInfo.attributeAxisSizes == renderInfo.countSizes || "Somethings wrong with the bins");
             PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes, renderInfo.attributeAxisSizes};
             vkCmdPushConstants(commands, _polyPipeInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipelineLayout, 0, 1, &_infoDescSet, 0, {});
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipelineLayout, 0, 1, &_infoDescSets[renderInfo.drawListId], 0, {});
             VkDeviceSize offsets[1]{0};
             vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, offsets);
             vkCmdDraw(commands, renderInfo.countSizes, 1, 0, 0);

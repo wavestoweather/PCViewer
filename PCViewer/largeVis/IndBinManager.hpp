@@ -71,9 +71,9 @@ public:
     };
 
     struct CompressedColumnData{    // atm not compressed, future feature
-        std::vector<half> columnData;
+        std::vector<half> cpuData;
         VkBuffer gpuData;
-        VkDeviceMemory memory;
+        VkDeviceMemory gpuMemory;
     };
 
     // maxDrawLines describes the max lines inbetween two attributes
@@ -87,6 +87,8 @@ public:
     void notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes);
     // updates the attribute ordering of the attributes. Might trigger recalculation of 
     void notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* atttributeActivations);
+    // forces recounting of the bins with the current countingMethod
+    void forceCountUpdate();
     // renders the current 2d bin counts to the pc plot (is done on main thread, as the main framebuffer is locked)
     void render(VkCommandBuffer commands, VkBuffer attributeInfos, bool clear = false);
     // checks if an update is enqueued
@@ -99,7 +101,7 @@ public:
     std::vector<Attribute> attributes;
     robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
     std::vector<CompressedColumnData> columnData;
-    CountingMethod countingMethod{CountingMethod::CpuGeneric};    // variable to set the different counting techniques
+    CountingMethod countingMethod{CountingMethod::GpuDrawPairwise};    // variable to set the different counting techniques
     uint32_t columnBins{1 << 10};
     uint32_t cpuLineCountingAmtOfThreads{12};
     std::atomic<bool> requestRender{false};

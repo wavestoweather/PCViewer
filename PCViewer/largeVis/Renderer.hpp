@@ -63,7 +63,7 @@ private:
     // vulkan resources that have to be destroyed
     VkUtil::PipelineInfo _polyPipeInfo{}, _splinePipeInfo{};
 
-    VkDescriptorSet _infoDescSet{};
+    std::map<std::string, VkDescriptorSet> _infoDescSets{};  // contains for each drawlist a descriptor set as multiple descriptor sets might be required
 
     const std::string _vertexShader = "shader/largeVis.vert.spv";
     const std::string _geometryShader = "shader/largeVis.geom.spv";

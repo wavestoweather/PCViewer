@@ -25,6 +25,9 @@ public:
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);  // test function
     void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false) const;
+    void countLinesAll(size_t dataSize, std::vector<VkBuffer> data, uint32_t binAmt, std::vector<VkBuffer> counts, std::vector<uint32_t> activeIndices, bool clearCounts = false) const;
+
+    const uint32_t maxAttributes{30};
 private:
     struct PairInfos{
         uint32_t amtofDataPoints, aBins, bBins, padding;
@@ -40,14 +43,15 @@ private:
     VkUtil::Context _vkContext;
     VkRenderPass _renderPass;
     VkDescriptorSet _descSet{}; //only here for test purposes
-    VkDescriptorSet _pairSet{};
+    VkDescriptorSet _pairSet{}, _allSet{};
     VkBuffer _pairUniform{};
     VkDeviceMemory _pairUniformMem{};
 
     // vulkan resources that have to be destroyed
-    VkUtil::PipelineInfo _countPipeInfo{};
+    VkUtil::PipelineInfo _countPipeInfo{}, _countAllPipeInfo{};
 
     const std::string _computeShader = "shader/lineCount.comp.spv";
+    const std::string _computeAllShader = "shader/lineCountAll.comp.spv";
 
     VkDeviceMemory _bins;
     size_t _binsSize;

@@ -1,0 +1,17 @@
+#version 460
+
+layout(binding = 0) uniform sampler2D image;
+layout(binding = 1) buffer Buff{
+    uint b[];
+};
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+void main(){
+    ivec2 imSize = textureSize(image, 0);
+    if(gl_GlobalInvocationID.x >= imSize.x * imSize.y)
+        return;
+    int x = int(gl_GlobalInvocationID.x) / imSize.x;
+    int y = int(gl_GlobalInvocationID.x) % imSize.x;
+    b[gl_GlobalInvocationID.x] = uint(texelFetch(image, ivec2(x, y), 0).x); // readout and convert image to uint buffer
+}

@@ -116,7 +116,7 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
         std::cout << "Loading half column data" << std::endl;
         for(uint32_t i: irange(attributes)){
             std::ifstream data(_hierarchyFolder + "/" + std::to_string(i) + ".col", std::ios_base::binary);
-            auto& dVec = columnData[i].columnData;
+            auto& dVec = columnData[i].cpuData;
             dVec.resize(dataSize);
             data.read(reinterpret_cast<char*>(dVec.data()), dVec.size() * sizeof(dVec[0]));
         }
@@ -125,6 +125,20 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
         // directly parse if same compression block size
         // not yet implemented
         std::cout << "Well thats wrong. Seems like there is some compression in the column data but we cant handle it." << std::endl;
+    }
+    // currently the uncompressed 16 bit vectors are uploaded. Has to be changed to compressed vectors
+    for(auto& d: columnData){
+        // creating the vulkan resources and uploading the data to them
+        VkUtil::createBuffer(_vkContext.device, d.cpuData.size() * sizeof(d.cpuData[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &d.gpuData);
+        VkMemoryRequirements memReq{};
+        vkGetBufferMemoryRequirements(_vkContext.device, d.gpuData, &memReq);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memReq.size;
+        allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &d.gpuMemory);
+        vkBindBufferMemory(_vkContext.device, d.gpuData, d.gpuMemory, 0);
+        VkUtil::uploadData(_vkContext.device, d.gpuMemory, 0, d.cpuData.size() * sizeof(d.cpuData[0]), d.cpuData.data());
     }
 
     // --------------------------------------------------------------------------------
@@ -152,6 +166,11 @@ void IndBinManager::notifyAttributeUpdate(const std::vector<int>& attributeOrder
     assert(attributes == this->attributes); // debug check
     _attributeActivations = attributeActivations;
     updateCounts();         // updating the counts if there are some missing and pushing a render call
+}
+
+void IndBinManager::forceCountUpdate(){
+    _currentBrushState.id = _curBrushingId++;   // increasing brush id to force recounting
+    updateCounts();
 }
 
 void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, bool clear){
@@ -223,7 +242,7 @@ void IndBinManager::updateCounts(){
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     return;
                 std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                auto counts = compression::lineCounterPair(t->columnData[a].columnData, t->columnData[b].columnData, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
+                auto counts = compression::lineCounterPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
@@ -245,7 +264,24 @@ void IndBinManager::updateCounts(){
             break;
         }
         case CountingMethod::GpuComputeFull:{
-            //ToDo: implement full pipeline
+            std::vector<VkBuffer> datas(activeIndices.size()), 
+                                    counts(activeIndices.size() - 1);
+            bool anyUpdate = false;
+            uint32_t b{};
+            for(int i: irange(activeIndices.size() - 1)){
+                uint32_t a = activeIndices[i];
+                b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId != t->_countBrushState.id)
+                    anyUpdate = true;
+                datas[i] = t->columnData[i].gpuData;
+                counts[i] = t->_countResources[{a,b}].countBuffer;
+            }
+            datas.back() = t->columnData[activeIndices.back()].gpuData;
+            if(!anyUpdate)
+                return;
+            t->_lineCounter->countLinesAll(t->columnData[0].cpuData.size())
             break;
         }
         case CountingMethod::GpuComputePairwise:{
@@ -257,7 +293,7 @@ void IndBinManager::updateCounts(){
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     return;
                 std::cout << "Counting pairwise (compute pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPair(t->columnData[a].columnData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
+                t->_lineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -271,7 +307,7 @@ void IndBinManager::updateCounts(){
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     return;
                 std::cout << "Counting pairwise (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPair(t->columnData[a].columnData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
+                t->_renderLineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -297,7 +333,7 @@ void IndBinManager::updateCounts(){
                 std::swap(a, b);
             if(!_countResources[{a,b}].countBuffer || _countResources[{a,b}].binAmt != columnBins * columnBins){
                 // create resource if not yet available
-                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &(_countResources[{a,b}].countBuffer));
+                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &(_countResources[{a,b}].countBuffer));
                 VkMemoryAllocateInfo allocInfo{};
                 allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
                 VkMemoryRequirements memReq{};

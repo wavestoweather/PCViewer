@@ -2,6 +2,7 @@
 #include <assert.h>
 #include "../PCUtil.h"
 #include "../VkUtil.h"
+#include "../range.hpp"
 
 LineCounter::LineCounter(const CreateInfo& info):
     _vkContext(info.context)
@@ -49,6 +50,21 @@ LineCounter::LineCounter(const CreateInfo& info):
     allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_pairUniformMem);
     vkBindBufferMemory(_vkContext.device, _pairUniform, _pairUniformMem, 0);
+
+    // second pipeline to count all bins at once
+    compBytes = PCUtil::readByteFile(_computeAllShader);
+    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
+    
+    bindings[0].descriptorCount = maxAttributes;
+    bindings[1].descriptorCount = maxAttributes;
+    bindings[2].descriptorCount = maxAttributes - 1; // always one as the 2d bins are always between 2 attributes
+    bindings[1] = bindings[3]; bindings.pop_back();     // we can drop the second binding
+
+    VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_countAllPipeInfo.descriptorSetLayout);
+
+    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countAllPipeInfo.descriptorSetLayout}, &_countAllPipeInfo.pipelineLayout, &_countAllPipeInfo.pipeline);
+
+    VkUtil::createDescriptorSets(_vkContext.device, {_countAllPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_allSet);    
 }
 
 void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
@@ -136,6 +152,8 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     infos.bBins = bIndices;
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
+    assert(_vkContext.queueMutex);  // debug check that the optional value is set
+	std::lock_guard<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     if(clearCounts)
@@ -144,6 +162,44 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
     vkCmdDispatch(commands, dataSize / 256, 1, 1);
 
+
+    PCUtil::Stopwatch stop(std::cout, "Gpu Pairwise");
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+}
+
+void LineCounter::countLinesAll(size_t dataSize, std::vector<VkBuffer> data, uint32_t binAmt, std::vector<VkBuffer> counts, std::vector<uint32_t> activeIndices, bool clearCounts = false) const{
+    assert(aData.size == bData.size() && aData.size() == counts.size() - 1);
+    for(auto a: irange(data))
+        VkUtil::updateArrayDescriptorSet(_vkContext.device, data[a], VK_WHOLE_SIZE, 0, a, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allSet);
+    for(auto c: irange(counts))
+        VkUtil::updateArrayDescriptorSet(_vkContext.device, counts[c], VK_WHOLE_SIZE, 2, c, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _allSet);
+
+    PairInfos infos{};
+    infos.amtofDataPoints = dataSize;
+    infos.aBins = binAmt;
+    for(int i: irange(activeIndices.size() - 1)){
+        infos.bBins |= int(activeIndices[i] > activeIndices[i + 1]) << i;
+    }
+    infos.padding = counts.size();
+    VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
+
+    assert(_vkContext.queueMutex);  // debug check that the optional value is set
+	std::lock_guard<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    if(clearCounts){
+        for(auto count: counts)
+            vkCmdFillBuffer(commands, count, 0, binAmt * binAmt * sizeof(uint32_t), 0);
+    }
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPipeInfo.pipelineLayout, 0, 1, &_allSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPipeInfo.pipeline);
+    vkCmdDispatch(commands, dataSize / 256, 1, 1);
+
+    PCUtil::Stopwatch stop(std::cout, "Gpu Compute All");
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
     auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
 
@@ -190,6 +246,7 @@ void LineCounter::tests(const CreateInfo& info){
 LineCounter::~LineCounter() 
 {
     _countPipeInfo.vkDestroy(_vkContext);
+    _countAllPipeInfo.vkDestroy(_vkContext);
     if(_descSet)
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_descSet);
     if(_pairSet)

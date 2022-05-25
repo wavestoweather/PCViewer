@@ -3,7 +3,6 @@
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_NV_shader_subgroup_partitioned : enable
 
-// TODO: add bindings
 layout(binding = 0) buffer vA{uint aVals[];}; 
 
 layout(binding = 1) buffer vB{uint bVals[];}; 
@@ -24,10 +23,12 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 // as each element of aVals and bVals contain two float16 we have to unpack
 void main(){
+    if(gl_GlobalInvocationID.x > amtOfDataPoints)
+        return;
     float aVal = unpackHalf2x16(aVals[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
     float bVal = unpackHalf2x16(bVals[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
-    uint binA = min(uint(fract(aVal) * float(aBins)), aBins);
-    uint binB = min(uint(fract(bVal) * float(bBins)), bBins);
+    uint binA = min(uint(aVal * float(aBins)), aBins - 1);
+    uint binB = min(uint(bVal * float(bBins)), bBins - 1);
     //binA = uint(float(gl_GlobalInvocationID.x) / float(amtOfDataPoints) * float(aBins));
     //binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
     uint finalBin = binA * bBins + binB;    // linear index

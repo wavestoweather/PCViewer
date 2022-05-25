@@ -14,8 +14,11 @@ layout(location = 1) in float b;
 layout(location = 0) out float increment;
 
 void main(){
-    float x = fract(a) * 2 - 1; // transforming from [0,1] to [-1,1]
-    float y = fract(b) * 2 - 1;
+    // scaling by 2 - 1/aBins to always have the bins fall inside rendertarget
+    float aInv = 1.0/float(aBins);
+    float bInv = 1.0/float(bBins);
+    float x = (a - .5) * (2 - aInv); // transforming from [0,1] to [-1,1]
+    float y = (b - .5) * (2 - bInv);
     //x = float(gl_VertexIndex) / float(amtOfDataPoints) * 2 - 1;
     //y = float(gl_VertexIndex * 2 % amtOfDataPoints) / float(amtOfDataPoints) * 2 - 1;
     gl_Position.xy = vec2(x, y);

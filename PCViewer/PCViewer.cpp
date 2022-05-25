@@ -168,6 +168,7 @@ static VkDevice                 g_Device = VK_NULL_HANDLE;
 static uint32_t                 g_QueueFamily = (uint32_t)-1;
 static uint32_t					c_QueueFamily = (uint32_t)-1;
 static VkQueue                  g_Queue = VK_NULL_HANDLE;
+static std::mutex				g_QueueMutex{};				// mutex to synchronize queue submissions with external threads
 static VkDebugReportCallbackEXT g_DebugReport = VK_NULL_HANDLE;
 static VkPipelineCache          g_PipelineCache = VK_NULL_HANDLE;
 static VkDescriptorPool         g_DescriptorPool = VK_NULL_HANDLE;
@@ -2318,7 +2319,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		IndBinManager::CreateInfo createInfo{
 			hierarchy,
 			pcSettings.maxHierarchyLines,
-			VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue},
+			VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex},
 			g_PcPlotRenderPass_noClear,
 			g_PcPlotFramebuffer_noClear
 		};
@@ -2481,6 +2482,8 @@ static void cleanupPcPlotDataSets() {
 }
 
 static void createPcPlotCommandBuffer(bool batching) {
+	g_QueueMutex.lock();		// locking the mutex for all other threads
+
 	VkResult err;
 
 	VkCommandBufferAllocateInfo bufferInfo = {};
@@ -2499,6 +2502,22 @@ static void createPcPlotCommandBuffer(bool batching) {
 
 	err = vkBeginCommandBuffer(g_PcPlotCommandBuffer, &beginInfo);
 	check_vk_result(err);
+
+	if(!batching){
+		VkImageMemoryBarrier use_barrier[1] = {};
+		use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		use_barrier[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		use_barrier[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		use_barrier[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		use_barrier[0].image = g_PcPlot;
+		use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		use_barrier[0].subresourceRange.levelCount = 1;
+		use_barrier[0].subresourceRange.layerCount = 1;
+		vkCmdPipelineBarrier(g_PcPlotCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+	}
 
 	VkRenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -2561,6 +2580,8 @@ static void cleanupPcPlotCommandBuffer() {
 	vkResetFences(g_Device, 1, &g_PcPlotRenderFence);
 
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &g_PcPlotCommandBuffer);
+
+	g_QueueMutex.unlock();	// releasing the lock for other threads
 }
 
 //getting the dimension values array. Creates the dimensin values array if it is not yet created
@@ -2630,20 +2651,20 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	VkResult err;
 
-	err = vkQueueWaitIdle(g_Queue);
-	check_vk_result(err);
+	//err = vkQueueWaitIdle(g_Queue);
+	//check_vk_result(err);
 
 	//beginning the command buffer
 	VkCommandPool command_pool = wd->Frames[wd->FrameIndex].CommandPool;
 	VkCommandBuffer command_buffer = wd->Frames[wd->FrameIndex].CommandBuffer;
 
-	err = vkResetCommandPool(g_Device, command_pool, 0);
-	check_vk_result(err);
-	VkCommandBufferBeginInfo begin_info = {};
-	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	err = vkBeginCommandBuffer(command_buffer, &begin_info);
-	check_vk_result(err);
+	//err = vkResetCommandPool(g_Device, command_pool, 0);
+	//check_vk_result(err);
+	//VkCommandBufferBeginInfo begin_info = {};
+	//begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	//begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	//err = vkBeginCommandBuffer(command_buffer, &begin_info);
+	//check_vk_result(err);
 
 	//now using the memory barrier to transition image state
 	VkImageMemoryBarrier use_barrier[1] = {};
@@ -2658,20 +2679,20 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 	use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	use_barrier[0].subresourceRange.levelCount = 1;
 	use_barrier[0].subresourceRange.layerCount = 1;
-	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+	//vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 
 	//ending the command buffer and submitting it
-	VkSubmitInfo end_info = {};
-	end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	end_info.commandBufferCount = 1;
-	end_info.pCommandBuffers = &command_buffer;
-	err = vkEndCommandBuffer(command_buffer);
-	check_vk_result(err);
-	err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
-	check_vk_result(err);
-
-	err = vkDeviceWaitIdle(g_Device);
-	check_vk_result(err);
+	//VkSubmitInfo end_info = {};
+	//end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	//end_info.commandBufferCount = 1;
+	//end_info.pCommandBuffers = &command_buffer;
+	//err = vkEndCommandBuffer(command_buffer);
+	//check_vk_result(err);
+	//err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
+	//check_vk_result(err);
+//
+	//err = vkDeviceWaitIdle(g_Device);
+	//check_vk_result(err);
 
 	//drawing via copying the indeces into the index buffer
 	//the indeces have to have just the right ordering for the vertices
@@ -2798,6 +2819,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		//creating the standard batch command buffer
 		line_batch_commands.push_back({});
 		VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &line_batch_commands[0]);
+		vkCmdPipelineBarrier(line_batch_commands[0], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 		std::vector<VkClearValue> clearValues{ { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w } };
 		VkUtil::beginRenderPass(line_batch_commands[0], clearValues, g_PcPlotRenderPass, g_PcPlotFramebuffer, { g_PcPlotWidth, g_PcPlotHeight });
 		vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
@@ -11405,6 +11427,8 @@ int main(int, char**)
 							}
 							ImGui::EndCombo();
 						}
+						if(ImGui::MenuItem("Force recount"))
+							dl.indBinManager->forceCountUpdate();
 						ImGui::Separator();
 					}
 					//if (ImGui::MenuItem("Send to Bubble plotter")) {

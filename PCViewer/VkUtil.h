@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <vector>
 #include <cstring>
+#include <mutex>
+#include <optional>
 
 static void check_vk_result(VkResult err)
 {
@@ -24,6 +26,7 @@ namespace VkUtil{
 		VkDescriptorPool descriptorPool;
 		VkCommandPool commandPool;
 		VkQueue queue;
+		std::mutex* queueMutex;	// needed for queue synchroniztion
 	};
 
 	struct PipelineInfo{

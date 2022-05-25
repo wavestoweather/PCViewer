@@ -1,0 +1,35 @@
+#version 450
+#extension GL_EXT_nonuniform_qualifier : enable
+
+layout(binding = 0) buffer vA{uint v[];}a[]; 
+
+layout(binding = 2) buffer Lines{
+	uint v[];
+}c[];
+
+layout(binding = 3) uniform Infos{
+    uint amtOfDataPoints;
+    uint aBins, bBins;      // b bins is used to determine switch of attributes (needs to be done to account for not increasingly ordered attributes)
+    uint amtOfCounts;
+};
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+void main(){
+    if(gl_GlobalInvocationID.x >= amtOfDataPoints)
+        return;
+    float aVal = unpackHalf2x16(a[0].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+    for(int i = 1; i <= amtOfCounts; ++i){
+        float bVal = unpackHalf2x16(a[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+        uint binA = min(uint(aVal * float(aBins)), aBins - 1);
+        uint binB = min(uint(bVal * float(bBins)), bBins - 1);
+        if(bool(bBins & (1 << (i - 1)))){ // switching bins if switching bit is set
+            uint tmp = binA;
+            binA = binB;
+            binB = tmp;
+        }
+        uint finalBin = binA * aBins + binB;    // linear index
+        atomicAdd(c[i - 1].v[finalBin], 1);
+        aVal = bVal;
+    }
+}

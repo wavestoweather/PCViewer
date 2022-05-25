@@ -42,7 +42,6 @@ private:
     VkRenderPass _renderPass;
     VkFramebuffer _framebuffer;
     VkDescriptorSet _descSet{}; //only here for test purposes
-    VkDescriptorSet _pairSet;
     VkBuffer _pairUniform;
     VkDeviceMemory _pairUniformMem;
     VkImage _countImage{};
@@ -52,8 +51,11 @@ private:
     size_t _imageMemSize;
 
     // vulkan resources that have to be destroyed
-    VkUtil::PipelineInfo _countPipeInfo{};
+    VkUtil::PipelineInfo _countPipeInfo{}, _conversionPipeInf{};
+    VkSampler _sampler{};
+    VkDescriptorSet _pairSet, _conversionSet;
 
     const std::string _vertexShader = "shader/lineCount.vert.spv";
     const std::string _fragmentShader = "shader/lineCount.frag.spv";
+    const std::string _convertShader = "shader/convertImageToUBuffer.comp.spv";
 };
