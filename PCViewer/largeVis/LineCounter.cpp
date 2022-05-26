@@ -170,8 +170,8 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
-void LineCounter::countLinesAll(size_t dataSize, std::vector<VkBuffer> data, uint32_t binAmt, std::vector<VkBuffer> counts, std::vector<uint32_t> activeIndices, bool clearCounts = false) const{
-    assert(aData.size == bData.size() && aData.size() == counts.size() - 1);
+void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, bool clearCounts) const{
+    assert(data.size() == counts.size() - 1);
     for(auto a: irange(data))
         VkUtil::updateArrayDescriptorSet(_vkContext.device, data[a], VK_WHOLE_SIZE, 0, a, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allSet);
     for(auto c: irange(counts))

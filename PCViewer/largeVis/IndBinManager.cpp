@@ -220,7 +220,7 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
 void IndBinManager::updateCounts(){
     bool prevValue{};
 
-    std::vector<int> activeIndices; // these are already ordered
+    std::vector<uint32_t> activeIndices; // these are already ordered
     for(auto i: _attributeOrdering){
         if(_attributeActivations[i])
             activeIndices.push_back(i);
@@ -230,7 +230,7 @@ void IndBinManager::updateCounts(){
         return;
     }
 
-    auto execCountUpdate = [](IndBinManager* t, std::vector<int> activeIndices){
+    auto execCountUpdate = [](IndBinManager* t, std::vector<uint32_t> activeIndices){
         // Note: vulkan resources for the count images were already provided by main thread
         switch(t->countingMethod){
         case CountingMethod::CpuGeneric:{
@@ -281,7 +281,7 @@ void IndBinManager::updateCounts(){
             datas.back() = t->columnData[activeIndices.back()].gpuData;
             if(!anyUpdate)
                 return;
-            t->_lineCounter->countLinesAll(t->columnData[0].cpuData.size())
+            t->_lineCounter->countLinesAll(t->columnData[0].cpuData.size(), datas, t->columnBins, counts, activeIndices, true);
             break;
         }
         case CountingMethod::GpuComputePairwise:{

@@ -124,7 +124,7 @@ class Data{
             for(auto d: columnDimensions[c]) redColumnSize *= reducedDimensions[d];
             std::vector<float> redData(redColumnSize);
             uint32_t redDataCur = 0;
-            while(redDimIndices[0] < reducedDimensions[columnDimensions[c][0]]){
+            while(redDimIndices[0] < redDimStops[columnDimensions[c][0]]){
                 //copy value
                 redData[redDataCur++] = columns[c][indexReducedDimIndices(redDimIndices, c)];
                 //increase dimension itertor

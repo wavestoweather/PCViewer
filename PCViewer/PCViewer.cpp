@@ -544,6 +544,11 @@ static std::map<std::string, std::pair<bool,std::vector<float>>> dimensionValues
 static bool atomicGpuFloatAddAvailable{};
 
 static PCViewerState pcViewerState = PCViewerState::Normal;
+enum class DefaultLoad{
+	No,		// not creating a drawlist on load
+	Full,
+	RandomSubsampling
+};
 struct PCSettings {
 	bool autoAlpha = true;
 	float alphaDrawLists = .5f;
@@ -552,7 +557,8 @@ struct PCSettings {
 	bool enableZeroTick = true;
 	int axisTickAmount = 10;
 	int axisTickWidth = 5;
-	bool createDefaultOnLoad = true;
+	DefaultLoad createDefaultOnLoad = DefaultLoad::Full;
+	float defaultLoadRandomProbability = .01f;	// default at 1 %
 	bool rescaleTableColumns = true;
 
 	//variables for the histogramm
@@ -7926,10 +7932,28 @@ int main(int, char**)
 					for (std::string& s : droppedPaths) {
 						if (!droppedPathActive[c++]) continue;
 						bool success = openDataset(s.c_str());
-						if (success && pcSettings.createDefaultOnLoad) {
+						if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
 							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
 							updateActiveIndices(g_PcPlotDrawLists.back());
 							pcPlotRender = true;
+						}
+						else if(success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling){
+							// creating random indices and exchanging the default template list tepmorary for the random indices
+							std::vector<uint32_t> randomIndices;
+							std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
+							std::random_device rd;
+							std::mt19937 gen(rd());
+							std::uniform_real_distribution<> dis(0, 1);
+							for(uint32_t i: irange(originalIndices)){
+								if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
+									randomIndices.push_back(originalIndices[i]);
+								}
+							}
+							g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
+							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+							updateActiveIndices(g_PcPlotDrawLists.back());
+							pcPlotRender = true;
+							g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
 						}
 					}
 					droppedPaths.clear();
@@ -7975,10 +7999,28 @@ int main(int, char**)
 						size_t pos = fileExtension.find_last_of(".");
 						if (pos != std::string::npos) {		//entered discrete file
 							bool success = openDataset(pcFilePath);
-							if (success && pcSettings.createDefaultOnLoad) {
+							if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
 								//pcPlotRender = true;
 								createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
 								pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+							}
+							else if(success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling){
+								// creating random indices and exchanging the default template list tepmorary for the random indices
+								std::vector<uint32_t> randomIndices;
+								std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
+								std::random_device rd;
+								std::mt19937 gen(rd());
+								std::uniform_real_distribution<> dis(0, 1);
+								for(uint32_t i: irange(originalIndices)){
+									if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
+										randomIndices.push_back(originalIndices[i]);
+									}
+								}
+								g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
+								createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+								updateActiveIndices(g_PcPlotDrawLists.back());
+								pcPlotRender = true;
+								g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
 							}
 						}
 						else {					//entered folder -> open open dataset dialogue
@@ -10179,8 +10221,17 @@ int main(int, char**)
 
 					ImGui::EndCombo();
 				}
-
-				ImGui::MenuItem("Default drawlist on load", "", &pcSettings.createDefaultOnLoad);
+				static const char* loadNames[] = {"None", "All", "Random subsampled"};
+				if(ImGui::BeginCombo("Create drawlist on load", loadNames[int(pcSettings.createDefaultOnLoad)])){
+					for(int i: irange(3)){
+						if(ImGui::MenuItem(loadNames[i])){
+							pcSettings.createDefaultOnLoad = static_cast<DefaultLoad>(i);
+						}
+					}
+					ImGui::EndCombo();
+				}
+				if(pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling)
+					ImGui::InputFloat("Random subsampling val", &pcSettings.defaultLoadRandomProbability);
 				ImGui::SliderInt("Line batch size", &pcSettings.lineBatchSize, 1e5, 1e7);
 
 				ImGui::PopItemWidth();
@@ -10591,7 +10642,17 @@ int main(int, char**)
 					ImGui::EndCombo();
 				}
 
-				ImGui::Checkbox("Create default drawlist on load", &pcSettings.createDefaultOnLoad);
+				static const char* loadNames[] = {"None", "All", "Random subsampled"};
+				if(ImGui::BeginCombo("Create drawlist on load", loadNames[int(pcSettings.createDefaultOnLoad)])){
+					for(int i: irange(3)){
+						if(ImGui::MenuItem(loadNames[i])){
+							pcSettings.createDefaultOnLoad = static_cast<DefaultLoad>(i);
+						}
+					}
+					ImGui::EndCombo();
+				}
+				if(pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling)
+					ImGui::InputFloat("Random subsampling val", &pcSettings.defaultLoadRandomProbability);
 
 				ImGui::DragInt("Live brush threshold", &pcSettings.liveBrushThreshold, 1000);
 
@@ -10625,10 +10686,28 @@ int main(int, char**)
 				size_t pos = fileExtension.find_last_of(".");
 				if (pos != std::string::npos) {		//entered discrete file
 					bool success = openDataset(pcFilePath);
-					if (success && pcSettings.createDefaultOnLoad) {
+					if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
 						//pcPlotRender = true;
 						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
 						pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+					}
+					else if (success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling) {
+						// creating random indices and exchanging the default template list tepmorary for the random indices
+						std::vector<uint32_t> randomIndices;
+						std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
+						std::random_device rd;
+						std::mt19937 gen(rd());
+						std::uniform_real_distribution<> dis(0, 1);
+						for(uint32_t i: irange(originalIndices)){
+							if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
+								randomIndices.push_back(originalIndices[i]);
+							}
+						}
+						g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
+						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+						updateActiveIndices(g_PcPlotDrawLists.back());
+						pcPlotRender = true;
+						g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
 					}
 				}
 				else {					//entered folder -> open open dataset dialogue
