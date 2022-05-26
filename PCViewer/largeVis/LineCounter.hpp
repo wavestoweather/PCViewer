@@ -41,7 +41,6 @@ private:
 
     // vulkan resources that are destroyed externally
     VkUtil::Context _vkContext;
-    VkRenderPass _renderPass;
     VkDescriptorSet _descSet{}; //only here for test purposes
     VkDescriptorSet _pairSet{}, _allSet{};
     VkBuffer _pairUniform{};

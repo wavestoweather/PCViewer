@@ -101,7 +101,7 @@ public:
     std::vector<Attribute> attributes;
     robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
     std::vector<CompressedColumnData> columnData;
-    CountingMethod countingMethod{CountingMethod::GpuDrawPairwise};    // variable to set the different counting techniques
+    CountingMethod countingMethod{CountingMethod::GpuComputeFull};    // variable to set the different counting techniques
     uint32_t columnBins{1 << 10};
     uint32_t cpuLineCountingAmtOfThreads{12};
     std::atomic<bool> requestRender{false};
@@ -150,8 +150,8 @@ private:
     std::vector<std::vector<uint32_t>> _attributeDimensions;
     std::vector<std::vector<compression::IndexCenterFileData>> _attributeCenters; // for each level for all attributes a singel list with the centers exists 
 
-    std::thread _dataLoadThread;
-    std::atomic<bool> _loadThreadActive{false};
+    //std::thread _dataLoadThread;
+    //std::atomic<bool> _loadThreadActive{false};
     std::thread _countUpdateThread;
     std::atomic<bool> _countUpdateThreadActive{false};
     bool _pendingCountUpdate{false};    // if a brush update or attribute update comes in while an update was still enqueud

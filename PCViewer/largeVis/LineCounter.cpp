@@ -141,6 +141,8 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
 }
 
 void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) const{
+    assert(_vkContext.queueMutex);  // debug check that the optional value is set
+	std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
@@ -152,16 +154,13 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     infos.bBins = bIndices;
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
-    assert(_vkContext.queueMutex);  // debug check that the optional value is set
-	std::lock_guard<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     if(clearCounts)
         vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
-    vkCmdDispatch(commands, dataSize / 256, 1, 1);
-
+    vkCmdDispatch(commands, (dataSize + 255) / 256, 1, 1);
 
     PCUtil::Stopwatch stop(std::cout, "Gpu Pairwise");
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
@@ -171,7 +170,9 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
 }
 
 void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, bool clearCounts) const{
-    assert(data.size() == counts.size() - 1);
+    assert(_vkContext.queueMutex);  // debug check that the optional value is set
+	std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
+    assert(data.size() - 1 == counts.size());
     for(auto a: irange(data))
         VkUtil::updateArrayDescriptorSet(_vkContext.device, data[a], VK_WHOLE_SIZE, 0, a, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allSet);
     for(auto c: irange(counts))
@@ -187,8 +188,6 @@ void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& da
     infos.padding = counts.size();
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
-    assert(_vkContext.queueMutex);  // debug check that the optional value is set
-	std::lock_guard<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     if(clearCounts){
@@ -197,7 +196,7 @@ void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& da
     }
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPipeInfo.pipelineLayout, 0, 1, &_allSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPipeInfo.pipeline);
-    vkCmdDispatch(commands, dataSize / 256, 1, 1);
+    vkCmdDispatch(commands, (dataSize + 255) / 256, 1, 1);
 
     PCUtil::Stopwatch stop(std::cout, "Gpu Compute All");
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);

@@ -158,7 +158,19 @@ IndBinManager::~IndBinManager(){
         _lineCounter->release();
     if(_renderer)
         _renderer->release();
-    //TODO: release all here created things
+    // count resource is destructed automatically by destructor
+    // columnd data info destruction
+    for(auto& d: columnData){
+        if(d.gpuData)
+            vkDestroyBuffer(_vkContext.device, d.gpuData, nullptr);
+        if(d.gpuMemory)
+            vkFreeMemory(_vkContext.device, d.gpuMemory, nullptr);
+    }
+
+    // joining all threads
+    if(_countUpdateThread.joinable())
+        _countUpdateThread.join();
+    
 }
 
 void IndBinManager::notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* attributeActivations){
@@ -343,9 +355,12 @@ void IndBinManager::updateCounts(){
                 vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_countResources[{a,b}].countMemory);
                 vkBindBufferMemory(_vkContext.device, _countResources[{a,b}].countBuffer, _countResources[{a,b}].countMemory, 0);
                 _countResources[{a,b}].binAmt = columnBins * columnBins;
+                _countResources[{a,b}]._vkDevice = _vkContext.device;
             }
         }
         _countBrushState = _currentBrushState;
+        if(_countUpdateThread.joinable())
+            _countUpdateThread.join();
         _countUpdateThread = std::thread(execCountUpdate, this, activeIndices);
     }
 }

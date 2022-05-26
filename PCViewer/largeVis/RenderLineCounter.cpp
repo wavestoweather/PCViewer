@@ -209,6 +209,8 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
 
 void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) const{
     const uint32_t shaderXSize = 256;
+    assert(_vkContext.queueMutex);
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
 
     VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
     VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _conversionSet);
@@ -220,8 +222,6 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     infos.bBins = bIndices;
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
-    assert(_vkContext.queueMutex);
-    _vkContext.queueMutex->lock();
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     if(clearCounts)
@@ -249,7 +249,6 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
 
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
-    _vkContext.queueMutex->unlock();
 }
 
 RenderLineCounter* RenderLineCounter::_singleton = nullptr;    // init to nullptr
@@ -304,6 +303,16 @@ RenderLineCounter::~RenderLineCounter()
         vkFreeMemory(_vkContext.device, _pairUniformMem, nullptr);
     if(_sampler)
         vkDestroySampler(_vkContext.device, _sampler, nullptr);
+    if(_countImage)
+        vkDestroyImage(_vkContext.device, _countImage, nullptr);
+    if(_countImageView)
+        vkDestroyImageView(_vkContext.device, _countImageView, nullptr);
+    if(_countImageMem)
+        vkFreeMemory(_vkContext.device, _countImageMem, nullptr);
+    if(_renderPass)
+        vkDestroyRenderPass(_vkContext.device, _renderPass, nullptr);
+    if(_framebuffer)
+        vkDestroyFramebuffer(_vkContext.device, _framebuffer, nullptr);
 }
 
 void RenderLineCounter::release(){

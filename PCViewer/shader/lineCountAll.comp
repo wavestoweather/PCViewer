@@ -22,7 +22,7 @@ void main(){
     for(int i = 1; i <= amtOfCounts; ++i){
         float bVal = unpackHalf2x16(a[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
         uint binA = min(uint(aVal * float(aBins)), aBins - 1);
-        uint binB = min(uint(bVal * float(bBins)), bBins - 1);
+        uint binB = min(uint(bVal * float(aBins)), aBins - 1);
         if(bool(bBins & (1 << (i - 1)))){ // switching bins if switching bit is set
             uint tmp = binA;
             binA = binB;
