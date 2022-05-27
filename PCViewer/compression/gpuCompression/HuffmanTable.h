@@ -23,10 +23,10 @@ public:
     uint getSymbolTableSize() const { return m_symbolTableSize; }
 
     static uint computeMaxGPUSize(const GpuInstance* pInstance);
-    uint computeGPUSize(const VGpuInstance* pInstance) const;
+    uint computeGPUSize(const GpuInstance* pInstance) const;
     void copyToBuffer(const GpuInstance* pInstance, byte* pTable) const;
     void uploadToGPU(const GpuInstance* pInstance, byte* dpTable) const;
-    void uploadToGPUAsync(const VGpuInstancet* pInstance, byte* dpTable) const;
+    void uploadToGPUAsync(const GpuInstance* pInstance, byte* dpTable) const;
     void syncOnLastAsyncUpload() const;
 
 private:
@@ -54,30 +54,30 @@ private:
 class HuffmanEncodeTable
 {
 public:
-    static size_t getRequiredMemory(const VkUtil::Context* context);
-    static void init(VkUtil::Context* context);
-    static void shutdown(VkUtil::Context* context);
+    static size_t getRequiredMemory(const GpuInstance* pInstance);
+    static void init(GpuInstance* pInstance);
+    static void shutdown(GpuInstance* pInstance);
 
-    HuffmanEncodeTable(const VkUtil::Context* context);
+    HuffmanEncodeTable(const GpuInstance* pInstance);
     HuffmanEncodeTable(HuffmanEncodeTable&& other);
     ~HuffmanEncodeTable();
 
     HuffmanEncodeTable& operator=(HuffmanEncodeTable&& other);
 
     void clear();
-    static bool design(VkUtil::Context* context, HuffmanEncodeTable* pTables, uint tableCount, const Symbol16** pdpSymbolStreams, const uint* pSymbolCountPerStream);
-    static bool design(InsVkUtil::Contextance* context, HuffmanEncodeTable* pTables, uint tableCount, const Symbol32** pdpSymbolStreams, const uint* pSymbolCountPerStream);
+    static bool design(GpuInstance* pInstance, HuffmanEncodeTable* pTables, uint tableCount, const Symbol16** pdpSymbolStreams, const uint* pSymbolCountPerStream);
+    static bool design(GpuInstance* pInstance, HuffmanEncodeTable* pTables, uint tableCount, const Symbol32** pdpSymbolStreams, const uint* pSymbolCountPerStream);
 
     uint getTableSize() const { return m_codewordTableSize; }
     void copyToBuffer(uint* pCodewords, uint* pCodewordLengths) const;
     void uploadToGPU(uint* dpCodewords, uint* dpCodewordLengths) const;
-    void uploadToGPUAsync(const VkUtil::Context* context, uint* dpCodewords, uint* dpCodewordLengths) const;
+    void uploadToGPUAsync(const GpuInstance* pInstance, uint* dpCodewords, uint* dpCodewordLengths) const;
 
-    void writeToBitStream(const VkUtil::Context* context, BitStream& bitstream) const;
+    void writeToBitStream(const GpuInstance* pInstance, cudaCompress::BitStream& bitstream) const;
 
 private:
     template<typename Symbol>
-    static bool design(VkUtil::Context* context, HuffmanEncodeTable* pTables, uint tableCount, const Symbol** pdpSymbolStreams, const uint* pSymbolCountPerStream);
+    static bool design(GpuInstance* pInstance, HuffmanEncodeTable* pTables, uint tableCount, const Symbol** pdpSymbolStreams, const uint* pSymbolCountPerStream);
     void build(const uint* pSymbolProbabilities, uint distinctSymbolCount);
 
     // data to be written to bitstream

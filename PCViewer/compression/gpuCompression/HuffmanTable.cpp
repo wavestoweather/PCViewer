@@ -1,10 +1,15 @@
 #include "HuffmanTable.h"
 
+#include <queue>
+#include <numeric>
+#include "../cpuCompression/util.h"
+#include "HuffmanDesign.hpp"
+
 namespace vkCompress{
 using namespace cudaCompress;
 HuffmanDecodeTable::HuffmanDecodeTable(const GpuInstance* pInstance)
 {
-    size_t storageSize = computeMaxGPUSize(context);
+    size_t storageSize = computeMaxGPUSize(pInstance);
     m_pStorage = new byte[storageSize];
 
     cudaCompress::byte* pNext = m_pStorage;
@@ -131,20 +136,20 @@ uint HuffmanDecodeTable::computeGPUSize(const GpuInstance* pInstance) const
 
 void HuffmanDecodeTable::copyToBuffer(const GpuInstance* pInstance, byte* pTable) const
 {
-    size_t size = computeGPUSize(context);
+    size_t size = computeGPUSize(pInstance);
     memcpy(pTable, m_pStorage, size);
 }
 
 void HuffmanDecodeTable::uploadToGPU(const GpuInstance* pInstance, byte* dpTable) const
 {
-    size_t size = computeGPUSize(context);
+    size_t size = computeGPUSize(pInstance);
     //cudaSafeCall(cudaMemcpy(dpTable, m_pStorage, size, cudaMemcpyHostToDevice));
     // TODO: upload to gpu
 }
 
-void HuffmanDecodeTable::uploadToGPUAsync(const VkUtil::Context* context, byte* dpTable) const
+void HuffmanDecodeTable::uploadToGPUAsync(const GpuInstance* pInstance, byte* dpTable) const
 {
-    size_t size = computeGPUSize(context);
+    size_t size = computeGPUSize(pInstance);
     //cudaSafeCall(cudaMemcpyAsync(dpTable, m_pStorage, size, cudaMemcpyHostToDevice, pInstance->m_stream));
     //cudaSafeCall(cudaEventRecord(m_uploadSyncEvent, pInstance->m_stream));
     // TDOO: upload async
@@ -239,30 +244,31 @@ size_t HuffmanEncodeTable::getRequiredMemory(const GpuInstance* pInstance)
     return size;
 }
 
-void HuffmanEncodeTable::init(VkUtil::Context* context)
+void HuffmanEncodeTable::init(GpuInstance* pInstance)
 {
     uint tableCountMax = pInstance->m_streamCountMax;
     uint distinctSymbolCountMax = 1 << pInstance->m_log2HuffmanDistinctSymbolCountMax;
 
     uint distinctSymbolCountMaxAligned = (uint)getAlignedSize(distinctSymbolCountMax, 128 / sizeof(uint));
 
-    cudaSafeCall(cudaMallocHost(&pInstance->HuffmanTable.pReadback, tableCountMax * distinctSymbolCountMaxAligned * sizeof(uint)));
+    //cudaSafeCall(cudaMallocHost(&pInstance->HuffmanTable.pReadback, tableCountMax * distinctSymbolCountMaxAligned * sizeof(uint)));
+    // TODO: change to vulkan calls
 }
 
-void HuffmanEncodeTable::shutdown(Instance* pInstance)
+void HuffmanEncodeTable::shutdown(GpuInstance* pInstance)
 {
-    cudaSafeCall(cudaFreeHost(pInstance->HuffmanTable.pReadback));
-    pInstance->HuffmanTable.pReadback = nullptr;
+    //cudaSafeCall(cudaFreeHost(pInstance->HuffmanTable.pReadback));
+    //pInstance->HuffmanTable.pReadback = nullptr;
+    // TODO: change to vulkan calls
 }
 
 
-HuffmanEncodeTable::HuffmanEncodeTable(const VkUtil::Context* context)
+HuffmanEncodeTable::HuffmanEncodeTable(const GpuInstance* pInstance)
     : m_symbolMax(0), m_codewordTableSize(0)
 {
     uint distinctSymbolCountMax = 1 << pInstance->m_log2HuffmanDistinctSymbolCountMax;
     uint codewordTableSizeMax = distinctSymbolCountMax;
-    //cudaSafeCall(cudaMallocHost(&m_pCodewords,       codewordTableSizeMax * sizeof(uint), cudaHostAllocWriteCombined));
-    //cudaSafeCall(cudaMallocHost(&m_pCodewordLengths, codewordTableSizeMax * sizeof(uint), cudaHostAllocWriteCombined));
+
     m_pCodewords = new uint[codewordTableSizeMax];
     m_pCodewordLengths = new uint[codewordTableSizeMax];
 }
@@ -285,10 +291,268 @@ HuffmanEncodeTable::~HuffmanEncodeTable()
 {
     clear();
 
-    //cudaSafeCall(cudaFreeHost(m_pCodewords));
-    //cudaSafeCall(cudaFreeHost(m_pCodewordLengths));
     delete[] m_pCodewords;
     delete[] m_pCodewordLengths;
 }
+
+HuffmanEncodeTable& HuffmanEncodeTable::operator=(HuffmanEncodeTable&& other)
+{
+    if(this == &other)
+        return *this;
+
+    m_symbolMax = other.m_symbolMax;
+    m_symbols.swap(other.m_symbols);
+    m_codewordCountPerLength.swap(other.m_codewordCountPerLength);
+
+    //cudaSafeCall(cudaFreeHost(m_pCodewords));
+    // TODO: vulkan things here
+    m_pCodewords = other.m_pCodewords;
+    other.m_pCodewords = nullptr;
+    //cudaSafeCall(cudaFreeHost(m_pCodewordLengths));
+    // TODO: vulkan things here
+    m_pCodewordLengths = other.m_pCodewordLengths;
+    other.m_pCodewordLengths = nullptr;
+    m_codewordTableSize = other.m_codewordTableSize;
+    other.m_codewordTableSize = 0;
+
+    return *this;
+}
+
+
+void HuffmanEncodeTable::clear()
+{
+    m_codewordTableSize = 0;
+
+    m_symbolMax = 0;
+    m_symbols.clear();
+    m_codewordCountPerLength.clear();
+}
+
+
+bool HuffmanEncodeTable::design(GpuInstance* pInstance, HuffmanEncodeTable* pTables, uint tableCount, const Symbol16** pdpSymbolStreams, const uint* pSymbolCountPerStream)
+{
+    return design<Symbol16>(pInstance, pTables, tableCount, pdpSymbolStreams, pSymbolCountPerStream);
+}
+
+bool HuffmanEncodeTable::design(GpuInstance* pInstance, HuffmanEncodeTable* pTables, uint tableCount, const Symbol32** pdpSymbolStreams, const uint* pSymbolCountPerStream)
+{
+    return design<Symbol32>(pInstance, pTables, tableCount, pdpSymbolStreams, pSymbolCountPerStream);
+}
+
+template<typename Symbol>
+bool HuffmanEncodeTable::design(GpuInstance* pInstance, HuffmanEncodeTable* pTables, uint tableCount, const Symbol** pdpSymbolStreams, const uint* pSymbolCountPerStream)
+{
+    Symbol* dpReduceOut = pInstance->getBuffer<Symbol>(tableCount);
+
+
+    for(uint i = 0; i < tableCount; i++) {
+        pTables[i].clear();
+    }
+
+    // find max symbol
+    for(uint i = 0; i < tableCount; i++) {
+        reduceArray<Symbol, OperatorMax<Symbol>>(dpReduceOut + i, pdpSymbolStreams[i], pSymbolCountPerStream[i], pInstance->m_pReducePlan);
+        cudaCheckMsg("HuffmanEncodeTable::design: Error in reduceArray");
+    }
+    Symbol* pTableSymbolMax = (Symbol*)pInstance->HuffmanTable.pReadback;
+    cudaSafeCall(cudaMemcpy(pTableSymbolMax, dpReduceOut, tableCount * sizeof(Symbol), cudaMemcpyDeviceToHost));
+    Symbol symbolMax = 0;VkUtil::Context
+    for(uint i = 0; i < tableCount; i++) {
+        pTables[i].m_symbolMax = pTableSymbolMax[i];
+        symbolMax = max(symbolMax, pTables[i].m_symbolMax);
+    }
+
+
+    uint distinctSymbolCountMax = 1 << pInstance->m_log2HuffmanDistinctSymbolCountMax;
+    uint distinctSymbolCount = symbolMax + 1;
+    if(distinctSymbolCount > distinctSymbolCountMax) {
+        //TODO maybe clamp values instead of failing?
+        printf("WARNING: distinctSymbolCount == %u > %u, huffman table design failed.\n", distinctSymbolCount, distinctSymbolCountMax);
+#ifdef _DEBUG
+        __debugbreak();
+#endif
+        pInstance->releaseBuffers(1);
+        return false;
+    }
+
+
+    uint distinctSymbolCountAligned = (uint)getAlignedSize(distinctSymbolCount, 128 / sizeof(uint));
+    uint* dpHistograms = pInstance->getBuffer<uint>(tableCount * distinctSymbolCountAligned);
+
+    std::vector<uint*> pdpHistograms(tableCount);
+    for(uint i = 0; i < tableCount; i++) {
+        pdpHistograms[i] = dpHistograms + i * distinctSymbolCountAligned;
+    }
+
+
+    // find symbol probabilities
+    assert(distinctSymbolCount <= distinctSymbolCountMax);
+    histogram(pInstance, pdpHistograms.data(), tableCount, pdpSymbolStreams, pSymbolCountPerStream, distinctSymbolCount);
+
+    cudaSafeCall(cudaMemcpy(pInstance->HuffmanTable.pReadback, dpHistograms, tableCount * distinctSymbolCountAligned * sizeof(uint), cudaMemcpyDeviceToHost));
+
+    #pragma omp parallel for
+    for(int i = 0; i < int(tableCount); i++) {
+        // build actual encode table
+        uint distinctSymbolCountThisTable = pTables[i].m_symbolMax + 1;
+        pTables[i].build(pInstance->HuffmanTable.pReadback + i * distinctSymbolCountAligned, distinctSymbolCountThisTable);
+    }
+    
+    pInstance->releaseBuffers(2);
+
+    return true;
+}
+
+void HuffmanEncodeTable::copyToBuffer(uint* pCodewords, uint* pCodewordLengths) const
+{
+    size_t size = m_codewordTableSize * sizeof(uint);
+    memcpy(pCodewords,       m_pCodewords,       size);
+    memcpy(pCodewordLengths, m_pCodewordLengths, size);
+}
+
+void HuffmanEncodeTable::uploadToGPU(uint* dpCodewords, uint* dpCodewordLengths) const
+{
+    size_t size = m_codewordTableSize * sizeof(uint);
+    ///cudaSafeCall(cudaMemcpy(dpCodewords,       m_pCodewords,       size, cudaMemcpyHostToDevice));
+    ///cudaSafeCall(cudaMemcpy(dpCodewordLengths, m_pCodewordLengths, size, cudaMemcpyHostToDevice));
+    // TODO: change to vulkan calls
+}
+
+void HuffmanEncodeTable::uploadToGPUAsync(const GpuInstance* pInstance, uint* dpCodewords, uint* dpCodewordLengths) const
+{
+    size_t size = m_codewordTableSize * sizeof(uint);
+    //cudaSafeCall(cudaMemcpyAsync(dpCodewords,       m_pCodewords,       size, cudaMemcpyHostToDevice, pInstance->m_stream));
+    //cudaSafeCall(cudaMemcpyAsync(dpCodewordLengths, m_pCodewordLengths, size, cudaMemcpyHostToDevice, pInstance->m_stream));
+    // TODO: change to vulkan calls
+}
+
+void HuffmanEncodeTable::writeToBitStream(const GpuInstance* pInstance, BitStream& bitstream) const
+{
+    // write #codewords per length
+    bitstream.writeBits(uint(m_codewordCountPerLength.size()), LOG2_MAX_CODEWORD_BITS);
+    for(uint i = 0; i < m_codewordCountPerLength.size(); i++) {
+        bitstream.writeBits(m_codewordCountPerLength[i], pInstance->m_log2HuffmanDistinctSymbolCountMax);
+    }
+    // write symbols (ordered by codeword length)
+    bitstream.writeBits(uint(m_symbols.size()), pInstance->m_log2HuffmanDistinctSymbolCountMax);
+    uint symbolBits = getRequiredBits(m_symbolMax);
+    bool longSymbols = (pInstance->m_log2HuffmanDistinctSymbolCountMax > 16);
+    bitstream.writeBits(symbolBits, longSymbols ? LOG2_MAX_SYMBOL32_BITS : LOG2_MAX_SYMBOL16_BITS); // note: if symbolBits is 16, this will actually write out 0...
+    for(uint i = 0; i < m_symbols.size(); i++) {
+        bitstream.writeBits(m_symbols[i], symbolBits);
+    }
+}
+
+void HuffmanEncodeTable::build(const uint* pSymbolProbabilities, uint distinctSymbolCount)
+{
+    std::vector<HuffmanTreeNode> huffmanNodes(2 * distinctSymbolCount - 1);
+    uint nextNodeIndex = 0;
+
+    // build list of all used symbols, packed in HuffmanTreeNodes
+    // these will be the leaves of the huffman tree
+    std::vector<HuffmanTreeNode*> treeLeaves;
+    for(uint symbol = 0; symbol < distinctSymbolCount; symbol++) {
+        if(pSymbolProbabilities[symbol] > 0) {
+            huffmanNodes[nextNodeIndex].init(symbol, pSymbolProbabilities[symbol]);
+            treeLeaves.push_back(&huffmanNodes[nextNodeIndex]);
+            nextNodeIndex++;
+        }
+    }
+
+    if(treeLeaves.empty())
+        return;
+
+    // list of huffman nodes to process
+    std::priority_queue<HuffmanTreeNode*, std::vector<HuffmanTreeNode*>, HuffmanTreeNodeProbabilityInvComparer> treeNodesTodo(treeLeaves.begin(), treeLeaves.end());
+
+    // build the huffman tree by successively combining the lowest-probability nodes
+    while(treeNodesTodo.size() > 1) {
+        uint newNodeIndex = nextNodeIndex++;
+        HuffmanTreeNode& newNode = huffmanNodes[newNodeIndex];
+
+        newNode.init(INVALID_SYMBOL32, 0);
+
+        // get nodes with lowest probability as children
+        HuffmanTreeNode* pLeftChild = treeNodesTodo.top();
+        treeNodesTodo.pop();
+        HuffmanTreeNode* pRightChild = treeNodesTodo.top();
+        treeNodesTodo.pop();
+
+        newNode.m_pLeftChild = pLeftChild;
+        newNode.m_pRightChild = pRightChild;
+
+        // combine probabilities
+        newNode.m_probability = pLeftChild->m_probability + pRightChild->m_probability;
+
+        // insert into todo list
+        treeNodesTodo.push(&newNode);
+    }
+
+    HuffmanTreeNode& rootNode = *treeNodesTodo.top();
+
+    // assign codeword length = tree level
+    uint codewordLengthMax = (uint)rootNode.assignCodewordLength(0);
+
+    // sort leaves (ie actual symbols) by codeword length
+    std::sort(treeLeaves.begin(), treeLeaves.end(), HuffmanTreeNodeCodewordLengthComparer());
+
+    // fill codeword count list and symbol list from leaves list
+    m_codewordCountPerLength.resize(codewordLengthMax);
+    m_symbols.resize(treeLeaves.size());
+    for(uint i = 0; i < treeLeaves.size(); i++) {
+        const HuffmanTreeNode& node = *treeLeaves[i];
+
+        if(node.m_codewordLength > 0)
+            m_codewordCountPerLength[node.m_codewordLength - 1]++;
+        m_symbols[i] = node.m_symbol;
+    }
+
+    // count total number of codewords
+    uint codewordCount = std::accumulate(m_codewordCountPerLength.begin(), m_codewordCountPerLength.end(), 0);
+    if(m_codewordCountPerLength.empty()) {
+        // this can happen when all symbols are the same -> only a single "codeword" with length 0
+        codewordCount++;
+    }
+
+    // make array of codeword lengths (ordered by codeword index)
+    uint* pCodewordLengthsByIndex = new uint[codewordCount];
+    if(!m_codewordCountPerLength.empty()) {
+        uint index = 0;
+        for(uint codewordLength = 1; codewordLength <= codewordLengthMax; codewordLength++) {
+            for(uint i = 0; i < m_codewordCountPerLength[codewordLength - 1]; i++) {
+                pCodewordLengthsByIndex[index++] = codewordLength;
+            }
+        }
+    } else {
+        pCodewordLengthsByIndex[0] = 0;
+    }
+
+    // assign codewords (ordered by codeword index)
+    uint* pCodewordsByIndex = new uint[codewordCount];
+    pCodewordsByIndex[0] = 0;
+    for(uint index = 1; index < codewordCount; index++) {
+        // new codeword = increment previous codeword
+        pCodewordsByIndex[index] = pCodewordsByIndex[index-1] + 1;
+        // append zero bits as required to reach correct length
+        uint lengthDiff = pCodewordLengthsByIndex[index] - pCodewordLengthsByIndex[index-1];
+        pCodewordsByIndex[index] <<= lengthDiff;
+    }
+
+    m_codewordTableSize = distinctSymbolCount;
+
+    // fill tables with invalid values
+    memset(m_pCodewords,        0, m_codewordTableSize * sizeof(uint));
+    memset(m_pCodewordLengths, -1, m_codewordTableSize * sizeof(uint));
+
+    // reorder codewords and lengths by symbol
+    for(uint index = 0; index < codewordCount; index++) {
+        m_pCodewords      [m_symbols[index]] = pCodewordsByIndex      [index];
+        m_pCodewordLengths[m_symbols[index]] = pCodewordLengthsByIndex[index];
+    }
+
+    delete[] pCodewordsByIndex;
+    delete[] pCodewordLengthsByIndex;
+}
+
 
 }
