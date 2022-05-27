@@ -21,6 +21,8 @@ const uint LOG2_MAX_SYMBOL32_BITS = 5;
 const uint MAX_SYMBOL32_BITS = (1 << LOG2_MAX_SYMBOL32_BITS); // = sizeof(Symbol32) * 8
 static_assert(MAX_SYMBOL32_BITS == sizeof(Symbol32) * 8, "Inconsistent constants: MAX_SYMBOL32_BITS is not equal to sizeof(Symbol32) * 8");
 
+const uint LOG2_HUFFMAN_DISTINCT_SYMBOL_COUNT_MAX = 14;
+
 const uint LOG2_MAX_CODEWORD_BITS = 5;
 const uint MAX_CODEWORD_BITS = (1 << LOG2_MAX_CODEWORD_BITS);
 
