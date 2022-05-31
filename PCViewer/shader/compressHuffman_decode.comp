@@ -7,6 +7,7 @@
 #extension GL_KHR_shader_subgroup_basic: enable
 #extension GL_EXT_buffer_reference2: require
 #extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
 
 layout(buffer_reference, scalar) buffer Symbols {u16vec2 i[];};  // raw data
 layout(buffer_reference, scalar) buffer Codewords {uint i[];};
@@ -15,7 +16,7 @@ layout(buffer_reference, scalar) buffer EncodeCodewords {uint i[];};
 layout(buffer_reference, scalar) buffer EncodeCodewordLengths{uint i[];};
 layout(buffer_reference, scalar) buffer DecodeTable {u16vec2 i[];};
 
-layout(binding = 0) uniform HuffmanInfo{
+layout(binding = 0) buffer HuffmanInfo{
     uint64_t symbolStream;
 
     uint64_t codewordStream;
@@ -25,14 +26,12 @@ layout(binding = 0) uniform HuffmanInfo{
     uint64_t encodeCodewordLengths;
     uint64_t decodeTable;
     uint decodeSymbolTableSize;
-
-    // second input parameter in the original implementation
-    uint codingBlockSize;
-}infos;
+}infos[];
 
 layout(push_constant) uniform constants{
     uint longSymbols;   //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
-}pc;
+    uint codingBlockSize;
+};
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
@@ -110,13 +109,13 @@ shared int s_codewordIndexLookup [HUFFMAN_LOOKUP_SIZE];
 void main(){
     const uint thread = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
     const uvec2 threadIdx = gl_LocalInvocationID.xy;
-    if(infos.decodeSymbolTableSize > 1) {
+    if(infos[gl_WorkGroupID.y].decodeSymbolTableSize > 1) {
         // load codeword indices and min/max into shared memory
         //assert(blockDim.x >= MAX_CODEWORD_BITS, "blockDim.x must be >= MAX_CODEWORD_BITS");
         if(threadIdx.x < MAX_CODEWORD_BITS) {
-            s_codewordFirstIndexPerLength[threadIdx.x] = int(DecodeTable(infos.decodeTable).i[threadIdx.x]);
-            s_codewordMinPerLength       [threadIdx.x] = int(DecodeTable(infos.decodeTable).i[threadIdx.x + MAX_CODEWORD_BITS]);
-            s_codewordMaxPerLength       [threadIdx.x] = int(DecodeTable(infos.decodeTable).i[threadIdx.x + 2 * MAX_CODEWORD_BITS]);
+            s_codewordFirstIndexPerLength[threadIdx.x] = int(DecodeTable(infos[gl_WorkGroupID.y].decodeTable).i[threadIdx.x]);
+            s_codewordMinPerLength       [threadIdx.x] = int(DecodeTable(infos[gl_WorkGroupID.y].decodeTable).i[threadIdx.x + MAX_CODEWORD_BITS]);
+            s_codewordMaxPerLength       [threadIdx.x] = int(DecodeTable(infos[gl_WorkGroupID.y].decodeTable).i[threadIdx.x + 2 * MAX_CODEWORD_BITS]);
         }
         barrier();
 
@@ -144,21 +143,21 @@ void main(){
         }
         barrier();
 
-        uint readOffset = thread * infos.codingBlockSize;
-        if(readOffset >= infos.symbolCount)
+        uint readOffset = thread * codingBlockSize;
+        if(readOffset >= infos[gl_WorkGroupID.y].symbolCount)
             return;
 
-        uint offset = Offsets(infos.offsets).i[thread];
-        GPUBitstream codewordBitStream = bitstream_init(infos.codewordStream, offset);
+        uint offset = Offsets(infos[gl_WorkGroupID.y].offsets).i[thread];
+        GPUBitstream codewordBitStream = bitstream_init(infos[gl_WorkGroupID.y].codewordStream, offset);
 
-        uint symbolsToDecode = min(readOffset + infos.codingBlockSize, infos.symbolCount) - readOffset;
+        uint symbolsToDecode = min(readOffset + codingBlockSize, infos[gl_WorkGroupID.y].symbolCount) - readOffset;
         // setup for interleaved output
         uint warp = gl_SubgroupID;
         uint threadWithinWarp = gl_SubgroupInvocationID;
-        uint writeIndex = warp * gl_SubgroupSize * infos.codingBlockSize + threadWithinWarp;
+        uint writeIndex = warp * gl_SubgroupSize * codingBlockSize + threadWithinWarp;
 
-        Symbols symbolStream = Symbols(infos.symbolStream);
-        DecodeTable symbolTable = DecodeTable(infos.decodeTable);
+        Symbols symbolStream = Symbols(infos[gl_WorkGroupID.y].symbolStream);
+        DecodeTable symbolTable = DecodeTable(infos[gl_WorkGroupID.y].decodeTable);
         uint symbolTableByteOffset = 3 * MAX_CODEWORD_BITS * 4; // sizeof(int) = 4
         for(int i = 0; i < symbolsToDecode; i++) {
             // get next uint in bitstream if necessary
@@ -189,7 +188,7 @@ void main(){
 
             // output in interleaved order (-> coalesced)
             
-            if(bool(pc.longSymbols)){
+            if(bool(longSymbols)){
                 symbolStream.i[writeIndex] = symbolTable.i[codewordIndex + symbolTableByteOffset / 4] ;
             }
             else{
@@ -200,14 +199,14 @@ void main(){
         }
     } else {
         // single-symbol case
-        uint readOffset = thread * infos.codingBlockSize;
-        if(readOffset >= infos.symbolCount)
+        uint readOffset = thread * codingBlockSize;
+        if(readOffset >= infos[gl_WorkGroupID.y].symbolCount)
             return;
 
-        DecodeTable symbolTable = DecodeTable(infos.decodeTable);
+        DecodeTable symbolTable = DecodeTable(infos[gl_WorkGroupID.y].decodeTable);
         uint symbolTableByteOffset = 3 * MAX_CODEWORD_BITS * 4; //sizeof(int) = 4
         u16vec2 symbol;
-        if(bool(pc.longSymbols)){
+        if(bool(longSymbols)){
             symbol = symbolTable.i[symbolTableByteOffset / 4];
         }
         else{
@@ -215,15 +214,15 @@ void main(){
             symbol.x = symbolTable.i[index >> 1][index & 1];
         }
 
-        uint symbolsToDecode = min(readOffset + infos.codingBlockSize, infos.symbolCount) - readOffset;
+        uint symbolsToDecode = min(readOffset + codingBlockSize, infos[gl_WorkGroupID.y].symbolCount) - readOffset;
 
         uint warp = gl_SubgroupID;
         uint threadWithinWarp = gl_SubgroupInvocationID;
-        uint writeIndex = warp * gl_SubgroupSize * infos.codingBlockSize + threadWithinWarp;
+        uint writeIndex = warp * gl_SubgroupSize * codingBlockSize + threadWithinWarp;
 
-        Symbols symbolStream = Symbols(infos.symbolStream);
+        Symbols symbolStream = Symbols(infos[gl_WorkGroupID.y].symbolStream);
         for(int i = 0; i < symbolsToDecode; i++) {
-            if(bool(pc.longSymbols)){
+            if(bool(longSymbols)){
                 symbolStream.i[writeIndex] = symbol;
             }
             else{

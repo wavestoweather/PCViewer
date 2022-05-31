@@ -1,0 +1,79 @@
+#version 460
+
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
+
+layout(buffer_reference, scalar) buffer Symbols {u16vec2 i[];};  // raw data
+layout(buffer_reference, scalar) buffer Codewords {uint i[];};
+layout(buffer_reference, scalar) buffer Offsets {uint i[];};
+layout(buffer_reference, scalar) buffer EncodeCodewords {uint i[];};
+layout(buffer_reference, scalar) buffer EncodeCodewordLengths{uint i[];};
+layout(buffer_reference, scalar) buffer DecodeTable {u16vec2 i[];};
+
+layout(binding = 0) buffer HuffmanInfo{
+    uint64_t symbolStream;
+
+    uint64_t codewordStream;
+    uint64_t offsets;
+    uint symbolCount;
+    uint64_t encodeCodewords;
+    uint64_t encodeCodewordLengths;
+    uint64_t decodeTable;
+    uint decodeSymbolTableSize;
+}infos[];
+
+layout(push_constant) uniform constants{
+    uint longSymbols;   //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
+    uint codingBlockSize;
+};
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+const uint maxBlockSize = 10;   //todo insert correct value
+const uint maxGroupSize = 64;
+// "+2" padding instead of "+1" because of 2-byte elements vs 4-byte bank size!
+shared u16vec2 block[maxGroupSize][maxBlockSize + 2];
+
+void main(){
+    const uint transposeBlockdimX = gl_SubgroupSize;
+    const uint transposeBlockdimY = 8;
+    const uvec2 threadIdx = gl_LocalInvocationID.xy;
+
+    Symbols symbolStream = Symbols(infos[gl_WorkGroupID.y].symbolStream);
+    
+    uint symbolStreamOffset = gl_WorkGroupID.x * codingBlockSize * gl_SubgroupSize;
+
+    // load into shared memory and transpose
+    // each thread fills one row of the smem buffer
+    #pragma unroll
+    for(uint col = threadIdx.y; col < codingBlockSize; col += transposeBlockdimY) {
+        uint index = threadIdx.x + col * gl_SubgroupSize;
+        if(bool(longSymbols)){
+            block[threadIdx.x][col] = symbolStream.i[symbolStreamOffset + index];
+        }
+        else{
+            uint ind = symbolStreamOffset + index;
+            block[threadIdx.x >> 1][col][threadIdx.x & 1] = symbolStream.i[ind >> 1][ind & 1];
+        }
+    }
+    barrier();
+
+    // write out (4-byte elements)
+    uint factor = 1; // = sizeof(uint) / sizeof(Symbol)
+    //if(longSymbols == 0)  // not needed, as always full bytes can be loaded by default
+    //    factor = 2;
+
+    for(uint col = factor * threadIdx.x; col < codingBlockSize; col += factor * transposeBlockdimX) {
+        #pragma unroll
+        for(uint row = threadIdx.y; row < gl_SubgroupSize; row += transposeBlockdimY) {
+            uint index = row * codingBlockSize + col;
+            symbolStream.i[index + symbolStreamOffset] = block[row][col];
+        }
+    }
+}
