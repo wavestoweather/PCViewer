@@ -13,6 +13,17 @@ typedef unsigned long long int uint64;
 
 }
 
+namespace vkCompress {
+
+typedef unsigned char byte;
+typedef unsigned char uchar;
+typedef unsigned short ushort;
+typedef unsigned int uint;
+typedef long long int int64;
+typedef unsigned long long int uint64;
+
+}
+
 
 #if defined(CUCOMP_BUILD_STANDALONE)
 #define CUCOMP_DLL
