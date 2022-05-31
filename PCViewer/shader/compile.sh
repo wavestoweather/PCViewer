@@ -68,3 +68,5 @@ glslangValidator -V --target-env vulkan1.1 -o largeVis.geom.spv largeVis.geom
 glslangValidator -V --target-env vulkan1.1 -o largeVis.frag.spv largeVis.frag
 
 glslangValidator -V --target-env vulkan1.1 -o convertImageToUBuffer.comp.spv convertImageToUBuffer.comp
+
+glslangValidator -V --target-env vulkan1.1 -o compressHuffman_decode.comp.spv compressHuffman_decode.comp

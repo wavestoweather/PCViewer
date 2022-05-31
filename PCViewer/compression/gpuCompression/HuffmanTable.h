@@ -42,7 +42,7 @@ private:
     cudaCompress::byte* m_pSymbolTable;
     uint m_symbolTableSize;
 
-    cudaEvent_t m_uploadSyncEvent;
+    uint32_t m_uploadSyncEvent; // todo sync event thingy
 
     void build(const std::vector<uint>& codewordCountPerLength);
 

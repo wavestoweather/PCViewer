@@ -1,0 +1,235 @@
+#version 460
+
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+
+layout(buffer_reference, scalar) buffer Symbols {u16vec2 i[];};  // raw data
+layout(buffer_reference, scalar) buffer Codewords {uint i[];};
+layout(buffer_reference, scalar) buffer Offsets {uint i[];};
+layout(buffer_reference, scalar) buffer EncodeCodewords {uint i[];};
+layout(buffer_reference, scalar) buffer EncodeCodewordLengths{uint i[];};
+layout(buffer_reference, scalar) buffer DecodeTable {u16vec2 i[];};
+
+layout(binding = 0) uniform HuffmanInfo{
+    uint64_t symbolStream;
+
+    uint64_t codewordStream;
+    uint64_t offsets;
+    uint symbolCount;
+    uint64_t encodeCodewords;
+    uint64_t encodeCodewordLengths;
+    uint64_t decodeTable;
+    uint decodeSymbolTableSize;
+
+    // second input parameter in the original implementation
+    uint codingBlockSize;
+}infos;
+
+layout(push_constant) uniform constants{
+    uint longSymbols;   //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
+}pc;
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+struct GPUBitstream{
+    Codewords stream;
+    uint _bitPos;
+    uint _dataPos;
+    uint64_t _cache;
+};
+
+// instantiates GPUBitstream from bufferAddress and bitoffset
+GPUBitstream bitstream_init(uint64_t bufferAddress, uint bitoffset){
+    GPUBitstream ret;
+    ret.stream = Codewords(bufferAddress);
+    ret._bitPos = bitoffset % 32;
+    ret._dataPos = bitoffset / 32;
+    ret._cache = uint64_t(ret.stream.i[ret._dataPos++]) << 32;
+    ret._cache |= uint64_t(ret.stream.i[ret._dataPos++]);
+    return ret;
+}
+
+uint bitstream_peekBits(const GPUBitstream bitstream, uint count){
+    return uint((bitstream._cache >> (64u - count - bitstream._bitPos)) & ((1u << count) - 1u));
+}
+
+uint bitstream_peekByte(const GPUBitstream bitstream){
+    return uint(bitstream._cache >> (56u - bitstream._bitPos)) & 0xFFu;
+}
+
+uint bitstream_peekUInt(const GPUBitstream bitstream)
+{
+    return uint(bitstream._cache >> (32u - bitstream._bitPos));
+}
+
+void bitstream_stepBits(inout GPUBitstream bitstream, uint count)
+{
+    bitstream._bitPos += count;
+}
+
+ uint bitstream_readBit(inout GPUBitstream bitstream)
+{
+    return uint(bitstream._cache >> (63u - bitstream._bitPos++)) & 1u;
+}
+
+uint bitstream_readBits(inout GPUBitstream bitstream, uint count)
+{
+    uint result = bitstream_peekBits(bitstream, count);
+    bitstream._bitPos += count;
+    return result;
+}
+
+void bitstream_fillCache(inout GPUBitstream bitstream)
+{
+    // note: this assumes that there is another uint available,
+    //       ie the bitstream has to be padded by at least one uint at the end
+    if(bitstream._bitPos >= 32u) {
+        bitstream._cache = (bitstream._cache << 32u) | uint64_t(bitstream.stream.i[bitstream._dataPos++]);
+        bitstream._bitPos -= 32u;
+    }
+}
+
+const uint LOG2_MAX_CODEWORD_BITS = 5;
+const uint MAX_CODEWORD_BITS = (1 << LOG2_MAX_CODEWORD_BITS);
+
+const uint LOG2_HUFFMAN_LOOKUP_SIZE = 7;
+const uint HUFFMAN_LOOKUP_SIZE = (1 << LOG2_HUFFMAN_LOOKUP_SIZE);
+
+shared int s_codewordFirstIndexPerLength [MAX_CODEWORD_BITS];
+shared int s_codewordMinPerLength       [MAX_CODEWORD_BITS];
+shared int s_codewordMaxPerLength       [MAX_CODEWORD_BITS];
+
+shared int s_codewordLengthLookup[HUFFMAN_LOOKUP_SIZE];
+shared int s_codewordIndexLookup [HUFFMAN_LOOKUP_SIZE];
+
+void main(){
+    const uint thread = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+    const uvec2 threadIdx = gl_LocalInvocationID.xy;
+    if(infos.decodeSymbolTableSize > 1) {
+        // load codeword indices and min/max into shared memory
+        //assert(blockDim.x >= MAX_CODEWORD_BITS, "blockDim.x must be >= MAX_CODEWORD_BITS");
+        if(threadIdx.x < MAX_CODEWORD_BITS) {
+            s_codewordFirstIndexPerLength[threadIdx.x] = int(DecodeTable(infos.decodeTable).i[threadIdx.x]);
+            s_codewordMinPerLength       [threadIdx.x] = int(DecodeTable(infos.decodeTable).i[threadIdx.x + MAX_CODEWORD_BITS]);
+            s_codewordMaxPerLength       [threadIdx.x] = int(DecodeTable(infos.decodeTable).i[threadIdx.x + 2 * MAX_CODEWORD_BITS]);
+        }
+        barrier();
+
+        // build lookup table for codewords of length <= LOG2_HUFFMAN_LOOKUP_SIZE
+        //assert(blockDim.x >= HUFFMAN_LOOKUP_SIZE, "blockDim.x must be >= HUFFMAN_LOOKUP_SIZE");
+        if(threadIdx.x < HUFFMAN_LOOKUP_SIZE) {
+            int len = 1;
+            int mask = 1 << (LOG2_HUFFMAN_LOOKUP_SIZE - 1);
+            int codeword;
+            //#pragma unroll LOG2_HUFFMAN_LOOKUP_SIZE
+            while(len <= LOG2_HUFFMAN_LOOKUP_SIZE) {
+                codeword = int(((threadIdx.x & mask) >> (LOG2_HUFFMAN_LOOKUP_SIZE - len)));
+                int codewordMax = s_codewordMaxPerLength[len-1];
+                if(codeword <= codewordMax) break;
+                mask = (mask >> 1) | (1 << (LOG2_HUFFMAN_LOOKUP_SIZE - 1));
+                len++;
+            }
+            if(len <= LOG2_HUFFMAN_LOOKUP_SIZE) {
+                s_codewordLengthLookup[threadIdx.x] = len;
+                s_codewordIndexLookup [threadIdx.x] = s_codewordFirstIndexPerLength[len-1] + codeword - s_codewordMinPerLength[len-1];
+            } else {
+                s_codewordLengthLookup[threadIdx.x] = 0;
+                s_codewordIndexLookup [threadIdx.x] = 0;
+            }
+        }
+        barrier();
+
+        uint readOffset = thread * infos.codingBlockSize;
+        if(readOffset >= infos.symbolCount)
+            return;
+
+        uint offset = Offsets(infos.offsets).i[thread];
+        GPUBitstream codewordBitStream = bitstream_init(infos.codewordStream, offset);
+
+        uint symbolsToDecode = min(readOffset + infos.codingBlockSize, infos.symbolCount) - readOffset;
+        // setup for interleaved output
+        uint warp = gl_SubgroupID;
+        uint threadWithinWarp = gl_SubgroupInvocationID;
+        uint writeIndex = warp * gl_SubgroupSize * infos.codingBlockSize + threadWithinWarp;
+
+        Symbols symbolStream = Symbols(infos.symbolStream);
+        DecodeTable symbolTable = DecodeTable(infos.decodeTable);
+        uint symbolTableByteOffset = 3 * MAX_CODEWORD_BITS * 4; // sizeof(int) = 4
+        for(int i = 0; i < symbolsToDecode; i++) {
+            // get next uint in bitstream if necessary
+            bitstream_fillCache(codewordBitStream);
+
+            // try lookup table
+            uint codeword = bitstream_peekUInt(codewordBitStream);
+            uint codewordLength = s_codewordLengthLookup[codeword >> (32u - LOG2_HUFFMAN_LOOKUP_SIZE)];
+
+            uint codewordIndex = 0;
+            if(codewordLength != 0) {
+                // lookup successful
+                codeword >>= (32u - LOG2_HUFFMAN_LOOKUP_SIZE);
+                codewordIndex = s_codewordIndexLookup[codeword];
+            } else {
+                // lookup unsuccessful, codeword is longer than LOG2_HUFFMAN_LOOKUP_SIZE
+                codewordLength = LOG2_HUFFMAN_LOOKUP_SIZE + 1u;
+                // find length of codeword
+                while(int(codeword >> (32u - codewordLength)) > s_codewordMaxPerLength[codewordLength - 1u]) {
+                    codewordLength++;
+                    //assert(codewordLength < sizeof(int) * 8);
+                }
+                codeword >>= (32u - codewordLength);
+
+                codewordIndex = s_codewordFirstIndexPerLength[codewordLength - 1u] + int(codeword) - s_codewordMinPerLength[codewordLength - 1u];
+            }
+            bitstream_stepBits(codewordBitStream, codewordLength);
+
+            // output in interleaved order (-> coalesced)
+            
+            if(bool(pc.longSymbols)){
+                symbolStream.i[writeIndex] = symbolTable.i[codewordIndex + symbolTableByteOffset / 4] ;
+            }
+            else{
+                uint curDecodeIndex = codewordIndex + symbolTableByteOffset / 2;
+                symbolStream.i[writeIndex >> 1][writeIndex & 1u] = symbolTable.i[curDecodeIndex >> 1][curDecodeIndex & 1u];    // 1. access correct 4 byte space, then address correct 2 byte block in 4 byte space
+            }
+            writeIndex += gl_SubgroupSize;
+        }
+    } else {
+        // single-symbol case
+        uint readOffset = thread * infos.codingBlockSize;
+        if(readOffset >= infos.symbolCount)
+            return;
+
+        DecodeTable symbolTable = DecodeTable(infos.decodeTable);
+        uint symbolTableByteOffset = 3 * MAX_CODEWORD_BITS * 4; //sizeof(int) = 4
+        u16vec2 symbol;
+        if(bool(pc.longSymbols)){
+            symbol = symbolTable.i[symbolTableByteOffset / 4];
+        }
+        else{
+            uint index = symbolTableByteOffset / 2; // index of the short uint
+            symbol.x = symbolTable.i[index >> 1][index & 1];
+        }
+
+        uint symbolsToDecode = min(readOffset + infos.codingBlockSize, infos.symbolCount) - readOffset;
+
+        uint warp = gl_SubgroupID;
+        uint threadWithinWarp = gl_SubgroupInvocationID;
+        uint writeIndex = warp * gl_SubgroupSize * infos.codingBlockSize + threadWithinWarp;
+
+        Symbols symbolStream = Symbols(infos.symbolStream);
+        for(int i = 0; i < symbolsToDecode; i++) {
+            if(bool(pc.longSymbols)){
+                symbolStream.i[writeIndex] = symbol;
+            }
+            else{
+                symbolStream.i[writeIndex >> 1][writeIndex & 1u] = symbol.x;    // 1. access correct 4 byte space, then address correct 2 byte block in 4 byte space
+            }
+            writeIndex += gl_SubgroupSize;
+        }
+    }
+}

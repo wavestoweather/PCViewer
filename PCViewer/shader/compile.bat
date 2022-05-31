@@ -50,4 +50,6 @@ E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixGlobalScan.comp.spv ra
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixHistogram.comp.spv radixHistogram.comp
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixScatter.comp.spv radixScatter.comp
 E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o radixLocalSort.comp.spv radixLocalSort.comp
+
+E:/Vulkan/1.2.135.0/Bin32/glslangValidator.exe -V -o compressHuffman_decode.comp.spv compressHuffman_decode.comp
 pause
