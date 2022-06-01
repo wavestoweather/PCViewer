@@ -1,9 +1,14 @@
 #include "Huffman.hpp"
 #include "GpuInstance.hpp"
 #include "../cpuCompression/util.h"
+#include "../cpuCompression/EncodeCommon.h"
+#include "../../PCUtil.h"
+#include <cassert>
 
 namespace vkCompress
 {
+    using namespace cudaCompress;
+
     const uint COMPACTIFY_ELEM_PER_THREAD = 8;
     auto getPrefixCount = [](uint symbolCount) { return (symbolCount + COMPACTIFY_ELEM_PER_THREAD - 1) / COMPACTIFY_ELEM_PER_THREAD; };
 
@@ -50,10 +55,10 @@ namespace vkCompress
     {
         //TODO free vulkan memory...
         //cudaSafeCall(cudaEventDestroy(pInstance->Huffman.syncEventReadback));
-        pInstance->Huffman.syncEventReadback = 0;
+        //pInstance->Huffman.syncEventReadback = 0;
 
         //cudaSafeCall(cudaFreeHost(pInstance->Huffman.pReadback));
-        pInstance->Huffman.pReadback = nullptr;
+        //pInstance->Huffman.pReadback = nullptr;
 
         return true;
     }
@@ -69,17 +74,14 @@ namespace vkCompress
 
         bool longSymbols = (pInstance->m_log2HuffmanDistinctSymbolCountMax > 16);
     
-        HuffmanGPUStreamInfo* dpStreamInfos = pInstance->getBuffer<HuffmanGPUStreamInfo>(streamCount);
+        //TODO: create stream infos vulkan buffer
+        //HuffmanGPUStreamInfo* dpStreamInfos = pInstance->getBuffer<HuffmanGPUStreamInfo>(streamCount);
     
-        util::CudaScopedTimer timer(pInstance->Huffman.timerDecode);
-    
-        timer("Upload Info");
-    
+        PCUtil::Stopwatch timer(std::cout, "Huffman decoding");
+        
         // upload stream infos
-        cudaSafeCall(cudaMemcpyAsync(dpStreamInfos, pStreamInfos, sizeof(HuffmanGPUStreamInfo) * streamCount, cudaMemcpyHostToDevice, pInstance->m_stream));
+        //cudaSafeCall(cudaMemcpyAsync(dpStreamInfos, pStreamInfos, sizeof(HuffmanGPUStreamInfo) * streamCount, cudaMemcpyHostToDevice, pInstance->m_stream));
         // note: we don't sync on this upload - we trust that the caller won't overwrite/delete the array...
-    
-        timer("Decode");
     
         // get max number of symbols
         uint symbolCountPerStreamMax = 0;
@@ -87,7 +89,7 @@ namespace vkCompress
             symbolCountPerStreamMax = max(symbolCountPerStreamMax, pStreamInfos[i].symbolCount);
     
         if(symbolCountPerStreamMax == 0) {
-            pInstance->releaseBuffer();
+            //pInstance->releaseBuffer();
             return true;
         }
     
@@ -96,34 +98,33 @@ namespace vkCompress
         uint blockSize = min(192u, threadCountPerStream);
         blockSize = max(blockSize, HUFFMAN_LOOKUP_SIZE);
         assert(blockSize >= HUFFMAN_LOOKUP_SIZE);
-        dim3 blockCount((threadCountPerStream + blockSize - 1) / blockSize, streamCount);
+        uint32_t dispatchX = (threadCountPerStream + blockSize - 1) / blockSize;
+        uint32_t dispatchY = streamCount;
     
         if(longSymbols) {
-            huffmanDecodeKernel<Symbol32><<<blockCount, blockSize, 0, pInstance->m_stream>>>(dpStreamInfos, codingBlockSize);
+            //huffmanDecodeKernel<Symbol32><<<blockCount, blockSize, 0, pInstance->m_stream>>>(dpStreamInfos, codingBlockSize);
         } else {
-            huffmanDecodeKernel<Symbol16><<<blockCount, blockSize, 0, pInstance->m_stream>>>(dpStreamInfos, codingBlockSize);
+            //huffmanDecodeKernel<Symbol16><<<blockCount, blockSize, 0, pInstance->m_stream>>>(dpStreamInfos, codingBlockSize);
         }
-        cudaCheckMsg("huffmanDecodeKernel execution failed");
-    
-        timer("Transpose");
-    
+        
         // launch transpose kernel
-        dim3 blockSizeTranspose(TRANSPOSE_BLOCKDIM_X, TRANSPOSE_BLOCKDIM_Y);
-        dim3 blockCountTranspose((symbolCountPerStreamMax + WARP_SIZE * codingBlockSize - 1) / (WARP_SIZE * codingBlockSize), streamCount);
+        const uint transposeBlockdimX = 32;//gl_SubgroupSize; TODO: change to automatically query subgroup size
+        const uint transposeBlockdimY = 8;
+        //dim3 blockCountTranspose((symbolCountPerStreamMax + WARP_SIZE * codingBlockSize - 1) / (WARP_SIZE * codingBlockSize), streamCount);
     
         if(longSymbols) {
             switch(codingBlockSize) {
                 case 32:
-                    huffmanDecodeTransposeKernel<Symbol32, 32><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol32, 32><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 case 64:
-                    huffmanDecodeTransposeKernel<Symbol32, 64><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol32, 64><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 case 128:
-                    huffmanDecodeTransposeKernel<Symbol32, 128><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol32, 128><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 case 256:
-                    huffmanDecodeTransposeKernel<Symbol32, 256><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol32, 256><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 default:
                     assert(false);
@@ -131,27 +132,21 @@ namespace vkCompress
         } else {
             switch(codingBlockSize) {
                 case 32:
-                    huffmanDecodeTransposeKernel<Symbol16, 32><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol16, 32><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 case 64:
-                    huffmanDecodeTransposeKernel<Symbol16, 64><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol16, 64><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 case 128:
-                    huffmanDecodeTransposeKernel<Symbol16, 128><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol16, 128><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 case 256:
-                    huffmanDecodeTransposeKernel<Symbol16, 256><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
+                    //huffmanDecodeTransposeKernel<Symbol16, 256><<<blockCountTranspose, blockSizeTranspose, 0, pInstance->m_stream>>>(dpStreamInfos);
                     break;
                 default:
                     assert(false);
             }
-        }
-        cudaCheckMsg("huffmanDecodeTransposeKernel execution failed");
-    
-        timer();
-    
-        pInstance->releaseBuffer();
-    
+        }        
         return true;
-        }
+    }
 }

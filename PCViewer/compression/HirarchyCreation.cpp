@@ -1000,7 +1000,7 @@ namespace compression
         // writing out attribute infos
         std::ofstream file(std::string(outputFolder) + "/attr.info", std::ios_base::binary);
         assert(file);
-        file << PCUtil::toReadableString(loader->curData().dimensionSizes) << "\n";
+        file << binsAmt << "\n";
         int c = 0;
         for(auto& a: attributes){
             file << a.name << " " << a.min << " " << a.max << "\n";

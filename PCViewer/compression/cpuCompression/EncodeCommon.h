@@ -34,5 +34,10 @@ const uint ZERO_COUNT_MAX = 255;
 
 }
 
+namespace vkCompress{
+typedef ushort Symbol16;
+typedef uint   Symbol32;
+}
+
 
 #endif
