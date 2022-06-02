@@ -909,6 +909,11 @@ namespace compression
     }
 
     void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, int amtOfThreads){
+        if(outputFolder.empty()){
+            std::cout << "Outputflolder empty. Stopping createRoaringBinsColumnData()" << std::endl;
+            return;
+        }
+        
         const uint32_t compressionIteration{1 << 10};   // each time and index is added and the cardinality of a roaring map is a multiple of this, the map is compressed
         
         std::cout << "Starting creation of Roaring bins with compressed column data" << std::endl;
@@ -935,7 +940,8 @@ namespace compression
         };
 
         auto appendColumnFile = [&](){
-            std::cout << "Appending column data to column file" << std::endl;
+            std::cout << "\rAppending column data to column file";
+            std::cout.flush();
             for(int i: irange(columnData)){
                 std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
                 columnFile.write(reinterpret_cast<char*>(columnData[i].data()), columnData[i].size() * sizeof(columnData[i][0]));
@@ -943,9 +949,11 @@ namespace compression
             }
         };
         
+        std::cout << std::endl;
         // clustering and index storing
         size_t offset{};
         while(loader->loadNextData()){
+            std::cout << "\rLoaded data, processing                "; std::cout.flush();
             Data& d = loader->curData();
             for(uint32_t a = 0; a < d.columns.size(); ++a){
                 for(uint32_t i = 0; i < d.columns[a].size(); ++i){
@@ -981,7 +989,10 @@ namespace compression
                 // writeout of the column data (appended to the column files)
                 appendColumnFile();
             }
+            std::cout << "\rProcessed data, loading next             "; std::cout.flush();
         }
+        if(columnData[0].size())
+            appendColumnFile();
         // ----------------------------------------------------------------------------------------------
         // writeout of the data info
         // ----------------------------------------------------------------------------------------------

@@ -8,6 +8,7 @@
 #include <thread>
 #include <string_view>
 #include <fstream>
+#include <set>
 #include "../range.hpp"
 #include "../PCUtil.h"
 #include "../compression/HirarchyCreation.hpp"
@@ -116,7 +117,11 @@ namespace compression
         // --------------------------------------------------------------------------------
         // center infos
         // --------------------------------------------------------------------------------
-        std::vector<std::vector<compression::IndexCenterFileData>> _attributeCenters;
+        struct IndexCenterFileDataOld{
+            float val, min, max;
+            uint32_t offset, size;
+        };
+        std::vector<std::vector<IndexCenterFileDataOld>> _attributeCenters;
         std::ifstream attributeCenterFile(_hierarchyFolder + "/attr.ac", std::ios_base::binary);
         std::vector<compression::ByteOffsetSize> offsetSizes(_attributes.size());
         attributeCenterFile.read(reinterpret_cast<char*>(offsetSizes.data()), offsetSizes.size() * sizeof(offsetSizes[0]));
@@ -148,14 +153,20 @@ namespace compression
         for(uint32_t compInd: irange(4, _attributeCenters.size())){
             std::vector<roaring::Roaring> compressed(_attributeCenters[compInd].size());
             size_t indexlistSize{_attributeIndices[compInd].size() * sizeof(uint32_t)}, compressedSize{};
+            size_t amtOriginalIndices{}, reducesIndices{};
+            size_t setSize{};
             for(int i = 0; i < compressed.size(); ++i){
+                amtOriginalIndices += _attributeCenters[compInd][i].size;
                 compressed[i] = roaring::Roaring(_attributeCenters[compInd][i].size, _attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset);
                 compressed[i].runOptimize();
                 compressed[i].shrinkToFit();
                 compressedSize += compressed[i].getSizeInBytes();
+                reducesIndices += compressed[i].cardinality();
+                setSize += std::set<uint32_t>(_attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset, _attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset + _attributeCenters[compInd][i].size).size();
             }
             attributeRoars[compInd] = std::move(compressed);
             std::cout << "Attribute " << _attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
+            std::cout << "Original index amt: " <<  amtOriginalIndices << " vs reduced " << reducesIndices << " vs set: " << setSize << std::endl;
         }
 
         std::atomic<uint32_t> at{0};

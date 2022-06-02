@@ -174,6 +174,7 @@ void NetCdfColumnLoader::tabelize()
         std::iota(increasing.begin(), increasing.end(), 0); 
         for(int i: irange(_curData.columns)){
             if(_curData.columnDimensions[i] == increasing)
+            //if(_curData.columnDimensions[i].size() == increasing.size())    //temporary test for compression
                 continue;
             std::vector<float> newColumn(_curData.size());
             for(int j: irange(newColumn)){
