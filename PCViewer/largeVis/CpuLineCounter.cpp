@@ -51,13 +51,17 @@ namespace compression
         //bool hell = false;
     }
 
-    std::vector<uint32_t> lineCounterPair(const std::vector<half>& aVals, const std::vector<half>& bVals, uint32_t aBins, uint32_t bBins, uint32_t amtOfThreads){
+    std::vector<uint32_t> lineCounterPair(const std::vector<half>& aVals, const std::vector<half>& bVals, uint32_t aBins, uint32_t bBins, const std::vector<uint8_t>& activation, uint32_t amtOfThreads){
         std::vector<std::thread> threads(amtOfThreads);
         std::vector<std::vector<uint32_t>> lineCounts(amtOfThreads, std::vector<uint32_t>(aBins * bBins, 0));   // for each thread one vector is available which is initialized to 0
         
-        auto threadExec = [&](uint32_t tId, uint32_t begin, uint32_t end){
+        auto threadExec = [&](uint32_t tId, size_t begin, size_t end){
             auto& localCounts = lineCounts[tId];
             for(auto cur = begin; cur != end; ++cur){
+                size_t p = cur / 8;
+                uint8_t bit = 1 << cur & 7;
+                if((activation[p] & bit) == 0)
+                    continue;       // skip non active indices
                 int binA = aVals[cur] * (static_cast<int>(aBins) - 1) + .5f;
                 int binB = bVals[cur] * (static_cast<int>(bBins) - 1) + .5f;
                 //safety check
@@ -70,8 +74,8 @@ namespace compression
         size_t size = aVals.size();
         PCUtil::Stopwatch stopwatch(std::cout, "CpuLineCounter counting time");
         for(uint32_t cur = 0; cur < amtOfThreads; ++cur){
-            uint32_t begin = size_t(cur) * size / amtOfThreads;
-            uint32_t end = size_t(cur + 1) * size / amtOfThreads;
+            size_t begin = size_t(cur) * size / amtOfThreads;
+            size_t end = size_t(cur + 1) * size / amtOfThreads;
             threads[cur] = std::thread(threadExec, cur, begin, end);
         }
         // wait for all threads
@@ -85,5 +89,40 @@ namespace compression
             }
         }
         return lineCounts[0];
+    }
+
+    std::vector<uint32_t> lineCounterPairSingleField(const std::vector<half>& aVals, const std::vector<half>& bVals, uint32_t aBins, uint32_t bBins, const std::vector<uint8_t>& activation, uint32_t amtOfThreads){
+        std::vector<std::thread> threads(amtOfThreads);
+        std::vector<std::atomic<uint32_t>> lineCounts(aBins * bBins);
+        
+        auto threadExec = [&](uint32_t tId, size_t begin, size_t end){
+            auto& localCounts = lineCounts;
+            for(auto cur = begin; cur != end; ++cur){
+                size_t p = cur / 8;
+                uint8_t bit = 1 << cur & 7;
+                if((activation[p] & bit) == 0)
+                    continue;       // skip non active indices
+                int binA = aVals[cur] * (static_cast<int>(aBins) - 1) + .5f;
+                int binB = bVals[cur] * (static_cast<int>(bBins) - 1) + .5f;
+                //safety check
+                binA %= aBins;
+                binB %= bBins;
+                ++localCounts[binA * bBins + binB];
+            }
+        };
+
+        size_t size = aVals.size();
+        PCUtil::Stopwatch stopwatch(std::cout, "CpuLineCounter counting time");
+        for(uint32_t cur = 0; cur < amtOfThreads; ++cur){
+            size_t begin = size_t(cur) * size / amtOfThreads;
+            size_t end = size_t(cur + 1) * size / amtOfThreads;
+            threads[cur] = std::thread(threadExec, cur, begin, end);
+        }
+        // wait for all threads
+        for(auto& t: threads)
+            t.join();
+
+        std::vector<uint32_t> ret(lineCounts.begin(), lineCounts.end());
+        return ret;
     }
 }

@@ -94,10 +94,12 @@ public:
      */
     void add(uint32_t x) {
         roarings[0].add(x);
+        roarings[0].compressionFlag  = 0;
         roarings[0].setCopyOnWrite(copyOnWrite);
     }
     void add(uint64_t x) {
         roarings[highBytes(x)].add(lowBytes(x));
+        roarings[highBytes(x)].compressionFlag = 0;
         roarings[highBytes(x)].setCopyOnWrite(copyOnWrite);
     }
 
@@ -107,11 +109,13 @@ public:
      */
     bool addChecked(uint32_t x) {
         bool result = roarings[0].addChecked(x);
+        roarings[0].compressionFlag = 0;
         roarings[0].setCopyOnWrite(copyOnWrite);
         return result;
     }
     bool addChecked(uint64_t x) {
         bool result = roarings[highBytes(x)].addChecked(lowBytes(x));
+        roarings[highBytes(x)].compressionFlag = 0;
         roarings[highBytes(x)].setCopyOnWrite(copyOnWrite);
         return result;
     }
@@ -122,12 +126,14 @@ public:
     void addMany(size_t n_args, const uint32_t *vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[0].add(vals[lcv]);
+            roarings[0].compressionFlag = 0;
             roarings[0].setCopyOnWrite(copyOnWrite);
         }
     }
     void addMany(size_t n_args, const uint64_t *vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
+            roarings[highBytes(vals[lcv])].compressionFlag = 0;
             roarings[highBytes(vals[lcv])].setCopyOnWrite(copyOnWrite);
         }
     }
@@ -138,8 +144,10 @@ public:
     void remove(uint32_t x) { roarings[0].remove(x); }
     void remove(uint64_t x) {
         auto roaring_iter = roarings.find(highBytes(x));
-        if (roaring_iter != roarings.cend())
+        if (roaring_iter != roarings.cend()){
             roaring_iter->second.remove(lowBytes(x));
+            roaring_iter->second.compressionFlag = 0;
+        }
     }
 
     /**
@@ -147,12 +155,15 @@ public:
      * Returns true if a new value was removed, false if the value was not existing.
      */
     bool removeChecked(uint32_t x) {
+        roarings[0].compressionFlag = 0;
         return roarings[0].removeChecked(x);
     }
     bool removeChecked(uint64_t x) {
         auto roaring_iter = roarings.find(highBytes(x));
-        if (roaring_iter != roarings.cend())
+        if (roaring_iter != roarings.cend()){
+            roaring_iter->second.compressionFlag = 0;
             return roaring_iter->second.removeChecked(lowBytes(x));
+        }
         return false;
     }
 
@@ -470,6 +481,9 @@ public:
         return std::accumulate(
             roarings.begin(), roarings.end(), true,
             [](bool previous, std::pair<const uint32_t, Roaring> &map_entry) {
+                if(map_entry.second.compressionFlag & 1)
+                    return previous;
+                map_entry.second.compressionFlag |= 1;
                 return map_entry.second.runOptimize() && previous;
             });
     }
@@ -487,7 +501,9 @@ public:
                 savedBytes += 88;
                 roarings.erase(iter++);
             } else {
-                savedBytes += iter->second.shrinkToFit();
+                if((iter->second.compressionFlag & 2) >0)
+                    savedBytes += iter->second.shrinkToFit();
+                iter->second.compressionFlag |= 2;
                 iter++;
             }
         }

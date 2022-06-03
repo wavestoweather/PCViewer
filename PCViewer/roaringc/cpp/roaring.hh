@@ -686,6 +686,7 @@ public:
     const_iterator &end() const;
 
     roaring_bitmap_t roaring;
+    uint8_t compressionFlag{};  // if 1 bit is set, container is already rl compressed, if 2 bit is set also shrink to fit is done
 };
 
 /**

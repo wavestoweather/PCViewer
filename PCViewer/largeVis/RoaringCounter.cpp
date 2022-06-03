@@ -154,7 +154,6 @@ namespace compression
             std::vector<roaring::Roaring> compressed(_attributeCenters[compInd].size());
             size_t indexlistSize{_attributeIndices[compInd].size() * sizeof(uint32_t)}, compressedSize{};
             size_t amtOriginalIndices{}, reducesIndices{};
-            size_t setSize{};
             for(int i = 0; i < compressed.size(); ++i){
                 amtOriginalIndices += _attributeCenters[compInd][i].size;
                 compressed[i] = roaring::Roaring(_attributeCenters[compInd][i].size, _attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset);
@@ -162,11 +161,10 @@ namespace compression
                 compressed[i].shrinkToFit();
                 compressedSize += compressed[i].getSizeInBytes();
                 reducesIndices += compressed[i].cardinality();
-                setSize += std::set<uint32_t>(_attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset, _attributeIndices[compInd].data() + _attributeCenters[compInd][i].offset + _attributeCenters[compInd][i].size).size();
             }
             attributeRoars[compInd] = std::move(compressed);
             std::cout << "Attribute " << _attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
-            std::cout << "Original index amt: " <<  amtOriginalIndices << " vs reduced " << reducesIndices << " vs set: " << setSize << std::endl;
+            std::cout << "Original index amt: " <<  amtOriginalIndices << " vs reduced " << reducesIndices << std::endl;
         }
 
         std::atomic<uint32_t> at{0};

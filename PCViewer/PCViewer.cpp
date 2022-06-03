@@ -2786,8 +2786,21 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		ubo.vertTransformations[0].w = (priorityAttribute != -1 && c == priorityListIndex) ? 1.f : 0;
 		ubo.dataFlags = static_cast<uint32_t>(ds.inheritanceFlags);
 		ubo.color = ds.color;
-		std::copy_n(reinterpret_cast<uint8_t*>(&ubo), uboSize, bits.data());
-		std::copy_n(reinterpret_cast<uint8_t*>(ubo.vertTransformations.data()), trafoSize, bits.data() + uboSize);
+		if(ds.indBinManager){
+			auto c = ubo;
+			// adjusting the min and max values to the min and max values of the bins
+			for(int i: irange(pcAttributes)){
+				double ad = pcAttributes[i].max - pcAttributes[i].min, nd = ds.indBinManager->attributes[i].max - ds.indBinManager->attributes[i].min;
+				c.vertTransformations[i].y = nd / ad;
+				c.vertTransformations[i].z = (ds.indBinManager->attributes[i].min - pcAttributes[i].min) / ad;
+			}
+			std::copy_n(reinterpret_cast<uint8_t*>(&c), uboSize, bits.data());
+			std::copy_n(reinterpret_cast<uint8_t*>(c.vertTransformations.data()), trafoSize, bits.data() + uboSize);
+		}
+		else{
+			std::copy_n(reinterpret_cast<uint8_t*>(&ubo), uboSize, bits.data());
+			std::copy_n(reinterpret_cast<uint8_t*>(ubo.vertTransformations.data()), trafoSize, bits.data() + uboSize);
+		}
 		vkMapMemory(g_Device, ds.dlMem, 0, bits.size(), 0, &da);
 		memcpy(da, bits.data(), bits.size());
 		vkUnmapMemory(g_Device, ds.dlMem);

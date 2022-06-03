@@ -24,6 +24,9 @@
 #include <memory>
 #include <numeric>
 
+#define LOGLINE(message) std::cout << "LINE " << __LINE__ << ": " << (message) << std::endl;
+#define RLOGLINE(message) std::cout << "\rLINE " << __LINE__ << ": " << (message) << "                             "; std::cout.flush()
+
 
 //private functions ----------------------------------------------------------------------------
 struct CacheInfo{std::string file; uint64_t offset, size;};
@@ -55,6 +58,14 @@ static void compressVector(std::vector<float>& src, float quantizationStep, /*ou
     std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
     cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
     symbolsSize = symbols.size();
+}
+
+static std::pair<cudaCompress::BitStream, uint32_t> compressVector(std::vector<float>& src, float quantizationStep){
+    std::pair<cudaCompress::BitStream, uint32_t> t;
+    cudaCompress::BitStream stream;
+    uint32_t symbolSize;
+    compressVector(src, quantizationStep, t.first, t.second);
+    return t;
 }
 
 static void decompressVector(std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize, /*out*/ std::vector<float>& data){
@@ -910,12 +921,17 @@ namespace compression
 
     void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, int amtOfThreads){
         if(outputFolder.empty()){
-            std::cout << "Outputflolder empty. Stopping createRoaringBinsColumnData()" << std::endl;
+            std::cout << "Outputfolder empty. Stopping createRoaringBinsColumnData()" << std::endl;
             return;
         }
         
-        const uint32_t compressionIteration{1 << 10};   // each time and index is added and the cardinality of a roaring map is a multiple of this, the map is compressed
-        
+        const uint32_t compressionIteration{1 << 20};   // each time and index is added and the cardinality of a roaring map is a multiple of this, the map is compressed
+        const bool halfData = false;
+        const bool compressedData = true;
+        const bool compressedDataDebugInfo = true;
+        const bool indices = false;
+        const bool logLine = true;
+
         std::cout << "Starting creation of Roaring bins with compressed column data" << std::endl;
         compression::CachingMethod cachingMethod = compression::CachingMethod::Bundled;
         auto [dataSize, attributes] = loader->dataAnalysis();
@@ -925,7 +941,7 @@ namespace compression
         using AttributeCenters = std::vector<robin_hood::unordered_map<uint32_t, uint32_t>>;
         AttributeCenters attributeCenters(attributes.size());
         std::vector<IndexCenterDataRoaring> data;
-        std::vector<std::vector<half>> columnData(attributes.size());
+        std::vector<std::vector<float>> columnData(attributes.size());
 
         auto storageSize = [](AttributeCenters* attributeCenters, std::vector<IndexCenterData>* data){
             size_t size{};
@@ -943,9 +959,27 @@ namespace compression
             std::cout << "\rAppending column data to column file";
             std::cout.flush();
             for(int i: irange(columnData)){
-                std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
-                columnFile.write(reinterpret_cast<char*>(columnData[i].data()), columnData[i].size() * sizeof(columnData[i][0]));
-                columnData[i].clear();
+                if(halfData){
+                    std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
+                    std::vector<half> write(columnData[i].begin(), columnData[i].end());    // conversion to half data
+                    columnFile.write(reinterpret_cast<char*>(write.data()), write.size() * sizeof(write[0]));
+                    columnData[i] = {};
+                }
+                if(compressedData){
+                    std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".comp", std::ios_base::binary | std::ios_base::app);
+                    
+                    auto [stream, symbolSize] = compressVector(columnData[i], .01f);
+                    // first comes the stream size (bytes) and the symbol size as a struct of a uint64_t and a uint32_t
+                    struct{uint64_t streamSize; uint32_t symbolSize;} sizes{stream.getRawSizeBytes(), symbolSize};
+                    columnFile.write(reinterpret_cast<char*>(&sizes), sizeof(sizes));    
+                    // then append the data                
+                    columnFile.write(reinterpret_cast<char*>(stream.getRaw()), stream.getRawSizeBytes());
+                    if(compressedDataDebugInfo){
+                        std::cout << "/rReduced data block from " << columnData[i].size () * sizeof(columnData[0][0]) << " to " << stream.getRawSizeBytes();
+                        std::cout.flush();
+                    }
+                    columnData[i] = {};
+                }
             }
         };
         
@@ -956,25 +990,43 @@ namespace compression
             std::cout << "\rLoaded data, processing                "; std::cout.flush();
             Data& d = loader->curData();
             for(uint32_t a = 0; a < d.columns.size(); ++a){
+                if(logLine)
+                    RLOGLINE("next attribute");
                 for(uint32_t i = 0; i < d.columns[a].size(); ++i){
+                    if(logLine)
+                        RLOGLINE("getVal");
                     float axisVal = d.columns[a][i];
                     // adding the axis val to the corresponding half values
-                    columnData[a].push_back(axisVal);
+                    if(halfData || compressedData)
+                        columnData[a].push_back(axisVal);
                     // indices
+                    if(!indices)
+                        continue;
+                    if(logLine)
+                        RLOGLINE("indices");
                     uint32_t childId = axisVal * binsAmt;
                     if(childId == binsAmt) childId--;
                     if(auto f = attributeCenters[a].find(childId); f != attributeCenters[a].end()){
                         auto& cd = data[f->second];
                         float a = cd.indices.cardinality() / float(cd.indices.cardinality() + 1);
                         cd.val = a * cd.val + (1. - a) * axisVal;
-                        cd.indices.add(i + offset);
+                        //cd.indices.add(i + offset);
+                        cd.tmpIndices.push_back(i + offset);
                         if(axisVal < cd.min)
                             cd.min = axisVal;
                         if(axisVal > cd.max)
                             cd.max = axisVal;
-                        if(data[f->second].indices.cardinality() % compressionIteration == 0){
+                        if(data[f->second].tmpIndices.size() >= compressionIteration){
+                            if(logLine)
+                                RLOGLINE("indexcompression");
+                            size_t roaringPreByte = data[f->second].indices.getSizeInBytes(), indSize = data[f->second].tmpIndices.size() * sizeof(uint64_t);
+                            data[f->second].indices.addMany(data[f->second].tmpIndices.size(), data[f->second].tmpIndices.data());
+                            data[f->second].tmpIndices = {};    //clearing the tmp indices
                             data[f->second].indices.runOptimize();
                             data[f->second].indices.shrinkToFit();
+                            std::ofstream reductionInfo(std::string(outputFolder) + "/red.info", std::ios_base::binary | std::ios_base::app);
+                            roaringPreByte = data[f->second].indices.getSizeInBytes() - roaringPreByte;
+                            reductionInfo << "Reduced indices from " << indSize << " bytes to " << roaringPreByte << ". Compression ratio: 1 " << double(roaringPreByte) / indSize << "\n";
                         }
                     }
                     else{
@@ -999,12 +1051,22 @@ namespace compression
         std::ofstream dataInfo(std::string(outputFolder) + "/data.info", std::ios_base::binary);
         assert(dataInfo);
         // data info bits
-        dataInfo << static_cast<uint32_t>(compression::DataStorageBits::HalfColumnData | compression::DataStorageBits::RoaringAttributeBins) << "\n";
+        compression::DataStorageBits storageInfo;
+        if(indices)
+            storageInfo |= compression::DataStorageBits::RoaringAttributeBins;
+        if(halfData)
+            storageInfo |= compression::DataStorageBits::HalfColumnData;
+        if(compressedData)
+            storageInfo |= compression::DataStorageBits::CuComColumnData;
+        dataInfo << storageInfo << "\n";
         // column block size (in amt of elements which are put into a block)
         dataInfo << dataCompressionBlock << "\n";
 
         dataInfo.close();
 
+        // early out if no index info is gathered and thus no attribute center info is available
+        if(!indices)
+            return;
         // ----------------------------------------------------------------------------------------------
         // writeout of the attribute Hierarchy
         // ----------------------------------------------------------------------------------------------
@@ -1039,8 +1101,15 @@ namespace compression
             assert(indexFile);
             for(auto [val, c]: orderedCenters){
                 size_t start = indexFile.tellp();
-                c->indices.runOptimize();
-                c->indices.shrinkToFit();
+                if(c->tmpIndices.size()){
+                    size_t roaringPreByte = c->indices.getSizeInBytes(), indSize = c->tmpIndices.size() * sizeof(uint64_t);
+                    c->indices.addMany(c->tmpIndices.size(), c->tmpIndices.data());
+                    c->indices.runOptimize();
+                    c->indices.shrinkToFit();
+                    std::ofstream reductionInfo(std::string(outputFolder) + "/red.info", std::ios_base::binary | std::ios_base::app);
+                    roaringPreByte = c->indices.getSizeInBytes() - roaringPreByte;
+                    reductionInfo << "Reduced indices from " << indSize << " bytes to " << roaringPreByte << ". Compression ratio: 1 " << double(roaringPreByte) / indSize << "\n";
+                }
                 std::vector<char> serialized(c->indices.getSizeInBytes());
                 c->indices.write(serialized.data());
                 indexFile.write(serialized.data(), serialized.size() * sizeof(serialized[0]));
@@ -1068,4 +1137,16 @@ namespace compression
         assert(attributeCenterOffsets.back().offset + attributeCenterOffsets.back().size == attributeCenterFile.tellp());
         std::cout << "Donesene" << std::endl;
     }
+
+    void convertColumnDataToCompressed(const std::string_view& outputFolder, size_t dataCompressionBlock, uint32_t attributeAmt){
+        //TODO: finish for half precision files
+        for(int i: irange(attributeAmt)){
+            std::string filename = std::string(outputFolder) + "/" + std::to_string(i) + ".col";
+            std::ifstream columnFile(filename, std::ios_base::binary);
+            size_t size = std::filesystem::file_size(filename);
+            while(columnFile.tellg() < size){
+                break;
+            }
+        }
+    }    
 }

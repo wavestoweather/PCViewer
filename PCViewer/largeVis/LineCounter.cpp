@@ -140,7 +140,7 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     // execution is done outside
 }
 
-void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) const{
+void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts) const{
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
 	std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
@@ -169,7 +169,7 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
-void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, bool clearCounts) const{
+void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, bool clearCounts) const{
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
 	std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     assert(data.size() - 1 == counts.size());

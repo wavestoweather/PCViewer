@@ -42,6 +42,7 @@ public:
 
     enum class CountingMethod{
         CpuGeneric,
+        CpuGenericSingleField,
         CpuRoaring,
         GpuDrawPairwise,
         GpuDrawMultiViewport,
@@ -51,8 +52,9 @@ public:
         Max
     };
 
-    const char* countingMethodNames[7] = {
+    const char* countingMethodNames[8] = {
         "CpuGeneric",
+        "CpuGenericSingleField",
         "CpuRoaring",
         "GpuDrawPairwise",
         "GpuDrawMultiViewport",
@@ -105,6 +107,7 @@ public:
     uint32_t columnBins{1 << 10};
     uint32_t cpuLineCountingAmtOfThreads{12};
     std::atomic<bool> requestRender{false};
+    std::vector<uint8_t> indexActivation{};          // bitset for all indices to safe index activation
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
     struct CountResource{
@@ -162,7 +165,9 @@ private:
     bool* _attributeActivations;
 
     robin_hood::unordered_map<std::vector<uint32_t>, CountResource, UVecHash> _countResources; // map saving for each attribute combination the 2d bin counts. It saves additional information and keeps after order changes to avoid unnesecary recomputation
-    
+    VkBuffer _indexActivation{};
+    VkDeviceMemory _indexActivationMemory{};
+
     // gpu pipeline handles which have to be noticed for deconstruction
     RenderLineCounter* _renderLineCounter{};
     LineCounter* _lineCounter{};

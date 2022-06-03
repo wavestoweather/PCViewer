@@ -19,10 +19,16 @@ namespace compression{
     };
     constexpr DataStorageBits operator|(DataStorageBits a, DataStorageBits b){return static_cast<DataStorageBits>(static_cast<int>(a) | static_cast<int>(b));};
     constexpr DataStorageBits operator&(DataStorageBits a, DataStorageBits b){return static_cast<DataStorageBits>(static_cast<int>(a) & static_cast<int>(b));};
+    constexpr DataStorageBits& operator|=(DataStorageBits& a, DataStorageBits b){a = a | b; return a;};
+    constexpr DataStorageBits& operator&=(DataStorageBits& a, DataStorageBits b){a = a & b; return a;};
     static std::ifstream& operator>>(std::ifstream& in, DataStorageBits& bits){
         uint32_t b;
         in >> b;
         bits = static_cast<DataStorageBits>(b);
         return in;
+    }
+    static std::ofstream& operator<<(std::ofstream& stream, DataStorageBits bits){
+        stream << static_cast<uint32_t>(bits);
+        return stream;
     }
 }

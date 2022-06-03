@@ -66,6 +66,7 @@ namespace compression{
     struct IndexCenterDataRoaring{
         float val, min, max;
         roaring::Roaring64Map indices;
+        std::vector<uint64_t> tmpIndices;
     };
 
     struct IndexCenterFileData{
@@ -113,4 +114,5 @@ namespace compression{
     // dataCompressionBlock: Block size for compressing column data
     // amtOfThreads     : Amount of threads to be used for hierarchy creation
     void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, int amtOfThreads);
+    void convertColumnDataToCompressed(const std::string_view& outputFolder, size_t dataCompressionBlock, uint32_t attributeAmt);
 };

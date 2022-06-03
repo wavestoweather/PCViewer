@@ -142,6 +142,21 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     }
 
     // --------------------------------------------------------------------------------
+    // creating the index activation buffer resource and setting up the cpu side activation vector
+    // --------------------------------------------------------------------------------
+    indexActivation = std::vector<uint8_t>(dataSize / 8, 0xff);    // set all to active on startup
+    VkUtil::createBuffer(_vkContext.device, dataSize / 8, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &_indexActivation);
+    VkMemoryRequirements memReq{};
+    vkGetBufferMemoryRequirements(_vkContext.device, _indexActivation, &memReq);
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_indexActivationMemory);
+    vkBindBufferMemory(_vkContext.device, _indexActivation, _indexActivationMemory, 0);
+    VkUtil::uploadData(_vkContext.device, _indexActivationMemory, 0, indexActivation.size(), indexActivation.data());
+
+    // --------------------------------------------------------------------------------
     // getting the handles for the counter pipelines
     // --------------------------------------------------------------------------------
     _renderLineCounter = RenderLineCounter::acquireReference(RenderLineCounter::CreateInfo{info.context});
@@ -166,6 +181,12 @@ IndBinManager::~IndBinManager(){
         if(d.gpuMemory)
             vkFreeMemory(_vkContext.device, d.gpuMemory, nullptr);
     }
+
+    if(_indexActivation)
+        vkDestroyBuffer(_vkContext.device, _indexActivation, nullptr);
+
+    if(_indexActivationMemory)
+        vkFreeMemory(_vkContext.device, _indexActivationMemory, nullptr);
 
     // joining all threads
     if(_countUpdateThread.joinable())
@@ -254,7 +275,22 @@ void IndBinManager::updateCounts(){
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     return;
                 std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                auto counts = compression::lineCounterPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
+                auto counts = compression::lineCounterPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
+                VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+            }
+            break;
+        }
+        case CountingMethod::CpuGenericSingleField:{
+            for(int i: irange(activeIndices.size() - 1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    return;
+                std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
+                auto counts = compression::lineCounterPairSingleField(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
