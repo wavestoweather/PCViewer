@@ -40,12 +40,12 @@ void main() {
 	float y2 = float(bIndex) / float(bSize);
 	// transforming according to axis scaling
 	y1 = y1 * ubo.vertexTransformations[aAxis].y + ubo.vertexTransformations[aAxis].z;
-	y2 = y2 * ubo.vertexTransformations[aAxis].y + ubo.vertexTransformations[aAxis].z;
+	y2 = y2 * ubo.vertexTransformations[bAxis].y + ubo.vertexTransformations[bAxis].z;
 	//y /= (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);
 	y1 -= .5f;
-	y1 *= 2;
+	y1 *= -2;
 	y2 -= .5f;
-	y2 *= 2;
+	y2 *= -2;
 
 	aPosBPos.x = x1;
 	aPosBPos.y = y1;

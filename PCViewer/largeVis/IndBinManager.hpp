@@ -103,7 +103,7 @@ public:
     std::vector<Attribute> attributes;
     robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
     std::vector<CompressedColumnData> columnData;
-    CountingMethod countingMethod{CountingMethod::GpuComputeFull};    // variable to set the different counting techniques
+    CountingMethod countingMethod{CountingMethod::GpuDrawPairwise};    // variable to set the different counting techniques
     uint32_t columnBins{1 << 10};
     uint32_t cpuLineCountingAmtOfThreads{12};
     std::atomic<bool> requestRender{false};

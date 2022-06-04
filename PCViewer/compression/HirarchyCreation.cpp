@@ -926,11 +926,11 @@ namespace compression
         }
         
         const uint32_t compressionIteration{1 << 20};   // each time and index is added and the cardinality of a roaring map is a multiple of this, the map is compressed
-        const bool halfData = false;
+        const bool halfData = true;
         const bool compressedData = true;
         const bool compressedDataDebugInfo = true;
-        const bool indices = false;
-        const bool logLine = true;
+        const bool indices = true;
+        const bool logLine = false;
 
         std::cout << "Starting creation of Roaring bins with compressed column data" << std::endl;
         compression::CachingMethod cachingMethod = compression::CachingMethod::Bundled;
@@ -962,8 +962,7 @@ namespace compression
                 if(halfData){
                     std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
                     std::vector<half> write(columnData[i].begin(), columnData[i].end());    // conversion to half data
-                    columnFile.write(reinterpret_cast<char*>(write.data()), write.size() * sizeof(write[0]));
-                    columnData[i] = {};
+                    columnFile.write(reinterpret_cast<char*>(write.data()), write.size() * sizeof(write[0]));  
                 }
                 if(compressedData){
                     std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".comp", std::ios_base::binary | std::ios_base::app);
@@ -975,11 +974,11 @@ namespace compression
                     // then append the data                
                     columnFile.write(reinterpret_cast<char*>(stream.getRaw()), stream.getRawSizeBytes());
                     if(compressedDataDebugInfo){
-                        std::cout << "/rReduced data block from " << columnData[i].size () * sizeof(columnData[0][0]) << " to " << stream.getRawSizeBytes();
+                        std::cout << "\rReduced data block from " << columnData[i].size () * sizeof(columnData[0][0]) << " to " << stream.getRawSizeBytes();
                         std::cout.flush();
                     }
-                    columnData[i] = {};
                 }
+                columnData[i] = {};
             }
         };
         
@@ -1043,6 +1042,7 @@ namespace compression
             }
             std::cout << "\rProcessed data, loading next             "; std::cout.flush();
         }
+        std::cout << std::endl;
         if(columnData[0].size())
             appendColumnFile();
         // ----------------------------------------------------------------------------------------------

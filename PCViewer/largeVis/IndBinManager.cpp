@@ -162,6 +162,8 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     _renderLineCounter = RenderLineCounter::acquireReference(RenderLineCounter::CreateInfo{info.context});
     _lineCounter = LineCounter::acquireReference(LineCounter::CreateInfo{info.context});
     _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.framebuffer});
+
+    std::cout << "Loaded " << dataSize << " datapoints" << std::endl;
 }
 
 
@@ -273,7 +275,7 @@ void IndBinManager::updateCounts(){
                 if(a > b)
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    return;
+                    continue;
                 std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
@@ -288,7 +290,7 @@ void IndBinManager::updateCounts(){
                 if(a > b)
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    return;
+                    continue;
                 std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterPairSingleField(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
@@ -303,7 +305,7 @@ void IndBinManager::updateCounts(){
                 if(a > b)
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    return;
+                    continue;
                 std::cout << "Counting pairwise (roaring) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterRoaring(t->ndBuckets[{a}], t->ndBuckets[{b}], t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
@@ -328,8 +330,8 @@ void IndBinManager::updateCounts(){
             }
             datas.back() = t->columnData[activeIndices.back()].gpuData;
             if(!anyUpdate)
-                return;
-            t->_lineCounter->countLinesAll(t->columnData[0].cpuData.size(), datas, t->columnBins, counts, activeIndices, true);
+                goto finish;
+            t->_lineCounter->countLinesAll(t->columnData[0].cpuData.size(), datas, t->columnBins, counts, activeIndices, t->_indexActivation, true);
             break;
         }
         case CountingMethod::GpuComputePairwise:{
@@ -339,9 +341,9 @@ void IndBinManager::updateCounts(){
                 if(a > b)
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    return;
+                    continue;
                 std::cout << "Counting pairwise (compute pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
+                t->_lineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -353,7 +355,7 @@ void IndBinManager::updateCounts(){
                 if(a > b)
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    return;
+                    continue;
                 std::cout << "Counting pairwise (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 t->_renderLineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
@@ -368,6 +370,8 @@ void IndBinManager::updateCounts(){
             break;
         }
         };
+        finish:
+        std::cout.flush();
         t->requestRender = true;                   // ready to update rendering
         t->_countUpdateThreadActive = false;        // releasing the update thread
     };

@@ -59,7 +59,7 @@ namespace compression
             auto& localCounts = lineCounts[tId];
             for(auto cur = begin; cur != end; ++cur){
                 size_t p = cur / 8;
-                uint8_t bit = 1 << cur & 7;
+                uint8_t bit = 1 << (cur & 7);
                 if((activation[p] & bit) == 0)
                     continue;       // skip non active indices
                 int binA = aVals[cur] * (static_cast<int>(aBins) - 1) + .5f;
@@ -99,7 +99,7 @@ namespace compression
             auto& localCounts = lineCounts;
             for(auto cur = begin; cur != end; ++cur){
                 size_t p = cur / 8;
-                uint8_t bit = 1 << cur & 7;
+                uint8_t bit = 1 << (cur & 7);
                 if((activation[p] & bit) == 0)
                     continue;       // skip non active indices
                 int binA = aVals[cur] * (static_cast<int>(aBins) - 1) + .5f;

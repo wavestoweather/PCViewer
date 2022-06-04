@@ -2263,7 +2263,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 		dataByteSize = (pcAttributes.size() + 1) * (pcSettings.maxHierarchyLines) * 1.2 * sizeof(float);
 	}
 	//updating the descriptor sets
-	for (int i = 0; i < layouts.size(); i++) {
+	for (int i = 0; i < layouts.size() && ds.dataType != DataType::Hierarchichal; i++) {
 		VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
 		VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 1, dl.histogrammDescSets[i]);
 		VkUtil::updateDescriptorSet(g_Device, tl.buffer, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
@@ -2791,8 +2791,14 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			// adjusting the min and max values to the min and max values of the bins
 			for(int i: irange(pcAttributes)){
 				double ad = pcAttributes[i].max - pcAttributes[i].min, nd = ds.indBinManager->attributes[i].max - ds.indBinManager->attributes[i].min;
-				c.vertTransformations[i].y = nd / ad;
-				c.vertTransformations[i].z = (ds.indBinManager->attributes[i].min - pcAttributes[i].min) / ad;
+				if(ad != 0){
+					c.vertTransformations[i].y = nd / ad;
+					c.vertTransformations[i].z = (ds.indBinManager->attributes[i].min - pcAttributes[i].min) / ad;
+				}
+				else{
+					c.vertTransformations[i].y = 1;
+					c.vertTransformations[i].z = 0;
+				}
 			}
 			std::copy_n(reinterpret_cast<uint8_t*>(&c), uboSize, bits.data());
 			std::copy_n(reinterpret_cast<uint8_t*>(c.vertTransformations.data()), trafoSize, bits.data() + uboSize);
@@ -14717,6 +14723,7 @@ int main(int, char**)
 		ImDrawData* main_draw_data = ImGui::GetDrawData();
 		const bool main_is_minimized = (main_draw_data->DisplaySize.x <= 0.0f || main_draw_data->DisplaySize.y <= 0.0f);
 		memcpy(&wd->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
+		g_QueueMutex.lock();	// queue is also used for imgui
 		if (!main_is_minimized)
 			FrameRender(wd, main_draw_data);
 
@@ -14730,6 +14737,7 @@ int main(int, char**)
 		// Present Main Platform Window
 		if (!main_is_minimized)
 			FramePresent(wd, window);
+		g_QueueMutex.unlock();
 	}
 
 	// Cleanup
