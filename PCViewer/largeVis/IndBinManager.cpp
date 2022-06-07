@@ -4,6 +4,8 @@
 #include "../range.hpp"
 #include "CpuLineCounter.hpp"
 #include "RoaringCounter.hpp"
+#include <math.h>
+#include <filesystem>
 
 IndBinManager::IndBinManager(const CreateInfo& info) :
 _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(info.context.screenSize[1])
@@ -22,8 +24,7 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     // attribute infos, cluster infos
     // --------------------------------------------------------------------------------
     std::ifstream attributeInfos(_hierarchyFolder + "/attr.info", std::ios_base::binary);
-    uint32_t maxCenterAmt;
-    attributeInfos >> maxCenterAmt; // first line contains the maximum amt of centers/bins
+    attributeInfos >> binsMaxCenterAmt; // first line contains the maximum amt of centers/bins
     std::string a; float aMin, aMax;
     while(attributeInfos >> a >> aMin >> aMax){
         attributes.push_back({a, a, {}, {}, aMin, aMax});
@@ -84,14 +85,13 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
             indicesData.read(indices.data(), indicesSize * sizeof(indices[0]));
             // parse into roaring bitmaps
             // filling only the attribute centers that are available, the other centers are empty
-            ndBuckets[{i}].resize(maxCenterAmt);
+            ndBuckets[{i}].resize(_attributeCenters[i].size());
             size_t curSize{};
             for(uint32_t bin: irange(_attributeCenters[i])){
-                uint32_t b = _attributeCenters[i][bin].val * maxCenterAmt;
-                if(b == maxCenterAmt) --b;
-                ndBuckets[{i}][b] = roaring::Roaring64Map::readSafe(indices.data() + _attributeCenters[i][bin].offset, _attributeCenters[i][bin].size * sizeof(indices[0]));
-                curSize += ndBuckets[{i}][b].cardinality();
+                ndBuckets[{i}][bin] = roaring::Roaring64Map::readSafe(indices.data() + _attributeCenters[i][bin].offset, _attributeCenters[i][bin].size * sizeof(indices[0]));
+                curSize += ndBuckets[{i}][bin].cardinality();
             }
+            //std::cout << "Idex size attribute " << attributes[i].name << ": " << curSize << std::endl;
             if(curSize > dataSize)
                 dataSize = curSize;
         }
@@ -114,7 +114,12 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     else if((dataBits & compression::DataStorageBits::HalfColumnData) != compression::DataStorageBits::None){
         // directly parse
         std::cout << "Loading half column data" << std::endl;
+        if(dataSize == 0){  //getting the data size from the file size
+            dataSize = std::filesystem::file_size(_hierarchyFolder + "/0.col") / 2;
+            std::cout << "Data size from col file: " << dataSize << std::endl;
+        }
         for(uint32_t i: irange(attributes)){
+            std::cout << "Loading half data for attribute " << attributes[i].name << std::endl;
             std::ifstream data(_hierarchyFolder + "/" + std::to_string(i) + ".col", std::ios_base::binary);
             auto& dVec = columnData[i].cpuData;
             dVec.resize(dataSize);
@@ -128,6 +133,7 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     }
     // currently the uncompressed 16 bit vectors are uploaded. Has to be changed to compressed vectors
     for(auto& d: columnData){
+        std::cout << "Creating vulkan buffer" << std::endl;
         // creating the vulkan resources and uploading the data to them
         VkUtil::createBuffer(_vkContext.device, d.cpuData.size() * sizeof(d.cpuData[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &d.gpuData);
         VkMemoryRequirements memReq{};
@@ -216,6 +222,7 @@ void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, boo
     }
     std::vector<VkBuffer> counts;
     std::vector<std::pair<uint32_t, uint32_t>> axes;
+    std::vector<uint32_t> binSizes;
     for(int i: irange(activeIndices.size() - 1)){
         uint32_t a = activeIndices[i];
         uint32_t b = activeIndices[i + 1];
@@ -226,6 +233,7 @@ void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, boo
         }
         counts.push_back(_countResources[{a,b}].countBuffer);
         axes.push_back({a,b});
+        binSizes.push_back(static_cast<uint32_t>(std::sqrt(_countResources[{a,b}].binAmt)));
     }
 
     compression::Renderer::RenderInfo renderInfo{
@@ -234,11 +242,10 @@ void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, boo
         compression::Renderer::RenderType::Polyline,
         counts,
         axes,
-        columnBins * columnBins,
         _attributeOrdering,
         attributes,
         _attributeActivations,
-        columnBins,
+        binSizes,
         attributeInfos,
         clear
     };
@@ -253,6 +260,9 @@ void IndBinManager::notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushe
 }
 
 void IndBinManager::updateCounts(){
+    if(countingMethod == CountingMethod::CpuRoaring)
+        columnBins = binsMaxCenterAmt;
+
     bool prevValue{};
 
     std::vector<uint32_t> activeIndices; // these are already ordered
@@ -306,8 +316,21 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
+                std::vector<uint32_t> aIndexBins, bIndexBins;
+                for(int bi: irange(t->_attributeCenters[a])){
+                    uint32_t bin = t->_attributeCenters[a][bi].val * t->binsMaxCenterAmt;
+                    if(bin >= t->binsMaxCenterAmt)
+                        --bin;
+                    aIndexBins.push_back(bin);
+                }
+                for(int bi: irange(t->_attributeCenters[b])){
+                    uint32_t bin = t->_attributeCenters[b][bi].val * t->binsMaxCenterAmt;
+                    if(bin >= t->binsMaxCenterAmt)
+                        --bin;
+                    bIndexBins.push_back(bin);
+                }
                 std::cout << "Counting pairwise (roaring) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                auto counts = compression::lineCounterRoaring(t->ndBuckets[{a}], t->ndBuckets[{b}], t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
+                auto counts = compression::lineCounterRoaring(t->binsMaxCenterAmt, t->ndBuckets[{a}], aIndexBins, t->ndBuckets[{b}], bIndexBins, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
@@ -377,6 +400,7 @@ void IndBinManager::updateCounts(){
     };
 
     if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies
+        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << columnData[0].cpuData.size() << " data points." << std::endl;
         // making shure the counting images are created and have the right size
         for(int i: irange(activeIndices.size() - 1)){
             uint32_t a = activeIndices[i];
@@ -384,6 +408,10 @@ void IndBinManager::updateCounts(){
             if(a > b)
                 std::swap(a, b);
             if(!_countResources[{a,b}].countBuffer || _countResources[{a,b}].binAmt != columnBins * columnBins){
+                if(_countResources[{a,b}].countBuffer){
+                    vkDestroyBuffer(_vkContext.device, _countResources[{a,b}].countBuffer, nullptr);
+                    vkFreeMemory(_vkContext.device, _countResources[{a,b}].countMemory, nullptr);
+                }
                 // create resource if not yet available
                 VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &(_countResources[{a,b}].countBuffer));
                 VkMemoryAllocateInfo allocInfo{};

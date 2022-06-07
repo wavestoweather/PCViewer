@@ -2,7 +2,7 @@
 #include "../PCUtil.h"
 
 RenderLineCounter::RenderLineCounter(const CreateInfo& info):
-    _vkContext(info.context), _aBins(info.context.screenSize[1]), _bBins(info.context.screenSize[1])
+    _vkContext(info.context)
 {
     //----------------------------------------------------------------------------------------------
 	// creating the pipeline for line counting
@@ -95,25 +95,18 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
     blendInfo.blendAttachment = colorBlendAttachment;
     blendInfo.createInfo = colorBlending;
     
-    std::vector<VkDynamicState> dynamicStateVec{};
+    std::vector<VkDynamicState> dynamicStateVec{VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_VIEWPORT};
 
-    VkUtil::createImage(info.context.device, _aBins, _bBins, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &_countImage);
-    VkMemoryRequirements memReq{};
-    vkGetImageMemoryRequirements(info.context.device, _countImage, &memReq);
-    VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, memReq.size, VkUtil::findMemoryType(info.context.physicalDevice, memReq.memoryTypeBits, 0)};
-    _imageMemSize = memReq.size;
-    vkAllocateMemory(info.context.device, &allocInfo, nullptr, &_countImageMem);
-    vkBindImageMemory(info.context.device, _countImage, _countImageMem, 0);
-    VkUtil::createImageView(info.context.device, _countImage, VK_FORMAT_R32_SFLOAT, 1, VK_IMAGE_ASPECT_COLOR_BIT, &_countImageView);
-
-    VkUtil::createRenderPass(info.context.device, VkUtil::PassType::PASS_TYPE_FLOAT, &_renderPass);
-    VkUtil::createFrameBuffer(info.context.device, _renderPass, {_countImageView}, _aBins, _bBins, &_framebuffer);
+    createOrUpdateFramebuffer(info.context.screenSize[1]);
 
     VkUtil::createPipeline(info.context.device, &vertexInfo, _aBins, _bBins, dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, {_countPipeInfo.descriptorSetLayout}, &_renderPass, &_countPipeInfo.pipelineLayout, &_countPipeInfo.pipeline);
 
     VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_pairSet);
     VkUtil::createBuffer(_vkContext.device, sizeof(PairInfos), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &_pairUniform);
+    VkMemoryRequirements memReq{};
     vkGetBufferMemoryRequirements(_vkContext.device, _pairUniform, &memReq);
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType =  VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memReq.size;
     allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_pairUniformMem);
@@ -207,10 +200,13 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     // execution is done outside
 }
 
-void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) const{
+void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) {
+    // check for outdated framebuffer size
+    if(aIndices != _aBins)
+        createOrUpdateFramebuffer(aIndices);
+    
     const uint32_t shaderXSize = 256;
     assert(_vkContext.queueMutex);
-    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
 
     VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
     VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _conversionSet);
@@ -222,6 +218,7 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     infos.bBins = bIndices;
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     if(clearCounts)
@@ -232,6 +229,16 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     VkUtil::beginRenderPass(commands, {clear}, _renderPass, _framebuffer, VkExtent2D{_aBins, _bBins});
     VkBuffer vertexBuffers[2]{aData, bData};
     VkDeviceSize offsets[2]{0, 0};
+    VkViewport vp{};
+    vp.height = aIndices;
+    vp.width = bIndices;
+    vp.maxDepth = 1;
+    vp.minDepth = 0;
+    vkCmdSetViewport(commands, 0, 1, &vp);
+    VkRect2D s{};
+    s.extent.width = aIndices;
+    s.extent.height = bIndices;
+    vkCmdSetScissor(commands, 0, 1, &s);
     vkCmdBindVertexBuffers(commands, 0, 2, vertexBuffers, offsets);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipeline);
@@ -321,4 +328,32 @@ void RenderLineCounter::release(){
         delete _singleton;
         _singleton = nullptr;
     }
+}
+
+void RenderLineCounter::createOrUpdateFramebuffer(uint32_t newFramebufferWidth){
+    if(newFramebufferWidth == _aBins)   // nothing to do
+        return;
+
+    _aBins = newFramebufferWidth;
+    _bBins = newFramebufferWidth;
+
+    if(_countImage){    // having to destroy old framebuffer
+        vkDestroyImage(_vkContext.device, _countImage, nullptr);
+        vkDestroyImageView(_vkContext.device, _countImageView, nullptr);
+        vkFreeMemory(_vkContext.device, _countImageMem, nullptr);
+        vkDestroyRenderPass(_vkContext.device, _renderPass, nullptr);
+        vkDestroyFramebuffer(_vkContext.device, _framebuffer, nullptr);
+    }
+
+    VkUtil::createImage(_vkContext.device, _aBins, _bBins, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &_countImage);
+    VkMemoryRequirements memReq{};
+    vkGetImageMemoryRequirements(_vkContext.device, _countImage, &memReq);
+    VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, memReq.size, VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, 0)};
+    _imageMemSize = memReq.size;
+    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_countImageMem);
+    vkBindImageMemory(_vkContext.device, _countImage, _countImageMem, 0);
+    VkUtil::createImageView(_vkContext.device, _countImage, VK_FORMAT_R32_SFLOAT, 1, VK_IMAGE_ASPECT_COLOR_BIT, &_countImageView);
+
+    VkUtil::createRenderPass(_vkContext.device, VkUtil::PassType::PASS_TYPE_FLOAT, &_renderPass);
+    VkUtil::createFrameBuffer(_vkContext.device, _renderPass, {_countImageView}, _aBins, _bBins, &_framebuffer);
 }

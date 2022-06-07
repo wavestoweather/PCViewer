@@ -929,7 +929,7 @@ namespace compression
         const bool halfData = true;
         const bool compressedData = true;
         const bool compressedDataDebugInfo = true;
-        const bool indices = true;
+        const bool indices = false;
         const bool logLine = false;
 
         std::cout << "Starting creation of Roaring bins with compressed column data" << std::endl;

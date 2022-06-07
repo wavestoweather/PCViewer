@@ -25,7 +25,7 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
-    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false) const;
+    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false);
 private:
     struct PairInfos{
         uint32_t amtofDataPoints, aBins, bBins, padding;
@@ -47,7 +47,7 @@ private:
     VkImage _countImage{};
     VkImageView _countImageView{};
     VkDeviceMemory _countImageMem{};
-    uint32_t _aBins, _bBins;
+    uint32_t _aBins{}, _bBins{};
     size_t _imageMemSize;
 
     // vulkan resources that have to be destroyed
@@ -58,4 +58,6 @@ private:
     const std::string _vertexShader = "shader/lineCount.vert.spv";
     const std::string _fragmentShader = "shader/lineCount.frag.spv";
     const std::string _convertShader = "shader/convertImageToUBuffer.comp.spv";
+
+    void createOrUpdateFramebuffer(uint32_t newFramebufferWidth);
 };

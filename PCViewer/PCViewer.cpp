@@ -2577,11 +2577,18 @@ static void cleanupPcPlotCommandBuffer() {
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &g_PcPlotCommandBuffer;
 
+#ifdef _DEBUG
+	{
+	PCUtil::Stopwatch renderWatch(std::cout, "PCPlot render time");
+#endif
 	err = vkQueueSubmit(g_Queue, 1, &submitInfo, g_PcPlotRenderFence);
 	check_vk_result(err);
 
 	err = vkWaitForFences(g_Device, 1, &g_PcPlotRenderFence, true, 60e9);	//timeout of 60 seconds
 	check_vk_result(err);
+	#ifdef _DEBUG
+	}
+	#endif
 
 	vkResetFences(g_Device, 1, &g_PcPlotRenderFence);
 
@@ -4998,6 +5005,9 @@ static bool openDataset(const char* filename) {
 		if(hierarchyInfo.size()){	//opening hierarchy dataset
 			opened = openHierarchy(filename, hierarchyInfo.c_str());
 		}
+		else{
+			std::cout << "Missing attr.info file" << std::endl;
+		}
 	}
 	else if (file.substr(file.find_last_of(".") + 1) == "csv") {
 		opened = openCsv(filename);
@@ -5338,6 +5348,10 @@ static void updateHistogramComparisonDL(unsigned int& idVioDLPlts)
 }
 
 static void updateDrawListIndexBuffer(DrawList& dl) {
+	if(dl.indBinManager){
+		dl.indBinManager->notifyAttributeUpdate(pcAttrOrd, pcAttributes, pcAttributeEnabled);
+		return;
+	}
 	std::vector<std::pair<int, int>> order;
 	for (int i = 0; i < pcAttributes.size(); i++) {
 		if (pcAttributeEnabled[i]) {
@@ -11527,6 +11541,9 @@ int main(int, char**)
 						}
 						if(ImGui::MenuItem("Force recount"))
 							dl.indBinManager->forceCountUpdate();
+						if(ImGui::InputInt("Bin count", reinterpret_cast<int*>(&dl.indBinManager->columnBins), 1, 100, ImGuiInputTextFlags_EnterReturnsTrue)){
+							dl.indBinManager->forceCountUpdate();
+						}
 						ImGui::Separator();
 					}
 					//if (ImGui::MenuItem("Send to Bubble plotter")) {

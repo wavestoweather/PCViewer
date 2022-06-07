@@ -199,22 +199,23 @@ namespace compression
         std::cout << "Average per attribute " << avg << "ms for " << _attributeIndices[4].size() << " datapoints" << std::endl;
     }
     
-    std::vector<uint32_t> lineCounterRoaring(const std::vector<roaring::Roaring64Map>& aIndices, const std::vector<roaring::Roaring64Map>& bIndices, uint32_t aBins, uint32_t bBins, uint32_t amtOfThreads) 
+    std::vector<uint32_t> lineCounterRoaring(uint32_t maxBins,const std::vector<roaring::Roaring64Map>& aIndices, const std::vector<uint32_t>& aIndexBins, const std::vector<roaring::Roaring64Map>& bIndices, const std::vector<uint32_t>& bIndexBins, uint32_t aBins, uint32_t bBins, uint32_t amtOfThreads) 
     {
         std::vector<uint32_t> counts(aBins * bBins);
         size_t maxSize = aIndices.size() * bIndices.size(), j;
-        double fac = counts.size() / double(maxSize);
+        double fac = counts.size() / double(maxBins * maxBins);
         std::atomic<size_t> at{0};
         auto threadExec = [&](){
             while((j = at++) < maxSize){
-                int a  = j / aIndices.size(), b = j % aIndices.size();
-                size_t finalBuck = j * fac;
+                int a  = j / bIndices.size(), b = j % bIndices.size();
+                size_t aBin = aIndexBins[a], bBin = bIndexBins[b];
+                size_t finalBuck = (aBin * maxBins + bBin) * fac;
 
                 counts[finalBuck] = aIndices[a].and_cardinality(bIndices[b]);
             }
         };
         std::vector<std::thread> threads(amtOfThreads);
-        PCUtil::Stopwatch watch(std::cout, "Indexpair computation time");
+        PCUtil::Stopwatch watch(std::cout, "Indexpair roaring time");
         for(int cur: irange(0, amtOfThreads)){
             threads[cur] = std::thread(threadExec);
         }

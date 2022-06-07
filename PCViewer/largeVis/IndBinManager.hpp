@@ -148,6 +148,8 @@ private:
     uint32_t _hierarchyLevels;
     std::vector<uint32_t> _clusterLevelSizes{};
 
+    uint32_t binsMaxCenterAmt;
+
     std::string _hierarchyFolder;
     std::vector<uint32_t> _dimensionSizes;
     std::vector<std::vector<uint32_t>> _attributeDimensions;

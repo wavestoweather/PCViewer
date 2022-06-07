@@ -154,13 +154,13 @@ void Renderer::render(const RenderInfo& renderInfo)
             auto aAxis = renderInfo.axes[i].first, bAxis = renderInfo.axes[i].second;
             if(!renderInfo.attributeActive[aAxis] || !renderInfo.attributeActive[bAxis])
                 continue;
-            assert(renderInfo.attributeAxisSizes * renderInfo.attributeAxisSizes == renderInfo.countSizes || "Somethings wrong with the bins");
-            PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes, renderInfo.attributeAxisSizes};
+            //assert(renderInfo.attributeAxisSizes * renderInfo.attributeAxisSizes == renderInfo.countSizes || "Somethings wrong with the bins");
+            PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes[i], renderInfo.attributeAxisSizes[i]};
             vkCmdPushConstants(commands, _polyPipeInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
             vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipelineLayout, 0, 1, &_infoDescSets[renderInfo.drawListId], 0, {});
             VkDeviceSize offsets[1]{0};
             vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, offsets);
-            vkCmdDraw(commands, renderInfo.countSizes, 1, 0, 0);
+            vkCmdDraw(commands, pc.aSize * pc.bSize, 1, 0, 0);
         }
         break;
         }
