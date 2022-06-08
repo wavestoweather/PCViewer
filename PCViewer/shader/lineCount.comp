@@ -20,6 +20,7 @@ layout(binding = 3) uniform Infos{
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 //#define USE_PARTITION
+//#define USE_ATOMIC_INC
 
 // as each element of aVals and bVals contain two float16 we have to unpack
 void main(){
@@ -41,5 +42,11 @@ void main(){
     if(tId == gl_SubgroupInvocationID)
         atomicAdd(counts[finalBin], count);         // incrementing
 #endif
-    atomicAdd(counts[finalBin], 1);
+#ifdef USE_ATOMIC_INC
+    //atomicAdd(counts[finalBin], 1);
+    counts[finalBin] += 1;
+#else
+    // testing if using non atomic count helps the performance
+    counts[finalBin] += 1;
+#endif
 }
