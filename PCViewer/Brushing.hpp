@@ -92,8 +92,8 @@ namespace brushing{
                 bool inLasso = false;
                 ImVec2 d{static_cast<float>((*data[attr1])[i]), static_cast<float>((*data[attr2])[i])};
                 for(int j: irange(lasso.borderPoints)){
-                    ImVec2& a = lasso.borderPoints[j];
-                    ImVec2& b = lasso.borderPoints[(j + 1) % lasso.borderPoints.size()];
+                    const ImVec2& a = lasso.borderPoints[j];
+                    const ImVec2& b = lasso.borderPoints[(j + 1) % lasso.borderPoints.size()];
                     // calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
                     if( ((a.y > d.y) != (b.y > d.y)) &&
 		    		    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )

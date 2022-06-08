@@ -4,6 +4,7 @@
 #include "../range.hpp"
 #include "CpuLineCounter.hpp"
 #include "RoaringCounter.hpp"
+#include "../Brushing.hpp"
 #include <math.h>
 #include <filesystem>
 
@@ -280,6 +281,23 @@ void IndBinManager::updateCounts(){
     }
 
     auto execCountUpdate = [](IndBinManager* t, std::vector<uint32_t> activeIndices){
+        // starting with updating the counts if needed to have all information available for the following counting/reduction
+        // note: might be changed to be settable by the user if cpu or gpu should be used for counting
+        if(t->countingMethod < CountingMethod::CpuRoaring){
+            // updating cpu activations
+            if(t->_indexActivationState != t->_currentBrushState.id){
+                t->_indexActivationState = t->_currentBrushState.id;
+                std::vector<std::vector<half>*> data(t->attributes.size());
+                for(int i: irange(t->columnData)){
+                    data[i] = &t->columnData[i].cpuData;
+                    brushing::updateIndexActivation(t->_currentBrushState.rangeBrushes, t->_currentBrushState.lassoBrushes, data, t->indexActivation);
+                }
+            }
+        }
+        else{
+            // updating gpu activations
+        }
+
         // Note: vulkan resources for the count images were already provided by main thread
         switch(t->countingMethod){
         case CountingMethod::CpuGeneric:{

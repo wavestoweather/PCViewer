@@ -186,5 +186,9 @@ private:
     size_t _curBrushingId{};                        // brush id to check brush status and need for count update
     uint32_t _managerByteSize{};                    // used to keep track of memory consumption to dynamically release intersection lists in "intersectionIndices"
 
+    uint32_t _indexActivationState{};               // holds the brush state for which the index activation was last updated
+    uint32_t _gpuIndexActivationState{};
+
+    
     void updateCounts();
 };

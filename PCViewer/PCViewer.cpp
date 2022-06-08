@@ -5720,13 +5720,13 @@ static void updateWorkbenchRenderings(DrawList& dl){
 
 static bool updateActiveIndices(DrawList& dl) {
 	//std::cout << dl.data->size() << std::endl;
-	if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
+	//if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
 	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
 		if (ImGui::GetIO().MouseDown[0] && !ImGui::IsMouseDoubleClicked(0)) return false;
 	}
 
-	//reloading data points if brush has changed
+	// reevaluating large datasets when brush has changed
 	if(dl.indBinManager){
 		return false;
 		std::vector<brushing::RangeBrush> rangeBrushes;
@@ -5735,6 +5735,10 @@ static bool updateActiveIndices(DrawList& dl) {
 		for(auto& b:dl.brushes){
 			brushing::RangeBrush brush;
 			for(auto& range: b){
+				// converting the range from main attribute scale to inBinManager scale(local scale)
+				const auto& dlAtt = dl.indBinManager->attributes;
+				float min = range.minMax.first - dlAtt[axis].min / (dlAtt[axis].max - dlAtt[axis].min);
+				float max = range.minMax.second - dlAtt[axis].min / (dlAtt[axis].max - dlAtt[axis].min);
 				brush.push_back({axis, range.minMax.first, range.minMax.second});
 			}
 			if(brush.size())
@@ -5743,10 +5747,12 @@ static bool updateActiveIndices(DrawList& dl) {
 		}
 		//adding global brushes
 		//TODO: global brushes
-		static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
-		if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
-			dl.indBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
-		prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
+		//static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
+		//if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
+		std::cout << "Ind bin manager brush update" << std::endl;
+		dl.indBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
+		//prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
+		return true;
 	}
 
 	//getting the parent dataset data
