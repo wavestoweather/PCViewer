@@ -15,6 +15,7 @@ namespace brushing{
     template<typename T>
     static bool inBrush(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes, const std::vector<T>& data, float eps = 0 /*maximum distance from data*/, bool andBrushes = false /*If true point has ot be in all ranges*/){
         bool a{rangeBrushes.empty()};
+        // Range brushes ------------------------------------------------------
         for(auto& b: rangeBrushes){
             bool inRange{true};
             for(auto& r: b){
@@ -33,7 +34,25 @@ namespace brushing{
         }
         if(!andBrushes && a)
             return a;       //early out when data point is already accepted
-        //TODO lasso selections
+
+        // Lasso brushes ------------------------------------------------------
+        for(const auto& lasso: lassoBrushes){
+            int attr1 = lasso.attr1;
+            int attr2 = lasso.attr2;
+            bool inLasso = false;
+            ImVec2 d{static_cast<float>(data[attr1]), static_cast<float>(data[attr2])};
+            for(int i: irange(lasso.borderPoints)){
+                const ImVec2& a = lasso.borderPoints[i];
+                const ImVec2& b = lasso.borderPoints[(i + 1) % lasso.borderPoints.size()];
+                // calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+                if( ((a.y > d.y) != (b.y > d.y)) &&
+				    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
+				    inLasso = !inLasso;
+            }
+            a = a && inLasso;
+            if(!a)
+                break;
+        }
 
         return a;
     }
@@ -42,6 +61,7 @@ namespace brushing{
     static void updateIndexActivation(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes, const std::vector<std::vector<T>*>& data, std::vector<uint8_t>& activations, float eps = 0 /*maximum distance from data*/, bool andBrushes = false /*If true point has ot be in all ranges*/){
         for(size_t i: irange(*data[0])){
             bool a{rangeBrushes.empty()};
+            // Range brushes ------------------------------------------------------
             for(auto& b: rangeBrushes){
                 bool inRange{true};
                 for(auto& r: b){
@@ -64,7 +84,25 @@ namespace brushing{
                 activations[i / 8] |= uint8_t(a) << i & 7;       //early out when data point is already accepted
                 continue;
             }
-            //TODO lasso selections
+            
+            // Lasso brushes ------------------------------------------------------
+            for(const auto& lasso: lassoBrushes){
+                int attr1 = lasso.attr1;
+                int attr2 = lasso.attr2;
+                bool inLasso = false;
+                ImVec2 d{static_cast<float>((*data[attr1])[i]), static_cast<float>((*data[attr2])[i])};
+                for(int j: irange(lasso.borderPoints)){
+                    ImVec2& a = lasso.borderPoints[j];
+                    ImVec2& b = lasso.borderPoints[(j + 1) % lasso.borderPoints.size()];
+                    // calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+                    if( ((a.y > d.y) != (b.y > d.y)) &&
+		    		    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
+		    		    inLasso = !inLasso;
+                }
+                a = a && inLasso;
+                if(!a)
+                    break;
+            }
 
             if(andBrushes)
                 activations[i / 8] &= uint8_t(a) << i & 7;
