@@ -40,8 +40,10 @@ private:
 public:
     using RangeBrush = brushing::RangeBrush;
 
+    // note: The counting methods also include methods for min/max finding (needed for priority rendering)
     enum class CountingMethod{
         CpuGeneric,
+        CpuMinGeneric,
         CpuGenericSingleField,
         CpuRoaring,
         GpuDrawPairwise,
@@ -53,8 +55,9 @@ public:
         Max
     };
 
-    const char* countingMethodNames[9] = {
+    const char* countingMethodNames[10] = {
         "CpuGeneric",
+        "CpuMinGeneric",
         "CpuGenericSingleField",
         "CpuRoaring",
         "GpuDrawPairwise",
@@ -91,6 +94,8 @@ public:
     void notifyBrushUpdate(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes);
     // updates the attribute ordering of the attributes. Might trigger recalculation of 
     void notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* atttributeActivations);
+    // updates the priority distance for all data points according to an axis value set
+    void notifyPriorityCenterUpdate(uint32_t attributeIndex, float attributeValue);
     // forces recounting of the bins with the current countingMethod
     void forceCountUpdate();
     // renders the current 2d bin counts to the pc plot (is done on main thread, as the main framebuffer is locked)
@@ -109,7 +114,8 @@ public:
     uint32_t columnBins{1 << 10};
     uint32_t cpuLineCountingAmtOfThreads{12};
     std::atomic<bool> requestRender{false};
-    std::vector<uint8_t> indexActivation{};          // bitset for all indices to safe index activation
+    std::vector<uint8_t> indexActivation{};         // bitset for all indices to safe index activation
+    std::vector<half> priorityDistances;             // vector containing the priority distances for each data point
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
     struct CountResource{

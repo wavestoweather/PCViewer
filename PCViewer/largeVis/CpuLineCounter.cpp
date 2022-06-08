@@ -131,7 +131,7 @@ namespace compression
         std::vector<std::vector<half>> minDistances(amtOfThreads, std::vector<half>(aBins * bBins, .0f));   // for each thread one vector is available which is initialized to 0
         
         auto threadExec = [&](uint32_t tId, size_t begin, size_t end){
-            auto& localCounts = minDistances[tId];
+            auto& localMins = minDistances[tId];
             for(auto cur = begin; cur != end; ++cur){
                 size_t p = cur / 8;
                 uint8_t bit = 1 << (cur & 7);
@@ -144,8 +144,8 @@ namespace compression
                 binA %= aBins;
                 binB %= bBins;
                 size_t index = binA * bBins + binB;
-                if(dist < localCounts[index])
-                    localCounts[index] = dist;
+                if(dist < localMins[index])
+                    localMins[index] = dist;
             }
         };
 

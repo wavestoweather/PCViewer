@@ -209,6 +209,10 @@ void IndBinManager::notifyAttributeUpdate(const std::vector<int>& attributeOrder
     updateCounts();         // updating the counts if there are some missing and pushing a render call
 }
 
+void IndBinManager::notifyPriorityCenterUpdate(uint32_t attributeIndex, float attributeValue){
+
+}
+
 void IndBinManager::forceCountUpdate(){
     _currentBrushState.id = _curBrushingId++;   // increasing brush id to force recounting
     updateCounts();
@@ -289,6 +293,30 @@ void IndBinManager::updateCounts(){
                 std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
                 auto counts = compression::lineCounterPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+            }
+            break;
+        }
+        case CountingMethod::CpuMinGeneric:{
+            if(t->priorityDistances.empty()){
+                // filling with radom numbers to have something interesting to min about
+                t->priorityDistances.resize(t->columnData[0].cpuData.size());
+                for(uint32_t i: irange(t->priorityDistances))
+                    t->priorityDistances[i] = double(std::rand()) / RAND_MAX;   // random value in [0, 1);
+            }
+            for(int i: irange(activeIndices.size() - 1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    continue;
+                std::cout << "ReducingMin distance pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
+                auto minDist = compression::lineMinPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->priorityDistances, t->cpuLineCountingAmtOfThreads);
+                std::vector<uint32_t> convertedDist(minDist.size());
+                for(uint32_t d: irange(minDist))
+                    convertedDist[d] = minDist[d] * 255;    // multiplied with 255 as there are only 255 different color values
+                VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), convertedDist.data());
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
