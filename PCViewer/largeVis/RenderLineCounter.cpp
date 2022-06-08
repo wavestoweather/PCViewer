@@ -1,5 +1,6 @@
 #include "RenderLineCounter.hpp"
 #include "../PCUtil.h"
+#include "../range.hpp"
 
 RenderLineCounter::RenderLineCounter(const CreateInfo& info):
     _vkContext(info.context)
@@ -243,6 +244,74 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipeline);
     vkCmdDraw(commands, dataSize, 1, 0, 0);
+    vkCmdEndRenderPass(commands);
+    VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipelineLayout, 0, 1, &_conversionSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipeline);
+    vkCmdDispatch(commands, (_aBins * _bBins + shaderXSize - 1) / shaderXSize, 1, 1);
+    VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    //TODO: conversion pipeline from float image to uint buffer
+    PCUtil::Stopwatch stopwatch(std::cout, "Render counter pairwise");
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+}
+
+void RenderLineCounter::countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt) {
+    // check for outdated framebuffer size
+    if(aIndices != _aBins)
+        createOrUpdateFramebuffer(aIndices);
+    
+    const uint32_t shaderXSize = 256;
+    assert(_vkContext.queueMutex);
+
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
+    VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _conversionSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _conversionSet);
+
+    PairInfos infos{};
+    infos.amtofDataPoints = dataSize;
+    infos.aBins = aIndices;
+    infos.bBins = bIndices;
+    VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
+
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    if(clearCounts)
+        vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
+    VkClearValue clear;
+    clear.color = {0,0,0,0};
+    clear.depthStencil = {0, 0};
+    VkUtil::beginRenderPass(commands, {clear}, _renderPass, _framebuffer, VkExtent2D{_aBins, _bBins});
+    VkBuffer vertexBuffers[2]{aData, bData};
+    VkDeviceSize offsets[2]{0, 0};
+    VkViewport vp{};
+    vp.height = aIndices;
+    vp.width = bIndices;
+    vp.maxDepth = 1;
+    vp.minDepth = 0;
+    vkCmdSetViewport(commands, 0, 1, &vp);
+    vkCmdBindVertexBuffers(commands, 0, 2, vertexBuffers, offsets);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipeline);
+    for(int i : irange(tileAmt)){
+        for(int j: irange(tileAmt)){
+            VkRect2D s{};
+            s.extent.width = aIndices / tileAmt;
+            if(i == tileAmt - 1)
+                s.extent.width += aIndices - (aIndices / tileAmt) * tileAmt;    //padding for the last tile
+            s.extent.height = bIndices / tileAmt;
+            if(j == tileAmt - 1)
+                s.extent.width += bIndices - (bIndices / tileAmt) * tileAmt;    //padding for the last tile
+            s.offset.x = aIndices / tileAmt * i;
+            s.offset.y = bIndices / tileAmt * j;
+            vkCmdSetScissor(commands, 0, 1, &s);
+            vkCmdDraw(commands, dataSize, 1, 0, 0);
+        }
+    }
     vkCmdEndRenderPass(commands);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipelineLayout, 0, 1, &_conversionSet, 0, {});

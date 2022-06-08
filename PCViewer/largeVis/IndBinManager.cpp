@@ -385,6 +385,21 @@ void IndBinManager::updateCounts(){
             }
             break;
         }
+        case CountingMethod::GpuDrawPairwiseTiled:{
+            for(int i: irange(activeIndices.size() -1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    continue;
+                const uint32_t tileAmt = 6;
+                std::cout << "Counting pairwise tiled (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << " with " << tileAmt * tileAmt << " tiles" << std::endl;
+                t->_renderLineCounter->countLinesPairTiled(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true, tileAmt);
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+            }
+            break;
+        }
         case CountingMethod::GpuDrawMultiViewport:{
             // ToDo
             break;
