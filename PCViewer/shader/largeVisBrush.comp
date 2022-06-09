@@ -1,0 +1,104 @@
+#version 460
+
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
+
+layout(buffer_reference, scalar) buffer Data {uint d[];};  // raw data
+
+layout(binding = 0) buffer BrushInfo{
+    uint amtOfDataPoints;
+    uint amtOfAttributes;
+    uint amtOfBrushes;
+    uint andBrushes;
+    uint offsetLassoBrushes; 
+    uint p,a,dding;
+    float brushData[];          // for information on brush Data layout look at ComputeBrushes.cpp -> updateActiveIndices()
+};
+
+layout(binding = 1) buffer DataInfo{
+    uint64_t dataAddresses[];
+};
+
+layout(binding = 2) buffer Activations{
+    uint activations[];
+}
+
+layout(push_constant) uniform constants{
+    uint longSymbols;   //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
+    uint codingBlockSize;
+};
+
+layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+
+// same size as the local size
+shared uint activations[256];
+
+void writeActivations(int iteration, bool active){
+    // creating 32 bit words via subgroup ballot. Only works with 32 or 64 bit sized ballots
+    uvec4 ballot = subgropuBallot(active);
+    if(gl_SubgroupSize == 32){
+        if(gl_SubgroupElect())
+            activations[iteration * gl_SubgroupID] = ballot[0];
+    }
+    if(gl_SubgroupSize == 64){
+        if(gl_SubgroupElect()){
+            activations[2 * iteration * gl_SubgroupID] = ballot[0]
+            activations[2 * iteration * gl_SubgroupID + 1] = ballot[1];
+        }
+    }
+}
+
+void main(){
+    Symbols symbolStream = Symbols(infos[gl_WorkGroupID.y].symbolStream);
+    if(gl_GlobalInvocationID.x * 32 > amtOfDataPoints) return;   // early out unused threads
+    
+    for(int i = 0; i < 32; ++i){    // each thread calculates 32 datapoints
+        bool a = amtOfBrushes == 0; // if no brushes data has to be active
+        // going through all brushes and testing for activatinos
+        for(int brush = 0; brush < amtOfBrushes; ++brush){
+            bool in = true;
+            uint brushOffset = uint(brushData[brush]);
+            for(int axisMap = 0; axisMap < brushData[brushOffset]; ++axisMap){
+                uint axisMapOffset = uint(brushData[brushOffset + 1 + axisMap]);
+                uint axis = uint(brushData[axisMapOffset + 1]);
+                Data axisData = Data(dataAddresses[axis]);
+                uint dataIndex = gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 + i * gl_WorkGroupSize.x + gl_LocalInvocationID.x
+                float axisVal = unpackHalf2x16(axisData.d[dataIndex >> 1])[dataIndex & 1];
+                bool inRange = false;
+                for(int range = 0; range < brushData[axisMapOffset]; ++range){
+                    uint rangeOffset = uint(brushData[axisMapOffset + 2 + range]);
+                    float min = brushData[rangeOffset];
+                    float max = brushData[rangeOffset + 1];
+                    if(axisVal >= min && axisVal <= max){
+                        inRange = true;
+                        break;
+                    }
+                }
+                in &= inRange;
+                if(!in)
+                    break;
+            }
+            if(andBrush > 0 && !in){
+                a = false;
+                break;
+            }
+            else if(andBrush == 0 && in){
+                a = true;
+                break;
+            }
+        }
+
+        // lasso brushes are missing here
+        writeActivations(i, a);
+    }
+    barrier();
+
+    // writeout of activation
+    activations[gl_GlobalInvocationID.x / 32] = activations[gl_LocalInvocationID.x];
+}

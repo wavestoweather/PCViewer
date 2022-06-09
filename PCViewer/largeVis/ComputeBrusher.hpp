@@ -3,8 +3,9 @@
 #include "../VkUtil.h"
 #include "../Brushing.hpp"
 
-// holds a single vulkan compute pipeline instance for counting active lines in cluster
-
+// executes index brushing. Every GPU thread will do 32 datapoints and stores the brushing result in a uint vector
+// like this, every GPU thread can write a single 32 bit integer.
+// To enable vectorized loading, al threads in a thread block will read consecutive datapoints, calculate its activation and store the activations via subgroup balloting
 class ComputeBrusher{
 public:
     // struct holding information needed to create the vulkan pipeline
@@ -19,11 +20,11 @@ public:
 
     static ComputeBrusher* acquireReference(const CreateInfo& info); // acquire a reference (automatically creates renderer if not yet existing)
     void release();                                                 // has to be called to notify destruction before vulkan resources are destroyed
-    void updateActiveIndices(const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, bool andBrushes = false);
+    void updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, bool andBrushes = false);
 
 private:
     struct BrushInfos{
-        uint32_t amtofDataPoints, amtOfAttributes, amtOfBrushes, padding;
+        uint32_t amtofDataPoints, amtOfAttributes, amtOfBrushes, offsetLassoBrushes, andBrushes, p,a,dding;
         // float list of brush infos ...coming soon :)
     };
 

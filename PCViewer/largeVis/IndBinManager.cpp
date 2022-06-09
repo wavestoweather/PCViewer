@@ -169,6 +169,7 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     _renderLineCounter = RenderLineCounter::acquireReference(RenderLineCounter::CreateInfo{info.context});
     _lineCounter = LineCounter::acquireReference(LineCounter::CreateInfo{info.context});
     _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.framebuffer});
+    _computeBrusher = ComputeBrusher::acquireReference(ComputeBrusher::CreateInfo{info.context});
 
     std::cout << "Loaded " << dataSize << " datapoints" << std::endl;
 }

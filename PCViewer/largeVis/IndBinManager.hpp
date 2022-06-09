@@ -13,6 +13,7 @@
 #include "RenderLineCounter.hpp"
 #include "Renderer.hpp"
 #include "LineCounter.hpp"
+#include "ComputeBrusher.hpp"
 #include <atomic>
 #include <future>
 #include <roaring64map.hh>
@@ -183,6 +184,7 @@ private:
     RenderLineCounter* _renderLineCounter{};
     LineCounter* _lineCounter{};
     compression::Renderer* _renderer{};
+    ComputeBrusher* _computeBrusher{};
 
     size_t _curBrushingId{};                        // brush id to check brush status and need for count update
     uint32_t _managerByteSize{};                    // used to keep track of memory consumption to dynamically release intersection lists in "intersectionIndices"
