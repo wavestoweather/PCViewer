@@ -290,13 +290,33 @@ void IndBinManager::updateCounts(){
                 PCUtil::Stopwatch updateWatch(std::cout, "Cpu index activation");
                 t->_indexActivationState = t->_countBrushState.id;
                 std::vector<std::vector<half>*> data(t->attributes.size());
+                const uint32_t amtOfThreads = 12;
+                auto execClear = [&](size_t start, size_t end){
+                    for(size_t e: irange(start, end)) 
+                        t->indexActivation[e] = 0;
+                };
+                // having to set all activations to 0 as the activation calculation currently uses oring
+                if(amtOfThreads == 1){
+                    execClear(0, t->indexActivation.size());
+                }
+                else{
+                    std::vector<std::thread> threads(amtOfThreads);
+                    size_t curStart = 0;
+                    size_t size = t->indexActivation.size();
+                    for(int i: irange(amtOfThreads)){
+                        size_t curEnd = size_t(i + 1) * size / amtOfThreads;
+                        threads[i] = std::thread(execClear, curStart, curEnd);
+                        curStart = curEnd;
+                    }
+                    for(auto& t: threads)
+                        t.join();
+                }
+
                 for(int i: irange(t->columnData)){
                     data[i] = &t->columnData[i].cpuData;
                 }
-                // having to set all activations to 0 as the activation calculation currently uses oring
-                for(auto& e: t->indexActivation) 
-                    e = 0;
-                brushing::updateIndexActivation(t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, data, t->indexActivation);
+                
+                brushing::updateIndexActivation(t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, data, t->indexActivation, 1);
             }
         }
         else{

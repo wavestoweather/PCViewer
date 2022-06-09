@@ -64,30 +64,38 @@ namespace brushing{
         // converting the range brushes to properly be able to check activation
         struct MM{float min, max;};
         std::vector<std::map<int, std::vector<MM>>> axisBrushes(rangeBrushes.size());
+        std::vector<bool> axisActive(data.size(), false);
         for(int i: irange(rangeBrushes)){
             auto& b = axisBrushes[i];
             for(const auto& range: rangeBrushes[i]){
                 b[range.axis].push_back({range.min, range.max});
+                axisActive[range.axis] = true;
             }
         }
         auto threadExec = [&](size_t start, size_t end){
             for(size_t i: irange(start, end)){
                 bool a{rangeBrushes.empty()};
                 // Range brushes ------------------------------------------------------
-                for(auto& b: rangeBrushes){
-                    bool inRange{true};
-                    for(auto& r: b){
-                        const uint32_t& ax = r.axis;
-                        if((*data[ax])[i] + eps < r.min || (*data[ax])[i] - eps > r.max){
-                            inRange = false;
-                            break;
+                for(auto& brush: axisBrushes){
+                    bool in{true};
+                    for(auto [axis, ranges]: brush){
+                        T d = (*data[axis])[i];
+                        bool inRange{false};
+                        for(auto& r: ranges){
+                            if(d + eps >= r.min && d - eps <= r.max){
+                                inRange = true;
+                                break;
+                            }
                         }
+                        in &= inRange;
+                        if(!in)
+                            break;
                     }
-                    if(andBrushes && !inRange){
+                    if(andBrushes && !in){
                         a = false;
                         break;
                     }
-                    else if(inRange){
+                    else if(!andBrushes && in){
                         a = true;
                         break;
                     }
@@ -121,7 +129,7 @@ namespace brushing{
                 else
                     activations[i / 8] |= uint8_t(a) << i & 7;
             }
-        }
+        };
         if(amtOfThreads == 1){
             threadExec(0, data[0]->size());
         }
