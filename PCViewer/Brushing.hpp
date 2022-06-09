@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
+#include <thread>
 #include <inttypes.h>
+#include <map>
 #include "LassoBrush.hpp"
 #include "range.hpp"
 
@@ -58,56 +60,82 @@ namespace brushing{
     }
 
     template<typename T>
-    static void updateIndexActivation(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes, const std::vector<std::vector<T>*>& data, std::vector<uint8_t>& activations, float eps = 0 /*maximum distance from data*/, bool andBrushes = false /*If true point has ot be in all ranges*/){
-        for(size_t i: irange(*data[0])){
-            bool a{rangeBrushes.empty()};
-            // Range brushes ------------------------------------------------------
-            for(auto& b: rangeBrushes){
-                bool inRange{true};
-                for(auto& r: b){
-                    const uint32_t& ax = r.axis;
-                    if((*data[ax])[i] + eps < r.min || (*data[ax])[i] - eps > r.max){
-                        inRange = false;
+    static void updateIndexActivation(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes, const std::vector<std::vector<T>*>& data, std::vector<uint8_t>& activations, uint32_t amtOfThreads = 1, float eps = 0 /*maximum distance from data*/, bool andBrushes = false /*If true point has to be in all ranges*/){
+        // converting the range brushes to properly be able to check activation
+        struct MM{float min, max;};
+        std::vector<std::map<int, std::vector<MM>>> axisBrushes(rangeBrushes.size());
+        for(int i: irange(rangeBrushes)){
+            auto& b = axisBrushes[i];
+            for(const auto& range: rangeBrushes[i]){
+                b[range.axis].push_back({range.min, range.max});
+            }
+        }
+        auto threadExec = [&](size_t start, size_t end){
+            for(size_t i: irange(start, end)){
+                bool a{rangeBrushes.empty()};
+                // Range brushes ------------------------------------------------------
+                for(auto& b: rangeBrushes){
+                    bool inRange{true};
+                    for(auto& r: b){
+                        const uint32_t& ax = r.axis;
+                        if((*data[ax])[i] + eps < r.min || (*data[ax])[i] - eps > r.max){
+                            inRange = false;
+                            break;
+                        }
+                    }
+                    if(andBrushes && !inRange){
+                        a = false;
+                        break;
+                    }
+                    else if(inRange){
+                        a = true;
                         break;
                     }
                 }
-                if(andBrushes && !inRange){
-                    a = false;
-                    break;
+                if(!andBrushes && a){
+                    activations[i / 8] |= uint8_t(a) << i & 7;       //early out when data point is already accepted
+                    continue;
                 }
-                else if(inRange){
-                    a = true;
-                    break;
-                }
-            }
-            if(!andBrushes && a){
-                activations[i / 8] |= uint8_t(a) << i & 7;       //early out when data point is already accepted
-                continue;
-            }
-            
-            // Lasso brushes ------------------------------------------------------
-            for(const auto& lasso: lassoBrushes){
-                int attr1 = lasso.attr1;
-                int attr2 = lasso.attr2;
-                bool inLasso = false;
-                ImVec2 d{static_cast<float>((*data[attr1])[i]), static_cast<float>((*data[attr2])[i])};
-                for(int j: irange(lasso.borderPoints)){
-                    const ImVec2& a = lasso.borderPoints[j];
-                    const ImVec2& b = lasso.borderPoints[(j + 1) % lasso.borderPoints.size()];
-                    // calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
-                    if( ((a.y > d.y) != (b.y > d.y)) &&
-		    		    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
-		    		    inLasso = !inLasso;
-                }
-                a = a && inLasso;
-                if(!a)
-                    break;
-            }
 
-            if(andBrushes)
-                activations[i / 8] &= uint8_t(a) << i & 7;
-            else
-                activations[i / 8] |= uint8_t(a) << i & 7;
+                // Lasso brushes ------------------------------------------------------
+                for(const auto& lasso: lassoBrushes){
+                    int attr1 = lasso.attr1;
+                    int attr2 = lasso.attr2;
+                    bool inLasso = false;
+                    ImVec2 d{static_cast<float>((*data[attr1])[i]), static_cast<float>((*data[attr2])[i])};
+                    for(int j: irange(lasso.borderPoints)){
+                        const ImVec2& a = lasso.borderPoints[j];
+                        const ImVec2& b = lasso.borderPoints[(j + 1) % lasso.borderPoints.size()];
+                        // calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+                        if( ((a.y > d.y) != (b.y > d.y)) &&
+		        		    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
+		        		    inLasso = !inLasso;
+                    }
+                    a = a && inLasso;
+                    if(!a)
+                        break;
+                }
+
+                if(andBrushes)
+                    activations[i / 8] &= uint8_t(a) << i & 7;
+                else
+                    activations[i / 8] |= uint8_t(a) << i & 7;
+            }
+        }
+        if(amtOfThreads == 1){
+            threadExec(0, data[0]->size());
+        }
+        else{
+            std::vector<std::thread> threads(amtOfThreads);
+            size_t curStart = 0;
+            size_t size = data[0]->size();
+            for(int i: irange(amtOfThreads)){
+                size_t curEnd = size_t(i + 1) * size / amtOfThreads;
+                threads[i] = std::thread(threadExec, curStart, curEnd);
+                curStart = curEnd;
+            }
+            for(auto& t: threads)
+                t.join();
         }
     }
 }
