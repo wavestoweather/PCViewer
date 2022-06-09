@@ -102,8 +102,9 @@ public:
     void render(VkCommandBuffer commands, VkBuffer attributeInfos, bool clear = false);
     // checks if an update is enqueued
     void checkUpdateQueue(){
-        if(_currentBrushState != _countBrushState && !_countUpdateThreadActive)
+        if(_currentBrushState != _countBrushState && !_countUpdateThreadActive){
             notifyBrushUpdate(_currentBrushState.rangeBrushes, _currentBrushState.lassoBrushes);
+        }
     };
 
     // bool which indicates render update should be done (by calling render())

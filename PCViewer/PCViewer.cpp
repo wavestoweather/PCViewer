@@ -3517,7 +3517,8 @@ static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface
 #ifdef IMGUI_UNLIMITED_FRAME_RATE
 	VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIFO_KHR };
 #else
-	VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_FIFO_KHR };
+	//VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_FIFO_KHR };
+	VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_IMMEDIATE_KHR };
 #endif
 	wd->PresentMode = ImGui_ImplVulkanH_SelectPresentMode(g_PhysicalDevice, wd->Surface, &present_modes[0], IM_ARRAYSIZE(present_modes));
 	//printf("[vulkan] Selected PresentMode = %d\n", wd->PresentMode);
@@ -5728,7 +5729,6 @@ static bool updateActiveIndices(DrawList& dl) {
 
 	// reevaluating large datasets when brush has changed
 	if(dl.indBinManager){
-		return false;
 		std::vector<brushing::RangeBrush> rangeBrushes;
 		//adding local brushes
 		uint32_t axis = 0;
@@ -5737,9 +5737,9 @@ static bool updateActiveIndices(DrawList& dl) {
 			for(auto& range: b){
 				// converting the range from main attribute scale to inBinManager scale(local scale)
 				const auto& dlAtt = dl.indBinManager->attributes;
-				float min = range.minMax.first - dlAtt[axis].min / (dlAtt[axis].max - dlAtt[axis].min);
-				float max = range.minMax.second - dlAtt[axis].min / (dlAtt[axis].max - dlAtt[axis].min);
-				brush.push_back({axis, range.minMax.first, range.minMax.second});
+				float min = (range.minMax.first - dlAtt[axis].min) / (dlAtt[axis].max - dlAtt[axis].min);
+				float max = (range.minMax.second - dlAtt[axis].min) / (dlAtt[axis].max - dlAtt[axis].min);
+				brush.push_back({axis, min, max});
 			}
 			if(brush.size())
 				rangeBrushes.push_back(std::move(brush));
@@ -14694,8 +14694,10 @@ int main(int, char**)
 			//	updateActiveIndices(dl);
 			//	pcPlotRender = true;
 			//}
-			if(dl.indBinManager && dl.indBinManager->requestRender){
-				pcPlotRender = true;
+			if(dl.indBinManager){
+				dl.indBinManager->checkUpdateQueue();	// check if brushing has to be rerun
+				if(dl.indBinManager->requestRender)
+					pcPlotRender = true;
 			}
 		}
 

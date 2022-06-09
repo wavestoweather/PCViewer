@@ -151,7 +151,7 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     // --------------------------------------------------------------------------------
     // creating the index activation buffer resource and setting up the cpu side activation vector
     // --------------------------------------------------------------------------------
-    indexActivation = std::vector<uint8_t>(dataSize / 8, 0xff);    // set all to active on startup
+    indexActivation = std::vector<uint8_t>((dataSize + 7) / 8, 0xff);    // set all to active on startup
     VkUtil::createBuffer(_vkContext.device, dataSize / 8, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &_indexActivation);
     VkMemoryRequirements memReq{};
     vkGetBufferMemoryRequirements(_vkContext.device, _indexActivation, &memReq);
@@ -283,15 +283,20 @@ void IndBinManager::updateCounts(){
     auto execCountUpdate = [](IndBinManager* t, std::vector<uint32_t> activeIndices){
         // starting with updating the counts if needed to have all information available for the following counting/reduction
         // note: might be changed to be settable by the user if cpu or gpu should be used for counting
-        if(t->countingMethod < CountingMethod::CpuRoaring){
+        if(t->countingMethod <= CountingMethod::CpuRoaring){
             // updating cpu activations
-            if(t->_indexActivationState != t->_currentBrushState.id){
-                t->_indexActivationState = t->_currentBrushState.id;
+            if(t->_indexActivationState != t->_countBrushState.id){
+                std::cout << "Updating cpu index activations" << std::endl; std::cout.flush();
+                PCUtil::Stopwatch updateWatch(std::cout, "Cpu index activation");
+                t->_indexActivationState = t->_countBrushState.id;
                 std::vector<std::vector<half>*> data(t->attributes.size());
                 for(int i: irange(t->columnData)){
                     data[i] = &t->columnData[i].cpuData;
-                    brushing::updateIndexActivation(t->_currentBrushState.rangeBrushes, t->_currentBrushState.lassoBrushes, data, t->indexActivation);
                 }
+                // having to set all activations to 0 as the activation calculation currently uses oring
+                for(auto& e: t->indexActivation) 
+                    e = 0;
+                brushing::updateIndexActivation(t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, data, t->indexActivation);
             }
         }
         else{
