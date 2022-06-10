@@ -23,6 +23,10 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
     b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     bindings.push_back(b);
 
+    b.binding = 1;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings.push_back(b);
+
     VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_countPipeInfo.descriptorSetLayout);
 
     VkVertexInputBindingDescription bindingDescription[2]{};
@@ -201,7 +205,7 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     // execution is done outside
 }
 
-void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts) {
+void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts) {
     // check for outdated framebuffer size
     if(aIndices != _aBins)
         createOrUpdateFramebuffer(aIndices);
@@ -210,6 +214,7 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     assert(_vkContext.queueMutex);
 
     VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, indexActivation, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _conversionSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _conversionSet);
 

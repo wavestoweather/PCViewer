@@ -3303,7 +3303,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 	// Create Vulkan Instance
 	{
 		VkApplicationInfo appInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-		appInfo.apiVersion = VK_API_VERSION_1_1;
+		appInfo.apiVersion = VK_API_VERSION_1_2;
 		appInfo.pApplicationName = "PCViewer";
 
 		VkInstanceCreateInfo create_info = {};
@@ -3351,6 +3351,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 	}
 
 	// Select GPU
+	bool useBufferDeviceAddress;
 	{
 		uint32_t gpu_count;
 		err = vkEnumeratePhysicalDevices(g_Instance, &gpu_count, NULL);
@@ -3369,12 +3370,17 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		vkGetPhysicalDeviceFeatures(gpus[0], &feat);
 		VkPhysicalDeviceFeatures2 feat2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
+		VkPhysicalDeviceVulkan12Features v12feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
 		feat2.pNext = &floatFeat;
+		floatFeat.pNext = &v12feat;
 		vkGetPhysicalDeviceFeatures2(gpus[0], &feat2);
 		atomicGpuFloatAddAvailable = feat.shaderFloat64 && floatFeat.shaderBufferFloat32AtomicAdd && floatFeat.shaderBufferFloat64AtomicAdd;
 		if(!floatFeat.shaderImageFloat32AtomicAdd){
 			std::cout << "Gpu does not support float64 atomic add -> gpu accelerated correlation calculations disabled" << std::endl;
 		}
+		useBufferDeviceAddress = v12feat.bufferDeviceAddress;
+		if(!useBufferDeviceAddress)
+			std::cout << "Gpu does not support buffer device addresses, large vis pipeline only reduced usable" << std::endl;
 
 #ifdef _DEBUG
 		std::cout << "Gometry shader usable:" << feat.geometryShader << std::endl;
@@ -3422,19 +3428,29 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 	// Create Logical Device (with 2 queues)
 	{
 		int device_extension_count = 3;
-		if(atomicGpuFloatAddAvailable) device_extension_count = 5;
-		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing", VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME};
+		if(atomicGpuFloatAddAvailable) device_extension_count = 6;
+		const char* device_extensions[] = { "VK_KHR_swapchain", "VK_KHR_maintenance3", "VK_EXT_descriptor_indexing", VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
 
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
 		floatFeat.shaderBufferFloat32AtomicAdd = VK_TRUE;
 		floatFeat.shaderBufferFloat64AtomicAdd = VK_TRUE;
 
-		VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexingFeatures{};
-		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
-		if(atomicGpuFloatAddAvailable)
-			indexingFeatures.pNext = &floatFeat;
-		indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
-		indexingFeatures.runtimeDescriptorArray = VK_TRUE;
+		VkPhysicalDeviceVulkan12Features v12feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+		v12feat.bufferDeviceAddress = useBufferDeviceAddress;
+		v12feat.descriptorBindingPartiallyBound = VK_TRUE;
+		v12feat.runtimeDescriptorArray = VK_TRUE;
+		v12feat.descriptorIndexing = VK_TRUE;
+
+		void* firstNext{};
+		void** curPNext = &firstNext;
+		if(atomicGpuFloatAddAvailable){
+			*curPNext = &floatFeat;
+			curPNext = &floatFeat.pNext;
+		}
+		if(useBufferDeviceAddress){
+			*curPNext = &v12feat;
+			curPNext = &v12feat.pNext;
+		}
 
 		VkPhysicalDeviceFeatures deviceFeatures = {};
 		deviceFeatures.geometryShader = VK_TRUE;
@@ -3445,6 +3461,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.shaderStorageImageExtendedFormats = VK_TRUE;
 		deviceFeatures.shaderTessellationAndGeometryPointSize = VK_TRUE;
 		deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
+		deviceFeatures.shaderInt64 = VK_TRUE;
 		if(atomicGpuFloatAddAvailable)
 			deviceFeatures.shaderFloat64 = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
@@ -3454,13 +3471,13 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		queue_info[0].queueCount = 1;
 		queue_info[0].pQueuePriorities = queue_priority;
 		VkDeviceCreateInfo create_info = {};
+		create_info.pNext = firstNext;
 		create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		create_info.queueCreateInfoCount = sizeof(queue_info) / sizeof(queue_info[0]);
 		create_info.pQueueCreateInfos = queue_info;
 		create_info.enabledExtensionCount = device_extension_count;
 		create_info.ppEnabledExtensionNames = device_extensions;
 		create_info.pEnabledFeatures = &deviceFeatures;
-		create_info.pNext = &indexingFeatures;
 		err = vkCreateDevice(g_PhysicalDevice, &create_info, g_Allocator, &g_Device);
 		check_vk_result(err);
 		vkGetDeviceQueue(g_Device, g_QueueFamily, 0, &g_Queue);

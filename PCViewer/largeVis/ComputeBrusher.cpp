@@ -22,6 +22,9 @@ ComputeBrusher::ComputeBrusher(const CreateInfo& info):
     b.binding = 1;              // data addresses buffer
     bindings.push_back(b);
 
+    b.binding = 2;                // activation buffer
+    bindings.push_back(b);
+
     VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_brushPipelineInfo.descriptorSetLayout);
 
     VkUtil::createComputePipeline(info.context.device, shaderModule, {_brushPipelineInfo.descriptorSetLayout}, &_brushPipelineInfo.pipelineLayout, &_brushPipelineInfo.pipeline);
@@ -58,7 +61,20 @@ void ComputeBrusher::release(){
     }
 }
 
-void ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, bool andBrushes = false){
+void ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, bool andBrushes){
+    // if no brushes are active, set all points active
+    if(brushes.empty() && lassoBrushes.empty()){
+        std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+        vkCmdFillBuffer(commands, indexActivations, 0, VK_WHOLE_SIZE, uint32_t(-1));
+        PCUtil::Stopwatch stopwatch(std::cout, "Compute Brush: Clear");
+        VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+        auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+        vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+        return;
+    }
     // converting the range brushes to properly be able to check activation
     struct MM{float min, max;};
     std::vector<std::map<int, std::vector<MM>>> axisBrushes(brushes.size());
@@ -79,13 +95,13 @@ void ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector
     // with AxisMap = {float nrRanges, float axis, vector<floatt> rangeOffsets, vector<Range> ranges}
     // with Range = {float, float} // first is min, second is max
     std::vector<float> brushData;
-    brushData.reserve(axisBrushes.size());  // space for brushOffsets
+    brushData.resize(axisBrushes.size());  // space for brushOffsets
     for(int brush: irange(axisBrushes)){
         // adding a brush
         brushData[brush] = brushData.size();        // inserting the correct offset
         brushData.push_back(axisBrushes[brush].size()); // number of axis maps
         size_t axisOffsetsIndex = brushData.size(); // safing index for fast access later
-        brushData.reserve(brushData.size() + axisBrushes[brush].size());   // reserving space for axisOffsets
+        brushData.resize(brushData.size() + axisBrushes[brush].size());   // reserving space for axisOffsets
         // adding the Axis Maps
         int curMap = 0;
         for(const auto [axis, ranges]: axisBrushes[brush]){
@@ -93,7 +109,7 @@ void ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector
             brushData.push_back(ranges.size());                         // ranges size
             brushData.push_back(axis);
             size_t rangesOffsetsIndex = brushData.size();
-            brushData.reserve(brushData.size() + ranges.size());
+            brushData.resize(brushData.size() + ranges.size());
             //adding the ranges
             int curRange = 0;
             for(const auto range: ranges){
@@ -130,9 +146,23 @@ void ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector
     }
     VkUtil::uploadData(_vkContext.device, _infoMemory, _dataOffset, deviceAddresses.size() * sizeof(deviceAddresses[0]), deviceAddresses.data());
 
+    // adding the activations buffer to the desc set
+    VkUtil::updateDescriptorSet(_vkContext.device, indexActivations, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
+
+    const uint32_t localSize = 256; // has to be the same as in the largeVisBrush.comp shader
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
-    
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushPipelineInfo.pipeline);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushPipelineInfo.pipelineLayout, 0, 1, &_descSet, 0, {});
+    vkCmdDispatch(commands, (amtDatapoints + 32 * localSize - 1) / (32 * localSize), 1, 1);
+    std::cout << "Dispatching " << (amtDatapoints + 32 * localSize - 1) / (32 * localSize) << " Local work groups for " << amtDatapoints << " data points" << std::endl;
+
+    PCUtil::Stopwatch stopwatch(std::cout, "Compute Brush");
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
 void ComputeBrusher::createOrUpdateBuffer(uint32_t amtOfAttributes, uint32_t infoByteSize){

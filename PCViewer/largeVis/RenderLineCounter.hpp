@@ -25,7 +25,7 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
-    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts = false);
+    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false);
     void countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt /*describes how much tiles along each side are used*/);
 private:
     struct PairInfos{

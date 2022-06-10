@@ -190,7 +190,7 @@ private:
     uint32_t _managerByteSize{};                    // used to keep track of memory consumption to dynamically release intersection lists in "intersectionIndices"
 
     uint32_t _indexActivationState{};               // holds the brush state for which the index activation was last updated
-    uint32_t _gpuIndexActivationState{};
+    uint32_t _gpuIndexActivationState{};            // holds the same as _indexActivationState for the gpu pipelines
 
     
     void updateCounts();

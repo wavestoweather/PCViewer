@@ -8,12 +8,23 @@ layout(binding = 0) uniform Infos{
     uint padding;
 };
 
+layout(binding = 1) buffer Activations{
+    uint activations[];
+};
+
 layout(location = 0) in float a;
 layout(location = 1) in float b;
 
 layout(location = 0) out float increment;
 
 void main(){
+    uint act = activations[gl_VertexIndex / 32];
+    if((act & (1 << (gl_VertexIndex & 31))) > 0){
+        gl_Position.xy = vec2(-2, -2);  // outside viewport
+        gl_PointSize = 0;   // not visible
+        increment = 0;
+        return;
+    }
     // scaling by 2 - 1/aBins to always have the bins fall inside rendertarget
     float aInv = 1.0/float(aBins);
     float bInv = 1.0/float(bBins);
