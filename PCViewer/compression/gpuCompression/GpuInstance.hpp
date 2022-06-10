@@ -4,6 +4,10 @@
 
 namespace vkCompress{
 struct GpuInstance{
+public:
+    GpuInstance(VkUtil::Context context);
+    ~GpuInstance();
+
     VkUtil::Context vkContext{};      // holds gpu device information
 
     uint m_streamCountMax{};
@@ -12,16 +16,37 @@ struct GpuInstance{
     uint m_log2HuffmanDistinctSymbolCountMax{14};
     // todo fill
 
+    struct HistogramResources
+    {
+        byte* pUpload{};
+        VkFence syncFence{};
+        VkUtil::PipelineInfo pipelineInfo{};
+    } Histogram;
+
+    struct HuffmanTableResources
+    {
+        uint* pReadback{};
+        VkUtil::PipelineInfo pipelineInfo{};
+    } HuffmanTable;
+
     struct RunLengthResources
     {
-        uint* pReadback;
+        uint* pReadback{};
         std::vector<void*> syncEventsReadback;
 
-        byte* pUpload;
-        void* syncEventUpload;
-
-        RunLengthResources()
-            : pReadback(nullptr), pUpload(nullptr), syncEventUpload(0) {}
+        byte* pUpload{};
+        VkFence syncFenceUpload{};
+        VkUtil::PipelineInfo pipelineInfo{};
     } RunLength;
+
+    struct DWTResources
+    {
+        VkUtil::PipelineInfo pipelineInfo{};
+    } DWT;
+
+    struct QuantizationResources
+    {
+        VkUtil::PipelineInfo pipelineInfo{};
+    } Quantization;
 };
 }
