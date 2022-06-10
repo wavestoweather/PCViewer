@@ -45,9 +45,11 @@ void PCUtil::hexdump(const void* ptr, int buflen) {
 	}
 }
 
-void PCUtil::numdump(const float* ptr, int len)
+void PCUtil::numdump(const float* ptr, int len, bool lineNumber)
 {
 	for (int i = 0; i < len; ++i) {
+		if(lineNumber)
+			std::cout << i << " : ";
 		std::cout << ptr[i] << std::endl;
 	}
 }

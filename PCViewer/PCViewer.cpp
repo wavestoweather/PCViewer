@@ -7347,6 +7347,26 @@ int main(int, char**)
 #endif
 	engine.seed(15);
 
+	class ScopedCoutRedirect{
+	public:
+    	ScopedCoutRedirect(std::ostream* out_stream, std::streambuf* original_buffer)
+        : _out_stream(out_stream), _original_buffer(original_buffer)
+		{
+		}
+		~ScopedCoutRedirect()
+		{
+			// reset to standard output
+			_out_stream->rdbuf(_original_buffer);
+		}
+
+	private:
+		std::ostream* _out_stream;
+		std::streambuf* _original_buffer; 
+	};
+	//ScopedCoutRedirect sentry(&std::cout, std::cout.rdbuf());
+	//std::ofstream out("log.txt");
+	//std::cout.rdbuf(out.rdbuf());
+
 	//std::vector<float> numbers(100);
 	//std::iota(numbers.begin(), numbers.end(), 0);
 	//std::ofstream tes("/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/test/temp/1");

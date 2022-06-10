@@ -45,18 +45,18 @@ void writeActivations(int iteration, bool a){
     uvec4 ballot = subgroupBallot(a);
     if(gl_SubgroupSize == 32){
         if(subgroupElect())
-            act[iteration * gl_SubgroupID] = ballot[0];
+            act[iteration * gl_NumSubgroups + gl_SubgroupID] = ballot[0];
     }
     if(gl_SubgroupSize == 64){
         if(gl_SubgroupInvocationID < 2){
-            act[2 * iteration * gl_SubgroupID + gl_SubgroupInvocationID] = ballot[gl_SubgroupInvocationID];
+            act[2 * (iteration * gl_NumSubgroups + gl_SubgroupID) + gl_SubgroupInvocationID] = ballot[gl_SubgroupInvocationID];
         }
     }
 }
 
 void main(){
-    if(gl_GlobalInvocationID.x * 32 > amtOfDataPoints) return;   // early out unused threads
-    
+    if(gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 >= amtOfDataPoints) return;   // early out unused threads
+
     for(int i = 0; i < 32; ++i){    // each thread calculates 32 datapoints
         bool a = amtOfBrushes == 0; // if no brushes data has to be active
         // going through all brushes and testing for activatinos
@@ -99,5 +99,5 @@ void main(){
     barrier();
 
     // writeout of activation
-    activations[gl_GlobalInvocationID.x / 32] = act[gl_LocalInvocationID.x];
+    activations[gl_GlobalInvocationID.x] = act[gl_LocalInvocationID.x];
 }

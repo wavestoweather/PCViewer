@@ -62,8 +62,8 @@ namespace compression
                 uint8_t bit = 1 << (cur & 7);
                 if((activation[p] & bit) == 0)
                     continue;       // skip non active indices
-                int binA = aVals[cur] * (static_cast<int>(aBins) - 1) + .5f;
-                int binB = bVals[cur] * (static_cast<int>(bBins) - 1) + .5f;
+                int binA = float(aVals[cur]) * (static_cast<int>(aBins) - 1) + .5f;
+                int binB = float(bVals[cur]) * (static_cast<int>(bBins) - 1) + .5f;
                 //safety check
                 binA %= aBins;
                 binB %= bBins;
@@ -102,8 +102,8 @@ namespace compression
                 uint8_t bit = 1 << (cur & 7);
                 if((activation[p] & bit) == 0)
                     continue;       // skip non active indices
-                int binA = aVals[cur] * (static_cast<int>(aBins) - 1) + .5f;
-                int binB = bVals[cur] * (static_cast<int>(bBins) - 1) + .5f;
+                int binA = float(aVals[cur]) * (static_cast<int>(aBins) - 1) + .5f;
+                int binB = float(bVals[cur]) * (static_cast<int>(bBins) - 1) + .5f;
                 //safety check
                 binA %= aBins;
                 binB %= bBins;
@@ -137,8 +137,8 @@ namespace compression
                 uint8_t bit = 1 << (cur & 7);
                 if((activation[p] & bit) == 0)
                     continue;       // skip non active indices
-                int binA = aVals[cur] * (static_cast<int>(aBins) - 1) + .5f;
-                int binB = bVals[cur] * (static_cast<int>(bBins) - 1) + .5f;
+                int binA = float(aVals[cur]) * (static_cast<int>(aBins) - 1) + .5f;
+                int binB = float(bVals[cur]) * (static_cast<int>(bBins) - 1) + .5f;
                 half dist = distances[cur];
                 //safety check
                 binA %= aBins;
