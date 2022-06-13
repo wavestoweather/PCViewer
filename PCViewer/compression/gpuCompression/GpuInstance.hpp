@@ -2,6 +2,7 @@
 
 #include "../../VkUtil.h"
 #include "../cpuCompression/global.h"
+#include "ScanPlan.hpp"
 
 namespace vkCompress{
 struct GpuInstance{
@@ -15,6 +16,8 @@ public:
     uint m_elemCountPerStreamMax{};
     uint m_codingBlockSize{};
     uint m_log2HuffmanDistinctSymbolCountMax{14};
+
+    ScanPlan* m_pScanPlan{};
     // todo fill
 
     struct HistogramResources

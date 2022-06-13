@@ -17,7 +17,7 @@ namespace vkCompress
         uint offsetCountMax = (m_elemCountPerStreamMax + m_codingBlockSize - 1) / m_codingBlockSize;
 
         uint rowPitch = (uint) getAlignedSize(m_elemCountPerStreamMax + 1, 128 / sizeof(uint));
-        m_pScanPlan = new ScanPlan(sizeof(uint), m_elemCountPerStreamMax + 1, m_streamCountMax, rowPitch); // "+ 1" for total
+        m_pScanPlan = new ScanPlan(context, sizeof(uint), m_elemCountPerStreamMax + 1, m_streamCountMax, rowPitch); // "+ 1" for total
         m_pReducePlan = new ReducePlan(sizeof(uint), m_elemCountPerStreamMax);
 
 
