@@ -6,7 +6,7 @@
 namespace vkCompress{
 struct GpuInstance{
 public:
-    GpuInstance(VkUtil::Context context);
+    GpuInstance(VkUtil::Context context, uint32_t streamCountMax, uint32_t elemCountPerStreamMax, uint32_t codingBlockSize, uint32_t log2HuffmanDistinctSymbolCountMax);
     ~GpuInstance();
 
     VkUtil::Context vkContext{};      // holds gpu device information
@@ -49,5 +49,8 @@ public:
     {
         VkUtil::PipelineInfo pipelineInfo{};
     } Quantization;
+
+private:
+    
 };
 }
