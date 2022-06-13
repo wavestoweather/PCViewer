@@ -1,5 +1,10 @@
 #include "GpuInstance.hpp"
 #include "../cpuCompression/util.h"
+#include "RunLength.hpp"
+#include "Huffman.hpp"
+#include "HuffmanTable.h"
+#include "Histogram.hpp"
+#include "PackInc.hpp"
 
 namespace vkCompress
 {
@@ -18,7 +23,7 @@ namespace vkCompress
 
         uint rowPitch = (uint) getAlignedSize(m_elemCountPerStreamMax + 1, 128 / sizeof(uint));
         m_pScanPlan = new ScanPlan(context, sizeof(uint), m_elemCountPerStreamMax + 1, m_streamCountMax, rowPitch); // "+ 1" for total
-        m_pReducePlan = new ReducePlan(sizeof(uint), m_elemCountPerStreamMax);
+        m_pReducePlan = new ReducePlan(context, sizeof(uint), m_elemCountPerStreamMax);
 
 
         size_t sizeTier0 = 0;

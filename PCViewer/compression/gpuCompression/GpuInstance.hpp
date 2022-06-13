@@ -3,6 +3,7 @@
 #include "../../VkUtil.h"
 #include "../cpuCompression/global.h"
 #include "ScanPlan.hpp"
+#include "ReducePlan.hpp"
 
 namespace vkCompress{
 struct GpuInstance{
@@ -18,11 +19,14 @@ public:
     uint m_log2HuffmanDistinctSymbolCountMax{14};
 
     ScanPlan* m_pScanPlan{};
+    ReducePlan* m_pReducePlan{};
     // todo fill
 
     struct HistogramResources
     {
-        byte* pUpload{};
+        //byte* pUpload{};
+        VkBuffer pUpload{};
+        VkDeviceMemory pUploadMem{};
         VkFence syncFence{};
         VkUtil::PipelineInfo pipelineInfo{};
     } Histogram;

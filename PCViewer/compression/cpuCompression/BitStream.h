@@ -494,5 +494,10 @@ inline void BitStream::resizeVector(uint newSize)
 
 }
 
+namespace vkCompress{
+typedef cudaCompress::BitStream BitStream;
+typedef cudaCompress::BitStreamReadOnly BitStreamReadOnly;
+}
+
 
 #endif
