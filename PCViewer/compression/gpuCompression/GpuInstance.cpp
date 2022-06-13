@@ -5,7 +5,9 @@ namespace vkCompress
 {
     GpuInstance::GpuInstance(VkUtil::Context context) 
     {
-        
+        // creating all pipelines
+
+        // Huffman table pipelines ---------------------------------------------------
     }
     
     GpuInstance::~GpuInstance() 

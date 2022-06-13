@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../VkUtil.h"
+#include "../cpuCompression/global.h"
 
 namespace vkCompress{
 struct GpuInstance{
