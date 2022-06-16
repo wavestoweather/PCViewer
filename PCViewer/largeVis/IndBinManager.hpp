@@ -18,6 +18,7 @@
 #include <future>
 #include <roaring64map.hh>
 #include "../half/half.hpp"
+#include "../compression/gpuCompression/Encode.hpp"
 
 // loads the roaring bitmaps from memory and makes them easily accesisble
 // provides a general interface to be used in the main application for calculating the 2d bin counts as well as rendering them as pc plots

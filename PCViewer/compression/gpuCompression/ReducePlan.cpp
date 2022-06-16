@@ -1,7 +1,7 @@
 #include "ReducePlan.hpp"
 #include <algorithm>
 
-namespace cudaCompress {
+namespace vkCompress {
 const int REDUCE_CTA_SIZE = 256;  
 ReducePlan::ReducePlan(VkUtil::Context& context, size_t  elemSizeBytes, size_t numElements)
 : m_numElements(numElements),

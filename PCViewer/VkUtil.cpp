@@ -1,4 +1,5 @@
 #include "VkUtil.h"
+#include "range.hpp"
 
 uint32_t VkUtil::findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
@@ -167,6 +168,37 @@ void VkUtil::createBuffer(VkDevice device, VkDeviceSize size, VkBufferUsageFlags
 
 	err = vkCreateBuffer(device, &bufferInfo, nullptr, buffer);
 	check_vk_result(err);
+}
+
+std::tuple<std::vector<VkBuffer>, std::vector<VkDeviceSize>, VkDeviceMemory> VkUtil::createMultiBufferBound(const Context& context,const std::vector<VkDeviceSize>& sizes, const std::vector<VkBufferUsageFlags>& usages, VkMemoryPropertyFlags memoryProperty) 
+{
+	const int alignment = 128;
+	VkMemoryAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	std::vector<VkBuffer> buffers(sizes.size());
+	std::vector<VkDeviceSize> offsets(sizes.size());
+	for(int i: irange(buffers)){
+		auto alignedSize = (sizes[i] + alignment - 1) / alignment * alignment;
+		createBuffer(context.device, alignedSize, usages[i], &buffers[i]);
+		VkMemoryRequirements memReq{};
+		vkGetBufferMemoryRequirements(context.device, buffers[i], &memReq);
+		offsets[i] = allocInfo.allocationSize;
+		allocInfo.allocationSize += memReq.size;
+		allocInfo.memoryTypeIndex |= memReq.memoryTypeBits;
+	}
+	allocInfo.memoryTypeIndex = findMemoryType(context.physicalDevice, allocInfo.memoryTypeIndex, memoryProperty);
+	VkDeviceMemory memory;
+	auto err = vkAllocateMemory(context.device, &allocInfo, nullptr, &memory); check_vk_result(err);
+	for(int i: irange(buffers)){
+		err = vkBindBufferMemory(context.device, buffers[i], memory, offsets[i]); check_vk_result(err);
+	}
+	return {buffers, offsets, memory};
+};
+
+VkDeviceAddress VkUtil::getBufferAddress(VkDevice device, VkBuffer buffer){
+	VkBufferDeviceAddressInfo info{};
+	info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	return vkGetBufferDeviceAddress(device, &info);
 }
 
 void VkUtil::createBufferView(VkDevice device, VkBuffer buffer, VkFormat format, uint32_t offset, VkDeviceSize range, VkBufferView *bufferView)
@@ -1411,7 +1443,8 @@ void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice,
 	createBuffer(device, byteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &stagingBuffer);
 	VkMemoryRequirements memReq;
 	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReq);
-	VkMemoryAllocateInfo memAlloc{};
+	VkMemoryAllocateInfo memAlloc{}
+	
 	memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	memAlloc.allocationSize = memReq.size;
 	memAlloc.memoryTypeIndex = findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);

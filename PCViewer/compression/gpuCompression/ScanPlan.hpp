@@ -3,7 +3,7 @@
 #include <cstring>
 #include "../../VkUtil.h"
 
-namespace cudaCompress {
+namespace vkCompress {
 
 class ScanPlan
 {

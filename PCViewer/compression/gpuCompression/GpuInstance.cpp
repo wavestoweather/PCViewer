@@ -5,6 +5,7 @@
 #include "HuffmanTable.h"
 #include "Histogram.hpp"
 #include "PackInc.hpp"
+#include "Encode.hpp"
 
 namespace vkCompress
 {
@@ -36,6 +37,18 @@ namespace vkCompress
         sizeTier1 = max(sizeTier1, encodeGetRequiredMemory(this));
 
         m_bufferSize = sizeTier0 + sizeTier1;
+
+        // getting warp size from phyiscal device info
+        VkPhysicalDeviceSubgroupProperties subgroupProperties;
+        subgroupProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+        subgroupProperties.pNext = NULL;
+
+        VkPhysicalDeviceProperties2 physicalDeviceProperties;
+        physicalDeviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        physicalDeviceProperties.pNext = &subgroupProperties;
+
+        vkGetPhysicalDeviceProperties2(context.physicalDevice, &physicalDeviceProperties);
+        m_warpSize = subgroupProperties.subgroupSize;
         // creating all pipelines
 
         // Huffman table pipelines ---------------------------------------------------

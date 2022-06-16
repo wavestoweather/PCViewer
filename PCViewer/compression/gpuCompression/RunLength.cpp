@@ -49,7 +49,9 @@ bool runLengthInit(GpuInstance* pInstance)
 bool runLengthShutdown(GpuInstance* pInstance)
 {
     //cudaSafeCall(cudaEventDestroy(pInstance->RunLength.syncEventUpload));
-    pInstance->RunLength.syncEventUpload = 0;
+    if(pInstance->RunLength.syncFenceUpload)
+        vkDestroyFence(pInstance->vkContext.device, pInstance->RunLength.syncFenceUpload, nullptr);
+    pInstance->RunLength.syncFenceUpload = 0;
 
     //cudaSafeCall(cudaFreeHost(pInstance->RunLength.pUpload));
     pInstance->RunLength.pUpload = nullptr;

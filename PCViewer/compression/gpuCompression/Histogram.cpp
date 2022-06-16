@@ -6,7 +6,7 @@
 #include "../cpuCompression/util.h"
 #include "GpuInstance.hpp"
 
-namespace cudaCompress {
+namespace vkCompress {
 
 static const uint MAX_PARTIAL_HISTOGRAM_COUNT = 32768;
 static const uint SMALL_HISTOGRAM_MAX_BIN_COUNT = 128;   
@@ -126,6 +126,7 @@ void histogramPadData(GpuInstance* pInstance, uint* dpData, uint elemCount)
 template<typename T>
 bool histogram(GpuInstance* pInstance, uint* pdpHistograms[], uint histogramCount, const T* pdpData[], const uint* pElemCount, uint binCount)
 {
+    // TODO: inputs have to be vulkan buffer resource addresses...
     // find max number of elements per histogram
     uint elemCountMax = 0;
     for(uint i = 0; i < histogramCount; i++) {
@@ -137,33 +138,38 @@ bool histogram(GpuInstance* pInstance, uint* pdpHistograms[], uint histogramCoun
     if(partialHistogramCount == 0)
         return true;
 
-
-    uint* dpPartialHistograms = pInstance->getBuffer<uint>(MAX_PARTIAL_HISTOGRAM_COUNT * SMALL_HISTOGRAM_MAX_BIN_COUNT);
-    uint** dppHistograms = pInstance->getBuffer<uint*>(histogramCount);
-    T** dppData = pInstance->getBuffer<T*>(histogramCount);
-    uint* dpElemCount = pInstance->getBuffer<uint>(histogramCount);
-
+    //uint* dpPartialHistograms = pInstance->getBuffer<uint>(MAX_PARTIAL_HISTOGRAM_COUNT * SMALL_HISTOGRAM_MAX_BIN_COUNT);
+    //uint** dppHistograms = pInstance->getBuffer<uint*>(histogramCount);
+    //T** dppData = pInstance->getBuffer<T*>(histogramCount);
+    //uint* dpElemCount = pInstance->getBuffer<uint>(histogramCount);
+    std::vector<VkDeviceSize> sizes{MAX_PARTIAL_HISTOGRAM_COUNT * SMALL_HISTOGRAM_MAX_BIN_COUNT * sizeof(uint), histogramCount * sizeof(VkDeviceAddress), histogramCount * sizeof(VkDeviceAddress), histogramCount * sizeof(uint)};
+    std::vector<VkBufferUsageFlags> usages(sizes.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    auto [buffers, offsets, memory] = VkUtil::createMultiBufferBound(pInstance->vkContext, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
     // copy pointers and elemcount to pinned memory
-    byte* pUploadHistogramPtrs = pInstance->Histogram.pUpload;
-    uint size = histogramCount * sizeof(uint*);
-    memcpy(pUploadHistogramPtrs, pdpHistograms, size);
-    byte* pUploadDataPtrs = pUploadHistogramPtrs + ((size + 127) / 128 * 128);
-    size = histogramCount * sizeof(T*);
-    memcpy(pUploadDataPtrs, pdpData, size);
-    byte* pUploadElemCounts = pUploadDataPtrs + ((size + 127) / 128 * 128);
-    size = histogramCount * sizeof(uint);
-    memcpy(pUploadElemCounts, pElemCount, size);
+    //byte* pUploadHistogramPtrs = pInstance->Histogram.pUpload;
+    //uint size = histogramCount * sizeof(uint*);
+    //memcpy(pUploadHistogramPtrs, pdpHistograms, size);
+    //byte* pUploadDataPtrs = pUploadHistogramPtrs + ((size + 127) / 128 * 128);
+    //size = histogramCount * sizeof(T*);
+    //memcpy(pUploadDataPtrs, pdpData, size);
+    //byte* pUploadElemCounts = pUploadDataPtrs + ((size + 127) / 128 * 128);
+    //size = histogramCount * sizeof(uint);
+    //memcpy(pUploadElemCounts, pElemCount, size);
 
-    // upload pointers and elemcount
-    // first make sure cpu buffers are not in use anymore
-    cudaSafeCall(cudaEventSynchronize(pInstance->Histogram.syncEvent));
+    //// upload pointers and elemcount
+    //// first make sure cpu buffers are not in use anymore
+    //cudaSafeCall(cudaEventSynchronize(pInstance->Histogram.syncEvent));
 
-    cudaSafeCall(cudaMemcpyAsync(dppHistograms, pUploadHistogramPtrs, histogramCount * sizeof(uint*), cudaMemcpyHostToDevice, pInstance->m_stream));
-    cudaSafeCall(cudaMemcpyAsync(dppData,       pUploadDataPtrs,      histogramCount * sizeof(T*),    cudaMemcpyHostToDevice, pInstance->m_stream));
-    cudaSafeCall(cudaMemcpyAsync(dpElemCount,   pUploadElemCounts,    histogramCount * sizeof(uint),  cudaMemcpyHostToDevice, pInstance->m_stream));
+    //cudaSafeCall(cudaMemcpyAsync(dppHistograms, pUploadHistogramPtrs, histogramCount * sizeof(uint*), cudaMemcpyHostToDevice, pInstance->m_stream));
+    //cudaSafeCall(cudaMemcpyAsync(dppData,       pUploadDataPtrs,      histogramCount * sizeof(T*),    cudaMemcpyHostToDevice, pInstance->m_stream));
+    //cudaSafeCall(cudaMemcpyAsync(dpElemCount,   pUploadElemCounts,    histogramCount * sizeof(uint),  cudaMemcpyHostToDevice, pInstance->m_stream));
 
-    cudaSafeCall(cudaEventRecord(pInstance->Histogram.syncEvent, pInstance->m_stream));
+    //cudaSafeCall(cudaEventRecord(pInstance->Histogram.syncEvent, pInstance->m_stream));
+    VkDevice device = pInstance->vkContext.device;
+    VkUtil::uploadData(device, memory, offsets[1], sizes[1], pdpHistograms);
+    VkUtil::uploadData(device, memory, offsets[2], sizes[2], pdpData);
+    VkUtil::uploadData(device, memory, offsets[3], sizes[3], pElemCount);
 
 
     assert( partialHistogramCount * histogramCount <= MAX_PARTIAL_HISTOGRAM_COUNT );

@@ -4,6 +4,7 @@
 
 #include "../cpuCompression/util.h"
 #include "HuffmanTable.h"
+#include "Huffman.hpp"
 
 namespace vkCompress {
 using namespace cudaCompress;
@@ -73,6 +74,8 @@ size_t encodeGetRequiredMemory(const GpuInstance* pInstance)
 
 bool encodeInit(GpuInstance* pInstance)
 {
+    // currently no encoding will be implemented
+    return false;
     bool longSymbols = (pInstance->m_log2HuffmanDistinctSymbolCountMax > 16);
     uint symbolSize = longSymbols ? sizeof(Symbol32) : sizeof(Symbol16);
 
@@ -92,7 +95,7 @@ bool encodeInit(GpuInstance* pInstance)
 
     uint distinctSymbolCountMaxBytesAligned = (uint)getAlignedSize(distinctSymbolCountMax * sizeof(uint), 128);
 
-
+    /*
     cudaSafeCall(cudaMallocHost(&pInstance->Encode.pCodewordBuffer, 2 * streamCountMax * symbolStreamMaxBytesAligned));
     cudaSafeCall(cudaMallocHost(&pInstance->Encode.pOffsetBuffer,   2 * streamCountMax * offsetStreamMaxBytesAligned));
 
@@ -140,10 +143,13 @@ bool encodeInit(GpuInstance* pInstance)
     }
 
     return true;
+    */
 }
 
 bool encodeShutdown(GpuInstance* pInstance)
 {
+    return false;
+    /*
     for(int i = 0; i < pInstance->Encode.ms_decodeResourcesCount; i++) {
         GpuInstance::EncodeResources::DecodeResources& res = pInstance->Encode.Decode[i];
 
@@ -192,11 +198,15 @@ bool encodeShutdown(GpuInstance* pInstance)
     pInstance->Encode.pCodewordBuffer = nullptr;
 
     return true;
+    */
 }
 
 template<typename Symbol>
 bool encodeRLHuff(GpuInstance* pInstance, BitStream* ppBitStreams[], bool singleBitStream, const Symbol* const pdpSymbolStreams[], uint streamCount, uint symbolCountPerStream)
 {
+    // not yet implemented (currently only decoding)
+    return false;
+    /*
     uint symbolStreamMaxBytes = symbolCountPerStream * sizeof(Symbol);
     uint offsetStreamMaxBytes = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize) * sizeof(uint);
 
@@ -458,47 +468,61 @@ bool encodeRLHuff(GpuInstance* pInstance, BitStream* ppBitStreams[], bool single
     pInstance->releaseBuffers(4 + 2 * streamCount);
 
     return true;
+    */
 }
 
 template<typename Symbol>
 bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly* ppBitStreams[], bool singleBitStream, Symbol* pdpSymbolStreams[], uint streamCount, uint symbolCountPerStream)
 {
-    uint pad = WARP_SIZE * pInstance->m_codingBlockSize;
+    assert(streamCount == 1);   // more than 1 block is currently not supported
+    const uint warpSize = pInstance->m_warpSize;
+    uint pad = warpSize * pInstance->m_codingBlockSize;
     uint symbolCountPerBlockPadded = (symbolCountPerStream + pad - 1) / pad * pad;
 
     uint symbolStreamMaxBytes = symbolCountPerStream * sizeof(Symbol);
     uint offsetStreamMaxBytes = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize) * sizeof(uint);
     GpuInstance::EncodeResources::DecodeResources& resources = pInstance->Encode.GetDecodeResources();
-    cudaSafeCall(cudaEventSynchronize(resources.syncEvent));
+    check_vk_result(vkWaitForFences(pInstance->vkContext.device, 1, &resources.syncFence, VK_TRUE, 0));
+    //cudaSafeCall(cudaEventSynchronize(resources.syncEvent));
 
-    Symbol* dpSymbolStreamCompacted = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
-    Symbol* dpZeroCounts            = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
-    uint* dpOffsets = (uint*)pInstance->getBuffer<byte>(streamCount * offsetStreamMaxBytes);
+    //Symbol* dpSymbolStreamCompacted = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
+    //Symbol* dpZeroCounts            = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
+    //uint* dpOffsets = (uint*)pInstance->getBuffer<byte>(streamCount * offsetStreamMaxBytes);
     size_t decodeTableSizeMax = getAlignedSize(HuffmanDecodeTable::computeMaxGPUSize(pInstance), 128);
-    byte* dpDecodeTables = pInstance->getBuffer<byte>(streamCount * decodeTableSizeMax);
+    //byte* dpDecodeTables = pInstance->getBuffer<byte>(streamCount * decodeTableSizeMax);
+    
+    std::vector<VkDeviceSize> sizes{streamCount * symbolCountPerBlockPadded * sizeof(Symbol), streamCount * symbolCountPerBlockPadded * sizeof(Symbol), streamCount * offsetStreamMaxBytes, streamCount * decodeTableSizeMax, symbolStreamMaxBytes};
+    std::vector<VkBufferUsageFlags> usages(sizes.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    auto [buffer, offsets, memory] = VkUtil::createMultiBufferBound(pInstance->vkContext, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    auto bSymbolStreamCompacted = buffer[0];
+    auto bZeroCounts = buffer[1];
+    auto bOffsets = buffer[2];
+    auto bDecodeTables = buffer[3];
+    auto dpCodewordStream = buffer[4];
+
     for(uint block = 0; block < streamCount; block++) {
         // get GPU buffers
-        uint* dpCodewordStream = (uint*)pInstance->getBuffer<byte>(symbolStreamMaxBytes);
+        //uint* dpCodewordStream = (uint*)pInstance->getBuffer<byte>(symbolStreamMaxBytes);
 
         // fill stream infos
         // all buffers except the symbol stream buffers are shared between compacted symbols and zero counts
         HuffmanGPUStreamInfo& streamInfoSymbols = resources.pSymbolStreamInfos[block];
         HuffmanGPUStreamInfo& streamInfoZeroCounts = resources.pZeroCountStreamInfos[block];
 
-        streamInfoSymbols.dpSymbolStream = (byte*)(dpSymbolStreamCompacted + block * symbolCountPerBlockPadded);
-        streamInfoZeroCounts.dpSymbolStream = (byte*)(dpZeroCounts + block * symbolCountPerBlockPadded);
+        streamInfoSymbols.dpSymbolStream = VkUtil::getBufferAddress(pInstance->vkContext.device, bSymbolStreamCompacted);//(byte*)(dpSymbolStreamCompacted + block * symbolCountPerBlockPadded);
+        streamInfoZeroCounts.dpSymbolStream = VkUtil::getBufferAddress(pInstance->vkContext.device, bZeroCounts);//(byte*)(dpZeroCounts + block * symbolCountPerBlockPadded);
 
-        streamInfoSymbols.dpCodewordStream = streamInfoZeroCounts.dpCodewordStream = dpCodewordStream;
+        streamInfoSymbols.dpCodewordStream = streamInfoZeroCounts.dpCodewordStream = VkUtil::getBufferAddress(pInstance->vkContext.device, dpCodewordStream);
         // streamInfo.dpOffsets will be filled later, with pointers into our single dpOffsets buffer (see above)
         // streamInfo.dpDecodeTable will be filled later, with pointers into our single dpDecodeTables buffer (see above)
     }
 
-    util::CudaScopedTimer timerLow(pInstance->Encode.timerDecodeLowDetail);
-    util::CudaScopedTimer timerHigh(pInstance->Encode.timerDecodeHighDetail);
+    //util::CudaScopedTimer timerLow(pInstance->Encode.timerDecodeLowDetail);
+    //util::CudaScopedTimer timerHigh(pInstance->Encode.timerDecodeHighDetail);
 
-    timerLow("Huffman Decode Symbols");
+    //timerLow("Huffman Decode Symbols");
 
-    timerHigh("Symbols:    Upload (+read BitStream)");
+    //timerHigh("Symbols:    Upload (+read BitStream)");
 
     uint* pSymbolOffsetsNext = resources.pSymbolOffsets;
     uint* dpOffsetsNext = dpOffsets;
@@ -638,6 +662,9 @@ bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly* ppBitStreams[], boo
 template<typename Symbol>
 bool encodeHuff(GpuInstance* pInstance, BitStream* ppBitStreams[], bool singleBitStream, /*const*/ Symbol* const pdpSymbolStreams[], uint streamCount, uint symbolCountPerStream)
 {
+    // not yet encoded
+    return false;
+    /*
     uint symbolStreamMaxBytes = symbolCountPerStream * sizeof(Symbol);
     uint offsetStreamMaxBytes = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize) * sizeof(uint);
 
@@ -777,6 +804,7 @@ bool encodeHuff(GpuInstance* pInstance, BitStream* ppBitStreams[], bool singleBi
     pInstance->releaseBuffers(4);
 
     return true;
+    */
 }
 
 template<typename Symbol>

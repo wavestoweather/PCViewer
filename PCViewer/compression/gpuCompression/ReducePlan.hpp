@@ -4,7 +4,7 @@
 #include "../../VkUtil.h"
 
 
-namespace cudaCompress {
+namespace vkCompress {
 
 class ReducePlan
 {

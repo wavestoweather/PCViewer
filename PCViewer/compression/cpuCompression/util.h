@@ -44,5 +44,31 @@ inline void align(T*& pData, uint numBytes)
 
 }
 
+namespace vkCompress {
+
+inline uint getRequiredBits(uint maxValue)
+{
+    uint requiredBits = 0;
+    while(maxValue > 0) {
+        requiredBits++;
+        maxValue >>= 1;
+    }
+
+    return requiredBits;
+}
+
+inline size_t getAlignedSize(size_t size, uint numBytes)
+{
+    return (size + numBytes - 1) / numBytes * numBytes;
+}
+
+template<typename T>
+inline void align(T*& pData, uint numBytes)
+{
+    pData = (T*)getAlignedSize(size_t(pData), numBytes);
+}
+
+}
+
 
 #endif

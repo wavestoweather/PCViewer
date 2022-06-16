@@ -3,7 +3,7 @@
 #include "../cpuCompression/util.h"
 #include "../../range.hpp"
 
-namespace cudaCompress {
+namespace vkCompress {
 const int SCAN_ELTS_PER_THREAD = 8;
 const int SCAN_CTA_SIZE = 128;
 

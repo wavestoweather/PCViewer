@@ -6,6 +6,7 @@
 #include "largeVis/Renderer.hpp"
 #include "range.hpp"
 #include "PCUtil.h"
+#include "compression/gpuCompression/Encode.hpp"
 #include <iostream>
 
 void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
@@ -56,4 +57,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // testing the rendering pipeline creation ----------------------------
     //auto renderer = compression::Renderer::acquireReference({context, testInfo.pcNoClearPass, testInfo.pcFramebuffer});
+
+    // testing gpu decompression
+    vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
 }

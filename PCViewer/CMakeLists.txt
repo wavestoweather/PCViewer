@@ -62,6 +62,7 @@ file(GLOB rtree_SRC
 file(GLOB compress_SRC
     "compression/*.cpp"
     "compression/cpuCompression/*.cpp"
+    "compression/gpuCompression/*.cpp"
 )
     
 file(GLOB largeVis_SRC

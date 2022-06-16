@@ -4,8 +4,11 @@
 #include "../cpuCompression/global.h"
 #include "ScanPlan.hpp"
 #include "ReducePlan.hpp"
+#include "HuffmanTable.h"
 
 namespace vkCompress{
+struct HuffmanGPUStreamInfo;
+
 struct GpuInstance{
 public:
     GpuInstance(VkUtil::Context context, uint32_t streamCountMax, uint32_t elemCountPerStreamMax, uint32_t codingBlockSize, uint32_t log2HuffmanDistinctSymbolCountMax);
@@ -13,14 +16,86 @@ public:
 
     VkUtil::Context vkContext{};      // holds gpu device information
 
-    uint m_streamCountMax{};
+    uint m_streamCountMax{1};
     uint m_elemCountPerStreamMax{};
     uint m_codingBlockSize{};
     uint m_log2HuffmanDistinctSymbolCountMax{14};
+    uint m_warpSize{};
 
     ScanPlan* m_pScanPlan{};
     ReducePlan* m_pReducePlan{};
     // todo fill
+
+    // TIER 1
+    struct EncodeResources
+    {
+        // encode*:
+        // used for downloads
+        uint* pCodewordBuffer;
+        uint* pOffsetBuffer;
+        uint* pEncodeCodewords;
+        uint* pEncodeCodewordLengths;
+
+        HuffmanGPUStreamInfo* pEncodeSymbolStreamInfos;
+
+        std::vector<HuffmanEncodeTable> symbolEncodeTables;
+        std::vector<HuffmanEncodeTable> zeroCountEncodeTables;
+
+        VkFence encodeFinishedFence;
+
+        // decode*:
+        // decode resources are multi-buffered to avoid having to sync too often
+        struct DecodeResources
+        {
+            VkFence syncFence;
+
+            std::vector<HuffmanDecodeTable> symbolDecodeTables;
+            std::vector<HuffmanDecodeTable> zeroCountDecodeTables;
+            VkBuffer pSymbolDecodeTablesBuffer;
+            VkDeviceSize symbolDecodeTablesBufferOffset;
+            VkBuffer pZeroCountDecodeTablesBuffer;
+            VkDeviceSize ZeroCountDecodeTablesBufferOffset;
+
+            VkBuffer  pCodewordStreams;
+            VkDeviceSize codewordStreamsOffset;
+            VkBuffer  pSymbolOffsets;
+            VkDeviceSize symbolOffsetsOffset;
+            VkBuffer  pZeroCountOffsets;
+            VkDeviceSize zeroCountOffsetsOffset;
+
+            HuffmanGPUStreamInfo* pSymbolStreamInfos;
+            HuffmanGPUStreamInfo* pZeroCountStreamInfos;
+
+            VkDeviceMemory memory;
+
+            DecodeResources()
+                : syncFence(0)
+                , pSymbolDecodeTablesBuffer(nullptr), pZeroCountDecodeTablesBuffer(nullptr)
+                , pCodewordStreams(nullptr), pSymbolOffsets(nullptr), pZeroCountOffsets(nullptr)
+                , pSymbolStreamInfos(nullptr), pZeroCountStreamInfos(nullptr) {}
+        };
+        const static int ms_decodeResourcesCount = 8;
+        DecodeResources Decode[ms_decodeResourcesCount];
+        int nextDecodeResources;
+        DecodeResources& GetDecodeResources() {
+            DecodeResources& result = Decode[nextDecodeResources];
+            nextDecodeResources = (nextDecodeResources + 1) % ms_decodeResourcesCount;
+            return result;
+        }
+
+
+        //util::CudaTimerResources timerEncodeLowDetail;
+        //util::CudaTimerResources timerEncodeHighDetail;
+        //util::CudaTimerResources timerDecodeLowDetail;
+        //util::CudaTimerResources timerDecodeHighDetail;
+
+        EncodeResources()
+            : pCodewordBuffer(nullptr), pOffsetBuffer(nullptr)
+            , pEncodeCodewords(nullptr), pEncodeCodewordLengths(nullptr)
+            , pEncodeSymbolStreamInfos(nullptr)
+            , encodeFinishedFence(0)
+            , nextDecodeResources(0) {}
+    } Encode;
 
     struct HistogramResources
     {
@@ -58,6 +133,6 @@ public:
     } Quantization;
 
 private:
-    
+    uint m_bufferSize;
 };
 }
