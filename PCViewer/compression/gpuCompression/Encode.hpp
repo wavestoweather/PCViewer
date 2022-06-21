@@ -35,6 +35,9 @@ bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly& bitStream, Symbol32
 bool encodeHuff(GpuInstance* pInstance, BitStream& bitStream, /*const*/ Symbol32* const pdpSymbolStreams[], uint streamCount, uint symbolCountPerBlock);
 bool decodeHuff(GpuInstance* pInstance, BitStreamReadOnly& bitStream, Symbol32* pdpSymbolStreams[], uint streamCount, uint symbolCountPerBlock);
 
+// vulkan decode rlhuff with only a single bit stream and also only a single block for decoding
+bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly& bitStream, std::vector<Symbol16>& symbolStream);
+bool decodeRLHuff(GpuInstance* pInstance, VkBuffer bitStreamBuffer, BitStream& currentBitStream, size_t curBitStreamOffset, VkBuffer symbolBuffer, uint symbolSize, VkCommandBuffer commands);
 
 // separate bitstream for each block (but may contain duplicates)
 bool encodeRLHuff(GpuInstance* pInstance, BitStream* ppBitStreams[], const Symbol16* const pdpSymbolStreams[], uint streamCount, uint symbolCountPerBlock);

@@ -1443,8 +1443,7 @@ void VkUtil::downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice,
 	createBuffer(device, byteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &stagingBuffer);
 	VkMemoryRequirements memReq;
 	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReq);
-	VkMemoryAllocateInfo memAlloc{}
-	
+	VkMemoryAllocateInfo memAlloc{};
 	memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	memAlloc.allocationSize = memReq.size;
 	memAlloc.memoryTypeIndex = findMemoryType(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);

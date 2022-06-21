@@ -63,6 +63,10 @@ public:
             VkBuffer  pZeroCountOffsets;
             VkDeviceSize zeroCountOffsetsOffset;
 
+            // actually only these have to be filled for the decoding to work
+            // so: Create in the decode function buffers and fill them with the correct infos,
+            //  and then bind them to the buffer adresses here
+            // for the huffman decode function: create a vulkan buffer out of this array and bind that to the pipeline
             HuffmanGPUStreamInfo* pSymbolStreamInfos;
             HuffmanGPUStreamInfo* pZeroCountStreamInfos;
 

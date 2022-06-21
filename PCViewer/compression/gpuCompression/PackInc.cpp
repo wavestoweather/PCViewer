@@ -36,11 +36,22 @@ namespace vkCompress
 
     void packInc16CPU(const uint* pValues, ushort* pValueIncrements, uint valueCount) 
     {
-        
+        // written to work correctly even when pValues and pValueIncrements alias
+        uint prev = pValues[0];
+        pValueIncrements[0] = prev;
+        for(uint i = 1; i < valueCount; i++) {
+            uint value = pValues[i];
+            pValueIncrements[i] = pValues[i] - prev;
+            prev = value;
+        }
     }
 
-    void unpackInc16CPU(const uint* pValues, ushort* pValueIncrements, uint valueCount) 
+    void unpackInc16CPU(uint* pValues, const ushort* pValueIncrements, uint valueCount) 
     {
-        
+        uint total = 0;
+        for(uint i = 0; i < valueCount; i++) {
+            total += pValueIncrements[i];
+            pValues[i] = total;
+        }
     }
 }

@@ -1,5 +1,4 @@
-#ifndef __TUM3D_CUDACOMPRESS__BIT_STREAM_H__
-#define __TUM3D_CUDACOMPRESS__BIT_STREAM_H__
+#pragma once
 
 
 #include "global.h"
@@ -10,7 +9,7 @@
 #include <cstring>
 
 
-namespace cudaCompress {
+namespace vkCompress {
 
 class BitStreamReadOnly
 {
@@ -493,11 +492,3 @@ inline void BitStream::resizeVector(uint newSize)
 }
 
 }
-
-namespace vkCompress{
-typedef cudaCompress::BitStream BitStream;
-typedef cudaCompress::BitStreamReadOnly BitStreamReadOnly;
-}
-
-
-#endif

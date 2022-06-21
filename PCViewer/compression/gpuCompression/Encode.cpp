@@ -5,6 +5,8 @@
 #include "../cpuCompression/util.h"
 #include "HuffmanTable.h"
 #include "Huffman.hpp"
+#include "PackInc.hpp"
+#include "VkPointer.hpp"
 
 namespace vkCompress {
 using namespace cudaCompress;
@@ -524,8 +526,8 @@ bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly* ppBitStreams[], boo
 
     //timerHigh("Symbols:    Upload (+read BitStream)");
 
-    uint* pSymbolOffsetsNext = resources.pSymbolOffsets;
-    uint* dpOffsetsNext = dpOffsets;
+    VkPointer pSymbolOffsetsNext = {resources.pSymbolOffsets, resources.memory, 0, resources.symbolOffsetsOffset};
+    VkPointer dpOffsetsNext = {bOffsets, memory, 0, offsets[2]};//dpOffsets;
     // read and upload decode tables, upload codeword streams and offsets, and fill stream info for symbols
     std::vector<HuffmanDecodeTable>& symbolDecodeTables = resources.symbolDecodeTables;
     size_t symbolDecodeTablesBufferOffset = 0;
@@ -595,14 +597,14 @@ bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly* ppBitStreams[], boo
     size_t offsetCountTotal = pSymbolOffsetsNext - resources.pSymbolOffsets;
     cudaSafeCall(cudaMemcpyAsync(dpOffsets, resources.pSymbolOffsets, offsetCountTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
 
-    timerHigh("Symbols:    Huffman Decode");
+   // timerHigh("Symbols:    Huffman Decode");
 
     // decode symbols
     huffmanDecode(pInstance, resources.pSymbolStreamInfos, streamCount, pInstance->m_codingBlockSize);
 
-    timerLow("Huffman Decode ZeroCounts");
+    //timerLow("Huffman Decode ZeroCounts");
 
-    timerHigh("ZeroCounts: Upload");
+    //timerHigh("ZeroCounts: Upload");
 
     uint* pZeroCountOffsetsNext = resources.pZeroCountOffsets;
     dpOffsetsNext = dpOffsets;
@@ -657,6 +659,59 @@ bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly* ppBitStreams[], boo
     pInstance->releaseBuffers(4 + 1 * streamCount);
 
     return true;
+}
+
+bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly& bitStream, std::vector<Symbol16>& symbolStream){
+
+}
+
+bool decodeRLHuff(GpuInstance* pInstance, VkBuffer bitStreamBuffer, BitStream& currentBitStream, size_t decodeTableOffset, size_t codewordStreamOffset, VkBuffer symbolBuffer, uint symbolSize, VkCommandBuffer commands){
+    const bool useGpuUnpackInc = false;
+    const auto& context = pInstance->vkContext;
+    
+    // getting the symbol count from the bit stream
+    auto &resources = pInstance->Encode.GetDecodeResources();
+    HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
+    currentBitStream.readAligned(&streamInfo.symbolCount, 1);
+    resources.pZeroCountStreamInfos[0].symbolCount = streamInfo.symbolCount;
+
+    // getting the cpu huffman decode table
+    HuffmanDecodeTable& decodeTable = resources.symbolDecodeTables[0];
+    decodeTable.readFromBitStream(pInstance, currentBitStream);
+
+    // upload to gpu not needed, as already done in loading the compressed dataset, so binding data which is already on gpu
+    streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, bitStreamBuffer) + decodeTableOffset; // The  //dpDecodeTables + symbolDecodeTablesBufferOffset;
+    streamInfo.decodeSymbolTableSize = decodeTable.getSymbolTableSize();
+    size_t symbolDecodeTablesBufferOffset = getAlignedSize(decodeTable.computeGPUSize(pInstance), 128);
+
+    // set the codeword buffer address
+    streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, bitStreamBuffer) + codewordStreamOffset;
+    uint codewordBitsize;
+    currentBitStream.readAligned(&codewordBitsize, 1);
+    uint codewordUintCount = getNumUintsForBits(codewordBitsize);
+    currentBitStream.skipBits(codewordUintCount * sizeof(uint) * 8);    // skipping the codeword stream in the bit stream
+
+    // calculating the symbol offsets pointer (doing it currently on the cpu. Use const bool at the beginning of the function to change behaviour)
+    if(useGpuUnpackInc){
+        // TODO implement
+    }
+    else{
+        // get symbol offsets pointer
+        uint numOffsets = getNumOffsets(symbolSize, pInstance->m_codingBlockSize);
+        currentBitStream.align<uint>();
+        const uint* pOffsets = currentBitStream.getRaw() + currentBitStream.getBitPosition() / (sizeof(uint)*8);
+        currentBitStream.skipAligned<ushort>(numOffsets);
+
+        // make offsets absolute (prefix sum)
+        std::vector<uint> symbolOffsets(numOffsets);
+        unpackInc16CPU(symbolOffsets.data(), (const ushort*)pOffsets, numOffsets);
+        // upload offsets data
+        VkUtil::uploadData(context.device, resources.memory, resources.symbolOffsetsOffset, symbolOffsets.size() * sizeof(symbolOffsets[0]), symbolOffsets.data());
+        streamInfo.dpOffsets = 0;// TODO missing
+    }
+
+    // zero counts ? Whatever these are ....+
+    
 }
 
 template<typename Symbol>
