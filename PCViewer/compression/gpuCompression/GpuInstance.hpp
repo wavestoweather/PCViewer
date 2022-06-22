@@ -5,6 +5,7 @@
 #include "ScanPlan.hpp"
 #include "ReducePlan.hpp"
 #include "HuffmanTable.h"
+#include <map>
 
 namespace vkCompress{
 struct HuffmanGPUStreamInfo;
@@ -15,6 +16,7 @@ public:
     ~GpuInstance();
 
     VkUtil::Context vkContext{};      // holds gpu device information
+    uint m_subgroupSize{};            // is taken from the physical device properties on creation
 
     uint m_streamCountMax{1};
     uint m_elemCountPerStreamMax{};
@@ -47,8 +49,13 @@ public:
         // decode resources are multi-buffered to avoid having to sync too often
         struct DecodeResources
         {
+            VkUtil::PipelineInfo decodeHuffmanLong{};
+            VkUtil::PipelineInfo decodeHuffmanShort{};
+            std::map<uint32_t, VkUtil::PipelineInfo> huffmanTransposeShort{};
+            std::map<uint32_t, VkUtil::PipelineInfo> huffmanTransposeLong{};
             VkFence syncFence;
 
+            // unnesseary, should be removed for publication -----------------------------------------
             std::vector<HuffmanDecodeTable> symbolDecodeTables;
             std::vector<HuffmanDecodeTable> zeroCountDecodeTables;
             VkBuffer pSymbolDecodeTablesBuffer;
@@ -62,6 +69,12 @@ public:
             VkDeviceSize symbolOffsetsOffset;
             VkBuffer  pZeroCountOffsets;
             VkDeviceSize zeroCountOffsetsOffset;
+            // end: unnesseary, should be removed for publication -----------------------------------------
+
+            VkBuffer streamInfos;
+            size_t streamInfosOffset;       // offset from memory start
+
+            VkDescriptorSet streamInfoSet;  // descriptor set containgin the stream infos
 
             // actually only these have to be filled for the decoding to work
             // so: Create in the decode function buffers and fill them with the correct infos,

@@ -149,4 +149,53 @@ namespace vkCompress
         }        
         return true;
     }
+
+    bool huffmanDecode(GpuInstance* pInstance, VkCommandBuffer commands, VkDescriptorSet streamInfosSet, uint streamCount, uint codingBlockSize){
+        assert(streamCount == 1); // currently only a single buffer at once is allowed
+        auto pStreamInfos = pInstance->Encode.Decode[0].pSymbolStreamInfos;
+        bool longSymbols = (pInstance->m_log2HuffmanDistinctSymbolCountMax > 16);
+
+        // get max number of symbols
+        uint symbolCountPerStreamMax = 0;
+        for(uint i = 0; i < streamCount; i++)
+            symbolCountPerStreamMax = max(symbolCountPerStreamMax, pStreamInfos[i].symbolCount);
+    
+        if(symbolCountPerStreamMax == 0) {
+            //pInstance->releaseBuffer();
+            return true;
+        }
+    
+        // launch decode kernel
+        uint threadCountPerStream = (symbolCountPerStreamMax + codingBlockSize - 1) / codingBlockSize;
+        uint blockSize = min(192u, threadCountPerStream);
+        blockSize = max(blockSize, HUFFMAN_LOOKUP_SIZE);
+        assert(blockSize >= HUFFMAN_LOOKUP_SIZE);
+        uint32_t dispatchX = (threadCountPerStream + blockSize - 1) / blockSize;
+        uint32_t dispatchY = streamCount;
+    
+        if(longSymbols) {
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanLong.pipelineLayout, 0, 1, &streamInfosSet, 0, {});
+            vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanLong.pipeline);
+        } else {
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanShort.pipelineLayout, 0, 1, &streamInfosSet, 0, {});
+            vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanShort.pipeline);
+        }
+        vkCmdDispatch(commands, dispatchX, dispatchY, 1);
+        
+        // launch transpose kernel
+        const uint transposeBlockdimX = pInstance->m_subgroupSize;//gl_SubgroupSize; TODO: change to automatically query subgroup size
+        const uint transposeBlockdimY = 8;
+        //dim3 blockCountTranspose((symbolCountPerStreamMax + WARP_SIZE * codingBlockSize - 1) / (WARP_SIZE * codingBlockSize), streamCount);
+    
+        vkCmdPipelineBarrier(commands, VK_SHADER_STAGE_COMPUTE_BIT, VK_SHADER_STAGE_COMPUTE_BIT, 0, 0, {}, 0, {}, 0, {});
+        if(longSymbols) {
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeLong[codingBlockSize].pipelineLayout, 0, 1, &streamInfosSet, 0, {});
+            vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeLong[codingBlockSize].pipeline);
+        } else {
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeShort[codingBlockSize].pipelineLayout, 0, 1, &streamInfosSet, 0, {});
+            vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeShort[codingBlockSize].pipeline);
+        }        
+        vkCmdDispatch(commands, (symbolCountPerStreamMax + transposeBlockdimX * codingBlockSize - 1) / (transposeBlockdimX * codingBlockSize), streamCount, 1);
+        return true;    
+    }
 }

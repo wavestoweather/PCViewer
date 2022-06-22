@@ -492,3 +492,8 @@ inline void BitStream::resizeVector(uint newSize)
 }
 
 }
+
+namespace cudaCompress{
+    using BitStream = vkCompress::BitStream;
+    using BitStreamReadOnly = vkCompress::BitStreamReadOnly;
+}

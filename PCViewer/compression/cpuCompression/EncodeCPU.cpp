@@ -13,6 +13,7 @@
 
 
 namespace cudaCompress {
+using namespace vkCompress;
 
 std::string getCoderName(ECoder coder)
 {
