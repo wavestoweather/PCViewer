@@ -315,7 +315,66 @@ bool runLengthDecode(Instance* pInstance, const Symbol* dpSymbolsCompact, const 
     return true;
 }
 
+bool runLengthDecode(GpuInstance* pInstance, VkCommandBuffer commands, VkDescriptorSet rLSet){
+    ssert(streamCount == 1);
+    assert(stride <= pInstance->m_elemCountPerStreamMax);
 
+    uint symbolCountCompactMax = 0;
+    for(uint i = 0; i < streamCount; i++) {
+        symbolCountCompactMax = max(symbolCountCompactMax, pSymbolCountCompact[i]);
+    }
+
+    if(symbolCountCompactMax > 0) {
+
+        // run prefix sum on zero counts to get valid symbol indices
+        // combine scans below cutoff into multi-row scans
+        const uint cutoff = 64 * 1024; // chosen quite arbitrarily; TODO: benchmark scanArray...
+        for(uint streamStart = 0; streamStart < streamCount; ) {
+            uint elemCount = pSymbolCountCompact[streamStart];
+            if(elemCount == 0) { streamStart++; continue; }
+
+            uint streamEnd = streamStart + 1;
+            if(elemCount <= cutoff) {
+                while(streamEnd < streamCount && pSymbolCountCompact[streamEnd] <= cutoff) {
+                    elemCount = max(elemCount, pSymbolCountCompact[streamEnd]);
+                    streamEnd++;
+                }
+            }
+            if(elemCount > 0) {
+                uint offset = streamStart * stride;
+                scanArray<Symbol16, uint, false>(dpValidSymbolIndices + offset, dpZeroCounts + offset, elemCount, streamEnd - streamStart, stride, pInstance->m_pScanPlan, pInstance->m_stream);
+            }
+
+            streamStart = streamEnd;
+        }
+        //// simple version that just scans all streams at once
+        //scanArray<Symbol, uint, false>(dpValidSymbolIndices, dpZeroCounts, symbolCountCompactMax, streamCount, stride, pInstance->m_pScanPlan, pInstance->m_stream);
+        //cudaCheckMsg("runLengthDecode: Error in scanArray");
+
+        // upload symbol stream pointers and compact symbol counts
+        Symbol** ppSymbolsUpload        = (Symbol**)pInstance->RunLength.pUpload;
+        uint* pSymbolCountCompactUpload = (uint*)(ppSymbolsUpload + streamCount);
+        cudaSafeCall(cudaEventSynchronize(pInstance->RunLength.syncEventUpload));
+        memcpy(ppSymbolsUpload,           pdpSymbols,          streamCount * sizeof(Symbol*));
+        memcpy(pSymbolCountCompactUpload, pSymbolCountCompact, streamCount * sizeof(uint));
+        cudaSafeCall(cudaMemcpyAsync(dpUploads, pInstance->RunLength.pUpload, streamCount * (sizeof(Symbol*) + sizeof(uint)), cudaMemcpyHostToDevice, pInstance->m_stream));
+        cudaSafeCall(cudaEventRecord(pInstance->RunLength.syncEventUpload, pInstance->m_stream));
+
+        // expand symbol stream - scattered write of non-zero symbols
+        Symbol** dppSymbols = (Symbol**)dpUploads;
+        uint* dpSymbolCountCompact = (uint*)(dppSymbols + streamCount);
+
+        uint blockSize = 256;
+        dim3 blockCount(min((symbolCountCompactMax + blockSize - 1) / blockSize, 256u), streamCount);
+
+        runLengthDecodeMultiScatterKernel<<<blockCount, blockSize, 0, pInstance->m_stream>>>(dpSymbolsCompact, stride, dpValidSymbolIndices, stride, dpSymbolCountCompact, dppSymbols);
+        cudaCheckMsg("runLengthDecodeMultiScatterKernel execution failed");
+    }
+
+    pInstance->releaseBuffers(2);
+
+    return true;
+}
 
 bool runLengthEncode(Instance* pInstance, Symbol16** pdpSymbolsCompact, Symbol16** pdpZeroCounts, const Symbol16** pdpSymbols, const uint* pSymbolCount, uint streamCount, uint zeroCountMax, uint* pSymbolCountCompact)
 {

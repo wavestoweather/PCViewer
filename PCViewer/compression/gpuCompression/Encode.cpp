@@ -721,25 +721,43 @@ bool decodeRLHuff(GpuInstance* pInstance, VkBuffer bitStreamBuffer, BitStream& c
 }
 
 // decoding with proper input data structures
+// decodes only 16 bit symbols
 // this is the same function as the orignial decodeRLHuff with easier setup, and pre setup of the data structures
 bool decodeRLHuff(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataCpu, const RLHuffDecodeDataGpu& decodeDataGpu, VkCommandBuffer commands){
     const auto& context = pInstance->vkContext;
     auto &resources = pInstance->Encode.GetDecodeResources();
+    
+    // decompressing the zero counts -------------------------------------------------
     HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
     
-    resources.pZeroCountStreamInfos[0].symbolCount = decodeDataCpu.symbolCount;
+    streamInfo.symbolCount = decodeDataCpu.symbolCount;
 
-    streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.decodeTableOffset;
+    streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.symbolTableOffset;
     streamInfo.decodeSymbolTableSize = decodeDataCpu.decodeTable.getSymbolTableSize();
 
-    streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.codewordStreamOffset;
+    streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.symbolStreamOffset;
 
     streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.zeroCountOffsetsOffset;
 
     // uploading the stream info and calling the decoding function for the rl encoded stream
+    // note: the descriptor set resources.streamInfoSet has to be created and the streamInfos buffer has to be bound
     VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(HuffmanGPUStreamInfo), &streamInfo);
     huffmanDecode(pInstance, commands, resources.streamInfoSet, 1, pInstance->m_codingBlockSize);
 
+    // decompressing the zero counts -------------------------------------------------
+    HuffmanGPUStreamInfo& zeroStreamInfo = resources.pZeroCountStreamInfos[0];
+    zeroStreamInfo.symbolCount = decodeDataCpu.symbolCount; // symbol count is equivalent to the normal decomrpession symbol count
+    
+    zeroStreamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) +  decodeDataGpu.zeroCountTableOffset;
+    zeroStreamInfo.decodeSymbolTableSize = decodeDataCpu.zeroCountTable.getSymbolTableSize();
+
+    zeroStreamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.zeroCountStreamOffset;
+
+    zeroStreamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.zeroCountOffsetsOffset;
+    VkUtil::uploadData(context.device, resources.memory, resources.zeroStreamInfosOffset, sizeof(zeroStreamInfo), &zeroStreamInfo);
+    huffmanDecode(pInstance, commands, resources.zeroStreamInfoSet, 1, pInstance->m_codingBlockSize);
+
+    // decompressing the run length encoding ------------------------------------------
     
 }
 

@@ -21,11 +21,11 @@ struct RLHuffDecodeDataGpu{
     VkBuffer buffer{};
     VkDeviceMemory memory{};
 
-    size_t decodeTableOffset{};
-    size_t codewordStreamOffset{};
     size_t symbolTableOffset{};
+    size_t symbolStreamOffset{};
     size_t symbolOffsetsOffset{};
     size_t zeroCountTableOffset{};
+    size_t zeroCountStreamOffset{};
     size_t zeroCountOffsetsOffset{};
 
     // creates the gpu stuff from cpu stuff

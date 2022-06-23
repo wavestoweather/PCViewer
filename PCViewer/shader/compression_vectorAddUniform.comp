@@ -1,0 +1,39 @@
+#version 450
+
+layout(buffer_reference, scalar) buffer Uints {uint i[];};  // raw data
+
+layout(push_constant) uniform constants{
+    uint64_t outputAddress;
+    uint64_t blockSumsAddress;
+    uint numElements;
+    uint blockOffset;
+    uint baseIndex;
+};
+
+layout (local_size_x = 128,local_size_y=1,local_size_z=1) in;
+
+shared uint uni;
+void main(){
+    Uints d_vector = Uints(outputAddress);
+    Uints d_uniforms = Uints(blockSumsAddress);
+    // Get this block's uniform value from the uniform array in device memory
+    // We store it in shared memory so that the hardware's shared memory 
+    // broadcast capability can be used to share among all threads in each warp
+    // in a single cycle
+    if (gl_LocalInvocationID.x == 0)
+    {
+        uni = d_uniforms.i[gl_WorkGroupID.x + (gl_WorkGroupSize.x * gl_WorkGroupID.y) + blockOffset];
+    }
+
+    // Compute this thread's output address
+    int width = (gridDim.x * (gl_WorkGroupSize.x << 1));
+
+    uint address = baseIndex + (width * gl_WorkGroupID.y)
+        + gl_LocalInvocationID.x + (gl_WorkGroupID.x * (gl_WorkGroupSize.x << 1)); 
+
+    barrier();
+
+    // note two adds per thread: one in first half of the block, one in last
+    d_vector.i[address]              += uni;
+    if (gl_LocalInvocationID.x + gl_WorkGroupSize.x < numElements) d_vector.i[address + gl_WorkGroupSize.x] += uni;
+}

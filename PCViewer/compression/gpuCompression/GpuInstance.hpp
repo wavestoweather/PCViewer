@@ -73,8 +73,10 @@ public:
 
             VkBuffer streamInfos;
             size_t streamInfosOffset;       // offset from memory start
+            size_t zeroStreamInfosOffset;
 
             VkDescriptorSet streamInfoSet;  // descriptor set containgin the stream infos
+            VkDescriptorSet zeroStreamInfoSet;
 
             // actually only these have to be filled for the decoding to work
             // so: Create in the decode function buffers and fill them with the correct infos,
@@ -137,6 +139,9 @@ public:
         byte* pUpload{};
         VkFence syncFenceUpload{};
         VkUtil::PipelineInfo pipelineInfo{};
+
+        VkUtil::PipelineInfo exclusiveScanInfo{};
+        VkUtil::PipelineInfo inclusiveScanInfo{};
     } RunLength;
 
     struct DWTResources

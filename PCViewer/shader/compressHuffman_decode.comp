@@ -21,11 +21,11 @@ layout(binding = 0) buffer HuffmanInfo{
 
     uint64_t codewordStream;
     uint64_t offsets;
-    uint symbolCount;
     uint64_t encodeCodewords;
     uint64_t encodeCodewordLengths;
     uint64_t decodeTable;
     uint decodeSymbolTableSize;
+    uint symbolCount;
 }infos[];
 
 layout(push_constant) uniform constants{

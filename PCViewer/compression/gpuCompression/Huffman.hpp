@@ -17,9 +17,6 @@ struct HuffmanGPUStreamInfo
     VkDeviceAddress dpCodewordStream;
     VkDeviceAddress dpOffsets;
 
-    // common info
-    uint symbolCount;
-
     // encoder-only info
     VkDeviceAddress dpEncodeCodewords;
     VkDeviceAddress dpEncodeCodewordLengths;
@@ -27,6 +24,9 @@ struct HuffmanGPUStreamInfo
     // decoder-only info
     VkDeviceAddress dpDecodeTable;
     uint decodeSymbolTableSize;
+    
+    // common info
+    uint symbolCount;
 };
 
 size_t huffmanGetRequiredMemory(const GpuInstance* pInstance);
