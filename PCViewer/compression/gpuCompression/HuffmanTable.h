@@ -7,6 +7,7 @@
 #include "GpuInstance.hpp"
 
 namespace vkCompress{
+struct GpuInstance;
 
 class HuffmanDecodeTable
 {
@@ -29,8 +30,8 @@ public:
     void uploadToGPUAsync(const GpuInstance* pInstance, byte* dpTable) const;
     void syncOnLastAsyncUpload() const;
 
-private:
     cudaCompress::byte* m_pStorage;
+private:
 
     // indexed by codeword length
     // these are just pointers into m_pCodewordIndex

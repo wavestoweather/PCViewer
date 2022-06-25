@@ -476,193 +476,193 @@ bool encodeRLHuff(GpuInstance* pInstance, BitStream* ppBitStreams[], bool single
 template<typename Symbol>
 bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly* ppBitStreams[], bool singleBitStream, Symbol* pdpSymbolStreams[], uint streamCount, uint symbolCountPerStream)
 {
-    assert(streamCount == 1);   // more than 1 block is currently not supported
-    const uint warpSize = pInstance->m_warpSize;
-    uint pad = warpSize * pInstance->m_codingBlockSize;
-    uint symbolCountPerBlockPadded = (symbolCountPerStream + pad - 1) / pad * pad;
+    //assert(streamCount == 1);   // more than 1 block is currently not supported
+    //const uint warpSize = pInstance->m_warpSize;
+    //uint pad = warpSize * pInstance->m_codingBlockSize;
+    //uint symbolCountPerBlockPadded = (symbolCountPerStream + pad - 1) / pad * pad;
+//
+    //uint symbolStreamMaxBytes = symbolCountPerStream * sizeof(Symbol);
+    //uint offsetStreamMaxBytes = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize) * sizeof(uint);
+    //GpuInstance::EncodeResources::DecodeResources& resources = pInstance->Encode.GetDecodeResources();
+    //check_vk_result(vkWaitForFences(pInstance->vkContext.device, 1, &resources.syncFence, VK_TRUE, 0));
+    ////cudaSafeCall(cudaEventSynchronize(resources.syncEvent));
+//
+    ////Symbol* dpSymbolStreamCompacted = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
+    ////Symbol* dpZeroCounts            = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
+    ////uint* dpOffsets = (uint*)pInstance->getBuffer<byte>(streamCount * offsetStreamMaxBytes);
+    //size_t decodeTableSizeMax = getAlignedSize(HuffmanDecodeTable::computeMaxGPUSize(pInstance), 128);
+    ////byte* dpDecodeTables = pInstance->getBuffer<byte>(streamCount * decodeTableSizeMax);
+    //
+    //std::vector<VkDeviceSize> sizes{streamCount * symbolCountPerBlockPadded * sizeof(Symbol), streamCount * symbolCountPerBlockPadded * sizeof(Symbol), streamCount * offsetStreamMaxBytes, streamCount * decodeTableSizeMax, symbolStreamMaxBytes};
+    //std::vector<VkBufferUsageFlags> usages(sizes.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    //auto [buffer, offsets, memory] = VkUtil::createMultiBufferBound(pInstance->vkContext, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    //auto bSymbolStreamCompacted = buffer[0];
+    //auto bZeroCounts = buffer[1];
+    //auto bOffsets = buffer[2];
+    //auto bDecodeTables = buffer[3];
+    //auto dpCodewordStream = buffer[4];
+//
+    //for(uint block = 0; block < streamCount; block++) {
+    //    // get GPU buffers
+    //    //uint* dpCodewordStream = (uint*)pInstance->getBuffer<byte>(symbolStreamMaxBytes);
+//
+    //    // fill stream infos
+    //    // all buffers except the symbol stream buffers are shared between compacted symbols and zero counts
+    //    HuffmanGPUStreamInfo& streamInfoSymbols = resources.pSymbolStreamInfos[block];
+    //    HuffmanGPUStreamInfo& streamInfoZeroCounts = resources.pZeroCountStreamInfos[block];
+//
+    //    streamInfoSymbols.dpSymbolStream = VkUtil::getBufferAddress(pInstance->vkContext.device, bSymbolStreamCompacted);//(byte*)(dpSymbolStreamCompacted + block * symbolCountPerBlockPadded);
+    //    streamInfoZeroCounts.dpSymbolStream = VkUtil::getBufferAddress(pInstance->vkContext.device, bZeroCounts);//(byte*)(dpZeroCounts + block * symbolCountPerBlockPadded);
+//
+    //    streamInfoSymbols.dpCodewordStream = streamInfoZeroCounts.dpCodewordStream = VkUtil::getBufferAddress(pInstance->vkContext.device, dpCodewordStream);
+    //    // streamInfo.dpOffsets will be filled later, with pointers into our single dpOffsets buffer (see above)
+    //    // streamInfo.dpDecodeTable will be filled later, with pointers into our single dpDecodeTables buffer (see above)
+    //}
+//
+    ////util::CudaScopedTimer timerLow(pInstance->Encode.timerDecodeLowDetail);
+    ////util::CudaScopedTimer timerHigh(pInstance->Encode.timerDecodeHighDetail);
+//
+    ////timerLow("Huffman Decode Symbols");
+//
+    ////timerHigh("Symbols:    Upload (+read BitStream)");
+//
+    //VkPointer pSymbolOffsetsNext = {resources.pSymbolOffsets, resources.memory, 0, resources.symbolOffsetsOffset};
+    //VkPointer dpOffsetsNext = {bOffsets, memory, 0, offsets[2]};//dpOffsets;
+    //// read and upload decode tables, upload codeword streams and offsets, and fill stream info for symbols
+    //std::vector<HuffmanDecodeTable>& symbolDecodeTables = resources.symbolDecodeTables;
+    //size_t symbolDecodeTablesBufferOffset = 0;
+    //std::vector<HuffmanDecodeTable>& zeroCountDecodeTables = resources.zeroCountDecodeTables;
+    //std::vector<const uint*> pZeroCountCodewordStreams(streamCount);
+    //std::vector<uint> zeroCountCodewordUintCounts(streamCount);
+    //std::vector<const uint*> pZeroCountOffsets(streamCount);
+    //for(uint block = 0; block < streamCount; block++) {
+    //    BitStreamReadOnly& bitStream = *ppBitStreams[singleBitStream ? 0 : block];
+//
+    //    HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[block];
+//
+    //    // read compacted symbol count
+    //    bitStream.readAligned(&streamInfo.symbolCount, 1);
+    //    resources.pZeroCountStreamInfos[block].symbolCount = streamInfo.symbolCount;
+//
+    //    // 1. compacted symbols
+    //    // read symbol decode table
+    //    symbolDecodeTables[block].readFromBitStream(pInstance, bitStream);
+//
+    //    // copy decode table into upload buffer
+    //    //symbolDecodeTables[block].copyToBuffer(pInstance, resources.pSymbolDecodeTablesBuffer + symbolDecodeTablesBufferOffset);
+    //    //streamInfo.dpDecodeTable = dpDecodeTables + symbolDecodeTablesBufferOffset;
+    //    streamInfo.decodeSymbolTableSize = symbolDecodeTables[block].getSymbolTableSize();
+    //    symbolDecodeTablesBufferOffset += getAlignedSize(symbolDecodeTables[block].computeGPUSize(pInstance), 128);
+//
+    //    // upload symbol codewords
+    //    uint codewordBitsize;
+    //    bitStream.readAligned(&codewordBitsize, 1);
+    //    uint codewordUintCount = getNumUintsForBits(codewordBitsize);
+    //    const uint* pCodewordStream = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
+    //    //cudaSafeCall(cudaMemcpyAsync(streamInfo.dpCodewordStream, pCodewordStream, codewordUintCount * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
+    //    bitStream.skipBits(codewordUintCount * sizeof(uint) * 8);
+//
+    //    // get symbol offsets pointer
+    //    uint numOffsets = getNumOffsets(streamInfo.symbolCount, pInstance->m_codingBlockSize);
+    //    bitStream.align<uint>();
+    //    const uint* pOffsets = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
+    //    bitStream.skipAligned<ushort>(numOffsets);
+//
+    //    // make offsets absolute (prefix sum)
+    //    //unpackInc16CPU(pSymbolOffsetsNext, (const ushort*)pOffsets, numOffsets);
+    //    pSymbolOffsetsNext += numOffsets;
+    //    streamInfo.dpOffsets = dpOffsetsNext;
+    //    dpOffsetsNext += numOffsets;
+//
+    //    // 2. zero counts
+    //    // read zero count decode table
+    //    zeroCountDecodeTables[block].readFromBitStream(pInstance, bitStream);
+//
+    //    // read zero count codewords pointer
+    //    bitStream.readAligned(&codewordBitsize, 1);
+    //    zeroCountCodewordUintCounts[block] = getNumUintsForBits(codewordBitsize);
+    //    pZeroCountCodewordStreams[block] = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
+    //    bitStream.skipBits(zeroCountCodewordUintCounts[block] * sizeof(uint) * 8);
+//
+    //    // read zero count offsets pointer
+    //    bitStream.align<uint>();
+    //    pZeroCountOffsets[block] = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
+    //    bitStream.skipAligned<ushort>(numOffsets);
+    //}
+//
+    //// upload decode tables
+    ////cudaSafeCall(cudaMemcpyAsync(dpDecodeTables, resources.pSymbolDecodeTablesBuffer, symbolDecodeTablesBufferOffset, cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+    //// upload offsets
+    //size_t offsetCountTotal = pSymbolOffsetsNext - resources.pSymbolOffsets;
+    ////cudaSafeCall(cudaMemcpyAsync(dpOffsets, resources.pSymbolOffsets, offsetCountTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+   //// timerHigh("Symbols:    Huffman Decode");
+//
+    //// decode symbols
+    ////huffmanDecode(pInstance, resources.pSymbolStreamInfos, streamCount, pInstance->m_codingBlockSize);
+//
+    ////timerLow("Huffman Decode ZeroCounts");
+//
+    ////timerHigh("ZeroCounts: Upload");
+//
+    //uint* pZeroCountOffsetsNext = resources.pZeroCountOffsets;
+    //dpOffsetsNext = dpOffsets;
+    //size_t zeroCountDecodeTablesBufferOffset = 0;
+    //// upload decode tables, codeword streams and offsets, and fill stream infos for zero counts
+    //for(uint block = 0; block < streamCount; block++) {
+    //    HuffmanGPUStreamInfo& streamInfo = resources.pZeroCountStreamInfos[block];
+//
+    //    // copy decode table into upload buffer
+    //    zeroCountDecodeTables[block].copyToBuffer(pInstance, resources.pZeroCountDecodeTablesBuffer + zeroCountDecodeTablesBufferOffset);
+    //    streamInfo.dpDecodeTable = dpDecodeTables + zeroCountDecodeTablesBufferOffset;
+    //    streamInfo.decodeSymbolTableSize = zeroCountDecodeTables[block].getSymbolTableSize();
+    //    zeroCountDecodeTablesBufferOffset += getAlignedSize(zeroCountDecodeTables[block].computeGPUSize(pInstance), 128);
+//
+    //    // upload zero count codewords
+    //    cudaSafeCall(cudaMemcpyAsync(streamInfo.dpCodewordStream, pZeroCountCodewordStreams[block], zeroCountCodewordUintCounts[block] * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+    //    uint numOffsets = getNumOffsets(streamInfo.symbolCount, pInstance->m_codingBlockSize);
+    //    unpackInc16CPU(pZeroCountOffsetsNext, (const ushort*)pZeroCountOffsets[block], numOffsets);
+    //    pZeroCountOffsetsNext += numOffsets;
+    //    streamInfo.dpOffsets = dpOffsetsNext;
+    //    dpOffsetsNext += numOffsets;
+    //}
+//
+    //// upload decode tables
+    //cudaSafeCall(cudaMemcpyAsync(dpDecodeTables, resources.pZeroCountDecodeTablesBuffer, zeroCountDecodeTablesBufferOffset, cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+    //// upload offsets
+    //offsetCountTotal = pZeroCountOffsetsNext - resources.pZeroCountOffsets;
+    //cudaSafeCall(cudaMemcpyAsync(dpOffsets, resources.pZeroCountOffsets, offsetCountTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+    //timerHigh("ZeroCounts: Huffman Decode");
+//
+    //// decode zero counts
+    //huffmanDecode(pInstance, resources.pZeroCountStreamInfos, streamCount, pInstance->m_codingBlockSize);
+//
+    //timerHigh();
+//
+    //timerLow("Run Length Decode");
+//
+    //// run length decode
+    //std::vector<uint> symbolCountsCompact(streamCount);
+    //for(uint block = 0; block < streamCount; block++) {
+    //    symbolCountsCompact[block] = resources.pSymbolStreamInfos[block].symbolCount;
+    //}
+    //runLengthDecode(pInstance, dpSymbolStreamCompacted, dpZeroCounts, symbolCountsCompact.data(), symbolCountPerBlockPadded, pdpSymbolStreams, symbolCountPerStream, streamCount);
+//
+    //timerLow();
+//
+    //cudaSafeCall(cudaEventRecord(resources.syncEvent, pInstance->m_stream));
 
-    uint symbolStreamMaxBytes = symbolCountPerStream * sizeof(Symbol);
-    uint offsetStreamMaxBytes = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize) * sizeof(uint);
-    GpuInstance::EncodeResources::DecodeResources& resources = pInstance->Encode.GetDecodeResources();
-    check_vk_result(vkWaitForFences(pInstance->vkContext.device, 1, &resources.syncFence, VK_TRUE, 0));
-    //cudaSafeCall(cudaEventSynchronize(resources.syncEvent));
-
-    //Symbol* dpSymbolStreamCompacted = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
-    //Symbol* dpZeroCounts            = pInstance->getBuffer<Symbol>(streamCount * symbolCountPerBlockPadded);
-    //uint* dpOffsets = (uint*)pInstance->getBuffer<byte>(streamCount * offsetStreamMaxBytes);
-    size_t decodeTableSizeMax = getAlignedSize(HuffmanDecodeTable::computeMaxGPUSize(pInstance), 128);
-    //byte* dpDecodeTables = pInstance->getBuffer<byte>(streamCount * decodeTableSizeMax);
-    
-    std::vector<VkDeviceSize> sizes{streamCount * symbolCountPerBlockPadded * sizeof(Symbol), streamCount * symbolCountPerBlockPadded * sizeof(Symbol), streamCount * offsetStreamMaxBytes, streamCount * decodeTableSizeMax, symbolStreamMaxBytes};
-    std::vector<VkBufferUsageFlags> usages(sizes.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    auto [buffer, offsets, memory] = VkUtil::createMultiBufferBound(pInstance->vkContext, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-    auto bSymbolStreamCompacted = buffer[0];
-    auto bZeroCounts = buffer[1];
-    auto bOffsets = buffer[2];
-    auto bDecodeTables = buffer[3];
-    auto dpCodewordStream = buffer[4];
-
-    for(uint block = 0; block < streamCount; block++) {
-        // get GPU buffers
-        //uint* dpCodewordStream = (uint*)pInstance->getBuffer<byte>(symbolStreamMaxBytes);
-
-        // fill stream infos
-        // all buffers except the symbol stream buffers are shared between compacted symbols and zero counts
-        HuffmanGPUStreamInfo& streamInfoSymbols = resources.pSymbolStreamInfos[block];
-        HuffmanGPUStreamInfo& streamInfoZeroCounts = resources.pZeroCountStreamInfos[block];
-
-        streamInfoSymbols.dpSymbolStream = VkUtil::getBufferAddress(pInstance->vkContext.device, bSymbolStreamCompacted);//(byte*)(dpSymbolStreamCompacted + block * symbolCountPerBlockPadded);
-        streamInfoZeroCounts.dpSymbolStream = VkUtil::getBufferAddress(pInstance->vkContext.device, bZeroCounts);//(byte*)(dpZeroCounts + block * symbolCountPerBlockPadded);
-
-        streamInfoSymbols.dpCodewordStream = streamInfoZeroCounts.dpCodewordStream = VkUtil::getBufferAddress(pInstance->vkContext.device, dpCodewordStream);
-        // streamInfo.dpOffsets will be filled later, with pointers into our single dpOffsets buffer (see above)
-        // streamInfo.dpDecodeTable will be filled later, with pointers into our single dpDecodeTables buffer (see above)
-    }
-
-    //util::CudaScopedTimer timerLow(pInstance->Encode.timerDecodeLowDetail);
-    //util::CudaScopedTimer timerHigh(pInstance->Encode.timerDecodeHighDetail);
-
-    //timerLow("Huffman Decode Symbols");
-
-    //timerHigh("Symbols:    Upload (+read BitStream)");
-
-    VkPointer pSymbolOffsetsNext = {resources.pSymbolOffsets, resources.memory, 0, resources.symbolOffsetsOffset};
-    VkPointer dpOffsetsNext = {bOffsets, memory, 0, offsets[2]};//dpOffsets;
-    // read and upload decode tables, upload codeword streams and offsets, and fill stream info for symbols
-    std::vector<HuffmanDecodeTable>& symbolDecodeTables = resources.symbolDecodeTables;
-    size_t symbolDecodeTablesBufferOffset = 0;
-    std::vector<HuffmanDecodeTable>& zeroCountDecodeTables = resources.zeroCountDecodeTables;
-    std::vector<const uint*> pZeroCountCodewordStreams(streamCount);
-    std::vector<uint> zeroCountCodewordUintCounts(streamCount);
-    std::vector<const uint*> pZeroCountOffsets(streamCount);
-    for(uint block = 0; block < streamCount; block++) {
-        BitStreamReadOnly& bitStream = *ppBitStreams[singleBitStream ? 0 : block];
-
-        HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[block];
-
-        // read compacted symbol count
-        bitStream.readAligned(&streamInfo.symbolCount, 1);
-        resources.pZeroCountStreamInfos[block].symbolCount = streamInfo.symbolCount;
-
-        // 1. compacted symbols
-        // read symbol decode table
-        symbolDecodeTables[block].readFromBitStream(pInstance, bitStream);
-
-        // copy decode table into upload buffer
-        symbolDecodeTables[block].copyToBuffer(pInstance, resources.pSymbolDecodeTablesBuffer + symbolDecodeTablesBufferOffset);
-        streamInfo.dpDecodeTable = dpDecodeTables + symbolDecodeTablesBufferOffset;
-        streamInfo.decodeSymbolTableSize = symbolDecodeTables[block].getSymbolTableSize();
-        symbolDecodeTablesBufferOffset += getAlignedSize(symbolDecodeTables[block].computeGPUSize(pInstance), 128);
-
-        // upload symbol codewords
-        uint codewordBitsize;
-        bitStream.readAligned(&codewordBitsize, 1);
-        uint codewordUintCount = getNumUintsForBits(codewordBitsize);
-        const uint* pCodewordStream = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
-        cudaSafeCall(cudaMemcpyAsync(streamInfo.dpCodewordStream, pCodewordStream, codewordUintCount * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
-        bitStream.skipBits(codewordUintCount * sizeof(uint) * 8);
-
-        // get symbol offsets pointer
-        uint numOffsets = getNumOffsets(streamInfo.symbolCount, pInstance->m_codingBlockSize);
-        bitStream.align<uint>();
-        const uint* pOffsets = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
-        bitStream.skipAligned<ushort>(numOffsets);
-
-        // make offsets absolute (prefix sum)
-        unpackInc16CPU(pSymbolOffsetsNext, (const ushort*)pOffsets, numOffsets);
-        pSymbolOffsetsNext += numOffsets;
-        streamInfo.dpOffsets = dpOffsetsNext;
-        dpOffsetsNext += numOffsets;
-
-        // 2. zero counts
-        // read zero count decode table
-        zeroCountDecodeTables[block].readFromBitStream(pInstance, bitStream);
-
-        // read zero count codewords pointer
-        bitStream.readAligned(&codewordBitsize, 1);
-        zeroCountCodewordUintCounts[block] = getNumUintsForBits(codewordBitsize);
-        pZeroCountCodewordStreams[block] = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
-        bitStream.skipBits(zeroCountCodewordUintCounts[block] * sizeof(uint) * 8);
-
-        // read zero count offsets pointer
-        bitStream.align<uint>();
-        pZeroCountOffsets[block] = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
-        bitStream.skipAligned<ushort>(numOffsets);
-    }
-
-    // upload decode tables
-    cudaSafeCall(cudaMemcpyAsync(dpDecodeTables, resources.pSymbolDecodeTablesBuffer, symbolDecodeTablesBufferOffset, cudaMemcpyHostToDevice, pInstance->m_stream));
-
-    // upload offsets
-    size_t offsetCountTotal = pSymbolOffsetsNext - resources.pSymbolOffsets;
-    cudaSafeCall(cudaMemcpyAsync(dpOffsets, resources.pSymbolOffsets, offsetCountTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
-
-   // timerHigh("Symbols:    Huffman Decode");
-
-    // decode symbols
-    huffmanDecode(pInstance, resources.pSymbolStreamInfos, streamCount, pInstance->m_codingBlockSize);
-
-    //timerLow("Huffman Decode ZeroCounts");
-
-    //timerHigh("ZeroCounts: Upload");
-
-    uint* pZeroCountOffsetsNext = resources.pZeroCountOffsets;
-    dpOffsetsNext = dpOffsets;
-    size_t zeroCountDecodeTablesBufferOffset = 0;
-    // upload decode tables, codeword streams and offsets, and fill stream infos for zero counts
-    for(uint block = 0; block < streamCount; block++) {
-        HuffmanGPUStreamInfo& streamInfo = resources.pZeroCountStreamInfos[block];
-
-        // copy decode table into upload buffer
-        zeroCountDecodeTables[block].copyToBuffer(pInstance, resources.pZeroCountDecodeTablesBuffer + zeroCountDecodeTablesBufferOffset);
-        streamInfo.dpDecodeTable = dpDecodeTables + zeroCountDecodeTablesBufferOffset;
-        streamInfo.decodeSymbolTableSize = zeroCountDecodeTables[block].getSymbolTableSize();
-        zeroCountDecodeTablesBufferOffset += getAlignedSize(zeroCountDecodeTables[block].computeGPUSize(pInstance), 128);
-
-        // upload zero count codewords
-        cudaSafeCall(cudaMemcpyAsync(streamInfo.dpCodewordStream, pZeroCountCodewordStreams[block], zeroCountCodewordUintCounts[block] * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
-
-        uint numOffsets = getNumOffsets(streamInfo.symbolCount, pInstance->m_codingBlockSize);
-        unpackInc16CPU(pZeroCountOffsetsNext, (const ushort*)pZeroCountOffsets[block], numOffsets);
-        pZeroCountOffsetsNext += numOffsets;
-        streamInfo.dpOffsets = dpOffsetsNext;
-        dpOffsetsNext += numOffsets;
-    }
-
-    // upload decode tables
-    cudaSafeCall(cudaMemcpyAsync(dpDecodeTables, resources.pZeroCountDecodeTablesBuffer, zeroCountDecodeTablesBufferOffset, cudaMemcpyHostToDevice, pInstance->m_stream));
-
-    // upload offsets
-    offsetCountTotal = pZeroCountOffsetsNext - resources.pZeroCountOffsets;
-    cudaSafeCall(cudaMemcpyAsync(dpOffsets, resources.pZeroCountOffsets, offsetCountTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
-
-    timerHigh("ZeroCounts: Huffman Decode");
-
-    // decode zero counts
-    huffmanDecode(pInstance, resources.pZeroCountStreamInfos, streamCount, pInstance->m_codingBlockSize);
-
-    timerHigh();
-
-    timerLow("Run Length Decode");
-
-    // run length decode
-    std::vector<uint> symbolCountsCompact(streamCount);
-    for(uint block = 0; block < streamCount; block++) {
-        symbolCountsCompact[block] = resources.pSymbolStreamInfos[block].symbolCount;
-    }
-    runLengthDecode(pInstance, dpSymbolStreamCompacted, dpZeroCounts, symbolCountsCompact.data(), symbolCountPerBlockPadded, pdpSymbolStreams, symbolCountPerStream, streamCount);
-
-    timerLow();
-
-    cudaSafeCall(cudaEventRecord(resources.syncEvent, pInstance->m_stream));
-
-    pInstance->releaseBuffers(4 + 1 * streamCount);
+    //pInstance->releaseBuffers(4 + 1 * streamCount);
 
     return true;
 }
 
 bool decodeRLHuff(GpuInstance* pInstance, BitStreamReadOnly& bitStream, std::vector<Symbol16>& symbolStream){
-
+    return false;
 }
 
 bool decodeRLHuff(GpuInstance* pInstance, VkBuffer bitStreamBuffer, BitStream& currentBitStream, size_t decodeTableOffset, size_t codewordStreamOffset, VkBuffer symbolBuffer, uint symbolSize, VkCommandBuffer commands){
@@ -712,11 +712,11 @@ bool decodeRLHuff(GpuInstance* pInstance, VkBuffer bitStreamBuffer, BitStream& c
     }
 
     // adding decode command for rl encoded data (The zero counts are stored in a different array)
-    huffmanDecodeCommands(pInstance, commands, resources.pSymbolStreamInfos, 1, pInstance->m_codingBlockSize);
+    //huffmanDecodeCommands(pInstance, commands, resources.pSymbolStreamInfos, 1, pInstance->m_codingBlockSize);
 
     // zero counts ? Whatever these are ....+
     // seems like they should already be on the gpu at this point
-
+    return false;
 
 }
 
@@ -759,6 +759,7 @@ bool decodeRLHuff(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataC
 
     // decompressing the run length encoding ------------------------------------------
     
+    return true;
 }
 
 template<typename Symbol>
@@ -912,126 +913,126 @@ bool encodeHuff(GpuInstance* pInstance, BitStream* ppBitStreams[], bool singleBi
 template<typename Symbol>
 bool decodeHuff(GpuInstance* pInstance, BitStreamReadOnly* ppBitStreams[], bool singleBitStream, Symbol* pdpSymbolStreams[], uint streamCount, uint symbolCountPerStream)
 {
-    ScopedProfileSample sample0(pInstance->m_pProfiler, "decodeHuff");
-
-    uint symbolStreamMaxBytes = symbolCountPerStream * sizeof(Symbol);
-    uint offsetStreamMaxBytes = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize) * sizeof(uint);
-
-    GpuInstance::EncodeResources::DecodeResources& resources = pInstance->Encode.GetDecodeResources();
-    { ScopedProfileSample sample0(pInstance->m_pProfiler, "sync");
-        cudaSafeCall(cudaEventSynchronize(resources.syncEvent));
-    }
-
-    //TODO ? size_t symbolStreamMaxBytesPadded = getAlignedSize(symbolStreamMaxBytes, 128);
-    uint* dpCodewordStreams = (uint*)pInstance->getBuffer<byte>(streamCount * symbolStreamMaxBytes);
-    uint* dpOffsets = (uint*)pInstance->getBuffer<byte>(streamCount * offsetStreamMaxBytes);
-    size_t decodeTableSizeMax = getAlignedSize(HuffmanDecodeTable::computeMaxGPUSize(pInstance), 128);
-    byte* dpDecodeTables = pInstance->getBuffer<byte>(streamCount * decodeTableSizeMax);
-    for(uint block = 0; block < streamCount; block++) {
-        HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[block];
-
-        streamInfo.dpSymbolStream = (byte*)pdpSymbolStreams[block];
-        streamInfo.symbolCount = symbolCountPerStream;
-
-        // streamInfo.dpCodewordStream, dpOffsets, dpDecodeTable will be filled later, with pointers into our contiguous buffers (see above)
-    }
-
-    util::CudaScopedTimer timerLow(pInstance->Encode.timerDecodeLowDetail);
-    util::CudaScopedTimer timerHigh(pInstance->Encode.timerDecodeHighDetail);
-
-    timerLow("Huffman Decode Symbols");
-
-    timerHigh("Symbols:    Upload (+read BitStream)");
-
-    std::vector<HuffmanDecodeTable>& symbolDecodeTables = resources.symbolDecodeTables;
-    //if(!singleBitStream) {
-    //    // read decode tables
-    //    ScopedProfileSample sample1(pInstance->m_pProfiler, "read decode table");
-    //    //#pragma omp parallel for
-    //    for(int block = 0; block < int(streamCount); block++) {
-    //        BitStreamReadOnly& bitStream = *ppBitStreams[block];
+    //ScopedProfileSample sample0(pInstance->m_pProfiler, "decodeHuff");
+//
+    //uint symbolStreamMaxBytes = symbolCountPerStream * sizeof(Symbol);
+    //uint offsetStreamMaxBytes = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize) * sizeof(uint);
+//
+    //GpuInstance::EncodeResources::DecodeResources& resources = pInstance->Encode.GetDecodeResources();
+    //{ ScopedProfileSample sample0(pInstance->m_pProfiler, "sync");
+    //    cudaSafeCall(cudaEventSynchronize(resources.syncEvent));
+    //}
+//
+    ////TODO ? size_t symbolStreamMaxBytesPadded = getAlignedSize(symbolStreamMaxBytes, 128);
+    //uint* dpCodewordStreams = (uint*)pInstance->getBuffer<byte>(streamCount * symbolStreamMaxBytes);
+    //uint* dpOffsets = (uint*)pInstance->getBuffer<byte>(streamCount * offsetStreamMaxBytes);
+    //size_t decodeTableSizeMax = getAlignedSize(HuffmanDecodeTable::computeMaxGPUSize(pInstance), 128);
+    //byte* dpDecodeTables = pInstance->getBuffer<byte>(streamCount * decodeTableSizeMax);
+    //for(uint block = 0; block < streamCount; block++) {
+    //    HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[block];
+//
+    //    streamInfo.dpSymbolStream = (byte*)pdpSymbolStreams[block];
+    //    streamInfo.symbolCount = symbolCountPerStream;
+//
+    //    // streamInfo.dpCodewordStream, dpOffsets, dpDecodeTable will be filled later, with pointers into our contiguous buffers (see above)
+    //}
+//
+    //util::CudaScopedTimer timerLow(pInstance->Encode.timerDecodeLowDetail);
+    //util::CudaScopedTimer timerHigh(pInstance->Encode.timerDecodeHighDetail);
+//
+    //timerLow("Huffman Decode Symbols");
+//
+    //timerHigh("Symbols:    Upload (+read BitStream)");
+//
+    //std::vector<HuffmanDecodeTable>& symbolDecodeTables = resources.symbolDecodeTables;
+    ////if(!singleBitStream) {
+    ////    // read decode tables
+    ////    ScopedProfileSample sample1(pInstance->m_pProfiler, "read decode table");
+    ////    //#pragma omp parallel for
+    ////    for(int block = 0; block < int(streamCount); block++) {
+    ////        BitStreamReadOnly& bitStream = *ppBitStreams[block];
+    ////        symbolDecodeTables[block].readFromBitStream(pInstance, bitStream);
+    ////    }
+    ////}
+//
+    //size_t symbolDecodeTablesBufferOffset = 0;
+    //uint* pCodewordStreamsNext = resources.pCodewordStreams;
+    //uint* dpCodewordStreamsNext = dpCodewordStreams;
+    //uint* pOffsetsNext = resources.pSymbolOffsets;
+    //uint* dpOffsetsNext = dpOffsets;
+    //// read and upload decode tables, upload codeword streams and offsets, and fill stream info
+    //for(uint block = 0; block < streamCount; block++) {
+    //    BitStreamReadOnly& bitStream = *ppBitStreams[singleBitStream ? 0 : block];
+//
+    //    /*if(singleBitStream)*/ {
+    //        // read decode table
+    //        ScopedProfileSample sample1(pInstance->m_pProfiler, "read decode table");
     //        symbolDecodeTables[block].readFromBitStream(pInstance, bitStream);
     //    }
+//
+    //    HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[block];
+//
+    //    // copy decode table into upload buffer
+    //    { ScopedProfileSample sample1(pInstance->m_pProfiler, "copy decode table into upload buffer");
+    //        symbolDecodeTables[block].copyToBuffer(pInstance, resources.pSymbolDecodeTablesBuffer + symbolDecodeTablesBufferOffset);
+    //        streamInfo.dpDecodeTable = dpDecodeTables + symbolDecodeTablesBufferOffset;
+    //        streamInfo.decodeSymbolTableSize = symbolDecodeTables[block].getSymbolTableSize();
+    //        symbolDecodeTablesBufferOffset += getAlignedSize(symbolDecodeTables[block].computeGPUSize(pInstance), 128);
+    //    }
+//
+    //    // copy codewords into pinned buffer
+    //    { ScopedProfileSample sample1(pInstance->m_pProfiler, "copy codewords into pinned buffer");
+    //        uint codewordBitsize;
+    //        bitStream.readAligned(&codewordBitsize, 1);
+    //        uint codewordUints = getNumUintsForBits(codewordBitsize);
+    //        const uint* pCodewordStream = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
+    //        bitStream.skipBits(codewordUints * sizeof(uint) * 8);
+    //        memcpy(pCodewordStreamsNext, pCodewordStream, codewordUints * sizeof(uint));
+    //        streamInfo.dpCodewordStream = dpCodewordStreamsNext;
+    //        //TODO align?
+    //        pCodewordStreamsNext += codewordUints;
+    //        dpCodewordStreamsNext += codewordUints;
+    //    }
+//
+    //    // get offsets pointer
+    //    uint numOffsets = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize);
+    //    bitStream.align<uint>();
+    //    const uint* pOffsets = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
+    //    bitStream.skipAligned<ushort>(numOffsets);
+//
+    //    // make offsets absolute (prefix sum)
+    //    { ScopedProfileSample sample1(pInstance->m_pProfiler, "make offsets absolute (prefix sum)");
+    //        unpackInc16CPU(pOffsetsNext, (const ushort*)pOffsets, numOffsets);
+    //        streamInfo.dpOffsets = dpOffsetsNext;
+    //        //TODO align?
+    //        pOffsetsNext += numOffsets;
+    //        dpOffsetsNext += numOffsets;
+    //    }
     //}
-
-    size_t symbolDecodeTablesBufferOffset = 0;
-    uint* pCodewordStreamsNext = resources.pCodewordStreams;
-    uint* dpCodewordStreamsNext = dpCodewordStreams;
-    uint* pOffsetsNext = resources.pSymbolOffsets;
-    uint* dpOffsetsNext = dpOffsets;
-    // read and upload decode tables, upload codeword streams and offsets, and fill stream info
-    for(uint block = 0; block < streamCount; block++) {
-        BitStreamReadOnly& bitStream = *ppBitStreams[singleBitStream ? 0 : block];
-
-        /*if(singleBitStream)*/ {
-            // read decode table
-            ScopedProfileSample sample1(pInstance->m_pProfiler, "read decode table");
-            symbolDecodeTables[block].readFromBitStream(pInstance, bitStream);
-        }
-
-        HuffmanGPUStreamInfo& streamInfo = resources.pSymbolStreamInfos[block];
-
-        // copy decode table into upload buffer
-        { ScopedProfileSample sample1(pInstance->m_pProfiler, "copy decode table into upload buffer");
-            symbolDecodeTables[block].copyToBuffer(pInstance, resources.pSymbolDecodeTablesBuffer + symbolDecodeTablesBufferOffset);
-            streamInfo.dpDecodeTable = dpDecodeTables + symbolDecodeTablesBufferOffset;
-            streamInfo.decodeSymbolTableSize = symbolDecodeTables[block].getSymbolTableSize();
-            symbolDecodeTablesBufferOffset += getAlignedSize(symbolDecodeTables[block].computeGPUSize(pInstance), 128);
-        }
-
-        // copy codewords into pinned buffer
-        { ScopedProfileSample sample1(pInstance->m_pProfiler, "copy codewords into pinned buffer");
-            uint codewordBitsize;
-            bitStream.readAligned(&codewordBitsize, 1);
-            uint codewordUints = getNumUintsForBits(codewordBitsize);
-            const uint* pCodewordStream = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
-            bitStream.skipBits(codewordUints * sizeof(uint) * 8);
-            memcpy(pCodewordStreamsNext, pCodewordStream, codewordUints * sizeof(uint));
-            streamInfo.dpCodewordStream = dpCodewordStreamsNext;
-            //TODO align?
-            pCodewordStreamsNext += codewordUints;
-            dpCodewordStreamsNext += codewordUints;
-        }
-
-        // get offsets pointer
-        uint numOffsets = getNumOffsets(symbolCountPerStream, pInstance->m_codingBlockSize);
-        bitStream.align<uint>();
-        const uint* pOffsets = bitStream.getRaw() + bitStream.getBitPosition() / (sizeof(uint)*8);
-        bitStream.skipAligned<ushort>(numOffsets);
-
-        // make offsets absolute (prefix sum)
-        { ScopedProfileSample sample1(pInstance->m_pProfiler, "make offsets absolute (prefix sum)");
-            unpackInc16CPU(pOffsetsNext, (const ushort*)pOffsets, numOffsets);
-            streamInfo.dpOffsets = dpOffsetsNext;
-            //TODO align?
-            pOffsetsNext += numOffsets;
-            dpOffsetsNext += numOffsets;
-        }
-    }
-
-    // upload decode tables
-    cudaSafeCall(cudaMemcpyAsync(dpDecodeTables, resources.pSymbolDecodeTablesBuffer, symbolDecodeTablesBufferOffset, cudaMemcpyHostToDevice, pInstance->m_stream));
-
-    // upload codewords
-    size_t codewordUintsTotal = pCodewordStreamsNext - resources.pCodewordStreams;
-    cudaSafeCall(cudaMemcpyAsync(dpCodewordStreams, resources.pCodewordStreams, codewordUintsTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
-
-    // upload offsets
-    size_t offsetCountTotal = pOffsetsNext - resources.pSymbolOffsets;
-    cudaSafeCall(cudaMemcpyAsync(dpOffsets, resources.pSymbolOffsets, offsetCountTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
-
-    timerHigh("Symbols:    Huffman Decode");
-
-    // decode symbols
-    //FIXME huffmanDecode requires the symbol streams to be padded, which we can't guarantee here..
-    huffmanDecode(pInstance, resources.pSymbolStreamInfos, streamCount, pInstance->m_codingBlockSize);
-
-    timerLow();
-    timerHigh();
-
-    cudaSafeCall(cudaEventRecord(resources.syncEvent, pInstance->m_stream));
-
-    pInstance->releaseBuffers(3);
+//
+    //// upload decode tables
+    //cudaSafeCall(cudaMemcpyAsync(dpDecodeTables, resources.pSymbolDecodeTablesBuffer, symbolDecodeTablesBufferOffset, cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+    //// upload codewords
+    //size_t codewordUintsTotal = pCodewordStreamsNext - resources.pCodewordStreams;
+    //cudaSafeCall(cudaMemcpyAsync(dpCodewordStreams, resources.pCodewordStreams, codewordUintsTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+    //// upload offsets
+    //size_t offsetCountTotal = pOffsetsNext - resources.pSymbolOffsets;
+    //cudaSafeCall(cudaMemcpyAsync(dpOffsets, resources.pSymbolOffsets, offsetCountTotal * sizeof(uint), cudaMemcpyHostToDevice, pInstance->m_stream));
+//
+    //timerHigh("Symbols:    Huffman Decode");
+//
+    //// decode symbols
+    ////FIXME huffmanDecode requires the symbol streams to be padded, which we can't guarantee here..
+    //huffmanDecode(pInstance, resources.pSymbolStreamInfos, streamCount, pInstance->m_codingBlockSize);
+//
+    //timerLow();
+    //timerHigh();
+//
+    //cudaSafeCall(cudaEventRecord(resources.syncEvent, pInstance->m_stream));
+//
+    //pInstance->releaseBuffers(3);
 
     return true;
 }

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../cpuCompression/EncodeCommon.h"
+#include <vulkan/vulkan.h>
 
 
 namespace vkCompress {

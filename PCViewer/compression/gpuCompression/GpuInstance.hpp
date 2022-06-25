@@ -9,6 +9,8 @@
 
 namespace vkCompress{
 struct HuffmanGPUStreamInfo;
+class HuffmanEncodeTable;
+class HuffmanDecodeTable;
 
 struct GpuInstance{
 public:

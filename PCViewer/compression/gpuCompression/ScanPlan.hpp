@@ -17,7 +17,7 @@ public:
     size_t  m_elemSizeBytes; // Size of each element in bytes, i.e. sizeof(T)
     std::vector<VkBuffer> m_blockSums;  // the same as the old m_blockSums for vulkan
     std::vector<uint32_t> m_blockSumsOffsets;   // holds the memory offest for each blockSums buffer
-    std::vector<VkDescriptorSet> m_blockSets; //
+    std::vector<VkDescriptorSet> m_blockSets; // holds the already bound block sets. For level 0 the 
     VkDeviceMemory m_blockSumsMemory;
     //void**  m_blockSums;     // Intermediate block sums array
     size_t  m_numLevels;     // Number of levels (in m_blockSums)

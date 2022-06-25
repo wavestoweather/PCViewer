@@ -1,4 +1,6 @@
 #include "PackInc.hpp"
+#include "GpuInstance.hpp"
+#include "../cpuCompression/util.h"
 
 namespace vkCompress
 {
@@ -7,6 +9,26 @@ namespace vkCompress
     const int LOG2_SCAN_CTA_SIZE = 7;                /**< log_2(CTA_SIZE) */
 
     const int SCAN_ELTS_PER_THREAD = 8;              /**< Number of elements per scan thread */
+
+    static uint getValueCountMax(const GpuInstance* pInstance)
+    {
+        return (pInstance->m_elemCountPerStreamMax + pInstance->m_codingBlockSize - 1) / pInstance->m_codingBlockSize;
+    }
+
+    
+    size_t packIncGetRequiredMemory(const GpuInstance* pInstance)
+    {
+        uint valueCountMax = getValueCountMax(pInstance);
+
+        size_t size = 0;
+
+        // encode and decode: dpValueIncrements
+        size += getAlignedSize(valueCountMax * sizeof(uint), 128);
+        // encode: dpReduceOut
+        size += getAlignedSize(sizeof(uint), 128);
+
+        return size;
+    }
 
     bool unpackInc16(GpuInstance* pInstance, uint* dpValues, const ushort* dpValueIncrements, uint valueCount)
     {

@@ -182,131 +182,131 @@ bool histogram(GpuInstance* pInstance, uint* pdpHistograms[], uint histogramCoun
 
     uint binCountDone = 0;
 
-    for(uint pass = 0; pass < smallHistogramPassCount; pass++) {
-        const dim3 blockCount(partialHistogramCount, histogramCount);
-
-        uint binCountThisPass = min(binCountDone + SMALL_HISTOGRAM_MAX_BIN_COUNT, binCount) - binCountDone;
-
-        if(binCountThisPass > 64) {
-            smallHistogramKernel<T, 128><<<blockCount, SMALL_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                dpPartialHistograms, (data_t**)dppData, dpElemCount, binCountDone, binCountThisPass
-            );
-        } else if(binCountThisPass > 32) {
-            smallHistogramKernel<T, 64><<<blockCount, SMALL_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                dpPartialHistograms, (data_t**)dppData, dpElemCount, binCountDone, binCountThisPass
-            );
-        } else {
-            smallHistogramKernel<T, 32><<<blockCount, SMALL_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                dpPartialHistograms, (data_t**)dppData, dpElemCount, binCountDone, binCountThisPass
-            );
-        }
-        cudaCheckMsg("smallHistogramKernel() execution failed\n");
-
-        const dim3 blockCountMerge(binCountThisPass, histogramCount);
-        mergeHistogramKernel<<<blockCountMerge, MERGE_THREADBLOCK_SIZE>>>(
-            dppHistograms, binCountDone, dpPartialHistograms, partialHistogramCount, binCountThisPass
-        );
-        cudaCheckMsg("mergeHistogramKernel() execution failed\n");
-
-        binCountDone += binCountThisPass;
-    }
-
-
-    uint largeHistogramPassCount = (binCount - binCountDone + LARGE_HISTOGRAM_MAX_BIN_COUNT - 1) / LARGE_HISTOGRAM_MAX_BIN_COUNT;
-
-    for(uint pass = 0; pass < largeHistogramPassCount; pass++) {
-        uint partialHistogramCount = (128 + histogramCount - 1) / histogramCount; // arbitrary, but seems to give best performance
-        if(partialHistogramCount < 16) {
-            // not worth the extra merge pass...
-            partialHistogramCount = 1;
-        }
-        const dim3 blockCount(partialHistogramCount, histogramCount);
-
-        uint binCountThisPass = min(binCountDone + LARGE_HISTOGRAM_MAX_BIN_COUNT, binCount) - binCountDone;
-
-        if(partialHistogramCount == 1) {
-            if(binCountThisPass > 1536) {
-                largeHistogramKernel2<T, 2048><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            } else if(binCountThisPass > 1024) {
-                largeHistogramKernel2<T, 1536><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            } else if(binCountThisPass > 768) {
-                largeHistogramKernel2<T, 1024><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            } else if(binCountThisPass > 640) {
-                largeHistogramKernel2<T, 768><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            } else if(binCountThisPass > 512) {
-                largeHistogramKernel2<T, 640><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            } else if(binCountThisPass > 384) {
-                largeHistogramKernel2<T, 512><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            } else if(binCountThisPass > 256) {
-                largeHistogramKernel2<T, 384><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            } else {
-                largeHistogramKernel2<T, 256><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
-                );
-            }
-            cudaCheckMsg("largeHistogramKernel2() execution failed\n");
-        } else {
-            if(binCountThisPass > 1536) {
-                largeHistogramKernel1<T, 2048><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            } else if(binCountThisPass > 1024) {
-                largeHistogramKernel1<T, 1536><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            } else if(binCountThisPass > 768) {
-                largeHistogramKernel1<T, 1024><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            } else if(binCountThisPass > 640) {
-                largeHistogramKernel1<T, 768><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            } else if(binCountThisPass > 512) {
-                largeHistogramKernel1<T, 640><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            } else if(binCountThisPass > 384) {
-                largeHistogramKernel1<T, 512><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            } else if(binCountThisPass > 256) {
-                largeHistogramKernel1<T, 384><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            } else {
-                largeHistogramKernel1<T, 256><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
-                    dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
-                );
-            }
-            cudaCheckMsg("largeHistogramKernel1() execution failed\n");
-
-            //TODO mergeHistogramKernel is very inefficient for small partialHistogramCount
-            const dim3 blockCountMerge(binCountThisPass, histogramCount);
-            mergeHistogramKernel<<<blockCountMerge, MERGE_THREADBLOCK_SIZE>>>(
-                dppHistograms, binCountDone, dpPartialHistograms, partialHistogramCount, binCountThisPass
-            );
-            cudaCheckMsg("mergeHistogramKernel() execution failed\n");
-        }
-
-        binCountDone += binCountThisPass;
-    }
-
-    pInstance->releaseBuffers(4);
+    //for(uint pass = 0; pass < smallHistogramPassCount; pass++) {
+    //    const dim3 blockCount(partialHistogramCount, histogramCount);
+//
+    //    uint binCountThisPass = min(binCountDone + SMALL_HISTOGRAM_MAX_BIN_COUNT, binCount) - binCountDone;
+//
+    //    if(binCountThisPass > 64) {
+    //        smallHistogramKernel<T, 128><<<blockCount, SMALL_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //            dpPartialHistograms, (data_t**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //        );
+    //    } else if(binCountThisPass > 32) {
+    //        smallHistogramKernel<T, 64><<<blockCount, SMALL_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //            dpPartialHistograms, (data_t**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //        );
+    //    } else {
+    //        smallHistogramKernel<T, 32><<<blockCount, SMALL_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //            dpPartialHistograms, (data_t**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //        );
+    //    }
+    //    cudaCheckMsg("smallHistogramKernel() execution failed\n");
+//
+    //    const dim3 blockCountMerge(binCountThisPass, histogramCount);
+    //    mergeHistogramKernel<<<blockCountMerge, MERGE_THREADBLOCK_SIZE>>>(
+    //        dppHistograms, binCountDone, dpPartialHistograms, partialHistogramCount, binCountThisPass
+    //    );
+    //    cudaCheckMsg("mergeHistogramKernel() execution failed\n");
+//
+    //    binCountDone += binCountThisPass;
+    //}
+//
+//
+    //uint largeHistogramPassCount = (binCount - binCountDone + LARGE_HISTOGRAM_MAX_BIN_COUNT - 1) / LARGE_HISTOGRAM_MAX_BIN_COUNT;
+//
+    //for(uint pass = 0; pass < largeHistogramPassCount; pass++) {
+    //    uint partialHistogramCount = (128 + histogramCount - 1) / histogramCount; // arbitrary, but seems to give best performance
+    //    if(partialHistogramCount < 16) {
+    //        // not worth the extra merge pass...
+    //        partialHistogramCount = 1;
+    //    }
+    //    const dim3 blockCount(partialHistogramCount, histogramCount);
+//
+    //    uint binCountThisPass = min(binCountDone + LARGE_HISTOGRAM_MAX_BIN_COUNT, binCount) - binCountDone;
+//
+    //    if(partialHistogramCount == 1) {
+    //        if(binCountThisPass > 1536) {
+    //            largeHistogramKernel2<T, 2048><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        } else if(binCountThisPass > 1024) {
+    //            largeHistogramKernel2<T, 1536><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        } else if(binCountThisPass > 768) {
+    //            largeHistogramKernel2<T, 1024><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        } else if(binCountThisPass > 640) {
+    //            largeHistogramKernel2<T, 768><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        } else if(binCountThisPass > 512) {
+    //            largeHistogramKernel2<T, 640><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        } else if(binCountThisPass > 384) {
+    //            largeHistogramKernel2<T, 512><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        } else if(binCountThisPass > 256) {
+    //            largeHistogramKernel2<T, 384><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        } else {
+    //            largeHistogramKernel2<T, 256><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dppHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass, binCount
+    //            );
+    //        }
+    //        cudaCheckMsg("largeHistogramKernel2() execution failed\n");
+    //    } else {
+    //        if(binCountThisPass > 1536) {
+    //            largeHistogramKernel1<T, 2048><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        } else if(binCountThisPass > 1024) {
+    //            largeHistogramKernel1<T, 1536><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        } else if(binCountThisPass > 768) {
+    //            largeHistogramKernel1<T, 1024><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        } else if(binCountThisPass > 640) {
+    //            largeHistogramKernel1<T, 768><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        } else if(binCountThisPass > 512) {
+    //            largeHistogramKernel1<T, 640><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        } else if(binCountThisPass > 384) {
+    //            largeHistogramKernel1<T, 512><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        } else if(binCountThisPass > 256) {
+    //            largeHistogramKernel1<T, 384><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        } else {
+    //            largeHistogramKernel1<T, 256><<<blockCount, LARGE_HISTOGRAM_THREADBLOCK_SIZE>>>(
+    //                dpPartialHistograms, (uint**)dppData, dpElemCount, binCountDone, binCountThisPass
+    //            );
+    //        }
+    //        cudaCheckMsg("largeHistogramKernel1() execution failed\n");
+//
+    //        //TODO mergeHistogramKernel is very inefficient for small partialHistogramCount
+    //        const dim3 blockCountMerge(binCountThisPass, histogramCount);
+    //        mergeHistogramKernel<<<blockCountMerge, MERGE_THREADBLOCK_SIZE>>>(
+    //            dppHistograms, binCountDone, dpPartialHistograms, partialHistogramCount, binCountThisPass
+    //        );
+    //        cudaCheckMsg("mergeHistogramKernel() execution failed\n");
+    //    }
+//
+    //    binCountDone += binCountThisPass;
+    //}
+//
+    //pInstance->releaseBuffers(4);
 
     return true;
 }

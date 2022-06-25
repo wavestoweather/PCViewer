@@ -14,7 +14,7 @@ namespace vkCompress
     vkContext(context),
     m_streamCountMax(streamCountMax),
     m_elemCountPerStreamMax(elemCountPerStreamMax),
-    m_codingBlockSize(codingBlockSize == 0 ? 24 : codingBlockSize), // default to 128
+    m_codingBlockSize(codingBlockSize == 0 ? 128 : codingBlockSize), // default to 128
     m_log2HuffmanDistinctSymbolCountMax(log2HuffmanDistinctSymbolCountMax == 0 ? 14 : log2HuffmanDistinctSymbolCountMax)  // default to 14 bits (which was used before this was configurable)
     {
         if(m_log2HuffmanDistinctSymbolCountMax > 24) 

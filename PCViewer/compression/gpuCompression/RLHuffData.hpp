@@ -1,12 +1,13 @@
 #pragma once
 #include "HuffmanTable.h"
+#include "GpuInstance.hpp"
+#include "../cpuCompression/util.h"
 
 struct RLHuffDecodeDataCpu{
     size_t symbolCount{};
 
     std::vector<uint> symbolOffsets{};
     std::vector<uint> zeroCountOffsets{};
-    vkCompress::HuffmanDecodeTable decodeTable;
     vkCompress::HuffmanDecodeTable symbolTable;
     vkCompress::HuffmanDecodeTable zeroCountTable;
     std::vector<uint8_t> codewordStream;        // holds the compressed bits of the main codewords
@@ -15,7 +16,7 @@ struct RLHuffDecodeDataCpu{
 
 struct RLHuffDecodeDataGpu{
     // vulkan context from which the decode table has been created (for automatic destruction)
-    VkUtil::Context gpuContext;
+    VkUtil::Context gpuContext{};
     // there is only a single gpu buffer for all decoding information
     // the _xxxOffset variables give the byte offset of the 
     VkBuffer buffer{};
@@ -29,8 +30,40 @@ struct RLHuffDecodeDataGpu{
     size_t zeroCountOffsetsOffset{};
 
     // creates the gpu stuff from cpu stuff
-    RLHuffDecodeDataGpu(const RLHuffDecodeDataCpu& cpuData){
-        // TODO: 
+    RLHuffDecodeDataGpu(vkCompress::GpuInstance* pInstance, const RLHuffDecodeDataCpu& cpuData):
+        gpuContext(pInstance->vkContext)
+        {
+        size_t wholeSize{};
+        symbolTableOffset = wholeSize;
+        wholeSize += cpuData.symbolTable.computeGPUSize(pInstance);
+        wholeSize = cudaCompress::getAlignedSize(wholeSize, 16);    // 16 byte alignment for aligned vec4 reads
+        
+        symbolStreamOffset = wholeSize;
+        wholeSize += cpuData.codewordStream.size() * sizeof(cpuData.codewordStream[0]);
+        wholeSize = cudaCompress::getAlignedSize(wholeSize, 16);
+
+        symbolOffsetsOffset = wholeSize;
+        wholeSize += cpuData.symbolOffsets.size() * sizeof(cpuData.symbolOffsets[0]);
+        wholeSize = cudaCompress::getAlignedSize(wholeSize, 16);
+
+        zeroCountTableOffset = wholeSize;
+        wholeSize += cpuData.zeroCountTable.computeGPUSize(pInstance);
+        wholeSize = cudaCompress::getAlignedSize(wholeSize, 16);
+        
+        zeroCountStreamOffset = wholeSize;
+        wholeSize += cpuData.zeroStream.size() * sizeof(cpuData.zeroStream[0]);
+        wholeSize = cudaCompress::getAlignedSize(wholeSize, 16);
+
+        zeroCountOffsetsOffset = wholeSize;
+        wholeSize += cpuData.zeroCountOffsets.size() * sizeof(cpuData.zeroCountOffsets[0]);
+        wholeSize = cudaCompress::getAlignedSize(wholeSize, 16);
+
+        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(gpuContext, {wholeSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        buffer = buffers[0];
+        memory = mem;   // offsets is not need, as only a single buffer is created
+
+        //uploading all the data
+        
     }
     RLHuffDecodeDataGpu(const RLHuffDecodeDataGpu&) = delete;   // no copy
     RLHuffDecodeDataGpu& operator=(const RLHuffDecodeDataGpu&) = delete; // no copy on assignment

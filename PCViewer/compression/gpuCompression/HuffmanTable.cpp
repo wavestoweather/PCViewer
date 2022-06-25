@@ -342,63 +342,63 @@ bool HuffmanEncodeTable::design(GpuInstance* pInstance, HuffmanEncodeTable* pTab
 template<typename Symbol>
 bool HuffmanEncodeTable::design(GpuInstance* pInstance, HuffmanEncodeTable* pTables, uint tableCount, const Symbol** pdpSymbolStreams, const uint* pSymbolCountPerStream)
 {
-    Symbol* dpReduceOut = pInstance->getBuffer<Symbol>(tableCount);
-
-
-    for(uint i = 0; i < tableCount; i++) {
-        pTables[i].clear();
-    }
-
-    // find max symbol
-    for(uint i = 0; i < tableCount; i++) {
-        reduceArray<Symbol, OperatorMax<Symbol>>(dpReduceOut + i, pdpSymbolStreams[i], pSymbolCountPerStream[i], pInstance->m_pReducePlan);
-        cudaCheckMsg("HuffmanEncodeTable::design: Error in reduceArray");
-    }
-    Symbol* pTableSymbolMax = (Symbol*)pInstance->HuffmanTable.pReadback;
-    cudaSafeCall(cudaMemcpy(pTableSymbolMax, dpReduceOut, tableCount * sizeof(Symbol), cudaMemcpyDeviceToHost));
-    Symbol symbolMax = 0;VkUtil::Context
-    for(uint i = 0; i < tableCount; i++) {
-        pTables[i].m_symbolMax = pTableSymbolMax[i];
-        symbolMax = max(symbolMax, pTables[i].m_symbolMax);
-    }
-
-
-    uint distinctSymbolCountMax = 1 << pInstance->m_log2HuffmanDistinctSymbolCountMax;
-    uint distinctSymbolCount = symbolMax + 1;
-    if(distinctSymbolCount > distinctSymbolCountMax) {
-        //TODO maybe clamp values instead of failing?
-        printf("WARNING: distinctSymbolCount == %u > %u, huffman table design failed.\n", distinctSymbolCount, distinctSymbolCountMax);
-#ifdef _DEBUG
-        __debugbreak();
-#endif
-        pInstance->releaseBuffers(1);
-        return false;
-    }
-
-
-    uint distinctSymbolCountAligned = (uint)getAlignedSize(distinctSymbolCount, 128 / sizeof(uint));
-    uint* dpHistograms = pInstance->getBuffer<uint>(tableCount * distinctSymbolCountAligned);
-
-    std::vector<uint*> pdpHistograms(tableCount);
-    for(uint i = 0; i < tableCount; i++) {
-        pdpHistograms[i] = dpHistograms + i * distinctSymbolCountAligned;
-    }
-
-
-    // find symbol probabilities
-    assert(distinctSymbolCount <= distinctSymbolCountMax);
-    histogram(pInstance, pdpHistograms.data(), tableCount, pdpSymbolStreams, pSymbolCountPerStream, distinctSymbolCount);
-
-    cudaSafeCall(cudaMemcpy(pInstance->HuffmanTable.pReadback, dpHistograms, tableCount * distinctSymbolCountAligned * sizeof(uint), cudaMemcpyDeviceToHost));
-
-    #pragma omp parallel for
-    for(int i = 0; i < int(tableCount); i++) {
-        // build actual encode table
-        uint distinctSymbolCountThisTable = pTables[i].m_symbolMax + 1;
-        pTables[i].build(pInstance->HuffmanTable.pReadback + i * distinctSymbolCountAligned, distinctSymbolCountThisTable);
-    }
-    
-    pInstance->releaseBuffers(2);
+//    Symbol* dpReduceOut = pInstance->getBuffer<Symbol>(tableCount);
+//
+//
+//    for(uint i = 0; i < tableCount; i++) {
+//        pTables[i].clear();
+//    }
+//
+//    // find max symbol
+//    for(uint i = 0; i < tableCount; i++) {
+//        reduceArray<Symbol, OperatorMax<Symbol>>(dpReduceOut + i, pdpSymbolStreams[i], pSymbolCountPerStream[i], pInstance->m_pReducePlan);
+//        cudaCheckMsg("HuffmanEncodeTable::design: Error in reduceArray");
+//    }
+//    Symbol* pTableSymbolMax = (Symbol*)pInstance->HuffmanTable.pReadback;
+//    cudaSafeCall(cudaMemcpy(pTableSymbolMax, dpReduceOut, tableCount * sizeof(Symbol), cudaMemcpyDeviceToHost));
+//    Symbol symbolMax = 0;VkUtil::Context
+//    for(uint i = 0; i < tableCount; i++) {
+//        pTables[i].m_symbolMax = pTableSymbolMax[i];
+//        symbolMax = max(symbolMax, pTables[i].m_symbolMax);
+//    }
+//
+//
+//    uint distinctSymbolCountMax = 1 << pInstance->m_log2HuffmanDistinctSymbolCountMax;
+//    uint distinctSymbolCount = symbolMax + 1;
+//    if(distinctSymbolCount > distinctSymbolCountMax) {
+//        //TODO maybe clamp values instead of failing?
+//        printf("WARNING: distinctSymbolCount == %u > %u, huffman table design failed.\n", distinctSymbolCount, distinctSymbolCountMax);
+//#ifdef _DEBUG
+//        __debugbreak();
+//#endif
+//        pInstance->releaseBuffers(1);
+//        return false;
+//    }
+//
+//
+//    uint distinctSymbolCountAligned = (uint)getAlignedSize(distinctSymbolCount, 128 / sizeof(uint));
+//    uint* dpHistograms = pInstance->getBuffer<uint>(tableCount * distinctSymbolCountAligned);
+//
+//    std::vector<uint*> pdpHistograms(tableCount);
+//    for(uint i = 0; i < tableCount; i++) {
+//        pdpHistograms[i] = dpHistograms + i * distinctSymbolCountAligned;
+//    }
+//
+//
+//    // find symbol probabilities
+//    assert(distinctSymbolCount <= distinctSymbolCountMax);
+//    histogram(pInstance, pdpHistograms.data(), tableCount, pdpSymbolStreams, pSymbolCountPerStream, distinctSymbolCount);
+//
+//    cudaSafeCall(cudaMemcpy(pInstance->HuffmanTable.pReadback, dpHistograms, tableCount * distinctSymbolCountAligned * sizeof(uint), cudaMemcpyDeviceToHost));
+//
+//    #pragma omp parallel for
+//    for(int i = 0; i < int(tableCount); i++) {
+//        // build actual encode table
+//        uint distinctSymbolCountThisTable = pTables[i].m_symbolMax + 1;
+//        pTables[i].build(pInstance->HuffmanTable.pReadback + i * distinctSymbolCountAligned, distinctSymbolCountThisTable);
+//    }
+//    
+//    pInstance->releaseBuffers(2);
 
     return true;
 }
