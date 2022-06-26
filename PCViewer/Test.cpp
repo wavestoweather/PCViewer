@@ -10,6 +10,7 @@
 #include "compression/gpuCompression/Huffman.hpp"
 #include "compression/cpuCompression/EncodeCPU.h"
 #include <iostream>
+#include "compression/gpuCompression/Util.hpp"
 
 void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     // range testing ------------------------------
@@ -66,12 +67,17 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const uint symbolsSize = 1 << 20;
     std::vector<uint16_t> symbols(symbolsSize);
     for(auto& s: symbols)
-        s = rand() & std::numeric_limits<uint16_t>::max();
+        s = rand() & 0xff;
     cudaCompress::BitStream bitStream;
     cudaCompress::BitStream* arr[]{&bitStream};
     std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
-    cudaCompress::encodeHuffCPU(arr, sArr, 1, symbols.size());
+    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
+    cudaCompress::BitStreamReadOnly readStream(bitStream.getRaw(), bitStream.getBitSize());
+    cudaCompress::BitStreamReadOnly* bArr[]{&readStream};
+    cudaCompress::decodeRLHuffCPU(bArr, sArr, symbolsSize, 1, symbolsSize);
     uint bitStreamSize = bitStream.getRawSizeBytes();
     uint originalSize = symbols.size() * sizeof(symbols[0]);
+    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector());
+    RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
     //vkCompress::decodeHuff()
 }

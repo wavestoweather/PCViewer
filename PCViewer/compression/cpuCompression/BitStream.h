@@ -99,6 +99,8 @@ public:
 
     uint* getRaw();
 
+    const std::vector<uint>& getVector() const {return *m_pVector;};
+
 private:
     std::vector<uint>* m_pVector;
     bool m_ownBuffer;

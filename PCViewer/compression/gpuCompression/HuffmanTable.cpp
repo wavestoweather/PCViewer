@@ -90,7 +90,9 @@ void HuffmanDecodeTable::readFromBitStream(const GpuInstance* pInstance, BitStre
     bitstream.readBits(m_symbolTableSize, LOG2_HUFFMAN_DISTINCT_SYMBOL_COUNT_MAX);
     bool longSymbols = (LOG2_HUFFMAN_DISTINCT_SYMBOL_COUNT_MAX > 16);
     uint symbolBits = 0;
-    bitstream.readBits(symbolBits, longSymbols ? LOG2_MAX_SYMBOL32_BITS : LOG2_MAX_SYMBOL16_BITS);
+    //TODO make this consistent with gpu version
+    //bitstream.readBits(symbolBits, longSymbols ? LOG2_MAX_SYMBOL32_BITS : LOG2_MAX_SYMBOL16_BITS);
+    bitstream.readBits(symbolBits, 14 /*=LOG2_MAX_SYMBOL_BITS*/);
     // HACK: if symbolBits was 16, then 0 was written to the bitstream (4 least significant bits)
     if(!longSymbols && symbolBits == 0 && m_symbolTableSize > 1) symbolBits = 16;
     for(uint i = 0; i < m_symbolTableSize; i++) {

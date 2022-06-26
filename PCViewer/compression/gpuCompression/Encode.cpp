@@ -733,7 +733,7 @@ bool decodeRLHuff(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataC
     streamInfo.symbolCount = decodeDataCpu.symbolCount;
 
     streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.symbolTableOffset;
-    streamInfo.decodeSymbolTableSize = decodeDataCpu.decodeTable.getSymbolTableSize();
+    streamInfo.decodeSymbolTableSize = decodeDataCpu.symbolTable.getSymbolTableSize();
 
     streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.symbolStreamOffset;
 

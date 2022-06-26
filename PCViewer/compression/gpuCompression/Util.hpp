@@ -5,8 +5,8 @@
 
 namespace vkCompress{
     // parse bytes to decode tables and rl data
-    RLHuffDecodeDataCpu parseCpuRLHuffData(const GpuInstance* pInstance, const std::vector<uint>& data){
-        BitStreamReadOnly bitStream(data.data(), data.size());
+    RLHuffDecodeDataCpu parseCpuRLHuffData(const GpuInstance* pInstance, const std::vector<uint32_t>& data){
+        BitStreamReadOnly bitStream(data.data(), data.size() * sizeof(data[0]) * 8);
         // compacted symbols
         uint compactSymbolCount;
         bitStream.readAligned(&compactSymbolCount, 1);
@@ -20,7 +20,7 @@ namespace vkCompress{
         std::vector<uint8_t> codewordStream(codewordBitsize / 8);   // divide by 8 to get the byte size
         bitStream.readAligned(codewordStream.data(), codewordStream.size());
 
-        uint offsetCount = (compactSymbolCount + pInstance->m_codingBlockSize - 1) / pInstance->m_codingBlockSize;
+        uint offsetCount = 1; // currently constant 1 as all symbols are compressed in one block //(compactSymbolCount + pInstance->m_codingBlockSize - 1) / pInstance->m_codingBlockSize;
         std::vector<ushort> offsetsInc(offsetCount);
         bitStream.readAligned(offsetsInc.data(), offsetsInc.size());
         std::vector<uint> offsets(offsetsInc.size());
