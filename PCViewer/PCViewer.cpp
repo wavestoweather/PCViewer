@@ -73,6 +73,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "range.hpp"
 #include "Test.hpp"
 
+#include "DrawlistColorMatrixEditor.hpp"
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
 
@@ -661,6 +662,7 @@ static BubblePlotter* bubblePlotter;
 
 static SettingsManager* settingsManager;
 static DrawlistColorPalette* drawListColorPalette;
+static DrawlistColorMatrixEditor* drawlistMatrixEditor;
 
 static GpuBrusher* gpuBrusher;
 
@@ -7625,6 +7627,7 @@ int main(int, char**)
 	{//creating the settngs manager
 		settingsManager = new SettingsManager();
 		drawListColorPalette = new DrawlistColorPalette(settingsManager);
+		drawlistMatrixEditor = new DrawlistColorMatrixEditor(&g_PcPlotDrawLists);
 	}
 
 	{//brushing gpu
@@ -11403,6 +11406,7 @@ int main(int, char**)
 				destroyPcPlotDataSet(*destroySet);
 
 			//Showing the Drawlists
+			//Drawlist section
 			DrawList* changeList;
 			destroy = false;
 			bool up = false;
@@ -11411,20 +11415,29 @@ int main(int, char**)
 			ImGui::SameLine();
 			ImGui::BeginChild("DrawLists", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
 
+			// header info
 			ImGui::Text("Draw lists");
 			ImGui::SameLine();
 			static float uniform_alpha = .5f;
+			ImGui::PushItemWidth(150);
 			if (ImGui::SliderFloat("Set uniform alpha", &uniform_alpha, 0.003f, .99f)) {	//when changed set alpha for each dl
 				for (DrawList& dl : g_PcPlotDrawLists) {
 					dl.color.w = uniform_alpha;
 				}
 				pcPlotRender = true;
 			}
+			ImGui::PopItemWidth();
 			ImGui::SameLine();
 			if(ImGui::Button("Edit drawlist color palette")){
 				drawListColorPalette->openColorPaletteEditor();
 			}
 			drawListColorPalette->drawColorPaletteEditor();
+			ImGui::SameLine();
+			if(ImGui::Button("ColorMatrix")){
+				drawlistMatrixEditor->open();
+			}
+			drawlistMatrixEditor->draw();
+			// drawlist table info
 			int count = 0;
 
 			ImGui::Columns(9, "Columns", true);
@@ -14861,6 +14874,7 @@ int main(int, char**)
 		delete isoSurfaceRenderer;
 		delete settingsManager;
 		delete drawListColorPalette;
+		delete drawlistMatrixEditor;
 		delete gpuBrusher;
 		delete histogramManager;
 		delete scatterplotWorkbench;
