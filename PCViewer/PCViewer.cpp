@@ -3940,7 +3940,9 @@ static bool openCsv(const char* filename) {
 			float curF = 0;
 			int count = 0;
 			while ((pos = line.find(delimiter)) != std::string::npos) {
-				cur = line.substr(0, pos);
+				// skip leading 0
+				int leadZ = 0; while(line[leadZ] == ' ') ++leadZ;
+				cur = line.substr(leadZ, pos - leadZ);
 				if(cur[0] == '\"'){
 					line.erase(0, pos);
 					cur.erase(0,1);
@@ -3959,6 +3961,11 @@ static bool openCsv(const char* filename) {
 				}
 				else
 					line.erase(0, pos + delimiter.length());
+				// delete trailing 0
+				int trailZ = cur.size();
+				while(trailZ > 0 && cur[trailZ - 1] == ' ') --trailZ;
+				if(trailZ != cur.size()) 
+					cur = cur.substr(0, trailZ);
 				if(!queryAttributes[count++].active) continue;
 				//checking for an overrunning attribute counter
 				if (attr == pcAttributes.size()) {
@@ -4057,6 +4064,10 @@ static bool openCsv(const char* filename) {
 	for (int i = 0; i < ds.data.size(); ++i) {
 		for (int k = 0; k < pcAttributes.size(); ++k) {
 			if (lexicon[k].size()) {
+				if(int(ds.data(i, k)) > lexicon[k].size() || int(ds.data(i, k)) < 0){
+					std::cout << "Error with reading labeled attribute. Is there a mix of labeled and non labled values? This is permitted!" << std::endl;
+					return false;
+				}
 				ds.data(i, k) = lexicon[k][int(ds.data(i, k))].first;
 			}
 		}
