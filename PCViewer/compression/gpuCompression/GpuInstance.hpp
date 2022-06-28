@@ -5,10 +5,10 @@
 #include "ScanPlan.hpp"
 #include "ReducePlan.hpp"
 #include "HuffmanTable.h"
+#include "Huffman.hpp"
 #include <map>
 
 namespace vkCompress{
-struct HuffmanGPUStreamInfo;
 class HuffmanEncodeTable;
 class HuffmanDecodeTable;
 
@@ -74,8 +74,9 @@ public:
             // end: unnesseary, should be removed for publication -----------------------------------------
 
             VkBuffer streamInfos;
+            VkBuffer zeroInfos;
             size_t streamInfosOffset;       // offset from memory start
-            size_t zeroStreamInfosOffset;
+            size_t zeroInfosOffset;
 
             VkDescriptorSet streamInfoSet;  // descriptor set containgin the stream infos
             VkDescriptorSet zeroStreamInfoSet;
@@ -93,9 +94,13 @@ public:
                 : syncFence(0)
                 , pSymbolDecodeTablesBuffer(nullptr), pZeroCountDecodeTablesBuffer(nullptr)
                 , pCodewordStreams(nullptr), pSymbolOffsets(nullptr), pZeroCountOffsets(nullptr)
-                , pSymbolStreamInfos(nullptr), pZeroCountStreamInfos(nullptr) {}
+                , pSymbolStreamInfos(new HuffmanGPUStreamInfo[1]), pZeroCountStreamInfos(new HuffmanGPUStreamInfo[1]) {}
+            ~DecodeResources(){
+                delete[] pSymbolStreamInfos;
+                delete[] pZeroCountStreamInfos;
+            }
         };
-        const static int ms_decodeResourcesCount = 8;
+        const static int ms_decodeResourcesCount = 1;// 8;
         DecodeResources Decode[ms_decodeResourcesCount];
         int nextDecodeResources;
         DecodeResources& GetDecodeResources() {

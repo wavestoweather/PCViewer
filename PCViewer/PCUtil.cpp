@@ -7,9 +7,9 @@
 #include <regex>
 #include "Attribute.hpp"
 
-std::vector<char> PCUtil::readByteFile(const std::string& filename)
+std::vector<char> PCUtil::readByteFile(const std::string_view& filename)
 {
-	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+	std::ifstream file(filename.data(), std::ios::ate | std::ios::binary);
 
 	if (!file.is_open()) {
 		std::cerr << "failed to open file " << filename << "!" << std::endl;

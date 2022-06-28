@@ -9,7 +9,7 @@
 #include "VkPointer.hpp"
 
 namespace vkCompress {
-using namespace cudaCompress;
+//using namespace cudaCompress;
 //static uint g_bitsSymbolEncodeTables = 0;
 //static uint g_bitsSymbolCodewords = 0;
 //static uint g_bitsSymbolOffsets = 0;
@@ -742,7 +742,7 @@ bool decodeRLHuff(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataC
     // uploading the stream info and calling the decoding function for the rl encoded stream
     // note: the descriptor set resources.streamInfoSet has to be created and the streamInfos buffer has to be bound
     VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(HuffmanGPUStreamInfo), &streamInfo);
-    huffmanDecode(pInstance, commands, resources.streamInfoSet, 1, pInstance->m_codingBlockSize);
+    huffmanDecode(pInstance, commands, resources.streamInfoSet, 1u, pInstance->m_codingBlockSize);
 
     // decompressing the zero counts -------------------------------------------------
     HuffmanGPUStreamInfo& zeroStreamInfo = resources.pZeroCountStreamInfos[0];
@@ -754,8 +754,8 @@ bool decodeRLHuff(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataC
     zeroStreamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.zeroCountStreamOffset;
 
     zeroStreamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.zeroCountOffsetsOffset;
-    VkUtil::uploadData(context.device, resources.memory, resources.zeroStreamInfosOffset, sizeof(zeroStreamInfo), &zeroStreamInfo);
-    huffmanDecode(pInstance, commands, resources.zeroStreamInfoSet, 1, pInstance->m_codingBlockSize);
+    VkUtil::uploadData(context.device, resources.memory, resources.zeroInfosOffset, sizeof(zeroStreamInfo), &zeroStreamInfo);
+    huffmanDecode(pInstance, commands, resources.zeroStreamInfoSet, 1u, pInstance->m_codingBlockSize);
 
     // decompressing the run length encoding ------------------------------------------
     

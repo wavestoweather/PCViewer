@@ -66,7 +66,7 @@ struct RLHuffDecodeDataGpu{
         wholeSize += zeroCountOffsetSize;
         wholeSize = cudaCompress::getAlignedSize(wholeSize, offsetAlignment);
 
-        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(gpuContext, {wholeSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(gpuContext, {wholeSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
         buffer = buffers[0];
         memory = mem;   // offsets is not need, as only a single buffer is created
 

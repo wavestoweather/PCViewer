@@ -177,6 +177,7 @@ std::tuple<std::vector<VkBuffer>, std::vector<VkDeviceSize>, VkDeviceMemory> VkU
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	std::vector<VkBuffer> buffers(sizes.size());
 	std::vector<VkDeviceSize> offsets(sizes.size());
+	bool useBufferDeviceAddress{false};
 	for(int i: irange(buffers)){
 		auto alignedSize = (sizes[i] + alignment - 1) / alignment * alignment;
 		createBuffer(context.device, alignedSize, usages[i], &buffers[i]);
@@ -185,8 +186,15 @@ std::tuple<std::vector<VkBuffer>, std::vector<VkDeviceSize>, VkDeviceMemory> VkU
 		offsets[i] = allocInfo.allocationSize;
 		allocInfo.allocationSize += memReq.size;
 		allocInfo.memoryTypeIndex |= memReq.memoryTypeBits;
+		if(usages[i] & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+			useBufferDeviceAddress = true;
 	}
 	allocInfo.memoryTypeIndex = findMemoryType(context.physicalDevice, allocInfo.memoryTypeIndex, memoryProperty);
+	VkMemoryAllocateFlagsInfo allocFlagInfo{};
+	allocFlagInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+	if(useBufferDeviceAddress)
+		allocFlagInfo.flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+	allocInfo.pNext = &allocFlagInfo;
 	VkDeviceMemory memory;
 	auto err = vkAllocateMemory(context.device, &allocInfo, nullptr, &memory); check_vk_result(err);
 	for(int i: irange(buffers)){
@@ -198,6 +206,7 @@ std::tuple<std::vector<VkBuffer>, std::vector<VkDeviceSize>, VkDeviceMemory> VkU
 VkDeviceAddress VkUtil::getBufferAddress(VkDevice device, VkBuffer buffer){
 	VkBufferDeviceAddressInfo info{};
 	info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	info.buffer = buffer;
 	return vkGetBufferDeviceAddress(device, &info);
 }
 

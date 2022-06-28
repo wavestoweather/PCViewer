@@ -20,7 +20,7 @@ std::stringstream& operator<<(std::stringstream& out, std::vector<T>& v);
 
 class PCUtil {
 public:
-	static std::vector<char> readByteFile(const std::string& filename);
+	static std::vector<char> readByteFile(const std::string_view& filename);
 	static void hexdump(const void* ptr, int buflen);
 	static void numdump(const float* ptr, int len, bool lineNumber = false);
 	static void numdump(const int* ptr, int len);

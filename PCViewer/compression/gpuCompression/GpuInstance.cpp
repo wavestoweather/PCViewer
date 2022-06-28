@@ -6,6 +6,8 @@
 #include "Histogram.hpp"
 #include "PackInc.hpp"
 #include "Encode.hpp"
+#include "../../range.hpp"
+#include "../../PCUtil.h"
 
 namespace vkCompress
 {
@@ -49,10 +51,46 @@ namespace vkCompress
 
         vkGetPhysicalDeviceProperties2(context.physicalDevice, &physicalDeviceProperties);
         m_warpSize = subgroupProperties.subgroupSize;
+
         // creating all pipelines
 
         // Huffman table pipelines ---------------------------------------------------
+        const std::string_view huffmanShaderPath = "compressHuffman_decode.comp.spv";
+
+        auto compBytes = PCUtil::readByteFile(huffmanShaderPath);
+        auto shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+
+        std::vector<VkDescriptorSetLayoutBinding> bindings;
+        VkDescriptorSetLayoutBinding b{};
+        b.binding = 0;
+        b.descriptorCount = 1;
+        b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        b.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        bindings.push_back(b);
+
+        auto& decodeHuffmanLayout = Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout;
+        VkUtil::createDescriptorSetLayout(context.device, bindings, &decodeHuffmanLayout);
+
+        // TODO: add specialization constants
+        VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].decodeHuffmanLong.pipelineLayout, &Encode.Decode[0].decodeHuffmanLong.pipeline);
         
+        // creating the buffer and descriptor sets for decoding ---------------------
+        for(int i: irange(Encode.ms_decodeResourcesCount)){
+            auto& d = Encode.Decode[i];
+            uint infoSize = sizeof(HuffmanGPUStreamInfo);
+            VkBufferUsageFlags flags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            auto [buffers, offsets, memory] = VkUtil::createMultiBufferBound(context, {infoSize, infoSize}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            d.streamInfos = buffers[0];
+            d.streamInfosOffset = offsets[0];
+            d.zeroInfos = buffers[1];
+            d.zeroInfosOffset = offsets[1];
+
+            d.memory = memory;
+
+            VkUtil::createDescriptorSets(context.device, {Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout, Encode.Decode[0].decodeHuffmanShort.descriptorSetLayout}, context.descriptorPool, &d.streamInfoSet);
+            VkUtil::updateDescriptorSet(context.device, d.streamInfos, infoSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, d.streamInfoSet);
+            VkUtil::updateDescriptorSet(context.device, d.zeroInfos, infoSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, d.zeroStreamInfoSet);
+        }
     }
     
     GpuInstance::~GpuInstance() 
@@ -62,5 +100,17 @@ namespace vkCompress
         RunLength.pipelineInfo.vkDestroy(vkContext);
         DWT.pipelineInfo.vkDestroy(vkContext);
         Quantization.pipelineInfo.vkDestroy(vkContext);
+
+        for(int i: irange(Encode.ms_decodeResourcesCount)){
+            auto& d = Encode.Decode[i];
+            if(d.streamInfos)
+                vkDestroyBuffer(vkContext.device, d.streamInfos, nullptr);
+            if(d.zeroInfos)
+                vkDestroyBuffer(vkContext.device, d.zeroInfos, nullptr);
+            if(d.memory)
+                vkFreeMemory(vkContext.device, d.memory, nullptr);
+            if(d.streamInfoSet)
+                vkFreeDescriptorSets(vkContext.device, vkContext.descriptorPool, 2, &d.streamInfoSet);
+        }
     }
 }

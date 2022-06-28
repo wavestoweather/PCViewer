@@ -63,6 +63,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
+    return;
     vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
     const uint symbolsSize = 1 << 20;
     std::vector<uint16_t> symbols(symbolsSize);
@@ -80,4 +81,23 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector());
     RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
     //vkCompress::decodeHuff()
+
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+    auto &resources = gpu.Encode.GetDecodeResources();
+    auto& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
+    
+    streamInfo.symbolCount = symbolsSize;
+
+    streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolTableOffset;
+    streamInfo.decodeSymbolTableSize = cpuData.symbolTable.getSymbolTableSize();
+
+    streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolStreamOffset;
+
+    streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountOffsetsOffset;
+    VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(vkCompress::HuffmanGPUStreamInfo), &streamInfo);
+    vkCompress::huffmanDecode(&gpu, commands, resources.streamInfoSet, 1, symbolsSize);
+
+    VkUtil::commitCommandBuffer(context.queue, commands);
+    check_vk_result(vkQueueWaitIdle(context.queue));
 }

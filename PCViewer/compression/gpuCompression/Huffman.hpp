@@ -4,8 +4,8 @@
 
 #include "../cpuCompression/global.h"
 
-class GpuInstance;
 namespace vkCompress {
+class GpuInstance;
 
 //TODO make separate versions for encoder and decoder?
 struct HuffmanGPUStreamInfo

@@ -66,6 +66,7 @@ namespace vkCompress
     bool huffmanEncode(GpuInstance* pInstance, const HuffmanGPUStreamInfo* pStreamInfos, uint streamCount, uint codingBlockSize, uint* pCompressedSizeBits) 
     {
         // currently empty. All encoding has to be done via the cpu
+        return false;
     }
     
     bool huffmanDecode(GpuInstance* pInstance, const HuffmanGPUStreamInfo* pStreamInfos, uint streamCount, uint codingBlockSize) 
