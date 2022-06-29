@@ -13,6 +13,7 @@ void DrawlistColorMatrixEditor::open(){
 void DrawlistColorMatrixEditor::draw(){
     if(ImGui::BeginPopup(_popupName.data(), ImGuiWindowFlags_AlwaysAutoResize)){
         const size_t colorPickerWidth = 20;    // TODO adjust, is size_t to avoid overflow
+        const float widthHalf = colorPickerWidth / 2;
 
         // section for setting the grid dimensions
         if(ImGui::InputInt2("Matrix width/height", &_matrixWidth)){
@@ -96,10 +97,10 @@ void DrawlistColorMatrixEditor::draw(){
                     b.y = _dragStart.y;
                 }
 
-                _selRowStart = (a.y - _matrixStart.y) / colorPickerWidth;
-                _selRowEnd = (b.y - _matrixStart.y) / colorPickerWidth;
-                _selColStart = (a.x - _matrixStart.x) / colorPickerWidth;
-                _selColEnd = (b.x - _matrixStart.x) / colorPickerWidth;
+                _selRowStart = (a.y - _matrixStart.y + widthHalf) / colorPickerWidth;
+                _selRowEnd = (b.y - _matrixStart.y + widthHalf) / colorPickerWidth;
+                _selColStart = (a.x - _matrixStart.x + widthHalf) / colorPickerWidth;
+                _selColEnd = (b.x - _matrixStart.x + widthHalf) / colorPickerWidth;
 
                 _selRowStart = std::clamp(_selRowStart, 0, _matrixHeight - 1);
                 _selRowEnd = std::clamp(_selRowEnd, 1, _matrixHeight);

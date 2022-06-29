@@ -543,6 +543,7 @@ static std::vector<int> pcPlotSelectedDrawList;									//Contains the index of 
 static std::map<std::string, std::pair<bool,std::vector<float>>> dimensionValues;//Contains the dimension values for each dimension. Dimension values SHOULD be read using the getDimensionValues method to secure that the dimension values for an attribute is available
 
 static bool atomicGpuFloatAddAvailable{};
+static bool shader16BitIntAvailable{};
 
 static PCViewerState pcViewerState = PCViewerState::Normal;
 enum class DefaultLoad{
@@ -3372,9 +3373,11 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		vkGetPhysicalDeviceFeatures(gpus[0], &feat);
 		VkPhysicalDeviceFeatures2 feat2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
 		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
+		VkPhysicalDeviceVulkan11Features v11feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
 		VkPhysicalDeviceVulkan12Features v12feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
 		feat2.pNext = &floatFeat;
-		floatFeat.pNext = &v12feat;
+		floatFeat.pNext = &v11feat;
+		v11feat.pNext = &v12feat;
 		vkGetPhysicalDeviceFeatures2(gpus[0], &feat2);
 		atomicGpuFloatAddAvailable = feat.shaderFloat64 && floatFeat.shaderBufferFloat32AtomicAdd && floatFeat.shaderBufferFloat64AtomicAdd;
 		if(!floatFeat.shaderImageFloat32AtomicAdd){
@@ -3383,7 +3386,9 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		useBufferDeviceAddress = v12feat.bufferDeviceAddress;
 		if(!useBufferDeviceAddress)
 			std::cout << "Gpu does not support buffer device addresses, large vis pipeline only reduced usable" << std::endl;
-
+		shader16BitIntAvailable = feat.shaderInt16 && v11feat.storageBuffer16BitAccess;
+		if(!shader16BitIntAvailable)
+			std::cout << "Gpu does not support shader int16 support, large vis pipeline only reduced usable" << std::endl;
 #ifdef _DEBUG
 		std::cout << "Gometry shader usable:" << feat.geometryShader << std::endl;
 		std::cout << "Wide lines usable:" << feat.wideLines << std::endl;
@@ -3437,6 +3442,9 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		floatFeat.shaderBufferFloat32AtomicAdd = VK_TRUE;
 		floatFeat.shaderBufferFloat64AtomicAdd = VK_TRUE;
 
+		VkPhysicalDeviceVulkan11Features v11feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+		v11feat.storageBuffer16BitAccess = VK_TRUE;
+
 		VkPhysicalDeviceVulkan12Features v12feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
 		v12feat.bufferDeviceAddress = useBufferDeviceAddress;
 		v12feat.descriptorBindingPartiallyBound = VK_TRUE;
@@ -3448,6 +3456,10 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		if(atomicGpuFloatAddAvailable){
 			*curPNext = &floatFeat;
 			curPNext = &floatFeat.pNext;
+		}
+		if(shader16BitIntAvailable){
+			*curPNext = &v11feat;
+			curPNext = &v11feat.pNext;
 		}
 		if(useBufferDeviceAddress){
 			*curPNext = &v12feat;
@@ -3464,6 +3476,8 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		deviceFeatures.shaderTessellationAndGeometryPointSize = VK_TRUE;
 		deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
 		deviceFeatures.shaderInt64 = VK_TRUE;
+		if(shader16BitIntAvailable)
+			deviceFeatures.shaderInt16 = VK_TRUE;
 		if(atomicGpuFloatAddAvailable)
 			deviceFeatures.shaderFloat64 = VK_TRUE;
 		const float queue_priority[] = { 1.0f };

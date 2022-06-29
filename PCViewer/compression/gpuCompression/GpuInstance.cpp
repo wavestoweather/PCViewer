@@ -55,7 +55,7 @@ namespace vkCompress
         // creating all pipelines
 
         // Huffman table pipelines ---------------------------------------------------
-        const std::string_view huffmanShaderPath = "compressHuffman_decode.comp.spv";
+        const std::string_view huffmanShaderPath = "shader/compressHuffman_decode.comp.spv";
 
         auto compBytes = PCUtil::readByteFile(huffmanShaderPath);
         auto shaderModule = VkUtil::createShaderModule(context.device, compBytes);
@@ -72,7 +72,18 @@ namespace vkCompress
         VkUtil::createDescriptorSetLayout(context.device, bindings, &decodeHuffmanLayout);
 
         // TODO: add specialization constants
-        VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].decodeHuffmanLong.pipelineLayout, &Encode.Decode[0].decodeHuffmanLong.pipeline);
+        std::vector<VkSpecializationMapEntry> entries{VkSpecializationMapEntry{0, 0, sizeof(uint32_t)}};
+        uint32_t longSymbols = 1;           // first creating the long symbols pipeline
+        VkSpecializationInfo specializationInfo{};
+        specializationInfo.mapEntryCount = entries.size();
+        specializationInfo.pMapEntries = entries.data();
+        specializationInfo.dataSize = sizeof(longSymbols);
+        specializationInfo.pData = &longSymbols;
+        std::vector<VkPushConstantRange> pushConstants{VkPushConstantRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t)}};
+        VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].decodeHuffmanLong.pipelineLayout, &Encode.Decode[0].decodeHuffmanLong.pipeline, &specializationInfo, pushConstants);
+        longSymbols = 0;
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+        VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].decodeHuffmanShort.pipelineLayout, &Encode.Decode[0].decodeHuffmanShort.pipeline, &specializationInfo, pushConstants);
         
         // creating the buffer and descriptor sets for decoding ---------------------
         for(int i: irange(Encode.ms_decodeResourcesCount)){
@@ -87,7 +98,7 @@ namespace vkCompress
 
             d.memory = memory;
 
-            VkUtil::createDescriptorSets(context.device, {Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout, Encode.Decode[0].decodeHuffmanShort.descriptorSetLayout}, context.descriptorPool, &d.streamInfoSet);
+            VkUtil::createDescriptorSets(context.device, {Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout, Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout}, context.descriptorPool, &d.streamInfoSet);
             VkUtil::updateDescriptorSet(context.device, d.streamInfos, infoSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, d.streamInfoSet);
             VkUtil::updateDescriptorSet(context.device, d.zeroInfos, infoSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, d.zeroStreamInfoSet);
         }

@@ -63,7 +63,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
-    return;
+    
     vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
     const uint symbolsSize = 1 << 20;
     std::vector<uint16_t> symbols(symbolsSize);

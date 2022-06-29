@@ -383,7 +383,7 @@ void VkUtil::createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInf
 		vkDestroyShaderModule(device, shaderModules[4], nullptr);
 }
 
-void VkUtil::createComputePipeline(VkDevice device, VkShaderModule &shaderModule, std::vector<VkDescriptorSetLayout> descriptorLayouts, VkPipelineLayout *pipelineLayout, VkPipeline *pipeline, VkSpecializationInfo *specializationInfo)
+void VkUtil::createComputePipeline(VkDevice device, VkShaderModule &shaderModule, std::vector<VkDescriptorSetLayout> descriptorLayouts, VkPipelineLayout *pipelineLayout, VkPipeline *pipeline, VkSpecializationInfo *specializationInfo, const std::vector<VkPushConstantRange>& pushConstants)
 {
 	VkResult err;
 
@@ -391,8 +391,8 @@ void VkUtil::createComputePipeline(VkDevice device, VkShaderModule &shaderModule
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutInfo.setLayoutCount = descriptorLayouts.size();
 	pipelineLayoutInfo.pSetLayouts = descriptorLayouts.data();
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+	pipelineLayoutInfo.pushConstantRangeCount = pushConstants.size();
+	pipelineLayoutInfo.pPushConstantRanges = pushConstants.data();
 
 	err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, pipelineLayout);
 	check_vk_result(err);
