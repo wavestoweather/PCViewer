@@ -31,10 +31,10 @@ layout(binding = 0) buffer HuffmanInfo{
 }infos[];
 
 layout(push_constant) uniform constants{
-    uint codingBlockSize;
+    uint codingBlockSizess;
 };
 
-layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+layout (local_size_x = 192,local_size_y=1,local_size_z=1) in;   // if adjusted dispatch in gpuCompression/Huffman.cpp has also to be adopted
 
 struct GPUBitstream{
     Codewords stream;
@@ -108,6 +108,7 @@ shared int s_codewordLengthLookup[HUFFMAN_LOOKUP_SIZE];
 shared int s_codewordIndexLookup [HUFFMAN_LOOKUP_SIZE];
 
 void main(){
+    const uint codingBlockSize = gl_WorkGroupSize.x;
     const uint thread = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
     const uvec2 threadIdx = gl_LocalInvocationID.xy;
     if(infos[gl_WorkGroupID.y].decodeSymbolTableSize > 1) {

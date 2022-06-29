@@ -170,25 +170,30 @@ namespace vkCompress
         uint threadCountPerStream = (symbolCountPerStreamMax + codingBlockSize - 1) / codingBlockSize;
         uint blockSize = min(192u, threadCountPerStream);
         blockSize = max(blockSize, HUFFMAN_LOOKUP_SIZE);
+        // test if constant block size works
+        blockSize = 192;
         assert(blockSize >= HUFFMAN_LOOKUP_SIZE);
         uint32_t dispatchX = (threadCountPerStream + blockSize - 1) / blockSize;
         uint32_t dispatchY = streamCount;
     
         if(longSymbols) {
+            vkCmdPushConstants(commands, pInstance->Encode.Decode[0].decodeHuffmanLong.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &blockSize);
             vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanLong.pipelineLayout, 0, 1, &streamInfosSet, 0, {});
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanLong.pipeline);
         } else {
+            vkCmdPushConstants(commands, pInstance->Encode.Decode[0].decodeHuffmanShort.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &blockSize);
             vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanShort.pipelineLayout, 0, 1, &streamInfosSet, 0, {});
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].decodeHuffmanShort.pipeline);
         }
         vkCmdDispatch(commands, dispatchX, dispatchY, 1);
+        return true;
         
         // launch transpose kernel
         const uint transposeBlockdimX = pInstance->m_subgroupSize;//gl_SubgroupSize; TODO: change to automatically query subgroup size
         const uint transposeBlockdimY = 8;
         //dim3 blockCountTranspose((symbolCountPerStreamMax + WARP_SIZE * codingBlockSize - 1) / (WARP_SIZE * codingBlockSize), streamCount);
     
-        vkCmdPipelineBarrier(commands, VK_SHADER_STAGE_COMPUTE_BIT, VK_SHADER_STAGE_COMPUTE_BIT, 0, 0, {}, 0, {}, 0, {});
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
         if(longSymbols) {
             vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeLong[codingBlockSize].pipelineLayout, 0, 1, &streamInfosSet, 0, {});
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeLong[codingBlockSize].pipeline);

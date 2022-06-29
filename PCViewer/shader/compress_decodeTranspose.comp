@@ -9,6 +9,9 @@
 #extension GL_EXT_shader_explicit_arithmetic_types: enable
 #extension GL_EXT_nonuniform_qualifier: enable
 
+layout(constant_id = 0) const uint longSymbols = 0; //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
+layout(constant_id = 1) const uint codingBlockSize = 32; //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
+
 layout(buffer_reference, scalar) buffer Symbols {u16vec2 i[];};  // raw data
 layout(buffer_reference, scalar) buffer Codewords {uint i[];};
 layout(buffer_reference, scalar) buffer Offsets {uint i[];};
@@ -27,11 +30,6 @@ layout(binding = 0) buffer HuffmanInfo{
     uint decodeSymbolTableSize;
     uint symbolCount;
 }infos[];
-
-layout(push_constant) uniform constants{
-    uint longSymbols;   //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
-    uint codingBlockSize;
-};
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 

@@ -51,10 +51,12 @@ namespace vkCompress
 
         vkGetPhysicalDeviceProperties2(context.physicalDevice, &physicalDeviceProperties);
         m_warpSize = subgroupProperties.subgroupSize;
+        m_subgroupSize = m_warpSize;
 
         // creating all pipelines
 
         // Huffman table pipelines ---------------------------------------------------
+        // huffman decode
         const std::string_view huffmanShaderPath = "shader/compressHuffman_decode.comp.spv";
 
         auto compBytes = PCUtil::readByteFile(huffmanShaderPath);
@@ -71,7 +73,6 @@ namespace vkCompress
         auto& decodeHuffmanLayout = Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout;
         VkUtil::createDescriptorSetLayout(context.device, bindings, &decodeHuffmanLayout);
 
-        // TODO: add specialization constants
         std::vector<VkSpecializationMapEntry> entries{VkSpecializationMapEntry{0, 0, sizeof(uint32_t)}};
         uint32_t longSymbols = 1;           // first creating the long symbols pipeline
         VkSpecializationInfo specializationInfo{};
@@ -81,9 +82,37 @@ namespace vkCompress
         specializationInfo.pData = &longSymbols;
         std::vector<VkPushConstantRange> pushConstants{VkPushConstantRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t)}};
         VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].decodeHuffmanLong.pipelineLayout, &Encode.Decode[0].decodeHuffmanLong.pipeline, &specializationInfo, pushConstants);
+        // short symbols
         longSymbols = 0;
         shaderModule = VkUtil::createShaderModule(context.device, compBytes);
         VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].decodeHuffmanShort.pipelineLayout, &Encode.Decode[0].decodeHuffmanShort.pipeline, &specializationInfo, pushConstants);
+
+        // huffman transpose
+        const std::string_view huffmanTransposePath = "shader/compress_decodeTranspose.comp.spv";
+        compBytes = PCUtil::readByteFile(huffmanTransposePath);
+
+        // descriptorSet layout is the same as for huffman decode -> suse decodeHuffmanLayout
+        // long symbols
+        longSymbols = 1;
+        const std::vector<uint32_t> codingBlocks{32, 64, 128, 256};
+        entries.push_back({1, sizeof(uint32_t), sizeof(uint32_t)}); // adding specialization constant 1: codingBlockSize
+        uint32_t specializationData[2]{longSymbols, 0};
+        specializationInfo.dataSize = sizeof(uint32_t) * 2;
+        specializationInfo.pData = specializationData;
+        specializationInfo.mapEntryCount = entries.size();
+        specializationInfo.pMapEntries = entries.data();
+        for(uint32_t i: codingBlocks){
+            specializationData[1] = i;  // setting the codingBlockSize
+            shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+            VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].huffmanTransposeLong[i].pipelineLayout, &Encode.Decode[0].huffmanTransposeLong[i].pipeline, &specializationInfo);
+        }
+        // short symbols
+        specializationData[0] = 0;
+        for(uint32_t i: codingBlocks){
+            specializationData[1] = i;  // setting the codingBlockSize
+            shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+            VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].huffmanTransposeShort[i].pipelineLayout, &Encode.Decode[0].huffmanTransposeShort[i].pipeline, &specializationInfo);
+        }
         
         // creating the buffer and descriptor sets for decoding ---------------------
         for(int i: irange(Encode.ms_decodeResourcesCount)){
@@ -122,6 +151,13 @@ namespace vkCompress
                 vkFreeMemory(vkContext.device, d.memory, nullptr);
             if(d.streamInfoSet)
                 vkFreeDescriptorSets(vkContext.device, vkContext.descriptorPool, 2, &d.streamInfoSet);
+        }
+
+        for(auto& [s, p]: Encode.Decode[0].huffmanTransposeLong){
+            p.vkDestroy(vkContext);
+        }
+        for(auto& [s, p]: Encode.Decode[0].huffmanTransposeShort){
+            p.vkDestroy(vkContext);
         }
     }
 }

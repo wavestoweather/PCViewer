@@ -72,19 +72,19 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     cudaCompress::BitStream bitStream;
     cudaCompress::BitStream* arr[]{&bitStream};
     std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
-    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
+    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, gpu.m_codingBlockSize);
     cudaCompress::BitStreamReadOnly readStream(bitStream.getRaw(), bitStream.getBitSize());
     cudaCompress::BitStreamReadOnly* bArr[]{&readStream};
-    cudaCompress::decodeRLHuffCPU(bArr, sArr, symbolsSize, 1, symbolsSize);
+    cudaCompress::decodeRLHuffCPU(bArr, sArr, symbolsSize, 1, gpu.m_codingBlockSize);
     uint bitStreamSize = bitStream.getRawSizeBytes();
     uint originalSize = symbols.size() * sizeof(symbols[0]);
-    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector());
+    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector(), gpu.m_codingBlockSize);
     RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
     //vkCompress::decodeHuff()
 
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
-    auto &resources = gpu.Encode.GetDecodeResources();
+    auto &resources = gpu.Encode.Decode[0];
     auto& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
     
     streamInfo.symbolCount = symbolsSize;
@@ -96,7 +96,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountOffsetsOffset;
     VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(vkCompress::HuffmanGPUStreamInfo), &streamInfo);
-    vkCompress::huffmanDecode(&gpu, commands, resources.streamInfoSet, 1, symbolsSize);
+    vkCompress::huffmanDecode(&gpu, commands, resources.streamInfoSet, 1, gpu.m_codingBlockSize);
 
     VkUtil::commitCommandBuffer(context.queue, commands);
     check_vk_result(vkQueueWaitIdle(context.queue));
