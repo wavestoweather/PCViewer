@@ -23,10 +23,10 @@ static std::vector<std::string> getDataFilenames(const std::string_view& path, c
             if(includes.empty()) return true;
             return std::find_if(includes.begin(), includes.end(), [&](const std::string_view& s){return PCUtil::compareStringFormat(n, s);}) != includes.end();
         };
-        std::vector<std::string_view> folders{path};
+        std::vector<std::string> folders{std::string(path)};
         while(!folders.empty()){
-            std::string_view curFolder = folders.back(); folders.pop_back();
-            std::string_view folderName = curFolder.substr(curFolder.find_last_of("/\\"));
+            std::string curFolder = folders.back(); folders.pop_back();
+            std::string_view folderName = std::string_view(curFolder).substr(curFolder.find_last_of("/\\"));
             if(!isIgnored(folderName, ignores)){
                 // folder should not be ignored
                 // get all contents and iterate over them
