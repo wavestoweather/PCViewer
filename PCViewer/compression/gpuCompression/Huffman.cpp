@@ -191,7 +191,6 @@ namespace vkCompress
         const uint transposeBlockdimY = 8;
         //dim3 blockCountTranspose((symbolCountPerStreamMax + WARP_SIZE * codingBlockSize - 1) / (WARP_SIZE * codingBlockSize), streamCount);
     
-        return true;  
         vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
         if(longSymbols) {
             vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeLong[codingBlockSize].pipelineLayout, 0, 1, &streamInfosSet, 0, {});
@@ -201,5 +200,6 @@ namespace vkCompress
             vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->Encode.Decode[0].huffmanTransposeShort[codingBlockSize].pipeline);
         }        
         vkCmdDispatch(commands, (symbolCountPerStreamMax + transposeBlockdimX * codingBlockSize - 1) / (transposeBlockdimX * codingBlockSize), streamCount, 1);
+        return true;  
     }
 }
