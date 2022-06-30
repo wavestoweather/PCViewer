@@ -17,7 +17,7 @@ namespace vkCompress{
         uint codewordBitsize;
         bitStream.readAligned(&codewordBitsize, 1);
         
-        std::vector<uint8_t> codewordStream(codewordBitsize / 8);   // divide by 8 to get the byte size
+        std::vector<uint32_t> codewordStream((codewordBitsize + 31) / 32);   // divide by 8 to get the byte size
         bitStream.readAligned(codewordStream.data(), codewordStream.size());
 
         uint offsetCount = (compactSymbolCount + codingBlockSize - 1) / codingBlockSize;
@@ -31,7 +31,7 @@ namespace vkCompress{
         zeroTable.readFromBitStream(pInstance, bitStream);
 
         bitStream.readAligned(&codewordBitsize, 1);
-        std::vector<uint8_t> zeroStream(codewordBitsize / 8);
+        std::vector<uint32_t> zeroStream((codewordBitsize + 31) / 32);
         bitStream.readAligned(zeroStream.data(), zeroStream.size());
 
         std::vector<ushort> zeroOffsetsInc(offsetCount);

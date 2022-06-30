@@ -1064,9 +1064,6 @@ namespace compression
 
         dataInfo.close();
 
-        // early out if no index info is gathered and thus no attribute center info is available
-        if(!indices)
-            return;
         // ----------------------------------------------------------------------------------------------
         // writeout of the attribute Hierarchy
         // ----------------------------------------------------------------------------------------------
@@ -1080,6 +1077,9 @@ namespace compression
         }
         file.close();
 
+        // early out if no index info is gathered and thus no attribute center info is available
+        if(!indices)
+            return;
         // -----------------------------------------------------------------------------------------------
         // writeout of the indices per attribute in separate files
         // -----------------------------------------------------------------------------------------------

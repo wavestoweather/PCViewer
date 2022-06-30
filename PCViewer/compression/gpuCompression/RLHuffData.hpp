@@ -10,8 +10,8 @@ struct RLHuffDecodeDataCpu{
     std::vector<uint> zeroCountOffsets{};
     vkCompress::HuffmanDecodeTable symbolTable;
     vkCompress::HuffmanDecodeTable zeroCountTable;
-    std::vector<uint8_t> codewordStream;        // holds the compressed bits of the main codewords
-    std::vector<uint8_t> zeroStream;            // holds the compressed bits of the 0 run lengths(needs zeroCountTable for decompression)
+    std::vector<uint32_t> codewordStream;        // holds the compressed bits of the main codewords
+    std::vector<uint32_t> zeroStream;            // holds the compressed bits of the 0 run lengths(needs zeroCountTable for decompression)
 };
 
 struct RLHuffDecodeDataGpu{
@@ -72,10 +72,12 @@ struct RLHuffDecodeDataGpu{
 
         //uploading all the data
         VkUtil::uploadData(gpuContext.device, memory, symbolTableOffset, symbolTableSize, cpuData.symbolTable.m_pStorage);
-        VkUtil::uploadData(gpuContext.device, memory, symbolStreamOffset, symbolStreamSize, cpuData.codewordStream.data());
+        if(symbolStreamSize)
+            VkUtil::uploadData(gpuContext.device, memory, symbolStreamOffset, symbolStreamSize, cpuData.codewordStream.data());
         VkUtil::uploadData(gpuContext.device, memory, symbolOffsetsOffset, symbolOffsetsSize, cpuData.symbolOffsets.data());
         VkUtil::uploadData(gpuContext.device, memory, zeroCountTableOffset, zeroCountTableSize, cpuData.zeroCountTable.m_pStorage);
-        VkUtil::uploadData(gpuContext.device, memory, zeroCountStreamOffset, zeroCountStreamSize, cpuData.zeroStream.data());
+        if(zeroCountStreamSize)
+            VkUtil::uploadData(gpuContext.device, memory, zeroCountStreamOffset, zeroCountStreamSize, cpuData.zeroStream.data());
         VkUtil::uploadData(gpuContext.device, memory, zeroCountOffsetsOffset, zeroCountOffsetSize, cpuData.zeroCountOffsets.data());
     }
     RLHuffDecodeDataGpu(const RLHuffDecodeDataGpu&) = delete;   // no copy

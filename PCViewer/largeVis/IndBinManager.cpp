@@ -288,6 +288,7 @@ void IndBinManager::updateCounts(){
     }
 
     auto execCountUpdate = [](IndBinManager* t, std::vector<uint32_t> activeIndices){
+        PCUtil::Stopwatch totalTime(std::cout, "Total Count update Time");
         // starting with updating the counts if needed to have all information available for the following counting/reduction
         // note: might be changed to be settable by the user if cpu or gpu should be used for counting
         if(t->countingMethod <= CountingMethod::CpuRoaring){

@@ -16,6 +16,7 @@ class BitStreamReadOnly
 public:
     BitStreamReadOnly(const uint* pBuffer, uint bitSize);
     BitStreamReadOnly(BitStreamReadOnly&& other);
+    BitStreamReadOnly& operator=(BitStreamReadOnly&& other);
     virtual ~BitStreamReadOnly();
 
     uint getBitPosition() const;
@@ -125,6 +126,19 @@ inline BitStreamReadOnly::BitStreamReadOnly(BitStreamReadOnly&& other)
     other.m_bitSize = 0;
     other.m_bufferPos = 0;
     other.m_bitPos = 0;
+}
+
+inline BitStreamReadOnly& BitStreamReadOnly::operator=(BitStreamReadOnly&& other)
+{
+    m_pBuffer = other.m_pBuffer;
+    m_bitSize = other.m_bitSize;
+    m_bufferPos = other.m_bufferPos;
+    m_bitPos = other.m_bitPos;
+    other.m_pBuffer = nullptr;
+    other.m_bitSize = 0;
+    other.m_bufferPos = 0;
+    other.m_bitPos = 0;
+    return *this;
 }
 
 inline BitStreamReadOnly::~BitStreamReadOnly()

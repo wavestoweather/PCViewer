@@ -110,9 +110,9 @@ void HuffmanDecodeTable::readFromBitStream(const GpuInstance* pInstance, BitStre
 
 uint HuffmanDecodeTable::computeMaxGPUSize(const GpuInstance* pInstance)
 {
-    uint distinctSymbolCountMax = 1 << LOG2_HUFFMAN_DISTINCT_SYMBOL_COUNT_MAX;
+    uint distinctSymbolCountMax = 1 << pInstance->m_log2HuffmanDistinctSymbolCountMax;
 
-    bool longSymbols = (LOG2_HUFFMAN_DISTINCT_SYMBOL_COUNT_MAX > 16);
+    bool longSymbols = (pInstance->m_log2HuffmanDistinctSymbolCountMax > 16);
     uint symbolSize = longSymbols ? sizeof(Symbol32) : sizeof(Symbol16);
 
     uint size = 0;
@@ -125,7 +125,7 @@ uint HuffmanDecodeTable::computeMaxGPUSize(const GpuInstance* pInstance)
 
 uint HuffmanDecodeTable::computeGPUSize(const GpuInstance* pInstance) const
 {
-    bool longSymbols = (LOG2_HUFFMAN_DISTINCT_SYMBOL_COUNT_MAX > 16);
+    bool longSymbols = (pInstance->m_log2HuffmanDistinctSymbolCountMax > 16);
     uint symbolSize = longSymbols ? sizeof(Symbol32) : sizeof(Symbol16);
 
     uint size = 0;

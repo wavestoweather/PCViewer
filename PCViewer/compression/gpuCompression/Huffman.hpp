@@ -11,22 +11,22 @@ class GpuInstance;
 struct HuffmanGPUStreamInfo
 {
     // raw data
-    VkDeviceAddress dpSymbolStream;
+    VkDeviceAddress dpSymbolStream{};
 
     // encoded data
-    VkDeviceAddress dpCodewordStream;
-    VkDeviceAddress dpOffsets;
+    VkDeviceAddress dpCodewordStream{};
+    VkDeviceAddress dpOffsets{};
 
     // encoder-only info
-    VkDeviceAddress dpEncodeCodewords;
-    VkDeviceAddress dpEncodeCodewordLengths;
+    VkDeviceAddress dpEncodeCodewords{};
+    VkDeviceAddress dpEncodeCodewordLengths{};
 
     // decoder-only info
-    VkDeviceAddress dpDecodeTable;
-    uint decodeSymbolTableSize;
+    VkDeviceAddress dpDecodeTable{};
+    uint decodeSymbolTableSize{};
     
     // common info
-    uint symbolCount;
+    uint symbolCount{};
 };
 
 size_t huffmanGetRequiredMemory(const GpuInstance* pInstance);

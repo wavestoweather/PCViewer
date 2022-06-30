@@ -96,8 +96,10 @@ namespace vkCompress
         longSymbols = 1;
         const std::vector<uint32_t> codingBlocks{32, 64, 128, 256};
         entries.push_back({1, sizeof(uint32_t), sizeof(uint32_t)}); // adding specialization constant 1: codingBlockSize
-        uint32_t specializationData[2]{longSymbols, 0};
-        specializationInfo.dataSize = sizeof(uint32_t) * 2;
+        entries.push_back({2, sizeof(uint32_t) * 2, sizeof(uint32_t)}); // adding specialization constant 2: subgroupSize
+        entries.push_back({3, sizeof(uint32_t) * 3, sizeof(uint32_t)}); // adding specialization constant 3: localHeight
+        uint32_t specializationData[4]{longSymbols, 0, m_subgroupSize, 256 / m_subgroupSize};
+        specializationInfo.dataSize = sizeof(uint32_t) * 4;
         specializationInfo.pData = specializationData;
         specializationInfo.mapEntryCount = entries.size();
         specializationInfo.pMapEntries = entries.data();
