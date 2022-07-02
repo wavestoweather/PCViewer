@@ -160,8 +160,6 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     uint bitStreamSize = bitStream.getRawSizeBytes();
     uint originalSize = symbols.size() * sizeof(symbols[0]);
     auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector(), gpu.m_codingBlockSize);
-    std::cout << cpuData.symbolOffsets.size() << std::endl;
-    //cpuData.symbolOffsets[1] -= 32;
     RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
     //vkCompress::decodeHuff()
 

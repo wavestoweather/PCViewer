@@ -737,7 +737,7 @@ bool decodeRLHuff(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataC
 
     streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.symbolStreamOffset;
 
-    streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.zeroCountOffsetsOffset;
+    streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, decodeDataGpu.buffer) + decodeDataGpu.symbolOffsetsOffset;
 
     // uploading the stream info and calling the decoding function for the rl encoded stream
     // note: the descriptor set resources.streamInfoSet has to be created and the streamInfos buffer has to be bound
