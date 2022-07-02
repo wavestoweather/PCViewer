@@ -41,7 +41,7 @@ bool huffmanShutdown(GpuInstance* pInstance);
 bool huffmanEncode(GpuInstance* pInstance, const HuffmanGPUStreamInfo* pStreamInfos, uint streamCount, uint codingBlockSize, uint* pCompressedSizeBits);
 bool huffmanDecode(GpuInstance* pInstance, const HuffmanGPUStreamInfo* pStreamInfos, uint streamCount, uint codingBlockSize);
 // note: does the same as huffmanDecode, however expects all the data to be available in vulkan buffers and writes the commands into the commands buffer
-// note: execution is only done after the commands command buffer is submitted to a queue
+// note: execution is only done after the commands command buffer is submitted to a queue 
 bool huffmanDecode(GpuInstance* pInstance, VkCommandBuffer commands, VkDescriptorSet pStreamInfos, uint streamCount, uint codingBlockSize);
 
 }

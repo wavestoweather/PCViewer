@@ -142,6 +142,8 @@ namespace vkCompress
         RunLength.pipelineInfo.vkDestroy(vkContext);
         DWT.pipelineInfo.vkDestroy(vkContext);
         Quantization.pipelineInfo.vkDestroy(vkContext);
+        Encode.Decode[0].decodeHuffmanLong.vkDestroy(vkContext);
+        Encode.Decode[0].decodeHuffmanShort.vkDestroy(vkContext);
 
         for(int i: irange(Encode.ms_decodeResourcesCount)){
             auto& d = Encode.Decode[i];

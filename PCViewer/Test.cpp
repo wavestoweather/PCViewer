@@ -137,65 +137,102 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
-    
-    vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
-    const uint symbolsSize = 1 << 20;
-    std::vector<uint16_t> symbols(symbolsSize), symbolsCpu(symbolsSize);
-    srand(10);  //seeding
-    for(auto& s: symbols)
-        s = rand() & 0xff;
-    cudaCompress::BitStream bitStream;
-    cudaCompress::BitStream* arr[]{&bitStream};
-    std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
-    {
-    PCUtil::Stopwatch encodeWatch(std::cout, "Encoding Time");
-    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, gpu.m_codingBlockSize);
-    //cudaCompress::encodeHuffCPU(arr, sArr, 1, gpu.m_codingBlockSize);
+    const bool testDecomp = false;
+    if(testDecomp){
+        vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
+        const uint symbolsSize = 1 << 20;
+        std::vector<uint16_t> symbols(symbolsSize), symbolsCpu(symbolsSize);
+        srand(10);  //seeding
+        for(auto& s: symbols)
+            s = rand() & 0xff;
+        cudaCompress::BitStream bitStream;
+        cudaCompress::BitStream* arr[]{&bitStream};
+        std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
+        {
+        PCUtil::Stopwatch encodeWatch(std::cout, "Encoding Time");
+        cudaCompress::encodeRLHuffCPU(arr, sArr, 1, gpu.m_codingBlockSize);
+        //cudaCompress::encodeHuffCPU(arr, sArr, 1, gpu.m_codingBlockSize);
+        }
+        cudaCompress::BitStreamReadOnly readStream(bitStream.getRaw(), bitStream.getBitSize());
+        cudaCompress::BitStreamReadOnly* bArr[]{&readStream};
+        sArr[0] = &symbolsCpu;
+        cudaCompress::decodeRLHuffCPU(bArr, sArr, symbolsSize, 1, gpu.m_codingBlockSize);
+        //cudaCompress::decodeHuffCPU(bArr, sArr, symbolsSize, 1, gpu.m_codingBlockSize);
+        uint bitStreamSize = bitStream.getRawSizeBytes();
+        uint originalSize = symbols.size() * sizeof(symbols[0]);
+        auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector(), gpu.m_codingBlockSize);
+        std::cout << cpuData.symbolOffsets.size() << std::endl;
+        //cpuData.symbolOffsets[1] -= 32;
+        RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
+        //vkCompress::decodeHuff()
+
+        // creating buffer for the symbol table
+        uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
+        uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
+        auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {2 * paddedSymbols}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        std::vector<uint16_t> sorted(symbolsSize); uint16_t count{};
+        for(auto& i: sorted) i = count++;
+        VkUtil::uploadData(context.device, mem, 0, symbolsSize * sizeof(uint16_t), sorted.data());
+
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+
+        VkQueryPool times;
+        VkQueryPoolCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        createInfo.queryCount = 2;
+        createInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        vkCreateQueryPool(context.device, &createInfo, nullptr, &times);
+        vkCmdResetQueryPool(commands, times, 0, 2);
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, times, 0);
+
+        auto &resources = gpu.Encode.Decode[0];
+        auto& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
+        
+        streamInfo.symbolCount = cpuData.symbolCount;
+
+        streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolTableOffset;
+        streamInfo.decodeSymbolTableSize = cpuData.symbolTable.getSymbolTableSize();
+
+        streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolStreamOffset;
+
+        streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolOffsetsOffset;
+        streamInfo.dpSymbolStream = VkUtil::getBufferAddress(context.device, symbolBuffer[0]);
+        VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(vkCompress::HuffmanGPUStreamInfo), &streamInfo);
+        
+        vkCompress::huffmanDecode(&gpu, commands, resources.streamInfoSet, 1, gpu.m_codingBlockSize);
+        
+        auto& zeroStreamInfo = resources.pZeroCountStreamInfos[0];
+        zeroStreamInfo.symbolCount = cpuData.symbolCount; // symbol count is equivalent to the normal decomrpession symbol count
+
+        zeroStreamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) +  gpuData.zeroCountTableOffset;
+        zeroStreamInfo.decodeSymbolTableSize = cpuData.zeroCountTable.getSymbolTableSize();
+
+        zeroStreamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountStreamOffset;
+
+        zeroStreamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountOffsetsOffset;
+        zeroStreamInfo.dpSymbolStream = VkUtil::getBufferAddress(context.device, symbolBuffer[0]) + paddedSymbols;
+        VkUtil::uploadData(context.device, resources.memory, resources.zeroInfosOffset, sizeof(zeroStreamInfo), &zeroStreamInfo);
+        vkCompress::huffmanDecode(&gpu, commands, resources.zeroStreamInfoSet, 1u, gpu.m_codingBlockSize);
+
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, times, 1);
+        uint32_t t[2];
+        {
+        PCUtil::Stopwatch decodeWatch(std::cout, "Decoding time Gpu");
+        VkUtil::commitCommandBuffer(context.queue, commands);
+        vkGetQueryPoolResults(context.device, times, 0, 2, sizeof(uint32_t) * 2, t, sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT);
+        }
+        check_vk_result(vkQueueWaitIdle(context.queue)); // have to wait for buffer freeing
+        std::cout << (t[1] - t[0]) * 1e-6 << " ms?" << std::endl;
+
+        std::vector<uint16_t> downloadedData(symbolsSize);
+        vkDestroyQueryPool(context.device, times, nullptr);
+        VkUtil::downloadData(context.device, mem, 0, symbolsSize * sizeof(uint16_t), downloadedData.data());
+        //std::set<uint16_t> block1Orig(symbols.begin(), symbols.begin() + 4096);
+        //std::set<uint16_t> block1Gpu(downloadedData.begin(), downloadedData.begin() + 4096);
+        //bool equ = block1Orig == block1Gpu;
+        vkDestroyBuffer(context.device, symbolBuffer[0], nullptr);
+        vkFreeMemory(context.device, mem, nullptr);
+        bool test = true;
     }
-    cudaCompress::BitStreamReadOnly readStream(bitStream.getRaw(), bitStream.getBitSize());
-    cudaCompress::BitStreamReadOnly* bArr[]{&readStream};
-    sArr[0] = &symbolsCpu;
-    cudaCompress::decodeRLHuffCPU(bArr, sArr, symbolsSize, 1, gpu.m_codingBlockSize);
-    //cudaCompress::decodeHuffCPU(bArr, sArr, symbolsSize, 1, gpu.m_codingBlockSize);
-    uint bitStreamSize = bitStream.getRawSizeBytes();
-    uint originalSize = symbols.size() * sizeof(symbols[0]);
-    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector(), gpu.m_codingBlockSize);
-    RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
-    //vkCompress::decodeHuff()
-
-    // creating buffer for the symbol table
-    uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
-    uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
-    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-    std::vector<uint16_t> sorted(symbolsSize); uint16_t count{};
-    for(auto& i: sorted) i = count++;
-    VkUtil::uploadData(context.device, mem, 0, symbolsSize * sizeof(uint16_t), sorted.data());
-    uint8_t* ddd = (uint8_t*)cpuData.codewordStream.data();
-
-    VkCommandBuffer commands;
-    VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
-    auto &resources = gpu.Encode.Decode[0];
-    auto& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
-    
-    streamInfo.symbolCount = cpuData.symbolCount;
-
-    streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolTableOffset;
-    streamInfo.decodeSymbolTableSize = cpuData.symbolTable.getSymbolTableSize();
-
-    streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolStreamOffset;
-
-    streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolOffsetsOffset;
-    streamInfo.dpSymbolStream = VkUtil::getBufferAddress(context.device, symbolBuffer[0]);
-    VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(vkCompress::HuffmanGPUStreamInfo), &streamInfo);
-    vkCompress::huffmanDecode(&gpu, commands, resources.streamInfoSet, 1, gpu.m_codingBlockSize);
-
-    VkUtil::commitCommandBuffer(context.queue, commands);
-    check_vk_result(vkQueueWaitIdle(context.queue));
-
-    std::vector<uint16_t> downloadedData(symbolsSize);
-    VkUtil::downloadData(context.device, mem, 0, symbolsSize * sizeof(uint16_t), downloadedData.data());
-    //std::set<uint16_t> block1Orig(symbols.begin(), symbols.begin() + 4096);
-    //std::set<uint16_t> block1Gpu(downloadedData.begin(), downloadedData.begin() + 4096);
-    //bool equ = block1Orig == block1Gpu;
-    bool test = true;
 }
