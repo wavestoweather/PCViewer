@@ -115,7 +115,31 @@ namespace vkCompress
             shaderModule = VkUtil::createShaderModule(context.device, compBytes);
             VkUtil::createComputePipeline(context.device, shaderModule, {decodeHuffmanLayout}, &Encode.Decode[0].huffmanTransposeShort[i].pipelineLayout, &Encode.Decode[0].huffmanTransposeShort[i].pipeline, &specializationInfo);
         }
+
+        // inclusive scan
+        const std::string_view inclusiveScanPath = "shader/compression_scan.comp.spv";
+        compBytes = PCUtil::readByteFile(inclusiveScanPath);
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+
+        bindings.clear();
+
+        // does not need descriptor set anymore
+        //VkUtil::createDescriptorSetLayout(context.device, bindings, &RunLength.inclusiveScanInfo.descriptorSetLayout);
         
+        entries = {{0, 0, sizeof(uint32_t)}};
+        uint32_t exclusive = 0;
+        specializationInfo.dataSize = sizeof(uint32_t);
+        specializationInfo.pData = &exclusive;
+        specializationInfo.mapEntryCount = entries.size();
+        specializationInfo.pMapEntries = entries.data();
+        pushConstants = {VkPushConstantRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, 4 * sizeof(uint32_t) + 3 * sizeof(uint64_t)}};
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &RunLength.inclusiveScanInfo.pipelineLayout, &RunLength.inclusiveScanInfo.pipeline, &specializationInfo, pushConstants);
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+        exclusive = 1;
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &RunLength.exclusiveScanInfo.pipelineLayout, &RunLength.exclusiveScanInfo.pipeline, &specializationInfo, pushConstants);
+
+        
+        // resources for huffman pipeline ---------------------------------------------------------------
         // creating the buffer and descriptor sets for decoding ---------------------
         for(int i: irange(Encode.ms_decodeResourcesCount)){
             auto& d = Encode.Decode[i];
@@ -140,6 +164,8 @@ namespace vkCompress
         Histogram.pipelineInfo.vkDestroy(vkContext);
         HuffmanTable.pipelineInfo.vkDestroy(vkContext);
         RunLength.pipelineInfo.vkDestroy(vkContext);
+        RunLength.inclusiveScanInfo.vkDestroy(vkContext);
+        RunLength.exclusiveScanInfo.vkDestroy(vkContext);
         DWT.pipelineInfo.vkDestroy(vkContext);
         Quantization.pipelineInfo.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanLong.vkDestroy(vkContext);

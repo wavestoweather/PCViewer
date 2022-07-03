@@ -39,6 +39,8 @@ bool runLengthInit(GpuInstance* pInstance)
         //cudaSafeCall(cudaEventCreateWithFlags(&pInstance->RunLength.syncEventsReadback[stream], cudaEventDisableTiming));
     }
 
+    
+
     //cudaSafeCall(cudaMallocHost(&pInstance->RunLength.pUpload, streamCountMax * (2 * sizeof(Symbol16*) + sizeof(uint))));
     //cudaSafeCall(cudaEventCreateWithFlags(&pInstance->RunLength.syncEventUpload, cudaEventDisableTiming));
     //cudaSafeCall(cudaEventRecord(pInstance->RunLength.syncEventUpload));

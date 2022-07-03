@@ -66,8 +66,7 @@ void ScanPlan::allocate(size_t elemSizeBytes, size_t numElements, size_t numRows
     // allocate storage for block sums
     numElts = m_numElements;
     level = 0;
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    size_t sizeSum{};
     do
     {
         size_t numBlocks = (numElts + blockSize - 1) / blockSize;
@@ -80,43 +79,41 @@ void ScanPlan::allocate(size_t elemSizeBytes, size_t numElements, size_t numRows
                 // doing row aligning to 16 bytes to ensure every alignment there is...
                 size_t rowLength = cudaCompress::getAlignedSize(numBlocks * m_elemSizeBytes, 16);
                 //cudaSafeCall(cudaMallocPitch((void**)&(m_blockSums[level]), &dpitch, numBlocks * m_elemSizeBytes, numRows));
-                VkUtil::createBuffer(m_context.device, rowLength * numRows, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &m_blockSums[level]);
-                m_blockSumsOffsets[level] = allocInfo.allocationSize;
-                VkMemoryRequirements memReq{};
-                vkGetBufferMemoryRequirements(m_context.device, m_blockSums[level], &memReq);
-                allocInfo.allocationSize += memReq.size;
-                allocInfo.memoryTypeIndex |= memReq.memoryTypeBits;
+                //VkUtil::createBuffer(m_context.device, rowLength * numRows, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &m_blockSums[level]);
+                m_blockSumsOffsets[level] = sizeSum;
+                sizeSum += rowLength * numRows; 
 
                 m_rowPitches[level+1] = rowLength / m_elemSizeBytes;
             }
             else
             {
                 //cudaSafeCall(cudaMalloc((void**)&(m_blockSums[level]), numBlocks * m_elemSizeBytes));
-                VkUtil::createBuffer(m_context.device, numBlocks * m_elemSizeBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &m_blockSums[level]);
-                m_blockSumsOffsets[level] = allocInfo.allocationSize;
-                VkMemoryRequirements memReq{};
-                vkGetBufferMemoryRequirements(m_context.device, m_blockSums[level], &memReq);
-                allocInfo.allocationSize += memReq.size;
-                allocInfo.memoryTypeIndex |= memReq.memoryTypeBits;
+                //VkUtil::createBuffer(m_context.device, numBlocks * m_elemSizeBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &m_blockSums[level]);
+                m_blockSumsOffsets[level] = sizeSum;
+                //vkGetBufferMemoryRequirements(m_context.device, m_blockSums[level], &memReq);
+                sizeSum += numBlocks * m_elemSizeBytes;
             }
             level++;
         }
         numElts = numBlocks;
     } while (numElts > 1);
 
-    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(m_context.physicalDevice, allocInfo.memoryTypeIndex, 0);
-    vkAllocateMemory(m_context.device, &allocInfo, nullptr, &m_blockSumsMemory);
+    //allocInfo.memoryTypeIndex = VkUtil::findMemoryType(m_context.physicalDevice, allocInfo.memoryTypeIndex, 0);
+    auto [buffer, offset, memory] = VkUtil::createMultiBufferBound(m_context, {sizeSum}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, 0);
+    m_buffer = buffer[0];
+    m_blockSumsMemory = memory;
+
+    VkDeviceAddress baseAddress = VkUtil::getBufferAddress(m_context.device, m_buffer);
+    
     for(int i: irange(m_blockSums)){
-        vkBindBufferMemory(m_context.device, m_blockSums[i], m_blockSumsMemory, m_blockSumsOffsets[i]);
+        //vkBindBufferMemory(m_context.device, m_blockSums[i], m_blockSumsMemory, m_blockSumsOffsets[i]);
+        m_blockSums[i] = baseAddress + m_blockSumsOffsets[i];
     }
 }
 
 ScanPlan::~ScanPlan()
 {
-    for (unsigned int i = 0; i < m_numLevels; i++)
-    {
-        vkDestroyBuffer(m_context.device, m_blockSums[i], nullptr);
-    }
+    vkDestroyBuffer(m_context.device, m_buffer, nullptr);
     vkFreeMemory(m_context.device,  m_blockSumsMemory, nullptr);
 
     if(m_numRows > 1)

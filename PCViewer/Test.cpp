@@ -13,6 +13,7 @@
 #include "compression/gpuCompression/Util.hpp"
 #include "compression/cpuCompression/EncodeCPU.h"
 #include "compression/cpuCompression/DWTCpu.h"
+#include "compression/gpuCompression/Scan.hpp"
 
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
     //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
@@ -138,6 +139,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
     const bool testDecomp = false;
+    const bool testExclusiveScan = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -234,5 +236,32 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         vkDestroyBuffer(context.device, symbolBuffer[0], nullptr);
         vkFreeMemory(context.device, mem, nullptr);
         bool test = true;
+    }
+    if(testExclusiveScan){
+        vkCompress::GpuInstance gpu(context, 1, 1 << 10, 0, 0);
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+        VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        auto [buffer, offsets, mem] = VkUtil::createMultiBufferBound(context, {1024 * 2, 1024 * 4, 1024 * 4}, {usage, usage, usage}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+        VkDeviceAddress src = VkUtil::getBufferAddress(context.device, buffer[0]);
+        VkDeviceAddress dst = VkUtil::getBufferAddress(context.device, buffer[1]);
+        VkDeviceAddress dstEx = VkUtil::getBufferAddress(context.device, buffer[2]);
+        std::vector<short> init(1024);
+        short s = 0; for(auto& i: init) i = s++;
+        VkUtil::uploadData(context.device, mem, offsets[0], sizeof(init[0]) * init.size(), init.data());
+        vkCompress::scanArray<false>(&gpu, commands, dst, src, init.size(), gpu.m_pScanPlan); //testing inclusive scan
+        vkCompress::scanArray<true>(&gpu, commands, dstEx, src, init.size(), gpu.m_pScanPlan); //testing exclusive scan
+        VkUtil::commitCommandBuffer(context.queue, commands);
+        auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
+        
+        std::vector<uint32_t> final(init.size());
+        VkUtil::downloadData(context.device, mem, offsets[1], final.size() * sizeof(final[0]), final.data());
+        for(int i = final.size() - 1; i > 0; --i){
+            final[i] -= final[i - 1];
+        }
+        VkUtil::downloadData(context.device, mem, offsets[2], final.size() * sizeof(final[0]), final.data());
+    
+        bool letssee = true;
     }
 }

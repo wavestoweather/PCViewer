@@ -1,0 +1,172 @@
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
+
+//layout(binding = 0) buffer In{
+//    uvec4 src4u[];
+//};  // is interpreted as ushort array (16 bit uints)
+//layout(binding = 0) buffer InVec4{
+//    u16vec4 src4[];
+//};
+//
+//layout(binding = 1) buffer Out{
+//    uint dst[];
+//};
+//layout(binding = 1) buffer OutVec4{
+//    uvec4 dst4[];
+//};
+//
+//layout(binding = 2) buffer Block{
+//    uint blockSums[];
+//};
+
+layout(buffer_reference, scalar) buffer UVec4 {uvec4 i[];};
+layout(buffer_reference, scalar) buffer HVec4 {u16vec4 i[];};
+layout(buffer_reference, scalar) buffer UVec {uint i[];};
+
+layout(push_constant) uniform PC{
+    uint numElements;
+    uint dataRowPitch;
+    uint blockSumRowPitch;
+    uint srcUVec4;  // if bit 0 is 1, src4u should be used for loading
+    uint64_t inAddress;
+    uint64_t outAddress;
+    uint64_t blocksAddress;
+};
+
+layout(constant_id = 0) const uint isExclusive = 0;   // if 1 exclusive scan, inclusive scan else
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+// double of loacal size
+shared uint tmp[gl_WorkGroupSize.x * 2];
+void main(){
+    int devOffset, ai, bi, aiDev, biDev;
+    uvec4 threadScan[2];  // contains the final data
+
+    // no multirow ignoring this in https://github.com/m0bl0/cudaCompress/blob/master/src/cudaCompress/scan/scan_kernel.cui
+
+    devOffset = int(gl_WorkGroupID.x * gl_WorkGroupSize.x << 1); // doubled for some reason
+    aiDev = int(devOffset + gl_LocalInvocationID.x);
+    biDev = int(aiDev + gl_WorkGroupSize.x);
+    ai = int(gl_LocalInvocationID.x);
+    bi = int(ai + gl_WorkGroupSize.x);
+
+    // loading data to shared memory ---------------------------------------------
+    int i = aiDev * 4;
+    UVec4 srcU = UVec4(inAddress);  // source uvec4 array
+    HVec4 srcH = HVec4(inAddress);  // source half vec4 array
+    if(i + 3 < numElements){
+        if((srcUVec4 & 1) > 0)
+            threadScan[0] = uvec4(srcU.i[aiDev]);
+        else
+            threadScan[0] = uvec4(srcH.i[aiDev]);
+        threadScan[0].y += threadScan[0].x;
+        threadScan[0].z += threadScan[0].y;
+        threadScan[0].w += threadScan[0].z;
+        tmp[ai] = threadScan[0].w;
+    }
+    else{
+        if((srcUVec4 & 1) > 0)
+            threadScan[0] = (i < numElements) ? uvec4(srcU.i[aiDev]) : uvec4(0);
+        else
+            threadScan[0] = (i < numElements) ? uvec4(srcH.i[aiDev]) : uvec4(0);
+        threadScan[0].y = (((i + 1) < numElements) ? threadScan[0].y : 0) + threadScan[0].x;
+        threadScan[0].z = (((i + 2) < numElements) ? threadScan[0].z : 0) + threadScan[0].y;
+        threadScan[0].w = (((i + 3) < numElements) ? threadScan[0].w : 0) + threadScan[0].z;
+        tmp[ai] = threadScan[0].w;
+    }
+
+    i = biDev * 4;
+    if(i + 3 < numElements){
+        if((srcUVec4 & 1) > 0)
+            threadScan[1] = uvec4(srcU.i[biDev]);
+        else
+            threadScan[1] = uvec4(srcH.i[biDev]);
+        threadScan[1].y += threadScan[1].x;
+        threadScan[1].z += threadScan[1].y;
+        threadScan[1].w += threadScan[1].z;
+        tmp[bi] = threadScan[1].w;
+    }
+    else{
+        if((srcUVec4 & 1) > 0)
+            threadScan[1] = (i < numElements) ? uvec4(srcU.i[biDev]) : uvec4(0);
+        else
+            threadScan[1] = (i < numElements) ? uvec4(srcH.i[biDev]) : uvec4(0);
+        threadScan[1].y = (((i + 1) < numElements) ? threadScan[1].y : 0) + threadScan[1].x;
+        threadScan[1].z = (((i + 2) < numElements) ? threadScan[1].z : 0) + threadScan[1].y;
+        threadScan[1].w = (((i + 3) < numElements) ? threadScan[1].w : 0) + threadScan[1].z;
+        tmp[bi] = threadScan[1].w;
+    }
+    //barrier();  // load barrier
+
+    // scan cta ------------------------------------------------------------------------
+    uint blockSumIndex = gl_WorkGroupID.x;
+    uint val = tmp[ai];
+    uint val2 = tmp[bi];
+    barrier();
+
+    // doing a subgroup exclusive scan
+    uint scan1 = subgroupExclusiveAdd(val);
+    uint scan2 = subgroupExclusiveAdd(val2);
+
+    if(gl_SubgroupInvocationID == gl_SubgroupSize - 1){
+        tmp[gl_SubgroupID] = scan1 + val;   // making things inclusive (dont know why here and not up there)
+        tmp[gl_SubgroupID + gl_NumSubgroups] = scan2 + val2;
+    }
+
+    val = scan1;
+    val2 = scan2;
+
+    barrier();
+    // Exclusive scan on the last few things, *2 as we have 2 values per thread
+    if(gl_LocalInvocationID.x < gl_NumSubgroups * 2){
+        tmp[gl_LocalInvocationID.x] = subgroupExclusiveAdd(tmp[gl_LocalInvocationID.x]);
+    }
+    barrier();
+
+    val = val + tmp[gl_SubgroupID];
+    val2 = val2 + tmp[gl_SubgroupID + gl_NumSubgroups];
+    barrier();
+
+    tmp[gl_LocalInvocationID.x] = val;
+    tmp[gl_LocalInvocationID.x + gl_WorkGroupSize.x] = val2;
+    barrier();
+    // finish up and store -----------------------------------------------------------------------
+    // writing block sums (only if second bit of srcUVec4 is set)
+    UVec blockSums = UVec(blocksAddress);
+    if(((srcUVec4 >> 1) & 1) > 0 && gl_LocalInvocationID.x == gl_WorkGroupSize.x - 1){
+        blockSums.i[blockSumIndex] = val2 + tmp[gl_LocalInvocationID.x + gl_WorkGroupSize.x];
+    }
+    // writing inclusive scans / exclusive
+    uint temp = val;
+    //temp = 0;
+
+    // converting to inclusive/exclusive scan
+    if(bool(isExclusive))
+        threadScan[0] = temp + uvec4(0, threadScan[0].xyz);
+    else
+        threadScan[0] += temp;
+
+    //int i = aiDev * 4;
+    // dont care for not full block
+    UVec4 dst4 = UVec4(outAddress);
+    dst4.i[aiDev] = threadScan[0];
+
+    temp = val2;
+    // converting to inclusive/exclusive
+    if(bool(isExclusive))
+        threadScan[1] = temp + uvec4(0, threadScan[1].xyz);
+    else
+        threadScan[1] += temp;
+
+    dst4.i[biDev] = threadScan[1];
+}
