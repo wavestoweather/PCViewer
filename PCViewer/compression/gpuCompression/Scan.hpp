@@ -38,9 +38,10 @@ void scanArray(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress
     pc.numElements = symbolCount;
     pc.srcUVec4 = level != 0;
     pc.srcUVec4 |= int(numBlocks > 1)  << 1;
+    pc.srcUVec4 |= int(fullBlock) << 2;
     pc.srcAddress = srcAddress;
     pc.dstAddress = dstAddress;
-    pc.blockAddress = plan->m_blockSums[level];
+    pc.blockAddress = (level >= plan->m_blockSums.size()) ? 0: plan->m_blockSums[level];
 
     if constexpr(isExclusive){
         vkCmdPushConstants(commands, pInstance->RunLength.exclusiveScanInfo.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
@@ -59,28 +60,14 @@ void scanArray(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress
         // sub-blocks and scan those. This will give us a new value
         // that must be added to each block to get the final results.
 
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
         // recursive (CPU) call
         scanArray<true> // recursion is always an exclusive add
             (pInstance, commands, pc.blockAddress, pc.blockAddress, numBlocks, plan, level + 1); 
-        
-        //if (fullBlock) {
-        //    vectorAddUniform4<TOut, Op, SCAN_ELTS_PER_THREAD, true>
-        //        <<< grid, threads, 0, stream >>>(d_out,
-        //                                         (const TOut*)plan->m_blockSums[level],
-        //                                         (uint)numElements,
-        //                                         (uint)rowPitch*4,
-        //                                         blockSumRowPitch*4,
-        //                                         0, 0);
-        //} else {
-        //    vectorAddUniform4<TOut, Op, SCAN_ELTS_PER_THREAD, false>
-        //        <<< grid, threads, 0, stream >>>(d_out,
-        //                                         (const TOut*)plan->m_blockSums[level],
-        //                                         (uint)numElements,
-        //                                         (uint)rowPitch*4,
-        //                                         blockSumRowPitch*4,
-        //                                         0, 0);
-        //}
-       
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+
+        vkCmdPushConstants(commands, pInstance->RunLength.addInfo.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->RunLength.addInfo.pipeline);     
     }
 }
 

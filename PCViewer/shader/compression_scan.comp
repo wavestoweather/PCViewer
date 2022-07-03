@@ -10,24 +10,6 @@
 #extension GL_EXT_shader_explicit_arithmetic_types: enable
 #extension GL_EXT_nonuniform_qualifier: enable
 
-//layout(binding = 0) buffer In{
-//    uvec4 src4u[];
-//};  // is interpreted as ushort array (16 bit uints)
-//layout(binding = 0) buffer InVec4{
-//    u16vec4 src4[];
-//};
-//
-//layout(binding = 1) buffer Out{
-//    uint dst[];
-//};
-//layout(binding = 1) buffer OutVec4{
-//    uvec4 dst4[];
-//};
-//
-//layout(binding = 2) buffer Block{
-//    uint blockSums[];
-//};
-
 layout(buffer_reference, scalar) buffer UVec4 {uvec4 i[];};
 layout(buffer_reference, scalar) buffer HVec4 {u16vec4 i[];};
 layout(buffer_reference, scalar) buffer UVec {uint i[];};
@@ -143,7 +125,8 @@ void main(){
     // finish up and store -----------------------------------------------------------------------
     // writing block sums (only if second bit of srcUVec4 is set)
     UVec blockSums = UVec(blocksAddress);
-    if(((srcUVec4 >> 1) & 1) > 0 && gl_LocalInvocationID.x == gl_WorkGroupSize.x - 1){
+    bool writeBlocks = ((srcUVec4 >> 1) & 1) > 0;
+    if(writeBlocks && gl_LocalInvocationID.x == gl_WorkGroupSize.x - 1){
         blockSums.i[blockSumIndex] = val2 + tmp[gl_LocalInvocationID.x + gl_WorkGroupSize.x];
     }
     // writing inclusive scans / exclusive

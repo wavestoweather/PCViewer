@@ -1,0 +1,49 @@
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
+
+layout(buffer_reference, scalar) buffer UVec4 {uvec4 i[];};
+layout(buffer_reference, scalar) buffer HVec4 {u16vec4 i[];};
+layout(buffer_reference, scalar) buffer UVec {uint i[];};
+
+layout(push_constant) uniform PC{
+    uint numElements;
+    uint dataRowPitch;
+    uint blockSumRowPitch;
+    uint srcUVec4;  // if bit 0 is 1, src4u should be used for loading
+    uint64_t inAddress;
+    uint64_t outAddress;
+    uint64_t blocksAddress;
+};
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+const uint scanElementsPerThread = 8;
+
+shared uint uni;
+void main(){
+    UVec blockOffsets = UVec(blocksAddress);
+    if(gl_LocalInvocationID.x == 0)
+        uni = blockOffsets.i[gl_WorkGroupID.x];
+    
+    // the out index is capable to cope with multiple input vectors at once
+    uint outIndex = numElements * gl_WorkGroupID.y + gl_LocalInvocationID.x + (gl_WorkGroupID.x * (gl_WorkGroupSize.x * scanElementsPerThread));
+
+    barrier();  // waiting for shared write completion
+
+    #pragma unroll
+    bool fullBlocks = ((srcUVec4 >> 2) & 1) > 0;
+    UVec outArray = UVec(outAddress);
+    for(int i = 0; i < scanElementsPerThread && (fullBlocks || outIndex < numElements); ++i){
+        outArray.i[outIndex] += uni;
+        outIndex += gl_WorkGroupSize.x;
+    }
+}

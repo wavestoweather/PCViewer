@@ -74,3 +74,4 @@ glslangValidator -V --target-env vulkan1.1 -o compressHuffman_decode.comp.spv co
 glslangValidator -V --target-env vulkan1.1 -o compress_decodeTranspose.comp.spv compress_decodeTranspose.comp
 glslangValidator -V --target-env vulkan1.1 -o compression_RLDecodeScatter.comp.spv compression_RLDecodeScatter.comp
 glslangValidator -V --target-env vulkan1.1 -o compression_scan.comp.spv compression_scan.comp
+glslangValidator -V --target-env vulkan1.1 -o compression_scanAdd.comp.spv compression_scanAdd.comp

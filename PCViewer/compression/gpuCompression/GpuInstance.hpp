@@ -149,6 +149,7 @@ public:
 
         VkUtil::PipelineInfo exclusiveScanInfo{};
         VkUtil::PipelineInfo inclusiveScanInfo{};
+        VkUtil::PipelineInfo addInfo{};
     } RunLength;
 
     struct DWTResources

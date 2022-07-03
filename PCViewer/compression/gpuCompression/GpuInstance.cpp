@@ -138,6 +138,12 @@ namespace vkCompress
         exclusive = 1;
         VkUtil::createComputePipeline(context.device, shaderModule, {}, &RunLength.exclusiveScanInfo.pipelineLayout, &RunLength.exclusiveScanInfo.pipeline, &specializationInfo, pushConstants);
 
+        // add pipeline (used for scan pipelines)
+        const std::string_view addPath = "shader/compression_scanAdd.comp.spv";
+        compBytes = PCUtil::readByteFile(addPath);
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+        
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &RunLength.addInfo.pipelineLayout, &RunLength.addInfo.pipeline, {}, pushConstants);
         
         // resources for huffman pipeline ---------------------------------------------------------------
         // creating the buffer and descriptor sets for decoding ---------------------
@@ -166,6 +172,7 @@ namespace vkCompress
         RunLength.pipelineInfo.vkDestroy(vkContext);
         RunLength.inclusiveScanInfo.vkDestroy(vkContext);
         RunLength.exclusiveScanInfo.vkDestroy(vkContext);
+        RunLength.addInfo.vkDestroy(vkContext);
         DWT.pipelineInfo.vkDestroy(vkContext);
         Quantization.pipelineInfo.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanLong.vkDestroy(vkContext);
