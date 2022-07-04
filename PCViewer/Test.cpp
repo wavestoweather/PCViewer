@@ -14,6 +14,7 @@
 #include "compression/cpuCompression/EncodeCPU.h"
 #include "compression/cpuCompression/DWTCpu.h"
 #include "compression/gpuCompression/Scan.hpp"
+#include "compression/gpuCompression/Quantize.hpp"
 
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
     //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
@@ -138,8 +139,9 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
-    const bool testDecomp = true;
+    const bool testDecomp = false;
     const bool testExclusiveScan = false;
+    const bool testUnquanzite = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -271,5 +273,39 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         upper = std::vector<uint32_t>(final.begin() + 1000, final.end());
 
         bool letssee = true;
+    }
+    if(testUnquanzite){
+        const uint quantSize = 1 << 20;
+        const float quantStep = .001f;
+        vkCompress::GpuInstance gpu(context, 1, quantSize, 0, 0);
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+
+        std::vector<float> orig(quantSize);
+        srand(10);
+        for(auto& f: orig)
+            f = random() / float(1u << 31);
+        
+        std::vector<uint16_t> symbols(quantSize);
+        cudaCompress::util::quantizeToSymbols(symbols.data(), orig.data(), quantSize, quantStep);
+
+        VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        auto [buffer, offsets, mem] = VkUtil::createMultiBufferBound(context, {quantSize * 2, quantSize * 4}, {usage, usage}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    
+        VkUtil::uploadData(context.device, mem, 0, quantSize * 2, symbols.data());
+        auto dst = VkUtil::getBufferAddress(context.device, buffer[1]);
+        auto src = VkUtil::getBufferAddress(context.device, buffer[0]);
+        vkCompress::unquantizeFromSymbols(&gpu, commands, dst, src, quantSize, quantStep);
+        {
+        PCUtil::Stopwatch unquantWatch(std::cout, "Unquantizationtime");
+        VkUtil::commitCommandBuffer(context.queue, commands);
+        auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
+        }
+
+        std::vector<float> res(quantSize);
+        VkUtil::downloadData(context.device, mem, offsets[1], quantSize * 4, res.data());
+        std::vector<float> ref(quantSize);
+        cudaCompress::util::unquantizeFromSymbols(ref.data(), symbols.data(), symbols.size(), quantStep);
+        bool heyho = true;
     }
 }

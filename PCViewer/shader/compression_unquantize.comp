@@ -1,0 +1,51 @@
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
+
+layout(buffer_reference, scalar) buffer HVec2 {u16vec2 i[];};
+layout(buffer_reference, scalar) buffer FVec {float i[];};
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PC{
+    uint size;
+    float quantizationStep;
+    uint quantizationType;
+    uint padding;
+    uint64_t outAddress;
+    uint64_t inAddress;
+};
+
+const uint quantTypeDeadzone = 0;
+const uint quantTypeUniform = 1;
+
+void main(){
+    if(gl_GlobalInvocationID.x >= size)
+        return;
+    HVec2 src = HVec2(inAddress);
+    FVec dst = FVec(outAddress);
+    switch(quantizationType){
+    case quantTypeDeadzone:{
+        uint symbol = src.i[gl_GlobalInvocationID.x >> 1][gl_GlobalInvocationID.x & 1];
+        int neg = int(symbol & 1);
+        int unsymbolized = (1 - 2 * neg) * int((symbol + neg) / 2);
+        dst.i[gl_GlobalInvocationID.x] = (float(unsymbolized) + .5f * (unsymbolized < 0 ? -1.f: unsymbolized > 0 ? 1.f: .0f)) * quantizationStep;
+        break;
+    }
+    case quantTypeUniform:{
+        uint symbol = src.i[gl_GlobalInvocationID.x >> 1][gl_GlobalInvocationID.x & 1];
+        int neg = int(symbol & 1);
+        int unsymbolized = (1 - 2 * neg) * int((symbol + neg) / 2);
+        dst.i[gl_GlobalInvocationID.x] = float(unsymbolized) * quantizationStep;
+        break;
+    }
+    }
+}

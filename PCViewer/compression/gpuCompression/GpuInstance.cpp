@@ -152,6 +152,14 @@ namespace vkCompress
 
         VkUtil::createComputePipeline(context.device, shaderModule, {}, &RunLength.scatterInfo.pipelineLayout, &RunLength.scatterInfo.pipeline, {}, pushConstants);
 
+        // creating unquantize pipeline
+        const std::string_view unquantPath = "shader/compression_unquantize.comp.spv";
+        compBytes = PCUtil::readByteFile(unquantPath);
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+
+        pushConstants = {VkPushConstantRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, 4 * sizeof(uint32_t) + 2 * sizeof(uint64_t)}};
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &Quantization.unquantizeUShortFloatInfo.pipelineLayout, &Quantization.unquantizeUShortFloatInfo.pipeline, {}, pushConstants);
+
         // resources for huffman pipeline ---------------------------------------------------------------
         // creating the buffer and descriptor sets for decoding ---------------------
         for(int i: irange(Encode.ms_decodeResourcesCount)){
@@ -199,6 +207,7 @@ namespace vkCompress
             vkFreeMemory(vkContext.device, RunLength.scannedIndicesMemory, nullptr);
         DWT.pipelineInfo.vkDestroy(vkContext);
         Quantization.pipelineInfo.vkDestroy(vkContext);
+        Quantization.unquantizeUShortFloatInfo.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanLong.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanShort.vkDestroy(vkContext);
 
