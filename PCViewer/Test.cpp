@@ -138,8 +138,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
-    const bool testDecomp = false;
-    const bool testExclusiveScan = true;
+    const bool testDecomp = true;
+    const bool testExclusiveScan = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -172,9 +172,9 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
         uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
         auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {2 * paddedSymbols}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-        std::vector<uint16_t> sorted(symbolsSize); uint16_t count{};
-        for(auto& i: sorted) i = count++;
-        VkUtil::uploadData(context.device, mem, 0, symbolsSize * sizeof(uint16_t), sorted.data());
+        //std::vector<uint16_t> sorted(symbolsSize); uint16_t count{};
+        //for(auto& i: sorted) i = count++;
+        //VkUtil::uploadData(context.device, mem, 0, symbolsSize * sizeof(uint16_t), sorted.data());
 
         VkCommandBuffer commands;
         VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
@@ -187,35 +187,39 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         vkCreateQueryPool(context.device, &createInfo, nullptr, &times);
         vkCmdResetQueryPool(commands, times, 0, 2);
         vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, times, 0);
-
-        auto &resources = gpu.Encode.Decode[0];
-        auto& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
         
-        streamInfo.symbolCount = cpuData.symbolCount;
-
-        streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolTableOffset;
-        streamInfo.decodeSymbolTableSize = cpuData.symbolTable.getSymbolTableSize();
-
-        streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolStreamOffset;
-
-        streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolOffsetsOffset;
-        streamInfo.dpSymbolStream = VkUtil::getBufferAddress(context.device, symbolBuffer[0]);
-        VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(vkCompress::HuffmanGPUStreamInfo), &streamInfo);
+        // old debuggin code to test inner workings of huffman decoding --------------------------------------
+        //auto &resources = gpu.Encode.Decode[0];
+        //auto& streamInfo = resources.pSymbolStreamInfos[0]; // we assume here to only have a single decoding block! -> index 0
+        //
+        //streamInfo.symbolCount = cpuData.symbolCount;
+//
+        //streamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolTableOffset;
+        //streamInfo.decodeSymbolTableSize = cpuData.symbolTable.getSymbolTableSize();
+//
+        //streamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolStreamOffset;
+//
+        //streamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.symbolOffsetsOffset;
+        //streamInfo.dpSymbolStream = VkUtil::getBufferAddress(context.device, symbolBuffer[0]);
+        //VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(vkCompress::HuffmanGPUStreamInfo), &streamInfo);
+        //
+        //vkCompress::huffmanDecode(&gpu, commands, resources.streamInfoSet, 1, gpu.m_codingBlockSize);
+        //
+        //auto& zeroStreamInfo = resources.pZeroCountStreamInfos[0];
+        //zeroStreamInfo.symbolCount = cpuData.symbolCount; // symbol count is equivalent to the normal decomrpession symbol count
+//
+        //zeroStreamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) +  gpuData.zeroCountTableOffset;
+        //zeroStreamInfo.decodeSymbolTableSize = cpuData.zeroCountTable.getSymbolTableSize();
+//
+        //zeroStreamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountStreamOffset;
+//
+        //zeroStreamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountOffsetsOffset;
+        //zeroStreamInfo.dpSymbolStream = VkUtil::getBufferAddress(context.device, symbolBuffer[0]) + paddedSymbols;
+        //VkUtil::uploadData(context.device, resources.memory, resources.zeroInfosOffset, sizeof(zeroStreamInfo), &zeroStreamInfo);
+        //vkCompress::huffmanDecode(&gpu, commands, resources.zeroStreamInfoSet, 1u, gpu.m_codingBlockSize);
         
-        vkCompress::huffmanDecode(&gpu, commands, resources.streamInfoSet, 1, gpu.m_codingBlockSize);
-        
-        auto& zeroStreamInfo = resources.pZeroCountStreamInfos[0];
-        zeroStreamInfo.symbolCount = cpuData.symbolCount; // symbol count is equivalent to the normal decomrpession symbol count
-
-        zeroStreamInfo.dpDecodeTable = VkUtil::getBufferAddress(context.device, gpuData.buffer) +  gpuData.zeroCountTableOffset;
-        zeroStreamInfo.decodeSymbolTableSize = cpuData.zeroCountTable.getSymbolTableSize();
-
-        zeroStreamInfo.dpCodewordStream = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountStreamOffset;
-
-        zeroStreamInfo.dpOffsets = VkUtil::getBufferAddress(context.device, gpuData.buffer) + gpuData.zeroCountOffsetsOffset;
-        zeroStreamInfo.dpSymbolStream = VkUtil::getBufferAddress(context.device, symbolBuffer[0]) + paddedSymbols;
-        VkUtil::uploadData(context.device, resources.memory, resources.zeroInfosOffset, sizeof(zeroStreamInfo), &zeroStreamInfo);
-        vkCompress::huffmanDecode(&gpu, commands, resources.zeroStreamInfoSet, 1u, gpu.m_codingBlockSize);
+        // new debugging code for testing complete huffman decoding
+        vkCompress::decodeRLHuffHalf(&gpu, cpuData, gpuData, VkUtil::getBufferAddress(context.device, symbolBuffer[0]), commands);
 
         vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, times, 1);
         uint32_t t[2];
@@ -259,11 +263,13 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         std::vector<uint32_t> final(init.size());
         VkUtil::downloadData(context.device, mem, offsets[1], final.size() * sizeof(final[0]), final.data());
         std::vector<uint32_t> upper(final.begin() + 1000, final.end());
+        VkUtil::downloadData(context.device, gpu.m_pScanPlan->m_blockSumsMemory, 0, sizeof(uint) * 3, final.data());
         for(int i = final.size() - 1; i > 0; --i){
             final[i] -= final[i - 1];
         }
         VkUtil::downloadData(context.device, mem, offsets[2], final.size() * sizeof(final[0]), final.data());
-    
+        upper = std::vector<uint32_t>(final.begin() + 1000, final.end());
+
         bool letssee = true;
     }
 }

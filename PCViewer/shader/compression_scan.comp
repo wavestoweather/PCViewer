@@ -94,6 +94,7 @@ void main(){
     uint blockSumIndex = gl_WorkGroupID.x;
     uint val = tmp[ai];
     uint val2 = tmp[bi];
+    uint blockTmp = val2;
     barrier();
 
     // doing a subgroup exclusive scan
@@ -127,7 +128,7 @@ void main(){
     UVec blockSums = UVec(blocksAddress);
     bool writeBlocks = ((srcUVec4 >> 1) & 1) > 0;
     if(writeBlocks && gl_LocalInvocationID.x == gl_WorkGroupSize.x - 1){
-        blockSums.i[blockSumIndex] = val2 + tmp[gl_LocalInvocationID.x + gl_WorkGroupSize.x];
+        blockSums.i[blockSumIndex] = blockTmp + tmp[gl_LocalInvocationID.x + gl_WorkGroupSize.x];
     }
     // writing inclusive scans / exclusive
     uint temp = val;

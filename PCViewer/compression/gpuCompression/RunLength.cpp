@@ -1,6 +1,8 @@
 #include "RunLength.hpp"
 
 #include "GpuInstance.hpp"
+#include "../../range.hpp"
+#include "Scan.hpp"
 
 namespace vkCompress {
 using namespace cudaCompress;
@@ -66,6 +68,53 @@ bool runLengthShutdown(GpuInstance* pInstance)
     //cudaSafeCall(cudaFreeHost(pInstance->RunLength.pReadback));
     pInstance->RunLength.pReadback = nullptr;
 
+    return true;
+}
+
+bool runLengthDecodeHalf(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress compactSymbolAddress, VkDeviceAddress zeroCountsAddress, const std::vector<uint32_t>& symbolCountsCompacted, uint stride, VkDeviceAddress outSymbolStreamAddress,const std::vector<uint32_t>& symbolCountsPerStream, uint streamCount){
+    assert(streamCount <= pInstance->m_streamCountMax);
+    assert(streamCount == 1);
+
+    uint32_t symbolCountMax = pInstance->m_elemCountPerStreamMax;
+
+    // zero count inclusive scan
+    VkDeviceAddress scannedIndicesAddress = VkUtil::getBufferAddress(pInstance->vkContext.device, pInstance->RunLength.scannedIndices);
+    for(int i: irange(streamCount)){
+        if(symbolCountsCompacted[i] == 0)
+            continue;
+        
+        assert(symbolCountsCompacted[i] < symbolCountMax);
+        scanArray<false>(pInstance, commands, scannedIndicesAddress, zeroCountsAddress, symbolCountsCompacted[i], pInstance->m_pScanPlan);
+    }
+
+    uint symbolCountCompactMax = 0;
+    for(int i: irange(streamCount))
+        symbolCountCompactMax = max(symbolCountCompactMax, symbolCountsCompacted[i]);
+
+    // scattering the symbols
+    const uint workGroupSize = 256;
+    if(symbolCountCompactMax > 0){
+        struct PC{
+            uint symbolCountCompact;
+            uint longSymbols;
+            uint pad, ding;
+            VkDeviceAddress symbolsCompactAddress;
+            VkDeviceAddress indicesAddress;
+            VkDeviceAddress symbolsAddress;
+        }pc{};
+
+        pc.symbolCountCompact = symbolCountsCompacted[0];
+        pc.longSymbols = false;
+        pc.symbolsCompactAddress = compactSymbolAddress;
+        pc.indicesAddress = scannedIndicesAddress;
+        pc.symbolsAddress = outSymbolStreamAddress;
+        uint dispatchX = min((symbolCountCompactMax + workGroupSize - 1) / workGroupSize, 256u);
+
+        vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+        vkCmdPushConstants(commands, pInstance->RunLength.scatterInfo.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->RunLength.scatterInfo.pipeline);
+        vkCmdDispatch(commands, dispatchX, 1, 1);
+    }
     return true;
 }
 

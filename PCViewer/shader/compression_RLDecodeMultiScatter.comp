@@ -3,28 +3,50 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int16 : enable
 #extension GL_KHR_vulkan_glsl: enable
 
-layout(binding = 0) buffer D{
-    u16vec2 s[];
-}symbolsCompact;
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
 
-layout(binding = 1) buffer I{
-    uint i[];
-}validIndices;
+layout(buffer_reference, scalar) buffer HVec2 {u16vec2 i[];};
+layout(buffer_reference, scalar) buffer UVec {uint i[];};
 
-layout(binding = 2) buffer S{
-    u16vec2 s[];
-}symbols;
+//layout(binding = 0) buffer D{
+//    u16vec2 s[];
+//}symbolsCompact;
+//
+//layout(binding = 1) buffer I{
+//    uint i[];
+//}validIndices;
+//
+//layout(binding = 2) buffer S{
+//    u16vec2 s[];
+//}symbols;
 
 layout(push_constant) uniform PC{
     uint symbolCountCompact;
     uint longSymbols;
+    uint pad, ding;
+    uint64_t symbolsCompactAddress;
+    uint64_t indicesAddress;
+    uint64_t symbolsAddress;
 };
 
-layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
+//layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
 
-layout(local_size_x_id = 0, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 void main(){
+    HVec2 symbolsCompact = HVec2(symbolsCompactAddress);
+    HVec2 symbols = HVec2(symbolsAddress);
+    UVec validIndices = Uvec(indicesAddress);
+
     ivec2 blockIdx = ivec2(gl_WorkGroupID.xy);
     ivec2 blockDim = ivec2(gl_WorkGroupSize.xy);
     ivec2 threadIdx = ivec2(gl_LocalInvocationID.xy);

@@ -7,7 +7,7 @@
 
 namespace vkCompress {
 
-// vulkan version doing the conversion from uint16 counts to uint offsets (inklusive)
+// vulkan version doing the conversion from uint16 counts to uint offsets (inklusive or exclusive)
 template<bool isExclusive>
 void scanArray(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress dstAddress, VkDeviceAddress srcAddress, uint32_t symbolCount, const ScanPlan* plan, uint level = 0)
 {
@@ -68,6 +68,7 @@ void scanArray(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress
 
         vkCmdPushConstants(commands, pInstance->RunLength.addInfo.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->RunLength.addInfo.pipeline);     
+        vkCmdDispatch(commands, dispatchX, 1, 1);
     }
 }
 

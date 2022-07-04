@@ -73,10 +73,13 @@ public:
             VkDeviceSize zeroCountOffsetsOffset;
             // end: unnesseary, should be removed for publication -----------------------------------------
 
-            VkBuffer streamInfos;
-            VkBuffer zeroInfos;
+            VkBuffer streamInfos{};
+            VkBuffer zeroInfos{};
             size_t streamInfosOffset;       // offset from memory start
             size_t zeroInfosOffset;
+            VkBuffer symbolsZeroCounts{};   // buffer with information of compacted symbols and zero counts
+            size_t compactSymbolsOffset;    // offset from symbolsZeroCounts
+            size_t zeroCountsOffset;        // same as compactSymbolsOffset but for zero counts
 
             VkDescriptorSet streamInfoSet;  // descriptor set containgin the stream infos
             VkDescriptorSet zeroStreamInfoSet;
@@ -88,7 +91,8 @@ public:
             HuffmanGPUStreamInfo* pSymbolStreamInfos;
             HuffmanGPUStreamInfo* pZeroCountStreamInfos;
 
-            VkDeviceMemory memory;
+            VkDeviceMemory memory{};
+            VkDeviceMemory nonVisMemory{};
 
             DecodeResources()
                 : syncFence(0)
@@ -143,6 +147,9 @@ public:
         uint* pReadback{};
         std::vector<void*> syncEventsReadback;
 
+        VkBuffer scannedIndices{};
+        VkDeviceMemory scannedIndicesMemory{};
+
         byte* pUpload{};
         VkFence syncFenceUpload{};
         VkUtil::PipelineInfo pipelineInfo{};
@@ -150,6 +157,7 @@ public:
         VkUtil::PipelineInfo exclusiveScanInfo{};
         VkUtil::PipelineInfo inclusiveScanInfo{};
         VkUtil::PipelineInfo addInfo{};
+        VkUtil::PipelineInfo scatterInfo{};
     } RunLength;
 
     struct DWTResources
@@ -160,6 +168,10 @@ public:
     struct QuantizationResources
     {
         VkUtil::PipelineInfo pipelineInfo{};
+        VkUtil::PipelineInfo unquantizeUShortFloatInfo{};
+        VkUtil::PipelineInfo unquantizeUShortHalfInfo{};
+        VkUtil::PipelineInfo unquantizeUIntFloatInfo{};
+        VkUtil::PipelineInfo unquantizeUIntHalfInfo{};
     } Quantization;
 
 private:

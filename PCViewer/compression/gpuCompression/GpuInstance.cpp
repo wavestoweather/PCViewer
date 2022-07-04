@@ -145,24 +145,43 @@ namespace vkCompress
         
         VkUtil::createComputePipeline(context.device, shaderModule, {}, &RunLength.addInfo.pipelineLayout, &RunLength.addInfo.pipeline, {}, pushConstants);
         
+        // creating the multi scatter kernel
+        const std::string_view scatterPath = "shader/compression_RLDecodeScatter.comp.spv";
+        compBytes = PCUtil::readByteFile(scatterPath);
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &RunLength.scatterInfo.pipelineLayout, &RunLength.scatterInfo.pipeline, {}, pushConstants);
+
         // resources for huffman pipeline ---------------------------------------------------------------
         // creating the buffer and descriptor sets for decoding ---------------------
         for(int i: irange(Encode.ms_decodeResourcesCount)){
             auto& d = Encode.Decode[i];
             uint infoSize = sizeof(HuffmanGPUStreamInfo);
+            uint symbolZeroCountsSize = elemCountPerStreamMax * sizeof(uint16_t) * 2;   // times 2 as we need storage for symbol as well as zero counts
             VkBufferUsageFlags flags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
             auto [buffers, offsets, memory] = VkUtil::createMultiBufferBound(context, {infoSize, infoSize}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            auto [symbolZeroBuffer, offs, m] = VkUtil::createMultiBufferBound(context, {symbolZeroCountsSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, 0);
             d.streamInfos = buffers[0];
             d.streamInfosOffset = offsets[0];
             d.zeroInfos = buffers[1];
             d.zeroInfosOffset = offsets[1];
 
+            d.symbolsZeroCounts = symbolZeroBuffer[0];
+            d.compactSymbolsOffset = 0;
+            d.zeroCountsOffset = symbolZeroCountsSize / 2;
+
             d.memory = memory;
+            d.nonVisMemory = m;
 
             VkUtil::createDescriptorSets(context.device, {Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout, Encode.Decode[0].decodeHuffmanLong.descriptorSetLayout}, context.descriptorPool, &d.streamInfoSet);
             VkUtil::updateDescriptorSet(context.device, d.streamInfos, infoSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, d.streamInfoSet);
             VkUtil::updateDescriptorSet(context.device, d.zeroInfos, infoSize, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, d.zeroStreamInfoSet);
         }
+
+        // run length scanned indices creation
+        auto[buffers, offsets, mem] = VkUtil::createMultiBufferBound(context, {elemCountPerStreamMax * sizeof(uint32_t)}, {VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, 0);
+        RunLength.scannedIndices = buffers[0];
+        RunLength.scannedIndicesMemory = mem;
     }
     
     GpuInstance::~GpuInstance() 
@@ -173,6 +192,11 @@ namespace vkCompress
         RunLength.inclusiveScanInfo.vkDestroy(vkContext);
         RunLength.exclusiveScanInfo.vkDestroy(vkContext);
         RunLength.addInfo.vkDestroy(vkContext);
+        RunLength.scatterInfo.vkDestroy(vkContext);
+        if(RunLength.scannedIndices)
+            vkDestroyBuffer(vkContext.device, RunLength.scannedIndices, nullptr);
+         if(RunLength.scannedIndicesMemory)
+            vkFreeMemory(vkContext.device, RunLength.scannedIndicesMemory, nullptr);
         DWT.pipelineInfo.vkDestroy(vkContext);
         Quantization.pipelineInfo.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanLong.vkDestroy(vkContext);
@@ -188,6 +212,10 @@ namespace vkCompress
                 vkFreeMemory(vkContext.device, d.memory, nullptr);
             if(d.streamInfoSet)
                 vkFreeDescriptorSets(vkContext.device, vkContext.descriptorPool, 2, &d.streamInfoSet);
+            if(d.symbolsZeroCounts)
+                vkDestroyBuffer(vkContext.device, d.symbolsZeroCounts, nullptr);
+            if(d.nonVisMemory)
+                vkFreeMemory(vkContext.device, d.nonVisMemory, nullptr);
         }
 
         for(auto& [s, p]: Encode.Decode[0].huffmanTransposeLong){
