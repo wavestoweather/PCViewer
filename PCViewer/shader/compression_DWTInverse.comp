@@ -1,0 +1,144 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : enable
+#extension GL_KHR_vulkan_glsl: enable
+
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
+
+layout(buffer_reference, scalar) buffer HVec2 {u16vec2 i[];};
+layout(buffer_reference, scalar) buffer FVec {float i[];};
+
+layout(push_constant) uniform PC{
+    uint srcOffset;
+    uint dstOffset;
+    uint size;      // data size
+    uint padding;
+    uint64_t dstAddress;
+    uint64_t srcAddress;
+};
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+const uint blockCount = 8; // corresponds to xResultBlockCount in DWT.cpp
+const uint filterLength = 9;
+const uint filterOffset = 4;
+const uint filterOffsetRight = filterLength - filterOffset - 1;
+const uint filterOverheadLeftInv = (filterOffset + 1) / 2 * 2;
+const uint filterOverheadRightInv = (filterOffsetRight + 1) / 2 * 2;
+const uint filterOverheadInv = filterOverheadLeftInv + filterOverheadRightInv; // corresponds to define CUDACOMPRESS_DWT_FLOAT_FILTER in DWTCpu.cpp
+
+const uint coefficientCount = 2 * filterLength;
+const float g_ForwardFilterCoefficients[coefficientCount] = float[](
+    0.0267488f,-0.0168641f,-0.0782233f, 0.2668641f, 0.6029490f, 0.2668641f,-0.0782233f,-0.0168641f, 0.0267488f, // low-pass
+    0.0f,       0.0456359f,-0.0287718f,-0.2956359f, 0.5575435f,-0.2956359f,-0.0287718f, 0.0456359f, 0.0f        // high-pass
+);
+const float g_InverseFilterCoefficients[coefficientCount] = float[](
+    0.0f,       0.0337282f,-0.0575435f,-0.5337281f, 1.1150871f,-0.5337281f,-0.0575435f, 0.0337282f, 0.0f,       // even (interleaved lp and hp)
+    0.0534975f,-0.0912718f,-0.1564465f, 0.5912718f, 1.2058980f, 0.5912718f,-0.1564465f,-0.0912718f, 0.0534975f  // odd  (interleaved hp and lp)
+);
+// shared storage for blockCount x 1 blocks + overlap
+// lowpass and highpass parts are interleaved; each has blockCount/2 blocks and FILTER_LENGTH-1 "halo" pixels
+shared float s_Data[gl_WorkGroupSize.y][blockCount * gl_WorkGroupSize.x + filterOverheadInv];
+
+bool leftHaloTest(uint thread){
+    const int comp = int(gl_WorkGroupSize.x) - int(filterOffset);
+    return thread >= comp;
+}
+
+bool rightHaloTest(uint thread){
+    return thread < filterOffset;
+}
+
+int mirrorLeft(int index){
+    return abs(index);
+}
+
+int mirrorLeftRepeat(int index){
+    return abs(index) + (index >> 31);  // substract 1 if index is negative
+}
+
+int mirrorRight(int index, int size){
+    return (((size)-1) - abs(((size)-1) - (index)));
+}
+
+int mirrorRightRepeat(int index, int size){
+    if(index >= size) return 2*size - (index+1);
+    return index;
+}
+
+// this dwt inverse kernel is for 1dimensional data only
+// corresponds to the inverseDWT9XKernel in cudaCompress
+void main(){
+    const int sizeofSrc = 4;
+    const int sizeofDst = 4;
+    const int sharedLine = int(blockCount * gl_WorkGroupSize.x + filterOverheadInv);
+
+    const int offsetX = int((gl_WorkGroupID.x * blockCount / 2) * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
+    const int offsetY = 0;  // currently no y direction
+    const int offsetZ = 0;  // currently no z direction
+
+    // offset data ptrs into correct slice and row
+    uint64_t src = (srcAddress + srcOffset) * sizeofSrc;
+    uint64_t dst = (dstAddress + dstOffset) * sizeofDst;
+
+    FVec srcV = FVec(src);
+
+    int globalIndex = int(offsetX - gl_WorkGroupSize.x); // shifting to the left to load halo
+    int sharedIndex = int(2 * (gl_LocalInvocationID.x + (filterOffset + 1) / 2 - gl_WorkGroupSize.x));
+
+    // load the halo
+    if(leftHaloTest(gl_LocalInvocationID.x)){
+        s_Data[gl_LocalInvocationID.y][sharedIndex] = srcV.i[mirrorLeft(globalIndex)];
+        s_Data[gl_LocalInvocationID.y][sharedIndex + 1] = srcV.i[size / 2 + mirrorLeftRepeat(globalIndex)];
+    }
+    globalIndex += int(gl_WorkGroupSize.x); // shifting to the right again to start normal calculations
+    sharedIndex += int(2 * gl_WorkGroupSize.x);
+
+    // load main data
+    #pragma unroll
+    for(int block = 0; block < blockCount / 2; ++block){
+        s_Data[gl_LocalInvocationID.y][sharedIndex] = srcV.i[globalIndex];
+        s_Data[gl_LocalInvocationID.y][sharedIndex + 1] = srcV.i[size / 2 + globalIndex];
+        globalIndex += int(gl_WorkGroupSize.x);
+        sharedIndex += int(2 * gl_WorkGroupSize.x);
+    }
+
+    // load right halo
+    if(rightHaloTest(gl_LocalInvocationID.x)){
+        s_Data[gl_LocalInvocationID.y][sharedIndex] = srcV.i[mirrorRightRepeat(globalIndex, int(size / 2))];
+        s_Data[gl_LocalInvocationID.y][sharedIndex + 1] = srcV.i[size / 2 + mirrorRight(globalIndex, int(size / 2))];
+    }
+
+    barrier();  // syncing shared data
+
+    int filterBaseIndex = int((gl_LocalInvocationID.x & 1) * filterLength);
+
+    // offsetting output data pointer
+    const int offsetXOutput = int(gl_LocalInvocationID.x * blockCount * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
+    dst += offsetXOutput * sizeofDst;
+    FVec dstV = FVec(dst);
+
+    // compute results and store in global memory
+    #pragma unroll
+    for(int block = 0; block < blockCount; ++block){
+        int blockOffset = int(block * gl_WorkGroupSize.x);
+
+        float sum = 0;
+        #pragma unroll
+        for(int i = 0; i < filterLength; ++i){
+            int index = int(blockOffset + int(gl_LocalInvocationID.x) + i + (filterOffset & 1));
+            float value = s_Data[gl_LocalInvocationID.y][index];
+            sum += g_InverseFilterCoefficients[filterBaseIndex + i] * value;
+        }
+        dstV.i[blockOffset] = sum;
+    }
+}

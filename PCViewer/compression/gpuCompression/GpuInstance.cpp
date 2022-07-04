@@ -160,6 +160,13 @@ namespace vkCompress
         pushConstants = {VkPushConstantRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, 4 * sizeof(uint32_t) + 2 * sizeof(uint64_t)}};
         VkUtil::createComputePipeline(context.device, shaderModule, {}, &Quantization.unquantizeUShortFloatInfo.pipelineLayout, &Quantization.unquantizeUShortFloatInfo.pipeline, {}, pushConstants);
 
+        // creating dwt inverse pipelines
+        const std::string_view dwtInversePath = "shader/compression_DWTInverse.comp.spv";
+        compBytes = PCUtil::readByteFile(dwtInversePath);
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &DWT.floatInverseInfo.pipelineLayout, &DWT.floatInverseInfo.pipeline, {}, pushConstants);
+
         // resources for huffman pipeline ---------------------------------------------------------------
         // creating the buffer and descriptor sets for decoding ---------------------
         for(int i: irange(Encode.ms_decodeResourcesCount)){
@@ -206,6 +213,8 @@ namespace vkCompress
          if(RunLength.scannedIndicesMemory)
             vkFreeMemory(vkContext.device, RunLength.scannedIndicesMemory, nullptr);
         DWT.pipelineInfo.vkDestroy(vkContext);
+        DWT.floatInverseInfo.vkDestroy(vkContext);
+        DWT.floatToHalfInverseInfo.vkDestroy(vkContext);
         Quantization.pipelineInfo.vkDestroy(vkContext);
         Quantization.unquantizeUShortFloatInfo.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanLong.vkDestroy(vkContext);

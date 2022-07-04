@@ -163,6 +163,8 @@ public:
     struct DWTResources
     {
         VkUtil::PipelineInfo pipelineInfo{};
+        VkUtil::PipelineInfo floatInverseInfo{};
+        VkUtil::PipelineInfo floatToHalfInverseInfo{};
     } DWT;
 
     struct QuantizationResources
