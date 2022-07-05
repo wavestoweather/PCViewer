@@ -15,6 +15,7 @@
 #include "compression/cpuCompression/DWTCpu.h"
 #include "compression/gpuCompression/Scan.hpp"
 #include "compression/gpuCompression/Quantize.hpp"
+#include "compression/gpuCompression/DWT.hpp"
 
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
     //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
@@ -141,7 +142,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
     const bool testDecomp = false;
     const bool testExclusiveScan = false;
-    const bool testUnquanzite = true;
+    const bool testUnquanzite = false;
+    const bool testDWTInverse = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -306,6 +308,39 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         VkUtil::downloadData(context.device, mem, offsets[1], quantSize * 4, res.data());
         std::vector<float> ref(quantSize);
         cudaCompress::util::unquantizeFromSymbols(ref.data(), symbols.data(), symbols.size(), quantStep);
+        bool heyho = true;
+    }
+    if(testDWTInverse){
+        const uint size = 1 << 20;
+        vkCompress::GpuInstance gpu(context, 1, size, 0, 0);
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+
+        std::vector<float> orig(size);
+        srand(10);
+        for(auto& f: orig)
+            f = random() / float(1u << 31);
+        std::vector<float> dst(size);
+        cudaCompress::util::dwtFloatForwardCPU(dst.data(), orig.data(), size);
+
+        VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        auto [buffer, offsets, mem] = VkUtil::createMultiBufferBound(context, {size * 4, size * 4}, {usage, usage}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+        VkUtil::uploadData(context.device, mem, 0, size * 4, dst.data());
+        auto dstA = VkUtil::getBufferAddress(context.device, buffer[1]);
+        auto srcA = VkUtil::getBufferAddress(context.device, buffer[0]); 
+        vkCompress::dwtFloatInverse(&gpu, commands, dstA, srcA, size, 0, 0);
+
+        {
+        PCUtil::Stopwatch unquantWatch(std::cout, "dwt inverse time");
+        VkUtil::commitCommandBuffer(context.queue, commands);
+        auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
+        }
+
+        std::vector<float> res(size);
+        VkUtil::downloadData(context.device, mem, offsets[1], size * 4, res.data());
+        std::vector<float> ref(size);
+        cudaCompress::util::dwtFloatInverseCPU(ref.data(), dst.data(), size);
         bool heyho = true;
     }
 }

@@ -14,7 +14,7 @@
 #extension GL_EXT_shader_explicit_arithmetic_types: enable
 #extension GL_EXT_nonuniform_qualifier: enable
 
-layout(buffer_reference, scalar) buffer HVec2 {u16vec2 i[];};
+layout(buffer_reference, scalar) buffer HVec2 {f16vec2 i[];};
 layout(buffer_reference, scalar) buffer FVec {float i[];};
 
 layout(push_constant) uniform PC{
@@ -26,7 +26,9 @@ layout(push_constant) uniform PC{
     uint64_t srcAddress;
 };
 
-layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint floatOut = 1;
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 
 const uint blockCount = 8; // corresponds to xResultBlockCount in DWT.cpp
 const uint filterLength = 9;
@@ -79,7 +81,7 @@ int mirrorRightRepeat(int index, int size){
 // corresponds to the inverseDWT9XKernel in cudaCompress
 void main(){
     const int sizeofSrc = 4;
-    const int sizeofDst = 4;
+    const int sizeofDst = (floatOut > 0) ? 4: 2;
     const int sharedLine = int(blockCount * gl_WorkGroupSize.x + filterOverheadInv);
 
     const int offsetX = int((gl_WorkGroupID.x * blockCount / 2) * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
@@ -87,8 +89,8 @@ void main(){
     const int offsetZ = 0;  // currently no z direction
 
     // offset data ptrs into correct slice and row
-    uint64_t src = (srcAddress + srcOffset) * sizeofSrc;
-    uint64_t dst = (dstAddress + dstOffset) * sizeofDst;
+    uint64_t src = srcAddress + srcOffset * sizeofSrc;
+    uint64_t dst = dstAddress + dstOffset * sizeofDst;
 
     FVec srcV = FVec(src);
 
@@ -123,9 +125,14 @@ void main(){
     int filterBaseIndex = int((gl_LocalInvocationID.x & 1) * filterLength);
 
     // offsetting output data pointer
-    const int offsetXOutput = int(gl_LocalInvocationID.x * blockCount * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
+    const int offsetXOutput = int(gl_WorkGroupID.x * blockCount * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
     dst += offsetXOutput * sizeofDst;
-    FVec dstV = FVec(dst);
+    FVec dstV;
+    HVec2 dstH;
+    if(floatOut > 0)
+        dstV = FVec(dst);
+    else
+        dstH = HVec2(dst);
 
     // compute results and store in global memory
     #pragma unroll
@@ -139,6 +146,9 @@ void main(){
             float value = s_Data[gl_LocalInvocationID.y][index];
             sum += g_InverseFilterCoefficients[filterBaseIndex + i] * value;
         }
-        dstV.i[blockOffset] = sum;
+        if(floatOut > 0)
+            dstV.i[blockOffset] = sum;
+        else
+            dstH.i[blockOffset >> 1][blockOffset & 1] = float16_t(sum);
     }
 }

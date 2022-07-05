@@ -165,7 +165,16 @@ namespace vkCompress
         compBytes = PCUtil::readByteFile(dwtInversePath);
         shaderModule = VkUtil::createShaderModule(context.device, compBytes);
 
-        VkUtil::createComputePipeline(context.device, shaderModule, {}, &DWT.floatInverseInfo.pipelineLayout, &DWT.floatInverseInfo.pipeline, {}, pushConstants);
+        uint32_t floatOut = 1;
+        specializationInfo.dataSize = sizeof(floatOut);
+        specializationInfo.pData = &floatOut;
+        // map entries are still the same
+
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &DWT.floatInverseInfo.pipelineLayout, &DWT.floatInverseInfo.pipeline, &specializationInfo, pushConstants);
+
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+        floatOut = 0;
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &DWT.floatToHalfInverseInfo.pipelineLayout, &DWT.floatToHalfInverseInfo.pipeline, &specializationInfo, pushConstants);
 
         // resources for huffman pipeline ---------------------------------------------------------------
         // creating the buffer and descriptor sets for decoding ---------------------
