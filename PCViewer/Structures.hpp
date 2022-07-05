@@ -9,6 +9,8 @@
 #include "TemplateList.hpp"
 #include "Attribute.hpp"
 #include "largeVis/IndBinManager.hpp"
+#include "half/half.hpp"
+#include "compression/gpuCompression/Encode.hpp"
 #include <memory>
 
 //forward declaration
@@ -48,17 +50,31 @@ struct Buffer {
 enum class DataType{
 	Continuous,
 	ContinuousDlf,
-	Hierarchichal
+	Hierarchichal,
+	Compressed
+};
+
+struct CompressedColumnData{    // atm not compressed, future feature
+    std::vector<half> cpuData{};// half compressed data
+    VkBuffer gpuHalfData{};		// half compredded data on Gpu
+    VkDeviceMemory gpuMemory{};	// memory for half compressed gpu data
+	std::vector<RLHuffDecodeDataCpu> compressedRLHuffCpu{};
+	std::vector<RLHuffDecodeDataGpu> compressedRLHuffGpu{};
 };
 
 struct DataSet {
-	std::string name;
-	Buffer buffer;
-	Data data;
-	std::list<TemplateList> drawLists;
-	int reducedDataSetSize;					//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
-	DataType dataType;
-	std::vector<uint8_t> additionalData;	//byte vector for additional data. For Hierarchical data this is where teh hierarchy folder is stored
+	std::string name{};
+	Buffer buffer{};
+	Data data{};
+	std::list<TemplateList> drawLists{};
+	int reducedDataSetSize{};					//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
+	DataType dataType{};
+	std::vector<uint8_t> additionalData{};		//byte vector for additional data. For Hierarchical data this is where teh hierarchy folder is stored
+	std::vector<CompressedColumnData> compressedColumnData{};
+	std::vector<Attribute> compressedAttributes{};
+	uint32_t compressedBlockSize;
+	std::unique_ptr<vkCompress::GpuInstance> gpuInstance{};
+	// herer should go space for roaring bins
 
 	bool operator==(const DataSet& other) const {
 		return this->name == other.name;

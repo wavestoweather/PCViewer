@@ -1,5 +1,6 @@
 #define NOSTATICS
 #include "IndBinManager.hpp"
+#include "../Structures.hpp"
 #undef NOSTATICS
 #include "../range.hpp"
 #include "CpuLineCounter.hpp"
@@ -12,149 +13,9 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
 _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(info.context.screenSize[1])
 {
     // --------------------------------------------------------------------------------
-    // determine kind of stored data (used to convert internally to a unified represantation for further processing)
-    // --------------------------------------------------------------------------------
-    std::ifstream dataInfo(_hierarchyFolder + "/data.info", std::ios::binary);
-    compression::DataStorageBits dataBits;
-    uint32_t dataBlockSize;
-    dataInfo >> dataBits;
-    dataInfo >> dataBlockSize;  // block size for compressed data
-    dataInfo.close();
-
-    // --------------------------------------------------------------------------------
-    // attribute infos, cluster infos
-    // --------------------------------------------------------------------------------
-    std::ifstream attributeInfos(_hierarchyFolder + "/attr.info", std::ios_base::binary);
-    attributeInfos >> binsMaxCenterAmt; // first line contains the maximum amt of centers/bins
-    std::string a; float aMin, aMax;
-    while(attributeInfos >> a >> aMin >> aMax){
-        attributes.push_back({a, a, {}, {}, aMin, aMax});
-    }
-    attributeInfos.close();
-
-    // --------------------------------------------------------------------------------
-    // center infos
-    // --------------------------------------------------------------------------------
-    std::ifstream attributeCenterFile(_hierarchyFolder + "/attr.ac", std::ios_base::binary);
-    std::vector<compression::ByteOffsetSize> offsetSizes(attributes.size());
-    attributeCenterFile.read(reinterpret_cast<char*>(offsetSizes.data()), offsetSizes.size() * sizeof(offsetSizes[0]));
-    _attributeCenters.resize(attributes.size());
-    for(int i = 0; i < attributes.size(); ++i){
-        assert(attributeCenterFile.tellg() == offsetSizes[i].offset);
-        _attributeCenters[i].resize(offsetSizes[i].size / sizeof(_attributeCenters[0][0]));
-        attributeCenterFile.read(reinterpret_cast<char*>(_attributeCenters[i].data()), offsetSizes[i].size);
-    }
-
-    // --------------------------------------------------------------------------------
-    // 1d index data either compressed or not (automatic conversion if not compressed)
-    // --------------------------------------------------------------------------------
-    size_t dataSize = 0;
-    if((dataBits & compression::DataStorageBits::RawAttributeBins) != compression::DataStorageBits::None){
-        // reading index data
-        std::cout << "Loading indexdata..." << std::endl;
-        std::vector<std::vector<uint32_t>> attributeIndices;
-        attributeIndices.resize(attributes.size());
-        for(int i = 0; i < attributes.size(); ++i){
-            std::ifstream indicesData(_hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
-            uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;
-            if(indicesSize > dataSize)
-                dataSize = indicesSize;
-            attributeIndices[i].resize(indicesSize);
-            indicesData.read(reinterpret_cast<char*>(attributeIndices[i].data()), indicesSize * sizeof(attributeIndices[0][0]));
-        }
-        // compressing index data
-        std::cout << "Compressing indexdata..."  << std::endl;
-        for(uint32_t compInd: irange(_attributeCenters)){
-            ndBuckets[{compInd}].resize(_attributeCenters[compInd].size());
-            size_t indexlistSize{attributeIndices[compInd].size() * sizeof(uint32_t)}, compressedSize{};
-            for(uint32_t bin: irange(ndBuckets[{compInd}])){
-                ndBuckets[{compInd}][bin] = roaring::Roaring64Map(_attributeCenters[compInd][bin].size, attributeIndices[compInd].data() + _attributeCenters[compInd][bin].offset);
-                ndBuckets[{compInd}][bin].runOptimize();
-                ndBuckets[{compInd}][bin].shrinkToFit();
-                compressedSize += ndBuckets[{compInd}][bin].getSizeInBytes();
-            }
-            std::cout << "Attribute " << attributes[compInd].name << ": Uncompressed Indices take " << indexlistSize / float(1 << 20) << " MByte vs " << compressedSize / float(1 << 20) << " MByte compressed." << "Compression rate 1:" << indexlistSize / float(compressedSize) << std::endl;
-        }
-    }
-    else if((dataBits & compression::DataStorageBits::RoaringAttributeBins) != compression::DataStorageBits::None){
-        // compressed indices, can be read out directly
-        std::cout << "Loading compressed indexdata..." << std::endl;
-        for(uint32_t i: irange(attributes)){
-            std::ifstream indicesData(_hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
-            uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;   // size is given in bytes
-            std::vector<char> indices(indicesSize);
-            indicesData.read(indices.data(), indicesSize * sizeof(indices[0]));
-            // parse into roaring bitmaps
-            // filling only the attribute centers that are available, the other centers are empty
-            ndBuckets[{i}].resize(_attributeCenters[i].size());
-            size_t curSize{};
-            for(uint32_t bin: irange(_attributeCenters[i])){
-                ndBuckets[{i}][bin] = roaring::Roaring64Map::readSafe(indices.data() + _attributeCenters[i][bin].offset, _attributeCenters[i][bin].size * sizeof(indices[0]));
-                curSize += ndBuckets[{i}][bin].cardinality();
-            }
-            //std::cout << "Idex size attribute " << attributes[i].name << ": " << curSize << std::endl;
-            if(curSize > dataSize)
-                dataSize = curSize;
-        }
-    }
-
-    // --------------------------------------------------------------------------------
-    // 1d data either compressed or not (automatic conversion if not compressed, stored currently as 16bit float vec)
-    // --------------------------------------------------------------------------------
-    columnData.resize(attributes.size());   // for each attribute there is one column
-    if((dataBits & compression::DataStorageBits::RawColumnData) != compression::DataStorageBits::None){
-        // convert normalized float data automatically to half data
-        std::cout << "Loading float column data" << std::endl;
-        for(uint32_t i: irange(attributes)){
-            std::ifstream data(_hierarchyFolder + "/" + std::to_string(i) + ".col", std::ios_base::binary);
-            std::vector<float> dVec(dataSize);
-            data.read(reinterpret_cast<char*>(dVec.data()), dVec.size() * sizeof(dVec[0]));
-            columnData[i] = {std::vector<half>(dVec.begin(), dVec.end())};  // automatic conversion to half via range constructor
-        }
-    }
-    else if((dataBits & compression::DataStorageBits::HalfColumnData) != compression::DataStorageBits::None){
-        // directly parse
-        std::cout << "Loading half column data" << std::endl;
-        if(dataSize == 0){  //getting the data size from the file size
-            dataSize = std::filesystem::file_size(_hierarchyFolder + "/0.col") / 2;
-            std::cout << "Data size from col file: " << dataSize << std::endl;
-        }
-        for(uint32_t i: irange(attributes)){
-            std::cout << "Loading half data for attribute " << attributes[i].name << std::endl;
-            std::ifstream data(_hierarchyFolder + "/" + std::to_string(i) + ".col", std::ios_base::binary);
-            auto& dVec = columnData[i].cpuData;
-            dVec.resize(dataSize);
-            data.read(reinterpret_cast<char*>(dVec.data()), dVec.size() * sizeof(dVec[0]));
-        }
-    }
-    else if((dataBits & compression::DataStorageBits::CuComColumnData) != compression::DataStorageBits::None){
-        // directly parse if same compression block size
-        // not yet implemented
-        std::cout << "Well thats wrong. Seems like there is some compression in the column data but we cant handle it." << std::endl;
-    }
-    // currently the uncompressed 16 bit vectors are uploaded. Has to be changed to compressed vectors
-    for(auto& d: columnData){
-        //std::cout << "Creating vulkan buffer" << std::endl;
-        // creating the vulkan resources and uploading the data to them
-        VkUtil::createBuffer(_vkContext.device, d.cpuData.size() * sizeof(d.cpuData[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &d.gpuData);
-        VkMemoryRequirements memReq{};
-        vkGetBufferMemoryRequirements(_vkContext.device, d.gpuData, &memReq);
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memReq.size;
-        allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-        VkMemoryAllocateFlagsInfo allocFlags{};
-        allocFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-        allocFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-        allocInfo.pNext = &allocFlags;
-        vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &d.gpuMemory);
-        vkBindBufferMemory(_vkContext.device, d.gpuData, d.gpuMemory, 0);
-        VkUtil::uploadData(_vkContext.device, d.gpuMemory, 0, d.cpuData.size() * sizeof(d.cpuData[0]), d.cpuData.data());
-    }
-
-    // --------------------------------------------------------------------------------
     // creating the index activation buffer resource and setting up the cpu side activation vector
     // --------------------------------------------------------------------------------
+    uint32_t dataSize = 1;  // TODO obvisiously
     indexActivation = std::vector<uint8_t>((dataSize + 7) / 8, 0xff);    // set all to active on startup
     VkUtil::createBuffer(_vkContext.device, indexActivation.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &_indexActivation);
     VkMemoryRequirements memReq{};
@@ -174,8 +35,6 @@ _vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(inf
     _lineCounter = LineCounter::acquireReference(LineCounter::CreateInfo{info.context});
     _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.framebuffer});
     _computeBrusher = ComputeBrusher::acquireReference(ComputeBrusher::CreateInfo{info.context});
-
-    std::cout << "Loaded " << dataSize << " datapoints" << std::endl;
 }
 
 
@@ -192,10 +51,10 @@ IndBinManager::~IndBinManager(){
     // count resource is destructed automatically by destructor
     // columnd data info destruction
     for(auto& d: columnData){
-        if(d.gpuData)
-            vkDestroyBuffer(_vkContext.device, d.gpuData, nullptr);
-        if(d.gpuMemory)
-            vkFreeMemory(_vkContext.device, d.gpuMemory, nullptr);
+        //if(d.gpuData)
+        //    vkDestroyBuffer(_vkContext.device, d.gpuData, nullptr);
+        //if(d.gpuMemory)
+        //    vkFreeMemory(_vkContext.device, d.gpuMemory, nullptr);
     }
 
     if(_indexActivation)
@@ -335,7 +194,7 @@ void IndBinManager::updateCounts(){
                 t->_gpuIndexActivationState = t->_countBrushState.id;
                 std::vector<VkBuffer> dataBuffer(t->attributes.size());
                 for(int i: irange(dataBuffer))
-                    dataBuffer[i] = t->columnData[i].gpuData;
+                    dataBuffer[i] = t->columnData[i].gpuHalfData;
                 t->_computeBrusher->updateActiveIndices(t->columnData[0].cpuData.size(), t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation);
             }
         }
@@ -436,10 +295,10 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId != t->_countBrushState.id)
                     anyUpdate = true;
-                datas[i] = t->columnData[i].gpuData;
+                datas[i] = t->columnData[i].gpuHalfData;
                 counts[i] = t->_countResources[{a,b}].countBuffer;
             }
-            datas.back() = t->columnData[activeIndices.back()].gpuData;
+            datas.back() = t->columnData[activeIndices.back()].gpuHalfData;
             if(!anyUpdate)
                 goto finish;
             t->_lineCounter->countLinesAll(t->columnData[0].cpuData.size(), datas, t->columnBins, counts, activeIndices, t->_indexActivation, true);
@@ -454,7 +313,7 @@ void IndBinManager::updateCounts(){
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 std::cout << "Counting pairwise (compute pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
+                t->_lineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuHalfData, t->columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -468,7 +327,7 @@ void IndBinManager::updateCounts(){
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 std::cout << "Counting pairwise (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                t->_renderLineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
+                t->_renderLineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuHalfData, t->columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -483,7 +342,7 @@ void IndBinManager::updateCounts(){
                     continue;
                 const uint32_t tileAmt = 6;
                 std::cout << "Counting pairwise tiled (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << " with " << tileAmt * tileAmt << " tiles" << std::endl;
-                t->_renderLineCounter->countLinesPairTiled(t->columnData[a].cpuData.size(), t->columnData[a].gpuData, t->columnData[b].gpuData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true, tileAmt);
+                t->_renderLineCounter->countLinesPairTiled(t->columnData[a].cpuData.size(), t->columnData[a].gpuHalfData, t->columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true, tileAmt);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;

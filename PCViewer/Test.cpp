@@ -1,3 +1,4 @@
+#define NOSTATICS
 #include "Test.hpp"
 #include "largeVis/LineCounter.hpp"
 #include "largeVis/RenderLineCounter.hpp"
@@ -6,6 +7,7 @@
 #include "largeVis/Renderer.hpp"
 #include "range.hpp"
 #include "PCUtil.h"
+#include "VkUtil.h"
 #include "compression/gpuCompression/Encode.hpp"
 #include "compression/gpuCompression/Huffman.hpp"
 #include "compression/cpuCompression/EncodeCPU.h"

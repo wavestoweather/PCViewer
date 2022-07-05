@@ -19,6 +19,10 @@
 #include <roaring64map.hh>
 #include "../half/half.hpp"
 #include "../compression/gpuCompression/Encode.hpp"
+#include "UVecHasher.hpp"
+//#include "../Structures.hpp"
+
+struct CompressedColumnData;
 
 // loads the roaring bitmaps from memory and makes them easily accesisble
 // provides a general interface to be used in the main application for calculating the 2d bin counts as well as rendering them as pc plots
@@ -28,17 +32,6 @@
 //  3. render:                  A method to render the current active ordered attributes to the pc plot according to current 2d bin counts
 //  4. checkRenderRequest:      A method which indicates that updates have been processed which require a rerendering -> call render() to set to false
 class IndBinManager{
-private:
-    struct UVecHash{
-        std::size_t operator()(std::vector<uint32_t> const& vec) const{
-            std::size_t seed = vec.size();
-            for(const auto& i : vec){
-                seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-            }
-            return seed;
-        }
-    };
-
 public:
     using RangeBrush = brushing::RangeBrush;
 
@@ -79,12 +72,6 @@ public:
         VkFramebuffer framebuffer;
     };
 
-    struct CompressedColumnData{    // atm not compressed, future feature
-        std::vector<half> cpuData;
-        VkBuffer gpuData;
-        VkDeviceMemory gpuMemory;
-    };
-
     // maxDrawLines describes the max lines inbetween two attributes
     IndBinManager(const CreateInfo& info);
     IndBinManager(const IndBinManager&) = delete;   // no copy constructor
@@ -118,7 +105,7 @@ public:
     uint32_t cpuLineCountingAmtOfThreads{12};
     std::atomic<bool> requestRender{false};
     std::vector<uint8_t> indexActivation{};         // bitset for all indices to safe index activation
-    std::vector<half> priorityDistances;             // vector containing the priority distances for each data point
+    std::vector<half> priorityDistances;            // vector containing the priority distances for each data point
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
     struct CountResource{

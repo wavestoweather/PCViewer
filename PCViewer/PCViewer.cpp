@@ -70,6 +70,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "largeVis/CpuLineCounter.hpp"
 #include "largeVis/RoaringCounter.hpp"
 #include "largeVis/IndBinManager.hpp"
+#include "largeVis/OpenCompressedDataset.hpp"
 #include "range.hpp"
 #include "Test.hpp"
 
@@ -2422,7 +2423,7 @@ static void removePcPlotDrawList(DrawList& drawList) {
 	correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists, {name});
 }
 
-static void removePcPlotDrawLists(DataSet dataSet) {
+static void removePcPlotDrawLists(const DataSet& dataSet) {
 	for (auto it = g_PcPlotDrawLists.begin(); it != g_PcPlotDrawLists.end(); ) {
 		if (it->parentDataSet == dataSet.name) {
 			removePcPlotDrawList(*it);
@@ -2481,7 +2482,7 @@ static void destroyPcPlotDataSet(DataSet& dataSet) {
 
 //This method automatically also destroys all draw Lists
 static void cleanupPcPlotDataSets() {
-	for (DataSet ds : g_PcPlotDataSets) {
+	for (DataSet& ds : g_PcPlotDataSets) {
 		ds.drawLists.clear();
 		removePcPlotDrawLists(ds);
 	}
@@ -3846,7 +3847,7 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 	tl.parentDataSetName = ds.name;
 	ds.drawLists.push_back(tl);
 
-	g_PcPlotDataSets.push_back(ds);
+	g_PcPlotDataSets.push_back(std::move(ds));
 	return true;
 }
 
@@ -4134,7 +4135,7 @@ static bool openCsv(const char* filename) {
 
 	ds.drawLists.push_back(tl);
 
-	g_PcPlotDataSets.push_back(ds);
+	g_PcPlotDataSets.push_back(std::move(ds));
 
 #ifdef _DEBUG
 	//printing out the loaded attributes for debug reasons
@@ -4372,7 +4373,7 @@ static bool openDlf(const char* filename) {
 			}
 
 			//adding the data set finally to the list
-			g_PcPlotDataSets.push_back(ds);
+			g_PcPlotDataSets.push_back(std::move(ds));
 		}
 
 		f.close();
@@ -4978,7 +4979,7 @@ static bool openNetCDF(const char* filename){
 	tl.buffer = g_PcPlotVertexBuffers.back().buffer;
 	ds.drawLists.push_back(tl);
 
-	g_PcPlotDataSets.push_back(ds);
+	g_PcPlotDataSets.push_back(std::move(ds));
     #ifdef _DEBUG
 	//printing out the loaded attributes for debug reasons
 	std::cout << "Attributes: " << std::endl;
@@ -4988,9 +4989,9 @@ static bool openNetCDF(const char* filename){
 
 	int dc = 0;
 	std::cout << std::endl << "Data:" << std::endl;
-	for (int d = 0; d < ds.data.size(); ++d) {
+	for (int d = 0; d < g_PcPlotDataSets.back().data.size(); ++d) {
 		for (int i = 0; i < pcAttributes.size(); i++) {
-			std::cout << ds.data(d, i) << " , ";
+			std::cout << g_PcPlotDataSets.back().data(d, i) << " , ";
 		}
 		std::cout << std::endl;
 		if (dc++ > 10)
@@ -9346,7 +9347,7 @@ int main(int, char**)
 						gb.id = dl->name;
 						gb.parent = dl->parentTemplateList;
 						gb.kdTree = nullptr;
-						DataSet* ds = &(*std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [dl](auto d) {return d.name == dl->parentDataSet; }));
+						DataSet* ds = &(*std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [dl](auto& d) {return d.name == dl->parentDataSet; }));
 						gb.parentDataset = ds;
 						for (int i = 0; i < dl->brushes.size(); ++i) {	//Attribute Index
 							bool first = true;
@@ -11890,49 +11891,49 @@ int main(int, char**)
 				ImGui::Text("The intersection has %d points.", static_cast<int>(drawListComparator.aAndb.size()));
 				if (ImGui::Button("Create intersection##a")) {
 					TemplateList tl = {};
-					DataSet& parent = g_PcPlotDataSets.front();
+					DataSet* parent = &g_PcPlotDataSets.front();
 					for (DataSet& ds : g_PcPlotDataSets) {
 						if (ds.name == drawListComparator.parentDataset) {
-							parent = ds;
+							parent = &ds;
 							break;
 						}
 					}
-					tl.buffer = parent.buffer.buffer;
+					tl.buffer = parent->buffer.buffer;
 					tl.name = name;
 					tl.indices = drawListComparator.aAndb;
-					createPcPlotDrawList(tl, parent, name);
+					createPcPlotDrawList(tl, *parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Union has %8d points", static_cast<int>(drawListComparator.aOrB.size()));
 				if (ImGui::Button("Create union##a")) {
 					TemplateList tl = {};
-					DataSet& parent = g_PcPlotDataSets.front();
+					DataSet* parent = &g_PcPlotDataSets.front();
 					for (DataSet& ds : g_PcPlotDataSets) {
 						if (ds.name == drawListComparator.parentDataset) {
-							parent = ds;
+							parent = &ds;
 							break;
 						}
 					}
-					tl.buffer = parent.buffer.buffer;
+					tl.buffer = parent->buffer.buffer;
 					tl.name = name;
 					tl.indices = drawListComparator.aOrB;
-					createPcPlotDrawList(tl, parent, name);
+					createPcPlotDrawList(tl, *parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Difference has %8d points", static_cast<int>(drawListComparator.aMinusB.size()));
 				if (ImGui::Button("Create difference##a")) {
 					TemplateList tl = {};
-					DataSet& parent = g_PcPlotDataSets.front();
+					DataSet* parent = &g_PcPlotDataSets.front();
 					for (DataSet& ds : g_PcPlotDataSets) {
 						if (ds.name == drawListComparator.parentDataset) {
-							parent = ds;
+							parent = &ds;
 							break;
 						}
 					}
-					tl.buffer = parent.buffer.buffer;
+					tl.buffer = parent->buffer.buffer;
 					tl.name = name;
 					tl.indices = drawListComparator.aMinusB;
-					createPcPlotDrawList(tl, parent, name);
+					createPcPlotDrawList(tl, *parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::EndChild();
@@ -11944,49 +11945,49 @@ int main(int, char**)
 				ImGui::Text("The intersection has %d points.", static_cast<int>(drawListComparator.aAndb.size()));
 				if (ImGui::Button("Create intersection##b")) {
 					TemplateList tl = {};
-					DataSet& parent = g_PcPlotDataSets.front();
+					DataSet* parent = &g_PcPlotDataSets.front();
 					for (DataSet& ds : g_PcPlotDataSets) {
 						if (ds.name == drawListComparator.parentDataset) {
-							parent = ds;
+							parent = &ds;
 							break;
 						}
 					}
-					tl.buffer = parent.buffer.buffer;
+					tl.buffer = parent->buffer.buffer;
 					tl.name = name;
 					tl.indices = drawListComparator.aAndb;
-					createPcPlotDrawList(tl, parent, name);
+					createPcPlotDrawList(tl, *parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Union has %8d points", static_cast<int>(drawListComparator.aOrB.size()));
 				if (ImGui::Button("Create union##b")) {
 					TemplateList tl = {};
-					DataSet& parent = g_PcPlotDataSets.front();
+					DataSet* parent = &g_PcPlotDataSets.front();
 					for (DataSet& ds : g_PcPlotDataSets) {
 						if (ds.name == drawListComparator.parentDataset) {
-							parent = ds;
+							parent = &ds;
 							break;
 						}
 					}
-					tl.buffer = parent.buffer.buffer;
+					tl.buffer = parent->buffer.buffer;
 					tl.name = name;
 					tl.indices = drawListComparator.aOrB;
-					createPcPlotDrawList(tl, parent, name);
+					createPcPlotDrawList(tl, *parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::Text("Difference has %8d points", static_cast<int>(drawListComparator.bMinusA.size()));
 				if (ImGui::Button("Create difference##b")) {
 					TemplateList tl = {};
-					DataSet& parent = g_PcPlotDataSets.front();
+					DataSet* parent = &g_PcPlotDataSets.front();
 					for (DataSet& ds : g_PcPlotDataSets) {
 						if (ds.name == drawListComparator.parentDataset) {
-							parent = ds;
+							parent = &ds;
 							break;
 						}
 					}
-					tl.buffer = parent.buffer.buffer;
+					tl.buffer = parent->buffer.buffer;
 					tl.name = name;
 					tl.indices = drawListComparator.bMinusA;
-					createPcPlotDrawList(tl, parent, name);
+					createPcPlotDrawList(tl, *parent, name);
 					pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
 				}
 				ImGui::EndChild();
