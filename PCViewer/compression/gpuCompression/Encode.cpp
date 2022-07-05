@@ -767,6 +767,7 @@ bool decodeRLHuffHalf(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeD
     huffmanDecode(pInstance, commands, resources.zeroStreamInfoSet, 1u, pInstance->m_codingBlockSize);
 
     // decompressing the run length encoding ------------------------------------------
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
     runLengthDecodeHalf(pInstance, commands, compactSymbolsAddress, zeroCountsAddress, {static_cast<uint>(decodeDataCpu.symbolCount)}, symbolCountPadded, outSymbols, {static_cast<uint>(decodeDataCpu.symbolCount)}, 1);
     
     return true;

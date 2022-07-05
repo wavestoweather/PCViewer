@@ -24,6 +24,7 @@ public:
 	static void hexdump(const void* ptr, int buflen);
 	static void numdump(const float* ptr, int len, bool lineNumber = false);
 	static void numdump(const int* ptr, int len);
+	static void numdump(const uint16_t* ptr, int len);
 	static void matrixdump(const std::vector<std::vector<int>>& matrix);
 	static void matrixdump(const std::vector<std::vector<double>>& matrix);
 	static float getVectorIndex(const std::vector<float>& values, float v);

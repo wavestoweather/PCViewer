@@ -37,8 +37,6 @@ static void compressVector(std::vector<float>& src, float quantizationStep, /*ou
 
 static std::pair<cudaCompress::BitStream, uint32_t> compressVector(std::vector<float>& src, float quantizationStep){
     std::pair<cudaCompress::BitStream, uint32_t> t;
-    cudaCompress::BitStream stream;
-    uint32_t symbolSize;
     compressVector(src, quantizationStep, t.first, t.second);
     return t;
 }
@@ -55,6 +53,48 @@ static void decompressVector(std::vector<uint32_t> src, float quantizationStep, 
 	result2 = data;
 	cudaCompress::util::dwtFloatInverseCPU(result2.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
 	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
+}
+
+static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize){
+    vkCompress::GpuInstance gpu(context, 1, symbolsSize, 0, 0);
+    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, src, gpu.m_codingBlockSize);
+    RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
+
+    // creating buffer for the symbol table
+    uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
+    uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
+    // symbolBuffer holds enough memory to store all intermediate data as well: this means that we need 2 * float vector containing all data
+    uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+    
+    VkDeviceAddress srcA = VkUtil::getBufferAddress(context.device, symbolBuffer[0]); // the symbol buffer containes the quantized values
+    VkDeviceAddress dstA = VkUtil::getBufferAddress(context.device, symbolBuffer[1]); // is the padded offset * 2 as the offset is for halves
+
+    vkCompress::decodeRLHuffHalf(&gpu, cpuData, gpuData, srcA, commands);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    
+    vkCompress::unquantizeFromSymbols(&gpu, commands, dstA, srcA, symbolsSize, quantizationStep);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+
+    vkCompress::dwtFloatInverse(&gpu, commands, srcA, dstA, symbolsSize / 2, symbolsSize / 2, symbolsSize / 2);
+    // - correct until here
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, {}, 0, {}, 0, {});
+    VkBufferCopy cpy{};
+    cpy.dstOffset = 0;
+    cpy.srcOffset = 0;
+    cpy.size = symbolsSize / 2 * sizeof(float);
+    vkCmdCopyBuffer(commands, symbolBuffer[1], symbolBuffer[0], 1, &cpy);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, symbolsSize);
+
+    VkUtil::commitCommandBuffer(context.queue, commands);
+    auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
+    std::vector<half> final(symbolsSize);
+    VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
+    return std::vector<float>(final.begin(), final.end());
 }
 
 void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
@@ -144,7 +184,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testExclusiveScan = false;
     const bool testUnquanzite = false;
     const bool testDWTInverse = false;
-    const bool testDWTInverseToHalf = true;
+    const bool testDWTInverseToHalf = false;
+    const bool testFullDecomp = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -236,9 +277,11 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         check_vk_result(vkQueueWaitIdle(context.queue)); // have to wait for buffer freeing
         std::cout << (t[1] - t[0]) * 1e-6 << " ms?" << std::endl;
 
-        std::vector<uint16_t> downloadedData(symbolsSize);
         vkDestroyQueryPool(context.device, times, nullptr);
+        std::vector<uint16_t> downloadedData(symbolsSize);
         VkUtil::downloadData(context.device, mem, 0, symbolsSize * sizeof(uint16_t), downloadedData.data());
+        downloadedData = std::vector<uint16_t>(downloadedData.end() - 1000, downloadedData.end());
+        symbols = std::vector<uint16_t>(symbols.end() - 1000, symbols.end());
         //std::set<uint16_t> block1Orig(symbols.begin(), symbols.begin() + 4096);
         //std::set<uint16_t> block1Gpu(downloadedData.begin(), downloadedData.begin() + 4096);
         //bool equ = block1Orig == block1Gpu;
@@ -309,6 +352,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         VkUtil::downloadData(context.device, mem, offsets[1], quantSize * 4, res.data());
         std::vector<float> ref(quantSize);
         cudaCompress::util::unquantizeFromSymbols(ref.data(), symbols.data(), symbols.size(), quantStep);
+        res = std::vector<float>(res.end() - 1000, res.end());
+        ref = std::vector<float>(ref.end() - 1000, ref.end());
         bool heyho = true;
     }
     if(testDWTInverse){
@@ -330,7 +375,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         VkUtil::uploadData(context.device, mem, 0, size * 4, dst.data());
         auto dstA = VkUtil::getBufferAddress(context.device, buffer[1]);
         auto srcA = VkUtil::getBufferAddress(context.device, buffer[0]); 
-        vkCompress::dwtFloatInverse(&gpu, commands, dstA, srcA, size/2, 0, size/2);
+        vkCompress::dwtFloatInverse(&gpu, commands, dstA, srcA, size, 0, 0);
 
         {
         PCUtil::Stopwatch unquantWatch(std::cout, "dwt inverse time");
@@ -341,7 +386,9 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         std::vector<float> res(size);
         VkUtil::downloadData(context.device, mem, offsets[1], size * 4, res.data());
         std::vector<float> ref(size);
-        cudaCompress::util::dwtFloatInverseCPU(ref.data(), dst.data(), size/ 2, 0, size/2);
+        cudaCompress::util::dwtFloatInverseCPU(ref.data(), dst.data(), size, 0, 0);
+        res = std::vector<float>(res.end() - 1000, res.end());
+        ref = std::vector<float>(ref.end() - 1000, ref.end());
         bool heyho = true;
     }
     if(testDWTInverseToHalf){
@@ -377,5 +424,20 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         VkUtil::downloadData(context.device, mem, offsets[1], size * 2, res.data());
         std::vector<float> conv(res.begin(), res.end());
         bool heyho = true;
+    }
+    if(testFullDecomp){
+        const uint size = 1 << 20;
+        const float quantStep = .0001;
+        std::vector<float> orig(size);
+        srand(10);
+        for(auto& f: orig)
+            f = random() / float(1u << 31);
+
+        auto copy = orig;
+        auto [bitstream, s] = compressVector(orig, quantStep);
+        std::vector<float> cpuDecomp;
+        decompressVector(bitstream.getVector(), quantStep, size, cpuDecomp);
+        auto decomp = vkDecompress(context, bitstream.getVector(), quantStep, size);
+        bool letssee = true;
     }
 }

@@ -61,6 +61,13 @@ void PCUtil::numdump(const int* ptr, int len)
 	}
 }
 
+void PCUtil::numdump(const uint16_t* ptr, int len)
+{
+	for (int i = 0; i < len; ++i) {
+		std::cout << ptr[i] << std::endl;
+	}
+}
+
 void PCUtil::matrixdump(const std::vector<std::vector<int>>& matrix)
 {
 	for (auto& x : matrix) {
