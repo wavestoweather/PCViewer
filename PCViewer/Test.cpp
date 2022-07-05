@@ -17,6 +17,7 @@
 #include "compression/gpuCompression/Quantize.hpp"
 #include "compression/gpuCompression/DWT.hpp"
 
+// note: src vector is changed!
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
     //compressing the data with 2 dwts, followed by run-length and huffman encoding of quantized symbols
     //padding to size % 4 size
@@ -35,6 +36,7 @@ static void compressVector(std::vector<float>& src, float quantizationStep, /*ou
     symbolsSize = symbols.size();
 }
 
+// note: src vector is changed!
 static std::pair<cudaCompress::BitStream, uint32_t> compressVector(std::vector<float>& src, float quantizationStep){
     std::pair<cudaCompress::BitStream, uint32_t> t;
     compressVector(src, quantizationStep, t.first, t.second);
@@ -185,7 +187,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testUnquanzite = false;
     const bool testDWTInverse = false;
     const bool testDWTInverseToHalf = false;
-    const bool testFullDecomp = true;
+    const bool testFullDecomp = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
