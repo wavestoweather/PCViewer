@@ -143,7 +143,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testDecomp = false;
     const bool testExclusiveScan = false;
     const bool testUnquanzite = false;
-    const bool testDWTInverse = true;
+    const bool testDWTInverse = false;
+    const bool testDWTInverseToHalf = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -329,7 +330,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         VkUtil::uploadData(context.device, mem, 0, size * 4, dst.data());
         auto dstA = VkUtil::getBufferAddress(context.device, buffer[1]);
         auto srcA = VkUtil::getBufferAddress(context.device, buffer[0]); 
-        vkCompress::dwtFloatInverse(&gpu, commands, dstA, srcA, size, 0, 0);
+        vkCompress::dwtFloatInverse(&gpu, commands, dstA, srcA, size/2, 0, size/2);
 
         {
         PCUtil::Stopwatch unquantWatch(std::cout, "dwt inverse time");
@@ -340,7 +341,41 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         std::vector<float> res(size);
         VkUtil::downloadData(context.device, mem, offsets[1], size * 4, res.data());
         std::vector<float> ref(size);
-        cudaCompress::util::dwtFloatInverseCPU(ref.data(), dst.data(), size);
+        cudaCompress::util::dwtFloatInverseCPU(ref.data(), dst.data(), size/ 2, 0, size/2);
+        bool heyho = true;
+    }
+    if(testDWTInverseToHalf){
+        const uint size = 1 << 20;
+        vkCompress::GpuInstance gpu(context, 1, size, 0, 0);
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+
+        std::vector<float> orig(size);
+        srand(10);
+        for(auto& f: orig)
+            f = random() / float(1u << 31);
+        std::vector<float> dst(size);
+        cudaCompress::util::dwtFloatForwardCPU(dst.data(), orig.data(), size / 2, size / 2, size / 2);
+
+        VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        auto [buffer, offsets, mem] = VkUtil::createMultiBufferBound(context, {size * 4, size * 2}, {usage, usage}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+        VkUtil::uploadData(context.device, mem, 0, size * 4, dst.data());
+        auto dstA = VkUtil::getBufferAddress(context.device, buffer[1]);
+        auto srcA = VkUtil::getBufferAddress(context.device, buffer[0]); 
+        vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, size /  2, 0, size / 2);
+
+        {
+        PCUtil::Stopwatch unquantWatch(std::cout, "dwt inverse time");
+        VkUtil::commitCommandBuffer(context.queue, commands);
+        auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
+        }
+
+        orig = std::vector<float>(orig.begin() + size / 2, orig.end());
+
+        std::vector<half> res(size);
+        VkUtil::downloadData(context.device, mem, offsets[1], size * 2, res.data());
+        std::vector<float> conv(res.begin(), res.end());
         bool heyho = true;
     }
 }

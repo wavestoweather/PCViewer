@@ -45,6 +45,12 @@ namespace vkCompress
         const int xBlockSizeX = 128;
         const int xResultBlockCount = 8;
 
+        pc.srcOffset = srcRowPitch;
+        pc.dstOffset = dstRowPitch;
+        pc.size = size;
+        pc.dstAddress = dstAddress;
+        pc.srcAddress = srcAddress;
+
         int dispatchX = size / (xResultBlockCount * xBlockSizeX);
 
         // no special case for image sizes of 64 and 128
