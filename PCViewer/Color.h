@@ -18,9 +18,9 @@ typedef struct {
 	double l;
 } hsl;
 
-hsv   rgb2hsv(rgb in);
-rgb   hsv2rgb(const hsv& in);
-rgb	 hsl2rgb(const hsl& in);
+static hsv   rgb2hsv(rgb in);
+static rgb   hsv2rgb(const hsv& in);
+static rgb	 hsl2rgb(const hsl& in);
 
 rgb hsv2rgb(const hsv& in)
 {

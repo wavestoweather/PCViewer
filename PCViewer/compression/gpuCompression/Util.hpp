@@ -5,7 +5,7 @@
 
 namespace vkCompress{
     // parse bytes to decode tables and rl data
-    RLHuffDecodeDataCpu parseCpuRLHuffData(const GpuInstance* pInstance, const std::vector<uint32_t>& data, uint codingBlockSize = 128){
+    static RLHuffDecodeDataCpu parseCpuRLHuffData(const GpuInstance* pInstance, const std::vector<uint32_t>& data, uint codingBlockSize = 128){
         BitStreamReadOnly bitStream(data.data(), data.size() * sizeof(data[0]) * 8);
         // compacted symbols
         uint compactSymbolCount;
