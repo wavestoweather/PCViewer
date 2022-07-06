@@ -9,6 +9,7 @@
 #include "TemplateList.hpp"
 #include "Attribute.hpp"
 #include "largeVis/IndBinManager.hpp"
+#include "largeVis/DecompressManager.hpp"
 #include "half/half.hpp"
 #include "compression/gpuCompression/Encode.hpp"
 #include <memory>
@@ -68,6 +69,7 @@ struct CompressedData{
 	std::vector<Attribute> attributes{};
 	uint32_t compressedBlockSize{};
 	std::unique_ptr<vkCompress::GpuInstance> gpuInstance{};
+	std::unique_ptr<DecompressManager> decompressManager{}; 
 };
 
 struct DataSet {
