@@ -12,9 +12,9 @@
 class DecompressManager{
 public:
     // cpuColumns is a vector of pointers to the cpu data which should be decompressed. If one is a nullptr the data should not be decompressed
-    using cpuColumns = std::vector<const RLHuffDecodeDataCpu*>;
+    using CpuColumns = std::vector<const RLHuffDecodeDataCpu*>;
     // gpuColumns is the same as cpuColumns for the gpu data
-    using gpuColumns = std::vector<const RLHuffDecodeDataGpu*>;
+    using GpuColumns = std::vector<const RLHuffDecodeDataGpu*>;
     enum class DecompressedType{
         halfF
     };
@@ -25,8 +25,8 @@ public:
     DecompressedType decompressedType{DecompressedType::halfF};
     size_t decompressedElementsPerBuffer{0};
 
-    // quick init via external column blocks
-    DecompressManager(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const cpuColumns& cpuData, const gpuColumns& gpuData):
+    // quick init via external column blocks (avoids initialization on first call to recordBlockDecompression(...))
+    DecompressManager(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData):
         _vkContext(gpu.vkContext)
         {resizeOrCreateBuffers(symbolCountPerBlock, gpu, cpuData, gpuData);};
     
@@ -34,7 +34,7 @@ public:
         deleteVkResources();
     }
 
-    void recordBlockDecompression(VkCommandBuffer commands, uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const cpuColumns& cpuData, const gpuColumns& gpuData, float quantizationStep){
+    void recordBlockDecompression(VkCommandBuffer commands, uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep){
         if(!_vkContext.device)
             _vkContext = gpu.vkContext;
         // ensure buffer size is large enough
@@ -87,7 +87,7 @@ private:
     std::vector<size_t> _cacheBufferOffsets{};
     VkUtil::Context _vkContext;
 
-    gpuColumns _lastDecompressed{};  // stores the last recorded decompressed gpu data to avoid re-recording of the same decompression
+    GpuColumns _lastDecompressed{};  // stores the last recorded decompressed gpu data to avoid re-recording of the same decompression
 
     inline void deleteVkResources(){
         auto device = _vkContext.device;
@@ -99,7 +99,7 @@ private:
             vkFreeMemory(device, bufferMemory, nullptr);
     }
 
-    void resizeOrCreateBuffers(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const cpuColumns& cpuData, const gpuColumns& gpuData){
+    void resizeOrCreateBuffers(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData){
         if(cpuData.size() == buffers.size() && decompressedElementsPerBuffer >= symbolCountPerBlock){
             // nothing to do, return
             return;

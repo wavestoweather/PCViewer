@@ -32,7 +32,7 @@ private:
     uint32_t _linesPerLvl{static_cast<uint32_t>(1e6)};
     uint32_t _levels{3};
     uint32_t _binsAmt{1000};
-    uint32_t _compressionBlockSize{1 << 20};
+    uint32_t _compressionBlockSize{28}; // power of 2 given here
     uint32_t _maxWorkingMemory{16000};
     uint32_t _amtOfThreads{8};
     float _quantizationStep{.001f};

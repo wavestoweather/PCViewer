@@ -56,7 +56,7 @@ static void compressVector(std::vector<float>& src, float quantizationStep, /*ou
     cudaCompress::util::quantizeToSymbols(symbols.data(), src.data(), src.size(), quantizationStep);
 	cudaCompress::BitStream* arr[]{&bitStream};
     std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
-    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, symbols.size());
+    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);
     symbolsSize = symbols.size();
 }
 
@@ -955,31 +955,29 @@ namespace compression
             return size;
         };
 
-        auto appendColumnFile = [&](){
+        auto appendColumnFile = [&](int i){
             std::cout << "\rAppending column data to column file";
             std::cout.flush();
-            for(int i: irange(columnData)){
-                if(halfData){
-                    std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
-                    std::vector<half> write(columnData[i].begin(), columnData[i].end());    // conversion to half data
-                    columnFile.write(reinterpret_cast<char*>(write.data()), write.size() * sizeof(write[0]));  
-                }
-                if(compressedData){
-                    std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".comp", std::ios_base::binary | std::ios_base::app);
-                    
-                    auto [stream, symbolSize] = compressVector(columnData[i], .01f);
-                    // first comes the stream size (bytes) and the symbol size as a struct of a uint64_t and a uint32_t
-                    struct{uint64_t streamSize; uint32_t symbolSize;} sizes{stream.getRawSizeBytes(), symbolSize};
-                    columnFile.write(reinterpret_cast<char*>(&sizes), sizeof(sizes));    
-                    // then append the data                
-                    columnFile.write(reinterpret_cast<char*>(stream.getRaw()), stream.getRawSizeBytes());
-                    if(compressedDataDebugInfo){
-                        std::cout << "\rReduced data block from " << columnData[i].size () * sizeof(columnData[0][0]) << " to " << stream.getRawSizeBytes();
-                        std::cout.flush();
-                    }
-                }
-                columnData[i] = {};
+            if(halfData){
+                std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".col", std::ios_base::binary | std::ios_base::app);
+                std::vector<half> write(columnData[i].begin(), columnData[i].end());    // conversion to half data
+                columnFile.write(reinterpret_cast<char*>(write.data()), write.size() * sizeof(write[0]));  
             }
+            if(compressedData){
+                std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".comp", std::ios_base::binary | std::ios_base::app);
+                
+                auto [stream, symbolSize] = compressVector(columnData[i], .01f);
+                // first comes the stream size (bytes) and the symbol size as a struct of a uint64_t and a uint32_t
+                struct{uint64_t streamSize; uint32_t symbolSize;} sizes{stream.getRawSizeBytes(), symbolSize};
+                columnFile.write(reinterpret_cast<char*>(&sizes), sizeof(sizes));    
+                // then append the data                
+                columnFile.write(reinterpret_cast<char*>(stream.getRaw()), stream.getRawSizeBytes());
+                if(compressedDataDebugInfo){
+                    std::cout << "\rReduced data block from " << columnData[i].size () * sizeof(columnData[0][0]) << " to " << stream.getRawSizeBytes();
+                    std::cout.flush();
+                }
+            }
+            columnData[i] = {};
         };
         
         std::cout << std::endl;
@@ -996,8 +994,11 @@ namespace compression
                         RLOGLINE("getVal");
                     float axisVal = d.columns[a][i];
                     // adding the axis val to the corresponding half values
-                    if(halfData || compressedData)
+                    if(halfData || compressedData){
                         columnData[a].push_back(axisVal);
+                        if(columnData[a].size() >= dataCompressionBlock)
+                            appendColumnFile(a);
+                    }
                     // indices
                     if(!indices)
                         continue;
@@ -1036,22 +1037,23 @@ namespace compression
                 }
             }
             offset += d.columns[0].size();
-            if(columnData[0].size() >= dataCompressionBlock){
-                // writeout of the column data (appended to the column files)
-                appendColumnFile();
-            }
+            //if(columnData[0].size() >= dataCompressionBlock){
+            //    // writeout of the column data (appended to the column files)
+            //    appendColumnFile();
+            //}
             std::cout << "\rProcessed data, loading next             "; std::cout.flush();
         }
         std::cout << std::endl;
         if(columnData[0].size())
-            appendColumnFile();
+            for(int i: irange(columnData))
+                appendColumnFile(i);
         // ----------------------------------------------------------------------------------------------
         // writeout of the data info
         // ----------------------------------------------------------------------------------------------
         std::ofstream dataInfo(std::string(outputFolder) + "/data.info", std::ios_base::binary);
         assert(dataInfo);
         // data info bits
-        compression::DataStorageBits storageInfo;
+        compression::DataStorageBits storageInfo{};
         if(indices)
             storageInfo |= compression::DataStorageBits::RoaringAttributeBins;
         if(halfData)

@@ -443,4 +443,18 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         auto decomp = vkDecompress(context, bitstream.getVector(), quantStep, size);
         bool letssee = true;
     }
+
+    // testing fucking decompressing blockwise stored data
+    {
+        //std::ifstream columnFile(hierarchyFolder + "/" + std::to_string(i) + ".comp", std::ios_base::binary);
+        //assert(columnFile);
+        //struct{uint64_t streamSize; uint32_t symbolSize;}sizes{};
+        //while(columnFile.read(reinterpret_cast<char*>(&sizes), sizeof(sizes))){
+        //    // streamSize is in bytes, while symbolSize is the resulting size of the decompressed vector
+        //    dataVec.resize(sizes.streamSize / sizeof(dataVec[0]));
+        //    columnFile.read(reinterpret_cast<char*>(dataVec.data()), sizes.streamSize);
+        //    columnData[i].compressedRLHuffCpu.emplace_back(vkCompress::parseCpuRLHuffData(gpuInstance.get(), dataVec));
+        //    columnData[i].compressedRLHuffGpu.emplace_back(gpuInstance.get(), columnData[i].compressedRLHuffCpu.back());
+        //}
+    }
 }

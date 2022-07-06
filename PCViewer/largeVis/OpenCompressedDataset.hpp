@@ -138,12 +138,14 @@ namespace util{
                 data.read(reinterpret_cast<char*>(dVec.data()), dVec.size() * sizeof(dVec[0]));
             }
         }
-        else if((dataBits & compression::DataStorageBits::CuComColumnData) != compression::DataStorageBits::None){
+        if((dataBits & compression::DataStorageBits::CuComColumnData) != compression::DataStorageBits::None){
             // directly parse if same compression block size
             gpuInstance = std::make_unique<vkCompress::GpuInstance>(context, 1, dataBlockSize, 0,0);
             std::vector<uint32_t> dataVec;
             for(uint32_t i: irange(attributes)){
+                std::cout << "Loading compressed data for attribute " << attributes[i].name << std::endl;
                 std::ifstream columnFile(hierarchyFolder + "/" + std::to_string(i) + ".comp", std::ios_base::binary);
+                assert(columnFile);
                 struct{uint64_t streamSize; uint32_t symbolSize;}sizes{};
                 while(columnFile.read(reinterpret_cast<char*>(&sizes), sizeof(sizes))){
                     // streamSize is in bytes, while symbolSize is the resulting size of the decompressed vector

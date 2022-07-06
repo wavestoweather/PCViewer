@@ -83,7 +83,15 @@ struct RLHuffDecodeDataGpu{
     RLHuffDecodeDataGpu(const RLHuffDecodeDataGpu&) = delete;   // no copy
     RLHuffDecodeDataGpu& operator=(const RLHuffDecodeDataGpu&) = delete; // no copy on assignment
     // move constructor and assignment operator are still defined by default
-    RLHuffDecodeDataGpu(RLHuffDecodeDataGpu&&) = default;
+    RLHuffDecodeDataGpu(RLHuffDecodeDataGpu &&o){
+        std::memcpy(this, &o, sizeof(o));
+        std::memset(&o, 0, sizeof(o));
+    };
+    RLHuffDecodeDataGpu& operator=(RLHuffDecodeDataGpu &&o){
+        std::memcpy(this, &o, sizeof(o));
+        std::memset(&o, 0, sizeof(o));
+        return *this;
+    };
 
     ~RLHuffDecodeDataGpu(){
         if(buffer)

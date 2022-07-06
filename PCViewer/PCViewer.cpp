@@ -3810,6 +3810,15 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 
 static bool openHierarchy(const char* filename, const char* attributeInfo){
 	DataSet ds = util::openCompressedDataset(VkUtil::Context{0, 0, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, filename);
+	if(ds.compressedData.gpuInstance){
+		DecompressManager::GpuColumns gpuColumns(ds.compressedData.columnData.size());
+		DecompressManager::CpuColumns cpuColumns(gpuColumns.size());
+		for(int i : irange(gpuColumns)){
+			gpuColumns[i] = ds.compressedData.columnData[i].compressedRLHuffGpu.data();
+			cpuColumns[i] = ds.compressedData.columnData[i].compressedRLHuffCpu.data();
+		}
+		ds.compressedData.decompressManager = std::make_unique<DecompressManager>(ds.compressedData.compressedBlockSize, *ds.compressedData.gpuInstance, cpuColumns, gpuColumns);
+	}
 
 	//checking attribute correctnes and creating attributes if not yet available
 	std::vector<std::string> attributeNames(ds.compressedData.attributes.size());
