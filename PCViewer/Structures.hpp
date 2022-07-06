@@ -54,12 +54,20 @@ enum class DataType{
 	Compressed
 };
 
-struct CompressedColumnData{    // atm not compressed, future feature
+struct CompressedColumnData{
     std::vector<half> cpuData{};// half compressed data
     VkBuffer gpuHalfData{};		// half compredded data on Gpu
     VkDeviceMemory gpuMemory{};	// memory for half compressed gpu data
 	std::vector<RLHuffDecodeDataCpu> compressedRLHuffCpu{};
 	std::vector<RLHuffDecodeDataGpu> compressedRLHuffGpu{};
+};
+
+struct CompressedData{
+	size_t dataSize{};
+	std::vector<CompressedColumnData> columnData{};
+	std::vector<Attribute> attributes{};
+	uint32_t compressedBlockSize{};
+	std::unique_ptr<vkCompress::GpuInstance> gpuInstance{};
 };
 
 struct DataSet {
@@ -70,10 +78,7 @@ struct DataSet {
 	int reducedDataSetSize{};					//size of the reduced dataset(when clustering was applied). This is set to data.size() on creation.
 	DataType dataType{};
 	std::vector<uint8_t> additionalData{};		//byte vector for additional data. For Hierarchical data this is where teh hierarchy folder is stored
-	std::vector<CompressedColumnData> compressedColumnData{};
-	std::vector<Attribute> compressedAttributes{};
-	uint32_t compressedBlockSize;
-	std::unique_ptr<vkCompress::GpuInstance> gpuInstance{};
+	CompressedData compressedData{};
 	// herer should go space for roaring bins
 
 	bool operator==(const DataSet& other) const {
@@ -88,7 +93,8 @@ struct Brush {
 
 enum class InheritanceFlags{
 	dlf = 1,
-	hierarchical = 1 << 1
+	hierarchical = 1 << 1,
+	compressed = 1 << 2
 };
 
 // struct holding the information for a drawable instance of a TemplateList

@@ -27,7 +27,7 @@ public:
         std::vector<VkBuffer>& counts;                      // the count buffer are expected to be in row major order (same order as for images)
         std::vector<std::pair<uint32_t, uint32_t>>& axes;   // contains for each counts buffer the axes
         std::vector<int>& order;
-        std::vector<Attribute>& attributes;
+        const std::vector<Attribute>& attributes;
         bool* attributeActive;
         std::vector<uint32_t> attributeAxisSizes;           //contains for each axis how many bins exist.
         VkBuffer attributeInformation;                      // contains mapping information for axis scaling, axis positioning and padding

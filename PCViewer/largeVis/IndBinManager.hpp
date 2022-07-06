@@ -22,7 +22,7 @@
 #include "UVecHasher.hpp"
 //#include "../Structures.hpp"
 
-struct CompressedColumnData;
+struct CompressedData;
 
 // loads the roaring bitmaps from memory and makes them easily accesisble
 // provides a general interface to be used in the main application for calculating the 2d bin counts as well as rendering them as pc plots
@@ -70,6 +70,7 @@ public:
         VkUtil::Context context;
         VkRenderPass renderPass;
         VkFramebuffer framebuffer;
+        const CompressedData& compressedData;
     };
 
     // maxDrawLines describes the max lines inbetween two attributes
@@ -97,15 +98,13 @@ public:
     };
 
     // bool which indicates render update should be done (by calling render())
-    std::vector<Attribute> attributes;
-    robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;    // contains all bin indices available (might also be multidimensional if 2d bin indexes are available)
-    std::vector<CompressedColumnData> columnData;
-    CountingMethod countingMethod{CountingMethod::GpuDrawPairwise};    // variable to set the different counting techniques
-    uint32_t columnBins{1 << 10};
+    const CompressedData& compressedData;                 // references the data stored inside dataset
     uint32_t cpuLineCountingAmtOfThreads{12};
     std::atomic<bool> requestRender{false};
     std::vector<uint8_t> indexActivation{};         // bitset for all indices to safe index activation
     std::vector<half> priorityDistances;            // vector containing the priority distances for each data point
+    uint32_t columnBins{};
+    CountingMethod countingMethod{CountingMethod::GpuDrawPairwise};    // variable to set the different counting techniques
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
     struct CountResource{
@@ -138,13 +137,7 @@ private:
         }
     };
 
-    const uint32_t _compressedBlockSize{1 << 20};
     VkUtil::Context _vkContext;
-
-    bool _hierarchyValid{true};
-    uint32_t _baseLevel{0};
-    uint32_t _hierarchyLevels;
-    std::vector<uint32_t> _clusterLevelSizes{};
 
     uint32_t binsMaxCenterAmt;
 
@@ -159,7 +152,7 @@ private:
     std::atomic<bool> _countUpdateThreadActive{false};
     bool _pendingCountUpdate{false};    // if a brush update or attribute update comes in while an update was still enqueud
     BrushState _currentBrushState;
-    BrushState _countBrushState;    // used to check if it diverges from the current brush state. Happens when a brush update was entered while a count is still active
+    BrushState _countBrushState;        // used to check if it diverges from the current brush state. Happens when a brush update was entered while a count is still active
 
     std::vector<int> _attributeOrdering;
     bool* _attributeActivations;

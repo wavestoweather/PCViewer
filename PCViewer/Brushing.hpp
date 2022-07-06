@@ -60,7 +60,7 @@ namespace brushing{
     }
 
     template<typename T>
-    static void updateIndexActivation(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes, const std::vector<std::vector<T>*>& data, std::vector<uint8_t>& activations, uint32_t amtOfThreads = 1, float eps = 0 /*maximum distance from data*/, bool andBrushes = false /*If true point has to be in all ranges*/){
+    static void updateIndexActivation(const std::vector<RangeBrush>& rangeBrushes, const Polygons& lassoBrushes, const std::vector<const std::vector<T>*>& data, std::vector<uint8_t>& activations, uint32_t amtOfThreads = 1, float eps = 0 /*maximum distance from data*/, bool andBrushes = false /*If true point has to be in all ranges*/){
         // converting the range brushes to properly be able to check activation
         struct MM{float min, max;};
         std::vector<std::map<int, std::vector<MM>>> axisBrushes(rangeBrushes.size());

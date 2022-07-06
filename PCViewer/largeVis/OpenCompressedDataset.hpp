@@ -14,7 +14,7 @@
 #endif
 
 namespace util{
-    DataSet openCompressedDatasetconst(VkUtil::Context& context, std::string_view folder){
+    DataSet openCompressedDataset(const VkUtil::Context& context, std::string_view folder){
         std::string hierarchyFolder(folder);
 
         // --------------------------------------------------------------------------------
@@ -49,7 +49,7 @@ namespace util{
         attributeCenterFile.read(reinterpret_cast<char*>(offsetSizes.data()), offsetSizes.size() * sizeof(offsetSizes[0]));
         _attributeCenters.resize(attributes.size());
         for(int i = 0; i < attributes.size(); ++i){
-            assert(attributeCenterFile.tellg() == offsetSizes[i].offset);
+            assert(!attributeCenterFile || attributeCenterFile.tellg() == offsetSizes[i].offset);
             _attributeCenters[i].resize(offsetSizes[i].size / sizeof(_attributeCenters[0][0]));
             attributeCenterFile.read(reinterpret_cast<char*>(_attributeCenters[i].data()), offsetSizes[i].size);
         }
@@ -180,17 +180,20 @@ namespace util{
         std::cout << "Loaded " << dataSize << " datapoints" << std::endl;
 
         return DataSet{
-            std::string(folder.substr(folder.find_last_of("/\\"))),
+            std::string(folder.substr(folder.find_last_of("/\\") + 1)),
             {},
             {},
             {},
             1,
             DataType::Compressed,
-            {},
-            std::move(columnData),
-            std::move(attributes),
-            dataBlockSize,
-            std::move(gpuInstance)
+            std::vector<uint8_t>(hierarchyFolder.begin(), hierarchyFolder.end()),
+            {   // compressedData
+                dataSize,
+                std::move(columnData),
+                std::move(attributes),
+                dataBlockSize,
+                std::move(gpuInstance)
+            }
         };
     }
 }

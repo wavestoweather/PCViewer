@@ -10,12 +10,15 @@
 #include <filesystem>
 
 IndBinManager::IndBinManager(const CreateInfo& info) :
-_vkContext(info.context), _hierarchyFolder(info.hierarchyFolder), columnBins(info.context.screenSize[1])
+    compressedData(info.compressedData), 
+    _vkContext(info.context), 
+    _hierarchyFolder(info.hierarchyFolder), 
+    columnBins(info.context.screenSize[1])
 {
     // --------------------------------------------------------------------------------
     // creating the index activation buffer resource and setting up the cpu side activation vector
     // --------------------------------------------------------------------------------
-    uint32_t dataSize = 1;  // TODO obvisiously
+    uint32_t dataSize = compressedData.dataSize;
     indexActivation = std::vector<uint8_t>((dataSize + 7) / 8, 0xff);    // set all to active on startup
     VkUtil::createBuffer(_vkContext.device, indexActivation.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &_indexActivation);
     VkMemoryRequirements memReq{};
@@ -49,13 +52,6 @@ IndBinManager::~IndBinManager(){
     if(_computeBrusher)
         _computeBrusher->release();
     // count resource is destructed automatically by destructor
-    // columnd data info destruction
-    for(auto& d: columnData){
-        //if(d.gpuData)
-        //    vkDestroyBuffer(_vkContext.device, d.gpuData, nullptr);
-        //if(d.gpuMemory)
-        //    vkFreeMemory(_vkContext.device, d.gpuMemory, nullptr);
-    }
 
     if(_indexActivation)
         vkDestroyBuffer(_vkContext.device, _indexActivation, nullptr);
@@ -71,7 +67,7 @@ IndBinManager::~IndBinManager(){
 
 void IndBinManager::notifyAttributeUpdate(const std::vector<int>& attributeOrdering, const std::vector<Attribute>& attributes, bool* attributeActivations){
     _attributeOrdering = attributeOrdering;
-    assert(attributes == this->attributes); // debug check
+    assert(attributes == compressedData.attributes); // debug check
     _attributeActivations = attributeActivations;
     updateCounts();         // updating the counts if there are some missing and pushing a render call
 }
@@ -114,7 +110,7 @@ void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, boo
         counts,
         axes,
         _attributeOrdering,
-        attributes,
+        compressedData.attributes,
         _attributeActivations,
         binSizes,
         attributeInfos,
@@ -156,7 +152,7 @@ void IndBinManager::updateCounts(){
                 std::cout << "Updating cpu index activations" << std::endl; std::cout.flush();
                 PCUtil::Stopwatch updateWatch(std::cout, "Cpu index activation");
                 t->_indexActivationState = t->_countBrushState.id;
-                std::vector<std::vector<half>*> data(t->attributes.size());
+                std::vector<const std::vector<half>*> data(t->compressedData.attributes.size());
                 const uint32_t amtOfThreads = 12;
                 auto execClear = [&](size_t start, size_t end){
                     for(size_t e: irange(start, end)) 
@@ -179,8 +175,8 @@ void IndBinManager::updateCounts(){
                         t.join();
                 }
 
-                for(int i: irange(t->columnData)){
-                    data[i] = &t->columnData[i].cpuData;
+                for(int i: irange(t->compressedData.columnData)){
+                    data[i] = &t->compressedData.columnData[i].cpuData;
                 }
                 
                 brushing::updateIndexActivation(t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, data, t->indexActivation, 1);
@@ -192,10 +188,10 @@ void IndBinManager::updateCounts(){
                 std::cout << "Updating gpu index activations" << std::endl; std::cout.flush();
                 PCUtil::Stopwatch updateWatch(std::cout, "Gpu index activation");
                 t->_gpuIndexActivationState = t->_countBrushState.id;
-                std::vector<VkBuffer> dataBuffer(t->attributes.size());
+                std::vector<VkBuffer> dataBuffer(t->compressedData.attributes.size());
                 for(int i: irange(dataBuffer))
-                    dataBuffer[i] = t->columnData[i].gpuHalfData;
-                t->_computeBrusher->updateActiveIndices(t->columnData[0].cpuData.size(), t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation);
+                    dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
+                t->_computeBrusher->updateActiveIndices(t->compressedData.columnData[0].cpuData.size(), t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation);
             }
         }
 
@@ -209,8 +205,8 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                auto counts = compression::lineCounterPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
+                std::cout << "Counting pairwise (cpu generic) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                auto counts = compression::lineCounterPair(t->compressedData.columnData[a].cpuData, t->compressedData.columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
@@ -219,7 +215,7 @@ void IndBinManager::updateCounts(){
         case CountingMethod::CpuMinGeneric:{
             if(t->priorityDistances.empty()){
                 // filling with radom numbers to have something interesting to min about
-                t->priorityDistances.resize(t->columnData[0].cpuData.size());
+                t->priorityDistances.resize(t->compressedData.columnData[0].cpuData.size());
                 for(uint32_t i: irange(t->priorityDistances))
                     t->priorityDistances[i] = double(std::rand()) / RAND_MAX;   // random value in [0, 1);
             }
@@ -230,8 +226,8 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "ReducingMin distance pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                auto minDist = compression::lineMinPair(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->priorityDistances, t->cpuLineCountingAmtOfThreads);
+                std::cout << "ReducingMin distance pairwise (cpu generic) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                auto minDist = compression::lineMinPair(t->compressedData.columnData[a].cpuData, t->compressedData.columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->priorityDistances, t->cpuLineCountingAmtOfThreads);
                 std::vector<uint32_t> convertedDist(minDist.size());
                 for(uint32_t d: irange(minDist))
                     convertedDist[d] = float(minDist[d]) * 255;    // multiplied with 255 as there are only 255 different color values
@@ -248,8 +244,8 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (cpu generic) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                auto counts = compression::lineCounterPairSingleField(t->columnData[a].cpuData, t->columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
+                std::cout << "Counting pairwise (cpu generic) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                auto counts = compression::lineCounterPairSingleField(t->compressedData.columnData[a].cpuData, t->compressedData.columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
                 VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
@@ -257,6 +253,8 @@ void IndBinManager::updateCounts(){
         }
         case CountingMethod::CpuRoaring:{
             for(int i: irange(activeIndices.size() -1)){
+                std::cout << "Cpu roaring currently disabled" << std::endl;
+                break;
                 uint32_t a = activeIndices[i];
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
@@ -276,10 +274,10 @@ void IndBinManager::updateCounts(){
                         --bin;
                     bIndexBins.push_back(bin);
                 }
-                std::cout << "Counting pairwise (roaring) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                auto counts = compression::lineCounterRoaring(t->binsMaxCenterAmt, t->ndBuckets[{a}], aIndexBins, t->ndBuckets[{b}], bIndexBins, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
-                VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
-                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+                std::cout << "Counting pairwise (roaring) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                //auto counts = compression::lineCounterRoaring(t->binsMaxCenterAmt, t->ndBuckets[{a}], aIndexBins, t->ndBuckets[{b}], bIndexBins, t->columnBins, t->columnBins, t->cpuLineCountingAmtOfThreads);
+                //VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
+                //t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
         }
@@ -295,13 +293,13 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId != t->_countBrushState.id)
                     anyUpdate = true;
-                datas[i] = t->columnData[i].gpuHalfData;
+                datas[i] = t->compressedData.columnData[i].gpuHalfData;
                 counts[i] = t->_countResources[{a,b}].countBuffer;
             }
-            datas.back() = t->columnData[activeIndices.back()].gpuHalfData;
+            datas.back() = t->compressedData.columnData[activeIndices.back()].gpuHalfData;
             if(!anyUpdate)
                 goto finish;
-            t->_lineCounter->countLinesAll(t->columnData[0].cpuData.size(), datas, t->columnBins, counts, activeIndices, t->_indexActivation, true);
+            t->_lineCounter->countLinesAll(t->compressedData.columnData[0].cpuData.size(), datas, t->columnBins, counts, activeIndices, t->_indexActivation, true);
             break;
         }
         case CountingMethod::GpuComputePairwise:{
@@ -312,8 +310,8 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (compute pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuHalfData, t->columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
+                std::cout << "Counting pairwise (compute pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                t->_lineCounter->countLinesPair(t->compressedData.columnData[a].cpuData.size(), t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -326,8 +324,8 @@ void IndBinManager::updateCounts(){
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << std::endl;
-                t->_renderLineCounter->countLinesPair(t->columnData[a].cpuData.size(), t->columnData[a].gpuHalfData, t->columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
+                std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                t->_renderLineCounter->countLinesPair(t->compressedData.columnData[a].cpuData.size(), t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, true);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -341,8 +339,8 @@ void IndBinManager::updateCounts(){
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 const uint32_t tileAmt = 6;
-                std::cout << "Counting pairwise tiled (render pipeline) for attribute " << t->attributes[a].name << " and " << t->attributes[b].name << " with " << tileAmt * tileAmt << " tiles" << std::endl;
-                t->_renderLineCounter->countLinesPairTiled(t->columnData[a].cpuData.size(), t->columnData[a].gpuHalfData, t->columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true, tileAmt);
+                std::cout << "Counting pairwise tiled (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << " with " << tileAmt * tileAmt << " tiles" << std::endl;
+                t->_renderLineCounter->countLinesPairTiled(t->compressedData.columnData[a].cpuData.size(), t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, true, tileAmt);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -362,7 +360,7 @@ void IndBinManager::updateCounts(){
     };
 
     if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies
-        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << columnData[0].cpuData.size() << " data points." << std::endl;
+        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << compressedData.columnData[0].cpuData.size() << " data points." << std::endl;
         // making shure the counting images are created and have the right size
         for(int i: irange(activeIndices.size() - 1)){
             uint32_t a = activeIndices[i];
