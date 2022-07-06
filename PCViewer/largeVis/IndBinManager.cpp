@@ -146,6 +146,8 @@ void IndBinManager::updateCounts(){
         PCUtil::Stopwatch totalTime(std::cout, "Total Count update Time");
         // starting with updating the counts if needed to have all information available for the following counting/reduction
         // note: might be changed to be settable by the user if cpu or gpu should be used for counting
+        bool gpuDecompression = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.columnData[0].compressedRLHuffGpu.size();
+        
         if(t->countingMethod <= CountingMethod::CpuRoaring){
             // updating cpu activations
             if(t->_indexActivationState != t->_countBrushState.id){
@@ -158,7 +160,7 @@ void IndBinManager::updateCounts(){
                     for(size_t e: irange(start, end)) 
                         t->indexActivation[e] = 0;
                 };
-                // having to set all activations to 0 as the activation calculation currently uses oring
+                // having to set all activations to 0 as the activation calculation currently uses or
                 if(amtOfThreads == 1){
                     execClear(0, t->indexActivation.size());
                 }

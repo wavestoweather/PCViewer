@@ -82,10 +82,25 @@ public:
         // setting _lastDecompressed to remember the decoded columns
         _lastDecompressed = gpuData;
     }
+
+    // creates a command buffer itself and commits it, return the vkevent that will be signaled upon finishing
+    VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep){
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+        vkCmdResetEvent(commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+
+        recordBlockDecompression(commands, symbolCountPerBlock, gpu, cpuData, gpuData, quantizationStep);
+
+        vkCmdSetEvent(commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+
+        VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+        return _syncEvent;
+    }
 private:
     std::vector<VkBuffer> _cacheBuffers{};   // needed for intermediate
     std::vector<size_t> _cacheBufferOffsets{};
-    VkUtil::Context _vkContext;
+    VkEvent _syncEvent{};
+    VkUtil::Context _vkContext{};
 
     GpuColumns _lastDecompressed{};  // stores the last recorded decompressed gpu data to avoid re-recording of the same decompression
 
@@ -97,9 +112,18 @@ private:
             vkDestroyBuffer(device, b, nullptr);
         if(bufferMemory)
             vkFreeMemory(device, bufferMemory, nullptr);
+        if(_syncEvent)
+            vkDestroyEvent(device, _syncEvent, nullptr);
     }
 
     void resizeOrCreateBuffers(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData){
+        if(!_syncEvent){
+            VkEventCreateInfo info{};
+            info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
+            info.flags = VK_EVENT_CREATE_DEVICE_ONLY_BIT;
+            vkCreateEvent(_vkContext.device, &info, nullptr, &_syncEvent);
+        }
+        
         if(cpuData.size() == buffers.size() && decompressedElementsPerBuffer >= symbolCountPerBlock){
             // nothing to do, return
             return;
