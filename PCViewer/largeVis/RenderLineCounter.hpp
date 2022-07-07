@@ -26,14 +26,15 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
-    VkEvent countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false, VkEvent prevPipeEvent = {});
+    VkEvent countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts = false, VkEvent prevPipeEvent = {});
     void countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt /*describes how much tiles along each side are used*/);
 private:
     struct PairInfos{
-        uint32_t amtofDataPoints, aBins, bBins, padding;
+        uint32_t amtofDataPoints, aBins, bBins, indexOffset;    // indexOffset is already converted from bit offset to uint offset
     };
     struct BPair{
         VkBuffer a, b;
+        bool operator<(const BPair& o) const{return a < o.a || (a == o.a && b < o.b);};
     };
 
     RenderLineCounter(const CreateInfo& info);
@@ -59,10 +60,10 @@ private:
     VkUtil::PipelineInfo _countPipeInfo{}, _conversionPipeInf{};
     VkSampler _sampler{};
     std::map<BPair, VkDescriptorSet> _pairSets, _conversionSets;
-    VkEvent _renderEvent{};
+    std::map<BPair, VkEvent> _renderEvents{};
     VkEvent _renderTiledEvent{};
-    VkCommandBuffer _renderCommands{};
-    VkCommandBuffer _renderCommands{};
+    std::map<BPair, VkCommandBuffer> _renderCommands{};
+    VkCommandBuffer _renderTiledCommands{};
 
     const std::string _vertexShader = "shader/lineCount.vert.spv";
     const std::string _fragmentShader = "shader/lineCount.frag.spv";

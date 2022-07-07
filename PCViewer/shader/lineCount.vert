@@ -5,7 +5,7 @@
 layout(binding = 0) uniform Infos{
     uint amtOfDataPoints;
     uint aBins, bBins;
-    uint padding;
+    uint indexOffset;
 };
 
 layout(binding = 1) buffer Activations{
@@ -18,7 +18,7 @@ layout(location = 1) in float b;
 layout(location = 0) out float increment;
 
 void main(){
-    uint act = activations[gl_VertexIndex / 32];
+    uint act = activations[gl_VertexIndex / 32 + indexOffset];
     if((act & (1 << (gl_VertexIndex & 31))) == 0){
         gl_Position.xy = vec2(-2, -2);  // outside viewport
         gl_PointSize = 0;   // not visible

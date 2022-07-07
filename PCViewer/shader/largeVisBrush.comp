@@ -18,7 +18,8 @@ layout(binding = 0) buffer BrushInfo{
     uint amtOfBrushes;
     uint andBrushes;
     uint offsetLassoBrushes; 
-    uint p,a,dding;
+    uint outputOffset;          // already converted from bit offset to uint offset
+    uint pa,dding;
     float brushData[];          // for information on brush Data layout look at ComputeBrushes.cpp -> updateActiveIndices()
 };
 
@@ -99,5 +100,5 @@ void main(){
     barrier();
 
     // writeout of activation
-    activations[gl_GlobalInvocationID.x] = act[gl_LocalInvocationID.x];
+    activations[gl_GlobalInvocationID.x + outputOffset] = act[gl_LocalInvocationID.x];
 }

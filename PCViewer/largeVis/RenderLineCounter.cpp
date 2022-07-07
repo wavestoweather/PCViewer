@@ -204,22 +204,25 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     // execution is done outside
 }
 
-VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts, VkEvent prevPipeEvent) {
+VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, VkEvent prevPipeEvent) {
     // check for outdated framebuffer size
     if(aIndices != _aBins)
         createOrUpdateFramebuffer(aIndices);
 
-    if(_renderEvent)
-        assert(vkGetEventStatus(_vkContext.device, _renderEvent) == VK_EVENT_SET);  // checking if the event was signaled. Should always be the case
+    VkEvent& renderEvent = _renderEvents[{aData,bData}];
+    if(renderEvent)
+        assert(vkGetEventStatus(_vkContext.device, renderEvent) == VK_EVENT_SET);  // checking if the event was signaled. Should always be the case
     else{
         VkEventCreateInfo info{}; info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
-        vkCreateEvent(_vkContext.device, &info, nullptr, &_renderEvent);
+        vkCreateEvent(_vkContext.device, &info, nullptr, &renderEvent);
     }
-    vkResetEvent(_vkContext.device, _renderEvent);
+    vkResetEvent(_vkContext.device, renderEvent);
 
-    if(_renderCommands)
-        vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_renderCommands);
-    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_renderCommands);
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);  // lockingthe queue as long as we are recording commands
+    VkCommandBuffer& renderCommands = _renderCommands[{aData, bData}];
+    if(renderCommands)
+        vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &renderCommands);
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &renderCommands);
     
     const uint32_t shaderXSize = 256;
     assert(_vkContext.queueMutex);
@@ -240,10 +243,10 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     infos.amtofDataPoints = dataSize;
     infos.aBins = aIndices;
     infos.bBins = bIndices;
+    infos.indexOffset = indexOffset / 32; // convert bitOffset to indexOffset
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
-    //std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
-    VkCommandBuffer commands = _renderCommands;
+    VkCommandBuffer commands = renderCommands;
     if(prevPipeEvent)
         vkCmdWaitEvents(commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, 0, {}, 0, {});
     if(clearCounts)
@@ -274,12 +277,12 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipeline);
     vkCmdDispatch(commands, (_aBins * _bBins + shaderXSize - 1) / shaderXSize, 1, 1);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    vkCmdSetEvent(commands, _renderEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    vkCmdSetEvent(commands, renderEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
     //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res); synchronization has to be done outsize via events
 
-    return _renderEvent;
+    return renderEvent;
 }
 
 void RenderLineCounter::countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt) {
@@ -419,8 +422,8 @@ RenderLineCounter::~RenderLineCounter()
         vkDestroyRenderPass(_vkContext.device, _renderPass, nullptr);
     if(_framebuffer)
         vkDestroyFramebuffer(_vkContext.device, _framebuffer, nullptr);
-    if(_renderEvent)
-        vkDestroyEvent(_vkContext.device, _renderEvent, nullptr);
+    for(auto [b, e]: _renderEvents)
+        vkDestroyEvent(_vkContext.device, e, nullptr);
     if(_renderTiledEvent)
         vkDestroyEvent(_vkContext.device, _renderTiledEvent, nullptr);
 }

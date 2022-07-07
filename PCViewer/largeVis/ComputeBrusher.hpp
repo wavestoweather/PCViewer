@@ -24,7 +24,7 @@ public:
 
 private:
     struct BrushInfos{
-        uint32_t amtofDataPoints, amtOfAttributes, amtOfBrushes, offsetLassoBrushes, andBrushes, p,a,dding;
+        uint32_t amtofDataPoints, amtOfAttributes, amtOfBrushes, andBrushes, offsetLassoBrushes, outputOffset, pa,dding;    // outputOffset is already divided by 32
         // float list of brush infos ...coming soon :)
     };
 
