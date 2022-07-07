@@ -23,7 +23,9 @@ namespace util{
         std::ifstream dataInfo(hierarchyFolder + "/data.info", std::ios::binary);
         compression::DataStorageBits dataBits;
         uint32_t dataBlockSize;
+        float quantizationStep;
         dataInfo >> dataBits;
+        dataInfo >> quantizationStep;
         dataInfo >> dataBlockSize;  // block size for compressed data
         dataInfo.close();
 
@@ -194,6 +196,7 @@ namespace util{
                 std::move(columnData),
                 std::move(attributes),
                 dataBlockSize,
+                quantizationStep,
                 std::move(gpuInstance)
             }
         };

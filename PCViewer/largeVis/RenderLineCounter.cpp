@@ -106,7 +106,6 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
 
     VkUtil::createPipeline(info.context.device, &vertexInfo, _aBins, _bBins, dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, {_countPipeInfo.descriptorSetLayout}, &_renderPass, &_countPipeInfo.pipelineLayout, &_countPipeInfo.pipeline);
 
-    VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_pairSet);
     VkUtil::createBuffer(_vkContext.device, sizeof(PairInfos), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &_pairUniform);
     VkMemoryRequirements memReq{};
     vkGetBufferMemoryRequirements(_vkContext.device, _pairUniform, &memReq);
@@ -133,10 +132,10 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
     bindings.push_back(b);
     VkUtil::createDescriptorSetLayout(_vkContext.device, bindings, &_conversionPipeInf.descriptorSetLayout);
     VkUtil::createComputePipeline(_vkContext.device, convertModule, {_conversionPipeInf.descriptorSetLayout}, &_conversionPipeInf.pipelineLayout, &_conversionPipeInf.pipeline);
-    VkUtil::createDescriptorSets(_vkContext.device, {_conversionPipeInf.descriptorSetLayout}, _vkContext.descriptorPool, &_conversionSet);
     VkUtil::createImageSampler(_vkContext.device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_NEAREST, 1, 1, &_sampler);
 }
 
+// this method was mainly for test purposes and should not anymore be really used. Still in here for reference implementation
 void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
     // test counting
     const uint32_t size = 1 << 30;  // 2^30
@@ -205,18 +204,37 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     // execution is done outside
 }
 
-void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts) {
+VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts, VkEvent prevPipeEvent) {
     // check for outdated framebuffer size
     if(aIndices != _aBins)
         createOrUpdateFramebuffer(aIndices);
+
+    if(_renderEvent)
+        assert(vkGetEventStatus(_vkContext.device, _renderEvent) == VK_EVENT_SET);  // checking if the event was signaled. Should always be the case
+    else{
+        VkEventCreateInfo info{}; info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
+        vkCreateEvent(_vkContext.device, &info, nullptr, &_renderEvent);
+    }
+    vkResetEvent(_vkContext.device, _renderEvent);
+
+    if(_renderCommands)
+        vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_renderCommands);
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_renderCommands);
     
     const uint32_t shaderXSize = 256;
     assert(_vkContext.queueMutex);
 
-    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, indexActivation, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
-    VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _conversionSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _conversionSet);
+    VkDescriptorSet& pairSet = _pairSets[{aData, bData}];
+    if(!pairSet)
+        VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &pairSet);
+    VkDescriptorSet& conversionSet = _conversionSets[{aData, bData}];
+    if(!conversionSet)
+        VkUtil::createDescriptorSets(_vkContext.device, {_conversionPipeInf.descriptorSetLayout}, _vkContext.descriptorPool, &conversionSet);
+
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, indexActivation, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, pairSet);
+    VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, conversionSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, conversionSet);
 
     PairInfos infos{};
     infos.amtofDataPoints = dataSize;
@@ -224,9 +242,10 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     infos.bBins = bIndices;
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
-    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
-    VkCommandBuffer commands;
-    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    //std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
+    VkCommandBuffer commands = _renderCommands;
+    if(prevPipeEvent)
+        vkCmdWaitEvents(commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, 0, {}, 0, {});
     if(clearCounts)
         vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
     VkClearValue clear;
@@ -246,22 +265,21 @@ void RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer
     s.extent.height = bIndices;
     vkCmdSetScissor(commands, 0, 1, &s);
     vkCmdBindVertexBuffers(commands, 0, 2, vertexBuffers, offsets);
-    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipelineLayout, 0, 1, &pairSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipeline);
     vkCmdDraw(commands, dataSize, 1, 0, 0);
     vkCmdEndRenderPass(commands);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipelineLayout, 0, 1, &_conversionSet, 0, {});
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipelineLayout, 0, 1, &conversionSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipeline);
     vkCmdDispatch(commands, (_aBins * _bBins + shaderXSize - 1) / shaderXSize, 1, 1);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    vkCmdSetEvent(commands, _renderEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-    //TODO: conversion pipeline from float image to uint buffer
-    PCUtil::Stopwatch stopwatch(std::cout, "Render counter pairwise");
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
-    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+    //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res); synchronization has to be done outsize via events
 
-    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+    return _renderEvent;
 }
 
 void RenderLineCounter::countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt) {
@@ -272,9 +290,16 @@ void RenderLineCounter::countLinesPairTiled(size_t dataSize, VkBuffer aData, VkB
     const uint32_t shaderXSize = 256;
     assert(_vkContext.queueMutex);
 
-    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, _pairSet);
-    VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _conversionSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _conversionSet);
+    VkDescriptorSet& pairSet = _pairSets[{aData, bData}];
+    if(!pairSet)
+        VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &pairSet);
+    VkDescriptorSet& conversionSet = _conversionSets[{aData, bData}];
+    if(!conversionSet)
+        VkUtil::createDescriptorSets(_vkContext.device, {_conversionPipeInf.descriptorSetLayout}, _vkContext.descriptorPool, &conversionSet);
+
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 0, pairSet);
+    VkUtil::updateImageDescriptorSet(_vkContext.device, _sampler, _countImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, conversionSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, conversionSet);
 
     PairInfos infos{};
     infos.amtofDataPoints = dataSize;
@@ -300,7 +325,7 @@ void RenderLineCounter::countLinesPairTiled(size_t dataSize, VkBuffer aData, VkB
     vp.minDepth = 0;
     vkCmdSetViewport(commands, 0, 1, &vp);
     vkCmdBindVertexBuffers(commands, 0, 2, vertexBuffers, offsets);
-    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipelineLayout, 0, 1, &pairSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _countPipeInfo.pipeline);
     for(int i : irange(tileAmt)){
         for(int j: irange(tileAmt)){
@@ -319,7 +344,7 @@ void RenderLineCounter::countLinesPairTiled(size_t dataSize, VkBuffer aData, VkB
     }
     vkCmdEndRenderPass(commands);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipelineLayout, 0, 1, &_conversionSet, 0, {});
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipelineLayout, 0, 1, &conversionSet, 0, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipeline);
     vkCmdDispatch(commands, (_aBins * _bBins + shaderXSize - 1) / shaderXSize, 1, 1);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -376,8 +401,8 @@ RenderLineCounter::~RenderLineCounter()
     _conversionPipeInf.vkDestroy(_vkContext);
     if(_descSet)
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_descSet);
-    if(_pairSet)
-        vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_pairSet);
+    for(auto [b, s]: _pairSets)
+        vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &s);
     if(_pairUniform)
         vkDestroyBuffer(_vkContext.device, _pairUniform, nullptr);
     if(_pairUniformMem)
@@ -394,6 +419,10 @@ RenderLineCounter::~RenderLineCounter()
         vkDestroyRenderPass(_vkContext.device, _renderPass, nullptr);
     if(_framebuffer)
         vkDestroyFramebuffer(_vkContext.device, _framebuffer, nullptr);
+    if(_renderEvent)
+        vkDestroyEvent(_vkContext.device, _renderEvent, nullptr);
+    if(_renderTiledEvent)
+        vkDestroyEvent(_vkContext.device, _renderTiledEvent, nullptr);
 }
 
 void RenderLineCounter::release(){

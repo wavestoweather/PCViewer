@@ -6,6 +6,7 @@
 #include "../compression/gpuCompression/Quantize.hpp"
 #include "../compression/gpuCompression/DWT.hpp"
 #include "../range.hpp"
+#include <thread>
 
 // currently uses the gpu instance from an external source for decompression.
 // Could b better to inherit the manager into this class
@@ -84,16 +85,24 @@ public:
     }
 
     // creates a command buffer itself and commits it, return the vkevent that will be signaled upon finishing
-    VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep){
-        VkCommandBuffer commands;
-        VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
-        vkCmdResetEvent(commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+    VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep, VkEvent prevPipeEvent = {}){
+        while(vkGetEventStatus(_vkContext.device, _syncEvent) == VK_EVENT_RESET)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));          // busy wait for finished decomp
 
-        recordBlockDecompression(commands, symbolCountPerBlock, gpu, cpuData, gpuData, quantizationStep);
+        vkResetEvent(_vkContext.device, _syncEvent);
 
-        vkCmdSetEvent(commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+        if(_commands)
+            vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
+        VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
 
-        VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+        if(prevPipeEvent)
+            vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+
+        recordBlockDecompression(_commands, symbolCountPerBlock, gpu, cpuData, gpuData, quantizationStep);
+
+        vkCmdSetEvent(_commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+
+        VkUtil::commitCommandBuffer(_vkContext.queue, _commands);
         return _syncEvent;
     }
 private:
@@ -103,6 +112,8 @@ private:
     VkUtil::Context _vkContext{};
 
     GpuColumns _lastDecompressed{};  // stores the last recorded decompressed gpu data to avoid re-recording of the same decompression
+
+    VkCommandBuffer _commands;
 
     inline void deleteVkResources(){
         auto device = _vkContext.device;
@@ -120,7 +131,6 @@ private:
         if(!_syncEvent){
             VkEventCreateInfo info{};
             info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
-            info.flags = VK_EVENT_CREATE_DEVICE_ONLY_BIT;
             vkCreateEvent(_vkContext.device, &info, nullptr, &_syncEvent);
         }
         

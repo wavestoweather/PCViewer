@@ -173,7 +173,8 @@ private:
     uint32_t _indexActivationState{};               // holds the brush state for which the index activation was last updated
     uint32_t _gpuIndexActivationState{};            // holds the same as _indexActivationState for the gpu pipelines
 
-    
+    bool _gpuDecompressForward{true};
+
     void updateCounts();
     static void execCountUpdate(IndBinManager* t, std::vector<uint32_t> activeIndices);                        // method that is run on extra thread for thread update
 };

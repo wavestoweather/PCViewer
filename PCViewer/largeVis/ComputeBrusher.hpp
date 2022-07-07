@@ -20,7 +20,7 @@ public:
 
     static ComputeBrusher* acquireReference(const CreateInfo& info); // acquire a reference (automatically creates renderer if not yet existing)
     void release();                                                 // has to be called to notify destruction before vulkan resources are destroyed
-    void updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, bool andBrushes = false);
+    VkEvent updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset = 0, bool andBrushes = false, VkEvent prevPipeEvent = {});
 
 private:
     struct BrushInfos{
@@ -46,6 +46,8 @@ private:
 
     // vulkan resources that have to be destroyed
     VkUtil::PipelineInfo _brushPipelineInfo{};
+    VkEvent _brushEvent{};
+    VkCommandBuffer _commands{};
 
     const std::string _computeShader = "shader/largeVisBrush.comp.spv";
 

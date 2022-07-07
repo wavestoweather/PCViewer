@@ -115,6 +115,7 @@ namespace VkUtil{
 	void downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkFormat format, VkImageLayout imageLayout, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize);
 	void addImageToAllocInfo(VkDevice device, VkImage image, VkMemoryAllocateInfo& allocInfo);
 	VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
+	VkEvent createEvent(VkDevice device, VkEventCreateFlags createFlags);
 };
 
 #endif

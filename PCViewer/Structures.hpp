@@ -68,6 +68,7 @@ struct CompressedData{
 	std::vector<CompressedColumnData> columnData{};
 	std::vector<Attribute> attributes{};
 	uint32_t compressedBlockSize{};
+	float quantizationStep;
 	std::unique_ptr<vkCompress::GpuInstance> gpuInstance{};
 	std::unique_ptr<DecompressManager> decompressManager{}; 
 };

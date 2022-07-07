@@ -1063,6 +1063,7 @@ namespace compression
         if(compressedData)
             storageInfo |= compression::DataStorageBits::CuComColumnData;
         dataInfo << storageInfo << "\n";
+        dataInfo << quantizationStep << "\n";
         // column block size (in amt of elements which are put into a block)
         dataInfo << dataCompressionBlock << "\n";
 

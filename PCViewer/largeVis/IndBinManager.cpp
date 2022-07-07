@@ -181,8 +181,40 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     // starting with updating the counts if needed to have all information available for the following counting/reduction
     // note: might be changed to be settable by the user if cpu or gpu should be used for counting
     bool gpuDecompression = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.columnData[0].compressedRLHuffGpu.size();
-    size_t blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: t->compressedData.dataSize;
-    for(size_t dataOffset = 0; dataOffset < t->compressedData.dataSize; dataOffset += blockSize){
+    long blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: t->compressedData.dataSize;
+    if(!t->_gpuDecompressForward)
+        blockSize = -blockSize;
+    long startOffset = t->_gpuDecompressForward ? 0: t->compressedData.columnData[0].compressedRLHuffGpu.size() - 1 * t->compressedData.compressedBlockSize;
+    VkEvent curEvent{};
+    std::set<uint32_t> neededIndices(activeIndices.begin(), activeIndices.end()); // getting all needed indices, not just the visible once, but also all brushed ones
+    for(auto& b: t->_countBrushState.rangeBrushes){
+        for(auto& r: b)
+            neededIndices.insert(r.axis);
+    }
+    for(auto& b: t->_countBrushState.lassoBrushes){
+        neededIndices.insert(b.attr1);
+        neededIndices.insert(b.attr2);
+    }
+        
+    for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize){
+        // if compressed data first decompressing
+        if(gpuDecompression)
+        {
+            uint32_t blockIndex = dataOffset / std::abs(blockSize);
+
+            DecompressManager::CpuColumns cpuColumns(t->compressedData.attributes.size(), {});
+            DecompressManager::GpuColumns gpuColumns(cpuColumns.size(), {});
+            for(int i: neededIndices){
+                // checking if column is needed and adding to decompression if so
+                if(std::count(activeIndices.begin(), activeIndices.end(), i)){
+                    cpuColumns[i] = &t->compressedData.columnData[i].compressedRLHuffCpu[blockIndex];
+                    gpuColumns[i] = &t->compressedData.columnData[i].compressedRLHuffGpu[blockIndex];
+                }
+            }
+
+            curEvent = t->compressedData.decompressManager->executeBlockDecompression(blockSize, *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent);
+        }
+        
         if(t->countingMethod <= CountingMethod::CpuRoaring){
             // updating cpu activations
             if(t->_indexActivationState != t->_countBrushState.id){
@@ -225,10 +257,17 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 std::cout << "Updating gpu index activations" << std::endl; std::cout.flush();
                 PCUtil::Stopwatch updateWatch(std::cout, "Gpu index activation");
                 t->_gpuIndexActivationState = t->_countBrushState.id;
-                std::vector<VkBuffer> dataBuffer(t->compressedData.attributes.size());
-                for(int i: irange(dataBuffer))
-                    dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
-                t->_computeBrusher->updateActiveIndices(t->compressedData.columnData[0].cpuData.size(), t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation);
+                
+                if(gpuDecompression){
+                    auto &dataBuffer = t->compressedData.decompressManager->buffers;
+                    curEvent = t->_computeBrusher->updateActiveIndices(t->compressedData.columnData[0].cpuData.size(), t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, false, curEvent);
+                }
+                else{
+                    std::vector<VkBuffer> dataBuffer(t->compressedData.attributes.size());
+                    for(int i: irange(dataBuffer))
+                        dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
+                    t->_computeBrusher->updateActiveIndices(t->compressedData.columnData[0].cpuData.size(), t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation);
+                }
             }
         }
 

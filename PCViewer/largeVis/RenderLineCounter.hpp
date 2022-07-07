@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../VkUtil.h"
+#include <map>
 
 // holds a single vulkan compute pipeline instance for counting active lines by using rendering pipeline
 
@@ -25,11 +26,14 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
-    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false);
+    VkEvent countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false, VkEvent prevPipeEvent = {});
     void countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt /*describes how much tiles along each side are used*/);
 private:
     struct PairInfos{
         uint32_t amtofDataPoints, aBins, bBins, padding;
+    };
+    struct BPair{
+        VkBuffer a, b;
     };
 
     RenderLineCounter(const CreateInfo& info);
@@ -54,7 +58,11 @@ private:
     // vulkan resources that have to be destroyed
     VkUtil::PipelineInfo _countPipeInfo{}, _conversionPipeInf{};
     VkSampler _sampler{};
-    VkDescriptorSet _pairSet, _conversionSet;
+    std::map<BPair, VkDescriptorSet> _pairSets, _conversionSets;
+    VkEvent _renderEvent{};
+    VkEvent _renderTiledEvent{};
+    VkCommandBuffer _renderCommands{};
+    VkCommandBuffer _renderCommands{};
 
     const std::string _vertexShader = "shader/lineCount.vert.spv";
     const std::string _fragmentShader = "shader/lineCount.frag.spv";

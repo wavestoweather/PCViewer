@@ -1495,4 +1495,12 @@ namespace VkUtil
 		commitCommandBuffer(queue, commands);
 		VkResult res = vkQueueWaitIdle(queue); check_vk_result(res);
 	}
+
+	VkEvent createEvent(VkDevice device, VkEventCreateFlags createFlags){
+		VkEventCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
+		VkEvent event;
+        vkCreateEvent(device, &info, nullptr, &event);
+		return event;
+	}
 }
