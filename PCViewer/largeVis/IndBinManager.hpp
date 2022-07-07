@@ -175,4 +175,5 @@ private:
 
     
     void updateCounts();
+    static void execCountUpdate(IndBinManager* t, std::vector<uint32_t> activeIndices);                        // method that is run on extra thread for thread update
 };

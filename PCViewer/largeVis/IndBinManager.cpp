@@ -142,12 +142,47 @@ void IndBinManager::updateCounts(){
         return;
     }
 
-    auto execCountUpdate = [](IndBinManager* t, std::vector<uint32_t> activeIndices){
-        PCUtil::Stopwatch totalTime(std::cout, "Total Count update Time");
-        // starting with updating the counts if needed to have all information available for the following counting/reduction
-        // note: might be changed to be settable by the user if cpu or gpu should be used for counting
-        bool gpuDecompression = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.columnData[0].compressedRLHuffGpu.size();
-        
+    if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies
+        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << compressedData.columnData[0].cpuData.size() << " data points." << std::endl;
+        // making shure the counting images are created and have the right size
+        for(int i: irange(activeIndices.size() - 1)){
+            uint32_t a = activeIndices[i];
+            uint32_t b = activeIndices[i + 1];
+            if(a > b)
+                std::swap(a, b);
+            if(!_countResources[{a,b}].countBuffer || _countResources[{a,b}].binAmt != columnBins * columnBins){
+                if(_countResources[{a,b}].countBuffer){
+                    vkDestroyBuffer(_vkContext.device, _countResources[{a,b}].countBuffer, nullptr);
+                    vkFreeMemory(_vkContext.device, _countResources[{a,b}].countMemory, nullptr);
+                }
+                // create resource if not yet available
+                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &(_countResources[{a,b}].countBuffer));
+                VkMemoryAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                VkMemoryRequirements memReq{};
+                vkGetBufferMemoryRequirements(_vkContext.device, _countResources[{a,b}].countBuffer, &memReq);
+                allocInfo.allocationSize = memReq.size;
+                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+                vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_countResources[{a,b}].countMemory);
+                vkBindBufferMemory(_vkContext.device, _countResources[{a,b}].countBuffer, _countResources[{a,b}].countMemory, 0);
+                _countResources[{a,b}].binAmt = columnBins * columnBins;
+                _countResources[{a,b}]._vkDevice = _vkContext.device;
+            }
+        }
+        _countBrushState = _currentBrushState;
+        if(_countUpdateThread.joinable())
+            _countUpdateThread.join();
+        _countUpdateThread = std::thread(execCountUpdate, this, activeIndices);
+    }
+}
+
+void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> activeIndices){
+    PCUtil::Stopwatch totalTime(std::cout, "Total Count update Time");
+    // starting with updating the counts if needed to have all information available for the following counting/reduction
+    // note: might be changed to be settable by the user if cpu or gpu should be used for counting
+    bool gpuDecompression = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.columnData[0].compressedRLHuffGpu.size();
+    size_t blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: t->compressedData.dataSize;
+    for(size_t dataOffset = 0; dataOffset < t->compressedData.dataSize; dataOffset += blockSize){
         if(t->countingMethod <= CountingMethod::CpuRoaring){
             // updating cpu activations
             if(t->_indexActivationState != t->_countBrushState.id){
@@ -180,7 +215,7 @@ void IndBinManager::updateCounts(){
                 for(int i: irange(t->compressedData.columnData)){
                     data[i] = &t->compressedData.columnData[i].cpuData;
                 }
-                
+
                 brushing::updateIndexActivation(t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, data, t->indexActivation, 1);
             }
         }
@@ -355,42 +390,9 @@ void IndBinManager::updateCounts(){
             break;
         }
         };
-        finish:
-        std::cout.flush();
-        t->requestRender = true;                   // ready to update rendering
-        t->_countUpdateThreadActive = false;        // releasing the update thread
-    };
-
-    if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies
-        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << compressedData.columnData[0].cpuData.size() << " data points." << std::endl;
-        // making shure the counting images are created and have the right size
-        for(int i: irange(activeIndices.size() - 1)){
-            uint32_t a = activeIndices[i];
-            uint32_t b = activeIndices[i + 1];
-            if(a > b)
-                std::swap(a, b);
-            if(!_countResources[{a,b}].countBuffer || _countResources[{a,b}].binAmt != columnBins * columnBins){
-                if(_countResources[{a,b}].countBuffer){
-                    vkDestroyBuffer(_vkContext.device, _countResources[{a,b}].countBuffer, nullptr);
-                    vkFreeMemory(_vkContext.device, _countResources[{a,b}].countMemory, nullptr);
-                }
-                // create resource if not yet available
-                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &(_countResources[{a,b}].countBuffer));
-                VkMemoryAllocateInfo allocInfo{};
-                allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-                VkMemoryRequirements memReq{};
-                vkGetBufferMemoryRequirements(_vkContext.device, _countResources[{a,b}].countBuffer, &memReq);
-                allocInfo.allocationSize = memReq.size;
-                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-                vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_countResources[{a,b}].countMemory);
-                vkBindBufferMemory(_vkContext.device, _countResources[{a,b}].countBuffer, _countResources[{a,b}].countMemory, 0);
-                _countResources[{a,b}].binAmt = columnBins * columnBins;
-                _countResources[{a,b}]._vkDevice = _vkContext.device;
-            }
-        }
-        _countBrushState = _currentBrushState;
-        if(_countUpdateThread.joinable())
-            _countUpdateThread.join();
-        _countUpdateThread = std::thread(execCountUpdate, this, activeIndices);
     }
+    finish:
+    std::cout.flush();
+    t->requestRender = true;                   // ready to update rendering
+    t->_countUpdateThreadActive = false;        // releasing the update thread
 }

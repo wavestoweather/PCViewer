@@ -21,6 +21,7 @@ namespace compression{
     constexpr DataStorageBits operator&(DataStorageBits a, DataStorageBits b){return static_cast<DataStorageBits>(static_cast<int>(a) & static_cast<int>(b));};
     constexpr DataStorageBits& operator|=(DataStorageBits& a, DataStorageBits b){a = a | b; return a;};
     constexpr DataStorageBits& operator&=(DataStorageBits& a, DataStorageBits b){a = a & b; return a;};
+    constexpr inline bool DataStorageBitSet(DataStorageBits a, DataStorageBits bit){return (a & bit) != DataStorageBits::None;};
     static std::ifstream& operator>>(std::ifstream& in, DataStorageBits& bits){
         uint32_t b;
         in >> b;

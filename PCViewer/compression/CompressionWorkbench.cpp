@@ -6,6 +6,7 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include "Constants.hpp"
 
 void analyse(std::shared_ptr<DataLoader> loader, size_t* dataSize, std::vector<Attribute>* attributes){
     loader->dataAnalysis(*dataSize, *attributes);
@@ -130,13 +131,24 @@ void CompressionWorkbench::draw()
         //}
         //ImGui::Separator();
         if(ImGui::InputInt("1d cluster bin amount", reinterpret_cast<int*>(&_binsAmt))) _binsAmt = std::clamp<uint32_t>(_startCluster, 1, 1e6);
-        if(ImGui::InputScalar("Compression block size(powerOf2)", ImGuiDataType_U32, &_compressionBlockSize)) _compressionBlockSize = std::clamp(_compressionBlockSize, 1u, 31u);
-        ImGui::SameLine(); ImGui::Text("Results in compression blocks of size %u", 1 << _compressionBlockSize);
+        if(ImGui::InputScalar("Compression block size(powerOf2)->", ImGuiDataType_U32, &_compressionBlockSize)) _compressionBlockSize = std::clamp(_compressionBlockSize, 1u, 31u);
+        ImGui::SameLine(); ImGui::Text("%u", 1u << _compressionBlockSize);
+        if(ImGui::InputFloat("Quantizatio step", &_quantizationStep, .0f,.0f, "%.4f")) _quantizationStep = std::clamp(_quantizationStep, .0001f, 1.f);
+        ImGui::Checkbox("Float column data", &_floatColumnData);
+        ImGui::Checkbox("Half column data", &_halfClolumnData);
+        ImGui::Checkbox("Compressed column data", &_compressedColumnData);
+        ImGui::Checkbox("Roaring column bin indices", &_roaringBinIndices);
         //if(ImGui::Button("Cluster 1d indices")){
         //    _buildHierarchyFuture = std::async(compression::create1DBinIndex, _outputFolder, _columnLoader.get(), _binsAmt, _maxWorkingMemory, _amtOfThreads);
         //}
+        using namespace compression;
         if(ImGui::Button("Cluster 1d with compressed columns")){
-            _buildHierarchyFuture = std::async(compression::createRoaringBinsColumnData, _outputFolder, _columnLoader.get(), _binsAmt, static_cast<size_t>(1 << _compressionBlockSize), _amtOfThreads);
+            DataStorageBits storageBits{};
+            if(_floatColumnData) storageBits |= DataStorageBits::RawColumnData;
+            if(_halfClolumnData) storageBits |= DataStorageBits::HalfColumnData;
+            if(_compressedColumnData) storageBits |= DataStorageBits::CuComColumnData;
+            if(_roaringBinIndices) storageBits |= DataStorageBits::RoaringAttributeBins;
+            _buildHierarchyFuture = std::async(compression::createRoaringBinsColumnData, _outputFolder, _columnLoader.get(), _binsAmt, static_cast<size_t>(1 << _compressionBlockSize), _quantizationStep, storageBits, _amtOfThreads);
         }
     }
     ImGui::End();

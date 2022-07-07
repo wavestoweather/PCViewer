@@ -81,8 +81,8 @@ public:
             size_t compactSymbolsOffset;    // offset from symbolsZeroCounts
             size_t zeroCountsOffset;        // same as compactSymbolsOffset but for zero counts
 
-            VkDescriptorSet streamInfoSet;  // descriptor set containgin the stream infos
-            VkDescriptorSet zeroStreamInfoSet;
+            VkDescriptorSet streamInfoSet{};  // descriptor set containgin the stream infos
+            VkDescriptorSet zeroStreamInfoSet{};
 
             // actually only these have to be filled for the decoding to work
             // so: Create in the decode function buffers and fill them with the correct infos,

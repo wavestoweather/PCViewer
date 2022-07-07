@@ -919,17 +919,19 @@ namespace compression
         std::cout << "Donesene" << std::endl;
     }
 
-    void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, int amtOfThreads){
+    void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, float quantizationStep, DataStorageBits storageBits, int amtOfThreads){
         if(outputFolder.empty()){
             std::cout << "Outputfolder empty. Stopping createRoaringBinsColumnData()" << std::endl;
             return;
         }
+        PCUtil::Stopwatch compTime(std::cout, "Compression");
         
         const uint32_t compressionIteration{1 << 20};   // each time and index is added and the cardinality of a roaring map is a multiple of this, the map is compressed
-        const bool halfData = true;
-        const bool compressedData = true;
-        const bool compressedDataDebugInfo = true;
-        const bool indices = false;
+        const bool floatData = DataStorageBitSet(storageBits, DataStorageBits::RawColumnData);
+        const bool halfData = DataStorageBitSet(storageBits, DataStorageBits::HalfColumnData);
+        const bool compressedData = DataStorageBitSet(storageBits, DataStorageBits::CuComColumnData);
+        const bool compressedDataDebugInfo = false;
+        const bool indices = DataStorageBitSet(storageBits, DataStorageBits::RoaringAttributeBins);
         const bool logLine = false;
 
         std::cout << "Starting creation of Roaring bins with compressed column data" << std::endl;
@@ -966,7 +968,7 @@ namespace compression
             if(compressedData){
                 std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".comp", std::ios_base::binary | std::ios_base::app);
                 
-                auto [stream, symbolSize] = compressVector(columnData[i], .01f);
+                auto [stream, symbolSize] = compressVector(columnData[i], quantizationStep);
                 // first comes the stream size (bytes) and the symbol size as a struct of a uint64_t and a uint32_t
                 struct{uint64_t streamSize; uint32_t symbolSize;} sizes{stream.getRawSizeBytes(), symbolSize};
                 columnFile.write(reinterpret_cast<char*>(&sizes), sizeof(sizes));    
@@ -1080,8 +1082,10 @@ namespace compression
         file.close();
 
         // early out if no index info is gathered and thus no attribute center info is available
-        if(!indices)
+        if(!indices){
+            std::cout << "Compression done!" << std::endl;
             return;
+        }
         // -----------------------------------------------------------------------------------------------
         // writeout of the indices per attribute in separate files
         // -----------------------------------------------------------------------------------------------

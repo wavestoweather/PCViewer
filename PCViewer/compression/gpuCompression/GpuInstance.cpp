@@ -28,7 +28,6 @@ namespace vkCompress
         m_pScanPlan = new ScanPlan(context, sizeof(uint), m_elemCountPerStreamMax + 1, m_streamCountMax, rowPitch); // "+ 1" for total
         m_pReducePlan = new ReducePlan(context, sizeof(uint), m_elemCountPerStreamMax);
 
-
         size_t sizeTier0 = 0;
         sizeTier0 = max(sizeTier0, runLengthGetRequiredMemory(this));
         sizeTier0 = max(sizeTier0, huffmanGetRequiredMemory(this));
@@ -122,7 +121,6 @@ namespace vkCompress
         shaderModule = VkUtil::createShaderModule(context.device, compBytes);
 
         bindings.clear();
-
         // does not need descriptor set anymore
         //VkUtil::createDescriptorSetLayout(context.device, bindings, &RunLength.inclusiveScanInfo.descriptorSetLayout);
         
@@ -251,5 +249,14 @@ namespace vkCompress
         for(auto& [s, p]: Encode.Decode[0].huffmanTransposeShort){
             p.vkDestroy(vkContext);
         }
+
+        if(m_pScanPlan->m_buffer)
+            vkDestroyBuffer(vkContext.device, m_pScanPlan->m_buffer, nullptr);
+        if(m_pScanPlan->m_blockSumsMemory)
+            vkFreeMemory(vkContext.device, m_pScanPlan->m_blockSumsMemory, nullptr);
+        if(m_pReducePlan->m_blockSums)
+            vkDestroyBuffer(vkContext.device, m_pReducePlan->m_blockSums, nullptr);
+        if(m_pReducePlan->m_blockSumsMem)
+            vkFreeMemory(vkContext.device, m_pReducePlan->m_blockSumsMem, nullptr);
     }
 }

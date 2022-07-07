@@ -113,6 +113,6 @@ namespace compression{
     // binsAmt          : Amount of bins on the finest layer
     // dataCompressionBlock: Block size for compressing column data
     // amtOfThreads     : Amount of threads to be used for hierarchy creation
-    void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, int amtOfThreads);
+    void createRoaringBinsColumnData(const std::string_view& outputFolder, ColumnLoader* loader, int binsAmt, size_t dataCompressionBlock, float quantizationStep, DataStorageBits storageBits, int amtOfThreads);
     void convertColumnDataToCompressed(const std::string_view& outputFolder, size_t dataCompressionBlock, uint32_t attributeAmt);
 };

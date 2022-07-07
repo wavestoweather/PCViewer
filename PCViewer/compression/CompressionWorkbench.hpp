@@ -35,7 +35,11 @@ private:
     uint32_t _compressionBlockSize{28}; // power of 2 given here
     uint32_t _maxWorkingMemory{16000};
     uint32_t _amtOfThreads{8};
-    float _quantizationStep{.001f};
+    float _quantizationStep{.01f};
+    bool _floatColumnData{false};
+    bool _halfClolumnData{true};
+    bool _compressedColumnData{true};
+    bool _roaringBinIndices{false};
 
     uint32_t _startCluster{10};
     uint32_t _clusterMultiplicator{10};
