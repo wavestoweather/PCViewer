@@ -26,13 +26,24 @@ public:
     DecompressedType decompressedType{DecompressedType::halfF};
     size_t decompressedElementsPerBuffer{0};
 
+    DecompressManager(const DecompressManager&) = delete;           //no copy constructor
+    DecompressManager& operator=(const DecompressManager&) = delete;//no copy assignment
+    DecompressManager(DecompressManager&& o){
+        std::memcpy(this, &o, sizeof(o));
+        std::memset(&o, 0, sizeof(o));
+    }
+    DecompressManager& operator=(DecompressManager&& o){
+        std::memcpy(this, &o, sizeof(o));
+        std::memset(&o, 0, sizeof(o));
+        return *this;
+    }
     // quick init via external column blocks (avoids initialization on first call to recordBlockDecompression(...))
     DecompressManager(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData):
         _vkContext(gpu.vkContext)
         {resizeOrCreateBuffers(symbolCountPerBlock, gpu, cpuData, gpuData);};
     
     ~DecompressManager(){
-        deleteVkResources();
+        deleteVkResources(true);
     }
 
     void recordBlockDecompression(VkCommandBuffer commands, uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep){
@@ -86,11 +97,12 @@ public:
 
     // creates a command buffer itself and commits it, return the vkevent that will be signaled upon finishing
     VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep, VkEvent prevPipeEvent = {}){
-        while(vkGetEventStatus(_vkContext.device, _syncEvent) == VK_EVENT_RESET)
+        while(_syncEvent && vkGetEventStatus(_vkContext.device, _syncEvent) == VK_EVENT_RESET)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));          // busy wait for finished decomp
 
         vkResetEvent(_vkContext.device, _syncEvent);
 
+        std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
         if(_commands)
             vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
         VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
@@ -113,9 +125,9 @@ private:
 
     GpuColumns _lastDecompressed{};  // stores the last recorded decompressed gpu data to avoid re-recording of the same decompression
 
-    VkCommandBuffer _commands;
+    VkCommandBuffer _commands{};
 
-    inline void deleteVkResources(){
+    inline void deleteVkResources(bool final = false){
         auto device = _vkContext.device;
         for(auto& b: buffers)
             vkDestroyBuffer(device, b, nullptr);
@@ -123,7 +135,7 @@ private:
             vkDestroyBuffer(device, b, nullptr);
         if(bufferMemory)
             vkFreeMemory(device, bufferMemory, nullptr);
-        if(_syncEvent)
+        if(_syncEvent && final)
             vkDestroyEvent(device, _syncEvent, nullptr);
     }
 
@@ -132,8 +144,9 @@ private:
             VkEventCreateInfo info{};
             info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
             vkCreateEvent(_vkContext.device, &info, nullptr, &_syncEvent);
+            vkSetEvent(_vkContext.device, _syncEvent);
         }
-        
+
         if(cpuData.size() == buffers.size() && decompressedElementsPerBuffer >= symbolCountPerBlock){
             // nothing to do, return
             return;
@@ -145,7 +158,7 @@ private:
         // creating needed resources
         // decompressed data resources
         uint32_t elementByteSize = decompressedType == DecompressedType::halfF ? 2: 0;
-        std::vector<VkBufferUsageFlags> usages(cpuData.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+        std::vector<VkBufferUsageFlags> usages(cpuData.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
         std::vector<size_t> sizes(cpuData.size(), symbolCountPerBlock * elementByteSize);
         // caching resources
         usages.push_back(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -159,5 +172,6 @@ private:
         _cacheBuffers = std::vector<VkBuffer>(bs.end() - 2, bs.end());  // last to buffers are cache buffers
         _cacheBufferOffsets = std::vector<size_t>(os.end() - 2, os.end());
         bufferMemory = m;
+        decompressedElementsPerBuffer = symbolCountPerBlock;
     };
 };

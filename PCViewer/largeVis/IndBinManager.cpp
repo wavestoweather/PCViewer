@@ -197,8 +197,11 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     }
         
     for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize){
+        std::cout << "Current data offset: " << dataOffset << std::endl; std::cout.flush();
         assert((dataOffset & 31) == 0); //check that dataOffset ist 32 aligned (needed for index activation)
         uint32_t curDataBlockSize = std::min<uint32_t>(t->compressedData.dataSize - dataOffset, t->compressedData.compressedBlockSize);
+        if(curDataBlockSize != blockSize)
+            break;
         // if compressed data first decompressing
         if(gpuDecompression)
         {
@@ -403,7 +406,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl; std::cout.flush();
                 curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter, curEvent);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }

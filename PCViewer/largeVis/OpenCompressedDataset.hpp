@@ -23,7 +23,9 @@ namespace util{
         std::ifstream dataInfo(hierarchyFolder + "/data.info", std::ios::binary);
         compression::DataStorageBits dataBits;
         uint32_t dataBlockSize;
+        size_t dataSize;
         float quantizationStep;
+        dataInfo >> dataSize;
         dataInfo >> dataBits;
         dataInfo >> quantizationStep;
         dataInfo >> dataBlockSize;  // block size for compressed data
@@ -60,7 +62,6 @@ namespace util{
         // 1d index data either compressed or not (automatic conversion if not compressed)
         // --------------------------------------------------------------------------------
         robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;
-        size_t dataSize = 0;
         if((dataBits & compression::DataStorageBits::RawAttributeBins) != compression::DataStorageBits::None){
             // reading index data
             std::cout << "Loading indexdata..." << std::endl;

@@ -104,7 +104,7 @@ public:
                 delete[] pZeroCountStreamInfos;
             }
         };
-        const static int ms_decodeResourcesCount = 1;// 8;
+        const static int ms_decodeResourcesCount = 16;// 8;
         DecodeResources Decode[ms_decodeResourcesCount];
         int nextDecodeResources;
         DecodeResources& GetDecodeResources() {

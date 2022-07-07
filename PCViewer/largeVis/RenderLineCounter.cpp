@@ -218,7 +218,7 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     }
     vkResetEvent(_vkContext.device, renderEvent);
 
-    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);  // lockingthe queue as long as we are recording commands
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);  // locking the queue as long as we are recording commands
     VkCommandBuffer& renderCommands = _renderCommands[{aData, bData}];
     if(renderCommands)
         vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &renderCommands);

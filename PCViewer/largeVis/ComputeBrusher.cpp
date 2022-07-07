@@ -67,6 +67,7 @@ void ComputeBrusher::release(){
 }
 
 VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset, bool andBrushes, VkEvent prevPipeEvent){
+    std::cout << "Updating Active Indices" << std::endl;
     while(vkGetEventStatus(_vkContext.device, _brushEvent) == VK_EVENT_RESET)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));          // busy wait for finished decomp
 
@@ -78,7 +79,7 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     
     // wait for previous event/pipeline to finish
     if(prevPipeEvent)
-        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
     // if no brushes are active, set all points active
     if(brushes.empty() && lassoBrushes.empty()){
         std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);

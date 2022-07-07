@@ -1062,6 +1062,7 @@ namespace compression
             storageInfo |= compression::DataStorageBits::HalfColumnData;
         if(compressedData)
             storageInfo |= compression::DataStorageBits::CuComColumnData;
+        dataInfo << offset << "\n"; // At the end fo the conversion loop the offset holds the overall data size
         dataInfo << storageInfo << "\n";
         dataInfo << quantizationStep << "\n";
         // column block size (in amt of elements which are put into a block)

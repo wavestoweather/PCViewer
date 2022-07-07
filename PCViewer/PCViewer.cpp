@@ -3809,7 +3809,7 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 }
 
 static bool openHierarchy(const char* filename, const char* attributeInfo){
-	DataSet ds = util::openCompressedDataset(VkUtil::Context{0, 0, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, filename);
+	DataSet ds = util::openCompressedDataset(VkUtil::Context{0, 0, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex}, filename);
 	if(ds.compressedData.gpuInstance){
 		DecompressManager::GpuColumns gpuColumns(ds.compressedData.columnData.size());
 		DecompressManager::CpuColumns cpuColumns(gpuColumns.size());
