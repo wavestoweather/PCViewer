@@ -156,6 +156,7 @@ namespace util{
                     columnFile.read(reinterpret_cast<char*>(dataVec.data()), sizes.streamSize);
                     columnData[i].compressedRLHuffCpu.emplace_back(vkCompress::parseCpuRLHuffData(gpuInstance.get(), dataVec));
                     columnData[i].compressedRLHuffGpu.emplace_back(gpuInstance.get(), columnData[i].compressedRLHuffCpu.back());
+                    columnData[i].compressedSymbolSize.push_back(sizes.symbolSize);
                 }
             }
         }

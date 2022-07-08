@@ -224,7 +224,7 @@ void VkUtil::createBufferView(VkDevice device, VkBuffer buffer, VkFormat format,
 	check_vk_result(err);
 }
 
-void VkUtil::commitCommandBuffer(VkQueue queue, VkCommandBuffer commandBuffer)
+void VkUtil::commitCommandBuffer(VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence)
 {
 	VkResult err;
 
@@ -238,7 +238,7 @@ void VkUtil::commitCommandBuffer(VkQueue queue, VkCommandBuffer commandBuffer)
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffer;
 
-	err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+	err = vkQueueSubmit(queue, 1, &submitInfo, fence);
 	check_vk_result(err);
 }
 

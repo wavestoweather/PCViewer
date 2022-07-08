@@ -200,8 +200,8 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         std::cout << "Current data offset: " << dataOffset << std::endl; std::cout.flush();
         assert((dataOffset & 31) == 0); //check that dataOffset ist 32 aligned (needed for index activation)
         uint32_t curDataBlockSize = std::min<uint32_t>(t->compressedData.dataSize - dataOffset, t->compressedData.compressedBlockSize);
-        if(curDataBlockSize != blockSize)
-            break;
+        //if(curDataBlockSize != blockSize)
+        //   break;
         // if compressed data first decompressing
         if(gpuDecompression)
         {
@@ -217,7 +217,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 }
             }
 
-            curEvent = t->compressedData.decompressManager->executeBlockDecompression(blockSize, *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent);
+            curEvent = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent);
         }
         std::vector<VkBuffer> dataBuffer(t->compressedData.attributes.size());  // vector of the gpu buffer which will contian the column data.
         if(t->countingMethod <= CountingMethod::CpuRoaring){
@@ -258,22 +258,22 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         }
         else{
             // updating gpu activations
-            if(t->_gpuIndexActivationState != t->_countBrushState.id){
+            if(gpuDecompression || t->_gpuIndexActivationState != t->_countBrushState.id){
                 std::cout << "Updating gpu index activations" << std::endl; std::cout.flush();
                 PCUtil::Stopwatch updateWatch(std::cout, "Gpu index activation");
                 t->_gpuIndexActivationState = t->_countBrushState.id;
                 
                 if(gpuDecompression){
                     dataBuffer = t->compressedData.decompressManager->buffers;
-                    curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent);
                 }
                 else{
                     for(int i: irange(dataBuffer))
                         dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
-                    curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent);
                 }
+                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent);
             }
         }
+        assert(dataBuffer[0]); //chedck for valid gpu buffer
 
         // Note: vulkan resources for the count images were already provided by main thread
         switch(t->countingMethod){
@@ -339,8 +339,6 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
-                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    continue;
                 std::vector<uint32_t> aIndexBins, bIndexBins;
                 for(int bi: irange(t->_attributeCenters[a])){
                     uint32_t bin = t->_attributeCenters[a][bi].val * t->binsMaxCenterAmt;
@@ -391,7 +389,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (compute pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                std::cout << "Counting pairwise (cMessage: Validation Error: [ VUID-vkCmdFillBuffer-size-00026 ] Object 0: handle = 0x555556fc11c8, type = VK_OBJECT_TYPE_DEVICE; | MessageID = 0x4eec9b3d | vkCmdFillBuffer() parameter, VkDeviceSize size (0x0), must be greater than zero. The Vulkan spec states: If size is not equal to VK_WHOLE_SIZE, size must be greater than 0 (https://vulkan.lunarg.com/doc/view/1.2.182.0/linux/1.2-extensions/vkspec.html#VUID-vkCmdFillBuffer-size-00026)ompute pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
                 t->_lineCounter->countLinesPair(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
@@ -404,7 +402,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 uint32_t b = activeIndices[i + 1];
                 if(a > b)
                     std::swap(a, b);
-                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                if(!gpuDecompression && t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl; std::cout.flush();
                 curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter, curEvent);
@@ -436,6 +434,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             break;
         }
         };
+        //break;
     }
     // wait for curEvent
     while(curEvent && vkGetEventStatus(t->_vkContext.device, curEvent) == VK_EVENT_RESET)

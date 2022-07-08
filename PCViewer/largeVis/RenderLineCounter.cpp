@@ -1,6 +1,7 @@
 #include "RenderLineCounter.hpp"
 #include "../PCUtil.h"
 #include "../range.hpp"
+#include <thread>
 
 RenderLineCounter::RenderLineCounter(const CreateInfo& info):
     _vkContext(info.context)
@@ -130,8 +131,10 @@ RenderLineCounter::RenderLineCounter(const CreateInfo& info):
     b.binding = 1;
     b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bindings.push_back(b);
+
+    std::vector<VkPushConstantRange> pushConstants{{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t)}};
     VkUtil::createDescriptorSetLayout(_vkContext.device, bindings, &_conversionPipeInf.descriptorSetLayout);
-    VkUtil::createComputePipeline(_vkContext.device, convertModule, {_conversionPipeInf.descriptorSetLayout}, &_conversionPipeInf.pipelineLayout, &_conversionPipeInf.pipeline);
+    VkUtil::createComputePipeline(_vkContext.device, convertModule, {_conversionPipeInf.descriptorSetLayout}, &_conversionPipeInf.pipelineLayout, &_conversionPipeInf.pipeline, {}, pushConstants);
     VkUtil::createImageSampler(_vkContext.device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_NEAREST, 1, 1, &_sampler);
 }
 
@@ -211,7 +214,9 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
 
     VkEvent& renderEvent = _renderEvents[{aData,bData}];
     if(renderEvent)
-        assert(vkGetEventStatus(_vkContext.device, renderEvent) == VK_EVENT_SET);  // checking if the event was signaled. Should always be the case
+        while(vkGetEventStatus(_vkContext.device, renderEvent) != VK_EVENT_SET)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        //assert(vkGetEventStatus(_vkContext.device, renderEvent) == VK_EVENT_SET);  // checking if the event was signaled. Should always be the case
     else{
         VkEventCreateInfo info{}; info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
         vkCreateEvent(_vkContext.device, &info, nullptr, &renderEvent);
@@ -274,6 +279,8 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     vkCmdEndRenderPass(commands);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipelineLayout, 0, 1, &conversionSet, 0, {});
+    uint32_t clearInt = clearCounts;
+    vkCmdPushConstants(commands, _conversionPipeInf.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &clearInt);
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipeline);
     vkCmdDispatch(commands, (_aBins * _bBins + shaderXSize - 1) / shaderXSize, 1, 1);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);

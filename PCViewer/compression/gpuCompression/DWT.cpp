@@ -21,7 +21,6 @@ namespace vkCompress
 
     void dwtFloatInverse(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress dstAddress, VkDeviceAddress srcAddress, uint size, uint dstRowPitch, uint srcRowPitch) 
     {
-        assert(powerOfTwo(size));
         const int xBlockSizeX = 128;
         const int xResultBlockCount = 8;
 
@@ -31,6 +30,7 @@ namespace vkCompress
         pc.dstAddress = dstAddress;
         pc.srcAddress = srcAddress;
 
+        assert((size % (xResultBlockCount * xBlockSizeX)) == 0);
         int dispatchX = size / (xResultBlockCount * xBlockSizeX);
 
         // no special case for image sizes of 64 and 128
@@ -41,7 +41,6 @@ namespace vkCompress
     
     void dwtFloatToHalfInverse(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress dstAddress, VkDeviceAddress srcAddress, uint size, uint dstRowPitch, uint srcRowPitch) 
     {
-        assert(powerOfTwo(size));
         const int xBlockSizeX = 128;
         const int xResultBlockCount = 8;
 
@@ -51,6 +50,8 @@ namespace vkCompress
         pc.dstAddress = dstAddress;
         pc.srcAddress = srcAddress;
 
+
+        assert((size % (xResultBlockCount * xBlockSizeX)) == 0);
         int dispatchX = size / (xResultBlockCount * xBlockSizeX);
 
         // no special case for image sizes of 64 and 128

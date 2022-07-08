@@ -47,6 +47,7 @@ private:
     // vulkan resources that have to be destroyed
     VkUtil::PipelineInfo _brushPipelineInfo{};
     VkEvent _brushEvent{};
+    VkFence _brushFence{};
     VkCommandBuffer _commands{};
 
     const std::string _computeShader = "shader/largeVisBrush.comp.spv";

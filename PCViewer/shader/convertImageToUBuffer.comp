@@ -5,6 +5,10 @@ layout(binding = 1) buffer Buff{
     uint b[];
 };
 
+layout(push_constant)uniform PC{
+    uint clear;
+};
+
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
@@ -13,5 +17,8 @@ void main(){
         return;
     int x = int(gl_GlobalInvocationID.x) / imSize.x;
     int y = int(gl_GlobalInvocationID.x) % imSize.x;
-    b[gl_GlobalInvocationID.x] = uint(texelFetch(image, ivec2(x, y), 0).x); // readout and convert image to uint buffer
+    if(clear > 0)
+        b[gl_GlobalInvocationID.x] = uint(texelFetch(image, ivec2(x, y), 0).x); // readout and convert image to uint buffer
+    else
+        b[gl_GlobalInvocationID.x] += uint(texelFetch(image, ivec2(x, y), 0).x);
 }

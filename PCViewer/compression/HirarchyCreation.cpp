@@ -968,6 +968,9 @@ namespace compression
             if(compressedData){
                 std::ofstream columnFile(std::string(outputFolder) + "/" + std::to_string(i) + ".comp", std::ios_base::binary | std::ios_base::app);
                 
+                // padding to a multiple of 2048 (Needed for gpu dwtInverse)
+                size_t padLen = (columnData[i].size() + 2047) / 2048 * 2048;
+                columnData[i].resize(padLen, 0);
                 auto [stream, symbolSize] = compressVector(columnData[i], quantizationStep);
                 // first comes the stream size (bytes) and the symbol size as a struct of a uint64_t and a uint32_t
                 struct{uint64_t streamSize; uint32_t symbolSize;} sizes{stream.getRawSizeBytes(), symbolSize};

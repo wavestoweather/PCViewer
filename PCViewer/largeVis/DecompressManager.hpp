@@ -97,15 +97,18 @@ public:
 
     // creates a command buffer itself and commits it, return the vkevent that will be signaled upon finishing
     VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep, VkEvent prevPipeEvent = {}){
+        assert((symbolCountPerBlock & 0b11) == 0);
         while(_syncEvent && vkGetEventStatus(_vkContext.device, _syncEvent) == VK_EVENT_RESET)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));          // busy wait for finished decomp
 
         vkResetEvent(_vkContext.device, _syncEvent);
 
         std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
+        std::cout << "Post commandBuffer createion" << std::endl; std::cout.flush();
         if(_commands)
             vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
         VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
+        std::cout << "Pre commandBuffer createion" << std::endl; std::cout.flush();
 
         if(prevPipeEvent)
             vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});

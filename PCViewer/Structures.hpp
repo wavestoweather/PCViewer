@@ -61,6 +61,7 @@ struct CompressedColumnData{
     VkDeviceMemory gpuMemory{};	// memory for half compressed gpu data
 	std::vector<RLHuffDecodeDataCpu> compressedRLHuffCpu{};
 	std::vector<RLHuffDecodeDataGpu> compressedRLHuffGpu{};
+	std::vector<uint32_t> compressedSymbolSize{};	// this compressed symbol size is taken from the loaded data and is already 4 aligned
 };
 
 struct CompressedData{

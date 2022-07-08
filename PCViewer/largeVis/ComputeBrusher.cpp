@@ -33,6 +33,11 @@ ComputeBrusher::ComputeBrusher(const CreateInfo& info):
 
     _brushEvent = VkUtil::createEvent(_vkContext.device, 0);
     vkSetEvent(_vkContext.device, _brushEvent); // has to be set to signal that the pipeline is ready for the next update
+
+    VkFenceCreateInfo fInfo{};
+    fInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    vkCreateFence(_vkContext.device, &fInfo, nullptr, &_brushFence);
 }
     
 ComputeBrusher::~ComputeBrusher(){
@@ -47,6 +52,8 @@ ComputeBrusher::~ComputeBrusher(){
         vkFreeMemory(_vkContext.device, _infoMemory, nullptr);
     if(_brushEvent)
         vkDestroyEvent(_vkContext.device, _brushEvent, nullptr);
+    if(_brushFence)
+        vkDestroyFence(_vkContext.device, _brushFence, nullptr);
 }
 
 ComputeBrusher* ComputeBrusher::_singleton = nullptr;   // init null
@@ -67,12 +74,13 @@ void ComputeBrusher::release(){
 }
 
 VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset, bool andBrushes, VkEvent prevPipeEvent){
-    std::cout << "Updating Active Indices" << std::endl;
-    while(vkGetEventStatus(_vkContext.device, _brushEvent) == VK_EVENT_RESET)
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));          // busy wait for finished decomp
+    auto err = vkWaitForFences(_vkContext.device, 1, &_brushFence, VK_TRUE, 0); check_vk_result(err);
+    vkResetFences(_vkContext.device, 1, &_brushFence);
 
+    assert(vkGetEventStatus(_vkContext.device, _brushEvent) == VK_EVENT_SET);
     vkResetEvent(_vkContext.device, _brushEvent);
     
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
     if(_commands)
         vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
@@ -82,8 +90,6 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
         vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
     // if no brushes are active, set all points active
     if(brushes.empty() && lassoBrushes.empty()){
-        std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
-
         vkCmdFillBuffer(_commands, indexActivations, indexOffset / 32, (amtDatapoints / 32 + 3) / 4 * 4, uint32_t(-1));
         //PCUtil::Stopwatch stopwatch(std::cout, "Compute Brush: Clear");
         vkCmdSetEvent(_commands, _brushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -109,7 +115,7 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     // the float array following the brushing info has the following layout:
     // vector<float> brushOffsets, vector<Brush> brushes;   // where brush offests describe the index in the float array from which the brush at index i is positioned
     // with Brush = {flaot nAxisMaps, vector<float> axisOffsets, vector<AxisMap> axisMaps} // axisOffsets same as brushOffsetsf for the axisMap
-    // with AxisMap = {float nrRanges, float axis, vector<floatt> rangeOffsets, vector<Range> ranges}
+    // with AxisMap = {float nrRanges, fl_brushEventoat axis, vector<floatt> rangeOffsets, vector<Range> ranges}
     // with Range = {float, float} // first is min, second is max
     std::vector<float> brushData;
     brushData.resize(axisBrushes.size());  // space for brushOffsets
@@ -142,7 +148,6 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     // ensuring size of info buffer (this includes updating the descriptor set)
     uint32_t brushInfoBytes = sizeof(BrushInfos) + brushData.size() * sizeof(brushData[0]); //TODO: add brush size to the infos
     createOrUpdateBuffer(dataBuffer.size(), brushInfoBytes);
-    
     // uploading the brush infos
     BrushInfos bI{};
     bI.amtOfAttributes = dataBuffer.size();
@@ -168,7 +173,6 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     VkUtil::updateDescriptorSet(_vkContext.device, indexActivations, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
 
     const uint32_t localSize = 256; // has to be the same as in the largeVisBrush.comp shader
-    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
 
     vkCmdBindPipeline(_commands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushPipelineInfo.pipeline);
     vkCmdBindDescriptorSets(_commands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushPipelineInfo.pipelineLayout, 0, 1, &_descSet, 0, {});
@@ -177,9 +181,8 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     vkCmdSetEvent(_commands, _brushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     //PCUtil::Stopwatch stopwatch(std::cout, "Compute Brush");
-    VkUtil::commitCommandBuffer(_vkContext.queue, _commands);
-    //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
-
+    VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _brushFence);
+    
     //vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
     return _brushEvent;
 }
