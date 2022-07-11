@@ -73,8 +73,9 @@ void ComputeBrusher::release(){
     }
 }
 
-VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset, bool andBrushes, VkEvent prevPipeEvent){
-    auto err = vkWaitForFences(_vkContext.device, 1, &_brushFence, VK_TRUE, 0); check_vk_result(err);
+VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset, bool andBrushes, VkEvent prevPipeEvent, TimingInfo timingInfo){
+    auto err = vkWaitForFences(_vkContext.device, 1, &_brushFence, VK_TRUE, 5e9); check_vk_result(err); // maximum wait for 1 sec
+    assert(err == VK_SUCCESS);
     vkResetFences(_vkContext.device, 1, &_brushFence);
 
     assert(vkGetEventStatus(_vkContext.device, _brushEvent) == VK_EVENT_SET);
@@ -84,16 +85,23 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     if(_commands)
         vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
-    
+
     // wait for previous event/pipeline to finish
     if(prevPipeEvent)
-        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+    
+    if(timingInfo.queryPool){
+        vkCmdResetQueryPool(_commands, timingInfo.queryPool, timingInfo.startIndex, 2);
+        vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex); 
+    }
     // if no brushes are active, set all points active
     if(brushes.empty() && lassoBrushes.empty()){
         vkCmdFillBuffer(_commands, indexActivations, indexOffset / 32, (amtDatapoints / 32 + 3) / 4 * 4, uint32_t(-1));
-        //PCUtil::Stopwatch stopwatch(std::cout, "Compute Brush: Clear");
+        
+        if(timingInfo.queryPool)
+            vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
         vkCmdSetEvent(_commands, _brushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
-        VkUtil::commitCommandBuffer(_vkContext.queue, _commands);
+        VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _brushFence);
         //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
 
         return _brushEvent;
@@ -177,10 +185,12 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     vkCmdBindPipeline(_commands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushPipelineInfo.pipeline);
     vkCmdBindDescriptorSets(_commands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushPipelineInfo.pipelineLayout, 0, 1, &_descSet, 0, {});
     vkCmdDispatch(_commands, (amtDatapoints + 32 * localSize - 1) / (32 * localSize), 1, 1);
-    //std::cout << "Dispatching " << (amtDatapoints + 32 * localSize - 1) / (32 * localSize) << " Local work groups for " << amtDatapoints << " data points" << std::endl;
+   
+    if(timingInfo.queryPool)
+        vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
+    
     vkCmdSetEvent(_commands, _brushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-    //PCUtil::Stopwatch stopwatch(std::cout, "Compute Brush");
+    
     VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _brushFence);
     
     //vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);

@@ -161,6 +161,9 @@ private:
     VkBuffer _indexActivation{};
     VkDeviceMemory _indexActivationMemory{};
 
+    uint32_t _timingAmt{};
+    VkQueryPool _timingPool{};                      // quer pool for timing the execution of decomprssion, counting etc.
+
     // gpu pipeline handles which have to be noticed for deconstruction
     RenderLineCounter* _renderLineCounter{};
     LineCounter* _lineCounter{};

@@ -1500,7 +1500,16 @@ namespace VkUtil
 		VkEventCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
 		VkEvent event;
-        vkCreateEvent(device, &info, nullptr, &event);
+        check_vk_result(vkCreateEvent(device, &info, nullptr, &event));
 		return event;
+	}
+
+	VkFence createFence(VkDevice device, VkFenceCreateFlags createFlags){
+		VkFenceCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		info.flags = createFlags;
+		VkFence fence;
+		check_vk_result(vkCreateFence(device, &info, nullptr, &fence));
+		return fence;
 	}
 }

@@ -100,6 +100,7 @@ void ScanPlan::allocate(size_t elemSizeBytes, size_t numElements, size_t numRows
 
     //allocInfo.memoryTypeIndex = VkUtil::findMemoryType(m_context.physicalDevice, allocInfo.memoryTypeIndex, 0);
     auto [buffer, offset, memory] = VkUtil::createMultiBufferBound(m_context, {sizeSum}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    m_memorySize = sizeSum;
     m_buffer = buffer[0];
     m_blockSumsMemory = memory;
 

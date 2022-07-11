@@ -116,6 +116,7 @@ namespace VkUtil{
 	void addImageToAllocInfo(VkDevice device, VkImage image, VkMemoryAllocateInfo& allocInfo);
 	VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
 	VkEvent createEvent(VkDevice device, VkEventCreateFlags createFlags);
+	VkFence createFence(VkDevice device, VkFenceCreateFlags createFlags);
 };
 
 #endif

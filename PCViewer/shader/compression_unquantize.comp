@@ -37,7 +37,8 @@ void main(){
         uint symbol = src.i[gl_GlobalInvocationID.x >> 1][gl_GlobalInvocationID.x & 1];
         int neg = int(symbol & 1);
         int unsymbolized = (1 - 2 * neg) * int((symbol + neg) / 2);
-        dst.i[gl_GlobalInvocationID.x] = (float(unsymbolized) + .5f * (unsymbolized < 0 ? -1.f: unsymbolized > 0 ? 1.f: .0f)) * quantizationStep;
+        float val = (float(unsymbolized) + .5f * (unsymbolized < 0 ? -1.f: unsymbolized > 0 ? 1.f: .0f)) * quantizationStep;
+        dst.i[gl_GlobalInvocationID.x] = val;
         break;
     }
     case quantTypeUniform:{

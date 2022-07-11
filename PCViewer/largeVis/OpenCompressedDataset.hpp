@@ -14,7 +14,7 @@
 #endif
 
 namespace util{
-    DataSet openCompressedDataset(const VkUtil::Context& context, std::string_view folder){
+    static DataSet openCompressedDataset(const VkUtil::Context& context, std::string_view folder){
         std::string hierarchyFolder(folder);
 
         // --------------------------------------------------------------------------------

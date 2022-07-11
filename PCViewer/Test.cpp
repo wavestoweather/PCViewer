@@ -18,6 +18,9 @@
 #include "compression/gpuCompression/Scan.hpp"
 #include "compression/gpuCompression/Quantize.hpp"
 #include "compression/gpuCompression/DWT.hpp"
+#include "largeVis/OpenCompressedDataset.hpp"
+#include "largeVis/DecompressManager.hpp"
+#include "compression/cpuCompression/HuffmanCPU.h"
 
 // note: src vector is changed!
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
@@ -189,6 +192,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testDWTInverse = false;
     const bool testDWTInverseToHalf = false;
     const bool testFullDecomp = false;
+    const bool testDecompressManager = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -456,5 +460,79 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         //    columnData[i].compressedRLHuffCpu.emplace_back(vkCompress::parseCpuRLHuffData(gpuInstance.get(), dataVec));
         //    columnData[i].compressedRLHuffGpu.emplace_back(gpuInstance.get(), columnData[i].compressedRLHuffCpu.back());
         //}
+    }
+
+    // testing full decompression on real world data
+    if (testDecompressManager){
+        const uint32_t cols = 10;
+        const uint32_t colSize = 1 << 20;
+        const float quantStep = .02f;
+        std::vector<std::vector<float>> original(cols, std::vector<float>(colSize));
+        srand(20);
+        for(int i: irange(cols)){
+            for(int j: irange(colSize))
+                original[i][j] = random() / float(1u << 31);
+        }
+        std::vector<cudaCompress::BitStream> compressedStreams(cols);
+        for(int i: irange(cols)){
+            uint32_t symbolSize;
+            auto cpy = original[i];
+            compressVector(cpy, quantStep, compressedStreams[i], symbolSize);
+        }
+        // decompressing the first blocks with the cpu
+        std::vector<std::vector<float>> cpuDecodedColumns(cols);
+        for(int column: irange(cols)){
+            // huffman + rl decoding
+            decompressVector(compressedStreams[column].getVector(), quantStep, colSize, cpuDecodedColumns[column]);
+        }
+
+        // pgu decoding
+        std::vector<std::vector<float>> gpuDecodedColumns(cols);
+        for(int column: irange(cols)){
+            gpuDecodedColumns[column] = vkDecompress(context, compressedStreams[column].getVector(), quantStep, colSize);
+        }
+
+        std::vector<std::vector<float>> gpuDecodeManagerColumns(cols);
+        std::vector<RLHuffDecodeDataCpu> cpuDatas;
+        std::vector<RLHuffDecodeDataGpu> gpuDatas;
+        vkCompress::GpuInstance gpu(context, 1, colSize);
+        auto cpuD = vkCompress::parseCpuRLHuffData(&gpu, compressedStreams[0].getVector(), gpu.m_codingBlockSize);
+        RLHuffDecodeDataGpu gpuD(&gpu, cpuD);
+        DecompressManager decompManager(colSize, gpu, {&cpuD}, {&gpuD});
+        std::vector<uint8_t> zeros(gpu.m_pScanPlan->m_memorySize, 0);
+        for(int column: irange(cols)){
+            cpuDatas.emplace_back(vkCompress::parseCpuRLHuffData(&gpu, compressedStreams[column].getVector(), gpu.m_codingBlockSize));
+            gpuDatas.emplace_back(&gpu, cpuDatas[column]);
+            //DecompressManager::CpuColumns cpuCols{&cpuData};
+            decompManager.executeBlockDecompression(colSize, gpu, {&cpuDatas[column]}, {&gpuDatas[column]}, quantStep);
+            auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
+            std::vector<half> final(colSize);
+            VkUtil::downloadData(context.device, decompManager.bufferMemory, decompManager.bufferOffsets[0], final.size() * sizeof(final[0]), final.data());
+
+            gpuDecodeManagerColumns[column] = std::vector<float>(final.begin(), final.end());
+        }
+
+        // differences
+        std::vector<float> maxDiffsCpu(cols);
+        std::vector<float> maxDiffsGpu(cols);
+        std::vector<float> maxDiffsGpuMan(cols);
+        std::vector<double> avgDiffsCpu(cols);
+        std::vector<double> avgDiffsGpu(cols);
+        std::vector<double> avgDiffsGpuMan(cols);
+        for(int c: irange(cols)){
+            for(int e: irange(colSize)){
+                float orig = original[c][e];
+                float cpu = std::abs(orig - cpuDecodedColumns[c][e]);
+                float gpu = std::abs(orig - gpuDecodedColumns[c][e]);
+                float gpuMan = std::abs(orig - gpuDecodeManagerColumns[c][e]);
+                maxDiffsCpu[c] = std::max(maxDiffsCpu[c], cpu);
+                maxDiffsGpu[c] = std::max(maxDiffsGpu[c], gpu);
+                maxDiffsGpuMan[c] = std::max(maxDiffsGpuMan[c], gpuMan);
+                avgDiffsCpu[c] += cpu / colSize;
+                avgDiffsGpu[c] += gpu / colSize;
+                avgDiffsGpuMan[c] += gpuMan / colSize;
+            }
+        }
+        bool test = true;
     }
 }

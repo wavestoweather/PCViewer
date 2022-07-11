@@ -727,6 +727,7 @@ bool decodeRLHuff(GpuInstance* pInstance, VkBuffer bitStreamBuffer, BitStream& c
 bool decodeRLHuffHalf(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataCpu, const RLHuffDecodeDataGpu& decodeDataGpu, VkDeviceAddress outSymbols, VkCommandBuffer commands){
     const auto& context = pInstance->vkContext;
     auto &resources = pInstance->Encode.GetDecodeResources();
+    pInstance->Encode.Decode[0].pSymbolStreamInfos[0].symbolCount = decodeDataCpu.symbolCount;
     const uint pad = pInstance->m_subgroupSize * pInstance->m_codingBlockSize;
     const uint symbolCountPadded = (decodeDataCpu.symbolCount + pad - 1) / pad * pad;
 

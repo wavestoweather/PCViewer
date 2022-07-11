@@ -31,6 +31,15 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
     vkBindBufferMemory(_vkContext.device, _indexActivation, _indexActivationMemory, 0);
     VkUtil::uploadData(_vkContext.device, _indexActivationMemory, 0, indexActivation.size(), indexActivation.data());
 
+    uint32_t amtOfBlocks = compressedData.columnData[0].compressedRLHuffCpu.size();
+    uint32_t timingAmt = compressedData.columnData.size() * amtOfBlocks * 2;    // timing points for counting
+    timingAmt += amtOfBlocks * 2 * 2;   // 2 timing points for decompression, 2 for index activation multiplied by amt Of blocks as for each block this has to be executed
+    VkQueryPoolCreateInfo createInfo{}; createInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    createInfo.queryCount = timingAmt;
+    _timingAmt = timingAmt;
+    createInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    vkCreateQueryPool(_vkContext.device, &createInfo, nullptr, &_timingPool);
+
     // --------------------------------------------------------------------------------
     // getting the handles for the counter pipelines
     // --------------------------------------------------------------------------------
@@ -58,6 +67,9 @@ IndBinManager::~IndBinManager(){
 
     if(_indexActivationMemory)
         vkFreeMemory(_vkContext.device, _indexActivationMemory, nullptr);
+
+    if(_timingPool)
+        vkDestroyQueryPool(_vkContext.device, _timingPool, nullptr);
 
     // joining all threads
     if(_countUpdateThread.joinable())
@@ -195,11 +207,14 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         neededIndices.insert(b.attr1);
         neededIndices.insert(b.attr2);
     }
-        
-    for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize){
-        std::cout << "Current data offset: " << dataOffset << std::endl; std::cout.flush();
+
+    std::vector<float> timings(2 + t->compressedData.attributes.size(), {});
+    uint32_t iteration{};
+    for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize, ++iteration){
+        uint32_t timingIndex{};
         assert((dataOffset & 31) == 0); //check that dataOffset ist 32 aligned (needed for index activation)
         uint32_t curDataBlockSize = std::min<uint32_t>(t->compressedData.dataSize - dataOffset, t->compressedData.compressedBlockSize);
+        std::cout << "Current data offset: " << dataOffset << ", with block size: " << curDataBlockSize <<  std::endl; std::cout.flush();
         //if(curDataBlockSize != blockSize)
         //   break;
         // if compressed data first decompressing
@@ -217,7 +232,19 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 }
             }
 
-            curEvent = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent);
+            //for(int i: irange(cpuColumns)){
+            //    if(cpuColumns[i]){
+            //        DecompressManager::CpuColumns cpuColumnsSingle(cpuColumns.size(), {});
+            //        DecompressManager::GpuColumns gpuColumnsSingle(gpuColumns.size(), {});
+            //        cpuColumnsSingle[i] = cpuColumns[i];
+            //        gpuColumnsSingle[i] = gpuColumns[i];
+            //        t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumnsSingle, gpuColumnsSingle, t->compressedData.quantizationStep, curEvent);
+            //        std::scoped_lock<std::mutex> lock(*t->compressedData.gpuInstance->vkContext.queueMutex);
+            //        auto err = vkQueueWaitIdle(t->compressedData.gpuInstance->vkContext.queue); check_vk_result(err);
+            //    }
+            //}
+            curEvent = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent, {t->_timingPool, timingIndex++, timingIndex++});
+            //auto err = vkQueueWaitIdle(t->compressedData.gpuInstance->vkContext.queue); check_vk_result(err);
         }
         std::vector<VkBuffer> dataBuffer(t->compressedData.attributes.size());  // vector of the gpu buffer which will contian the column data.
         if(t->countingMethod <= CountingMethod::CpuRoaring){
@@ -259,8 +286,8 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         else{
             // updating gpu activations
             if(gpuDecompression || t->_gpuIndexActivationState != t->_countBrushState.id){
-                std::cout << "Updating gpu index activations" << std::endl; std::cout.flush();
-                PCUtil::Stopwatch updateWatch(std::cout, "Gpu index activation");
+                //std::cout << "Updating gpu index activations" << std::endl; std::cout.flush();
+                //PCUtil::Stopwatch updateWatch(std::cout, "Gpu index activation");
                 t->_gpuIndexActivationState = t->_countBrushState.id;
                 
                 if(gpuDecompression){
@@ -270,7 +297,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     for(int i: irange(dataBuffer))
                         dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
                 }
-                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent);
+                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent, {t->_timingPool, timingIndex++, timingIndex++});
             }
         }
         assert(dataBuffer[0]); //chedck for valid gpu buffer
@@ -404,8 +431,8 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     std::swap(a, b);
                 if(!gpuDecompression && t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl; std::cout.flush();
-                curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter, curEvent);
+                //std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl; std::cout.flush();
+                curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, dataOffset, firstIter, curEvent, {t->_timingPool, timingIndex++, timingIndex++});
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -435,6 +462,20 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         }
         };
         //break;
+        std::vector<uint32_t> timeCounts(timingIndex);
+        assert(timingIndex == timeCounts.size());
+        vkGetQueryPoolResults(t->_vkContext.device, t->_timingPool, 0, timeCounts.size(), timeCounts.size() * sizeof(timeCounts[0]), timeCounts.data(), sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT);
+        for(int i: irange(timeCounts.size() / 2)){
+            //float a = 1 / float(iteration + 1);
+            //timings[i] = (1.f - a) * timings[i] + a * (timeCounts[2 * i + 1] - timeCounts[2 * i]) * 1e-6;
+            timings[i] += (timeCounts[2 * i + 1] - timeCounts[2 * i]) * 1e-6;
+        }
+    }
+    // printing single pipeline timings
+    std::cout << "[timing] Decompression   : " << timings[0] << " ms" << std::endl;
+    std::cout << "[timing] Index activaiton: " << timings[1] << " ms" << std::endl;
+    for(int i: irange(2, timings.size())){
+        std::cout << "[timing] Counting " << t->compressedData.attributes[i - 2].name << ": " << timings[1] << " ms" << std::endl;
     }
     // wait for curEvent
     while(curEvent && vkGetEventStatus(t->_vkContext.device, curEvent) == VK_EVENT_RESET)

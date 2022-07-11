@@ -207,7 +207,7 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     // execution is done outside
 }
 
-VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, VkEvent prevPipeEvent) {
+VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, VkEvent prevPipeEvent, TimingInfo timingInfo) {
     // check for outdated framebuffer size
     if(aIndices != _aBins)
         createOrUpdateFramebuffer(aIndices);
@@ -228,7 +228,7 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     if(renderCommands)
         vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &renderCommands);
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &renderCommands);
-    
+
     const uint32_t shaderXSize = 256;
     assert(_vkContext.queueMutex);
 
@@ -254,6 +254,12 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     VkCommandBuffer commands = renderCommands;
     if(prevPipeEvent)
         vkCmdWaitEvents(commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, 0, {}, 0, {});
+    
+    if(timingInfo.queryPool){
+        vkCmdResetQueryPool(renderCommands, timingInfo.queryPool, timingInfo.startIndex, 2);
+        vkCmdWriteTimestamp(renderCommands, static_cast<VkPipelineStageFlagBits>(VK_PIPELINE_STAGE_VERTEX_INPUT_BIT), timingInfo.queryPool, timingInfo.startIndex); 
+    }
+
     if(clearCounts)
         vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
     VkClearValue clear;
@@ -284,7 +290,9 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _conversionPipeInf.pipeline);
     vkCmdDispatch(commands, (_aBins * _bBins + shaderXSize - 1) / shaderXSize, 1, 1);
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    vkCmdSetEvent(commands, renderEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    if(timingInfo.queryPool)
+        vkCmdWriteTimestamp(renderCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
+    vkCmdSetEvent(commands, renderEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     VkUtil::commitCommandBuffer(_vkContext.queue, commands);
     //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res); synchronization has to be done outsize via events

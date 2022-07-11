@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../VkUtil.h"
+#include "TimingInfo.hpp"
 #include <map>
 
 // holds a single vulkan compute pipeline instance for counting active lines by using rendering pipeline
@@ -26,7 +27,7 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
-    VkEvent countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts = false, VkEvent prevPipeEvent = {});
+    VkEvent countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts = false, VkEvent prevPipeEvent = {}, TimingInfo = {});
     void countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt /*describes how much tiles along each side are used*/);
 private:
     struct PairInfos{

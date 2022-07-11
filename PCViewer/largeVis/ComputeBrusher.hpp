@@ -2,6 +2,7 @@
 
 #include "../VkUtil.h"
 #include "../Brushing.hpp"
+#include "TimingInfo.hpp"
 
 // executes index brushing. Every GPU thread will do 32 datapoints and stores the brushing result in a uint vector
 // like this, every GPU thread can write a single 32 bit integer.
@@ -20,7 +21,7 @@ public:
 
     static ComputeBrusher* acquireReference(const CreateInfo& info); // acquire a reference (automatically creates renderer if not yet existing)
     void release();                                                 // has to be called to notify destruction before vulkan resources are destroyed
-    VkEvent updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset = 0, bool andBrushes = false, VkEvent prevPipeEvent = {});
+    VkEvent updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset = 0, bool andBrushes = false, VkEvent prevPipeEvent = {}, TimingInfo timingInfo = {});
 
 private:
     struct BrushInfos{

@@ -5782,7 +5782,8 @@ static bool updateActiveIndices(DrawList& dl) {
 	//std::cout << dl.data->size() << std::endl;
 	//if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
 	//safety check to avoid updates of large drawlists. Update only occurs when mouse was released
-	if (dl.indices.size() > pcSettings.liveBrushThreshold) {
+	size_t dataSize = dl.inheritanceFlags == InheritanceFlags::compressed ? dl.indBinManager->compressedData.dataSize: dl.indices.size();
+	if (dataSize > pcSettings.liveBrushThreshold) {
 		if (ImGui::GetIO().MouseDown[0] && !ImGui::IsMouseDoubleClicked(0)) return false;
 	}
 
@@ -7706,7 +7707,7 @@ int main(int, char**)
 	}
 
 	{
-		TEST(VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, {g_PcPlotFramebuffer_noClear, g_PcPlotRenderPass_noClear});
+		TEST(VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex}, {g_PcPlotFramebuffer_noClear, g_PcPlotRenderPass_noClear});
 	}
 
 	{
@@ -8054,7 +8055,8 @@ int main(int, char**)
 						bool success = openDataset(s.c_str());
 						if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
 							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-							updateActiveIndices(g_PcPlotDrawLists.back());
+							if(g_PcPlotDrawLists.back().inheritanceFlags != InheritanceFlags::compressed)
+								updateActiveIndices(g_PcPlotDrawLists.back());
 							pcPlotRender = true;
 						}
 						else if(success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling){

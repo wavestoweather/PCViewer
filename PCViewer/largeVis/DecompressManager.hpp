@@ -6,6 +6,7 @@
 #include "../compression/gpuCompression/Quantize.hpp"
 #include "../compression/gpuCompression/DWT.hpp"
 #include "../range.hpp"
+#include "TimingInfo.hpp"
 #include <thread>
 
 // currently uses the gpu instance from an external source for decompression.
@@ -63,8 +64,10 @@ public:
                 }
             }
         }
-        if(isSubset)    // return if current decoding is a subset
+        if(isSubset){    // return if current decoding is a subset
+            std::cout << "Quitting blockDecompression" << std::endl;
             return;
+        }
 
         // recording decode commands
         VkDeviceAddress cacheA = VkUtil::getBufferAddress(_vkContext.device, _cacheBuffers[0]);
@@ -72,11 +75,17 @@ public:
         for(int i: irange(gpuData)){
             if(!gpuData[i])
                 continue;   // skipping attributes which should not be decompressed
+
+            // cacheA has to be zeroed, as otherwise rl decoding might leave old values in the buffer
+            vkCmdFillBuffer(commands, _cacheBuffers[0], 0, symbolCountPerBlock * sizeof(uint16_t), 0);
+            vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+
             vkCompress::decodeRLHuffHalf(&gpu, *cpuData[i], *gpuData[i], cacheA, commands);
             vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
     
             vkCompress::unquantizeFromSymbols(&gpu, commands, cacheB, cacheA, symbolCountPerBlock, quantizationStep);
             vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+
 
             vkCompress::dwtFloatInverse(&gpu, commands, cacheA, cacheB, symbolCountPerBlock / 2, symbolCountPerBlock / 2, symbolCountPerBlock / 2);
             vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, {}, 0, {}, 0, {});
@@ -86,6 +95,7 @@ public:
             cpy.size = symbolCountPerBlock / 2 * sizeof(float);
             vkCmdCopyBuffer(commands, _cacheBuffers[1], _cacheBuffers[0], 1, &cpy);
             vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+            
             VkDeviceAddress finalBlock = VkUtil::getBufferAddress(_vkContext.device, buffers[i]);
             vkCompress::dwtFloatToHalfInverse(&gpu, commands, finalBlock, cacheA, symbolCountPerBlock);
             vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
@@ -96,34 +106,44 @@ public:
     }
 
     // creates a command buffer itself and commits it, return the vkevent that will be signaled upon finishing
-    VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep, VkEvent prevPipeEvent = {}){
+    VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep, VkEvent prevPipeEvent = {}, TimingInfo timingInfo = {}){
         assert((symbolCountPerBlock & 0b11) == 0);
-        while(_syncEvent && vkGetEventStatus(_vkContext.device, _syncEvent) == VK_EVENT_RESET)
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));          // busy wait for finished decomp
+
+        auto err = vkWaitForFences(_vkContext.device, 1, &_decompFence, VK_TRUE, 1e9); check_vk_result(err);
+        assert(err == VK_SUCCESS);
+        vkResetFences(_vkContext.device, 1, &_decompFence);
+        assert(vkGetEventStatus(_vkContext.device, _syncEvent) == VK_EVENT_SET);
 
         vkResetEvent(_vkContext.device, _syncEvent);
 
         std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
-        std::cout << "Post commandBuffer createion" << std::endl; std::cout.flush();
         if(_commands)
             vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
         VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
-        std::cout << "Pre commandBuffer createion" << std::endl; std::cout.flush();
 
         if(prevPipeEvent)
-            vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+            vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+        
+        if(timingInfo.queryPool){
+            vkCmdResetQueryPool(_commands, timingInfo.queryPool, timingInfo.startIndex, 2);
+            vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex); 
+        }
 
         recordBlockDecompression(_commands, symbolCountPerBlock, gpu, cpuData, gpuData, quantizationStep);
 
-        vkCmdSetEvent(_commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+        if(timingInfo.queryPool)
+            vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
 
-        VkUtil::commitCommandBuffer(_vkContext.queue, _commands);
+        vkCmdSetEvent(_commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
+
+        VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _decompFence);
         return _syncEvent;
     }
 private:
     std::vector<VkBuffer> _cacheBuffers{};   // needed for intermediate
     std::vector<size_t> _cacheBufferOffsets{};
     VkEvent _syncEvent{};
+    VkFence _decompFence{};
     VkUtil::Context _vkContext{};
 
     GpuColumns _lastDecompressed{};  // stores the last recorded decompressed gpu data to avoid re-recording of the same decompression
@@ -140,6 +160,8 @@ private:
             vkFreeMemory(device, bufferMemory, nullptr);
         if(_syncEvent && final)
             vkDestroyEvent(device, _syncEvent, nullptr);
+        if(_decompFence && final)
+            vkDestroyFence(device, _decompFence, nullptr);
     }
 
     void resizeOrCreateBuffers(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData){
@@ -149,6 +171,8 @@ private:
             vkCreateEvent(_vkContext.device, &info, nullptr, &_syncEvent);
             vkSetEvent(_vkContext.device, _syncEvent);
         }
+        if(!_decompFence)
+            _decompFence = VkUtil::createFence(_vkContext.device, VK_FENCE_CREATE_SIGNALED_BIT);
 
         if(cpuData.size() == buffers.size() && decompressedElementsPerBuffer >= symbolCountPerBlock){
             // nothing to do, return
@@ -168,7 +192,7 @@ private:
         usages.push_back(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
         sizes.push_back(symbolCountPerBlock * sizeof(float));
         sizes.push_back(symbolCountPerBlock * sizeof(float));
-        auto [bs, os, m] = VkUtil::createMultiBufferBound(_vkContext, sizes, usages, 0);
+        auto [bs, os, m] = VkUtil::createMultiBufferBound(_vkContext, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
         // copying the buffers to the corresponding variables
         buffers = std::vector<VkBuffer>(bs.begin(), bs.end() - 2); // all buffers except the last 2 are decompressed data
         bufferOffsets = std::vector<size_t>(os.begin(), os.end() - 2);

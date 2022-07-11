@@ -19,6 +19,7 @@ public:
     std::vector<size_t> m_blockSumsOffsets;   // holds the memory offest for each blockSums buffer
     VkBuffer m_buffer{};
     VkDeviceMemory m_blockSumsMemory{};
+    size_t m_memorySize{};
     //void**  m_blockSums;     // Intermediate block sums array
     size_t  m_numLevels;     // Number of levels (in m_blockSums)
     size_t  m_numRows;       // Number of rows
