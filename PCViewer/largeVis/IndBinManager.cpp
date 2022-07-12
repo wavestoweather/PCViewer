@@ -209,6 +209,9 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     }
 
     std::vector<float> timings(2 + t->compressedData.attributes.size(), {});
+    VkQueryPool timingPool{};
+    if(t->printDeocmpressionTimes)
+        timingPool = t->_timingPool;
     uint32_t iteration{};
     for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize, ++iteration){
         uint32_t timingIndex{};
@@ -244,7 +247,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             //        auto err = vkQueueWaitIdle(t->compressedData.gpuInstance->vkContext.queue); check_vk_result(err);
             //    }
             //}
-            curEvent = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent, {t->_timingPool, timingIndex++, timingIndex++});
+            curEvent = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent, {timingPool, timingIndex++, timingIndex++});
             //auto err = vkQueueWaitIdle(t->compressedData.gpuInstance->vkContext.queue); check_vk_result(err);
         }
         std::vector<VkBuffer> dataBuffer(t->compressedData.attributes.size());  // vector of the gpu buffer which will contian the column data.
@@ -298,7 +301,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     for(int i: irange(dataBuffer))
                         dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
                 }
-                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent, {t->_timingPool, timingIndex++, timingIndex++});
+                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent, {timingPool, timingIndex++, timingIndex++});
             }
             else{
                 for(int i: irange(dataBuffer))
@@ -437,7 +440,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 if(!gpuDecompression && t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 //std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl; std::cout.flush();
-                curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, dataOffset, firstIter, curEvent, {t->_timingPool, timingIndex++, timingIndex++});
+                curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, dataOffset, firstIter, curEvent, {timingPool, timingIndex++, timingIndex++});
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -469,22 +472,31 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         //break;
         std::vector<uint32_t> timeCounts(timingIndex);
         assert(timingIndex == timeCounts.size());
-        vkGetQueryPoolResults(t->_vkContext.device, t->_timingPool, 0, timeCounts.size(), timeCounts.size() * sizeof(timeCounts[0]), timeCounts.data(), sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT);
-        for(int i: irange(timeCounts.size() / 2)){
-            //float a = 1 / float(iteration + 1);
-            //timings[i] = (1.f - a) * timings[i] + a * (timeCounts[2 * i + 1] - timeCounts[2 * i]) * 1e-6;
-            timings[i] += (timeCounts[2 * i + 1] - timeCounts[2 * i]) * 1e-6;
+        if(timingPool){
+            vkGetQueryPoolResults(t->_vkContext.device, t->_timingPool, 0, timeCounts.size(), timeCounts.size() * sizeof(timeCounts[0]), timeCounts.data(), sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT);
+            for(int i: irange(timeCounts.size() / 2)){
+                //float a = 1 / float(iteration + 1);
+                //timings[i] = (1.f - a) * timings[i] + a * (timeCounts[2 * i + 1] - timeCounts[2 * i]) * 1e-6;
+                timings[i] += (timeCounts[2 * i + 1] - timeCounts[2 * i]) * 1e-6;
+            }
         }
-    }
-    // printing single pipeline timings
-    std::cout << "[timing] Decompression   : " << timings[0] << " ms" << std::endl;
-    std::cout << "[timing] Index activaiton: " << timings[1] << " ms" << std::endl;
-    for(int i: irange(2, timings.size())){
-        std::cout << "[timing] Counting " << t->compressedData.attributes[i - 2].name << ": " << timings[1] << " ms" << std::endl;
     }
     // wait for curEvent
     while(curEvent && vkGetEventStatus(t->_vkContext.device, curEvent) == VK_EVENT_RESET)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    // printing single pipeline timings
+    if(timingPool){
+        uint32_t timingIndex{};
+        if(gpuDecompression)
+            std::cout << "[timing] Decompression   : " << timings[timingIndex++] << " ms" << std::endl;
+        std::cout << "[timing] Index activaiton: " << timings[timingIndex++] << " ms" << std::endl;
+        for(int i: irange(timingIndex, timings.size())){
+            if(i > t->compressedData.attributes.size())
+                break;
+            std::cout << "[timing] Counting " << std::setw(20) << t->compressedData.attributes[i - timingIndex].name << ": " << timings[i] << " ms" << std::endl;
+        }
+    }
 
     finish:
     std::cout.flush();

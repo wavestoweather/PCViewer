@@ -227,7 +227,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testDWTInverseToHalf = false;
     const bool testFullDecomp = false;
     const bool testDecompressManager = false;
-    const bool testRealWorldDataCompression = true;
+    const bool testRealWorldDataCompression = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;

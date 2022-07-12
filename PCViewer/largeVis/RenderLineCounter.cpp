@@ -257,7 +257,7 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     
     if(timingInfo.queryPool){
         vkCmdResetQueryPool(renderCommands, timingInfo.queryPool, timingInfo.startIndex, 2);
-        vkCmdWriteTimestamp(renderCommands, static_cast<VkPipelineStageFlagBits>(VK_PIPELINE_STAGE_VERTEX_INPUT_BIT), timingInfo.queryPool, timingInfo.startIndex); 
+        vkCmdWriteTimestamp(renderCommands, static_cast<VkPipelineStageFlagBits>(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT), timingInfo.queryPool, timingInfo.startIndex); 
     }
 
     if(clearCounts)
