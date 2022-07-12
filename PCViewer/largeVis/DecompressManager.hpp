@@ -134,7 +134,7 @@ public:
         if(timingInfo.queryPool)
             vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
 
-        vkCmdSetEvent(_commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
+        vkCmdSetEvent(_commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
         VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _decompFence);
         return _syncEvent;

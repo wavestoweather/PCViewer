@@ -31,7 +31,7 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
     vkBindBufferMemory(_vkContext.device, _indexActivation, _indexActivationMemory, 0);
     VkUtil::uploadData(_vkContext.device, _indexActivationMemory, 0, indexActivation.size(), indexActivation.data());
 
-    uint32_t amtOfBlocks = compressedData.columnData[0].compressedRLHuffCpu.size();
+    uint32_t amtOfBlocks = std::max<uint32_t>(compressedData.columnData[0].compressedRLHuffCpu.size(), 1u);
     uint32_t timingAmt = compressedData.columnData.size() * amtOfBlocks * 2;    // timing points for counting
     timingAmt += amtOfBlocks * 2 * 2;   // 2 timing points for decompression, 2 for index activation multiplied by amt Of blocks as for each block this has to be executed
     VkQueryPoolCreateInfo createInfo{}; createInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
@@ -221,6 +221,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         if(gpuDecompression)
         {
             uint32_t blockIndex = dataOffset / std::abs(blockSize);
+            assert(curDataBlockSize <= t->compressedData.columnData[0].compressedSymbolSize[blockIndex]);
 
             DecompressManager::CpuColumns cpuColumns(t->compressedData.attributes.size(), {});
             DecompressManager::GpuColumns gpuColumns(cpuColumns.size(), {});
@@ -298,6 +299,10 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                         dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
                 }
                 curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent, {t->_timingPool, timingIndex++, timingIndex++});
+            }
+            else{
+                for(int i: irange(dataBuffer))
+                    dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
             }
         }
         assert(dataBuffer[0]); //chedck for valid gpu buffer

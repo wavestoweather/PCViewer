@@ -74,6 +74,10 @@ void ComputeBrusher::release(){
 }
 
 VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset, bool andBrushes, VkEvent prevPipeEvent, TimingInfo timingInfo){
+    //while(prevPipeEvent && vkGetEventStatus(_vkContext.device, prevPipeEvent) == VK_EVENT_RESET)
+    //    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
+    check_vk_result(vkQueueWaitIdle(_vkContext.queue));         // TODO: find better solution
     auto err = vkWaitForFences(_vkContext.device, 1, &_brushFence, VK_TRUE, 5e9); check_vk_result(err); // maximum wait for 1 sec
     assert(err == VK_SUCCESS);
     vkResetFences(_vkContext.device, 1, &_brushFence);
@@ -81,14 +85,13 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     assert(vkGetEventStatus(_vkContext.device, _brushEvent) == VK_EVENT_SET);
     vkResetEvent(_vkContext.device, _brushEvent);
     
-    std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
     if(_commands)
         vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
 
     // wait for previous event/pipeline to finish
     if(prevPipeEvent)
-        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT , VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
     
     if(timingInfo.queryPool){
         vkCmdResetQueryPool(_commands, timingInfo.queryPool, timingInfo.startIndex, 2);
@@ -96,7 +99,9 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
     }
     // if no brushes are active, set all points active
     if(brushes.empty() && lassoBrushes.empty()){
-        vkCmdFillBuffer(_commands, indexActivations, indexOffset / 32, (amtDatapoints / 32 + 3) / 4 * 4, uint32_t(-1));
+        size_t size = (amtDatapoints + 0) / 8;
+        size = (size + 3) / 4 * 4; // 4 aligning the size for fil buffer cmd
+        vkCmdFillBuffer(_commands, indexActivations, indexOffset / 8, size, uint32_t(-1));   // +7 div 8 for conversion from bit index to byte index
         
         if(timingInfo.queryPool)
             vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
