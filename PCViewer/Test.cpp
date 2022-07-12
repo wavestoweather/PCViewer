@@ -103,6 +103,72 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vect
     return std::vector<float>(final.begin(), final.end());
 }
 
+static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize){
+    vkCompress::GpuInstance gpu(context, 1, symbolsSize, 0, 0);
+    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, src, gpu.m_codingBlockSize);
+    RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
+
+    VkQueryPool timings{};
+    VkQueryPoolCreateInfo info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    info.queryCount = 6;
+    vkCreateQueryPool(context.device, &info, nullptr, &timings);
+
+    // creating buffer for the symbol table
+    uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
+    uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
+    // symbolBuffer holds enough memory to store all intermediate data as well: this means that we need 2 * float vector containing all data
+    uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+    
+    VkDeviceAddress srcA = VkUtil::getBufferAddress(context.device, symbolBuffer[0]); // the symbol buffer containes the quantized values
+    VkDeviceAddress dstA = VkUtil::getBufferAddress(context.device, symbolBuffer[1]); // is the padded offset * 2 as the offset is for halves
+
+    vkCmdResetQueryPool(commands, timings, 0, info.queryCount);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 0);
+    vkCompress::decodeRLHuffHalf(&gpu, cpuData, gpuData, srcA, commands);
+    //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 1);
+
+    vkCompress::unquantizeFromSymbols(&gpu, commands, dstA, srcA, symbolsSize, quantizationStep);
+    //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 2);
+
+    vkCompress::dwtFloatInverse(&gpu, commands, srcA, dstA, symbolsSize / 2, symbolsSize / 2, symbolsSize / 2);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 3);
+    //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, {}, 0, {}, 0, {});
+    VkBufferCopy cpy{};
+    cpy.dstOffset = 0;
+    cpy.srcOffset = 0;
+    cpy.size = symbolsSize / 2 * sizeof(float);
+    vkCmdCopyBuffer(commands, symbolBuffer[1], symbolBuffer[0], 1, &cpy);
+    //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 4);
+    vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, symbolsSize);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 5);
+
+    VkUtil::commitCommandBuffer(context.queue, commands);
+    std::vector<uint32_t> timestamps(info.queryCount);
+    check_vk_result(vkGetQueryPoolResults(context.device, timings, 0, info.queryCount, timestamps.size() * sizeof(uint32_t), timestamps.data(), sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT));
+    check_vk_result(vkQueueWaitIdle(context.queue));
+    vkDestroyBuffer(context.device, symbolBuffer[0], nullptr);
+    vkDestroyBuffer(context.device, symbolBuffer[1], nullptr);
+    vkDestroyQueryPool(context.device, timings, nullptr);
+
+    std::vector<std::string_view> timingNames{"DecodeRLHuff", "Unquantize", "DWT Inverse", "DWT Copy", "DWT Inverse Full"};
+    for(int i: irange(timingNames)){
+        std::cout << std::left << "[timing] " << std::setw(17) << timingNames[i] << " : " << (timestamps[i + 1] - timestamps[i]) * 1e-6 << " ms" << std::endl;
+    }
+
+    std::vector<half> final(symbolsSize);
+    VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
+    vkFreeMemory(context.device, mem, nullptr);
+    return std::vector<float>(final.begin(), final.end());
+}
+
 void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     // range testing ------------------------------
     //for(int i: range(0, 100)){
@@ -152,38 +218,6 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     // testing the rendering pipeline creation ----------------------------
     //auto renderer = compression::Renderer::acquireReference({context, testInfo.pcNoClearPass, testInfo.pcFramebuffer});
 
-    // testing encoding times for real world data
-    //std::vector<std::string_view> filenames{"/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/tp.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/q.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/NCCLOUD.bin"};
-    //std::vector<float> quants{0.001f, .01f, .1f};
-    //for(auto file: filenames){
-    //    for(float q: quants){
-    //        uint32_t s;
-    //        std::vector<uint32_t> bits;
-    //        size_t bytesize;
-    //        {
-    //            // encoding
-    //            std::ifstream f(file.data(), std::ios_base::binary);
-    //            std::vector<float> tpVals(1024 * 1024);
-////
-    //            f.read(reinterpret_cast<char*>(tpVals.data()), tpVals.size() * sizeof(tpVals[0]));
-    //            
-    //            PCUtil::Stopwatch encode(std::cout, "Encode " + std::to_string(q) + std::string(file));
-    //            auto [stream, size] = compressVector(tpVals, q);
-    //            bytesize = stream.getRawSizeBytes();
-    //            bits = std::move(stream.getVector());
-    //            s = size;
-    //        }
-    //        {
-    //            // decoding
-    //            std::vector<float> symb(s);
-    //            PCUtil::Stopwatch decode(std::cout, "Decode " + std::to_string(q) + std::string(file));
-    //            decompressVector(bits, q, s, symb);
-    //            bool test = true;
-    //        }
-    //        std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024 * 4) / bytesize) << std::endl;
-    //    }
-    //}
-
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
     const bool testDecomp = false;
@@ -193,6 +227,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testDWTInverseToHalf = false;
     const bool testFullDecomp = false;
     const bool testDecompressManager = false;
+    const bool testRealWorldDataCompression = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -534,5 +569,38 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
             }
         }
         bool test = true;
+    }
+
+    if(testRealWorldDataCompression){
+        // testing encoding times for real world data
+        std::vector<std::string_view> filenames{"/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/tp.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/q.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/NCCLOUD.bin"};
+        std::vector<float> quants{0.001f, .01f, .1f};
+        for(auto file: filenames){
+            for(float q: quants){
+                uint32_t s;
+                std::vector<uint32_t> bits;
+                size_t bytesize;
+                {
+                    // encoding
+                    std::ifstream f(file.data(), std::ios_base::binary);
+                    std::vector<float> tpVals(1024 * 1024);
+ 
+                    f.read(reinterpret_cast<char*>(tpVals.data()), tpVals.size() * sizeof(tpVals[0]));
+
+                    PCUtil::Stopwatch encode(std::cout, "Encode " + std::to_string(q) + std::string(file));
+                    auto [stream, size] = compressVector(tpVals, q);
+                    bytesize = stream.getRawSizeBytes();
+                    bits = std::move(stream.getVector());
+                    s = size;
+                }
+                {
+                    // decoding
+                    PCUtil::Stopwatch decode(std::cout, "Decode " + std::to_string(q) + std::string(file));
+                    std::vector<float> symb = vkDecompressBenchmark(context, bits, q, s);
+                    bool test = true;
+                }
+                std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024 * 4) / bytesize) << std::endl;
+            }
+        }
     }
 }
