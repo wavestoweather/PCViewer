@@ -210,7 +210,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
 
     std::vector<float> timings(2 + t->compressedData.attributes.size(), {});
     VkQueryPool timingPool{};
-    if(t->printDeocmpressionTimes)
+    if(t->printDeocmpressionTimes && t->countingMethod == CountingMethod::GpuDrawPairwise)
         timingPool = t->_timingPool;
     uint32_t iteration{};
     for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize, ++iteration){
@@ -424,8 +424,23 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise (cMessage: Validation Error: [ VUID-vkCmdFillBuffer-size-00026 ] Object 0: handle = 0x555556fc11c8, type = VK_OBJECT_TYPE_DEVICE; | MessageID = 0x4eec9b3d | vkCmdFillBuffer() parameter, VkDeviceSize size (0x0), must be greater than zero. The Vulkan spec states: If size is not equal to VK_WHOLE_SIZE, size must be greater than 0 (https://vulkan.lunarg.com/doc/view/1.2.182.0/linux/1.2-extensions/vkspec.html#VUID-vkCmdFillBuffer-size-00026)ompute pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                std::cout << "Counting pairwise for attribute" << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
                 t->_lineCounter->countLinesPair(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+            }
+            break;
+        }
+        case CountingMethod::GpuComputeSubgroupReductionPairwise:{
+            bool firstIter = dataOffset == startOffset;
+            for(int i: irange(activeIndices.size() -1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    continue;
+                std::cout << "Counting pairwise subgroupReduction for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                t->_lineCounter->countLinesPairSubgroup(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;

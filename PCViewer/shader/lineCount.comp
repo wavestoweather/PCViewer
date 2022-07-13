@@ -2,6 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_NV_shader_subgroup_partitioned : enable
+#extension GL_KHR_shader_subgroup_vote : enable
 
 layout(binding = 0) buffer vA{uint aVals[];}; 
 
@@ -16,6 +17,16 @@ layout(binding = 3) uniform Infos{
     uint aBins, bBins;
     uint padding;
 };
+
+const uint reductionAdd = 0;
+const uint reductionSubgroupAdd = 1;
+const uint reductionSubgroupAllAdd = 2;
+const uint reductionMin = 3;
+const uint reductionSubgroupMin = 4;
+const uint reductionMax = 5;        // currently unused
+const uint reductionSubgroupMax = 6;// currently unused
+
+layout(constant_id = 0) const uint reductionType = 0;  // if 1 use subgroup partitioning including subgrouop reduction for counter incrementing
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
@@ -33,13 +44,52 @@ void main(){
     //binB = uint(float(gl_GlobalInvocationID.x * 2) / float(amtOfDataPoints) * float(bBins)) % bBins;
     uint finalBin = binA * bBins + binB;    // linear index
 
-#ifdef USE_PARTITION
-    // Find subgroup ( sg ) indices with same pixelID
-    uvec4 sg = subgroupPartitionNV(finalBin);
-    uint count = subgroupPartitionedAddNV(1, sg);
-    uint tId = subgroupPartitionedMinNV(gl_SubgroupInvocationID, sg);
-    if(tId == gl_SubgroupInvocationID)
-        atomicAdd(counts[finalBin], count);         // incrementing
-#endif
-    atomicAdd(counts[finalBin], 1);
+    switch(reductionType){
+    case reductionAdd:
+        atomicAdd(counts[finalBin], 1);
+        break;
+    case reductionSubgroupAdd:
+        // Find subgroup ( sg ) indices with same pixelID
+        uvec4 sg = subgroupPartitionNV(finalBin);
+        uint count = subgroupPartitionedAddNV(1, sg);
+        uint tId = subgroupPartitionedMinNV(gl_SubgroupInvocationID, sg);
+        if(tId == gl_SubgroupInvocationID)
+            atomicAdd(counts[finalBin], count);         // incrementing
+        break;
+    case reductionSubgroupAllAdd:
+        if(subgroupAllEqual(finalBin) && subgroupElect())
+            atomicAdd(counts[finalBin], gl_SubgroupSize);
+        else
+            atomicAdd(counts[finalBin], 1);
+        break;
+    case reductionMin:
+        uint val = 20;
+        if(val < counts[finalBin])
+            atomicMin(counts[finalBin], val);
+        break;
+    case reductionSubgroupMin:
+        val = 20;
+        sg = subgroupPartitionNV(finalBin);
+        uint m = subgroupPartitionedMinNV(val, sg);
+        if(val < counts[finalBin] && m == val)
+            atomicMin(counts[finalBin], val);
+
+        break;
+    case reductionMax:
+
+        break;
+    case reductionSubgroupMax:
+
+        break;
+    }
+    //if(useSubgroupPartition > 0){
+    //    // Find subgroup ( sg ) indices with same pixelID
+    //    uvec4 sg = subgroupPartitionNV(finalBin);
+    //    uint count = subgroupPartitionedAddNV(1, sg);
+    //    uint tId = subgroupPartitionedMinNV(gl_SubgroupInvocationID, sg);
+    //    if(tId == gl_SubgroupInvocationID)
+    //        atomicAdd(counts[finalBin], count);         // incrementing
+    //}
+    //else
+    //    atomicAdd(counts[finalBin], 1);
 }
