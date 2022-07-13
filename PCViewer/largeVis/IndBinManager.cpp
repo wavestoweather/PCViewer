@@ -454,7 +454,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
-                std::cout << "Counting pairwise subgroupReduction for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                std::cout << "Counting pairwise subgroup partitioning for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
                 t->_lineCounter->countLinesPairSubgroupPartitioned(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
