@@ -231,6 +231,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testFullDecomp = false;
     const bool testDecompressManager = false;
     const bool testRealWorldDataCompression = false;
+    const bool testRealWorldHuffmanDetail = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -606,5 +607,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
                 std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024 * 4) / bytesize) << std::endl;
             }
         }
+    }
+    if constexpr(testRealWorldHuffmanDetail){
+        
     }
 }
