@@ -61,10 +61,15 @@ LineCounter::LineCounter(const CreateInfo& info):
 
     VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countPipeInfo.pipelineLayout, &_countPipeInfo.pipeline, &specialization);
 
+    // pipeline for pairwase compute counting using subgroupallequal for less atomic adds
+    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
+    reductionType = ReductionSubgroupAllAdd;
+    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countSubgroupAllInfo.pipelineLayout, &_countSubgroupAllInfo.pipeline, &specialization);
+    
     // pipeline for pairwise counting using subgroup reduction via subgroupPartitionNV
     shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
     reductionType = ReductionSubgroupAdd;
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countSubgroupPipeInfo.pipelineLayout, &_countSubgroupPipeInfo.pipeline, &specialization);
+    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countPartitionedPipeInfo.pipelineLayout, &_countPartitionedPipeInfo.pipeline, &specialization);
 
     // pipeline for pairwise counting using subgroup reduction via subgroupPartitionNV
     shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
@@ -218,8 +223,8 @@ void LineCounter::countLinesPairSubgroup(size_t dataSize, VkBuffer aData, VkBuff
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
     if(clearCounts)
         vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
-    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countSubgroupPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
-    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countSubgroupPipeInfo.pipeline);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countSubgroupAllInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countSubgroupAllInfo.pipeline);
     vkCmdDispatch(commands, (dataSize + 255) / 256, 1, 1);
 
     PCUtil::Stopwatch stop(std::cout, "Gpu Pairwise Subgroup red");
@@ -229,6 +234,34 @@ void LineCounter::countLinesPairSubgroup(size_t dataSize, VkBuffer aData, VkBuff
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
+void LineCounter::countLinesPairSubgroupPartitioned(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts) const{
+    assert(_vkContext.queueMutex);  // debug check that the optional value is set
+	std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
+    VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _pairSet);
+
+    PairInfos infos{};
+    infos.amtofDataPoints = dataSize;
+    infos.aBins = aIndices;
+    infos.bBins = bIndices;
+    VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
+
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+    if(clearCounts)
+        vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPartitionedPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPartitionedPipeInfo.pipeline);
+    vkCmdDispatch(commands, (dataSize + 255) / 256, 1, 1);
+
+    PCUtil::Stopwatch stop(std::cout, "Gpu Pairwise Subgroup Partitioned");
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
+
+    vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+}
 
 void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, bool clearCounts) const{
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
@@ -306,7 +339,8 @@ void LineCounter::tests(const CreateInfo& info){
 LineCounter::~LineCounter() 
 {
     _countPipeInfo.vkDestroy(_vkContext);
-    _countSubgroupPipeInfo.vkDestroy(_vkContext);
+    _countSubgroupAllInfo.vkDestroy(_vkContext);
+    _countPartitionedPipeInfo.vkDestroy(_vkContext);
     _minPipeInfo.vkDestroy(_vkContext);
     _countAllPipeInfo.vkDestroy(_vkContext);
     if(_descSet)

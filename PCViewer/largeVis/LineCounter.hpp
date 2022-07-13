@@ -26,6 +26,7 @@ public:
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);  // test function
     void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false) const;
     void countLinesPairSubgroup(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false) const;
+    void countLinesPairSubgroupPartitioned(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false) const;
     void countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, bool clearCounts = false) const;
 
     const uint32_t maxAttributes{30};
@@ -48,7 +49,7 @@ private:
     VkDeviceMemory _pairUniformMem{};
 
     // vulkan resources that have to be destroyed
-    VkUtil::PipelineInfo _countPipeInfo{}, _countSubgroupPipeInfo{}, _minPipeInfo{}, _countAllPipeInfo{};
+    VkUtil::PipelineInfo _countPipeInfo{}, _countSubgroupAllInfo{}, _countPartitionedPipeInfo{}, _minPipeInfo{}, _countAllPipeInfo{};
 
     const std::string _computeShader = "shader/lineCount.comp.spv";
     const std::string _computeAllShader = "shader/lineCountAll.comp.spv";

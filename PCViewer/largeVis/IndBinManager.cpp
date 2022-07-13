@@ -430,7 +430,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             }
             break;
         }
-        case CountingMethod::GpuComputeSubgroupReductionPairwise:{
+        case CountingMethod::GpuComputeSubgroupPairwise:{
             bool firstIter = dataOffset == startOffset;
             for(int i: irange(activeIndices.size() -1)){
                 uint32_t a = activeIndices[i];
@@ -441,6 +441,21 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     continue;
                 std::cout << "Counting pairwise subgroupReduction for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
                 t->_lineCounter->countLinesPairSubgroup(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+            }
+            break;
+        }
+        case CountingMethod::GpuComputeSubgroupPartitionedPairwise:{
+            bool firstIter = dataOffset == startOffset;
+            for(int i: irange(activeIndices.size() -1)){
+                uint32_t a = activeIndices[i];
+                uint32_t b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
+                    continue;
+                std::cout << "Counting pairwise subgroupReduction for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
+                t->_lineCounter->countLinesPairSubgroupPartitioned(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;

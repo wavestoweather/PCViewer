@@ -45,13 +45,14 @@ public:
         GpuDrawPairwiseTiled,
         GpuDrawMultiViewport,
         GpuComputePairwise,
-        GpuComputeSubgroupReductionPairwise,
+        GpuComputeSubgroupPairwise,
+        GpuComputeSubgroupPartitionedPairwise,
         GpuComputeFull,
         HybridRoaringGpuDraw,
         Max
     };
 
-    const char* countingMethodNames[11] = {
+    const char* countingMethodNames[12] = {
         "CpuGeneric",
         "CpuMinGeneric",
         "CpuGenericSingleField",
@@ -60,7 +61,8 @@ public:
         "GpuDrawPairwiseTiled",
         "GpuDrawMultiViewport",
         "GpuComputePairwise",
-        "GpuComputeSubgroupReductionPairwise",
+        "GpuComputeSubgroupPairwise",
+        "GpuComputeSubgroupPartitionedPairwise",
         "GpuComputeFull",
         "HybridRoaringGpuDraw"
     };
