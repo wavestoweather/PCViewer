@@ -155,7 +155,7 @@ void IndBinManager::updateCounts(){
     }
 
     if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies
-        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << compressedData.columnData[0].cpuData.size() << " data points." << std::endl;
+        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << compressedData.dataSize << " data points." << std::endl;
         // making shure the counting images are created and have the right size
         for(int i: irange(activeIndices.size() - 1)){
             uint32_t a = activeIndices[i];
