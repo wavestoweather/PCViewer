@@ -150,10 +150,13 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, symbolsSize);
     vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 5);
 
-    VkUtil::commitCommandBuffer(context.queue, commands);
     std::vector<uint32_t> timestamps(info.queryCount);
+    {
+    PCUtil::Stopwatch cpuWatch(std::cout, "CpuDecompressionTime");
+    VkUtil::commitCommandBuffer(context.queue, commands);
     check_vk_result(vkGetQueryPoolResults(context.device, timings, 0, info.queryCount, timestamps.size() * sizeof(uint32_t), timestamps.data(), sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT));
     check_vk_result(vkQueueWaitIdle(context.queue));
+    }
     vkDestroyBuffer(context.device, symbolBuffer[0], nullptr);
     vkDestroyBuffer(context.device, symbolBuffer[1], nullptr);
     vkDestroyQueryPool(context.device, timings, nullptr);
@@ -227,7 +230,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testDWTInverseToHalf = false;
     const bool testFullDecomp = false;
     const bool testDecompressManager = false;
-    const bool testRealWorldDataCompression = false;
+    const bool testRealWorldDataCompression = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -583,6 +586,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
                 {
                     // encoding
                     std::ifstream f(file.data(), std::ios_base::binary);
+                    //assert(f);
                     std::vector<float> tpVals(1024 * 1024);
  
                     f.read(reinterpret_cast<char*>(tpVals.data()), tpVals.size() * sizeof(tpVals[0]));
