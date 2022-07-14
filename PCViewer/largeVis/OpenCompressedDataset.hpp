@@ -166,20 +166,20 @@ namespace util{
             for(auto& d: columnData){
                 //std::cout << "Creating vulkan buffer" << std::endl;
                 // creating the vulkan resources and uploading the data to them
-                VkUtil::createBuffer(context.device, d.cpuData.size() * sizeof(d.cpuData[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &d.gpuHalfData);
+                VkUtil::createBuffer(context.device, d.cpuData.size() * sizeof(d.cpuData[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &d.gpuHalfData);
                 VkMemoryRequirements memReq{};
                 vkGetBufferMemoryRequirements(context.device, d.gpuHalfData, &memReq);
                 VkMemoryAllocateInfo allocInfo{};
                 allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
                 allocInfo.allocationSize = memReq.size;
-                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(context.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(context.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
                 VkMemoryAllocateFlagsInfo allocFlags{};
                 allocFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
                 allocFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
                 allocInfo.pNext = &allocFlags;
-                vkAllocateMemory(context.device, &allocInfo, nullptr, &d.gpuMemory);
+                check_vk_result(vkAllocateMemory(context.device, &allocInfo, nullptr, &d.gpuMemory));
                 vkBindBufferMemory(context.device, d.gpuHalfData, d.gpuMemory, 0);
-                VkUtil::uploadData(context.device, d.gpuMemory, 0, d.cpuData.size() * sizeof(d.cpuData[0]), d.cpuData.data());
+                VkUtil::uploadDataIndirect(context, d.gpuHalfData, d.cpuData.size() * sizeof(d.cpuData[0]), d.cpuData.data());
             }
         }
 

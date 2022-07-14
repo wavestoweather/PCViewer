@@ -111,6 +111,8 @@ namespace VkUtil{
 	void createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, VkFilter filter, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler);
 	void uploadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize,const void* data);
 	void downloadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize,void* data);
+	void uploadDataIndirect(const Context& context, VkBuffer dstBuffer, uint32_t byteSize,const void* data);
+	void downloadDataIndirect(const Context& context, VkBuffer dstBuffer, uint32_t byteSize,void* data);
 	void uploadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout imageLayout, VkFormat imageFormat, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize);
 	void downloadImageData(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkImage image, VkFormat format, VkImageLayout imageLayout, uint32_t x, uint32_t y, uint32_t z, void* data, uint32_t byteSize);
 	void addImageToAllocInfo(VkDevice device, VkImage image, VkMemoryAllocateInfo& allocInfo);

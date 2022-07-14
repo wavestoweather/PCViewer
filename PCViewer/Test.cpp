@@ -68,7 +68,7 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, vkCompres
     uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
     // symbolBuffer holds enough memory to store all intermediate data as well: this means that we need 2 * float vector containing all data
     uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
@@ -95,7 +95,8 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, vkCompres
     VkUtil::commitCommandBuffer(context.queue, commands);
     auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
     std::vector<half> final(symbolsSize);
-    VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
+    //VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
+    VkUtil::downloadDataIndirect(context, symbolBuffer[1], symbolsSize * sizeof(final[0]), final.data());
     return std::vector<float>(final.begin(), final.end());
 }
 
@@ -119,7 +120,7 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
     // symbolBuffer holds enough memory to store all intermediate data as well: this means that we need 2 * float vector containing all data
     uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     VkCommandBuffer commands;
     VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
@@ -157,9 +158,6 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     check_vk_result(vkGetQueryPoolResults(context.device, timings, 0, info.queryCount, timestamps.size() * sizeof(uint32_t), timestamps.data(), sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT));
     check_vk_result(vkQueueWaitIdle(context.queue));
     }
-    vkDestroyBuffer(context.device, symbolBuffer[0], nullptr);
-    vkDestroyBuffer(context.device, symbolBuffer[1], nullptr);
-    vkDestroyQueryPool(context.device, timings, nullptr);
 
     std::vector<std::string_view> timingNames{"Huff Symbol", "Huff Zeros", "RLScan", "RLScatter", "Unquantize", "DWT Inverse", "DWT Copy", "DWT Inverse Full"};
     for(int i: irange(timingNames)){
@@ -167,7 +165,11 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     }
 
     std::vector<half> final(symbolsSize);
-    VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
+    //VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
+    VkUtil::downloadDataIndirect(context, symbolBuffer[1], symbolsSize * sizeof(final[0]), final.data());
+    vkDestroyBuffer(context.device, symbolBuffer[0], nullptr);
+    vkDestroyBuffer(context.device, symbolBuffer[1], nullptr);
+    vkDestroyQueryPool(context.device, timings, nullptr);
     vkFreeMemory(context.device, mem, nullptr);
     return std::vector<float>(final.begin(), final.end());
 }
@@ -240,7 +242,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testDecompressManager = false;
     const bool testRealWorldDataCompression = false;
     const bool testRealWorldHuffmanDetail = false;
-    const bool testUnquantizePerformance = true;
+    const bool testUnquantizePerformance = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -555,7 +557,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
             decompManager.executeBlockDecompression(colSize, gpu, {&cpuDatas[column]}, {&gpuDatas[column]}, quantStep);
             auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
             std::vector<half> final(colSize);
-            VkUtil::downloadData(context.device, decompManager.bufferMemory, decompManager.bufferOffsets[0], final.size() * sizeof(final[0]), final.data());
+            VkUtil::downloadDataIndirect(context, decompManager.buffers[0], final.size() * sizeof(final[0]), final.data());
 
             gpuDecodeManagerColumns[column] = std::vector<float>(final.begin(), final.end());
         }

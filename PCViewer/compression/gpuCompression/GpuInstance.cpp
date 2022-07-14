@@ -201,7 +201,7 @@ namespace vkCompress
         }
 
         // run length scanned indices creation
-        auto[buffers, offsets, mem] = VkUtil::createMultiBufferBound(context, {elemCountPerStreamMax * sizeof(uint32_t)}, {VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, 0);
+        auto[buffers, offsets, mem] = VkUtil::createMultiBufferBound(context, {elemCountPerStreamMax * sizeof(uint32_t)}, {VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         RunLength.scannedIndices = buffers[0];
         RunLength.scannedIndicesMemory = mem;
     }

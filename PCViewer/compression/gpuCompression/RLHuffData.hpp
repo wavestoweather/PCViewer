@@ -66,19 +66,28 @@ struct RLHuffDecodeDataGpu{
         wholeSize += zeroCountOffsetSize;
         wholeSize = cudaCompress::getAlignedSize(wholeSize, offsetAlignment);
 
-        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(gpuContext, {wholeSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(gpuContext, {wholeSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         buffer = buffers[0];
         memory = mem;   // offsets is not need, as only a single buffer is created
 
         //uploading all the data
-        VkUtil::uploadData(gpuContext.device, memory, symbolTableOffset, symbolTableSize, cpuData.symbolTable.m_pStorage);
-        if(symbolStreamSize)
-            VkUtil::uploadData(gpuContext.device, memory, symbolStreamOffset, symbolStreamSize, cpuData.codewordStream.data());
-        VkUtil::uploadData(gpuContext.device, memory, symbolOffsetsOffset, symbolOffsetsSize, cpuData.symbolOffsets.data());
-        VkUtil::uploadData(gpuContext.device, memory, zeroCountTableOffset, zeroCountTableSize, cpuData.zeroCountTable.m_pStorage);
-        if(zeroCountStreamSize)
-            VkUtil::uploadData(gpuContext.device, memory, zeroCountStreamOffset, zeroCountStreamSize, cpuData.zeroStream.data());
-        VkUtil::uploadData(gpuContext.device, memory, zeroCountOffsetsOffset, zeroCountOffsetSize, cpuData.zeroCountOffsets.data());
+        //VkUtil::uploadData(gpuContext.device, memory, symbolTableOffset, symbolTableSize, cpuData.symbolTable.m_pStorage);
+        //if(symbolStreamSize)
+        //    VkUtil::uploadData(gpuContext.device, memory, symbolStreamOffset, symbolStreamSize, cpuData.codewordStream.data());
+        //VkUtil::uploadData(gpuContext.device, memory, symbolOffsetsOffset, symbolOffsetsSize, cpuData.symbolOffsets.data());
+        //VkUtil::uploadData(gpuContext.device, memory, zeroCountTableOffset, zeroCountTableSize, cpuData.zeroCountTable.m_pStorage);
+        //if(zeroCountStreamSize)
+        //    VkUtil::uploadData(gpuContext.device, memory, zeroCountStreamOffset, zeroCountStreamSize, cpuData.zeroStream.data());
+        //VkUtil::uploadData(gpuContext.device, memory, zeroCountOffsetsOffset, zeroCountOffsetSize, cpuData.zeroCountOffsets.data());
+
+        std::vector<uint8_t> gpuData(wholeSize);
+        std::memcpy(gpuData.data() + symbolTableOffset, cpuData.symbolTable.m_pStorage, symbolTableSize);
+        std::memcpy(gpuData.data() + symbolStreamOffset, cpuData.codewordStream.data(), symbolStreamSize);
+        std::memcpy(gpuData.data() + symbolOffsetsOffset, cpuData.symbolOffsets.data(), symbolOffsetsSize);
+        std::memcpy(gpuData.data() + zeroCountTableOffset, cpuData.zeroCountTable.m_pStorage, zeroCountTableSize);
+        std::memcpy(gpuData.data() + zeroCountStreamOffset, cpuData.zeroStream.data(), zeroCountStreamSize);
+        std::memcpy(gpuData.data() + zeroCountOffsetsOffset, cpuData.zeroCountOffsets.data(), zeroCountOffsetSize);
+        VkUtil::uploadDataIndirect(gpuContext, buffer, wholeSize, gpuData.data());
     }
     RLHuffDecodeDataGpu(const RLHuffDecodeDataGpu&) = delete;   // no copy
     RLHuffDecodeDataGpu& operator=(const RLHuffDecodeDataGpu&) = delete; // no copy on assignment

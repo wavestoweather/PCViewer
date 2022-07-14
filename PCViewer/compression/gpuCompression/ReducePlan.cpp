@@ -20,7 +20,7 @@ ReducePlan::ReducePlan(VkUtil::Context& context, size_t  elemSizeBytes, size_t n
     vkGetBufferMemoryRequirements(m_context.device, m_blockSums, &memReq);
     allocInfo.allocationSize += memReq.size;
     allocInfo.memoryTypeIndex |= memReq.memoryTypeBits;
-    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(m_context.physicalDevice, allocInfo.memoryTypeIndex, 0);
+    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(m_context.physicalDevice, allocInfo.memoryTypeIndex, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     vkAllocateMemory(m_context.device, &allocInfo, nullptr, &m_blockSumsMem);
     vkBindBufferMemory(context.device, m_blockSums, m_blockSumsMem, 0);
 }

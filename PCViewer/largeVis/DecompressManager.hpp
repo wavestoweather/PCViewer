@@ -185,14 +185,14 @@ private:
         // creating needed resources
         // decompressed data resources
         uint32_t elementByteSize = decompressedType == DecompressedType::halfF ? 2: 0;
-        std::vector<VkBufferUsageFlags> usages(cpuData.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        std::vector<VkBufferUsageFlags> usages(cpuData.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
         std::vector<size_t> sizes(cpuData.size(), symbolCountPerBlock * elementByteSize);
         // caching resources
         usages.push_back(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         usages.push_back(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
         sizes.push_back(symbolCountPerBlock * sizeof(float));
         sizes.push_back(symbolCountPerBlock * sizeof(float));
-        auto [bs, os, m] = VkUtil::createMultiBufferBound(_vkContext, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        auto [bs, os, m] = VkUtil::createMultiBufferBound(_vkContext, sizes, usages, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         // copying the buffers to the corresponding variables
         buffers = std::vector<VkBuffer>(bs.begin(), bs.end() - 2); // all buffers except the last 2 are decompressed data
         bufferOffsets = std::vector<size_t>(os.begin(), os.end() - 2);

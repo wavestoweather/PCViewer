@@ -1512,4 +1512,38 @@ namespace VkUtil
 		check_vk_result(vkCreateFence(device, &info, nullptr, &fence));
 		return fence;
 	}
+
+	void uploadDataIndirect(const Context& context, VkBuffer dstBuffer, uint32_t byteSize,const void* data) 
+	{
+		auto [buffer, offset, mem] = createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_TRANSFER_SRC_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		uploadData(context.device, mem, 0, byteSize, data);
+		VkCommandBuffer commands;
+		createCommandBuffer(context.device, context.commandPool, &commands);
+		VkBufferCopy copy{};
+		copy.size = byteSize;
+		vkCmdCopyBuffer(commands, buffer[0], dstBuffer, 1, &copy);
+		commitCommandBuffer(context.queue, commands);
+		check_vk_result(vkQueueWaitIdle(context.queue));
+
+		vkDestroyBuffer(context.device, buffer[0], nullptr);
+		vkFreeMemory(context.device, mem, nullptr);
+		vkFreeCommandBuffers(context.device, context.commandPool, 1, &commands);
+	}
+
+	void downloadDataIndirect(const Context& context, VkBuffer dstBuffer, uint32_t byteSize,void* data) 
+	{
+		auto [buffer, offset, mem] = createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_TRANSFER_DST_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		VkCommandBuffer commands;
+		createCommandBuffer(context.device, context.commandPool, &commands);
+		VkBufferCopy copy{};
+		copy.size = byteSize;
+		vkCmdCopyBuffer(commands, dstBuffer, buffer[0], 1, &copy);
+		commitCommandBuffer(context.queue, commands);
+		check_vk_result(vkQueueWaitIdle(context.queue));
+		downloadData(context.device, mem, 0, byteSize, data);
+
+		vkDestroyBuffer(context.device, buffer[0], nullptr);
+		vkFreeMemory(context.device, mem, nullptr);
+		vkFreeCommandBuffers(context.device, context.commandPool, 1, &commands);
+	}
 }
