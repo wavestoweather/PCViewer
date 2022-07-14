@@ -7,16 +7,24 @@ layout(binding = 2) buffer Lines{
 	uint v[];
 }c[];
 
-layout(binding = 3) uniform Infos{
+layout(binding = 3) buffer Activations{uint activations[];};
+
+layout(binding = 4) uniform Infos{
     uint amtOfDataPoints;
     uint aBins, bBins;      // b bins is used to determine switch of attributes (needs to be done to account for not increasingly ordered attributes)
+    uint indexOffset;
     uint amtOfCounts;
+    uint pa,dd,ing;
 };
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
-    if(gl_GlobalInvocationID.x >= amtOfDataPoints)
+    const uint indexDiv32 = gl_GlobalInvocationID.x / 32 + indexOffset;  // index offset is already divided by 32
+    if(indexDiv32 * 32 >= amtOfDataPoints)
+        return;
+    uint act = activations[indexDiv32];
+    if((act & (1 << (gl_GlobalInvocationID.x & 31))) == 0)
         return;
     float aVal = unpackHalf2x16(a[0].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
     for(int i = 1; i <= amtOfCounts; ++i){

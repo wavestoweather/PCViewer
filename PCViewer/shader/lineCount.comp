@@ -12,10 +12,12 @@ layout(binding = 2) buffer Lines{
 	uint counts[];
 };
 
-layout(binding = 3) uniform Infos{
+layout(binding = 3) buffer Activations{uint activations[];};
+
+layout(binding = 4) uniform Infos{
     uint amtOfDataPoints;
     uint aBins, bBins;
-    uint padding;
+    uint indexOffset;
 };
 
 const uint reductionAdd = 0;
@@ -34,7 +36,11 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 // as each element of aVals and bVals contain two float16 we have to unpack
 void main(){
-    if(gl_GlobalInvocationID.x > amtOfDataPoints)
+    const uint indexDiv32 = gl_GlobalInvocationID.x / 32 + indexOffset;  // index offset is already divided by 32
+    if(indexDiv32 * 32 >= amtOfDataPoints)
+        return;
+    uint act = activations[indexDiv32];
+    if((act & (1 << (gl_GlobalInvocationID.x & 31))) == 0)
         return;
     float aVal = unpackHalf2x16(aVals[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
     float bVal = unpackHalf2x16(bVals[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];

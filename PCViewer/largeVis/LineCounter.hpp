@@ -32,7 +32,7 @@ public:
     const uint32_t maxAttributes{30};
 private:
     struct PairInfos{
-        uint32_t amtofDataPoints, aBins, bBins, padding;
+        uint32_t amtofDataPoints, aBins, bBins, indexOffset, allAmtOfPairs, pa,dd,ing;
     };
 
     LineCounter(const CreateInfo& info);

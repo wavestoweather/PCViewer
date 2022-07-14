@@ -42,7 +42,13 @@ LineCounter::LineCounter(const CreateInfo& info):
     b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bindings.push_back(b);
 
+    // activations
     b.binding = 3;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings.push_back(b);
+
+    // uniform infos
+    b.binding = 4;
     b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings.push_back(b);
 
@@ -92,9 +98,8 @@ LineCounter::LineCounter(const CreateInfo& info):
     shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
     
     bindings[0].descriptorCount = maxAttributes;
-    bindings[1].descriptorCount = maxAttributes;
     bindings[2].descriptorCount = maxAttributes - 1; // always one as the 2d bins are always between 2 attributes
-    bindings[1] = bindings[3]; bindings.pop_back();     // we can drop the second binding
+    bindings[1] = bindings[4]; bindings.pop_back();     // we can drop the second binding
 
     VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_countAllPipeInfo.descriptorSetLayout);
 
@@ -182,12 +187,14 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, indexActivation, VK_WHOLE_SIZE, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 4, _pairSet);
 
     PairInfos infos{};
     infos.amtofDataPoints = dataSize;
     infos.aBins = aIndices;
     infos.bBins = bIndices;
+    infos.indexOffset = 0; // TODO: set index activation
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
     VkCommandBuffer commands;
@@ -211,7 +218,8 @@ void LineCounter::countLinesPairSubgroup(size_t dataSize, VkBuffer aData, VkBuff
     VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, indexActivation, VK_WHOLE_SIZE, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 4, _pairSet);
 
     PairInfos infos{};
     infos.amtofDataPoints = dataSize;
@@ -240,7 +248,8 @@ void LineCounter::countLinesPairSubgroupPartitioned(size_t dataSize, VkBuffer aD
     VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, indexActivation, VK_WHOLE_SIZE, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 4, _pairSet);
 
     PairInfos infos{};
     infos.amtofDataPoints = dataSize;
@@ -271,7 +280,8 @@ void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& da
         VkUtil::updateArrayDescriptorSet(_vkContext.device, data[a], VK_WHOLE_SIZE, 0, a, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allSet);
     for(auto c: irange(counts))
         VkUtil::updateArrayDescriptorSet(_vkContext.device, counts[c], VK_WHOLE_SIZE, 2, c, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allSet);
-    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 3, _allSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, indexActivation, VK_WHOLE_SIZE, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allSet);
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, sizeof(PairInfos), 4, _allSet);
 
     PairInfos infos{};
     infos.amtofDataPoints = dataSize;
@@ -279,7 +289,7 @@ void LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& da
     for(int i: irange(activeIndices.size() - 1)){
         infos.bBins |= int(activeIndices[i] > activeIndices[i + 1]) << i;
     }
-    infos.padding = counts.size();
+    infos.allAmtOfPairs = counts.size();
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
     VkCommandBuffer commands;
