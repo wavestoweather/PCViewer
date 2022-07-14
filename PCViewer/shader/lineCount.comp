@@ -28,7 +28,7 @@ const uint reductionSubgroupMin = 4;
 const uint reductionMax = 5;        // currently unused
 const uint reductionSubgroupMax = 6;// currently unused
 
-layout(constant_id = 0) const uint reductionType = 0;  // if 1 use subgroup partitioning including subgrouop reduction for counter incrementing
+layout(constant_id = 0) const uint reductionType = reductionAdd;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 

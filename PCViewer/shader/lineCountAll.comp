@@ -1,5 +1,7 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_NV_shader_subgroup_partitioned: enable
+#extension GL_KHR_shader_subgroup_vote : enable
 
 layout(binding = 0) buffer vA{uint v[];}a[]; 
 
@@ -16,6 +18,16 @@ layout(binding = 4) uniform Infos{
     uint amtOfCounts;
     uint pa,dd,ing;
 };
+
+const uint reductionAdd = 0;
+const uint reductionSubgroupAdd = 1;
+const uint reductionSubgroupAllAdd = 2;
+const uint reductionMin = 3;
+const uint reductionSubgroupMin = 4;
+const uint reductionMax = 5;        // currently unused
+const uint reductionSubgroupMax = 6;// currently unused
+
+layout(constant_id = 0) const uint reductionType = reductionAdd;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
@@ -37,7 +49,48 @@ void main(){
             binB = tmp;
         }
         uint finalBin = binA * aBins + binB;    // linear index
-        atomicAdd(c[i - 1].v[finalBin], 1);
+
+        //atomicAdd(c[i - 1].v[finalBin], 1);
+
+        switch(reductionType){
+        case reductionAdd:
+            atomicAdd(c[i - 1].v[finalBin], 1);
+            break;
+        case reductionSubgroupAdd:
+            // Find subgroup ( sg ) indices with same pixelID
+            uvec4 sg = subgroupPartitionNV(finalBin);
+            uint count = subgroupPartitionedAddNV(1, sg);
+            uint tId = subgroupPartitionedMinNV(gl_SubgroupInvocationID, sg);
+            if(tId == gl_SubgroupInvocationID)
+                atomicAdd(c[i - 1].v[finalBin], count);         // incrementing
+            break;
+        case reductionSubgroupAllAdd:
+            if(subgroupAllEqual(finalBin) && subgroupElect())
+                atomicAdd(c[i - 1].v[finalBin], gl_SubgroupSize);
+            else
+                atomicAdd(c[i - 1].v[finalBin], 1);
+            break;
+        case reductionMin:
+            uint val = 20;
+            if(val < c[i - 1].v[finalBin])
+                atomicMin(c[i - 1].v[finalBin], val);
+            break;
+        case reductionSubgroupMin:
+            val = 20;
+            sg = subgroupPartitionNV(finalBin);
+            uint m = subgroupPartitionedMinNV(val, sg);
+            if(val < c[i - 1].v[finalBin] && m == val)
+                atomicMin(c[i - 1].v[finalBin], val);
+
+            break;
+        case reductionMax:
+
+            break;
+        case reductionSubgroupMax:
+
+            break;
+        }
+
         aVal = bVal;
     }
 }

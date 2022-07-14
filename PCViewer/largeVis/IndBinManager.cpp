@@ -210,7 +210,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
 
     std::vector<float> timings(2 + t->compressedData.attributes.size(), {});
     VkQueryPool timingPool{};
-    if(t->printDeocmpressionTimes && t->countingMethod == CountingMethod::GpuDrawPairwise)
+    if(t->printDeocmpressionTimes && (t->countingMethod == CountingMethod::GpuDrawPairwise || t->countingMethod == CountingMethod::GpuComputeFull || t->countingMethod == CountingMethod::GpuComputeFullPartitioned || t->countingMethod == CountingMethod::GpuComputeFullSubgroup))
         timingPool = t->_timingPool;
     uint32_t iteration{};
     for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize, ++iteration){
@@ -394,6 +394,8 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             }
             break;
         }
+        case CountingMethod::GpuComputeFullSubgroup:
+        case CountingMethod::GpuComputeFullPartitioned:
         case CountingMethod::GpuComputeFull:{
             std::vector<VkBuffer> datas(activeIndices.size()), 
                                     counts(activeIndices.size() - 1);
@@ -412,9 +414,17 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             datas.back() = t->compressedData.columnData[activeIndices.back()].gpuHalfData;
             if(!anyUpdate)
                 goto finish;
-            t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, true);
+            LineCounter::ReductionTypes reductionType{};
+            switch(t->countingMethod){
+                case CountingMethod::GpuComputeFullSubgroup: reductionType = LineCounter::ReductionSubgroupAllAdd; break;
+                case CountingMethod::GpuComputeFullPartitioned: reductionType = LineCounter::ReductionSubgroupAdd; break;
+                case CountingMethod::GpuComputeFull: reductionType = LineCounter::ReductionAdd; break;
+            }
+            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, true, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
             break;
         }
+        case CountingMethod::GpuComputeSubgroupPairwise:
+        case CountingMethod::GpuComputeSubgroupPartitionedPairwise:
         case CountingMethod::GpuComputePairwise:{
             bool firstIter = dataOffset == startOffset;
             for(int i: irange(activeIndices.size() -1)){
@@ -425,37 +435,13 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 std::cout << "Counting pairwise for attribute" << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPair(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
-                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
-            }
-            break;
-        }
-        case CountingMethod::GpuComputeSubgroupPairwise:{
-            bool firstIter = dataOffset == startOffset;
-            for(int i: irange(activeIndices.size() -1)){
-                uint32_t a = activeIndices[i];
-                uint32_t b = activeIndices[i + 1];
-                if(a > b)
-                    std::swap(a, b);
-                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    continue;
-                std::cout << "Counting pairwise subgroupReduction for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPairSubgroup(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
-                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
-            }
-            break;
-        }
-        case CountingMethod::GpuComputeSubgroupPartitionedPairwise:{
-            bool firstIter = dataOffset == startOffset;
-            for(int i: irange(activeIndices.size() -1)){
-                uint32_t a = activeIndices[i];
-                uint32_t b = activeIndices[i + 1];
-                if(a > b)
-                    std::swap(a, b);
-                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
-                    continue;
-                std::cout << "Counting pairwise subgroup partitioning for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
-                t->_lineCounter->countLinesPairSubgroupPartitioned(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter);
+                LineCounter::ReductionTypes reductionType{};
+                switch(t->countingMethod){
+                    case CountingMethod::GpuComputeSubgroupPairwise: reductionType = LineCounter::ReductionSubgroupAllAdd; break;
+                    case CountingMethod::GpuComputeSubgroupPartitionedPairwise: reductionType = LineCounter::ReductionSubgroupAdd; break;
+                    case CountingMethod::GpuComputePairwise: reductionType = LineCounter::ReductionAdd; break;
+                }
+                t->_lineCounter->countLinesPair(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter, reductionType);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -518,13 +504,19 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     // printing single pipeline timings
     if(timingPool){
         uint32_t timingIndex{};
+        const uint printWidth = 30;
         if(gpuDecompression)
-            std::cout << "[timing] Decompression   : " << timings[timingIndex++] << " ms" << std::endl;
-        std::cout << "[timing] Index activaiton: " << timings[timingIndex++] << " ms" << std::endl;
-        for(int i: irange(timingIndex, timings.size())){
-            if(i > t->compressedData.attributes.size())
-                break;
-            std::cout << "[timing] Counting " << std::setw(20) << t->compressedData.attributes[i - timingIndex].name << ": " << timings[i] << " ms" << std::endl;
+            std::cout << "[timing]" << std::setw(printWidth) << "Decompression:" << timings[timingIndex++] << " ms" << std::endl;
+        std::cout << "[timing]" << std::setw(printWidth) << "Index activaiton:" << timings[timingIndex++] << " ms" << std::endl;
+        if(t->countingMethod == CountingMethod::GpuDrawPairwise){
+            for(int i: irange(timingIndex, timings.size())){
+                if(i > t->compressedData.attributes.size())
+                    break;
+                std::cout << "[timing]" << std::setw(printWidth) << t->compressedData.attributes[i - timingIndex].name << ": " << timings[i] << " ms" << std::endl;
+            }
+        }
+        else{
+            std::cout << "[timing]" << std::setw(printWidth) << "Compute count all: " << timings[timingIndex++] << " ms" << std::endl;
         }
     }
 

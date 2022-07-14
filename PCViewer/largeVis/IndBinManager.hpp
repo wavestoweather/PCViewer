@@ -48,11 +48,13 @@ public:
         GpuComputeSubgroupPairwise,
         GpuComputeSubgroupPartitionedPairwise,
         GpuComputeFull,
+        GpuComputeFullSubgroup,
+        GpuComputeFullPartitioned,
         HybridRoaringGpuDraw,
         Max
     };
 
-    const char* countingMethodNames[12] = {
+    const char* countingMethodNames[14] = {
         "CpuGeneric",
         "CpuMinGeneric",
         "CpuGenericSingleField",
@@ -64,6 +66,8 @@ public:
         "GpuComputeSubgroupPairwise",
         "GpuComputeSubgroupPartitionedPairwise",
         "GpuComputeFull",
+        "GpuComputeFullSubgroup",
+        "GpuComputeFullPartitioned",
         "HybridRoaringGpuDraw"
     };
 
