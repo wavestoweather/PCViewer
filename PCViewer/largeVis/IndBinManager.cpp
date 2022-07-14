@@ -311,6 +311,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         assert(dataBuffer[0]); //chedck for valid gpu buffer
 
         // Note: vulkan resources for the count images were already provided by main thread
+        bool firstIter = dataOffset == startOffset;
         switch(t->countingMethod){
         case CountingMethod::CpuGeneric:{
             for(int i: irange(activeIndices.size() - 1)){
@@ -408,10 +409,10 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     std::swap(a, b);
                 if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId != t->_countBrushState.id)
                     anyUpdate = true;
-                datas[i] = t->compressedData.columnData[i].gpuHalfData;
+                datas[i] = dataBuffer[i];//t->compressedData.columnData[i].gpuHalfData;
                 counts[i] = t->_countResources[{a,b}].countBuffer;
             }
-            datas.back() = t->compressedData.columnData[activeIndices.back()].gpuHalfData;
+            datas.back() = dataBuffer[activeIndices.back()];//t->compressedData.columnData[activeIndices.back()].gpuHalfData;
             if(!anyUpdate)
                 goto finish;
             LineCounter::ReductionTypes reductionType{};
@@ -420,13 +421,12 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 case CountingMethod::GpuComputeFullPartitioned: reductionType = LineCounter::ReductionSubgroupAdd; break;
                 case CountingMethod::GpuComputeFull: reductionType = LineCounter::ReductionAdd; break;
             }
-            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, true, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
+            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, dataOffset, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
             break;
         }
         case CountingMethod::GpuComputeSubgroupPairwise:
         case CountingMethod::GpuComputeSubgroupPartitionedPairwise:
         case CountingMethod::GpuComputePairwise:{
-            bool firstIter = dataOffset == startOffset;
             for(int i: irange(activeIndices.size() -1)){
                 uint32_t a = activeIndices[i];
                 uint32_t b = activeIndices[i + 1];
@@ -447,7 +447,6 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             break;
         }
         case CountingMethod::GpuDrawPairwise:{
-            bool firstIter = dataOffset == startOffset;
             for(int i: irange(activeIndices.size() -1)){
                 uint32_t a = activeIndices[i];
                 uint32_t b = activeIndices[i + 1];
@@ -462,7 +461,6 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             break;
         }
         case CountingMethod::GpuDrawPairwiseTiled:{
-            bool firstIter = dataOffset == startOffset;
             for(int i: irange(activeIndices.size() -1)){
                 uint32_t a = activeIndices[i];
                 uint32_t b = activeIndices[i + 1];

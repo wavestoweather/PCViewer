@@ -37,7 +37,7 @@ public:
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);  // test function
     void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd) const;
-    VkEvent countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkEvent prevPipeEvent = {}, TimingInfo timingInfo = {});
+    VkEvent countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset = 0, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkEvent prevPipeEvent = {}, TimingInfo timingInfo = {});
 
     const uint32_t maxAttributes{30};
 private:

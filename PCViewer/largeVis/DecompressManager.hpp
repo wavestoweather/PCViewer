@@ -185,7 +185,7 @@ private:
         // creating needed resources
         // decompressed data resources
         uint32_t elementByteSize = decompressedType == DecompressedType::halfF ? 2: 0;
-        std::vector<VkBufferUsageFlags> usages(cpuData.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        std::vector<VkBufferUsageFlags> usages(cpuData.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
         std::vector<size_t> sizes(cpuData.size(), symbolCountPerBlock * elementByteSize);
         // caching resources
         usages.push_back(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);

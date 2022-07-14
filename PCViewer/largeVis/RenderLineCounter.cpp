@@ -469,7 +469,7 @@ void RenderLineCounter::createOrUpdateFramebuffer(uint32_t newFramebufferWidth){
     VkUtil::createImage(_vkContext.device, _aBins, _bBins, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &_countImage);
     VkMemoryRequirements memReq{};
     vkGetImageMemoryRequirements(_vkContext.device, _countImage, &memReq);
-    VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, memReq.size, VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, 0)};
+    VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, memReq.size, VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)};
     _imageMemSize = memReq.size;
     vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_countImageMem);
     vkBindImageMemory(_vkContext.device, _countImage, _countImageMem, 0);

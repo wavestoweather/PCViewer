@@ -112,7 +112,7 @@ public:
     std::vector<uint8_t> indexActivation{};         // bitset for all indices to safe index activation
     std::vector<half> priorityDistances;            // vector containing the priority distances for each data point
     uint32_t columnBins{};
-    CountingMethod countingMethod{CountingMethod::GpuDrawPairwise};    // variable to set the different counting techniques
+    CountingMethod countingMethod{CountingMethod::GpuComputeFullPartitioned};    // variable to set the different counting techniques
     bool printDeocmpressionTimes{true};
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...

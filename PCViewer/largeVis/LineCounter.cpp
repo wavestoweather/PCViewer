@@ -232,7 +232,7 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
-VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, bool clearCounts, ReductionTypes reductionType, VkEvent prevPipeEvent, TimingInfo timingInfo) {
+VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, ReductionTypes reductionType, VkEvent prevPipeEvent, TimingInfo timingInfo) {
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
 	assert(vkGetEventStatus(_vkContext.device, _allEvent) == VK_EVENT_SET); //safety check to make shure that the previous counting was done
     assert(data.size() < maxAttributes);
@@ -252,6 +252,7 @@ VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>&
     for(int i: irange(activeIndices.size() - 1)){
         infos.bBins |= int(activeIndices[i] > activeIndices[i + 1]) << i;
     }
+    infos.indexOffset = indexOffset / 32;   // convert to bitOffset to indexOffset (to be able to reduce from size_t to uin32_t with less danger of overflowing)
     infos.allAmtOfPairs = counts.size();
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
@@ -289,7 +290,7 @@ VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>&
     vkCmdDispatch(_allCommands, (dataSize + 255) / 256, 1, 1);
     if(timingInfo.queryPool)
         vkCmdWriteTimestamp(_allCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex);
-    vkCmdSetEvent(_allCommands, _allEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    vkCmdSetEvent(_allCommands, _allEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     VkUtil::commitCommandBuffer(_vkContext.queue, _allCommands);
 
