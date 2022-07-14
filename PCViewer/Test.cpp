@@ -629,12 +629,12 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         const uint32_t size = 100000000;
         vkCompress::GpuInstance gpu(context, 1, size, 0, 0);
         VkBufferUsageFlags flags = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(context, {size * sizeof(float), size * sizeof(uint16_t)}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(context, {size * sizeof(float), size * sizeof(uint16_t)}, {flags, flags}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         std::vector<uint16_t> symbols(size);
-        srand(10);
-        for(auto& i: symbols)
-            i = rand() & 0xff;
-        VkUtil::uploadData(context.device, mem, offsets[1], size * sizeof(uint16_t), symbols.data());
+        //srand(10);
+        //for(auto& i: symbols)
+        //    i = rand() & 0xff;
+        //VkUtil::uploadData(context.device, mem, offsets[1], size * sizeof(uint16_t), symbols.data());
         
         VkDeviceAddress symbolAddress = VkUtil::getBufferAddress(context.device, buffers[1]);
         VkDeviceAddress floatAddress = VkUtil::getBufferAddress(context.device, buffers[0]);
