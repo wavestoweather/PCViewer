@@ -3450,16 +3450,22 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		vkGetPhysicalDeviceQueueFamilyProperties(g_PhysicalDevice, &count, NULL);
 		VkQueueFamilyProperties* queues = (VkQueueFamilyProperties*)malloc(sizeof(VkQueueFamilyProperties) * count);
 		vkGetPhysicalDeviceQueueFamilyProperties(g_PhysicalDevice, &count, queues);
+		std::vector<uint32_t> graphicsQueues, computeQueues, transferQueues;
 		for (uint32_t i = 0; i < count; i++)
 			if (queues[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			{
 				g_QueueFamily = i;
-				break;
+				graphicsQueues.push_back(i);
 			}
 		for (uint32_t i = 0; i < count; ++i) {
 			if (queues[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
 				c_QueueFamily = i;
-				break;
+				computeQueues.push_back(i);
+			}
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			if (queues[i].queueFlags & VK_QUEUE_TRANSFER_BIT) {
+				transferQueues.push_back(i);
 			}
 		}
 		free(queues);
@@ -3467,6 +3473,18 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		IM_ASSERT(c_QueueFamily != (uint32_t)-1);
 #ifdef _DEBUG
 		std::cout << "graphics queue: " << g_QueueFamily << std::endl << "cpompute queue: " << c_QueueFamily << std::endl;
+		auto printVec = [](const std::vector<uint32_t>& v){
+			std::cout << "[";
+			for(auto e: v)
+				std::cout << " " << e << ",";
+			std::cout << "]" << std::endl;
+		};
+		std::cout << "Graphics queues" << std::endl;
+		printVec(graphicsQueues);
+		std::cout << "Compute queues" << std::endl;
+		printVec(computeQueues);
+		std::cout << "Transfer queues" << std::endl;
+		printVec(transferQueues);
 #endif
 	}
 

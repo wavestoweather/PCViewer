@@ -724,7 +724,7 @@ bool decodeRLHuff(GpuInstance* pInstance, VkBuffer bitStreamBuffer, BitStream& c
 // decoding with proper input data structures
 // decodes only 16 bit symbols
 // this is the same function as the orignial decodeRLHuff with easier setup, and pre setup of the data structures
-bool decodeRLHuffHalf(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataCpu, const RLHuffDecodeDataGpu& decodeDataGpu, VkDeviceAddress outSymbols, VkCommandBuffer commands){
+bool decodeRLHuffHalf(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeDataCpu, const RLHuffDecodeDataGpu& decodeDataGpu, VkDeviceAddress outSymbols, VkCommandBuffer commands, TimingQuery timingInfo){
     const auto& context = pInstance->vkContext;
     auto &resources = pInstance->Encode.GetDecodeResources();
     pInstance->Encode.Decode[0].pSymbolStreamInfos[0].symbolCount = decodeDataCpu.symbolCount;
@@ -750,6 +750,10 @@ bool decodeRLHuffHalf(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeD
     // uploading the stream info and calling the decoding function for the rl encoded stream
     // note: the descriptor set resources.streamInfoSet has to be created and the streamInfos buffer has to be bound
     VkUtil::uploadData(context.device, resources.memory, resources.streamInfosOffset, sizeof(HuffmanGPUStreamInfo), &streamInfo);
+    if(timingInfo.queryPool){
+        vkCmdResetQueryPool(commands, timingInfo.queryPool, timingInfo.startIndex, timingInfo.endIndex - timingInfo.startIndex);
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex);
+    }
     huffmanDecode(pInstance, commands, resources.streamInfoSet, 1u, pInstance->m_codingBlockSize);
 
     // decompressing the zero counts -------------------------------------------------
@@ -765,11 +769,13 @@ bool decodeRLHuffHalf(GpuInstance* pInstance, const RLHuffDecodeDataCpu& decodeD
     zeroStreamInfo.dpSymbolStream = zeroCountsAddress;
 
     VkUtil::uploadData(context.device, resources.memory, resources.zeroInfosOffset, sizeof(zeroStreamInfo), &zeroStreamInfo);
+    if(timingInfo.queryPool)
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex + 1);
     huffmanDecode(pInstance, commands, resources.zeroStreamInfoSet, 1u, pInstance->m_codingBlockSize);
 
     // decompressing the run length encoding ------------------------------------------
     vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
-    runLengthDecodeHalf(pInstance, commands, compactSymbolsAddress, zeroCountsAddress, {static_cast<uint>(decodeDataCpu.symbolCount)}, symbolCountPadded, outSymbols, {static_cast<uint>(decodeDataCpu.symbolCount)}, 1);
+    runLengthDecodeHalf(pInstance, commands, compactSymbolsAddress, zeroCountsAddress, {static_cast<uint>(decodeDataCpu.symbolCount)}, symbolCountPadded, outSymbols, {static_cast<uint>(decodeDataCpu.symbolCount)}, 1, {timingInfo.queryPool, timingInfo.startIndex + 2, timingInfo.endIndex});
     
     return true;
 }

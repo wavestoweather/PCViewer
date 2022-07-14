@@ -71,13 +71,15 @@ bool runLengthShutdown(GpuInstance* pInstance)
     return true;
 }
 
-bool runLengthDecodeHalf(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress compactSymbolAddress, VkDeviceAddress zeroCountsAddress, const std::vector<uint32_t>& symbolCountsCompacted, uint stride, VkDeviceAddress outSymbolStreamAddress,const std::vector<uint32_t>& symbolCountsPerStream, uint streamCount){
+bool runLengthDecodeHalf(GpuInstance* pInstance, VkCommandBuffer commands, VkDeviceAddress compactSymbolAddress, VkDeviceAddress zeroCountsAddress, const std::vector<uint32_t>& symbolCountsCompacted, uint stride, VkDeviceAddress outSymbolStreamAddress,const std::vector<uint32_t>& symbolCountsPerStream, uint streamCount, TimingQuery timingInfo){
     assert(streamCount <= pInstance->m_streamCountMax);
     assert(streamCount == 1);
 
     uint32_t symbolCountMax = pInstance->m_elemCountPerStreamMax;
 
     // zero count inclusive scan
+    if(timingInfo.queryPool)
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex);
     VkDeviceAddress scannedIndicesAddress = VkUtil::getBufferAddress(pInstance->vkContext.device, pInstance->RunLength.scannedIndices);
     for(int i: irange(streamCount)){
         if(symbolCountsCompacted[i] == 0)
@@ -86,6 +88,8 @@ bool runLengthDecodeHalf(GpuInstance* pInstance, VkCommandBuffer commands, VkDev
         assert(symbolCountsCompacted[i] < symbolCountMax);
         scanArray<false>(pInstance, commands, scannedIndicesAddress, zeroCountsAddress, symbolCountsCompacted[i], pInstance->m_pScanPlan);
     }
+    if(timingInfo.queryPool)
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex + 1);
 
     uint symbolCountCompactMax = 0;
     for(int i: irange(streamCount))
@@ -115,6 +119,8 @@ bool runLengthDecodeHalf(GpuInstance* pInstance, VkCommandBuffer commands, VkDev
         vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pInstance->RunLength.scatterInfo.pipeline);
         vkCmdDispatch(commands, dispatchX, 1, 1);
     }
+    if(timingInfo.queryPool)
+        vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex + 2);
     return true;
 }
 

@@ -3,6 +3,7 @@
 
 
 #include "global.h"
+#include <vulkan/vulkan.h>
 
 
 namespace cudaCompress {
@@ -37,6 +38,13 @@ const uint ZERO_COUNT_MAX = 255;
 namespace vkCompress{
 typedef ushort Symbol16;
 typedef uint   Symbol32;
+
+
+struct TimingQuery{
+    VkQueryPool queryPool{};
+    uint32_t startIndex{}, endIndex{};
+};
+
 }
 
 

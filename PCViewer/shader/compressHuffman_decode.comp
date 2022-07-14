@@ -12,7 +12,7 @@
 layout(constant_id = 0) const uint longSymbols = 0; //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
 
 layout(buffer_reference, scalar) buffer Symbols {u16vec2 i[];};  // raw data
-layout(buffer_reference, scalar) buffer Codewords {uint i[];};
+layout(buffer_reference, scalar) readonly buffer Codewords {uint i[];};
 layout(buffer_reference, scalar) buffer Offsets {uint i[];};
 layout(buffer_reference, scalar) buffer EncodeCodewords {uint i[];};
 layout(buffer_reference, scalar) buffer EncodeCodewordLengths{uint i[];};
@@ -55,15 +55,15 @@ GPUBitstream bitstream_init(uint64_t bufferAddress, uint bitoffset){
     return ret;
 }
 
-uint bitstream_peekBits(const GPUBitstream bitstream, uint count){
+uint bitstream_peekBits(inout GPUBitstream bitstream, uint count){
     return uint((bitstream._cache >> (64u - count - bitstream._bitPos)) & ((1u << count) - 1u));
 }
 
-uint bitstream_peekByte(const GPUBitstream bitstream){
+uint bitstream_peekByte(inout GPUBitstream bitstream){
     return uint(bitstream._cache >> (56u - bitstream._bitPos)) & 0xFFu;
 }
 
-uint bitstream_peekUInt(const GPUBitstream bitstream)
+uint bitstream_peekUInt(inout GPUBitstream bitstream)
 {
     return uint(bitstream._cache >> (32u - bitstream._bitPos));
 }

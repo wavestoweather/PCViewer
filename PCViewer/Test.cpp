@@ -62,11 +62,7 @@ static void decompressVector(std::vector<uint32_t> src, float quantizationStep, 
 	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
 }
 
-static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize){
-    vkCompress::GpuInstance gpu(context, 1, symbolsSize, 0, 0);
-    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, src, gpu.m_codingBlockSize);
-    RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
-
+static std::vector<float> vkDecompress(const VkUtil::Context& context, vkCompress::GpuInstance& gpu, const RLHuffDecodeDataCpu& cpuData, const RLHuffDecodeDataGpu& gpuData, float quantizationStep, uint32_t symbolsSize){
     // creating buffer for the symbol table
     uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
     uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
@@ -103,15 +99,19 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vect
     return std::vector<float>(final.begin(), final.end());
 }
 
-static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize){
+static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize){
     vkCompress::GpuInstance gpu(context, 1, symbolsSize, 0, 0);
     auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, src, gpu.m_codingBlockSize);
     RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
 
+    return vkDecompress(context, gpu, cpuData, gpuData, quantizationStep, symbolsSize);    
+}
+
+static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, vkCompress::GpuInstance& gpu, const RLHuffDecodeDataCpu& cpuData, const RLHuffDecodeDataGpu& gpuData, float quantizationStep, uint32_t symbolsSize){
     VkQueryPool timings{};
     VkQueryPoolCreateInfo info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    info.queryCount = 6;
+    info.queryCount = 9;
     vkCreateQueryPool(context.device, &info, nullptr, &timings);
 
     // creating buffer for the symbol table
@@ -128,17 +128,17 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     VkDeviceAddress dstA = VkUtil::getBufferAddress(context.device, symbolBuffer[1]); // is the padded offset * 2 as the offset is for halves
 
     vkCmdResetQueryPool(commands, timings, 0, info.queryCount);
-    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 0);
-    vkCompress::decodeRLHuffHalf(&gpu, cpuData, gpuData, srcA, commands);
-    //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
-    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 1);
+    //vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 0);
+    vkCompress::decodeRLHuffHalf(&gpu, cpuData, gpuData, srcA, commands, {timings, 0, 5});
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    //vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 1);
 
     vkCompress::unquantizeFromSymbols(&gpu, commands, dstA, srcA, symbolsSize, quantizationStep);
-    //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
-    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 2);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 5);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
 
     vkCompress::dwtFloatInverse(&gpu, commands, srcA, dstA, symbolsSize / 2, symbolsSize / 2, symbolsSize / 2);
-    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 3);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 6);
     //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, {}, 0, {}, 0, {});
     VkBufferCopy cpy{};
     cpy.dstOffset = 0;
@@ -146,13 +146,13 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     cpy.size = symbolsSize / 2 * sizeof(float);
     vkCmdCopyBuffer(commands, symbolBuffer[1], symbolBuffer[0], 1, &cpy);
     //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
-    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 4);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 7);
     vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, symbolsSize);
-    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 5);
+    vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 8);
 
     std::vector<uint32_t> timestamps(info.queryCount);
     {
-    PCUtil::Stopwatch cpuWatch(std::cout, "CpuDecompressionTime");
+    PCUtil::Stopwatch cpuWatch(std::cout, "GpuDecompressionTime");
     VkUtil::commitCommandBuffer(context.queue, commands);
     check_vk_result(vkGetQueryPoolResults(context.device, timings, 0, info.queryCount, timestamps.size() * sizeof(uint32_t), timestamps.data(), sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT));
     check_vk_result(vkQueueWaitIdle(context.queue));
@@ -161,7 +161,7 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     vkDestroyBuffer(context.device, symbolBuffer[1], nullptr);
     vkDestroyQueryPool(context.device, timings, nullptr);
 
-    std::vector<std::string_view> timingNames{"DecodeRLHuff", "Unquantize", "DWT Inverse", "DWT Copy", "DWT Inverse Full"};
+    std::vector<std::string_view> timingNames{"Huff Symbol", "Huff Zeros", "RLScan", "RLScatter", "Unquantize", "DWT Inverse", "DWT Copy", "DWT Inverse Full"};
     for(int i: irange(timingNames)){
         std::cout << std::left << "[timing] " << std::setw(17) << timingNames[i] << " : " << (timestamps[i + 1] - timestamps[i]) * 1e-6 << " ms" << std::endl;
     }
@@ -170,6 +170,14 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
     vkFreeMemory(context.device, mem, nullptr);
     return std::vector<float>(final.begin(), final.end());
+}
+
+static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize){
+    vkCompress::GpuInstance gpu(context, 1, symbolsSize, 0, 0);
+    auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, src, gpu.m_codingBlockSize);
+    RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
+
+    return vkDecompressBenchmark(context, gpu, cpuData, gpuData, quantizationStep, symbolsSize);
 }
 
 void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
@@ -231,7 +239,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testFullDecomp = false;
     const bool testDecompressManager = false;
     const bool testRealWorldDataCompression = false;
-    const bool testRealWorldHuffmanDetail = true;
+    const bool testRealWorldHuffmanDetail = false;
+    const bool testUnquantizePerformance = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -609,6 +618,35 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         }
     }
     if constexpr(testRealWorldHuffmanDetail){
+
+        auto ds = util::openCompressedDataset(context, "/run/media/lachei/TOSHIBA EXT/PCViewer_LargeVis/takumiReduced300mio/comp_only/100mio");
+        for(int comp: irange(ds.compressedData.columnData)){
+            PCUtil::Stopwatch decode(std::cout, "Decode " + std::to_string(comp));
+            std::vector<float> symb = vkDecompressBenchmark(context, *ds.compressedData.gpuInstance, ds.compressedData.columnData[comp].compressedRLHuffCpu[0], ds.compressedData.columnData[comp].compressedRLHuffGpu[0], ds.compressedData.quantizationStep, ds.compressedData.columnData[comp].compressedSymbolSize[0]);
+        }
+    }
+    if constexpr(testUnquantizePerformance){
+        const uint32_t size = 100000000;
+        vkCompress::GpuInstance gpu(context, 1, size, 0, 0);
+        VkBufferUsageFlags flags = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        auto [buffers, offsets, mem] = VkUtil::createMultiBufferBound(context, {size * sizeof(float), size * sizeof(uint16_t)}, {flags, flags}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        std::vector<uint16_t> symbols(size);
+        srand(10);
+        for(auto& i: symbols)
+            i = rand() & 0xff;
+        VkUtil::uploadData(context.device, mem, offsets[1], size * sizeof(uint16_t), symbols.data());
         
+        VkDeviceAddress symbolAddress = VkUtil::getBufferAddress(context.device, buffers[1]);
+        VkDeviceAddress floatAddress = VkUtil::getBufferAddress(context.device, buffers[0]);
+
+        VkCommandBuffer commands;
+        VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+        vkCompress::unquantizeFromSymbols(&gpu, commands, floatAddress, symbolAddress, size, .2f);
+
+        {
+            PCUtil::Stopwatch timer(std::cout, "Unquant Timer");
+            VkUtil::commitCommandBuffer(context.queue, commands);
+            check_vk_result(vkQueueWaitIdle(context.queue));
+        }
     }
 }
