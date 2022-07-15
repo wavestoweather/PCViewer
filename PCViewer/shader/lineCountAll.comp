@@ -32,9 +32,9 @@ layout(constant_id = 0) const uint reductionType = reductionAdd;
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
-    const uint indexDiv32 = gl_GlobalInvocationID.x / 32 + indexOffset;  // index offset is already divided by 32
-    if(indexDiv32 * 32 >= amtOfDataPoints)
+    if(gl_GlobalInvocationID.x >= amtOfDataPoints)
         return;
+    const uint indexDiv32 = gl_GlobalInvocationID.x / 32 + indexOffset;  // index offset is already divided by 32
     uint act = activations[indexDiv32];
     if((act & (1 << (gl_GlobalInvocationID.x & 31))) == 0)
         return;
