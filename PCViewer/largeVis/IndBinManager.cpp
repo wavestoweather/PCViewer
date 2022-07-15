@@ -196,7 +196,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     long blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: t->compressedData.dataSize;
     if(!t->_gpuDecompressForward)
         blockSize = -blockSize;
-    long startOffset = t->_gpuDecompressForward ? 0: t->compressedData.columnData[0].compressedRLHuffGpu.size() - 1 * t->compressedData.compressedBlockSize;
+    long startOffset = t->_gpuDecompressForward ? 0: (t->compressedData.columnData[0].compressedRLHuffGpu.size() - 1) * t->compressedData.compressedBlockSize;
     VkEvent curEvent{};
     std::set<uint32_t> neededIndices(activeIndices.begin(), activeIndices.end()); // getting all needed indices, not just the visible once, but also all brushed ones
     for(auto& b: t->_countBrushState.rangeBrushes){
@@ -413,7 +413,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 counts[i] = t->_countResources[{a,b}].countBuffer;
             }
             datas.back() = dataBuffer[activeIndices.back()];//t->compressedData.columnData[activeIndices.back()].gpuHalfData;
-            if(!anyUpdate)
+            if(!anyUpdate && !gpuDecompression)
                 goto finish;
             LineCounter::ReductionTypes reductionType{};
             switch(t->countingMethod){
@@ -517,6 +517,9 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             std::cout << "[timing]" << std::setw(printWidth) << "Compute count all: " << timings[timingIndex++] << " ms" << std::endl;
         }
     }
+
+    if(gpuDecompression)
+        t->_gpuDecompressForward ^= true;   // switch forward and backward for ping pong
 
     finish:
     std::cout.flush();
