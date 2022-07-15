@@ -216,7 +216,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize, ++iteration){
         uint32_t timingIndex{};
         assert((dataOffset & 31) == 0); //check that dataOffset ist 32 aligned (needed for index activation)
-        uint32_t curDataBlockSize = std::min<uint32_t>(t->compressedData.dataSize - dataOffset, t->compressedData.compressedBlockSize);
+        uint32_t curDataBlockSize = gpuDecompression ? std::min<uint32_t>(t->compressedData.dataSize - dataOffset, t->compressedData.compressedBlockSize): t->compressedData.dataSize;
         std::cout << "Current data offset: " << dataOffset << ", with block size: " << curDataBlockSize <<  std::endl; std::cout.flush();
         //if(curDataBlockSize != blockSize)
         //   break;
