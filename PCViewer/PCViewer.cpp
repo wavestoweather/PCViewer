@@ -516,6 +516,8 @@ static uint32_t					windowWidth = 1920;
 static uint32_t					windowHeight = 1080;
 static uint32_t					g_PcPlotWidth = 2060;
 static uint32_t					g_PcPlotHeight = 450;
+static VkSampleCountFlagBits	g_pcPlotSampleCount = VK_SAMPLE_COUNT_1_BIT;
+static VkFormat					g_pcPlotFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_geomShaderPath[] = "shader/geom.spv";
 static char						g_vertShaderPath[] = "shader/vert.spv";
@@ -921,7 +923,7 @@ static void createPcPlotHistoPipeline() {
 	VkPipelineMultisampleStateCreateInfo multisampling = {};
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.rasterizationSamples = g_pcPlotSampleCount;
 	multisampling.minSampleShading = 1.0f;
 	multisampling.pSampleMask = nullptr;
 	multisampling.alphaToCoverageEnable = VK_FALSE;
@@ -1107,7 +1109,10 @@ static void createPcPlotHistoPipeline() {
 	descriptorSetLayouts.clear();
 	descriptorSetLayouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 
-	VkUtil::createRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR, &g_PcPlotDensityRenderPass);
+	auto passType = VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR;
+	if(g_pcPlotFormat == VK_FORMAT_R16G16B16A16_UNORM)
+		passType = VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR;
+	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotDensityRenderPass);
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotDensityRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
 }
@@ -1142,8 +1147,25 @@ static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags proper
 #endif
 }
 
-static void createPcPlotImageView() {
+static void cleanupPcPlotImageView();
+
+static void reCreatePcPlotImageView() {
 	VkResult err;
+
+	static uint32_t lastWidth{}, lastHeight{};
+	static VkFormat lastFormat{VK_FORMAT_UNDEFINED};
+	static VkSampleCountFlagBits lastSampleBits{VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM};
+	if(lastWidth == g_PcPlotWidth && lastHeight == g_PcPlotHeight && lastFormat == g_pcPlotFormat && lastSampleBits == g_pcPlotSampleCount)
+		return;		// if nothing change about the window discard
+
+	// remembering the widht, height, format etc for next call
+	lastWidth = g_PcPlotWidth;
+	lastHeight = g_PcPlotHeight;
+	lastFormat = g_pcPlotFormat;
+	lastSampleBits = g_pcPlotSampleCount;
+
+	if(g_PcPlot)
+		cleanupPcPlotImageView();
 
 	//creating the VkImage for the PcPlot
 	VkImageCreateInfo imageInfo = {};
@@ -1154,12 +1176,12 @@ static void createPcPlotImageView() {
 	imageInfo.extent.depth = 1;
 	imageInfo.mipLevels = 1;
 	imageInfo.arrayLayers = 1;
-	imageInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	imageInfo.format = g_pcPlotFormat;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	imageInfo.samples = g_pcPlotSampleCount;
 
 	err = vkCreateImage(g_Device, &imageInfo, nullptr, &g_PcPlot);
 	check_vk_result(err);
@@ -1173,7 +1195,7 @@ static void createPcPlotImageView() {
 	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
 
 	//creating the Image and imageview for the density pipeline
-	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityImageCopy);
+	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, g_pcPlotFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityImageCopy);
 
 	uint32_t imageOffset = allocInfo.allocationSize;
 	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityImageCopy, &memRequirements);
@@ -1192,7 +1214,25 @@ static void createPcPlotImageView() {
 	vkBindImageMemory(g_Device, g_PcPlotDensityImageCopy, g_PcPlotMem, imageOffset);
 	vkBindImageMemory(g_Device, g_PcPlotDensityIronMap, g_PcPlotMem, g_PcPlotDensityIronMapOffset);
 
-	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_PcPlotDensityImageView);
+	VkImageViewCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	createInfo.image = g_PcPlot;
+	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	createInfo.format = g_pcPlotFormat;
+	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	createInfo.subresourceRange.baseMipLevel = 0;
+	createInfo.subresourceRange.levelCount = 1;
+	createInfo.subresourceRange.baseArrayLayer = 0;
+	createInfo.subresourceRange.layerCount = 1;
+
+	err = vkCreateImageView(g_Device, &createInfo, nullptr, &g_PcPlotView);
+	check_vk_result(err);
+
+	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, g_pcPlotFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_PcPlotDensityImageView);
 	VkUtil::createImageView(g_Device, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_PcPLotDensityIronMapView);
 
 	//creating the smapler for the density image
@@ -1242,25 +1282,7 @@ static void createPcPlotImageView() {
 	check_vk_result(err);
 	vkDestroyBuffer(g_Device, stagingBuffer, nullptr);
 	vkFreeMemory(g_Device, stagingBufferMemory, nullptr);
-
-	VkImageViewCreateInfo createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	createInfo.image = g_PcPlot;
-	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	createInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	createInfo.subresourceRange.baseMipLevel = 0;
-	createInfo.subresourceRange.levelCount = 1;
-	createInfo.subresourceRange.baseArrayLayer = 0;
-	createInfo.subresourceRange.layerCount = 1;
-
-	err = vkCreateImageView(g_Device, &createInfo, nullptr, &g_PcPlotView);
-	check_vk_result(err);
-	//the image view is now nearly ready set up as render target
+	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &stagingCommandBuffer);
 }
 
 static void cleanupPcPlotImageView() {
@@ -1441,7 +1463,7 @@ static void createPcPlotPipeline() {
 	VkPipelineMultisampleStateCreateInfo multisampling = {};
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.rasterizationSamples = g_pcPlotSampleCount;
 	multisampling.minSampleShading = 1.0f;
 	multisampling.pSampleMask = nullptr;
 	multisampling.alphaToCoverageEnable = VK_FALSE;
@@ -1680,8 +1702,8 @@ static void createPcPlotRenderPass() {
 	VkResult err;
 
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	colorAttachment.format = g_pcPlotFormat;
+	colorAttachment.samples = g_pcPlotSampleCount;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1708,7 +1730,10 @@ static void createPcPlotRenderPass() {
 	err = vkCreateRenderPass(g_Device, &renderPassInfo, nullptr, &g_PcPlotRenderPass);
 	check_vk_result(err);
 
-	VkUtil::createRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR, &g_PcPlotRenderPass_noClear);
+	VkUtil::PassType passType = VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR;
+	if(g_pcPlotFormat == VK_FORMAT_R16G16B16A16_UNORM)
+		passType = VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR;
+	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotRenderPass_noClear);
 }
 
 static void cleanupPcPlotRenderPass() {
@@ -3134,15 +3159,15 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 
 		//transition image Layouts
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, g_pcPlotFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, g_pcPlotFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		//blitting the image
 		VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		//transition image Layouts back
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, g_pcPlotFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, g_pcPlotFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		//beginning the density renderpass
 		std::vector<VkClearValue> clearColors;
@@ -3280,15 +3305,15 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 			vkCmdEndRenderPass(g_PcPlotCommandBuffer);
 
 			//transition image Layouts
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, g_pcPlotFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, g_pcPlotFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 			//blitting the image
 			VkUtil::copyImage(g_PcPlotCommandBuffer, g_PcPlot, g_PcPlotWidth, g_PcPlotHeight, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_PcPlotDensityImageCopy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 			//transition image Layouts back
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlot, g_pcPlotFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+			VkUtil::transitionImageLayout(g_PcPlotCommandBuffer, g_PcPlotDensityImageCopy, g_pcPlotFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 			//beginning the density renderpass
 			std::vector<VkClearValue> clearColors;
@@ -7584,7 +7609,7 @@ int main(int, char**)
 		createPcPlotCommandPool();
 		createPcPlotRenderPass();
 		createPcPlotHistoPipeline();
-		createPcPlotImageView();
+		reCreatePcPlotImageView();
 		createPcPlotFramebuffer();
 		createPcPlotPipeline();
 
@@ -7635,7 +7660,7 @@ int main(int, char**)
 		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 
 		//transition of the densitiy image
-		VkUtil::transitionImageLayout(command_buffer, g_PcPlotDensityImageCopy, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		VkUtil::transitionImageLayout(command_buffer, g_PcPlotDensityImageCopy, g_pcPlotFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		//ending the command buffer and submitting it
 		VkSubmitInfo end_info = {};

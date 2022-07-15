@@ -541,6 +541,24 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		subpass.pColorAttachments = &colorAttachmentRef;
 
 		break;
+	case VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR:
+		attachment.format = VK_FORMAT_R16G16B16A16_UNORM;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttachments.push_back(attachment);
+
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+		break;
 	case VkUtil::PASS_TYPE_DEPTH_OFFLINE:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
