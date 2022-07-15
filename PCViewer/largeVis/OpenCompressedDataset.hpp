@@ -179,6 +179,7 @@ namespace util{
                 allocInfo.pNext = &allocFlags;
                 check_vk_result(vkAllocateMemory(context.device, &allocInfo, nullptr, &d.gpuMemory));
                 vkBindBufferMemory(context.device, d.gpuHalfData, d.gpuMemory, 0);
+                PCUtil::Stopwatch uploadWatch(std::cout, "Indirect upload with staging buffer creation");
                 VkUtil::uploadDataIndirect(context, d.gpuHalfData, d.cpuData.size() * sizeof(d.cpuData[0]), d.cpuData.data());
             }
         }
