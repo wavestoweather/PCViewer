@@ -14874,6 +14874,19 @@ int main(int, char**)
 		if (!main_is_minimized)
 			FramePresent(wd, window);
 		g_QueueMutex.unlock();
+
+		// software wait for a maximum of 60 fps
+		static auto lastFrame = std::chrono::high_resolution_clock::now();
+		auto end = std::chrono::high_resolution_clock::now();
+		const float frameMicros = 1e6 / 60;
+		auto elapsedMicros = std::chrono::duration_cast<std::chrono::microseconds>(end - lastFrame).count();
+		if(elapsedMicros < frameMicros){
+			std::this_thread::sleep_for(std::chrono::duration<float, std::micro>(frameMicros - float(elapsedMicros)));
+			#ifdef _DEBUG
+			//std::cout << "\rSlept for " << (frameMicros - elapsedMicros) * 1e-3 << " milliseconds              ";
+			#endif
+		}
+		lastFrame = end;
 	}
 
 	// Cleanup
