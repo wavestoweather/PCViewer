@@ -434,7 +434,7 @@ VkShaderModule VkUtil::createShaderModule(VkDevice device, const std::vector<cha
 	return shaderModule;
 }
 
-void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRenderPass *renderPass)
+void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRenderPass *renderPass, VkSampleCountFlagBits sampleCount)
 {
 	VkResult err;
 
@@ -448,7 +448,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 	{
 	case VkUtil::PASS_TYPE_COLOR_OFFLINE:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -467,7 +467,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_COLOR_EXPORT:
 		attachment.format = VK_FORMAT_B8G8R8A8_UNORM;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -486,7 +486,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_COLOR_OFFLINE_NO_CLEAR:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -505,7 +505,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_COLOR16_OFFLINE:
 		attachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -524,7 +524,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR:
 		attachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -543,7 +543,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR:
 		attachment.format = VK_FORMAT_R16G16B16A16_UNORM;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -561,7 +561,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_DEPTH_OFFLINE:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -574,7 +574,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		attachment.format = VK_FORMAT_D16_UNORM;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -594,7 +594,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_DEPTH_STENCIL_OFFLINE:
 		attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -607,7 +607,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		attachment.format = VK_FORMAT_D24_UNORM_S8_UINT;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -627,7 +627,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_UINT32:
 		attachment.format = VK_FORMAT_R32_UINT;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -645,7 +645,7 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 		break;
 	case VkUtil::PASS_TYPE_FLOAT:
 		attachment.format = VK_FORMAT_R32_SFLOAT;
-		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.samples = sampleCount;
 		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -664,6 +664,17 @@ void VkUtil::createRenderPass(VkDevice device, VkUtil::PassType passType, VkRend
 	case VkUtil::PASS_TYPE_NONE:
 
 		break;
+	}
+	VkAttachmentDescription colorAttachmentResolve{colorAttachments[0]};
+    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+
+	VkAttachmentReference resolveAttachmentRef = {};
+	resolveAttachmentRef.attachment = 1;
+	resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	if((sampleCount & VK_SAMPLE_COUNT_1_BIT) == 0){
+		colorAttachments.push_back(colorAttachmentResolve);
+		subpass.pResolveAttachments = &resolveAttachmentRef;
 	}
 	VkRenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -1415,6 +1426,33 @@ void VkUtil::createImageSampler(VkDevice device, VkSamplerAddressMode adressMode
 
 	err = vkCreateSampler(device, &samplerInfo, nullptr, sampler);
 	check_vk_result(err);
+}
+
+VkImage VkUtil::createImage(VkDevice device, uint32_t width, uint32_t height, uint32_t depth, VkFormat imageFormat, VkImageUsageFlags flags, uint32_t mipLevel, VkSampleCountFlagBits sampleCounts){
+	VkImage image;
+	
+	VkResult err;
+
+	// creating the VkImage for the PcPlot
+	VkImageCreateInfo imageInfo = {};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageInfo.extent.width = width;
+	imageInfo.extent.height = height;
+	imageInfo.extent.depth = depth;
+	imageInfo.mipLevels = mipLevel;
+	imageInfo.arrayLayers = 1;
+	imageInfo.format = imageFormat;
+	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageInfo.usage = flags;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageInfo.samples = sampleCounts;
+
+	err = vkCreateImage(device, &imageInfo, nullptr, &image);
+	check_vk_result(err);
+
+	return image;
 }
 
 void VkUtil::uploadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize, const void *data)

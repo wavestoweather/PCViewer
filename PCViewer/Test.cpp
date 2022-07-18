@@ -243,6 +243,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testRealWorldDataCompression = false;
     const bool testRealWorldHuffmanDetail = false;
     const bool testUnquantizePerformance = false;
+    const bool testUPloadSpeed = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -650,5 +651,12 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
             VkUtil::commitCommandBuffer(context.queue, commands);
             check_vk_result(vkQueueWaitIdle(context.queue));
         }
+    }
+    if constexpr(testUPloadSpeed){
+        uint32_t byteSize = 1<<20; // 20 gigabytes
+        auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {{}}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        PCUtil::Stopwatch upload(std::cout, "Upload Speed");
+        std::vector<uint8_t> data(byteSize, 6);
+        VkUtil::uploadData(context.device, mem, 0, byteSize, byteSize.data());
     }
 }

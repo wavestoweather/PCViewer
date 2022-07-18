@@ -45,7 +45,7 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
     // --------------------------------------------------------------------------------
     _renderLineCounter = RenderLineCounter::acquireReference(RenderLineCounter::CreateInfo{info.context});
     _lineCounter = LineCounter::acquireReference(LineCounter::CreateInfo{info.context});
-    _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.framebuffer});
+    _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.sampleCount, info.framebuffer});
     _computeBrusher = ComputeBrusher::acquireReference(ComputeBrusher::CreateInfo{info.context});
 }
 
@@ -308,7 +308,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
             }
         }
-        assert(dataBuffer[0]); //chedck for valid gpu buffer
+        assert(t->countingMethod <= CountingMethod::CpuRoaring || dataBuffer[0]); //chedck for valid gpu buffer
 
         // Note: vulkan resources for the count images were already provided by main thread
         bool firstIter = dataOffset == startOffset;
@@ -323,7 +323,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     continue;
                 std::cout << "Counting pairwise (cpu generic) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl;
                 auto counts = compression::lineCounterPair(t->compressedData.columnData[a].cpuData, t->compressedData.columnData[b].cpuData, t->columnBins, t->columnBins, t->indexActivation, t->cpuLineCountingAmtOfThreads);
-                VkUtil::uploadData(t->_vkContext.device, t->_countResources[{a,b}].countMemory, 0, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
+                VkUtil::uploadDataIndirect(t->_vkContext, t->_countResources[{a,b}].countBuffer, t->_countResources[{a,b}].binAmt * sizeof(uint32_t), counts.data());
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;

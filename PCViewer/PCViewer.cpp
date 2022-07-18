@@ -443,6 +443,8 @@ struct ViolinDrawlistPlot {
 static VkDeviceMemory			g_PcPlotMem = VK_NULL_HANDLE;
 static VkImage					g_PcPlot = VK_NULL_HANDLE;
 static VkImageView				g_PcPlotView = VK_NULL_HANDLE;
+static VkImage					g_PcPlotMulti = VK_NULL_HANDLE;
+static VkImageView				g_PcPlotMultiView = VK_NULL_HANDLE;
 static VkSampler				g_PcPlotSampler = VK_NULL_HANDLE;
 static VkDescriptorSet			g_PcPlotImageDescriptorSet = VK_NULL_HANDLE;
 static VkRenderPass				g_PcPlotRenderPass = VK_NULL_HANDLE;		//contains the render pass for the pc
@@ -516,7 +518,7 @@ static uint32_t					windowWidth = 1920;
 static uint32_t					windowHeight = 1080;
 static uint32_t					g_PcPlotWidth = 2060;
 static uint32_t					g_PcPlotHeight = 450;
-static VkSampleCountFlagBits	g_pcPlotSampleCount = VK_SAMPLE_COUNT_1_BIT;
+static VkSampleCountFlagBits	g_pcPlotSampleCount = VK_SAMPLE_COUNT_8_BIT;
 static VkFormat					g_pcPlotFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 static char						g_fragShaderPath[] = "shader/frag.spv";
 static char						g_geomShaderPath[] = "shader/geom.spv";
@@ -1112,7 +1114,7 @@ static void createPcPlotHistoPipeline() {
 	auto passType = VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR;
 	if(g_pcPlotFormat == VK_FORMAT_R16G16B16A16_UNORM)
 		passType = VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR;
-	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotDensityRenderPass);
+	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotDensityRenderPass, g_pcPlotSampleCount);
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotDensityRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
 }
@@ -1181,7 +1183,7 @@ static void reCreatePcPlotImageView() {
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	imageInfo.samples = g_pcPlotSampleCount;
+	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;		// the final plot has always 1 sample
 
 	err = vkCreateImage(g_Device, &imageInfo, nullptr, &g_PcPlot);
 	check_vk_result(err);
@@ -1192,14 +1194,25 @@ static void reCreatePcPlotImageView() {
 	VkMemoryAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 0);
+	allocInfo.memoryTypeIndex = memRequirements.memoryTypeBits;
 
 	//creating the Image and imageview for the density pipeline
 	VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, g_pcPlotFormat, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityImageCopy);
 
+
 	uint32_t imageOffset = allocInfo.allocationSize;
 	vkGetImageMemoryRequirements(g_Device, g_PcPlotDensityImageCopy, &memRequirements);
 	allocInfo.allocationSize += memRequirements.size;
+	
+	// creating the multisampled image if needed
+	uint32_t multiOffset = allocInfo.allocationSize;
+	if((g_pcPlotSampleCount & VK_SAMPLE_COUNT_1_BIT) == 0){
+		g_PcPlotMulti = VkUtil::createImage(g_Device, g_PcPlotWidth, g_PcPlotHeight, 1, g_pcPlotFormat, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, g_pcPlotSampleCount);
+		vkGetImageMemoryRequirements(g_Device, g_PcPlotMulti, &memRequirements);
+		allocInfo.allocationSize += memRequirements.size;
+		allocInfo.memoryTypeIndex |= memRequirements.memoryTypeBits;
+	}
+	allocInfo.memoryTypeIndex = findMemoryType(allocInfo.memoryTypeIndex, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	//creating the Image and imageview for the iron map
 	VkUtil::createImage(g_Device, sizeof(heatmap) / sizeof(*heatmap) / 4, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, &g_PcPlotDensityIronMap);
@@ -1212,6 +1225,8 @@ static void reCreatePcPlotImageView() {
 
 	vkBindImageMemory(g_Device, g_PcPlot, g_PcPlotMem, 0);
 	vkBindImageMemory(g_Device, g_PcPlotDensityImageCopy, g_PcPlotMem, imageOffset);
+	if((g_pcPlotSampleCount & VK_SAMPLE_COUNT_1_BIT) == 0)
+		vkBindImageMemory(g_Device, g_PcPlotMulti, g_PcPlotMem, multiOffset);
 	vkBindImageMemory(g_Device, g_PcPlotDensityIronMap, g_PcPlotMem, g_PcPlotDensityIronMapOffset);
 
 	VkImageViewCreateInfo createInfo = {};
@@ -1233,7 +1248,10 @@ static void reCreatePcPlotImageView() {
 	check_vk_result(err);
 
 	VkUtil::createImageView(g_Device, g_PcPlotDensityImageCopy, g_pcPlotFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_PcPlotDensityImageView);
+	if((g_pcPlotSampleCount & VK_SAMPLE_COUNT_1_BIT) == 0)
+		VkUtil::createImageView(g_Device, g_PcPlotMulti, g_pcPlotFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_PcPlotMultiView);
 	VkUtil::createImageView(g_Device, g_PcPlotDensityIronMap, VK_FORMAT_R8G8B8A8_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_PcPLotDensityIronMapView);
+
 
 	//creating the smapler for the density image
 	VkUtil::createImageSampler(g_Device, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, VK_FILTER_LINEAR, 1, 1, &g_PcPlotDensityImageSampler);
@@ -1294,6 +1312,10 @@ static void cleanupPcPlotImageView() {
 	vkDestroyImageView(g_Device, g_PcPLotDensityIronMapView, nullptr);
 	vkDestroyImage(g_Device, g_PcPlotDensityIronMap, nullptr);
 	vkDestroySampler(g_Device, g_PcPlotDensityIronMapSampler, nullptr);
+	if(g_PcPlotMulti){
+		vkDestroyImage(g_Device, g_PcPlotMulti, nullptr);
+		vkDestroyImageView(g_Device, g_PcPlotMultiView, nullptr);
+	}
 	vkFreeMemory(g_Device, g_PcPlotMem, nullptr);
 }
 
@@ -1711,19 +1733,39 @@ static void createPcPlotRenderPass() {
 	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+	VkAttachmentDescription colorAttachmentResolve{};
+    colorAttachmentResolve.format = g_pcPlotFormat;
+    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
 	VkAttachmentReference colorAttachmentRef = {};
 	colorAttachmentRef.attachment = 0;
 	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	VkAttachmentReference colorAttachmentResolveRef{};
+    colorAttachmentResolveRef.attachment = 1;
+    colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	std::vector<VkAttachmentDescription> attachments{colorAttachment};
+	if((g_pcPlotSampleCount & VK_SAMPLE_COUNT_1_BIT) == 0)
+		attachments.push_back(colorAttachmentResolve);
 
 	VkSubpassDescription subpass = {};
 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	subpass.colorAttachmentCount = 1;
 	subpass.pColorAttachments = &colorAttachmentRef;
+	if((g_pcPlotSampleCount & VK_SAMPLE_COUNT_1_BIT) == 0)
+		subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
 	VkRenderPassCreateInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount = 1;
-	renderPassInfo.pAttachments = &colorAttachment;
+	renderPassInfo.attachmentCount = attachments.size();
+	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
 
@@ -1733,7 +1775,7 @@ static void createPcPlotRenderPass() {
 	VkUtil::PassType passType = VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR;
 	if(g_pcPlotFormat == VK_FORMAT_R16G16B16A16_UNORM)
 		passType = VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR;
-	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotRenderPass_noClear);
+	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotRenderPass_noClear, g_pcPlotSampleCount);
 }
 
 static void cleanupPcPlotRenderPass() {
@@ -1744,11 +1786,17 @@ static void cleanupPcPlotRenderPass() {
 static void createPcPlotFramebuffer() {
 	VkResult err;
 
+	std::vector<VkImageView> attachments{g_PcPlotView};
+	if((g_pcPlotSampleCount & VK_SAMPLE_COUNT_1_BIT) == 0){
+		attachments.push_back(g_PcPlotMultiView);
+		std::swap(attachments[0], attachments[1]);
+	}
+
 	VkFramebufferCreateInfo framebufferInfo = {};
 	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 	framebufferInfo.renderPass = g_PcPlotRenderPass;
-	framebufferInfo.attachmentCount = 1;
-	framebufferInfo.pAttachments = &g_PcPlotView;
+	framebufferInfo.attachmentCount = attachments.size();
+	framebufferInfo.pAttachments = attachments.data();
 	framebufferInfo.width = g_PcPlotWidth;
 	framebufferInfo.height = g_PcPlotHeight;
 	framebufferInfo.layers = 1;
@@ -1757,8 +1805,6 @@ static void createPcPlotFramebuffer() {
 	check_vk_result(err);
 
 	//creating the Framebuffer for the density pass
-	std::vector<VkImageView> attachments;
-	attachments.push_back(g_PcPlotView);
 	VkUtil::createFrameBuffer(g_Device, g_PcPlotDensityRenderPass, attachments, g_PcPlotWidth, g_PcPlotHeight, &g_PcPlotDensityFrameBuffer);
 
 	//creating the no clear framebuffer for spline rendering
@@ -2375,6 +2421,7 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 			VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex},
 			g_PcPlotRenderPass_noClear,
 			g_PcPlotFramebuffer_noClear,
+			g_pcPlotSampleCount,
 			ds.compressedData
 		};
 		dl.indBinManager = std::make_shared<IndBinManager>(createInfo);
@@ -7763,6 +7810,7 @@ int main(int, char**)
 		info.context.commandPool = g_PcPlotCommandPool;
 		info.context.queue = g_Queue;
 		info.renderPass = g_PcPlotRenderPass_noClear;
+		info.sampleCount = g_pcPlotSampleCount;
 		info.dataLayout = g_PcPlotDataSetLayout;
 		info.uniformLayout = g_PcPlotDescriptorLayout;
 

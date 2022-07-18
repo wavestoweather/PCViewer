@@ -18,6 +18,7 @@ public:
     struct CreateInfo{
         VkUtil::Context context;
         VkRenderPass renderPass;
+        VkSampleCountFlagBits sampleCount;
         VkFramebuffer framebuffer;
     };
     struct RenderInfo{

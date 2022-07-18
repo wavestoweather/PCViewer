@@ -9,6 +9,7 @@ public:
     struct CreateInfo{
         VkUtil::Context context;
         VkRenderPass renderPass;
+        VkSampleCountFlagBits sampleCount;
         VkDescriptorSetLayout dataLayout;
         VkDescriptorSetLayout uniformLayout;
     };

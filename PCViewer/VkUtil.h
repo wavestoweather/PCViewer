@@ -76,7 +76,7 @@ namespace VkUtil{
 	void createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, const std::vector<VkDynamicState>& dynamicStates, VkShaderModule* shaderModules, VkPrimitiveTopology topology, VkPipelineRasterizationStateCreateInfo* rasterizerInfo, VkPipelineMultisampleStateCreateInfo* multisamplingInfo, VkPipelineDepthStencilStateCreateInfo* depthStencilInfo, BlendInfo* blendInfo, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkRenderPass* renderPass, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline, const std::vector<VkPushConstantRange>& pushConstantRanges = {});
 	void createComputePipeline(VkDevice device, VkShaderModule& shaderModule, std::vector<VkDescriptorSetLayout> descriptorLayouts, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline, VkSpecializationInfo* specializationInfo = VK_NULL_HANDLE, const std::vector<VkPushConstantRange>& pushConstants = {});
 	void destroyPipeline(VkDevice device, VkPipeline pipeline);
-	void createRenderPass(VkDevice device, VkUtil::PassType passType, VkRenderPass* renderPass);
+	void createRenderPass(VkDevice device, VkUtil::PassType passType, VkRenderPass* renderPass, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT);
 	void createFrameBuffer(VkDevice device, VkRenderPass renderPass, const std::vector<VkImageView>& attachments, uint32_t width, uint32_t height, VkFramebuffer* frambuffer);
 	void fillDescriptorSetLayoutBinding(uint32_t bindingNumber, VkDescriptorType descriptorType, uint32_t amtOfDescriptors, VkShaderStageFlags shaderStages, VkDescriptorSetLayoutBinding* uboLayoutBinding);
 	void createDescriptorSetLayout(VkDevice device, const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* descriptorSetLayout);
@@ -110,6 +110,8 @@ namespace VkUtil{
 	void create1dImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
 	void create3dImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevelCount, VkImageView* imageView);
 	void createImageSampler(VkDevice device, VkSamplerAddressMode adressMode, VkFilter filter, uint16_t maxAnisotropy, uint16_t mipLevels, VkSampler* sampler);
+	VkImage createImage(VkDevice device, uint32_t width, uint32_t height, uint32_t depth, VkFormat imageFormat, VkImageUsageFlags flags, uint32_t mipLevel = 1, VkSampleCountFlagBits sampleCounts = VK_SAMPLE_COUNT_1_BIT);
+	//VkImageView createImageView(VkDevice device, VkImage image, VkFormat imageFormat, uint32_t mipLevel = 1, VkSampleCountFlagBits sampleCounts = VK_SAMPLE_COUNT_1_BIT);
 	void uploadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize,const void* data);
 	void downloadData(VkDevice device, VkDeviceMemory memory, uint32_t offset, uint32_t byteSize,void* data);
 	void uploadDataIndirect(const Context& context, VkBuffer dstBuffer, uint32_t byteSize,const void* data);

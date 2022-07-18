@@ -78,6 +78,7 @@ public:
         VkUtil::Context context;
         VkRenderPass renderPass;
         VkFramebuffer framebuffer;
+        VkSampleCountFlagBits sampleCount;
         const CompressedData& compressedData;
     };
 
