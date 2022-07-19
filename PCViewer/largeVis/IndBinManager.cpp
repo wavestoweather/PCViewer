@@ -117,7 +117,7 @@ void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, boo
 
     std::stringstream ss;
     ss << attributeInfos;
-    std::cout << ss.str() << std::endl;
+    //std::cout << ss.str() << std::endl;
 
     compression::Renderer::RenderInfo renderInfo{
         commands,
@@ -305,7 +305,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     for(int i: irange(dataBuffer))
                         dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
                 }
-                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, false, curEvent, {timingPool, timingIndex++, timingIndex++});
+                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, true, curEvent, {timingPool, timingIndex++, timingIndex++});
             }
             else{
                 for(int i: irange(dataBuffer))

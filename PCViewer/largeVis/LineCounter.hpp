@@ -19,12 +19,15 @@ public:
 
     enum ReductionTypes: uint32_t{
         ReductionAdd,
+        ReductionAddNonAtomic,
+        ReductionAddPartitionNonAtomic,
         ReductionSubgroupAdd ,
         ReductionSubgroupAllAdd,
         ReductionMin,
         ReductionSubgroupMin,
         ReductionMax,           // currently unused
         ReductionSubgroupMax,   // currently unused
+        ReductionEnumMax
     };
 
     // compression renderer can only be created internally, can not be moved, copied or destoryed
@@ -68,7 +71,10 @@ private:
     VkCommandBuffer _allCommands{};
 
     // vulkan resources that have to be destroyed
-    VkUtil::PipelineInfo _countPipeInfo{}, _countSubgroupAllInfo{}, _countPartitionedPipeInfo{}, _minPipeInfo{}, _countAllPipeInfo{}, _countAllSubgroupAllInfo{}, _countAllPartitionedInfo{};
+    //VkUtil::PipelineInfo _countPipeInfo{}, _countSubgroupAllInfo{}, _countPartitionedPipeInfo{}, _minPipeInfo{}, _countAllPipeInfo{}, _countAllSubgroupAllInfo{}, _countAllPartitionedInfo{};
+    std::map<ReductionTypes, VkUtil::PipelineInfo> _pairInfos;
+    std::map<ReductionTypes, VkUtil::PipelineInfo> _fullInfos;
+    std::map<ReductionTypes, VkUtil::PipelineInfo> _brushFullInfos;
 
     const std::string _computeShader = "shader/lineCount.comp.spv";
     const std::string _computeAllShader = "shader/lineCountAll.comp.spv";

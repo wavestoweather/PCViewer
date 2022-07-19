@@ -3,7 +3,7 @@
 #extension GL_NV_shader_subgroup_partitioned: enable
 #extension GL_KHR_shader_subgroup_vote : enable
 
-layout(binding = 0) buffer vA{uint v[];}a[]; 
+layout(binding = 0) buffer vA{uint v[];}aVal[]; 
 
 layout(binding = 2) buffer Lines{
 	uint v[];
@@ -16,25 +16,30 @@ layout(binding = 3) buffer BrushInfo{
     uint andBrushes;
     uint offsetLassoBrushes; 
     uint outputOffset;          // already converted from bit offset to uint offset
-    uint pa,dding;
+    uint activeBrushAttributes; // each bit stands for a single attribute which is need for brushing
+    uint padding;
     float brushData[];          // for information on brush Data layout look at ComputeBrushes.cpp -> updateActiveIndices()
 };
 
 layout(binding = 4) uniform Infos{
-    uint amtOfDataPoints;
+    uint amtOfDataPointss;
     uint aBins, bBins;      // b bins is used to determine switch of attributes (needs to be done to account for not increasingly ordered attributes)
     uint indexOffset;
     uint amtOfCounts;
-    uint pa,dd,ing;
+    uint attributeActive;   // each bit stands for a single attribute which is needed for counting
+    uint padd,ing;
+    uint countIndices[];    // essentially this is an array containing the sorted indices
 };
 
 const uint reductionAdd = 0;
-const uint reductionSubgroupAdd = 1;
-const uint reductionSubgroupAllAdd = 2;
-const uint reductionMin = 3;
-const uint reductionSubgroupMin = 4;
-const uint reductionMax = 5;        // currently unused
-const uint reductionSubgroupMax = 6;// currently unused
+const uint reductionAddNonAtomic = 1;
+const uint reductionAddPartitionNonAtomic = 2;
+const uint reductionSubgroupAdd = 3;
+const uint reductionSubgroupAllAdd = 4;
+const uint reductionMin = 5;
+const uint reductionSubgroupMin = 6;
+const uint reductionMax = 7;        // currently unused
+const uint reductionSubgroupMax = 8;// currently unused
 
 layout(constant_id = 0) const uint reductionType = reductionAdd;
 layout(constant_id = 1) const uint maxAttributes = 16;
@@ -44,22 +49,68 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 void main(){
     if(gl_GlobalInvocationID.x >= amtOfDataPoints)
         return;
-    const uint indexDiv32 = gl_GlobalInvocationID.x / 32 + indexOffset;  // index offset is already divided by 32
-    uint act = activations[indexDiv32];
-    if((act & (1 << (gl_GlobalInvocationID.x & 31))) == 0)
-        return;
 
-    uint16_t axisValues[maxAttributes];
-    // loading the attribute values
-    for(int i = 0; i <= amtOfCounts; ++i){
-        axisValues[i] = unpackHalf2x16(a[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+    float axisValues[maxAttributes];
+    // loading the attribute values for brushing
+    for(int i = 0; i <= amtOfAttributes; ++i){
+        if((activeBrushAttributes & (1 << i)) == 0)
+            continue;
+        axisValues[i] = unpackHalf2x16(aVal[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
     }
     // checking activation
 
+    bool a = amtOfBrushes == 0 || andBrushes > 0; // if no brushes data has to be active
+    // going through all brushes and testing for activatinos
+    for(int brush = 0; brush < amtOfBrushes; ++brush){
+        bool inside = true;
+        uint brushOffset = uint(brushData[brush]);
+        for(int axisMap = 0; axisMap < brushData[brushOffset]; ++axisMap){
+            uint axisMapOffset = uint(brushData[brushOffset + 1 + axisMap]);
+            uint axis = uint(brushData[axisMapOffset + 1]);
+            //Data axisData = Data(dataAddresses[axis]);
+            uint dataIndex = gl_GlobalInvocationID.x;
+            float axisVal = axisValues[axis];
+            bool inRange = false;
+            for(int range = 0; range < brushData[axisMapOffset]; ++range){
+                uint rangeOffset = uint(brushData[axisMapOffset + 2 + range]);
+                float min = brushData[rangeOffset];
+                float max = brushData[rangeOffset + 1];
+                if(axisVal >= min && axisVal <= max){
+                    inRange = true;
+                    break;
+                }
+            }
+            inside = inside && inRange;
+            if(!inside)
+                break;
+        }
+        if(andBrushes > 0 && !inside){
+            a = false;
+            break;
+        }
+        else if(andBrushes == 0 && inside){
+            a = true;
+            break;
+        }
+    }
+
+    // TODO: missing lasso brushes
+
+    if(!a)
+        return;  
+
+    // loading the attribute values missing for counting
+    uint missingAttributes = attributeActive & (~activeBrushAttributes);
+    for(int i = 0; i <= amtOfAttributes; ++i){
+        if((missingAttributes & (1 << i)) == 0)
+            continue;
+        axisValues[i] = unpackHalf2x16(aVal[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+    }
+
     //increasing activation counter
-    float aVal = unpackHalf2x16(a[0].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
     for(int i = 1; i <= amtOfCounts; ++i){
-        float bVal = unpackHalf2x16(a[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+        float aVal = axisValues[i -1];
+        float bVal = axisValues[i];
         uint binA = min(uint(aVal * float(aBins)), aBins - 1);
         uint binB = min(uint(bVal * float(aBins)), aBins - 1);
         if(bool(bBins & (1 << (i - 1)))){ // switching bins if switching bit is set
@@ -75,11 +126,22 @@ void main(){
         case reductionAdd:
             atomicAdd(c[i - 1].v[finalBin], 1);
             break;
-        case reductionSubgroupAdd:
+        case reductionAddNonAtomic:
+            c[i - 1].v[finalBin] += 1;
+            break;
+        case reductionAddPartitionNonAtomic:
             // Find subgroup ( sg ) indices with same pixelID
             uvec4 sg = subgroupPartitionNV(finalBin);
             uint count = subgroupPartitionedAddNV(1, sg);
             uint tId = subgroupPartitionedMinNV(gl_SubgroupInvocationID, sg);
+            if(tId == gl_SubgroupInvocationID)
+                c[i - 1].v[finalBin] += count;         // incrementing
+            break;
+        case reductionSubgroupAdd:
+            // Find subgroup ( sg ) indices with same pixelID
+            sg = subgroupPartitionNV(finalBin);
+            count = subgroupPartitionedAddNV(1, sg);
+            tId = subgroupPartitionedMinNV(gl_SubgroupInvocationID, sg);
             if(tId == gl_SubgroupInvocationID)
                 atomicAdd(c[i - 1].v[finalBin], count);         // incrementing
             break;
@@ -109,7 +171,5 @@ void main(){
 
             break;
         }
-
-        aVal = bVal;
     }
 }

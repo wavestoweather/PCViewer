@@ -59,7 +59,7 @@ void main(){
     if(gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 >= amtOfDataPoints) return;   // early out unused threads
 
     for(int i = 0; i < 32; ++i){    // each thread calculates 32 datapoints
-        bool a = amtOfBrushes == 0; // if no brushes data has to be active
+        bool a = amtOfBrushes == 0 || andBrushes > 0; // if no brushes data has to be active
         // going through all brushes and testing for activatinos
         for(int brush = 0; brush < amtOfBrushes; ++brush){
             bool inside = true;

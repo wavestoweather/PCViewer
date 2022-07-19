@@ -11,7 +11,6 @@ LineCounter::LineCounter(const CreateInfo& info):
 	// creating the pipeline for line counting
 	//----------------------------------------------------------------------------------------------
     auto compBytes = PCUtil::readByteFile(_computeShader);
-    auto shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     // TODO: fill bindings map
@@ -42,7 +41,7 @@ LineCounter::LineCounter(const CreateInfo& info):
     b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings.push_back(b);
 
-    VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_countPipeInfo.descriptorSetLayout);
+    VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_pairInfos[ReductionAdd].descriptorSetLayout);
 
     ReductionTypes reductionType = ReductionAdd;
     VkSpecializationMapEntry mapEntry{};
@@ -55,24 +54,13 @@ LineCounter::LineCounter(const CreateInfo& info):
     specialization.dataSize = sizeof(reductionType);
     specialization.pData = &reductionType;
 
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countPipeInfo.pipelineLayout, &_countPipeInfo.pipeline, &specialization);
-
-    // pipeline for pairwase compute counting using subgroupallequal for less atomic adds
-    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-    reductionType = ReductionSubgroupAllAdd;
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countSubgroupAllInfo.pipelineLayout, &_countSubgroupAllInfo.pipeline, &specialization);
+    for(int i: irange(static_cast<int>(ReductionEnumMax))){
+        auto shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
+        reductionType = static_cast<ReductionTypes>(ReductionSubgroupAllAdd);
+        VkUtil::createComputePipeline(info.context.device, shaderModule, {_pairInfos[ReductionAdd].descriptorSetLayout}, &_pairInfos[reductionType].pipelineLayout, &_pairInfos[reductionType].pipeline, &specialization);
+    }
     
-    // pipeline for pairwise counting using subgroup reduction via subgroupPartitionNV
-    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-    reductionType = ReductionSubgroupAdd;
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_countPartitionedPipeInfo.pipelineLayout, &_countPartitionedPipeInfo.pipeline, &specialization);
-
-    // pipeline for pairwise counting using subgroup reduction via subgroupPartitionNV
-    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-    reductionType = ReductionMin;
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countPipeInfo.descriptorSetLayout}, &_minPipeInfo.pipelineLayout, &_minPipeInfo.pipeline, &specialization);
-    
-    VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_pairSet);
+    VkUtil::createDescriptorSets(_vkContext.device, {_pairInfos[ReductionAdd].descriptorSetLayout}, _vkContext.descriptorPool, &_pairSet);
     VkUtil::createBuffer(_vkContext.device, sizeof(PairInfos), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &_pairUniform);
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -83,10 +71,8 @@ LineCounter::LineCounter(const CreateInfo& info):
     vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_pairUniformMem);
     vkBindBufferMemory(_vkContext.device, _pairUniform, _pairUniformMem, 0);
 
-    // second pipeline to count all bins at once
+    // next pipelines for single pipeline counting
     compBytes = PCUtil::readByteFile(_computeAllShader);
-    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-    
     bindings[0].descriptorCount = maxAttributes;
     bindings[2].descriptorCount = maxAttributes - 1; // always one as the 2d bins are always between 2 attributes
     bindings[1] = bindings[4]; bindings.pop_back();     // we can drop the second binding
@@ -94,20 +80,15 @@ LineCounter::LineCounter(const CreateInfo& info):
     enableValidation[0] = false;
     enableValidation[2] = false;
 
-    VkUtil::createDescriptorSetLayoutPartiallyBound(info.context.device, bindings, enableValidation, &_countAllPipeInfo.descriptorSetLayout);
+    VkUtil::createDescriptorSetLayoutPartiallyBound(info.context.device, bindings, enableValidation, &_fullInfos[ReductionAdd].descriptorSetLayout);
 
-    reductionType = ReductionAdd;
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countAllPipeInfo.descriptorSetLayout}, &_countAllPipeInfo.pipelineLayout, &_countAllPipeInfo.pipeline, &specialization);
+    for(int i: irange(static_cast<int>(ReductionEnumMax))){
+        auto shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
+        reductionType = static_cast<ReductionTypes>(ReductionSubgroupAllAdd);
+        VkUtil::createComputePipeline(info.context.device, shaderModule, {_fullInfos[ReductionAdd].descriptorSetLayout}, &_fullInfos[reductionType].pipelineLayout, &_fullInfos[reductionType].pipeline, &specialization);
+    }
 
-    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-    reductionType = ReductionSubgroupAllAdd;
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countAllPipeInfo.descriptorSetLayout}, &_countAllSubgroupAllInfo.pipelineLayout, &_countAllSubgroupAllInfo.pipeline, &specialization);
-
-    shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-    reductionType = ReductionSubgroupAdd;
-    VkUtil::createComputePipeline(info.context.device, shaderModule, {_countAllPipeInfo.descriptorSetLayout}, &_countAllPartitionedInfo.pipelineLayout, &_countAllPartitionedInfo.pipeline, &specialization);
-
-    VkUtil::createDescriptorSets(_vkContext.device, {_countAllPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_allSet);    
+    VkUtil::createDescriptorSets(_vkContext.device, {_fullInfos[ReductionAdd].descriptorSetLayout}, _vkContext.descriptorPool, &_allSet);    
 
     _allEvent = VkUtil::createEvent(_vkContext.device, 0);
     vkSetEvent(_vkContext.device, _allEvent);
@@ -168,15 +149,15 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     VkUtil::uploadData(_vkContext.device, mB, 0, a2.size() * sizeof(a2[0]), a2.data());
 
     if(!_descSet)
-        VkUtil::createDescriptorSets(_vkContext.device, {_countPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_descSet);
+        VkUtil::createDescriptorSets(_vkContext.device, {_pairInfos[ReductionAdd].descriptorSetLayout}, _vkContext.descriptorPool, &_descSet);
 
     VkUtil::updateDescriptorSet(_vkContext.device, vA, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, vB, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, (aBins * bBins) * sizeof(uint32_t), 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _descSet);
     VkUtil::updateDescriptorSet(_vkContext.device, infos, sizeof(Infos), 3, _descSet);
 
-    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
-    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipelineLayout, 0, 1, &_descSet, 0, nullptr);
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _pairInfos[ReductionAdd].pipeline);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _pairInfos[ReductionAdd].pipelineLayout, 0, 1, &_descSet, 0, nullptr);
     for(int i = 0; i < iterations; ++i)
         vkCmdDispatch(commands, size / 256, 1, 1);
 
@@ -207,22 +188,12 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     if(clearCounts)
         vkCmdFillBuffer(commands, counts, 0, aIndices * bIndices * sizeof(uint32_t), 0);
 
-    switch(reductionType){
-    case ReductionAdd:
-        vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
-        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPipeInfo.pipeline);
-        break;
-    case ReductionSubgroupAllAdd:
-        vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countSubgroupAllInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
-        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countSubgroupAllInfo.pipeline);
-        break;
-    case ReductionSubgroupAdd:
-        vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPartitionedPipeInfo.pipelineLayout, 0, 1, &_pairSet, 0, {});
-        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _countPartitionedPipeInfo.pipeline);
-        break;
-    default:
-        std::cout << "Not yet implemented reduction" << std::endl;
-    }
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _pairInfos[reductionType].pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _pairInfos[reductionType].pipeline);
+
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _pairInfos[reductionType].pipelineLayout, 0, 1, &_pairSet, 0, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, _pairInfos[reductionType].pipeline);
+
     vkCmdDispatch(commands, (dataSize + 255) / 256, 1, 1);
 
     PCUtil::Stopwatch stop(std::cout, "Gpu Pairwise");
@@ -266,22 +237,9 @@ VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>&
 
     if(prevPipeEvent)
         vkCmdWaitEvents(_allCommands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
-    switch(reductionType){
-    case ReductionAdd:
-        vkCmdBindDescriptorSets(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPipeInfo.pipelineLayout, 0, 1, &_allSet, 0, {});
-        vkCmdBindPipeline(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPipeInfo.pipeline);
-        break;
-    case ReductionSubgroupAllAdd:
-        vkCmdBindDescriptorSets(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllSubgroupAllInfo.pipelineLayout, 0, 1, &_allSet, 0, {});
-        vkCmdBindPipeline(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllSubgroupAllInfo.pipeline);
-        break;
-    case ReductionSubgroupAdd:
-        vkCmdBindDescriptorSets(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPartitionedInfo.pipelineLayout, 0, 1, &_allSet, 0, {});
-        vkCmdBindPipeline(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _countAllPartitionedInfo.pipeline);
-        break;
-    default:
-        std::cout << "Not yet implemented reduction" << std::endl;
-    }
+
+    vkCmdBindDescriptorSets(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _fullInfos[reductionType].pipelineLayout, 0, 1, &_allSet, 0, {});
+    vkCmdBindPipeline(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _fullInfos[reductionType].pipeline);
     
     if(timingInfo.queryPool){
         vkCmdResetQueryPool(_allCommands, timingInfo.queryPool, timingInfo.startIndex, 2);
@@ -336,13 +294,12 @@ void LineCounter::tests(const CreateInfo& info){
 
 LineCounter::~LineCounter() 
 {
-    _countPipeInfo.vkDestroy(_vkContext);
-    _countSubgroupAllInfo.vkDestroy(_vkContext);
-    _countPartitionedPipeInfo.vkDestroy(_vkContext);
-    _minPipeInfo.vkDestroy(_vkContext);
-    _countAllPipeInfo.vkDestroy(_vkContext);
-    _countAllSubgroupAllInfo.vkDestroy(_vkContext);
-    _countAllPartitionedInfo.vkDestroy(_vkContext);
+    for(auto& [t, p]: _pairInfos)
+        p.vkDestroy(_vkContext);
+    for(auto& [t, p]: _fullInfos)
+        p.vkDestroy(_vkContext); 
+    for(auto& [t, p]: _brushFullInfos)
+        p.vkDestroy(_vkContext); 
     if(_descSet)
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_descSet);
     if(_pairSet)

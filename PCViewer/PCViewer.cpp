@@ -5909,7 +5909,23 @@ static bool updateActiveIndices(DrawList& dl) {
 		if(brush.size())
 			rangeBrushes.push_back(std::move(brush));
 		//adding global brushes
-		//TODO: global brushes
+		if(!dl.immuneToGlobalBrushes){
+			for(auto& gb: globalBrushes){
+				if(gb.active){
+					brushing::RangeBrush brush;
+					for(const auto& [axis, brushes]: gb.brushes){
+						for(const auto& b: brushes){
+							// converting the range from main attribute scale to inBinManager scale(local scale)
+							const auto& dlAtt = dl.indBinManager->compressedData.attributes;
+							float min = (b.second.first - dlAtt[axis].min) / (dlAtt[axis].max - dlAtt[axis].min);
+							float max = (b.second.second - dlAtt[axis].min) / (dlAtt[axis].max - dlAtt[axis].min);
+							brush.push_back({static_cast<uint32_t>(axis), min, max});
+						}
+					}
+					rangeBrushes.push_back(std::move(brush));
+				}
+			}
+		}
 		//static bool prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
 		//if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
 		dl.indBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
