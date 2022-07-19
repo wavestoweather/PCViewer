@@ -115,9 +115,13 @@ void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, boo
         binSizes.push_back(static_cast<uint32_t>(std::sqrt(_countResources[{a,b}].binAmt)));
     }
 
+    std::stringstream ss;
+    ss << attributeInfos;
+    std::cout << ss.str() << std::endl;
+
     compression::Renderer::RenderInfo renderInfo{
         commands,
-        "dummy",
+        ss.str(),
         compression::Renderer::RenderType::Polyline,
         counts,
         axes,
