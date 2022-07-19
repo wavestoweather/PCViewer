@@ -34,6 +34,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "imgui/imgui_impl_sdl.h"
 #include "imgui/imgui_impl_vulkan.h"
 #include "imgui/imgui_internal.h"
+#include "imgui/imgui_stdlib.h"
 #include "cimg/CImg.h"
 #ifdef Success
 #undef Success
@@ -10458,6 +10459,43 @@ int main(int, char**)
 				if(pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling)
 					ImGui::InputFloat("Random subsampling val", &pcSettings.defaultLoadRandomProbability);
 				ImGui::SliderInt("Line batch size", &pcSettings.lineBatchSize, 1e5, 1e7);
+				if(ImGui::BeginMenu("Export Plot (no labels/ticks)")){
+					static std::string exportPath{};
+					ImGui::InputText("##pcExportPath", &exportPath);
+					ImGui::SameLine();
+					if(ImGui::Button("Export")){
+						if(exportPath.empty()){
+							std::cout << "No export name given, nothing happening" << std::endl;
+						}
+						else{
+							//creating the image and copying the frame data to the image
+							cimg_library::CImg<unsigned char> res(g_PcPlotWidth, g_PcPlotHeight, 1, 4);
+							//check_vk_result(vkQueueWaitIdle(g_Queue));
+							std::vector<half> img(g_PcPlotWidth * g_PcPlotHeight * 4);
+							VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_PcPlot, g_pcPlotFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_PcPlotWidth, g_PcPlotHeight, 1, img.data(), g_PcPlotWidth* g_PcPlotHeight * 4 * sizeof(img[0]));
+							//transforming the downloaded image to the correct image coordinates
+							for (int x = 0; x < g_PcPlotWidth; ++x) {
+								for (int y = 0; y < g_PcPlotHeight; ++y) {
+									for (int c = 0; c < 4; ++c) {
+										int cc = c;
+										//if (c != 3) cc = std::abs(c - 2);
+										int oldIndex = x * g_PcPlotHeight * 4 + y * 4 + c;
+										int newIndex = (cc) * g_PcPlotHeight * g_PcPlotWidth + x * g_PcPlotHeight + y;
+										assert(oldIndex < g_PcPlotWidth* g_PcPlotHeight * 4);
+										assert(newIndex < g_PcPlotWidth* g_PcPlotHeight * 4);
+	
+										if(c == 3) res.data()[newIndex] = 255;
+										else res.data()[newIndex] = float(img[oldIndex]) * 255;
+									}
+								}
+							}
+	
+							res.save_png(exportPath.c_str());
+							std::cout << "[export] Done" << std::endl;
+						}
+					}
+					ImGui::EndMenu();
+				}
 
 				ImGui::PopItemWidth();
 				ImGui::EndPopup();

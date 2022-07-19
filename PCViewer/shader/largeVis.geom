@@ -46,7 +46,7 @@ void main (void) {
 //
 	//EmitVertex();
   //}
-  if(col[0].a < 1e-2)
+  if(col[0].a == 0)
     return;           //skip lines which can not be seen and dont emit a vertex
 
   color = col[0];
