@@ -7,6 +7,8 @@
 #include "../PCUtil.h"
 #include "../range.hpp"
 
+constexpr bool CheckCounts = false;
+
 namespace compression
 {
     void testCounting() 
@@ -87,6 +89,13 @@ namespace compression
             for(uint32_t e: irange(lineCounts[0])){
                 lineCounts[0][e] += lineCounts[i][e];
             }
+        }
+        
+        if constexpr(CheckCounts){
+            size_t sum{};
+            for(auto i: lineCounts[0])
+                sum += i;
+            std::cout << "Total count " << sum << std::endl;
         }
         return lineCounts[0];
     }

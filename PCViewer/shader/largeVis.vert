@@ -55,4 +55,7 @@ void main() {
 	color = ubo.color;
 	//analytical calculation of opacity for clusterAmt wiith opacity a and N lines: a_final = 1-(1-a)^N
 	color.a = 1-pow(1-color.a, count);
+	//float a = color.a;
+	//color.g = 1;
+	//color.a = (1 - pow(1-a,2 * count)) / (1 + pow(1 - a, count));//1 - pow(1 - a * a, count) / pow(1 + a, count);
 }

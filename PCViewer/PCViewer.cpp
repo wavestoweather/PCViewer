@@ -1112,8 +1112,14 @@ static void createPcPlotHistoPipeline() {
 	descriptorSetLayouts.push_back(g_PcPlotDensityDescriptorSetLayout);
 
 	auto passType = VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR;
-	if(g_pcPlotFormat == VK_FORMAT_R16G16B16A16_UNORM)
+	switch(g_pcPlotFormat){
+	case VK_FORMAT_R16G16B16A16_UNORM:
 		passType = VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR;
+		break;
+	case VK_FORMAT_R32G32B32A32_SFLOAT:
+		passType = VkUtil::PASS_TYPE_COLOR32_OFFLINE_NO_CLEAR;
+		break;
+	}
 	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotDensityRenderPass, g_pcPlotSampleCount);
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStates, shaderModules, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotDensityRenderPass, &g_PcPlotDensityPipelineLayout, &g_PcPlotDensityPipeline);
@@ -1773,8 +1779,14 @@ static void createPcPlotRenderPass() {
 	check_vk_result(err);
 
 	VkUtil::PassType passType = VkUtil::PASS_TYPE_COLOR16_OFFLINE_NO_CLEAR;
-	if(g_pcPlotFormat == VK_FORMAT_R16G16B16A16_UNORM)
+	switch(g_pcPlotFormat){
+	case VK_FORMAT_R16G16B16A16_UNORM:
 		passType = VkUtil::PASS_TYPE_COLOR16UNORM_OFFLINE_NO_CLEAR;
+		break;
+	case VK_FORMAT_R32G32B32A32_SFLOAT:
+		passType = VkUtil::PASS_TYPE_COLOR32_OFFLINE_NO_CLEAR;
+		break;
+	}
 	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotRenderPass_noClear, g_pcPlotSampleCount);
 }
 

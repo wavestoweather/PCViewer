@@ -243,7 +243,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     const bool testRealWorldDataCompression = false;
     const bool testRealWorldHuffmanDetail = false;
     const bool testUnquantizePerformance = false;
-    const bool testUPloadSpeed = true;
+    const bool testUPloadSpeed = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
