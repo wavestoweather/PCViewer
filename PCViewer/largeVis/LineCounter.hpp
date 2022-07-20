@@ -1,10 +1,10 @@
 #pragma once
 #include "../VkUtil.h"
 #include "TimingInfo.hpp"
+#include "../Brushing.hpp"
 #include <map>
 
 // holds a single vulkan compute pipeline instance for counting active lines in cluster
-
 class LineCounter{
 public:
     // struct holding information needed to create the vulkan pipeline
@@ -39,13 +39,15 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);  // test function
-    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd) const;
+    void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd);
     VkEvent countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset = 0, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkEvent prevPipeEvent = {}, TimingInfo timingInfo = {});
 
-    const uint32_t maxAttributes{30};
+    VkEvent countBrushLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, const brushing::RangeBrushes& rangeBrushes, const Polygons& lassoBrushes, bool andBrushes = true, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkEvent prevPipeEvent = {}, TimingInfo timingIfo = {});
+
+    static const uint32_t maxAttributes{30};
 private:
     struct PairInfos{
-        uint32_t amtofDataPoints, aBins, bBins, indexOffset, allAmtOfPairs, pa,dd,ing;
+        uint32_t amtofDataPoints, aBins, bBins, indexOffset, allAmtOfPairs, attributeActive, countActive, padding;
     };
 
     struct BPair{
@@ -62,13 +64,15 @@ private:
     // vulkan resources that are destroyed externally
     VkUtil::Context _vkContext;
     VkDescriptorSet _descSet{}; //only here for test purposes
-    VkDescriptorSet _pairSet{}, _allSet{};
-    VkBuffer _pairUniform{};
-    VkDeviceMemory _pairUniformMem{};
+    VkDescriptorSet _pairSet{}, _allSet{}, _allBrushSet{};
+    uint32_t _brushBufferSize{};
+    VkBuffer _pairUniform{}, _brushBuffer{};
+    VkDeviceMemory _pairUniformMem{}, _brushMem{};
     std::map<BPair, VkDescriptorSet> _pairSets{};
     std::map<BPair, VkEvent> _pairEvents{};
-    VkEvent _allEvent{};
-    VkCommandBuffer _allCommands{};
+    VkEvent _allEvent{}, _allBrushEvent{};
+    VkFence _allFence{}, _allBrushFence{};
+    VkCommandBuffer _allCommands{}, _allBrushCommands{};
 
     // vulkan resources that have to be destroyed
     //VkUtil::PipelineInfo _countPipeInfo{}, _countSubgroupAllInfo{}, _countPartitionedPipeInfo{}, _minPipeInfo{}, _countAllPipeInfo{}, _countAllSubgroupAllInfo{}, _countAllPartitionedInfo{};
@@ -76,8 +80,9 @@ private:
     std::map<ReductionTypes, VkUtil::PipelineInfo> _fullInfos;
     std::map<ReductionTypes, VkUtil::PipelineInfo> _brushFullInfos;
 
-    const std::string _computeShader = "shader/lineCount.comp.spv";
-    const std::string _computeAllShader = "shader/lineCountAll.comp.spv";
+    const std::string_view _computeShader = "shader/lineCount.comp.spv";
+    const std::string_view _computeAllShader = "shader/lineCountAll.comp.spv";
+    const std::string_view _computeAllBrushingShader = "shader/lineCountAllBrush.comp.spv";
 
     VkDeviceMemory _bins;
     size_t _binsSize;

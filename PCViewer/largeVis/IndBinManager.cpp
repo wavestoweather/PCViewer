@@ -159,7 +159,7 @@ void IndBinManager::updateCounts(){
     }
 
     if(_countUpdateThreadActive.compare_exchange_strong(prevValue, true)){    // trying to block any further incoming notifies
-        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << compressedData.dataSize << " data points." << std::endl;
+        std::cout << "Starting counting pipeline for " << columnBins << " bins and " << compressedData.dataSize << " data points with counting type: " << countingMethodNames[static_cast<int>(countingMethod)] << std::endl;
         // making shure the counting images are created and have the right size
         for(int i: irange(activeIndices.size() - 1)){
             uint32_t a = activeIndices[i];
@@ -197,6 +197,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     // starting with updating the counts if needed to have all information available for the following counting/reduction
     // note: might be changed to be settable by the user if cpu or gpu should be used for counting
     bool gpuDecompression = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.columnData[0].compressedRLHuffGpu.size();
+    bool combinedActivationCounting = t->countingMethod >= CountingMethod::GpuComputeFullBrush && t->countingMethod <= CountingMethod::GpuComputeFullBrushPartitionedNoAtomics;
     long blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: t->compressedData.dataSize;
     if(!t->_gpuDecompressForward)
         blockSize = -blockSize;
@@ -214,7 +215,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
 
     std::vector<float> timings(2 + t->compressedData.attributes.size(), {});
     VkQueryPool timingPool{};
-    if(t->printDeocmpressionTimes && (t->countingMethod == CountingMethod::GpuDrawPairwise || t->countingMethod == CountingMethod::GpuComputeFull || t->countingMethod == CountingMethod::GpuComputeFullPartitioned || t->countingMethod == CountingMethod::GpuComputeFullSubgroup))
+    if(t->printDeocmpressionTimes && (t->countingMethod == CountingMethod::GpuDrawPairwise || (t->countingMethod >= CountingMethod::GpuComputeFull && t->countingMethod < CountingMethod::HybridRoaringGpuDraw )))
         timingPool = t->_timingPool;
     uint32_t iteration{};
     for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize, ++iteration){
@@ -293,7 +294,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         }
         else{
             // updating gpu activations
-            if(gpuDecompression || t->_gpuIndexActivationState != t->_countBrushState.id){
+            if(!combinedActivationCounting && (gpuDecompression || t->_gpuIndexActivationState != t->_countBrushState.id)){
                 //std::cout << "Updating gpu index activations" << std::endl; std::cout.flush();
                 //PCUtil::Stopwatch updateWatch(std::cout, "Gpu index activation");
                 t->_gpuIndexActivationState = t->_countBrushState.id;
@@ -399,35 +400,6 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             }
             break;
         }
-        case CountingMethod::GpuComputeFullSubgroup:
-        case CountingMethod::GpuComputeFullPartitioned:
-        case CountingMethod::GpuComputeFull:{
-            std::vector<VkBuffer> datas(activeIndices.size()), 
-                                    counts(activeIndices.size() - 1);
-            bool anyUpdate = false;
-            uint32_t b{};
-            for(int i: irange(activeIndices.size() - 1)){
-                uint32_t a = activeIndices[i];
-                b = activeIndices[i + 1];
-                if(a > b)
-                    std::swap(a, b);
-                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId != t->_countBrushState.id)
-                    anyUpdate = true;
-                datas[i] = dataBuffer[i];//t->compressedData.columnData[i].gpuHalfData;
-                counts[i] = t->_countResources[{a,b}].countBuffer;
-            }
-            datas.back() = dataBuffer[activeIndices.back()];//t->compressedData.columnData[activeIndices.back()].gpuHalfData;
-            if(!anyUpdate && !gpuDecompression)
-                goto finish;
-            LineCounter::ReductionTypes reductionType{};
-            switch(t->countingMethod){
-                case CountingMethod::GpuComputeFullSubgroup: reductionType = LineCounter::ReductionSubgroupAllAdd; break;
-                case CountingMethod::GpuComputeFullPartitioned: reductionType = LineCounter::ReductionSubgroupAdd; break;
-                case CountingMethod::GpuComputeFull: reductionType = LineCounter::ReductionAdd; break;
-            }
-            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, dataOffset, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
-            break;
-        }
         case CountingMethod::GpuComputeSubgroupPairwise:
         case CountingMethod::GpuComputeSubgroupPartitionedPairwise:
         case CountingMethod::GpuComputePairwise:{
@@ -448,6 +420,66 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 t->_lineCounter->countLinesPair(curDataBlockSize, t->compressedData.columnData[a].gpuHalfData, t->compressedData.columnData[b].gpuHalfData, t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, firstIter, reductionType);
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
+            break;
+        }
+        case CountingMethod::GpuComputeFullSubgroup:
+        case CountingMethod::GpuComputeFullPartitioned:
+        case CountingMethod::GpuComputeFull:{
+            std::vector<VkBuffer> datas(activeIndices.size()), 
+                                    counts(activeIndices.size() - 1);
+            bool anyUpdate = false;
+            uint32_t b{};
+            for(int i: irange(activeIndices.size() - 1)){
+                uint32_t a = activeIndices[i];
+                b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId != t->_countBrushState.id)
+                    anyUpdate = true;
+                datas[i] = dataBuffer[i];//t->compressedData.columnData[i].gpuHalfData;
+                counts[i] = t->_countResources[{a,b}].countBuffer;
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+            }
+            datas.back() = dataBuffer[activeIndices.back()];//t->compressedData.columnData[activeIndices.back()].gpuHalfData;
+            if(!anyUpdate && !gpuDecompression)
+                continue;
+            LineCounter::ReductionTypes reductionType{};
+            switch(t->countingMethod){
+                case CountingMethod::GpuComputeFullSubgroup: reductionType = LineCounter::ReductionSubgroupAllAdd; break;
+                case CountingMethod::GpuComputeFullPartitioned: reductionType = LineCounter::ReductionSubgroupAdd; break;
+                case CountingMethod::GpuComputeFull: reductionType = LineCounter::ReductionAdd; break;
+            }
+            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, dataOffset, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
+            break;
+        }
+        case CountingMethod::GpuComputeFullBrush:
+        case CountingMethod::GpuComputeFullBrushPartitioned:
+        case CountingMethod::GpuComputeFullBrushNoAtomics:
+        case CountingMethod::GpuComputeFullBrushPartitionedNoAtomics:{
+            std::vector<VkBuffer> counts(activeIndices.size() - 1);
+            bool anyUpdate = false;
+            uint32_t b{};
+            for(int i: irange(activeIndices.size() - 1)){
+                uint32_t a = activeIndices[i];
+                b = activeIndices[i + 1];
+                if(a > b)
+                    std::swap(a, b);
+                if(t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId != t->_countBrushState.id)
+                    anyUpdate = true;
+                counts[i] = t->_countResources[{a,b}].countBuffer;
+                t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
+            }
+            if(!anyUpdate && !gpuDecompression)
+                continue;
+
+            LineCounter::ReductionTypes reductionType{};
+            switch(t->countingMethod){
+                case CountingMethod::GpuComputeFullBrush:                       reductionType = LineCounter::ReductionAdd; break;
+                case CountingMethod::GpuComputeFullBrushPartitioned:            reductionType = LineCounter::ReductionSubgroupAdd; break;
+                case CountingMethod::GpuComputeFullBrushNoAtomics:              reductionType = LineCounter::ReductionAddNonAtomic; break;
+                case CountingMethod::GpuComputeFullBrushPartitionedNoAtomics:   reductionType = LineCounter::ReductionAddPartitionNonAtomic; break;
+            }
+            curEvent = t->_lineCounter->countBrushLinesAll(curDataBlockSize, dataBuffer, t->columnBins, counts, activeIndices, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, true, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
             break;
         }
         case CountingMethod::GpuDrawPairwise:{
@@ -508,8 +540,9 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         uint32_t timingIndex{};
         const uint printWidth = 30;
         if(gpuDecompression)
-            std::cout << "[timing]" << std::setw(printWidth) << "Decompression:" << timings[timingIndex++] << " ms" << std::endl;
-        std::cout << "[timing]" << std::setw(printWidth) << "Index activaiton:" << timings[timingIndex++] << " ms" << std::endl;
+            std::cout << "[timing]" << std::setw(printWidth) << "Decompression: " << timings[timingIndex++] << " ms" << std::endl;
+        if(!combinedActivationCounting)
+            std::cout << "[timing]" << std::setw(printWidth) << "Index activaiton: " << timings[timingIndex++] << " ms" << std::endl;
         if(t->countingMethod == CountingMethod::GpuDrawPairwise){
             for(int i: irange(timingIndex, timings.size())){
                 if(i > t->compressedData.attributes.size())

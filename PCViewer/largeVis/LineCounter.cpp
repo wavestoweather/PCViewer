@@ -10,10 +10,12 @@ LineCounter::LineCounter(const CreateInfo& info):
     //----------------------------------------------------------------------------------------------
 	// creating the pipeline for line counting
 	//----------------------------------------------------------------------------------------------
+    
+    // Pair counting pipelines---------------------------------------------------------
+    
     auto compBytes = PCUtil::readByteFile(_computeShader);
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
-    // TODO: fill bindings map
     VkDescriptorSetLayoutBinding b{};
     // attr a values
     b.binding = 0;
@@ -56,12 +58,12 @@ LineCounter::LineCounter(const CreateInfo& info):
 
     for(int i: irange(static_cast<int>(ReductionEnumMax))){
         auto shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-        reductionType = static_cast<ReductionTypes>(ReductionSubgroupAllAdd);
+        reductionType = static_cast<ReductionTypes>(i);
         VkUtil::createComputePipeline(info.context.device, shaderModule, {_pairInfos[ReductionAdd].descriptorSetLayout}, &_pairInfos[reductionType].pipelineLayout, &_pairInfos[reductionType].pipeline, &specialization);
     }
     
     VkUtil::createDescriptorSets(_vkContext.device, {_pairInfos[ReductionAdd].descriptorSetLayout}, _vkContext.descriptorPool, &_pairSet);
-    VkUtil::createBuffer(_vkContext.device, sizeof(PairInfos), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &_pairUniform);
+    VkUtil::createBuffer(_vkContext.device, sizeof(PairInfos) + maxAttributes * sizeof(uint32_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &_pairUniform);
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     VkMemoryRequirements memReq{};
@@ -71,7 +73,8 @@ LineCounter::LineCounter(const CreateInfo& info):
     vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_pairUniformMem);
     vkBindBufferMemory(_vkContext.device, _pairUniform, _pairUniformMem, 0);
 
-    // next pipelines for single pipeline counting
+    // All counting pipelines---------------------------------------------------------
+
     compBytes = PCUtil::readByteFile(_computeAllShader);
     bindings[0].descriptorCount = maxAttributes;
     bindings[2].descriptorCount = maxAttributes - 1; // always one as the 2d bins are always between 2 attributes
@@ -84,7 +87,7 @@ LineCounter::LineCounter(const CreateInfo& info):
 
     for(int i: irange(static_cast<int>(ReductionEnumMax))){
         auto shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
-        reductionType = static_cast<ReductionTypes>(ReductionSubgroupAllAdd);
+        reductionType = static_cast<ReductionTypes>(i);
         VkUtil::createComputePipeline(info.context.device, shaderModule, {_fullInfos[ReductionAdd].descriptorSetLayout}, &_fullInfos[reductionType].pipelineLayout, &_fullInfos[reductionType].pipeline, &specialization);
     }
 
@@ -92,6 +95,37 @@ LineCounter::LineCounter(const CreateInfo& info):
 
     _allEvent = VkUtil::createEvent(_vkContext.device, 0);
     vkSetEvent(_vkContext.device, _allEvent);
+
+    _allFence = VkUtil::createFence(_vkContext.device, VK_FENCE_CREATE_SIGNALED_BIT);
+
+    // All counting pipelines including brushing---------------------------------------------------------
+
+    compBytes = PCUtil::readByteFile(_computeAllBrushingShader);
+    
+    VkUtil::createDescriptorSetLayoutPartiallyBound(info.context.device, bindings, enableValidation, &_brushFullInfos[ReductionAdd].descriptorSetLayout);
+
+    struct{ReductionTypes reductionType; uint32_t maxAttributes;}specializationStruct{ReductionAdd, maxAttributes};
+    VkSpecializationMapEntry mapEntries[2]{mapEntry, mapEntry};
+    mapEntries[1].constantID = 1;
+    mapEntries[1].offset = sizeof(specializationStruct.reductionType);
+    mapEntries[1].size = sizeof(specializationStruct.maxAttributes);
+    specialization.mapEntryCount = 2;
+    specialization.pMapEntries = mapEntries;
+    specialization.dataSize = sizeof(specializationStruct);
+    specialization.pData = &specializationStruct;
+    for(int i: irange(static_cast<int>(ReductionEnumMax))){
+        auto shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
+        reductionType = static_cast<ReductionTypes>(i);
+        specializationStruct.reductionType = reductionType;
+        VkUtil::createComputePipeline(info.context.device, shaderModule, {_brushFullInfos[ReductionAdd].descriptorSetLayout}, &_brushFullInfos[reductionType].pipelineLayout, &_brushFullInfos[reductionType].pipeline, &specialization);
+    }
+
+    VkUtil::createDescriptorSets(_vkContext.device, {_brushFullInfos[ReductionAdd].descriptorSetLayout}, _vkContext.descriptorPool, &_allBrushSet);    
+
+    _allBrushEvent = VkUtil::createEvent(_vkContext.device, 0);
+    vkSetEvent(_vkContext.device, _allBrushEvent);
+
+    _allBrushFence = VkUtil::createFence(_vkContext.device, VK_FENCE_CREATE_SIGNALED_BIT);
 }
 
 void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& info){
@@ -167,7 +201,7 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
     // execution is done outside
 }
 
-void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts, ReductionTypes reductionType) const{
+void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts, ReductionTypes reductionType) {
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
 	std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
@@ -205,7 +239,9 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
 
 VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, ReductionTypes reductionType, VkEvent prevPipeEvent, TimingInfo timingInfo) {
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
-	assert(vkGetEventStatus(_vkContext.device, _allEvent) == VK_EVENT_SET); //safety check to make shure that the previous counting was done
+	check_vk_result(vkWaitForFences(_vkContext.device, 1, &_allFence, true, 10e9)); // wait for 10 secs, should throw error before...
+    vkResetFences(_vkContext.device, 1, &_allFence);
+    assert(vkGetEventStatus(_vkContext.device, _allEvent) == VK_EVENT_SET); //safety check to make shure that the previous counting was done
     assert(data.size() < maxAttributes);
     std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     
@@ -250,9 +286,106 @@ VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>&
         vkCmdWriteTimestamp(_allCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex);
     vkCmdSetEvent(_allCommands, _allEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    VkUtil::commitCommandBuffer(_vkContext.queue, _allCommands);
+    VkUtil::commitCommandBuffer(_vkContext.queue, _allCommands, _allFence);
 
     return _allEvent;
+}
+
+VkEvent LineCounter::countBrushLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, const brushing::RangeBrushes& rangeBrushes, const Polygons& lassoBrushes, bool andBrushes, bool clearCounts, ReductionTypes reductionType, VkEvent prevPipeEvent, TimingInfo timingInfo){
+    assert(data.size() <= maxAttributes);
+    assert(_vkContext.queueMutex);
+    check_vk_result(vkWaitForFences(_vkContext.device, 1, &_allBrushFence, true, 10e9));
+    vkResetFences(_vkContext.device, 1, &_allBrushFence);
+    assert(vkGetEventStatus(_vkContext.device, _allBrushEvent) == VK_EVENT_SET);
+
+    std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);
+
+    for(auto a: irange(data))
+        if(data[a])
+            VkUtil::updateArrayDescriptorSet(_vkContext.device, data[a], VK_WHOLE_SIZE, 0, a, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allBrushSet);
+    for(auto c: irange(counts))
+        if(counts[c])
+            VkUtil::updateArrayDescriptorSet(_vkContext.device, counts[c], VK_WHOLE_SIZE, 2, c, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allBrushSet);
+
+    // uniform infos --------------------------------------------------------------------
+    PairInfos infos{};
+    infos.amtofDataPoints = dataSize;
+    infos.aBins = binAmt;
+    for(int i: irange(activeIndices.size() - 1)){
+        infos.bBins |= int(activeIndices[i] > activeIndices[i + 1]) << i;
+    }
+    infos.indexOffset = 0;   // not used, as activation is computed on the fly
+    infos.allAmtOfPairs = counts.size();
+    static_assert(maxAttributes <= 32); // has to be less than 32 to fit into a single uint
+    for(uint32_t i: activeIndices)
+        infos.attributeActive |= 1 << i;    // setting the axis bit to signal active attribute
+    for(int i: irange(counts))
+        if(counts[i])
+            infos.countActive |= 1 << i;    // checking if count has to be calculated
+    std::vector<uint8_t> uploadData(sizeof(PairInfos) + activeIndices.size() * sizeof(activeIndices[0]));
+    std::memcpy(uploadData.data(), &infos, sizeof(PairInfos));
+    std::memcpy(uploadData.data() + sizeof(PairInfos), activeIndices.data(), activeIndices.size() * sizeof(activeIndices[0]));
+    VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, uploadData.size(), uploadData.data());
+    VkUtil::updateDescriptorSet(_vkContext.device, _pairUniform, VK_WHOLE_SIZE, 4, _allBrushSet);
+    
+    // brushInfos -----------------------------------------------------------------------
+    auto brushData = brushing::brushesToGpuData(rangeBrushes, lassoBrushes);
+    uint32_t brushInfoBytes = sizeof(brushing::GpuBrushInfo) + brushData.size() * sizeof(brushData);
+
+    if(_brushBufferSize < brushInfoBytes){
+        if(_brushBuffer)
+            vkDestroyBuffer(_vkContext.device, _brushBuffer, nullptr);
+        if(_brushMem)
+            vkFreeMemory(_vkContext.device, _brushMem, nullptr);
+        std::vector<VkBuffer> buffers;
+        std::tie(buffers, std::ignore, _brushMem) = VkUtil::createMultiBufferBound(_vkContext, {brushInfoBytes}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        _brushBuffer = buffers[0];
+    }
+    brushing::GpuBrushInfo bI{};
+    bI.amtOfAttributes = data.size();
+    bI.amtofDataPoints = dataSize;
+    bI.amtOfBrushes = rangeBrushes.size();
+    bI.andBrushes = andBrushes;
+    static_assert(maxAttributes <= 32); // has to be less than 32 to fit into a single uint
+    for(const auto& rangeBrush: rangeBrushes)
+        for(const auto& range: rangeBrush)
+            bI.activeBrushAttributes |= 1 << range.axis;    // setting the axis bit to signal active attribute
+
+
+    uploadData.resize(brushInfoBytes);
+    std::memcpy(uploadData.data(), &bI, sizeof(bI));
+    std::memcpy(uploadData.data() + sizeof(bI), brushData.data(), brushData.size() * sizeof(brushData[0]));
+    VkUtil::uploadData(_vkContext.device, _brushMem, 0, uploadData.size(), uploadData.data());
+    VkUtil::updateDescriptorSet(_vkContext.device, _brushBuffer, VK_WHOLE_SIZE, 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _allBrushSet);
+
+    if(_allBrushCommands)
+        vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_allBrushCommands);
+    VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_allBrushCommands);
+    if(clearCounts){
+        for(auto count: counts)
+            if(count)
+                vkCmdFillBuffer(_allBrushCommands, count, 0, binAmt * binAmt * sizeof(uint32_t), 0);
+    }
+
+    if(prevPipeEvent)
+        vkCmdWaitEvents(_allBrushCommands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT , VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+    
+    if(timingInfo.queryPool){
+        vkCmdResetQueryPool(_allBrushCommands, timingInfo.queryPool, timingInfo.startIndex, 2);
+        vkCmdWriteTimestamp(_allBrushCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex);
+    }
+
+    // dispatching main pipeline
+    vkCmdBindPipeline(_allBrushCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushFullInfos[reductionType].pipeline);
+    vkCmdBindDescriptorSets(_allBrushCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _brushFullInfos[ReductionAdd].pipelineLayout, 0, 1, &_allBrushSet, 0, {});
+    vkCmdDispatch(_allBrushCommands, (dataSize + 255) / 256, 1, 1);
+    if(timingInfo.queryPool)
+        vkCmdWriteTimestamp(_allBrushCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex);
+    vkCmdSetEvent(_allBrushCommands, _allBrushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    VkUtil::commitCommandBuffer(_vkContext.queue, _allBrushCommands, _allBrushFence);
+
+    return _allBrushEvent;
 }
 
 LineCounter* LineCounter::_singleton = nullptr;    // init to nullptr
@@ -314,6 +447,18 @@ LineCounter::~LineCounter()
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &e);
     if(_allEvent)
         vkDestroyEvent(_vkContext.device, _allEvent, nullptr);
+    if(_allBrushEvent)
+        vkDestroyEvent(_vkContext.device, _allBrushEvent, nullptr);
+    if(_allBrushSet)
+        vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_allBrushSet);
+    if(_brushBuffer)
+        vkDestroyBuffer(_vkContext.device, _brushBuffer, nullptr);
+    if(_brushMem)
+        vkFreeMemory(_vkContext.device, _brushMem, nullptr);
+    if(_allFence)
+        vkDestroyFence(_vkContext.device, _allFence, nullptr);
+    if(_allBrushFence)
+        vkDestroyFence(_vkContext.device, _allBrushFence, nullptr);
 }
 
 void LineCounter::release(){

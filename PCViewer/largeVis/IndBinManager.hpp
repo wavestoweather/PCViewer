@@ -2,6 +2,7 @@
 #include <string_view>
 #include <string>
 #include <vector>
+#include <array>
 #include "../LassoBrush.hpp"
 #include "../Attribute.hpp"
 #include "../Structures.hpp"
@@ -50,11 +51,15 @@ public:
         GpuComputeFull,
         GpuComputeFullSubgroup,
         GpuComputeFullPartitioned,
+        GpuComputeFullBrush,
+        GpuComputeFullBrushPartitioned,
+        GpuComputeFullBrushNoAtomics,
+        GpuComputeFullBrushPartitionedNoAtomics,
         HybridRoaringGpuDraw,
         Max
     };
 
-    const char* countingMethodNames[14] = {
+    const std::array<std::string_view, static_cast<size_t>(CountingMethod::Max)> countingMethodNames{
         "CpuGeneric",
         "CpuMinGeneric",
         "CpuGenericSingleField",
@@ -68,6 +73,10 @@ public:
         "GpuComputeFull",
         "GpuComputeFullSubgroup",
         "GpuComputeFullPartitioned",
+        "GpuComputeFullBrush",
+        "GpuComputeFullBrushPartitioned",
+        "GpuComputeFullBrushNoAtomics",
+        "GpuComputeFullBrushPartitionedNoAtomics",
         "HybridRoaringGpuDraw"
     };
 

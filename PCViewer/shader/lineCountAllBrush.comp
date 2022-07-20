@@ -27,7 +27,8 @@ layout(binding = 4) uniform Infos{
     uint indexOffset;
     uint amtOfCounts;
     uint attributeActive;   // each bit stands for a single attribute which is needed for counting
-    uint padd,ing;
+    uint countActive;
+    uint paddingg;
     uint countIndices[];    // essentially this is an array containing the sorted indices
 };
 
@@ -51,14 +52,8 @@ void main(){
         return;
 
     float axisValues[maxAttributes];
-    // loading the attribute values for brushing
-    for(int i = 0; i <= amtOfAttributes; ++i){
-        if((activeBrushAttributes & (1 << i)) == 0)
-            continue;
-        axisValues[i] = unpackHalf2x16(aVal[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
-    }
-    // checking activation
-
+    
+    // checking activation and loading activation values
     bool a = amtOfBrushes == 0 || andBrushes > 0; // if no brushes data has to be active
     // going through all brushes and testing for activatinos
     for(int brush = 0; brush < amtOfBrushes; ++brush){
@@ -69,6 +64,7 @@ void main(){
             uint axis = uint(brushData[axisMapOffset + 1]);
             //Data axisData = Data(dataAddresses[axis]);
             uint dataIndex = gl_GlobalInvocationID.x;
+            axisValues[axis] = unpackHalf2x16(aVal[axis].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
             float axisVal = axisValues[axis];
             bool inRange = false;
             for(int range = 0; range < brushData[axisMapOffset]; ++range){
@@ -109,6 +105,8 @@ void main(){
 
     //increasing activation counter
     for(int i = 1; i <= amtOfCounts; ++i){
+        if((countActive & (1 << (i - 1))) == 0) // only do counts that need to be updated
+            continue;
         float aVal = axisValues[i -1];
         float bVal = axisValues[i];
         uint binA = min(uint(aVal * float(aBins)), aBins - 1);

@@ -11787,9 +11787,9 @@ int main(int, char**)
 					}
 					ImGui::Separator();
 					if(dl.indBinManager){
-						if(ImGui::BeginCombo("Count technique", dl.indBinManager->countingMethodNames[int(dl.indBinManager->countingMethod)])){
+						if(ImGui::BeginCombo("Count technique", dl.indBinManager->countingMethodNames[int(dl.indBinManager->countingMethod)].data())){
 							for(int i: irange(int(IndBinManager::CountingMethod::Max))){
-								if(ImGui::MenuItem(dl.indBinManager->countingMethodNames[i])){
+								if(ImGui::MenuItem(dl.indBinManager->countingMethodNames[i].data())){
 									dl.indBinManager->countingMethod = static_cast<IndBinManager::CountingMethod>(i);
 								}
 							}
