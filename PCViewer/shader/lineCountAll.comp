@@ -41,6 +41,7 @@ void main(){
     if((act & (1 << (gl_GlobalInvocationID.x & 31))) == 0)
         return;
     float aVal = unpackHalf2x16(a[0].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+    const float invDist = aVal;
     for(int i = 1; i <= amtOfCounts; ++i){
         float bVal = unpackHalf2x16(a[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
         uint binA = min(uint(aVal * float(aBins)), aBins - 1);
@@ -100,6 +101,13 @@ void main(){
 
             break;
         case reductionSubgroupMax:
+            // hardcoding center to 1 on first axis
+            val = uint(invDist * 10000);
+
+            sg = subgroupPartitionNV(finalBin);
+            m = subgroupPartitionedMaxNV(val, sg);
+            if(val > c[i - 1].v[finalBin] && m == val)
+                atomicMax(c[i - 1].v[finalBin], val);
 
             break;
         }
