@@ -42,6 +42,7 @@ public:
 
     static Renderer* acquireReference(const CreateInfo& info);  // acquire a reference (automatically creates renderer if not yet existing)
     void release();                                             // has to be called to notify destruction before vulkan resources are destroyed
+    void updatePipeline(const CreateInfo& createInfo);
     void updateFramebuffer(VkFramebuffer framebuffer, uint32_t newWidth, uint32_t newHeight);   // used to update the framebuffer of the renderer incase of image resizing(future use)
     void render(const RenderInfo& renderInfo);
 private:

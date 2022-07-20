@@ -1120,6 +1120,9 @@ static void createPcPlotHistoPipeline() {
 	case VK_FORMAT_R32G32B32A32_SFLOAT:
 		passType = VkUtil::PASS_TYPE_COLOR32_OFFLINE_NO_CLEAR;
 		break;
+	case VK_FORMAT_R8G8B8A8_UNORM:
+		passType = VkUtil::PASS_TYPE_COLOR_OFFLINE_NO_CLEAR;
+		break;
 	}
 	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotDensityRenderPass, g_pcPlotSampleCount);
 
@@ -1308,6 +1311,46 @@ static void reCreatePcPlotImageView() {
 	vkDestroyBuffer(g_Device, stagingBuffer, nullptr);
 	vkFreeMemory(g_Device, stagingBufferMemory, nullptr);
 	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &stagingCommandBuffer);
+
+	if(g_PcPlotImageDescriptorSet)
+		vkFreeDescriptorSets(g_Device, g_DescriptorPool, 1, &g_PcPlotImageDescriptorSet);
+	g_PcPlotImageDescriptorSet = {};	
+	g_PcPlotImageDescriptorSet = (VkDescriptorSet)ImGui_ImplVulkan_AddTexture(g_PcPlotSampler, g_PcPlotView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool);
+
+	VkCommandBuffer command_buffer;
+	VkUtil::createCommandBuffer(g_Device,g_PcPlotCommandPool, &command_buffer);
+
+	//now using the memory barrier to transition image state
+	VkImageMemoryBarrier use_barrier[1] = {};
+	use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	use_barrier[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	use_barrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	use_barrier[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	use_barrier[0].image = g_PcPlot;
+	use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	use_barrier[0].subresourceRange.levelCount = 1;
+	use_barrier[0].subresourceRange.layerCount = 1;
+	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+
+	//transition of the densitiy image
+	VkUtil::transitionImageLayout(command_buffer, g_PcPlotDensityImageCopy, g_pcPlotFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	//ending the command buffer and submitting it
+	VkSubmitInfo end_info = {};
+	end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	end_info.commandBufferCount = 1;
+	end_info.pCommandBuffers = &command_buffer;
+	err = vkEndCommandBuffer(command_buffer);
+	check_vk_result(err);
+	err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
+	check_vk_result(err);
+
+	err = vkDeviceWaitIdle(g_Device);
+	check_vk_result(err);
+	vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, 1, &command_buffer);
 }
 
 static void cleanupPcPlotImageView() {
@@ -1324,6 +1367,18 @@ static void cleanupPcPlotImageView() {
 		vkDestroyImageView(g_Device, g_PcPlotMultiView, nullptr);
 	}
 	vkFreeMemory(g_Device, g_PcPlotMem, nullptr);
+
+	g_PcPlotView = {};
+	g_PcPlot = {};
+	g_PcPlotDensityImageView = {};
+	g_PcPlotDensityImageCopy = {};
+	g_PcPlotDensityImageSampler = {};
+	g_PcPLotDensityIronMapView = {};
+	g_PcPlotDensityIronMap = {};
+	g_PcPlotDensityIronMapSampler = {};
+	g_PcPlotMulti = {};
+	g_PcPlotMultiView = {};
+	g_PcPlotMem = {};
 }
 
 static void cleanupExportWindow() {
@@ -1787,6 +1842,9 @@ static void createPcPlotRenderPass() {
 		break;
 	case VK_FORMAT_R32G32B32A32_SFLOAT:
 		passType = VkUtil::PASS_TYPE_COLOR32_OFFLINE_NO_CLEAR;
+		break;
+	case VK_FORMAT_R8G8B8A8_UNORM:
+		passType = VkUtil::PASS_TYPE_COLOR_OFFLINE_NO_CLEAR;
 		break;
 	}
 	VkUtil::createRenderPass(g_Device, passType, &g_PcPlotRenderPass_noClear, g_pcPlotSampleCount);
@@ -7683,13 +7741,6 @@ int main(int, char**)
 	}
 
 	{//Section to initialize the pcPlot graphics queue
-		createPcPlotCommandPool();
-		createPcPlotRenderPass();
-		createPcPlotHistoPipeline();
-		reCreatePcPlotImageView();
-		createPcPlotFramebuffer();
-		createPcPlotPipeline();
-
 		//before being able to add the image to imgui the sampler has to be created
 		VkSamplerCreateInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -7705,52 +7756,12 @@ int main(int, char**)
 		err = vkCreateSampler(g_Device, &info, nullptr, &g_PcPlotSampler);
 		check_vk_result(err);
 
-		g_PcPlotImageDescriptorSet = (VkDescriptorSet)ImGui_ImplVulkan_AddTexture(g_PcPlotSampler, g_PcPlotView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_Device, g_DescriptorPool);
-
-
-
-		//beginning the command buffer
-		VkCommandPool command_pool = wd->Frames[wd->FrameIndex].CommandPool;
-		VkCommandBuffer command_buffer = wd->Frames[wd->FrameIndex].CommandBuffer;
-
-		err = vkResetCommandPool(g_Device, command_pool, 0);
-		check_vk_result(err);
-		VkCommandBufferBeginInfo begin_info = {};
-		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		err = vkBeginCommandBuffer(command_buffer, &begin_info);
-		check_vk_result(err);
-
-		//now using the memory barrier to transition image state
-		VkImageMemoryBarrier use_barrier[1] = {};
-		use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		use_barrier[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		use_barrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		use_barrier[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		use_barrier[0].image = g_PcPlot;
-		use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		use_barrier[0].subresourceRange.levelCount = 1;
-		use_barrier[0].subresourceRange.layerCount = 1;
-		vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
-
-		//transition of the densitiy image
-		VkUtil::transitionImageLayout(command_buffer, g_PcPlotDensityImageCopy, g_pcPlotFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-		//ending the command buffer and submitting it
-		VkSubmitInfo end_info = {};
-		end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		end_info.commandBufferCount = 1;
-		end_info.pCommandBuffers = &command_buffer;
-		err = vkEndCommandBuffer(command_buffer);
-		check_vk_result(err);
-		err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
-		check_vk_result(err);
-
-		err = vkDeviceWaitIdle(g_Device);
-		check_vk_result(err);
+		createPcPlotCommandPool();
+		createPcPlotRenderPass();
+		createPcPlotHistoPipeline();
+		reCreatePcPlotImageView();
+		createPcPlotFramebuffer();
+		createPcPlotPipeline();
 	}
 
 #ifdef RENDER3D
@@ -7904,6 +7915,7 @@ int main(int, char**)
 	}
 
 	// Main loop
+	bool skipRender = false; // needed for pcp recreation
     bool done = false;
 	while (!done)
 	{
@@ -10510,6 +10522,123 @@ int main(int, char**)
 							res.save_png(exportPath.c_str());
 							std::cout << "[export] Done" << std::endl;
 						}
+					}
+					ImGui::EndMenu();
+				}
+				if(ImGui::BeginMenu("Plot Size")){
+					bool change = ImGui::InputInt2("width/hight", reinterpret_cast<int*>(&g_PcPlotWidth), ImGuiInputTextFlags_EnterReturnsTrue);
+					static std::map<VkSampleCountFlagBits, std::string_view> flagNames{{VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_2_BIT, "2Spp"}, {VK_SAMPLE_COUNT_4_BIT, "4Spp"}, {VK_SAMPLE_COUNT_8_BIT, "8Spp"}, {VK_SAMPLE_COUNT_16_BIT, "16Spp"}};
+					if(ImGui::BeginCombo("Sample per pixel", flagNames[g_pcPlotSampleCount].data())){
+						for(auto [bit, name]: flagNames){
+							if(ImGui::MenuItem(name.data())){
+								change = true;
+								g_pcPlotSampleCount = bit;
+							}
+						}
+						ImGui::EndCombo();
+					}
+
+					static std::map<VkFormat, std::string_view> formatNames{{VK_FORMAT_R8G8B8A8_UNORM, "8 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_UNORM, "16 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_SFLOAT, "16 Bit Float"}, {VK_FORMAT_R32G32B32A32_SFLOAT, "32 Bit Float"}};
+					if(ImGui::BeginCombo("PCP Format", formatNames[g_pcPlotFormat].data())){
+						for(auto [bit, name]: formatNames){
+							if(ImGui::MenuItem(name.data())){
+								change = true;
+								g_pcPlotFormat = bit;
+							}
+						}
+						ImGui::EndCombo();
+					}
+
+					if(change){
+						check_vk_result(vkDeviceWaitIdle(g_Device));
+						// cleanup old resources
+						cleanupPcPlotFramebuffer();
+						cleanupPcPlotPipeline();
+						cleanupPcPlotRenderPass();
+						cleanupPcPlotImageView();
+						cleanupPcPlotHistoPipeline();
+
+						// recreating the things
+						createPcPlotRenderPass();
+						createPcPlotHistoPipeline();
+						reCreatePcPlotImageView();
+						createPcPlotFramebuffer();
+						createPcPlotPipeline();
+
+						// recreationg the descriptor sets for the datasets
+						for(auto& ds: g_PcPlotDataSets){
+							if(!ds.buffer.buffer)
+								continue;
+							std::vector<VkDescriptorSetLayout> layouts{g_PcPlotDataSetLayout};
+							VkUtil::createDescriptorSets(g_Device, layouts, g_PcPlotDescriptorPool, &ds.buffer.descriptorSet);
+						
+							VkUtil::updateDescriptorSet(g_Device, ds.buffer.buffer, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, ds.buffer.descriptorSet);
+						}
+
+						// recreating drawlist descriptor set
+						for(auto& dl: g_PcPlotDrawLists){
+							//creating the Descriptor sets for the histogramm uniform buffers
+							auto layouts = std::vector<VkDescriptorSetLayout>(dl.histogramUbos.size(), g_PcPlotHistoDescriptorSetLayout);
+							dl.histogrammDescSets = std::vector<VkDescriptorSet>(layouts.size());
+							VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, dl.histogrammDescSets.data());
+
+							auto ds = std::find_if(g_PcPlotDataSets.begin(), g_PcPlotDataSets.end(), [&](const auto& d){return d.name == dl.parentDataSet;});
+							
+							dl.dataDescriptorSet = ds->buffer.descriptorSet;
+							
+							size_t dataByteSize = ds->data.packedByteSize();
+							if(ds->dataType == DataType::Hierarchichal){
+								dataByteSize = (pcAttributes.size() + 1) * (pcSettings.maxHierarchyLines) * 1.2 * sizeof(float);
+							}
+							//updating the descriptor sets
+							for (int i = 0; i < layouts.size() && ds->dataType != DataType::Hierarchichal; i++) {
+								VkUtil::updateDescriptorSet(g_Device, dl.histogramUbos[i], sizeof(HistogramUniformBuffer), 0, dl.histogrammDescSets[i]);
+
+								if(dl.activeIndicesBuffer)
+									VkUtil::updateTexelBufferDescriptorSet(g_Device, dl.activeIndicesBufferView, 1, dl.histogrammDescSets[i]);
+								if(ds->buffer.buffer)
+									VkUtil::updateDescriptorSet(g_Device, ds->buffer.buffer, dataByteSize, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.histogrammDescSets[i]);
+								//TODO:: correct dataByteSize required / delete update
+							}
+
+							layouts = {g_PcPlotDescriptorLayout};
+							VkUtil::createDescriptorSets(g_Device, layouts, g_DescriptorPool, &dl.medianUboDescSet);
+							VkUtil::updateDescriptorSet(g_Device, dl.medianUbo, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+
+							//binding the medianBuffer
+							layouts = {g_PcPlotDataSetLayout};
+							VkUtil::createDescriptorSets(g_Device, layouts, g_PcPlotDescriptorPool, &dl.medianBufferSet);
+							VkUtil::updateDescriptorSet(g_Device, dl.medianBuffer, MEDIANCOUNT * pcAttributes.size() * sizeof(float), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianBufferSet);
+
+							VkUtil::createDescriptorSets(g_Device, {g_PcPlotDescriptorLayout}, g_DescriptorPool, &dl.uboDescSet);
+
+							VkUtil::updateDescriptorSet(g_Device, dl.ubo, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+							if(ds->dataType == DataType::Hierarchichal)
+								VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, pcSettings.maxHierarchyLines * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+							else if(dl.priorityColorBuffer)
+								VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds->data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.uboDescSet);
+							VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.uboDescSet);
+
+							if(ds->dataType == DataType::Hierarchichal)
+								VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, pcSettings.maxHierarchyLines * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+							else if(dl.priorityColorBuffer)
+								VkUtil::updateDescriptorSet(g_Device, dl.priorityColorBuffer, ds->data.size() * sizeof(float), 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dl.medianUboDescSet);
+							VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, dl.medianUboDescSet);
+						
+							if(dl.indBinManager){
+								dl.indBinManager->updateRenderer(compression::Renderer::CreateInfo{VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex},
+																														g_PcPlotRenderPass_noClear,
+																														g_pcPlotSampleCount,
+																														g_PcPlotFramebuffer_noClear
+								});
+								dl.indBinManager->requestRender = true;
+								dl.indBinManager->columnBins = g_PcPlotHeight;
+								dl.indBinManager->forceCountUpdate();
+							}
+						}
+
+						skipRender = true;
+						pcPlotRender = true;
 					}
 					ImGui::EndMenu();
 				}
@@ -14996,6 +15125,12 @@ int main(int, char**)
 			--g_ExportCountDown;
 		}
 
+		if(skipRender){
+			skipRender = false;
+			if ((io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable))
+				ImGui::UpdatePlatformWindows();
+			continue;
+		}
 		ImDrawData* main_draw_data = ImGui::GetDrawData();
 		const bool main_is_minimized = (main_draw_data->DisplaySize.x <= 0.0f || main_draw_data->DisplaySize.y <= 0.0f);
 		memcpy(&wd->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
@@ -15004,7 +15139,7 @@ int main(int, char**)
 			FrameRender(wd, main_draw_data);
 
 		// Update and Render additional Platform Windows
-		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		if ((io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable))
 		{
 			ImGui::UpdatePlatformWindows();
 			ImGui::RenderPlatformWindowsDefault();

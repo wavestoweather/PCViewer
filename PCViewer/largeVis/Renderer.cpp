@@ -8,6 +8,20 @@ Renderer::Renderer(const CreateInfo& info) :
     _renderPass(info.renderPass),
     _framebuffer(info.framebuffer)
 {
+    updatePipeline(info);
+}
+
+Renderer::~Renderer(){
+    _polyPipeInfo.vkDestroy(_vkContext);
+    _splinePipeInfo.vkDestroy(_vkContext);
+}
+void Renderer::updatePipeline(const CreateInfo& info){
+    _renderPass = info.renderPass;
+    _framebuffer = info.framebuffer;
+    _polyPipeInfo.vkDestroy(_vkContext);
+    _splinePipeInfo.vkDestroy(_vkContext);
+    _infoDescSets.clear();
+
     //----------------------------------------------------------------------------------------------
 	//creating the pipeline for polyline rendering
 	//----------------------------------------------------------------------------------------------
@@ -114,11 +128,6 @@ Renderer::Renderer(const CreateInfo& info) :
     shaderModules[4] = VkUtil::createShaderModule(info.context.device, fragmentBytes);
 
     VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &_renderPass, &_splinePipeInfo.pipelineLayout, &_splinePipeInfo.pipeline, pushConstants);
-}
-
-Renderer::~Renderer(){
-    _polyPipeInfo.vkDestroy(_vkContext);
-    _splinePipeInfo.vkDestroy(_vkContext);
 }
 
 void Renderer::render(const RenderInfo& renderInfo) 

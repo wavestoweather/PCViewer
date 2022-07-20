@@ -114,6 +114,10 @@ public:
             notifyBrushUpdate(_currentBrushState.rangeBrushes, _currentBrushState.lassoBrushes);
         }
     };
+    // updates the renderer when pcp is resized
+    void updateRenderer(const compression::Renderer::CreateInfo& info){
+        _renderer->updatePipeline(info);
+    };
 
     // bool which indicates render update should be done (by calling render())
     const CompressedData& compressedData;                 // references the data stored inside dataset
