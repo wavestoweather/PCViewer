@@ -1343,7 +1343,7 @@ static void recreateExportWindow() {
 		cleanupExportWindow();
 	}
 
-	VkUtil::createRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR_EXPORT, &g_ExportWindowRenderPass);
+	//VkUtil::createRenderPass(g_Device, VkUtil::PASS_TYPE_COLOR_EXPORT, &g_ExportWindowRenderPass);
 
 	VkUtil::createImage(g_Device, g_ExportImageWidth, g_ExportImageHeight, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &g_ExportWindowFrame.Backbuffer);
 	VkMemoryRequirements memReq{};
@@ -1357,7 +1357,8 @@ static void recreateExportWindow() {
 	VkUtil::createImageView(g_Device, g_ExportWindowFrame.Backbuffer, VK_FORMAT_B8G8R8A8_UNORM, 1, VK_IMAGE_ASPECT_COLOR_BIT, &g_ExportWindowFrame.BackbufferView);
 
 	std::vector<VkImageView> views{ g_ExportWindowFrame.BackbufferView };
-	VkUtil::createFrameBuffer(g_Device, g_ExportWindowRenderPass, views, g_ExportImageWidth, g_ExportImageHeight, &g_ExportWindowFrame.Framebuffer);
+	//VkUtil::createFrameBuffer(g_Device, g_ExportWindowRenderPass, views, g_ExportImageWidth, g_ExportImageHeight, &g_ExportWindowFrame.Framebuffer);
+	VkUtil::createFrameBuffer(g_Device,  g_MainWindowData.RenderPass, views, g_ExportImageWidth, g_ExportImageHeight, &g_ExportWindowFrame.Framebuffer);
 
 	VkResult err;
 	{
@@ -3797,7 +3798,7 @@ static void FrameRenderExport(ImGui_ImplVulkanH_Frame* fd, ImDrawData* draw_data
 	{
 		VkRenderPassBeginInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		info.renderPass = g_ExportWindowRenderPass;
+		info.renderPass =  g_MainWindowData.RenderPass;
 		info.framebuffer = fd->Framebuffer;
 		info.renderArea.extent.width = g_ExportImageWidth;
 		info.renderArea.extent.height = g_ExportImageHeight;
@@ -9790,7 +9791,7 @@ int main(int, char**)
 					float pieBorder = 3;
 					float radius = (xOffsetPerAttr / 2.0 - 3) * 0.9;
 
-//					for (int i = 0; i < amtOfLabels; i++) { 
+					//for (int i = 0; i < amtOfLabels; i++) { 
 					// Loop through all attributes, since placeOfInd expects ids of active attributes only.
 					int iActAttr = -1;
 					for (int i = 0; i < pcAttrOrd.size(); i++) {
@@ -14971,7 +14972,7 @@ int main(int, char**)
 				check_vk_result(vkQueueWaitIdle(g_Queue));
 				exportDrawData->FramebufferScale = old_scale;
 				unsigned char* img = new unsigned char[g_ExportImageWidth * g_ExportImageHeight * 4];
-				VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_ExportWindowFrame.Backbuffer, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_ExportImageWidth, g_ExportImageHeight, 1, img, g_ExportImageWidth* g_ExportImageHeight * 4 * sizeof(unsigned char));
+				VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_ExportWindowFrame.Backbuffer, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, g_ExportImageWidth, g_ExportImageHeight, 1, img, g_ExportImageWidth* g_ExportImageHeight * 4 * sizeof(unsigned char));
 				//transforming the downloaded image to the correct image coordinates
 				for (int x = 0; x < g_ExportImageWidth; ++x) {
 					for (int y = 0; y < g_ExportImageHeight; ++y) {
