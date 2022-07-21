@@ -1418,6 +1418,8 @@ void IsoSurfRenderer::createImageResources()
 
 void IsoSurfRenderer::createBuffer()
 {
+	constexpr uint32_t alignment = 0x40;
+	
 	VkUtil::createBuffer(device, 8 * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &vertexBuffer);
 	VkUtil::createBuffer(device, 12 * 3 * sizeof(uint16_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &indexBuffer);
 	VkUtil::createBuffer(device, sizeof(UniformBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &uniformBuffer);
@@ -1431,15 +1433,18 @@ void IsoSurfRenderer::createBuffer()
 	VkMemoryAllocateInfo memAlloc = {};
 	memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	memAlloc.allocationSize = memReq.size;
+	memAlloc.allocationSize = (memAlloc.allocationSize + alignment - 1) / alignment * alignment;
 	uint32_t indexBufferOffset = memReq.size;
 
 	vkGetBufferMemoryRequirements(device, indexBuffer, &memReq);
 	memAlloc.allocationSize += memReq.size;
+	memAlloc.allocationSize = (memAlloc.allocationSize + alignment - 1) / alignment * alignment;
 	memoryTypeBits |= memReq.memoryTypeBits;
 	uniformBufferOffset = memAlloc.allocationSize;
 
 	vkGetBufferMemoryRequirements(device, uniformBuffer, &memReq);
 	memAlloc.allocationSize += memReq.size;
+	memAlloc.allocationSize = (memAlloc.allocationSize + alignment - 1) / alignment * alignment;
 	memoryTypeBits |= memReq.memoryTypeBits;
 
 	memAlloc.memoryTypeIndex = VkUtil::findMemoryType(physicalDevice, memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
