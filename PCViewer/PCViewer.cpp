@@ -3568,7 +3568,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		useBufferDeviceAddress = v12feat.bufferDeviceAddress;
 		if(!useBufferDeviceAddress)
 			std::cout << "Gpu does not support buffer device addresses, large vis pipeline only reduced usable" << std::endl;
-		shader16BitIntAvailable = feat.shaderInt16 && v11feat.storageBuffer16BitAccess;
+		shader16BitIntAvailable = feat.shaderInt16 && v11feat.storageBuffer16BitAccess && v12feat.storageBuffer8BitAccess;
 		if(!shader16BitIntAvailable)
 			std::cout << "Gpu does not support shader int16 support, large vis pipeline only reduced usable" << std::endl;
 #ifdef _DEBUG
@@ -3650,6 +3650,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		v12feat.descriptorBindingPartiallyBound = VK_TRUE;
 		v12feat.runtimeDescriptorArray = VK_TRUE;
 		v12feat.descriptorIndexing = VK_TRUE;
+		v12feat.storageBuffer8BitAccess = VK_TRUE;
 
 		void* firstNext{};
 		void** curPNext = &firstNext;

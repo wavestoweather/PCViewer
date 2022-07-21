@@ -176,6 +176,10 @@ public:
         VkUtil::PipelineInfo unquantizeUIntHalfInfo{};
     } Quantization;
 
+    struct CopyResources{
+        VkUtil::PipelineInfo pipelineInfo{};
+    } Copy;
+
 private:
     uint m_bufferSize;
 };

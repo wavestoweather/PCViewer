@@ -174,6 +174,13 @@ namespace vkCompress
         floatOut = 0;
         VkUtil::createComputePipeline(context.device, shaderModule, {}, &DWT.floatToHalfInverseInfo.pipelineLayout, &DWT.floatToHalfInverseInfo.pipeline, &specializationInfo, pushConstants);
 
+        // copy pipeline
+        const std::string_view copyPath = "shader/compression_copy.comp.spv";
+        compBytes = PCUtil::readByteFile(copyPath);
+        shaderModule = VkUtil::createShaderModule(context.device, compBytes);
+        pushConstants = {VkPushConstantRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, 4 * sizeof(uint32_t) + 2 * sizeof(uint64_t)}};
+        VkUtil::createComputePipeline(context.device, shaderModule, {}, &Copy.pipelineInfo.pipelineLayout, &Copy.pipelineInfo.pipeline, {}, pushConstants);
+        
         // resources for huffman pipeline ---------------------------------------------------------------
         // creating the buffer and descriptor sets for decoding ---------------------
         for(int i: irange(Encode.ms_decodeResourcesCount)){
@@ -226,6 +233,7 @@ namespace vkCompress
         Quantization.unquantizeUShortFloatInfo.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanLong.vkDestroy(vkContext);
         Encode.Decode[0].decodeHuffmanShort.vkDestroy(vkContext);
+        Copy.pipelineInfo.vkDestroy(vkContext);
 
         for(int i: irange(Encode.ms_decodeResourcesCount)){
             auto& d = Encode.Decode[i];

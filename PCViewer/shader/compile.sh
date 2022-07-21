@@ -78,3 +78,4 @@ glslangValidator -V --target-env vulkan1.1 -o compression_scan.comp.spv compress
 glslangValidator -V --target-env vulkan1.1 -o compression_scanAdd.comp.spv compression_scanAdd.comp
 glslangValidator -V --target-env vulkan1.1 -o compression_unquantize.comp.spv compression_unquantize.comp
 glslangValidator -V --target-env vulkan1.1 -o compression_DWTInverse.comp.spv compression_DWTInverse.comp
+glslangValidator -V --target-env vulkan1.1 -o compression_copy.comp.spv compression_copy.comp

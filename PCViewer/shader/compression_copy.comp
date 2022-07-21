@@ -1,0 +1,39 @@
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_EXT_scalar_block_layout: enable
+#extension GL_EXT_buffer_reference: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_16bit_storage                     : enable
+#extension GL_KHR_shader_subgroup_basic: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_nonuniform_qualifier: enable
+
+layout(buffer_reference, scalar) buffer Vec {u8vec4 i[];};
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PC{
+    uint byteSize;
+    uint pa,dd,ing;
+    uint64_t outAddress;
+    uint64_t inAddress;
+};
+
+void main(){
+    uint startByte = gl_GlobalInvocationID.x * 4;
+    if(startByte >= byteSize)
+        return;
+    Vec src = Vec(inAddress);
+    Vec dst = Vec(outAddress);
+    uint elements = min(byteSize - gl_GlobalInvocationID.x / 4, 4);
+    bool full = (elements == 4) ? true: false;
+    if(full)
+        dst.i[gl_GlobalInvocationID.x] = src.i[gl_GlobalInvocationID.x];
+    else{
+        for(int i = 0; i < elements; ++i){
+            dst.i[gl_GlobalInvocationID.x][i] = src.i[gl_GlobalInvocationID.x][i];
+        }
+    }
+}

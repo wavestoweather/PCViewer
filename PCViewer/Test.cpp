@@ -18,6 +18,7 @@
 #include "compression/gpuCompression/Scan.hpp"
 #include "compression/gpuCompression/Quantize.hpp"
 #include "compression/gpuCompression/DWT.hpp"
+#include "compression/gpuCompression/Copy.hpp"
 #include "largeVis/OpenCompressedDataset.hpp"
 #include "largeVis/DecompressManager.hpp"
 #include "compression/cpuCompression/HuffmanCPU.h"
@@ -37,7 +38,7 @@ static void compressVector(std::vector<float>& src, float quantizationStep, /*ou
     cudaCompress::util::quantizeToSymbols(symbols.data(), src.data(), src.size(), quantizationStep);
 	cudaCompress::BitStream* arr[]{&bitStream};
     std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
-    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size());
+    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size()); NOTE: 128 needed for correct decompression via gpu
     symbolsSize = symbols.size();
 }
 
@@ -62,6 +63,29 @@ static void decompressVector(std::vector<uint32_t> src, float quantizationStep, 
 	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
 }
 
+static std::vector<uint32_t> compressQHuffman(const std::vector<float>& data, float quantizationStep){
+    std::vector<cudaCompress::Symbol16> q(data.size());
+    cudaCompress::util::quantizeToSymbols(q.data(), data.data(), data.size(), quantizationStep);
+    cudaCompress::BitStream stream;
+    cudaCompress::BitStream* arr[]{&stream};
+    std::vector<cudaCompress::Symbol16>* qs[]{&q};
+    //cudaCompress::encodeRLHuffCPU(arr, qs, 1, 128, false); // note:  128 needed for correct decompression via gpu
+    cudaCompress::encodeHuffCPU(arr, qs, 1, 128); // note:  128 needed for correct decompression via gpu
+    return stream.getVector();
+}
+
+static std::vector<float> decompressQHuffman(const std::vector<uint32_t>& bytes, uint32_t symbolSize, float quantizationStep){
+    cudaCompress::BitStreamReadOnly stream(bytes.data(), bytes.size() * 32);
+    cudaCompress::BitStreamReadOnly* arr[]{&stream};
+    std::vector<cudaCompress::Symbol16> q;
+    std::vector<cudaCompress::Symbol16>* qs[]{&q};
+    //cudaCompress::decodeRLHuffCPU(arr, qs, symbolSize, 1, 128, false);
+    cudaCompress::decodeHuffCPU(arr, qs, symbolSize, 1, 128);
+    std::vector<float> data(q.size());
+    cudaCompress::util::unquantizeFromSymbols(data.data(), q.data(), q.size(), quantizationStep);
+    return data;
+}
+
 static std::vector<float> vkDecompress(const VkUtil::Context& context, vkCompress::GpuInstance& gpu, const RLHuffDecodeDataCpu& cpuData, const RLHuffDecodeDataGpu& gpuData, float quantizationStep, uint32_t symbolsSize){
     // creating buffer for the symbol table
     uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
@@ -83,13 +107,14 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, vkCompres
     vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
 
     vkCompress::dwtFloatInverse(&gpu, commands, srcA, dstA, symbolsSize / 2, symbolsSize / 2, symbolsSize / 2);
-    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, {}, 0, {}, 0, {});
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
     VkBufferCopy cpy{};
     cpy.dstOffset = 0;
     cpy.srcOffset = 0;
     cpy.size = symbolsSize / 2 * sizeof(float);
-    vkCmdCopyBuffer(commands, symbolBuffer[1], symbolBuffer[0], 1, &cpy);
-    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    //vkCmdCopyBuffer(commands, symbolBuffer[1], symbolBuffer[0], 1, &cpy);
+    vkCompress::copy(&gpu, commands, srcA, dstA, symbolsSize / 2 * sizeof(float));
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
     vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, symbolsSize);
 
     VkUtil::commitCommandBuffer(context.queue, commands);
@@ -146,6 +171,7 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     cpy.srcOffset = 0;
     cpy.size = symbolsSize / 2 * sizeof(float);
     vkCmdCopyBuffer(commands, symbolBuffer[1], symbolBuffer[0], 1, &cpy);
+    //vkCompress::copy(&gpu, commands, srcA, dstA, symbolsSize / 2 * sizeof(float));
     //vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
     vkCmdWriteTimestamp(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timings, 7);
     vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, symbolsSize);
@@ -233,17 +259,18 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // testing gpu decompression
     //vkCompress::decodeRLHuff({}, {}, (vkCompress::Symbol16**){}, {}, {});
-    const bool testDecomp = false;
-    const bool testExclusiveScan = false;
-    const bool testUnquanzite = false;
-    const bool testDWTInverse = false;
-    const bool testDWTInverseToHalf = false;
-    const bool testFullDecomp = false;
-    const bool testDecompressManager = false;
-    const bool testRealWorldDataCompression = false;
-    const bool testRealWorldHuffmanDetail = false;
-    const bool testUnquantizePerformance = false;
-    const bool testUPloadSpeed = false;
+    constexpr bool testDecomp = false;
+    constexpr bool testExclusiveScan = false;
+    constexpr bool testUnquanzite = false;
+    constexpr bool testDWTInverse = false;
+    constexpr bool testDWTInverseToHalf = false;
+    constexpr bool testFullDecomp = false;
+    constexpr bool testDecompressManager = false;
+    constexpr bool testRealWorldDataCompression = false;
+    constexpr bool testRealWorldHuffmanDetail = false;
+    constexpr bool testUnquantizePerformance = false;
+    constexpr bool testUPloadSpeed = false;
+    constexpr bool testQHuffmanCpu = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -589,6 +616,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     if(testRealWorldDataCompression){
         // testing encoding times for real world data
+        std::cout << "[test] Real World Data compression dwt dwt quantization rlhuff" << std::endl;
         std::vector<std::string_view> filenames{"/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/tp.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/q.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/NCCLOUD.bin"};
         std::vector<float> quants{0.001f, .01f, .1f};
         for(auto file: filenames){
@@ -619,6 +647,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
                 std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024 * 4) / bytesize) << std::endl;
             }
         }
+        std::cout << "[test] -------------------------------------------------------------" << std::endl << std::endl;
     }
     if constexpr(testRealWorldHuffmanDetail){
 
@@ -658,5 +687,38 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         PCUtil::Stopwatch upload(std::cout, "Upload Speed");
         std::vector<uint8_t> data(byteSize, 6);
         VkUtil::uploadData(context.device, mem, 0, byteSize, data.data());
+    }
+    if constexpr(testQHuffmanCpu){
+        // testing encoding times for real world data
+        std::cout << "[test] Real World Data compression quantization rlhuff" << std::endl;
+        std::vector<std::string_view> filenames{"/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/tp.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/q.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/NCCLOUD.bin"};
+        std::vector<float> quants{.0005, 0.001f, .01f, .1f};
+        for(auto file: filenames){
+            for(float q: quants){
+                uint32_t s;
+                std::vector<uint32_t> bits;
+                size_t bytesize;
+                {
+                    // encoding
+                    std::ifstream f(file.data(), std::ios_base::binary);
+                    //assert(f);
+                    std::vector<float> tpVals(1024 * 1024);
+ 
+                    f.read(reinterpret_cast<char*>(tpVals.data()), tpVals.size() * sizeof(tpVals[0]));
+
+                    PCUtil::Stopwatch encode(std::cout, "Encode " + std::to_string(q) + std::string(file));
+                    bits = compressQHuffman(tpVals, q);
+                    bytesize = bits.size() * sizeof(bits[0]);
+                }
+                {
+                    // decoding
+                    PCUtil::Stopwatch decode(std::cout, "Decode " + std::to_string(q) + std::string(file));
+                    std::vector<float> symb = decompressQHuffman(bits, 1024 * 1024, q);
+                    bool test = true;
+                }
+                std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024 * 4) / bytesize) << std::endl;
+            }
+        }
+        std::cout << "[test] -------------------------------------------------------------" << std::endl << std::endl;
     }
 }
