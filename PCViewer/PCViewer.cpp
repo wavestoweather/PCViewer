@@ -10529,7 +10529,8 @@ int main(int, char**)
 					ImGui::EndMenu();
 				}
 				if(ImGui::BeginMenu("Plot Size")){
-					bool change = ImGui::InputInt2("width/hight", reinterpret_cast<int*>(&g_PcPlotWidth), ImGuiInputTextFlags_EnterReturnsTrue);
+					static int wh[2]{static_cast<int>(g_PcPlotWidth), static_cast<int>(g_PcPlotHeight)};
+					bool change = ImGui::InputInt2("width/hight", wh, ImGuiInputTextFlags_EnterReturnsTrue);
 					static std::map<VkSampleCountFlagBits, std::string_view> flagNames{{VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_2_BIT, "2Spp"}, {VK_SAMPLE_COUNT_4_BIT, "4Spp"}, {VK_SAMPLE_COUNT_8_BIT, "8Spp"}, {VK_SAMPLE_COUNT_16_BIT, "16Spp"}};
 					if(ImGui::BeginCombo("Sample per pixel", flagNames[g_pcPlotSampleCount].data())){
 						for(auto [bit, name]: flagNames){
@@ -10553,6 +10554,9 @@ int main(int, char**)
 					}
 
 					if(change){
+						g_PcPlotWidth = wh[0];
+						g_PcPlotHeight = wh[1];
+
 						check_vk_result(vkDeviceWaitIdle(g_Device));
 						// cleanup old resources
 						cleanupPcPlotFramebuffer();
