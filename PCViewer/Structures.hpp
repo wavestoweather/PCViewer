@@ -170,7 +170,7 @@ struct UniformBufferObject {
 	uint32_t amtOfVerts;
 	uint32_t amtOfAttributes;
 	float padding;
-	uint32_t dataFlags, fill, fill1, fill2;
+	uint32_t dataFlags, plotWidth, plotHeight, fill2;
 	Vec4 color;
 	std::vector<Vec4> vertTransformations;
 	//Vec4 VertexTransormations[];			//is now a variable length array at the end of the UBO

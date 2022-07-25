@@ -2897,6 +2897,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 
 	//filling the uniform buffer and copying it into the end of the uniformbuffer
 	UniformBufferObject ubo = {};
+	ubo.plotWidth = g_PcPlotWidth;
+	ubo.plotHeight = g_PcPlotHeight;
 	ubo.amtOfVerts = amtOfIndeces;
 	ubo.amtOfAttributes = attributes.size();
 	ubo.color = { 1,1,1,1 };

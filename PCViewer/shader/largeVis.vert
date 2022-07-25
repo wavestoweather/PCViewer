@@ -15,7 +15,7 @@ layout(binding = 0) buffer UniformBufferObject{
 	uint amtOfAttributes;
 	float padding;
 	uint dataFlags;						//contains additional data flags
-	uint fill, fill1, fill2;
+	uint plotWidth, plotHeight, fill2;
 	vec4 color;
 	vec4 vertexTransformations[];		//x holds the x position, y and z hold the lower and the upper bound respectivley for the first amtOfAttributes positions
 } ubo;
@@ -26,6 +26,7 @@ layout(location = 1) out vec4 aPosBPos;	//containts 2 vec2: [aPos, bPos], with x
 
 void main() {
 	float gap = 2.0f/(ubo.amtOfVerts - 1.0f); //gap is tested, and is correct
+	uint subWidth = ubo.plotWidth / (ubo.amtOfVerts - 1);
 
 	uint aIndex = gl_VertexIndex / bSize;
 	uint bIndex = gl_VertexIndex % bSize;
@@ -41,6 +42,7 @@ void main() {
 	// transforming according to axis scaling
 	y1 = y1 * ubo.vertexTransformations[aAxis].y + ubo.vertexTransformations[aAxis].z;
 	y2 = y2 * ubo.vertexTransformations[bAxis].y + ubo.vertexTransformations[bAxis].z;
+	float yDiff = (y1 - y2) * ubo.plotHeight;
 	//y /= (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);
 	y1 -= .5f;
 	y1 *= -2;
@@ -55,6 +57,7 @@ void main() {
 	color = ubo.color;
 	//analytical calculation of opacity for clusterAmt wiith opacity a and N lines: a_final = 1-(1-a)^N
 	color.a = 1.-pow(1.-color.a, count);
+	color.a *= 1 / (1 + yDiff * yDiff / (subWidth * subWidth));//subWidth / sqrt(subWidth * subWidth + yDiff * yDiff);
 	//if(count > 0)
 	//	color.a = max(color.a, 0.006103515625);
 	//float a = color.a;
