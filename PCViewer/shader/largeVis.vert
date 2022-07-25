@@ -42,7 +42,7 @@ void main() {
 	// transforming according to axis scaling
 	y1 = y1 * ubo.vertexTransformations[aAxis].y + ubo.vertexTransformations[aAxis].z;
 	y2 = y2 * ubo.vertexTransformations[bAxis].y + ubo.vertexTransformations[bAxis].z;
-	float yDiff = (y1 - y2) * ubo.plotHeight;
+	float yDiff = (y1 - y2) * ubo.plotHeight * .5f;
 	//y /= (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);
 	y1 -= .5f;
 	y1 *= -2;
@@ -57,11 +57,5 @@ void main() {
 	color = ubo.color;
 	//analytical calculation of opacity for clusterAmt wiith opacity a and N lines: a_final = 1-(1-a)^N
 	color.a = 1.-pow(1.-color.a, count);
-	color.a *= 1 / (1 + yDiff * yDiff / (subWidth * subWidth));//subWidth / sqrt(subWidth * subWidth + yDiff * yDiff);
-	//if(count > 0)
-	//	color.a = max(color.a, 0.006103515625);
-	//float a = color.a;
-	//color.g = 1;
-	//color.a = (1 - pow(1-a,2 * count)) / (1 + pow(1 - a, count));//1 - pow(1 - a * a, count) / pow(1 + a, count);
-	//color.a = 1.f - min(pow(1.f-color.a, count), 1.f-color.a);
+	//color.a *= 1 / (1 + yDiff * yDiff / (subWidth * subWidth));//;ubWidth / sqrt(subWidth * subWidth + yDiff * yDiff)
 }

@@ -12158,7 +12158,7 @@ int main(int, char**)
 				ImGui::NextColumn();
 
 				int misc_flags = ImGuiColorEditFlags_AlphaBar;
-				if (ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)&dl.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags)) {
+				if (ImGui::ColorEdit4((std::string("Color##") + dl.name).c_str(), (float*)&dl.color, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | misc_flags)) {
 					pcPlotRender = true;
 				}
 				ImGui::NextColumn();
