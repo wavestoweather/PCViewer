@@ -77,8 +77,30 @@ void CompressionWorkbench::draw()
                 }
             }
         }
+
         if(_columnLoader){
             ImGui::Text("Column loader contains %i files", static_cast<int>(_columnLoader->getFileAmt()));
+            if(ImGui::CollapsingHeader("Data dimension settings")){
+                for(auto& a: _columnLoader->queryAttributes){
+                    if (a.dimensionSize > 0) {
+                        ImGui::Text("%s", a.name.c_str());
+						ImGui::PushItemWidth(100);
+						if (a.active) {
+							ImGui::SameLine();
+							ImGui::InputInt(("sampleFrequency##" + a.name).c_str(), &a.dimensionSubsample);
+							if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
+							ImGui::SameLine();
+							ImGui::InputInt2(("Trim Indices##" + a.name).c_str(), a.trimIndices);
+						}
+						else {
+							ImGui::SameLine();
+							ImGui::InputInt(("slice Index##" + a.name).c_str(), &a.dimensionSlice);
+							a.dimensionSlice = std::clamp(a.dimensionSlice, 0, a.dimensionSize - 1);
+						}
+						ImGui::PopItemWidth();
+					}
+                }
+            }
         }
         if(_loader || _columnLoader && ImGui::Button("Analyze")){
             if(_loader)
