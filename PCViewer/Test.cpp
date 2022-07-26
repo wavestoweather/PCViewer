@@ -684,9 +684,12 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     if constexpr(testUPloadSpeed){
         uint32_t byteSize = 1<<30; // 1 gigabytes
         auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);// | VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        PCUtil::Stopwatch upload(std::cout, "Upload Speed");
         std::vector<uint8_t> data(byteSize, 6);
-        VkUtil::uploadData(context.device, mem, 0, byteSize, data.data());
+        //VkUtil::uploadData(context.device, mem, 0, byteSize, data.data());
+        void *d;
+	    vkMapMemory(context.device, mem, 0, byteSize, 0, &d);
+        PCUtil::Stopwatch upload(std::cout, "Upload Speed");
+	    memcpy(d, data.data(), byteSize);
     }
     if constexpr(testQHuffmanCpu){
         // testing encoding times for real world data
