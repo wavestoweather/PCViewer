@@ -101,6 +101,18 @@ enum class InheritanceFlags{
 	compressed = 1 << 2
 };
 
+enum class AlphaMappingTypes: uint32_t{
+	MappingMultiplicative,
+	MappingBound01,
+	MappingConstAlpha
+};
+
+static std::vector<std::string_view> alphaMappingNames{
+	"MappingMultiplicative",
+	"MappingBound01",
+	"MappingConstAlpha"
+};
+
 // struct holding the information for a drawable instance of a TemplateList
 //
 // The id of the Drawlist is its name!
@@ -158,6 +170,7 @@ struct DrawList {
 	bool renderBundles, renderClusterBundles;
 	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
 	std::shared_ptr<IndBinManager> indBinManager;	//optional import manger for large vis files
+	AlphaMappingTypes alphaMappingType;
 };
 
 struct DrawlistDragDropInfo{
@@ -170,7 +183,7 @@ struct UniformBufferObject {
 	uint32_t amtOfVerts;
 	uint32_t amtOfAttributes;
 	float padding;
-	uint32_t dataFlags, plotWidth, plotHeight, fill2;
+	uint32_t dataFlags, plotWidth, plotHeight, alphaMapping;
 	Vec4 color;
 	std::vector<Vec4> vertTransformations;
 	//Vec4 VertexTransormations[];			//is now a variable length array at the end of the UBO

@@ -15,7 +15,7 @@ layout(binding = 0) buffer UniformBufferObject{
 	uint amtOfAttributes;
 	float padding;
 	uint dataFlags;						//contains additional data flags
-	uint plotWidth, plotHeight, fill2;
+	uint plotWidth, plotHeight, alphaMappingType;
 	vec4 color;
 	vec4 vertexTransformations[];		//x holds the x position, y and z hold the lower and the upper bound respectivley for the first amtOfAttributes positions
 } ubo;
@@ -23,6 +23,10 @@ layout(binding = 0) buffer UniformBufferObject{
 layout(location = 0) in uint count;
 layout(location = 0) out vec4 color;	//color contains the count value in its alpha channel
 layout(location = 1) out vec4 aPosBPos;	//containts 2 vec2: [aPos, bPos], with xPos containing the x and y coordinates of one end of a line
+
+const uint MappingMultiplicative = 0;	// standard
+const uint MappingBound01 = 1;			// all resulting alpha values have at least  alpha = .01
+const uint MappingConstAlpha = 2;		// when count > 0 alpha value from color is taken
 
 void main() {
 	float gap = 2.0f/(ubo.amtOfVerts - 1.0f); //gap is tested, and is correct
@@ -56,6 +60,20 @@ void main() {
 
 	color = ubo.color;
 	//analytical calculation of opacity for clusterAmt wiith opacity a and N lines: a_final = 1-(1-a)^N
-	color.a = 1.-pow(1.-color.a, count);
+	switch(ubo.alphaMappingType){
+	case MappingMultiplicative:
+		color.a = 1.-pow(1.-color.a, count);
+	break;
+	case MappingBound01:
+		color.a = 1.-pow(1.-color.a, count);
+		if(count > 1)
+			color.a = max(color.a, .01);
+	break;
+	case MappingConstAlpha:
+		if(count == 0)
+			color.a = 0;
+		break;
+	}
+	
 	//color.a *= 1 / (1 + yDiff * yDiff / (subWidth * subWidth));//;ubWidth / sqrt(subWidth * subWidth + yDiff * yDiff)
 }

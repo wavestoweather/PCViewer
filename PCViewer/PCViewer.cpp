@@ -458,6 +458,8 @@ static VkBuffer					g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory			g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
 static VkPipelineLayout			g_PcPlotPipelineLayout = VK_NULL_HANDLE;	//contains the pipeline which is used to assign global shader variables
 static VkPipeline				g_PcPlotPipeline = VK_NULL_HANDLE;			//contains the graphics pipeline for the pc
+static VkPipelineLayout			g_PcPlotPipelineLayout_noClear = VK_NULL_HANDLE;
+static VkPipeline				g_PcPlotPipeline_noClear = VK_NULL_HANDLE;
 //variables for spline pipeline
 static VkPipelineLayout			g_PcPlotSplinePipelineLayout = VK_NULL_HANDLE;
 static VkPipeline				g_PcPlotSplinePipeline = VK_NULL_HANDLE;
@@ -1671,11 +1673,27 @@ static void createPcPlotPipeline() {
 	vkDestroyShaderModule(g_Device, fragShaderModule, nullptr);
 	vkDestroyShaderModule(g_Device, vertShaderModule, nullptr);
 
+	//----------------------------------------------------------------------------------------------
+	//creating the pipeline for line rendering without clear values
+	//----------------------------------------------------------------------------------------------
+	VkShaderModule shaderModules[5] = {};
+	vertShader = readFile(g_vertShaderPath);
+	fragShader = readFile(g_fragShaderPath);
+	shaderModules[0] = VkUtil::createShaderModule(g_Device, vertShader);
+	shaderModules[4] = VkUtil::createShaderModule(g_Device, fragShader);
+
+	std::vector<VkDynamicState> dynamicStateVec;
+	dynamicStateVec.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
+
+	VkUtil::BlendInfo blendInfo;
+	blendInfo.blendAttachment = colorBlendAttachment;
+	blendInfo.createInfo = colorBlending;
+
+	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP, &rasterizer, &multisampling, nullptr, &blendInfo, {g_PcPlotDescriptorLayout, g_PcPlotDataSetLayout}, &g_PcPlotRenderPass_noClear, &g_PcPlotPipelineLayout_noClear, &g_PcPlotPipeline_noClear);
 
 	//----------------------------------------------------------------------------------------------
 	//creating the pipeline for spline rendering
 	//----------------------------------------------------------------------------------------------
-	VkShaderModule shaderModules[5] = {};
 	std::vector<char> vertexBytes = PCUtil::readByteFile(g_vertShaderPath);
 	shaderModules[0] = VkUtil::createShaderModule(g_Device, vertexBytes);
 	std::vector<char> geometryBytes = PCUtil::readByteFile(g_geomShaderPath);
@@ -1707,16 +1725,9 @@ static void createPcPlotPipeline() {
 	uboLayoutBinding.descriptorCount = 1;
 	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
 
-	VkUtil::BlendInfo blendInfo;
-	blendInfo.blendAttachment = colorBlendAttachment;
-	blendInfo.createInfo = colorBlending;
-
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	descriptorSetLayouts.push_back(g_PcPlotDescriptorLayout);
 	descriptorSetLayouts.push_back(g_PcPlotDataSetLayout);
-
-	std::vector<VkDynamicState> dynamicStateVec;
-	dynamicStateVec.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
 
 	VkUtil::createPipeline(g_Device, &vertexInputInfo, g_PcPlotWidth, g_PcPlotHeight, dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &g_PcPlotRenderPass, &g_PcPlotSplinePipelineLayout, &g_PcPlotSplinePipeline);
 
@@ -1774,6 +1785,8 @@ static void cleanupPcPlotPipeline() {
 	vkDestroyDescriptorSetLayout(g_Device, g_PcPlotDataSetLayout, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotPipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotPipeline, nullptr);
+	vkDestroyPipelineLayout(g_Device, g_PcPlotPipelineLayout_noClear, nullptr);
+	vkDestroyPipeline(g_Device, g_PcPlotPipeline_noClear, nullptr);
 	vkDestroyPipelineLayout(g_Device, g_PcPlotSplinePipelineLayout, nullptr);
 	vkDestroyPipeline(g_Device, g_PcPlotSplinePipeline, nullptr);
 	vkDestroyPipelineLayout(g_Device, c_IndexPipelineLayout, nullptr);
@@ -2974,6 +2987,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		ubo.vertTransformations[0].w = (priorityAttribute != -1 && c == priorityListIndex) ? 1.f : 0;
 		ubo.dataFlags = static_cast<uint32_t>(ds.inheritanceFlags);
 		ubo.color = ds.color;
+		ubo.alphaMapping = static_cast<uint32_t>(ds.alphaMappingType);
 		if(ds.indBinManager){
 			auto c = ubo;
 			// adjusting the min and max values to the min and max values of the bins
@@ -3017,7 +3031,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		if(drawList->show)
 			max_amt_of_lines += drawList->indices.size();
 	}
-	bool batching = max_amt_of_lines > pcSettings.lineBatchSize && pcSettings.renderSplines;		//if more lines could be rendererd than the set batch size use batched rendering(only activated for spline rendering)
+	bool batching = max_amt_of_lines > pcSettings.lineBatchSize;// && pcSettings.renderSplines;		//if more lines could be rendererd than the set batch size use batched rendering(only activated for spline rendering)
 	int curIndex = 0;
 	int batchSizeLeft = pcSettings.lineBatchSize;
 
@@ -3035,10 +3049,19 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		vkCmdPipelineBarrier(line_batch_commands[0], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 		std::vector<VkClearValue> clearValues{ { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w } };
 		VkUtil::beginRenderPass(line_batch_commands[0], clearValues, g_PcPlotRenderPass, g_PcPlotFramebuffer, { g_PcPlotWidth, g_PcPlotHeight });
-		vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+		//vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+		if (pcSettings.renderSplines)
+			vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+		else
+			vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
 
 		//binding the all needed things
-		vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+		//vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+		if (pcSettings.renderSplines)
+			vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+		else
+			vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+
 
 		if (g_PcPlotIndexBuffer && pcAttributes.size())
 			vkCmdBindIndexBuffer(line_batch_commands.back(), g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
@@ -3057,7 +3080,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				drawList->lineBundles->haloWidth = pcSettings.haloWidth;
 				drawList->lineBundles->recordDrawBundles(line_batch_commands.back());
 				VkUtil::beginRenderPass(line_batch_commands.back(), clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
-				vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				if (pcSettings.renderSplines)
+					vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				else
+					vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
 				continue;
 			}
 			else if(drawList->renderClusterBundles){
@@ -3067,7 +3093,10 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				drawList->clusterBundles->haloWidth = pcSettings.haloWidth;
 				drawList->clusterBundles->recordDrawBundles(line_batch_commands.back());
 				VkUtil::beginRenderPass(line_batch_commands.back(), clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
-				vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				if (pcSettings.renderSplines)
+					vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
+				else
+					vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
 				continue;
 			}
 			do {
@@ -3146,10 +3175,19 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					//clearValues.clear();
 					VkUtil::beginRenderPass(line_batch_commands.back(), clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
 
-					vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline_noClear);
+					//vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline_noClear);
+					if (pcSettings.renderSplines)
+						vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline_noClear);
+					else
+						vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline_noClear);
 
 					//binding the all needed things
-					vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout_noClear, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+					//vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout_noClear, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+					if (pcSettings.renderSplines)
+						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout_noClear, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+					else
+						vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout_noClear, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+
 
 					if (g_PcPlotIndexBuffer && pcAttributes.size())
 						vkCmdBindIndexBuffer(line_batch_commands.back(), g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
@@ -3164,8 +3202,9 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		for (VkCommandBuffer b : line_batch_commands) {
 			VkUtil::commitCommandBuffer(g_Queue, b);
 			err = vkQueueWaitIdle(g_Queue); check_vk_result(err);
+			//break;
 		}
-
+		std::cout << line_batch_commands.size() << std::endl;
 		vkFreeCommandBuffers(g_Device, g_PcPlotCommandPool, line_batch_commands.size(), line_batch_commands.data());
 	}
 	else {
@@ -11854,6 +11893,15 @@ int main(int, char**)
 					}
 					if (ImGui::MenuItem("Immune to global brushes", "", &dl.immuneToGlobalBrushes)) {
 						pcPlotRender = updateActiveIndices(dl);
+					}
+					if (dl.indBinManager && ImGui::BeginCombo("Alpha mappingt type", alphaMappingNames[static_cast<uint32_t>(dl.alphaMappingType)].data())){
+						for(int mapType: irange(alphaMappingNames)){
+							if(ImGui::MenuItem(alphaMappingNames[mapType].data())){
+								dl.alphaMappingType = static_cast<AlphaMappingTypes>(mapType);
+								pcPlotRender = true;
+							}
+						}
+						ImGui::EndCombo();
 					}
 					if (ImGui::BeginCombo("##combo", "Compare to")) // The second parameter is the label previewed before opening the combo.
 					{
