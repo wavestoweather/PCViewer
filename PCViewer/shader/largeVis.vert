@@ -67,7 +67,7 @@ void main() {
 	case MappingBound01:
 		color.a = 1.-pow(1.-color.a, count);
 		if(count > 1)
-			color.a = max(color.a, .01);
+			color.a = max(color.a, .03);
 	break;
 	case MappingConstAlpha:
 		if(count == 0)

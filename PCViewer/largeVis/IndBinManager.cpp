@@ -425,6 +425,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         case CountingMethod::GpuComputeFullSubgroup:
         case CountingMethod::GpuComputeFullPartitioned:
         case CountingMethod::GpuComputeFullMax:
+        case CountingMethod::GpuComputeFullPartitionGeneric:
         case CountingMethod::GpuComputeFull:{
             std::vector<VkBuffer> datas(activeIndices.size()), 
                                     counts(activeIndices.size() - 1);
@@ -446,10 +447,11 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 continue;
             LineCounter::ReductionTypes reductionType{};
             switch(t->countingMethod){
-                case CountingMethod::GpuComputeFullSubgroup: reductionType = LineCounter::ReductionSubgroupAllAdd; break;
-                case CountingMethod::GpuComputeFullPartitioned: reductionType = LineCounter::ReductionSubgroupAdd; break;
-                case CountingMethod::GpuComputeFull: reductionType = LineCounter::ReductionAdd; break;
-                case CountingMethod::GpuComputeFullMax: reductionType = LineCounter::ReductionSubgroupMax; break;
+                case CountingMethod::GpuComputeFullSubgroup:        reductionType = LineCounter::ReductionSubgroupAllAdd; break;
+                case CountingMethod::GpuComputeFullPartitioned:     reductionType = LineCounter::ReductionSubgroupAdd; break;
+                case CountingMethod::GpuComputeFull:                reductionType = LineCounter::ReductionAdd; break;
+                case CountingMethod::GpuComputeFullMax:             reductionType = LineCounter::ReductionSubgroupMax; break;
+                case CountingMethod::GpuComputeFullPartitionGeneric:reductionType = LineCounter::ReductionAddPartitionGeneric; break;
             }
             curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, dataOffset, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
             break;

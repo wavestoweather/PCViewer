@@ -27,6 +27,7 @@ public:
         ReductionSubgroupMin,
         ReductionMax,           // currently unused
         ReductionSubgroupMax,   // currently unused
+        ReductionAddPartitionGeneric,
         ReductionEnumMax
     };
 

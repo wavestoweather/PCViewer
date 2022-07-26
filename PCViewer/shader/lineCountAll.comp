@@ -2,6 +2,8 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_NV_shader_subgroup_partitioned: enable
 #extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_shuffle: enable
 
 layout(binding = 0) buffer vA{uint v[];}a[]; 
 
@@ -28,6 +30,7 @@ const uint reductionMin = 5;
 const uint reductionSubgroupMin = 6;
 const uint reductionMax = 7;        // currently unused
 const uint reductionSubgroupMax = 8;// currently unused
+const uint reductionAddPartitionGeneric = 9;    // same as add partition but without nv things
 
 layout(constant_id = 0) const uint reductionType = reductionAdd;
 
@@ -109,6 +112,42 @@ void main(){
             if(val > c[i - 1].v[finalBin] && m == val)
                 atomicMax(c[i - 1].v[finalBin], val);
 
+            break;
+        case reductionAddPartitionGeneric:
+            bool cont = true;
+            // runtime: 120 ms for 30 million
+            //for(int iter = 0; cont && iter < gl_SubgroupInvocationID + 1; ++iter){
+            //    uint currentBin = subgroupBroadcastFirst(finalBin);
+            //    uvec4 binCount = subgroupBallot(currentBin == finalBin);
+            //    uint count = subgroupBallotBitCount(binCount);
+            //    if(subgroupBallotFindLSB(binCount) == gl_SubgroupInvocationID)
+            //        atomicAdd(c[i - 1].v[finalBin], count);
+            //    if(currentBin == finalBin)
+            //        cont = false;
+            //}
+            // runtime: 120 ms for 30 million
+            //for(uint iter = 0; cont && iter < gl_SubgroupSize; ++iter){
+            //    uint currentBin = subgroupShuffle(finalBin, iter);
+            //    uvec4 binCount = subgroupBallot(currentBin == finalBin);
+            //    uint count = subgroupBallotBitCount(binCount);
+            //    if(iter == gl_SubgroupInvocationID)
+            //        atomicAdd(c[i - 1].v[finalBin], count);
+            //    if(currentBin == finalBin)
+            //        cont = false;
+            //}
+            // runtime: 120ms for 30 million
+            uint inc = 0;
+            for(uint iter = 0; cont && iter < gl_SubgroupSize; ++iter){
+                uint currentBin = subgroupShuffle(finalBin, iter);
+                uvec4 binCount = subgroupBallot(currentBin == finalBin);
+                uint count = subgroupBallotBitCount(binCount);
+                if(iter == gl_SubgroupInvocationID)
+                    inc = count;
+                if(currentBin == finalBin)
+                    cont = false;
+            }
+            if(inc > 0)
+                atomicAdd(c[i - 1].v[finalBin], inc);
             break;
         }
 
