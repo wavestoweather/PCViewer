@@ -14,7 +14,7 @@
 #endif
 
 namespace util{
-    static DataSet openCompressedDataset(const VkUtil::Context& context, std::string_view folder){
+    static DataSet openCompressedDataset(const VkUtil::Context& context, std::string_view folder, uint32_t transferQueueIndex = (uint32_t)-1){
         std::string hierarchyFolder(folder);
 
         // --------------------------------------------------------------------------------
@@ -64,7 +64,7 @@ namespace util{
         robin_hood::unordered_map<std::vector<uint32_t>, std::vector<roaring::Roaring64Map>, UVecHash> ndBuckets;
         if((dataBits & compression::DataStorageBits::RawAttributeBins) != compression::DataStorageBits::None){
             // reading index data
-            std::cout << "Loading indexdata..." << std::endl;
+            std::cout << "[import] Loading indexdata..." << std::endl;
             std::vector<std::vector<uint32_t>> attributeIndices;
             attributeIndices.resize(attributes.size());
             for(int i = 0; i < attributes.size(); ++i){
@@ -76,7 +76,7 @@ namespace util{
                 indicesData.read(reinterpret_cast<char*>(attributeIndices[i].data()), indicesSize * sizeof(attributeIndices[0][0]));
             }
             // compressing index data
-            std::cout << "Compressing indexdata..."  << std::endl;
+            std::cout << "[import] Compressing indexdata..."  << std::endl;
             for(uint32_t compInd: irange(_attributeCenters)){
                 ndBuckets[{compInd}].resize(_attributeCenters[compInd].size());
                 size_t indexlistSize{attributeIndices[compInd].size() * sizeof(uint32_t)}, compressedSize{};
@@ -91,7 +91,7 @@ namespace util{
         }
         else if((dataBits & compression::DataStorageBits::RoaringAttributeBins) != compression::DataStorageBits::None){
             // compressed indices, can be read out directly
-            std::cout << "Loading compressed indexdata..." << std::endl;
+            std::cout << "[import] Loading compressed indexdata..." << std::endl;
             for(uint32_t i: irange(attributes)){
                 std::ifstream indicesData(hierarchyFolder + "/" + std::to_string(i) + ".ids", std::ios_base::binary);
                 uint32_t indicesSize = _attributeCenters[i].back().offset + _attributeCenters[i].back().size;   // size is given in bytes
@@ -118,7 +118,7 @@ namespace util{
         std::unique_ptr<vkCompress::GpuInstance> gpuInstance;
         if((dataBits & compression::DataStorageBits::RawColumnData) != compression::DataStorageBits::None){
             // convert normalized float data automatically to half data
-            std::cout << "Loading float column data" << std::endl;
+            std::cout << "[import] Loading float column data" << std::endl;
             for(uint32_t i: irange(attributes)){
                 std::ifstream data(hierarchyFolder + "/" + std::to_string(i) + ".col", std::ios_base::binary);
                 std::vector<float> dVec(dataSize);
@@ -128,13 +128,13 @@ namespace util{
         }
         else if((dataBits & compression::DataStorageBits::HalfColumnData) != compression::DataStorageBits::None){
             // directly parse
-            std::cout << "Loading half column data" << std::endl;
+            std::cout << "[import] Loading half column data" << std::endl;
             if(dataSize == 0){  //getting the data size from the file size
                 dataSize = std::filesystem::file_size(hierarchyFolder + "/0.col") / 2;
                 std::cout << "Data size from col file: " << dataSize << std::endl;
             }
             for(uint32_t i: irange(attributes)){
-                std::cout << "Loading half data for attribute " << attributes[i].name << std::endl;
+                std::cout << "[import] Loading half data for attribute " << attributes[i].name << std::endl;
                 std::ifstream data(hierarchyFolder + "/" + std::to_string(i) + ".col", std::ios_base::binary);
                 auto& dVec = columnData[i].cpuData;
                 dVec.resize(dataSize);
@@ -146,7 +146,7 @@ namespace util{
             gpuInstance = std::make_unique<vkCompress::GpuInstance>(context, 1, dataBlockSize, 0,0);
             std::vector<uint32_t> dataVec;
             for(uint32_t i: irange(attributes)){
-                std::cout << "Loading compressed data for attribute " << attributes[i].name << std::endl;
+                std::cout << "[import] Loading compressed data for attribute " << attributes[i].name << std::endl;
                 std::ifstream columnFile(hierarchyFolder + "/" + std::to_string(i) + ".comp", std::ios_base::binary);
                 assert(columnFile);
                 struct{uint64_t streamSize; uint32_t symbolSize;}sizes{};
@@ -161,30 +161,75 @@ namespace util{
             }
         }
         // only upload half data uncompressed if no cuda compressed data is available
+        std::unique_ptr<UploadManager> uploadManager;
         if(columnData[0].cpuData.size()){
-            // currently the uncompressed 16 bit vectors are uploaded. Has to be changed to compressed vectors
-            for(auto& d: columnData){
-                //std::cout << "Creating vulkan buffer" << std::endl;
-                // creating the vulkan resources and uploading the data to them
-                VkUtil::createBuffer(context.device, d.cpuData.size() * sizeof(d.cpuData[0]), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &d.gpuHalfData);
-                VkMemoryRequirements memReq{};
-                vkGetBufferMemoryRequirements(context.device, d.gpuHalfData, &memReq);
-                VkMemoryAllocateInfo allocInfo{};
-                allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-                allocInfo.allocationSize = memReq.size;
-                allocInfo.memoryTypeIndex = VkUtil::findMemoryType(context.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-                VkMemoryAllocateFlagsInfo allocFlags{};
-                allocFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-                allocFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-                allocInfo.pNext = &allocFlags;
-                check_vk_result(vkAllocateMemory(context.device, &allocInfo, nullptr, &d.gpuMemory));
-                vkBindBufferMemory(context.device, d.gpuHalfData, d.gpuMemory, 0);
-                PCUtil::Stopwatch uploadWatch(std::cout, "Indirect upload with staging buffer creation");
-                VkUtil::uploadDataIndirect(context, d.gpuHalfData, d.cpuData.size() * sizeof(d.cpuData[0]), d.cpuData.data());
+            // either uploading half data directly, or setting everything up to upload the half data on the fly via an uploadmanager
+
+            // getting memory information
+            VkPhysicalDeviceMemoryProperties memProps{};
+            vkGetPhysicalDeviceMemoryProperties(context.physicalDevice, &memProps);
+            size_t deviceLocalSize{};
+            for(int i: irange(memProps.memoryHeapCount)){
+                if(memProps.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT){
+                    deviceLocalSize = memProps.memoryHeaps[i].size;
+                    break;
+                }
+            }
+            std::cout << "[import] Found " << deviceLocalSize / double(1 << 30) << " GB of device local memory." << std::endl;
+            size_t dataByteSize = dataSize * columnData.size() * sizeof(half);
+            if(dataByteSize > .9 * deviceLocalSize){
+                std::cout << "[import] More than 90\% of GPU Memory is used -> using streaming upload to gpu." << std::endl;
+
+                // calculating all buffer sizes to occupy 80% of GPU memory
+                const uint32_t amtStagingBuffers{2};
+                size_t bufferByteSize = deviceLocalSize * .8 / (columnData.size() + amtStagingBuffers);
+                bufferByteSize = PCUtil::alignedSize(bufferByteSize, 0x40);
+                VkBufferUsageFlags usages = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+                for(auto& d: columnData){
+                    auto [b, o, m] = VkUtil::createMultiBufferBound(context, {bufferByteSize}, {usages}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                    d.gpuHalfData = b[0];
+                    d.gpuMemory = m;
+                }
+
+                uploadManager = std::make_unique<UploadManager>(context, transferQueueIndex, amtStagingBuffers, bufferByteSize);
+            }
+            else{
+                uint32_t alignedSize = PCUtil::alignedSize(columnData[0].cpuData.size() * sizeof(columnData[0].cpuData[0]), 0x40);
+                for(auto& d: columnData){
+                    //std::cout << "Creating vulkan buffer" << std::endl;
+                    // creating the vulkan resources and uploading the data to them
+                    VkUtil::createBuffer(context.device, alignedSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &d.gpuHalfData);
+                    VkMemoryRequirements memReq{};
+                    vkGetBufferMemoryRequirements(context.device, d.gpuHalfData, &memReq);
+                    VkMemoryAllocateInfo allocInfo{};
+                    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                    allocInfo.allocationSize = memReq.size;
+                    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(context.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                    VkMemoryAllocateFlagsInfo allocFlags{};
+                    allocFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+                    allocFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+                    allocInfo.pNext = &allocFlags;
+                    check_vk_result(vkAllocateMemory(context.device, &allocInfo, nullptr, &d.gpuMemory));
+                    vkBindBufferMemory(context.device, d.gpuHalfData, d.gpuMemory, 0);
+                    PCUtil::Stopwatch uploadWatch(std::cout, "Indirect upload with staging buffer creation");
+                    VkUtil::uploadDataIndirect(context, d.gpuHalfData, d.cpuData.size() * sizeof(d.cpuData[0]), d.cpuData.data());
+                }
             }
         }
 
-        std::cout << "Loaded " << dataSize << " datapoints" << std::endl;
+        // creating the decompress manager if needed
+        std::unique_ptr<DecompressManager> decompressManager;
+        if(gpuInstance){
+	    	DecompressManager::GpuColumns gpuColumns(columnData.size());
+	    	DecompressManager::CpuColumns cpuColumns(gpuColumns.size());
+	    	for(int i : irange(gpuColumns)){
+	    		gpuColumns[i] = columnData[i].compressedRLHuffGpu.data();
+	    		cpuColumns[i] = columnData[i].compressedRLHuffCpu.data();
+	    	}
+	    	decompressManager = std::make_unique<DecompressManager>(dataBlockSize, *gpuInstance, cpuColumns, gpuColumns);
+	    }
+
+        std::cout << "[import] Loaded " << dataSize << " datapoints" << std::endl;
 
         return DataSet{
             std::string(folder.substr(folder.find_last_of("/\\") + 1)),
@@ -200,7 +245,9 @@ namespace util{
                 std::move(attributes),
                 dataBlockSize,
                 quantizationStep,
-                std::move(gpuInstance)
+                std::move(gpuInstance),
+                std::move(decompressManager),
+                std::move(uploadManager)
             }
         };
     }

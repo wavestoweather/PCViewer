@@ -35,6 +35,7 @@ public:
 	static std::vector<QueryAttribute> queryNetCDF(const std::string_view& filename);
 	static std::vector<int> checkAttributes(std::vector<std::string>& a, std::vector<Attribute>& ref);
 	static Data openNetCdf(const std::string_view& filename, /*inout*/ std::vector<Attribute>& attributes, const std::vector<QueryAttribute>& queryAttributes);
+	static constexpr size_t alignedSize(size_t size, size_t alignment){return (size + alignment - 1) / alignment * alignment;};
 	template<typename T>
 	static std::string toReadableString(const std::vector<T>& v){
 		std::stringstream out;
@@ -107,6 +108,7 @@ public:
 		void release();
 		void releaseN(int n);
 		void acquire();
+		unsigned long peekCount(){return _count;};
 	};
 
 	// custom priority queue implementation to be able to access the underlying container

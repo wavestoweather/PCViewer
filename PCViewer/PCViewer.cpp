@@ -170,7 +170,8 @@ static VkPhysicalDevice         g_PhysicalDevice = VK_NULL_HANDLE;
 static VkDevice                 g_Device = VK_NULL_HANDLE;
 static uint32_t                 g_QueueFamily = (uint32_t)-1;
 static uint32_t					c_QueueFamily = (uint32_t)-1;
-static VkQueue                  g_Queue = VK_NULL_HANDLE;
+static uint32_t                 t_QueueFamily = (uint32_t)-1;
+static VkQueue					g_Queue = VK_NULL_HANDLE;
 static std::mutex				g_QueueMutex{};				// mutex to synchronize queue submissions with external threads
 static VkDebugReportCallbackEXT g_DebugReport = VK_NULL_HANDLE;
 static VkPipelineCache          g_PipelineCache = VK_NULL_HANDLE;
@@ -3654,10 +3655,14 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 			}
 		}
 		free(queues);
+		std::vector<uint32_t> diff1, diff2;
+		std::set_difference(transferQueues.begin(), transferQueues.end(), graphicsQueues.begin(), graphicsQueues.end(), std::inserter(diff1, diff1.end()));
+		std::set_difference(diff1.begin(), diff1.end(), computeQueues.begin(), computeQueues.end(), std::inserter(diff2, diff2.end()));
+		t_QueueFamily = diff2.empty() ? g_QueueFamily: diff2.front();
 		IM_ASSERT(g_QueueFamily != (uint32_t)-1);
 		IM_ASSERT(c_QueueFamily != (uint32_t)-1);
 #ifdef _DEBUG
-		std::cout << "graphics queue: " << g_QueueFamily << std::endl << "cpompute queue: " << c_QueueFamily << std::endl;
+		std::cout << "graphics queue: " << g_QueueFamily << std::endl << "cpompute queue: " << c_QueueFamily << ", transfer queue: " << t_QueueFamily << std::endl;
 		auto printVec = [](const std::vector<uint32_t>& v){
 			std::cout << "[";
 			for(auto e: v)
@@ -3670,6 +3675,8 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		printVec(computeQueues);
 		std::cout << "Transfer queues" << std::endl;
 		printVec(transferQueues);
+		std::cout << "Esclusive Transfer: ";
+		printVec(diff2);
 #endif
 	}
 
@@ -3723,11 +3730,15 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		if(atomicGpuFloatAddAvailable)
 			deviceFeatures.shaderFloat64 = VK_TRUE;
 		const float queue_priority[] = { 1.0f };
-		VkDeviceQueueCreateInfo queue_info[1] = {};
+		VkDeviceQueueCreateInfo queue_info[2] = {};
 		queue_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queue_info[0].queueFamilyIndex = g_QueueFamily;
 		queue_info[0].queueCount = 1;
 		queue_info[0].pQueuePriorities = queue_priority;
+		queue_info[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_info[1].queueFamilyIndex = t_QueueFamily;
+		queue_info[1].queueCount = 1;
+		queue_info[1].pQueuePriorities = queue_priority;
 		VkDeviceCreateInfo create_info = {};
 		create_info.pNext = firstNext;
 		create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -4013,16 +4024,7 @@ static std::vector<int> checkAttriubtes(std::vector<std::string>& a) {
 }
 
 static bool openHierarchy(const char* filename, const char* attributeInfo){
-	DataSet ds = util::openCompressedDataset(VkUtil::Context{0, 0, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex}, filename);
-	if(ds.compressedData.gpuInstance){
-		DecompressManager::GpuColumns gpuColumns(ds.compressedData.columnData.size());
-		DecompressManager::CpuColumns cpuColumns(gpuColumns.size());
-		for(int i : irange(gpuColumns)){
-			gpuColumns[i] = ds.compressedData.columnData[i].compressedRLHuffGpu.data();
-			cpuColumns[i] = ds.compressedData.columnData[i].compressedRLHuffCpu.data();
-		}
-		ds.compressedData.decompressManager = std::make_unique<DecompressManager>(ds.compressedData.compressedBlockSize, *ds.compressedData.gpuInstance, cpuColumns, gpuColumns);
-	}
+	DataSet ds = util::openCompressedDataset(VkUtil::Context{0, 0, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex}, filename, t_QueueFamily);
 
 	//checking attribute correctnes and creating attributes if not yet available
 	std::vector<std::string> attributeNames(ds.compressedData.attributes.size());

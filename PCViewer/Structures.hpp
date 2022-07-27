@@ -12,6 +12,7 @@
 #include "largeVis/DecompressManager.hpp"
 #include "half/half.hpp"
 #include "compression/gpuCompression/Encode.hpp"
+#include "vkMemory/UploadManager.hpp"
 #include <memory>
 
 //forward declaration
@@ -72,6 +73,7 @@ struct CompressedData{
 	float quantizationStep;
 	std::unique_ptr<vkCompress::GpuInstance> gpuInstance{};
 	std::unique_ptr<DecompressManager> decompressManager{}; 
+	std::unique_ptr<UploadManager> uploadManager{};
 };
 
 struct DataSet {

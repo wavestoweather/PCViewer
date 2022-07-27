@@ -18,18 +18,12 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
     // --------------------------------------------------------------------------------
     // creating the index activation buffer resource and setting up the cpu side activation vector
     // --------------------------------------------------------------------------------
-    uint32_t dataSize = compressedData.dataSize;
-    indexActivation = std::vector<uint8_t>((dataSize + 7) / 8, 0xff);    // set all to active on startup
-    VkUtil::createBuffer(_vkContext.device, indexActivation.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &_indexActivation);
-    VkMemoryRequirements memReq{};
-    vkGetBufferMemoryRequirements(_vkContext.device, _indexActivation, &memReq);
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memReq.size;
-    allocInfo.memoryTypeIndex = VkUtil::findMemoryType(_vkContext.physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-    vkAllocateMemory(_vkContext.device, &allocInfo, nullptr, &_indexActivationMemory);
-    vkBindBufferMemory(_vkContext.device, _indexActivation, _indexActivationMemory, 0);
-    VkUtil::uploadData(_vkContext.device, _indexActivationMemory, 0, indexActivation.size(), indexActivation.data());
+    size_t dataSize = compressedData.uploadManager ? compressedData.uploadManager->stagingBufferSize / sizeof(half): compressedData.dataSize;
+    indexActivation = std::vector<uint8_t>(PCUtil::alignedSize((dataSize + 7) / 8, 0x40), 0xff);    // set all to active on startup
+    auto [b, o, m] = VkUtil::createMultiBufferBound(info.context, {indexActivation.size()}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    _indexActivation = b[0];
+    _indexActivationMemory = m;
+    VkUtil::uploadDataIndirect(_vkContext, _indexActivation, indexActivation.size(), indexActivation.data());
 
     uint32_t amtOfBlocks = std::max<uint32_t>(compressedData.columnData[0].compressedRLHuffCpu.size(), 1u);
     uint32_t timingAmt = compressedData.columnData.size() * amtOfBlocks * 2;    // timing points for counting
@@ -197,8 +191,9 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     // starting with updating the counts if needed to have all information available for the following counting/reduction
     // note: might be changed to be settable by the user if cpu or gpu should be used for counting
     bool gpuDecompression = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.columnData[0].compressedRLHuffGpu.size();
+    bool streamGpuData = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.uploadManager;
     bool combinedActivationCounting = t->countingMethod >= CountingMethod::GpuComputeFullBrush && t->countingMethod <= CountingMethod::GpuComputeFullBrushPartitionedNoAtomics;
-    long blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: t->compressedData.dataSize;
+    long blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: streamGpuData ? t->compressedData.uploadManager->stagingBufferSize / sizeof(half): t->compressedData.dataSize;
     if(!t->_gpuDecompressForward)
         blockSize = -blockSize;
     long startOffset = t->_gpuDecompressForward ? 0: (t->compressedData.columnData[0].compressedRLHuffGpu.size() - 1) * t->compressedData.compressedBlockSize;
@@ -217,11 +212,13 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     VkQueryPool timingPool{};
     if(t->printDeocmpressionTimes && (t->countingMethod == CountingMethod::GpuDrawPairwise || (t->countingMethod >= CountingMethod::GpuComputeFull && t->countingMethod < CountingMethod::HybridRoaringGpuDraw )))
         timingPool = t->_timingPool;
+    uint32_t uploadTimingCount{};
+    float uploadTimingAverage{};
     uint32_t iteration{};
     for(size_t dataOffset = startOffset; dataOffset < t->compressedData.dataSize && dataOffset >= 0; dataOffset += blockSize, ++iteration){
         uint32_t timingIndex{};
         assert((dataOffset & 31) == 0); //check that dataOffset ist 32 aligned (needed for index activation)
-        uint32_t curDataBlockSize = gpuDecompression ? std::min<uint32_t>(t->compressedData.dataSize - dataOffset, t->compressedData.compressedBlockSize): t->compressedData.dataSize;
+        uint32_t curDataBlockSize = gpuDecompression ? std::min<uint32_t>(t->compressedData.dataSize - dataOffset, t->compressedData.compressedBlockSize): streamGpuData ? std::min<uint32_t>(t->compressedData.dataSize - dataOffset, std::abs(blockSize)): t->compressedData.dataSize;
         std::cout << "Current data offset: " << dataOffset << ", with block size: " << curDataBlockSize <<  std::endl; std::cout.flush();
         //if(curDataBlockSize != blockSize)
         //   break;
@@ -255,6 +252,19 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             curEvent = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent, {timingPool, timingIndex++, timingIndex++});
             //auto err = vkQueueWaitIdle(t->compressedData.gpuInstance->vkContext.queue); check_vk_result(err);
         }
+        else if(streamGpuData){
+            // uploading all needed data indices via upload manager
+            PCUtil::AverageWatch upload(uploadTimingAverage, uploadTimingCount);
+            VkFence f;
+            for(int i: neededIndices){
+                f = t->compressedData.uploadManager->uploadTask(reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data() + dataOffset), curDataBlockSize * sizeof(half), t->compressedData.columnData[i].gpuHalfData);
+            }
+            // having to wait until upload task is in idle
+            while(!t->compressedData.uploadManager->idle())
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        size_t indexOffset = streamGpuData ? 0: dataOffset;
         std::vector<VkBuffer> dataBuffer(t->compressedData.attributes.size());  // vector of the gpu buffer which will contian the column data.
         if(t->countingMethod <= CountingMethod::CpuRoaring){
             // updating cpu activations
@@ -306,7 +316,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     for(int i: irange(dataBuffer))
                         dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
                 }
-                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, dataOffset, true, curEvent, {timingPool, timingIndex++, timingIndex++});
+                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, indexOffset, true, curEvent, {timingPool, timingIndex++, timingIndex++});
             }
             else{
                 for(int i: irange(dataBuffer))
@@ -453,7 +463,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 case CountingMethod::GpuComputeFullMax:             reductionType = LineCounter::ReductionSubgroupMax; break;
                 case CountingMethod::GpuComputeFullPartitionGeneric:reductionType = LineCounter::ReductionAddPartitionGeneric; break;
             }
-            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, dataOffset, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
+            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, indexOffset, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
             break;
         }
         case CountingMethod::GpuComputeFullBrush:
@@ -495,7 +505,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 if(!gpuDecompression && t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 //std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl; std::cout.flush();
-                curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, dataOffset, firstIter, curEvent, {timingPool, timingIndex++, timingIndex++});
+                curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, indexOffset, firstIter, curEvent, {timingPool, timingIndex++, timingIndex++});
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -545,6 +555,8 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         const uint printWidth = 30;
         if(gpuDecompression)
             std::cout << "[timing]" << std::setw(printWidth) << "Decompression: " << timings[timingIndex++] << " ms" << std::endl;
+        if(uploadTimingCount)
+            std::cout << "[timing]" << std::setw(printWidth) << "Data upload: " << uploadTimingCount * uploadTimingAverage << " ms" << std::endl;
         if(!combinedActivationCounting)
             std::cout << "[timing]" << std::setw(printWidth) << "Index activaiton: " << timings[timingIndex++] << " ms" << std::endl;
         if(t->countingMethod == CountingMethod::GpuDrawPairwise){
