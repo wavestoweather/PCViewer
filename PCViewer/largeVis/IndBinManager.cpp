@@ -197,7 +197,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     if(!t->_gpuDecompressForward)
         blockSize = -blockSize;
     long startOffset = t->_gpuDecompressForward ? 0: (t->compressedData.columnData[0].compressedRLHuffGpu.size() - 1) * t->compressedData.compressedBlockSize;
-    VkEvent curEvent{};
+    VkSemaphore curSemaphore{};
     std::set<uint32_t> neededIndices(activeIndices.begin(), activeIndices.end()); // getting all needed indices, not just the visible once, but also all brushed ones
     for(auto& b: t->_countBrushState.rangeBrushes){
         for(auto& r: b)
@@ -249,22 +249,28 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             //        auto err = vkQueueWaitIdle(t->compressedData.gpuInstance->vkContext.queue); check_vk_result(err);
             //    }
             //}
-            curEvent = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curEvent, {timingPool, timingIndex++, timingIndex++});
+            curSemaphore = t->compressedData.decompressManager->executeBlockDecompression(t->compressedData.columnData[0].compressedSymbolSize[blockIndex], *t->compressedData.gpuInstance, cpuColumns, gpuColumns, t->compressedData.quantizationStep, curSemaphore, {timingPool, timingIndex++, timingIndex++});
             //auto err = vkQueueWaitIdle(t->compressedData.gpuInstance->vkContext.queue); check_vk_result(err);
         }
         else if(streamGpuData){
             // uploading all needed data indices via upload manager
-            //while(curEvent && vkGetEventStatus(t->_vkContext.device, curEvent) == VK_EVENT_RESET)
-            //    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            //if(curSemaphore){
+            //    uint64_t values;
+            //    VkSemaphoreWaitInfo info{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, {}, 0, 1, &curSemaphore, &values};
+            //    check_vk_result(vkWaitSemaphores(t->_vkContext.device, &info, 5e9));
+            //}
 
             PCUtil::AverageWatch upload(uploadTimingAverage, uploadTimingCount);
             VkFence f;
             for(int i: neededIndices){
+                assert((t->compressedData.columnData[i].cpuData.data() + dataOffset)[0] == t->compressedData.columnData[i].cpuData[dataOffset]);
+                //std::cout << "[task] " <<  reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data()) << "    " << reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data() + dataOffset) << std::endl; std::cout.flush();
                 f = t->compressedData.uploadManager->uploadTask(reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data() + dataOffset), curDataBlockSize * sizeof(half), t->compressedData.columnData[i].gpuHalfData);
             }
             // having to wait until upload task is in idle
             while(!t->compressedData.uploadManager->idle())
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            t->compressedData.uploadManager->queueWaitIdle();
         }
 
         size_t indexOffset = streamGpuData ? 0: dataOffset;
@@ -319,7 +325,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                     for(int i: irange(dataBuffer))
                         dataBuffer[i] = t->compressedData.columnData[i].gpuHalfData;
                 }
-                curEvent = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, indexOffset, true, curEvent, {timingPool, timingIndex++, timingIndex++});
+                curSemaphore = t->_computeBrusher->updateActiveIndices(curDataBlockSize, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, dataBuffer, t->_indexActivation, indexOffset, true, curSemaphore, {timingPool, timingIndex++, timingIndex++});
             }
             else{
                 for(int i: irange(dataBuffer))
@@ -466,7 +472,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 case CountingMethod::GpuComputeFullMax:             reductionType = LineCounter::ReductionSubgroupMax; break;
                 case CountingMethod::GpuComputeFullPartitionGeneric:reductionType = LineCounter::ReductionAddPartitionGeneric; break;
             }
-            curEvent = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, indexOffset, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
+            curSemaphore = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, indexOffset, firstIter, reductionType, curSemaphore, {timingPool, timingIndex++, timingIndex++});
             break;
         }
         case CountingMethod::GpuComputeFullBrush:
@@ -496,7 +502,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 case CountingMethod::GpuComputeFullBrushNoAtomics:              reductionType = LineCounter::ReductionAddNonAtomic; break;
                 case CountingMethod::GpuComputeFullBrushPartitionedNoAtomics:   reductionType = LineCounter::ReductionAddPartitionNonAtomic; break;
             }
-            curEvent = t->_lineCounter->countBrushLinesAll(curDataBlockSize, dataBuffer, t->columnBins, counts, activeIndices, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, true, firstIter, reductionType, curEvent, {timingPool, timingIndex++, timingIndex++});
+            curSemaphore = t->_lineCounter->countBrushLinesAll(curDataBlockSize, dataBuffer, t->columnBins, counts, activeIndices, t->_countBrushState.rangeBrushes, t->_countBrushState.lassoBrushes, true, firstIter, reductionType, curSemaphore, {timingPool, timingIndex++, timingIndex++});
             break;
         }
         case CountingMethod::GpuDrawPairwise:{
@@ -508,7 +514,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 if(!gpuDecompression && t->_countResources.contains({a,b}) && t->_countResources[{a,b}].brushingId == t->_countBrushState.id)
                     continue;
                 //std::cout << "Counting pairwise (render pipeline) for attribute " << t->compressedData.attributes[a].name << " and " << t->compressedData.attributes[b].name << std::endl; std::cout.flush();
-                curEvent = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, indexOffset, firstIter, curEvent, {timingPool, timingIndex++, timingIndex++});
+                curSemaphore = t->_renderLineCounter->countLinesPair(curDataBlockSize, dataBuffer[a], dataBuffer[b], t->columnBins, t->columnBins, t->_countResources[{a,b}].countBuffer, t->_indexActivation, indexOffset, firstIter, curSemaphore, {timingPool, timingIndex++, timingIndex++});
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             break;
@@ -547,10 +553,18 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 timings[i] += (timeCounts[2 * i + 1] - timeCounts[2 * i]) * 1e-6;
             }
         }
+
+        {
+            std::scoped_lock lock(*t->_vkContext.queueMutex);
+            check_vk_result(vkQueueWaitIdle(t->_vkContext.queue));
+        }
     }
-    // wait for curEvent
-    while(curEvent && vkGetEventStatus(t->_vkContext.device, curEvent) == VK_EVENT_RESET)
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // wait for curSemaphore
+    if(false && curSemaphore){
+        uint64_t val{};
+        VkSemaphoreWaitInfo info{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, {}, 0, 1, &curSemaphore, &val};
+        check_vk_result(vkWaitSemaphores(t->_vkContext.device, &info, 5e9));
+    }
 
     // printing single pipeline timings
     if(timingPool){

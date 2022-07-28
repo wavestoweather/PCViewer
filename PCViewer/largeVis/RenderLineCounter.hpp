@@ -27,7 +27,7 @@ public:
     static void tests(const CreateInfo& info);
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);
-    VkEvent countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts = false, VkEvent prevPipeEvent = {}, TimingInfo = {});
+    VkSemaphore countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts = false, VkSemaphore prevPipeSemaphore = {}, TimingInfo = {});
     void countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt /*describes how much tiles along each side are used*/);
 private:
     struct PairInfos{
@@ -61,8 +61,8 @@ private:
     VkUtil::PipelineInfo _countPipeInfo{}, _conversionPipeInf{};
     VkSampler _sampler{};
     std::map<BPair, VkDescriptorSet> _pairSets, _conversionSets;
-    std::map<BPair, VkEvent> _renderEvents{};
-    VkEvent _renderTiledEvent{};
+    std::map<BPair, VkSemaphore> _renderSemaphores{};
+    VkSemaphore _renderTiledSemaphore{};
     std::map<BPair, VkCommandBuffer> _renderCommands{};
     VkCommandBuffer _renderTiledCommands{};
 

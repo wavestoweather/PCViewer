@@ -93,8 +93,7 @@ LineCounter::LineCounter(const CreateInfo& info):
 
     VkUtil::createDescriptorSets(_vkContext.device, {_fullInfos[ReductionAdd].descriptorSetLayout}, _vkContext.descriptorPool, &_allSet);    
 
-    _allEvent = VkUtil::createEvent(_vkContext.device, 0);
-    vkSetEvent(_vkContext.device, _allEvent);
+    _allSemaphore = VkUtil::createSemaphore(_vkContext.device, 0);
 
     _allFence = VkUtil::createFence(_vkContext.device, VK_FENCE_CREATE_SIGNALED_BIT);
 
@@ -122,8 +121,7 @@ LineCounter::LineCounter(const CreateInfo& info):
 
     VkUtil::createDescriptorSets(_vkContext.device, {_brushFullInfos[ReductionAdd].descriptorSetLayout}, _vkContext.descriptorPool, &_allBrushSet);    
 
-    _allBrushEvent = VkUtil::createEvent(_vkContext.device, 0);
-    vkSetEvent(_vkContext.device, _allBrushEvent);
+    _allBrushSemaphore = VkUtil::createSemaphore(_vkContext.device, 0);
 
     _allBrushFence = VkUtil::createFence(_vkContext.device, VK_FENCE_CREATE_SIGNALED_BIT);
 }
@@ -237,11 +235,10 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
-VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, ReductionTypes reductionType, VkEvent prevPipeEvent, TimingInfo timingInfo) {
+VkSemaphore LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, ReductionTypes reductionType, VkSemaphore prevPipeSemaphore, TimingInfo timingInfo) {
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
 	check_vk_result(vkWaitForFences(_vkContext.device, 1, &_allFence, true, 10e9)); // wait for 10 secs, should throw error before...
     vkResetFences(_vkContext.device, 1, &_allFence);
-    assert(vkGetEventStatus(_vkContext.device, _allEvent) == VK_EVENT_SET); //safety check to make shure that the previous counting was done
     assert(data.size() < maxAttributes);
     std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
     
@@ -271,9 +268,6 @@ VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>&
             vkCmdFillBuffer(_allCommands, count, 0, binAmt * binAmt * sizeof(uint32_t), 0);
     }
 
-    if(prevPipeEvent)
-        vkCmdWaitEvents(_allCommands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
-
     vkCmdBindDescriptorSets(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _fullInfos[reductionType].pipelineLayout, 0, 1, &_allSet, 0, {});
     vkCmdBindPipeline(_allCommands, VK_PIPELINE_BIND_POINT_COMPUTE, _fullInfos[reductionType].pipeline);
     
@@ -284,19 +278,19 @@ VkEvent LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>&
     vkCmdDispatch(_allCommands, (dataSize + 255) / 256, 1, 1);
     if(timingInfo.queryPool)
         vkCmdWriteTimestamp(_allCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex);
-    vkCmdSetEvent(_allCommands, _allEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    VkUtil::commitCommandBuffer(_vkContext.queue, _allCommands, _allFence);
+    std::vector<VkSemaphore> waitSem;
+    if(prevPipeSemaphore) waitSem.push_back(prevPipeSemaphore);
+    VkUtil::commitCommandBuffer(_vkContext.queue, _allCommands, _allFence, waitSem, {_allSemaphore});
 
-    return _allEvent;
+    return _allSemaphore;
 }
 
-VkEvent LineCounter::countBrushLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, const brushing::RangeBrushes& rangeBrushes, const Polygons& lassoBrushes, bool andBrushes, bool clearCounts, ReductionTypes reductionType, VkEvent prevPipeEvent, TimingInfo timingInfo){
+VkSemaphore LineCounter::countBrushLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, const brushing::RangeBrushes& rangeBrushes, const Polygons& lassoBrushes, bool andBrushes, bool clearCounts, ReductionTypes reductionType, VkSemaphore prevPipeSemaphore, TimingInfo timingInfo){
     assert(data.size() <= maxAttributes);
     assert(_vkContext.queueMutex);
     check_vk_result(vkWaitForFences(_vkContext.device, 1, &_allBrushFence, true, 10e9));
     vkResetFences(_vkContext.device, 1, &_allBrushFence);
-    assert(vkGetEventStatus(_vkContext.device, _allBrushEvent) == VK_EVENT_SET);
 
     std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);
 
@@ -366,9 +360,6 @@ VkEvent LineCounter::countBrushLinesAll(size_t dataSize, const std::vector<VkBuf
             if(count)
                 vkCmdFillBuffer(_allBrushCommands, count, 0, binAmt * binAmt * sizeof(uint32_t), 0);
     }
-
-    if(prevPipeEvent)
-        vkCmdWaitEvents(_allBrushCommands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT , VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
     
     if(timingInfo.queryPool){
         vkCmdResetQueryPool(_allBrushCommands, timingInfo.queryPool, timingInfo.startIndex, 2);
@@ -381,11 +372,12 @@ VkEvent LineCounter::countBrushLinesAll(size_t dataSize, const std::vector<VkBuf
     vkCmdDispatch(_allBrushCommands, (dataSize + 255) / 256, 1, 1);
     if(timingInfo.queryPool)
         vkCmdWriteTimestamp(_allBrushCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex);
-    vkCmdSetEvent(_allBrushCommands, _allBrushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    VkUtil::commitCommandBuffer(_vkContext.queue, _allBrushCommands, _allBrushFence);
+    std::vector<VkSemaphore> waitSem;
+    if(prevPipeSemaphore) waitSem.push_back(prevPipeSemaphore);
+    VkUtil::commitCommandBuffer(_vkContext.queue, _allBrushCommands, _allBrushFence, waitSem, {_allBrushSemaphore});
 
-    return _allBrushEvent;
+    return _allBrushSemaphore;
 }
 
 LineCounter* LineCounter::_singleton = nullptr;    // init to nullptr
@@ -441,14 +433,14 @@ LineCounter::~LineCounter()
         vkDestroyBuffer(_vkContext.device, _pairUniform, nullptr);
     if(_pairUniformMem)
         vkFreeMemory(_vkContext.device, _pairUniformMem, nullptr);
-    for(auto [k, e]: _pairEvents)
-        vkDestroyEvent(_vkContext.device, e, nullptr);
+    for(auto [k, e]: _pairSemaphores)
+        vkDestroySemaphore(_vkContext.device, e, nullptr);
     for(auto [k, e]: _pairSets)
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &e);
-    if(_allEvent)
-        vkDestroyEvent(_vkContext.device, _allEvent, nullptr);
-    if(_allBrushEvent)
-        vkDestroyEvent(_vkContext.device, _allBrushEvent, nullptr);
+    if(_allSemaphore)
+        vkDestroySemaphore(_vkContext.device, _allSemaphore, nullptr);
+    if(_allBrushSemaphore)
+        vkDestroySemaphore(_vkContext.device, _allBrushSemaphore, nullptr);
     if(_allBrushSet)
         vkFreeDescriptorSets(_vkContext.device, _vkContext.descriptorPool, 1, &_allBrushSet);
     if(_brushBuffer)

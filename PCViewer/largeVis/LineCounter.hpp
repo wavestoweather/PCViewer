@@ -41,9 +41,9 @@ public:
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);  // test function
     void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd);
-    VkEvent countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset = 0, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkEvent prevPipeEvent = {}, TimingInfo timingInfo = {});
+    VkSemaphore countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset = 0, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkSemaphore prevPipeSemaphore = {}, TimingInfo timingInfo = {});
 
-    VkEvent countBrushLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, const brushing::RangeBrushes& rangeBrushes, const Polygons& lassoBrushes, bool andBrushes = true, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkEvent prevPipeEvent = {}, TimingInfo timingIfo = {});
+    VkSemaphore countBrushLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, const brushing::RangeBrushes& rangeBrushes, const Polygons& lassoBrushes, bool andBrushes = true, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkSemaphore prevPipeSemaphore = {}, TimingInfo timingIfo = {});
 
     static const uint32_t maxAttributes{30};
 private:
@@ -70,8 +70,8 @@ private:
     VkBuffer _pairUniform{}, _brushBuffer{};
     VkDeviceMemory _pairUniformMem{}, _brushMem{};
     std::map<BPair, VkDescriptorSet> _pairSets{};
-    std::map<BPair, VkEvent> _pairEvents{};
-    VkEvent _allEvent{}, _allBrushEvent{};
+    std::map<BPair, VkSemaphore> _pairSemaphores{};
+    VkSemaphore _allSemaphore{}, _allBrushSemaphore{};
     VkFence _allFence{}, _allBrushFence{};
     VkCommandBuffer _allCommands{}, _allBrushCommands{};
 

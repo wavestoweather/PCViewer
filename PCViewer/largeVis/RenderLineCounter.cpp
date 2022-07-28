@@ -207,21 +207,20 @@ void RenderLineCounter::countLines(VkCommandBuffer commands, const CountLinesInf
     // execution is done outside
 }
 
-VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, VkEvent prevPipeEvent, TimingInfo timingInfo) {
+VkSemaphore RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, VkSemaphore prevPipeSemaphore, TimingInfo timingInfo) {
     // check for outdated framebuffer size
     if(aIndices != _aBins)
         createOrUpdateFramebuffer(aIndices);
 
-    VkEvent& renderEvent = _renderEvents[{aData,bData}];
-    if(renderEvent)
-        while(vkGetEventStatus(_vkContext.device, renderEvent) != VK_EVENT_SET)
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        //assert(vkGetEventStatus(_vkContext.device, renderEvent) == VK_EVENT_SET);  // checking if the event was signaled. Should always be the case
+    auto& renderSemaphore = _renderSemaphores[{aData,bData}];
+    if(renderSemaphore){
+        uint64_t val;
+        VkSemaphoreWaitInfo info{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, {}, 0, 1, &renderSemaphore, &val};
+        check_vk_result(vkWaitSemaphores(_vkContext.device, &info, 5e9));
+    }  
     else{
-        VkEventCreateInfo info{}; info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
-        vkCreateEvent(_vkContext.device, &info, nullptr, &renderEvent);
+        renderSemaphore = VkUtil::createSemaphore(_vkContext.device, 0);
     }
-    vkResetEvent(_vkContext.device, renderEvent);
 
     std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);  // locking the queue as long as we are recording commands
     VkCommandBuffer& renderCommands = _renderCommands[{aData, bData}];
@@ -251,10 +250,8 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     infos.indexOffset = indexOffset / 32; // convert bitOffset to indexOffset
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
-    VkCommandBuffer commands = renderCommands;
-    if(prevPipeEvent)
-        vkCmdWaitEvents(commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, 0, {}, 0, {});
-    
+    VkCommandBuffer commands = renderCommands;  
+
     if(timingInfo.queryPool){
         vkCmdResetQueryPool(renderCommands, timingInfo.queryPool, timingInfo.startIndex, 2);
         vkCmdWriteTimestamp(renderCommands, static_cast<VkPipelineStageFlagBits>(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT), timingInfo.queryPool, timingInfo.startIndex); 
@@ -292,12 +289,13 @@ VkEvent RenderLineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuf
     VkUtil::transitionImageLayout(commands, _countImage, VK_FORMAT_R32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     if(timingInfo.queryPool)
         vkCmdWriteTimestamp(renderCommands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
-    vkCmdSetEvent(commands, renderEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    VkUtil::commitCommandBuffer(_vkContext.queue, commands);
+    std::vector<VkSemaphore> waitSem;
+    if(prevPipeSemaphore) waitSem.push_back(prevPipeSemaphore);
+    VkUtil::commitCommandBuffer(_vkContext.queue, commands, {}, waitSem, {renderSemaphore});
     //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res); synchronization has to be done outsize via events
 
-    return renderEvent;
+    return renderSemaphore;
 }
 
 void RenderLineCounter::countLinesPairTiled(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, bool clearCounts, uint32_t tileAmt) {
@@ -437,10 +435,10 @@ RenderLineCounter::~RenderLineCounter()
         vkDestroyRenderPass(_vkContext.device, _renderPass, nullptr);
     if(_framebuffer)
         vkDestroyFramebuffer(_vkContext.device, _framebuffer, nullptr);
-    for(auto [b, e]: _renderEvents)
-        vkDestroyEvent(_vkContext.device, e, nullptr);
-    if(_renderTiledEvent)
-        vkDestroyEvent(_vkContext.device, _renderTiledEvent, nullptr);
+    for(auto [b, e]: _renderSemaphores)
+        vkDestroySemaphore(_vkContext.device, e, nullptr);
+    if(_renderTiledSemaphore)
+        vkDestroySemaphore(_vkContext.device, _renderTiledSemaphore, nullptr);
 }
 
 void RenderLineCounter::release(){

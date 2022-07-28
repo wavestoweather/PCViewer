@@ -72,7 +72,7 @@ namespace VkUtil{
 	std::tuple<std::vector<VkBuffer>, std::vector<VkDeviceSize>, VkDeviceMemory> createMultiBufferBound(const Context& context,const std::vector<VkDeviceSize>& sizes, const std::vector<VkBufferUsageFlags>& usages, VkMemoryPropertyFlags memoryProperty);
 	void createBufferView(VkDevice device, VkBuffer buffer, VkFormat format, uint32_t offset, VkDeviceSize range, VkBufferView* bufferView);
 	VkDeviceAddress getBufferAddress(VkDevice device, VkBuffer buffer);
-	void commitCommandBuffer( VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence = {});
+	void commitCommandBuffer( VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence = {},const std::vector<VkSemaphore>& waitSemaphores = {}, const std::vector<VkSemaphore>& siganlSemaphore = {});
 	void beginRenderPass(VkCommandBuffer commandBuffer, const std::vector<VkClearValue>& clearValues, VkRenderPass renderPass, VkFramebuffer framebuffer, VkExtent2D extend);
 	void createPipeline(VkDevice device, VkPipelineVertexInputStateCreateInfo* vertexInfo, float frameWidth, float frameHight, const std::vector<VkDynamicState>& dynamicStates, VkShaderModule* shaderModules, VkPrimitiveTopology topology, VkPipelineRasterizationStateCreateInfo* rasterizerInfo, VkPipelineMultisampleStateCreateInfo* multisamplingInfo, VkPipelineDepthStencilStateCreateInfo* depthStencilInfo, BlendInfo* blendInfo, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkRenderPass* renderPass, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline, const std::vector<VkPushConstantRange>& pushConstantRanges = {});
 	void createComputePipeline(VkDevice device, VkShaderModule& shaderModule, std::vector<VkDescriptorSetLayout> descriptorLayouts, VkPipelineLayout* pipelineLayout, VkPipeline* pipeline, VkSpecializationInfo* specializationInfo = VK_NULL_HANDLE, const std::vector<VkPushConstantRange>& pushConstants = {});
@@ -123,6 +123,7 @@ namespace VkUtil{
 	VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& byteArr);
 	VkEvent createEvent(VkDevice device, VkEventCreateFlags createFlags);
 	VkFence createFence(VkDevice device, VkFenceCreateFlags createFlags);
+	VkSemaphore createSemaphore(VkDevice device, VkSemaphoreCreateFlags createFlags);
 };
 
 #endif

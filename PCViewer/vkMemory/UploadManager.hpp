@@ -22,6 +22,7 @@ public:
     VkFence uploadTask(const void* data, size_t byteSize, VkBuffer dstBuffer, size_t dstBufferOffset = 0);
 
     bool idle() const {return _doneTransferIndex == _nextFreeTransfer;};
+    void queueWaitIdle() const{if(_transferQueue) check_vk_result(vkQueueWaitIdle(_transferQueue));};
     void waitForIdle() {_idleSemaphore.acquire();};
 
 private:

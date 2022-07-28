@@ -3699,6 +3699,7 @@ static void SetupVulkan(const char** extensions, uint32_t extensions_count)
 		v12feat.runtimeDescriptorArray = VK_TRUE;
 		v12feat.descriptorIndexing = VK_TRUE;
 		v12feat.storageBuffer8BitAccess = VK_TRUE;
+		v12feat.timelineSemaphore = VK_TRUE;
 
 		void* firstNext{};
 		void** curPNext = &firstNext;

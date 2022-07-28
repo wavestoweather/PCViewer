@@ -224,7 +224,7 @@ void VkUtil::createBufferView(VkDevice device, VkBuffer buffer, VkFormat format,
 	check_vk_result(err);
 }
 
-void VkUtil::commitCommandBuffer(VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence)
+void VkUtil::commitCommandBuffer(VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& siganlSemaphores)
 {
 	VkResult err;
 
@@ -233,8 +233,12 @@ void VkUtil::commitCommandBuffer(VkQueue queue, VkCommandBuffer commandBuffer, V
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.signalSemaphoreCount = 0;
-	submitInfo.waitSemaphoreCount = 0;
+	submitInfo.signalSemaphoreCount = siganlSemaphores.size();
+	submitInfo.pSignalSemaphores = siganlSemaphores.data();
+	submitInfo.waitSemaphoreCount = waitSemaphores.size();
+	submitInfo.pWaitSemaphores = waitSemaphores.data();
+	std::vector<VkPipelineStageFlags> waitStage(waitSemaphores.size(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+	submitInfo.pWaitDstStageMask = waitStage.data();
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffer;
 
@@ -1599,6 +1603,18 @@ namespace VkUtil
 		VkFence fence;
 		check_vk_result(vkCreateFence(device, &info, nullptr, &fence));
 		return fence;
+	}
+
+	VkSemaphore createSemaphore(VkDevice device, VkSemaphoreCreateFlags createFlags){
+		VkSemaphoreTypeCreateInfo timelineSemaphoreInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO, nullptr,
+                                                   VK_SEMAPHORE_TYPE_TIMELINE, 0};
+		VkSemaphoreCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		info.flags = createFlags;
+		//info.pNext = &timelineSemaphoreInfo;
+		VkSemaphore sempahore;
+		check_vk_result(vkCreateSemaphore(device, &info, nullptr, &sempahore));
+		return sempahore;
 	}
 
 	void uploadDataIndirect(const Context& context, VkBuffer dstBuffer, uint32_t byteSize,const void* data) 

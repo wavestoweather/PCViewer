@@ -31,8 +31,7 @@ ComputeBrusher::ComputeBrusher(const CreateInfo& info):
 
     VkUtil::createDescriptorSets(_vkContext.device, {_brushPipelineInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_descSet);
 
-    _brushEvent = VkUtil::createEvent(_vkContext.device, 0);
-    vkSetEvent(_vkContext.device, _brushEvent); // has to be set to signal that the pipeline is ready for the next update
+    _brushSemaphore = VkUtil::createSemaphore(_vkContext.device, 0);
 
     VkFenceCreateInfo fInfo{};
     fInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -50,8 +49,8 @@ ComputeBrusher::~ComputeBrusher(){
         vkDestroyBuffer(_vkContext.device, _dataBuffer, nullptr);
     if(_infoMemory)
         vkFreeMemory(_vkContext.device, _infoMemory, nullptr);
-    if(_brushEvent)
-        vkDestroyEvent(_vkContext.device, _brushEvent, nullptr);
+    if(_brushSemaphore)
+        vkDestroySemaphore(_vkContext.device, _brushSemaphore, nullptr);
     if(_brushFence)
         vkDestroyFence(_vkContext.device, _brushFence, nullptr);
 }
@@ -73,26 +72,22 @@ void ComputeBrusher::release(){
     }
 }
 
-VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset, bool andBrushes, VkEvent prevPipeEvent, TimingInfo timingInfo){
+VkSemaphore ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vector<brushing::RangeBrush>& brushes, const Polygons& lassoBrushes, const std::vector<VkBuffer>& dataBuffer, VkBuffer indexActivations, size_t indexOffset, bool andBrushes, VkSemaphore prevPipeSemaphore, TimingInfo timingInfo){
     //while(prevPipeEvent && vkGetEventStatus(_vkContext.device, prevPipeEvent) == VK_EVENT_RESET)
     //    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    auto err = vkWaitForFences(_vkContext.device, 1, &_brushFence, VK_TRUE, 5e9); check_vk_result(err); // maximum wait for 1 sec
+    vkResetFences(_vkContext.device, 1, &_brushFence);
     std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
     check_vk_result(vkQueueWaitIdle(_vkContext.queue));         // TODO: find better solution
-    auto err = vkWaitForFences(_vkContext.device, 1, &_brushFence, VK_TRUE, 5e9); check_vk_result(err); // maximum wait for 1 sec
     assert(err == VK_SUCCESS);
-    vkResetFences(_vkContext.device, 1, &_brushFence);
-
-    assert(vkGetEventStatus(_vkContext.device, _brushEvent) == VK_EVENT_SET);
-    vkResetEvent(_vkContext.device, _brushEvent);
     
     if(_commands)
         vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
     VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
 
-    // wait for previous event/pipeline to finish
-    if(prevPipeEvent)
-        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT , VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
-    
+    std::vector<VkSemaphore> waitSem;
+    if(prevPipeSemaphore) waitSem.push_back(prevPipeSemaphore);
+
     if(timingInfo.queryPool){
         vkCmdResetQueryPool(_commands, timingInfo.queryPool, timingInfo.startIndex, 2);
         vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex); 
@@ -105,11 +100,11 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
         
         if(timingInfo.queryPool)
             vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
-        vkCmdSetEvent(_commands, _brushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
-        VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _brushFence);
+        
+        VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _brushFence, waitSem, {_brushSemaphore});
         //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
 
-        return _brushEvent;
+        return _brushSemaphore;
     }
     // converting the range brushes to properly be able to check activation
     struct MM{float min, max;};
@@ -193,13 +188,11 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
    
     if(timingInfo.queryPool)
         vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
-    
-    vkCmdSetEvent(_commands, _brushEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
-    
-    VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _brushFence);
+        
+    VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _brushFence, waitSem, {_brushSemaphore});
     
     //vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
-    return _brushEvent;
+    return _brushSemaphore;
 }
 
 void ComputeBrusher::createOrUpdateBuffer(uint32_t amtOfAttributes, uint32_t infoByteSize){

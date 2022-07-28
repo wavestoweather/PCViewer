@@ -106,24 +106,18 @@ public:
     }
 
     // creates a command buffer itself and commits it, return the vkevent that will be signaled upon finishing
-    VkEvent executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep, VkEvent prevPipeEvent = {}, TimingInfo timingInfo = {}){
+    VkSemaphore executeBlockDecompression(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData, float quantizationStep, VkSemaphore prevPipeSemaphore = {}, TimingInfo timingInfo = {}){
         assert((symbolCountPerBlock & 0b11) == 0);
 
         auto err = vkWaitForFences(_vkContext.device, 1, &_decompFence, VK_TRUE, 1e9); check_vk_result(err);
         assert(err == VK_SUCCESS);
         vkResetFences(_vkContext.device, 1, &_decompFence);
-        assert(vkGetEventStatus(_vkContext.device, _syncEvent) == VK_EVENT_SET);
-
-        vkResetEvent(_vkContext.device, _syncEvent);
 
         std::scoped_lock<std::mutex> lock(*_vkContext.queueMutex);
         if(_commands)
             vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &_commands);
         VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &_commands);
 
-        if(prevPipeEvent)
-            vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
-        
         if(timingInfo.queryPool){
             vkCmdResetQueryPool(_commands, timingInfo.queryPool, timingInfo.startIndex, 2);
             vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.startIndex); 
@@ -134,15 +128,15 @@ public:
         if(timingInfo.queryPool)
             vkCmdWriteTimestamp(_commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingInfo.queryPool, timingInfo.endIndex); 
 
-        vkCmdSetEvent(_commands, _syncEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
-        VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _decompFence);
-        return _syncEvent;
+        std::vector<VkSemaphore> waitSem;
+        if(prevPipeSemaphore) waitSem.push_back(prevPipeSemaphore);
+        VkUtil::commitCommandBuffer(_vkContext.queue, _commands, _decompFence, waitSem, {_syncSemaphore});
+        return _syncSemaphore;
     }
 private:
     std::vector<VkBuffer> _cacheBuffers{};   // needed for intermediate
     std::vector<size_t> _cacheBufferOffsets{};
-    VkEvent _syncEvent{};
+    VkSemaphore _syncSemaphore{};
     VkFence _decompFence{};
     VkUtil::Context _vkContext{};
 
@@ -158,18 +152,17 @@ private:
             vkDestroyBuffer(device, b, nullptr);
         if(bufferMemory)
             vkFreeMemory(device, bufferMemory, nullptr);
-        if(_syncEvent && final)
-            vkDestroyEvent(device, _syncEvent, nullptr);
+        if(_syncSemaphore && final)
+            vkDestroySemaphore(device, _syncSemaphore, nullptr);
         if(_decompFence && final)
             vkDestroyFence(device, _decompFence, nullptr);
     }
 
     void resizeOrCreateBuffers(uint32_t symbolCountPerBlock, vkCompress::GpuInstance& gpu ,const CpuColumns& cpuData, const GpuColumns& gpuData){
-        if(!_syncEvent){
-            VkEventCreateInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
-            vkCreateEvent(_vkContext.device, &info, nullptr, &_syncEvent);
-            vkSetEvent(_vkContext.device, _syncEvent);
+        if(!_syncSemaphore){
+            VkSemaphoreCreateInfo info{};
+            info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            vkCreateSemaphore(_vkContext.device, &info, nullptr, &_syncSemaphore);
         }
         if(!_decompFence)
             _decompFence = VkUtil::createFence(_vkContext.device, VK_FENCE_CREATE_SIGNALED_BIT);

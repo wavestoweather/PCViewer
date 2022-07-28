@@ -7,11 +7,11 @@ UploadManager::UploadManager(const VkUtil::Context& context, uint32_t transferQu
     _transfers(amtStagingBuffer),
     _transferCommands(amtStagingBuffer)
 {
-    size_t alignedStagingSize = PCUtil::alignedSize(stagingBufferSize, 0x40);
+    size_t alignedStagingSize = PCUtil::alignedSize(stagingBufferSize, 128);
     std::vector<size_t> sizes(amtStagingBuffer, alignedStagingSize);
     std::vector<VkBufferUsageFlags> usages(amtStagingBuffer, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    std::tie(_transferBuffers, _transferOffsets, _transferMemory) = VkUtil::createMultiBufferBound(context, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-    vkMapMemory(context.device, _transferMemory, 0, amtStagingBuffer * _transferOffsets[1], 0, &_mappedMemory);  // stayes mapped upon destruction
+    std::tie(_transferBuffers, _transferOffsets, _transferMemory) = VkUtil::createMultiBufferBound(context, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    vkMapMemory(context.device, _transferMemory, 0, amtStagingBuffer * alignedStagingSize, 0, &_mappedMemory);  // stayes mapped upon destruction
 
     for(int i: irange(amtStagingBuffer))
         _transferFences.push_back(VkUtil::createFence(context.device, 0));
@@ -90,6 +90,7 @@ void UploadManager::threadExec(UploadManager* m){
         // working on copy task
         auto transferIndex = curTransferIndex++ % m->_transferBuffers.size();
         uint8_t* finalPointer = reinterpret_cast<uint8_t*>(m->_mappedMemory) + m->_transferOffsets[transferIndex];
+        //std::cout << "[upload] " << m->_transfers[transferIndex].data  << "  to  " << (void*)finalPointer << std::endl; std::cout.flush();
         std::memcpy(finalPointer, m->_transfers[transferIndex].data, m->_transfers[transferIndex].byteSize);
         
         VkCommandBuffer& commands = m->_transferCommands[transferIndex];
@@ -109,7 +110,7 @@ void UploadManager::threadExec(UploadManager* m){
         range.memory = m->_transferMemory;
         range.offset = m->_transferOffsets[transferIndex];
         range.size = PCUtil::alignedSize(m->_transfers[transferIndex].byteSize, 0x40);
-        vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
+        //vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
         VkUtil::commitCommandBuffer(queue, commands, m->_transferFences[transferIndex]);
     }
     vkDeviceWaitIdle(m->_vkContext.device);
