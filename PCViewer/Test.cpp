@@ -49,7 +49,7 @@ static std::pair<cudaCompress::BitStream, uint32_t> compressVector(std::vector<f
     return t;
 }
 
-static void decompressVector(std::vector<uint32_t> src, float quantizationStep, uint32_t symbolsSize, /*out*/ std::vector<float>& data){
+static void decompressVector(const std::vector<uint32_t>& src, float quantizationStep, uint32_t symbolsSize, /*out*/ std::vector<float>& data){
     cudaCompress::BitStreamReadOnly bs(src.data(), src.size() * sizeof(src[0]) * 8);
 	cudaCompress::BitStreamReadOnly* dec[]{&bs};
 	std::vector<cudaCompress::Symbol16> nS(symbolsSize);
@@ -58,7 +58,8 @@ static void decompressVector(std::vector<uint32_t> src, float quantizationStep, 
 	std::vector<float> result2(symbolsSize);
     data.resize(symbolsSize);
 	cudaCompress::util::unquantizeFromSymbols(data.data(), nS.data(), nS.size(), quantizationStep);
-	result2 = data;
+	//result2 = data;
+    std::copy_n(data.begin(), data.size() / 2, result2.data());
 	cudaCompress::util::dwtFloatInverseCPU(result2.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
 	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
 }
@@ -564,7 +565,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
             decompressVector(compressedStreams[column].getVector(), quantStep, colSize, cpuDecodedColumns[column]);
         }
 
-        // pgu decoding
+        // gpu decoding
         std::vector<std::vector<float>> gpuDecodedColumns(cols);
         for(int column: irange(cols)){
             gpuDecodedColumns[column] = vkDecompress(context, compressedStreams[column].getVector(), quantStep, colSize);
@@ -641,8 +642,9 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
                 {
                     // decoding
                     PCUtil::Stopwatch decode(std::cout, "Decode " + std::to_string(q) + std::string(file));
-                    std::vector<float> symb = vkDecompressBenchmark(context, bits, q, s);
-                    bool test = true;
+                    //std::vector<float> symb = vkDecompressBenchmark(context, bits, q, s);
+                    std::vector<float> data(s);
+                    decompressVector(bits, q, s, data);
                 }
                 std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024 * 4) / bytesize) << std::endl;
             }
