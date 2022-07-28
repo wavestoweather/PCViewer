@@ -10,7 +10,7 @@ UploadManager::UploadManager(const VkUtil::Context& context, uint32_t transferQu
     size_t alignedStagingSize = PCUtil::alignedSize(stagingBufferSize, 128);
     std::vector<size_t> sizes(amtStagingBuffer, alignedStagingSize);
     std::vector<VkBufferUsageFlags> usages(amtStagingBuffer, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    std::tie(_transferBuffers, _transferOffsets, _transferMemory) = VkUtil::createMultiBufferBound(context, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    std::tie(_transferBuffers, _transferOffsets, _transferMemory) = VkUtil::createMultiBufferBound(context, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     vkMapMemory(context.device, _transferMemory, 0, amtStagingBuffer * alignedStagingSize, 0, &_mappedMemory);  // stayes mapped upon destruction
 
     for(int i: irange(amtStagingBuffer))
@@ -84,8 +84,6 @@ void UploadManager::threadExec(UploadManager* m){
 
         if(m->_doneTransferIndex == m->_nextFreeTransfer && m->_idleSemaphore.peekCount() > 0)
             m->_idleSemaphore.releaseN(m->_idleSemaphore.peekCount());
-
-        //if(m->idle() && m->_taskSemaphore.peekCount() > 0)
         
         // working on copy task
         auto transferIndex = curTransferIndex++ % m->_transferBuffers.size();
@@ -110,7 +108,7 @@ void UploadManager::threadExec(UploadManager* m){
         range.memory = m->_transferMemory;
         range.offset = m->_transferOffsets[transferIndex];
         range.size = PCUtil::alignedSize(m->_transfers[transferIndex].byteSize, 0x40);
-        //vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
+        vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
         VkUtil::commitCommandBuffer(queue, commands, m->_transferFences[transferIndex]);
     }
     vkDeviceWaitIdle(m->_vkContext.device);
