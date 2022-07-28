@@ -254,6 +254,9 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         }
         else if(streamGpuData){
             // uploading all needed data indices via upload manager
+            //while(curEvent && vkGetEventStatus(t->_vkContext.device, curEvent) == VK_EVENT_RESET)
+            //    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
             PCUtil::AverageWatch upload(uploadTimingAverage, uploadTimingCount);
             VkFence f;
             for(int i: neededIndices){
@@ -304,7 +307,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         }
         else{
             // updating gpu activations
-            if(!combinedActivationCounting && (gpuDecompression || t->_gpuIndexActivationState != t->_countBrushState.id)){
+            if(!combinedActivationCounting && (gpuDecompression || streamGpuData || t->_gpuIndexActivationState != t->_countBrushState.id)){
                 //std::cout << "Updating gpu index activations" << std::endl; std::cout.flush();
                 //PCUtil::Stopwatch updateWatch(std::cout, "Gpu index activation");
                 t->_gpuIndexActivationState = t->_countBrushState.id;

@@ -745,6 +745,21 @@ void PCUtil::Semaphore::acquire()
 		_cv.wait(lock);
 	--_count;
 }
+
+
+PCUtil::CIFile::CIFile(std::string_view filename):
+	handle(fopen(filename.data(), "rb"))
+{}
+
+PCUtil::CIFile::~CIFile(){
+	fclose(handle);
+}
+
+size_t PCUtil::CIFile::read(char* buffer, size_t byteSize){
+	return fread(buffer, sizeof(char), byteSize, handle);
+}
+		
+
 template<typename T>
 std::stringstream& operator>>(std::stringstream& out, std::vector<T>& v) 
 {

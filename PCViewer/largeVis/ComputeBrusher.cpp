@@ -91,7 +91,7 @@ VkEvent ComputeBrusher::updateActiveIndices(size_t amtDatapoints, const std::vec
 
     // wait for previous event/pipeline to finish
     if(prevPipeEvent)
-        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT , VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
+        vkCmdWaitEvents(_commands, 1, &prevPipeEvent, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT , VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, {}, 0, {}, 0, {});
     
     if(timingInfo.queryPool){
         vkCmdResetQueryPool(_commands, timingInfo.queryPool, timingInfo.startIndex, 2);

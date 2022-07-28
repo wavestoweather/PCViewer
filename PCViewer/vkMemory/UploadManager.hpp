@@ -22,6 +22,7 @@ public:
     VkFence uploadTask(const void* data, size_t byteSize, VkBuffer dstBuffer, size_t dstBufferOffset = 0);
 
     bool idle() const {return _doneTransferIndex == _nextFreeTransfer;};
+    void waitForIdle() {_idleSemaphore.acquire();};
 
 private:
     // Attribute section ------------------------------------------------------------
@@ -44,6 +45,7 @@ private:
     void* _mappedMemory;
 
     PCUtil::Semaphore _taskSemaphore{};
+    PCUtil::Semaphore _idleSemaphore{};
     std::thread _transferThread{};
     std::atomic_uint32_t _nextFreeTransfer{};
     uint32_t _curTransferIndex{};

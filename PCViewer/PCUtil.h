@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <sstream>
+#include <cstdio>
 #include <algorithm>
 #include "imgui/imgui.h"
 #include "Data.hpp"
@@ -109,6 +110,17 @@ public:
 		void releaseN(int n);
 		void acquire();
 		unsigned long peekCount(){return _count;};
+	};
+
+	class CIFile{
+	public:
+		CIFile(std::string_view filename);
+		~CIFile();
+		CIFile(const CIFile&) = delete;
+		CIFile& operator=(const CIFile&) = delete;
+		size_t read(char* buffer, size_t byteSize);
+
+		FILE* handle;
 	};
 
 	// custom priority queue implementation to be able to access the underlying container

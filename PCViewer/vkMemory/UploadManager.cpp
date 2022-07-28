@@ -82,6 +82,9 @@ void UploadManager::threadExec(UploadManager* m){
         if(curTransferIndex == m->_nextFreeTransfer)
             continue;
 
+        if(m->_doneTransferIndex == m->_nextFreeTransfer && m->_idleSemaphore.peekCount() > 0)
+            m->_idleSemaphore.releaseN(m->_idleSemaphore.peekCount());
+
         //if(m->idle() && m->_taskSemaphore.peekCount() > 0)
         
         // working on copy task
@@ -105,7 +108,7 @@ void UploadManager::threadExec(UploadManager* m){
         VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
         range.memory = m->_transferMemory;
         range.offset = m->_transferOffsets[transferIndex];
-        range.size = m->_transfers[transferIndex].byteSize;
+        range.size = PCUtil::alignedSize(m->_transfers[transferIndex].byteSize, 0x40);
         vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
         VkUtil::commitCommandBuffer(queue, commands, m->_transferFences[transferIndex]);
     }

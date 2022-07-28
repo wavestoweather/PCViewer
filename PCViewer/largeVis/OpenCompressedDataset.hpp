@@ -133,9 +133,10 @@ namespace util{
                 dataSize = std::filesystem::file_size(hierarchyFolder + "/0.col") / 2;
                 std::cout << "Data size from col file: " << dataSize << std::endl;
             }
+            PCUtil::Stopwatch importWatch(std::cout, "Half import time for " + std::to_string(dataSize * attributes.size() * sizeof(half) / double(1<<30)) + " GByte");
             for(uint32_t i: irange(attributes)){
                 std::cout << "[import] Loading half data for attribute " << attributes[i].name << std::endl;
-                std::ifstream data(hierarchyFolder + "/" + std::to_string(i) + ".col", std::ios_base::binary);
+                PCUtil::CIFile data(hierarchyFolder + "/" + std::to_string(i) + ".col");
                 auto& dVec = columnData[i].cpuData;
                 dVec.resize(dataSize);
                 data.read(reinterpret_cast<char*>(dVec.data()), dVec.size() * sizeof(dVec[0]));
