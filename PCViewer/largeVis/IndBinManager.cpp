@@ -197,6 +197,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     if(!t->_gpuDecompressForward)
         blockSize = -blockSize;
     long startOffset = t->_gpuDecompressForward ? 0: (t->compressedData.columnData[0].compressedRLHuffGpu.size() - 1) * t->compressedData.compressedBlockSize;
+    //startOffset = 2 * 264305696;
     VkSemaphore curSemaphore{};
     std::set<uint32_t> neededIndices(activeIndices.begin(), activeIndices.end()); // getting all needed indices, not just the visible once, but also all brushed ones
     for(auto& b: t->_countBrushState.rangeBrushes){
@@ -462,7 +463,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
             datas.back() = dataBuffer[activeIndices.back()];//t->compressedData.columnData[activeIndices.back()].gpuHalfData;
-            if(!anyUpdate && !gpuDecompression)
+            if(!anyUpdate && !gpuDecompression && !streamGpuData)
                 continue;
             LineCounter::ReductionTypes reductionType{};
             switch(t->countingMethod){
@@ -492,7 +493,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 counts[i] = t->_countResources[{a,b}].countBuffer;
                 t->_countResources[{a,b}].brushingId = t->_countBrushState.id;
             }
-            if(!anyUpdate && !gpuDecompression)
+            if(!anyUpdate && !gpuDecompression && !streamGpuData)
                 continue;
 
             LineCounter::ReductionTypes reductionType{};
