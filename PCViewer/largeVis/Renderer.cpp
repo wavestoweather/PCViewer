@@ -21,6 +21,8 @@ Renderer::~Renderer(){
         vkDestroyBuffer(_vkContext.device, b, nullptr);
     if(_indexBufferMem)
         vkFreeMemory(_vkContext.device, _indexBufferMem, nullptr);
+    if(_fence)
+        vkDestroyFence(_vkContext.device, _fence, nullptr);
 }
 void Renderer::updatePipeline(const CreateInfo& info){
     _renderPass = info.renderPass;
@@ -141,6 +143,8 @@ void Renderer::updatePipeline(const CreateInfo& info){
 
     VkUtil::createDescriptorSets(info.context.device, {_heatmapSetLayout}, info.context.descriptorPool, &_heatmapSet);
     VkUtil::updateImageDescriptorSet(info.context.device, info.heatmapSampler, info.heatmapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _heatmapSet);
+
+    VkFence _fence = VkUtil::createFence(_vkContext.device, 0);
 }
 
 void Renderer::render(const RenderInfo& renderInfo) 
@@ -259,16 +263,15 @@ void Renderer::updatePriorityIndexlists(const IndexlistUpdateInfo& info){
     vkMapMemory(_vkContext.device, m, 0, countByteSize, 0, &gpuMem);
     //downlaoding the counts 1 by 1 and sorting them, creating the indexlist
     std::vector<uint32_t> counts(info.countSizes[0]);
-    VkFence fence = VkUtil::createFence(_vkContext.device, 0);
     for(int i: irange(info.counts)){
         {
             VkCommandBuffer commands;
             std::scoped_lock lock(*_vkContext.queueMutex);
             VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
             VkUtil::copyBuffer(commands, info.counts[i], b[0], countByteSize, 0, 0);
-            VkUtil::commitCommandBuffer(_vkContext.queue, commands, fence);
-            check_vk_result(vkWaitForFences(_vkContext.device, 1, &fence, VK_TRUE, 5e9));
-            vkResetFences(_vkContext.device, 1, &fence);
+            VkUtil::commitCommandBuffer(_vkContext.queue, commands, _fence);
+            check_vk_result(vkWaitForFences(_vkContext.device, 1, &_fence, VK_TRUE, 5e9));
+            vkResetFences(_vkContext.device, 1, &_fence);
             vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
         }
         // able to download data and sort

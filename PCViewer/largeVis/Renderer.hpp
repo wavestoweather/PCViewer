@@ -80,6 +80,7 @@ private:
     std::vector<VkBuffer> _indexBuffers{};                  // priority rendering only
     std::vector<size_t> _indexBufferOffsets{};
     VkDeviceMemory      _indexBufferMem{};
+    VkFence             _fence{};
 
     const std::string _vertexShader = "shader/largeVis.vert.spv";
     const std::string _geometryShader = "shader/largeVis.geom.spv";
