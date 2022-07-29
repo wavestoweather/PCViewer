@@ -144,7 +144,7 @@ void Renderer::updatePipeline(const CreateInfo& info){
     VkUtil::createDescriptorSets(info.context.device, {_heatmapSetLayout}, info.context.descriptorPool, &_heatmapSet);
     VkUtil::updateImageDescriptorSet(info.context.device, info.heatmapSampler, info.heatmapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _heatmapSet);
 
-    VkFence _fence = VkUtil::createFence(_vkContext.device, 0);
+    _fence = VkUtil::createFence(_vkContext.device, 0);
 }
 
 void Renderer::render(const RenderInfo& renderInfo) 
