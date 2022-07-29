@@ -2508,7 +2508,9 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 			g_PcPlotRenderPass_noClear,
 			g_PcPlotFramebuffer_noClear,
 			g_pcPlotSampleCount,
-			ds.compressedData
+			ds.compressedData,
+			g_PcPLotDensityIronMapView,
+			g_PcPlotDensityIronMapSampler
 		};
 		dl.indBinManager = std::make_shared<IndBinManager>(createInfo);
 		pcAttributes = dl.indBinManager->compressedData.attributes;
@@ -3067,11 +3069,15 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		if (g_PcPlotIndexBuffer && pcAttributes.size())
 			vkCmdBindIndexBuffer(line_batch_commands.back(), g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList) {
+		uint32_t dlIndex = 0;
+		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList, ++dlIndex) {
 			if (!drawList->show)
 				continue;
 			if (drawList->indBinManager){
-				drawList->indBinManager->render(line_batch_commands.back(), drawList->ubo, true);
+				compression::Renderer::RenderType renderType{compression::Renderer::RenderType::Polyline};
+				if(priorityAttribute != -1 && dlIndex == priorityListIndex)
+					renderType = compression::Renderer::RenderType::PriorityPolyline;
+				drawList->indBinManager->render(line_batch_commands.back(), drawList->ubo, renderType, true);
 				continue;
 			}
 			if (drawList->renderBundles){
@@ -3218,12 +3224,16 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		if (g_PcPlotIndexBuffer && pcAttributes.size())
 			vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, g_PcPlotIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList) {
+		uint32_t dlIndex{};
+		for (auto drawList = g_PcPlotDrawLists.rbegin(); g_PcPlotDrawLists.rend() != drawList; ++drawList, ++dlIndex) {
 			if (!drawList->show)
 				continue;
 
 			if (drawList->indBinManager){
-				drawList->indBinManager->render(g_PcPlotCommandBuffer, drawList->ubo, true);
+				compression::Renderer::RenderType renderType{compression::Renderer::RenderType::Polyline};
+				if(priorityAttribute != -1 && dlIndex == priorityListIndex)
+					renderType = compression::Renderer::RenderType::PriorityPolyline;
+				drawList->indBinManager->render(g_PcPlotCommandBuffer, drawList->ubo, renderType, true);
 				continue;
 			}
 			if (drawList->renderBundles){
@@ -5783,6 +5793,14 @@ static void upatePriorityColorBuffer() {
 	auto it = g_PcPlotDrawLists.begin();
 	std::advance(it, priorityListIndex);
 	DrawList* dl = &(*it);
+
+	if(dl->indBinManager){
+		dl->indBinManager->priorityInfo.axis = priorityAttribute;
+		auto& compA = dl->indBinManager->compressedData.attributes[priorityAttribute];
+		dl->indBinManager->priorityInfo.axisValue = (priorityAttributeCenterValue - compA.min) / (compA.max - compA.min);
+		dl->indBinManager->forceCountUpdate();
+		return;
+	}
 
 	Data* data;
 	for (DataSet& ds : g_PcPlotDataSets) {
@@ -10464,7 +10482,13 @@ int main(int, char**)
 				if (ImGui::BeginCombo("Priority rendering", (priorityAttribute == -1) ? "Off" : pcAttributes[priorityAttribute].name.c_str())) {
 					if (ImGui::MenuItem("Off")) {
 						priorityAttribute = -1;
-						pcPlotRender = true;
+						auto dl = g_PcPlotDrawLists.begin(); std::advance(dl, priorityListIndex);
+						if(dl->indBinManager){
+							dl->indBinManager->priorityInfo.axis = -1;
+							dl->indBinManager->forceCountUpdate();
+						}
+						else
+							pcPlotRender = true;
 					}
 					for (int i = 0; i < pcAttributes.size(); i++) {
 						if (pcAttributeEnabled[i]) {
@@ -10678,7 +10702,9 @@ int main(int, char**)
 								dl.indBinManager->updateRenderer(compression::Renderer::CreateInfo{VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex},
 																														g_PcPlotRenderPass_noClear,
 																														g_pcPlotSampleCount,
-																														g_PcPlotFramebuffer_noClear
+																														g_PcPlotFramebuffer_noClear,
+																														g_PcPLotDensityIronMapView,
+																														g_PcPlotDensityIronMapSampler
 								});
 								dl.indBinManager->requestRender = true;
 								dl.indBinManager->columnBins = g_PcPlotHeight;
@@ -11042,7 +11068,13 @@ int main(int, char**)
 				if (ImGui::BeginCombo("Priority rendering", (priorityAttribute == -1) ? "Off" : pcAttributes[priorityAttribute].name.c_str())) {
 					if (ImGui::MenuItem("Off")) {
 						priorityAttribute = -1;
-						pcPlotRender = true;
+						auto dl = g_PcPlotDrawLists.begin(); std::advance(dl, priorityListIndex);
+						if(dl->indBinManager){
+							dl->indBinManager->priorityInfo.axis = -1;
+							dl->indBinManager->forceCountUpdate();
+						}
+						else
+							pcPlotRender = true;
 					}
 					for (int i = 0; i < pcAttributes.size(); i++) {
 						if (pcAttributeEnabled[i]) {

@@ -21,6 +21,7 @@
 #include "../half/half.hpp"
 #include "../compression/gpuCompression/Encode.hpp"
 #include "UVecHasher.hpp"
+#include "PriorityInfo.hpp"
 //#include "../Structures.hpp"
 
 struct CompressedData;
@@ -93,6 +94,8 @@ public:
         VkFramebuffer framebuffer;
         VkSampleCountFlagBits sampleCount;
         const CompressedData& compressedData;
+        VkImageView heatmapView;
+        VkSampler heatmapSampler;
     };
 
     // maxDrawLines describes the max lines inbetween two attributes
@@ -111,7 +114,7 @@ public:
     // forces recounting of the bins with the current countingMethod
     void forceCountUpdate();
     // renders the current 2d bin counts to the pc plot (is done on main thread, as the main framebuffer is locked)
-    void render(VkCommandBuffer commands, VkBuffer attributeInfos, bool clear = false);
+    void render(VkCommandBuffer commands, VkBuffer attributeInfos, compression::Renderer::RenderType renderType, bool clear = false);
     // checks if an update is enqueued
     void checkUpdateQueue(){
         if(_currentBrushState != _countBrushState && !_countUpdateThreadActive){
@@ -131,6 +134,7 @@ public:
     std::vector<half> priorityDistances;            // vector containing the priority distances for each data point
     uint32_t columnBins{};
     CountingMethod countingMethod{CountingMethod::GpuComputeFullPartitioned};    // variable to set the different counting techniques
+    PriorityInfo priorityInfo{};                    // when the attribute in priority info is set to a positive value the count update will produce a max operation for the count images
     bool printDeocmpressionTimes{true};
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...

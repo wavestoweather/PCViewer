@@ -1,6 +1,7 @@
 #include "Renderer.hpp"
 #include "../PCUtil.h"
 #include "../range.hpp"
+#include <numeric>
 
 namespace compression{
 Renderer::Renderer(const CreateInfo& info) :
@@ -14,6 +15,12 @@ Renderer::Renderer(const CreateInfo& info) :
 Renderer::~Renderer(){
     _polyPipeInfo.vkDestroy(_vkContext);
     _splinePipeInfo.vkDestroy(_vkContext);
+    if(_heatmapSetLayout)
+        vkDestroyDescriptorSetLayout(_vkContext.device, _heatmapSetLayout, nullptr);
+    for(auto b: _indexBuffers)
+        vkDestroyBuffer(_vkContext.device, b, nullptr);
+    if(_indexBufferMem)
+        vkFreeMemory(_vkContext.device, _indexBufferMem, nullptr);
 }
 void Renderer::updatePipeline(const CreateInfo& info){
     _renderPass = info.renderPass;
@@ -107,7 +114,10 @@ void Renderer::updatePipeline(const CreateInfo& info){
 
     VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_polyPipeInfo.descriptorSetLayout);
 
-    std::vector<VkDescriptorSetLayout> descriptorSetLayouts{_polyPipeInfo.descriptorSetLayout};
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    VkUtil::createDescriptorSetLayout(info.context.device, bindings, &_heatmapSetLayout);
+
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts{_polyPipeInfo.descriptorSetLayout, _heatmapSetLayout};
     
     std::vector<VkDynamicState> dynamicStateVec{};
 
@@ -128,6 +138,9 @@ void Renderer::updatePipeline(const CreateInfo& info){
     shaderModules[4] = VkUtil::createShaderModule(info.context.device, fragmentBytes);
 
     VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &_renderPass, &_splinePipeInfo.pipelineLayout, &_splinePipeInfo.pipeline, pushConstants);
+
+    VkUtil::createDescriptorSets(info.context.device, {_heatmapSetLayout}, info.context.descriptorPool, &_heatmapSet);
+    VkUtil::updateImageDescriptorSet(info.context.device, info.heatmapSampler, info.heatmapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _heatmapSet);
 }
 
 void Renderer::render(const RenderInfo& renderInfo) 
@@ -166,7 +179,8 @@ void Renderer::render(const RenderInfo& renderInfo)
             //assert(renderInfo.attributeAxisSizes * renderInfo.attributeAxisSizes == renderInfo.countSizes || "Somethings wrong with the bins");
             PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes[i], renderInfo.attributeAxisSizes[i]};
             vkCmdPushConstants(commands, _polyPipeInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipelineLayout, 0, 1, &_infoDescSets[renderInfo.drawListId], 0, {});
+            std::array<VkDescriptorSet, 2> descSets{_infoDescSets[renderInfo.drawListId], _heatmapSet};
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipelineLayout, 0, descSets.size(), descSets.data(), 0, {});
             VkDeviceSize offsets[1]{0};
             vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, offsets);
             vkCmdDraw(commands, pc.aSize * pc.bSize, 1, 0, 0);
@@ -185,7 +199,27 @@ void Renderer::render(const RenderInfo& renderInfo)
         break;
         }
     case RenderType::PriorityPolyline: {
-        // todo implement
+        if(_indexBuffers.empty() ||renderInfo.attributeAxisSizes[0] * renderInfo.attributeAxisSizes[1] > _prevIndexSize){
+            //std::cout << "Attempted render with prev size " << _prevIndexSize << " and current size " << renderInfo.attributeAxisSizes[0] * renderInfo.attributeAxisSizes[1]  << std::endl; 
+            return;
+        }
+        vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipeline);
+        for(int i: irange(renderInfo.counts)){
+            auto aAxis = renderInfo.axes[i].first, bAxis = renderInfo.axes[i].second;
+            if(!renderInfo.attributeActive[aAxis] || !renderInfo.attributeActive[bAxis])
+                continue;
+            //assert(renderInfo.attributeAxisSizes * renderInfo.attributeAxisSizes == renderInfo.countSizes || "Somethings wrong with the bins");
+            PushConstants pc{aAxis, bAxis, renderInfo.attributeAxisSizes[i], renderInfo.attributeAxisSizes[i]};
+            vkCmdPushConstants(commands, _polyPipeInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+            std::array<VkDescriptorSet, 2> descSets{_infoDescSets[renderInfo.drawListId], _heatmapSet};
+            vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, _polyPipeInfo.pipelineLayout, 0, descSets.size(), descSets.data(), 0, {});
+            VkDeviceSize offsets[1]{0};
+            vkCmdBindVertexBuffers(commands, 0, 1, renderInfo.counts.data() + i, offsets);
+            vkCmdBindIndexBuffer(commands, _indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
+            assert(pc.aSize * pc.bSize <= _prevIndexSize);
+            vkCmdDrawIndexed(commands, pc.aSize * pc.bSize, 1, 0, 0, 0);
+        }
+        break;
         }
     case RenderType::PrioritySpline: {
         // todo implement
@@ -201,6 +235,54 @@ void Renderer::render(const RenderInfo& renderInfo)
     //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
 //
     //vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+}
+
+void Renderer::updatePriorityIndexlists(const IndexlistUpdateInfo& info){
+    //std::cout << "[update indexlist] " << PCUtil::toReadableString(info.countSizes) << std::endl;
+    const uint32_t countByteSize = info.countSizes[0] * sizeof(uint32_t);
+    // creating the index buffers
+    if(info.countSizes[0] > _prevIndexSize){
+        for(auto b: _indexBuffers)
+            vkDestroyBuffer(_vkContext.device, b, nullptr);
+        if(_indexBufferMem)
+            vkFreeMemory(_vkContext.device, _indexBufferMem, nullptr);
+
+        std::vector<size_t> sizes(info.counts.size(), countByteSize);
+        std::vector<VkBufferUsageFlags> usages(info.counts.size(), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+        std::tie(_indexBuffers, _indexBufferOffsets, _indexBufferMem) = VkUtil::createMultiBufferBound(_vkContext, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    }
+
+    PCUtil::Stopwatch stopwatch(std::cout, "update priority indexlist");
+    // creating a staging buffer
+    auto [b, o, m] = VkUtil::createMultiBufferBound(_vkContext, {countByteSize}, {VK_BUFFER_USAGE_TRANSFER_DST_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    void* gpuMem;
+    vkMapMemory(_vkContext.device, m, 0, countByteSize, 0, &gpuMem);
+    //downlaoding the counts 1 by 1 and sorting them, creating the indexlist
+    std::vector<uint32_t> counts(info.countSizes[0]);
+    VkFence fence = VkUtil::createFence(_vkContext.device, 0);
+    for(int i: irange(info.counts)){
+        {
+            VkCommandBuffer commands;
+            std::scoped_lock lock(*_vkContext.queueMutex);
+            VkUtil::createCommandBuffer(_vkContext.device, _vkContext.commandPool, &commands);
+            VkUtil::copyBuffer(commands, info.counts[i], b[0], countByteSize, 0, 0);
+            VkUtil::commitCommandBuffer(_vkContext.queue, commands, fence);
+            check_vk_result(vkWaitForFences(_vkContext.device, 1, &fence, VK_TRUE, 5e9));
+            vkResetFences(_vkContext.device, 1, &fence);
+            vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+        }
+        // able to download data and sort
+        std::memcpy(counts.data(), gpuMem, countByteSize);
+        std::vector<uint32_t> indices(counts.size());
+        std::iota(indices.begin(), indices.end(), 0);       // filling with increasing indices
+        std::sort(indices.begin(), indices.end(), [&](uint32_t l, uint32_t r){return counts[l] < counts[r];});  // sorting according to the counts (low counts are drawn in the beginning)
+        // upload to the indexbuffer
+        VkUtil::uploadData(_vkContext.device, _indexBufferMem, _indexBufferOffsets[i], countByteSize, indices.data());
+    }
+    vkUnmapMemory(_vkContext.device, m);
+    vkDestroyBuffer(_vkContext.device, b[0], nullptr);
+    vkFreeMemory(_vkContext.device, m, nullptr);
+    _prevIndexSize = info.countSizes[0];
 }
 
 void Renderer::updateFramebuffer(VkFramebuffer framebuffer, uint32_t newWidth, uint32_t newHeight){

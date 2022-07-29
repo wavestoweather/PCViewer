@@ -20,6 +20,8 @@ layout(binding = 0) buffer UniformBufferObject{
 	vec4 vertexTransformations[];		//x holds the x position, y and z hold the lower and the upper bound respectivley for the first amtOfAttributes positions
 } ubo;
 
+layout(set = 1, binding = 0) uniform sampler2D ironMap;
+
 layout(location = 0) in uint count;
 layout(location = 0) out vec4 color;	//color contains the count value in its alpha channel
 layout(location = 1) out vec4 aPosBPos;	//containts 2 vec2: [aPos, bPos], with xPos containing the x and y coordinates of one end of a line
@@ -59,6 +61,16 @@ void main() {
 	aPosBPos.w = y2;
 
 	color = ubo.color;
+
+	if(int(ubo.vertexTransformations[0].a) == 1){
+		float norm = float(count) / 65535.f;
+		norm  = .98 * norm + .02;
+		color.xyz = texture(ironMap, vec2(norm,.5f)).xyz;
+		if(count < 2)
+			color.a = 0;
+		return;
+	}
+
 	//analytical calculation of opacity for clusterAmt wiith opacity a and N lines: a_final = 1-(1-a)^N
 	switch(ubo.alphaMappingType){
 	case MappingMultiplicative:

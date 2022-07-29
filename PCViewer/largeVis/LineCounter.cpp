@@ -235,7 +235,12 @@ void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData
     vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
 }
 
-VkSemaphore LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, ReductionTypes reductionType, VkSemaphore prevPipeSemaphore, TimingInfo timingInfo) {
+VkSemaphore LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset, bool clearCounts, ReductionTypes reductionType, VkSemaphore prevPipeSemaphore, TimingInfo timingInfo, const PriorityInfo& priorityinfo) {
+    if(priorityinfo.axis != -1){
+        //std::cout << "Switchin to priority counting" << std::endl;
+        reductionType = ReductionSubgroupMax;
+    }
+    
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
 	check_vk_result(vkWaitForFences(_vkContext.device, 1, &_allFence, true, 10e9)); // wait for 10 secs, should throw error before...
     vkResetFences(_vkContext.device, 1, &_allFence);
@@ -258,6 +263,7 @@ VkSemaphore LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuff
     }
     infos.indexOffset = indexOffset / 32;   // convert to bitOffset to indexOffset (to be able to reduce from size_t to uin32_t with less danger of overflowing)
     infos.allAmtOfPairs = counts.size();
+    infos.priorityAttributeValue = (priorityinfo.axis << 16) | (uint32_t(priorityinfo.axisValue * 65535.f) & 0xffff);
     VkUtil::uploadData(_vkContext.device, _pairUniformMem, 0, sizeof(infos), &infos);
 
     if(_allCommands)

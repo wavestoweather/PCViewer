@@ -1,6 +1,7 @@
 #pragma once
 #include "../VkUtil.h"
 #include "TimingInfo.hpp"
+#include "PriorityInfo.hpp"
 #include "../Brushing.hpp"
 #include <map>
 
@@ -41,14 +42,14 @@ public:
     void release();                                 // has to be called to notify destruction before vulkan resources are destroyed
     void countLines(VkCommandBuffer commands, const CountLinesInfo& info);  // test function
     void countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd);
-    VkSemaphore countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset = 0, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkSemaphore prevPipeSemaphore = {}, TimingInfo timingInfo = {});
+    VkSemaphore countLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, VkBuffer indexActivation, size_t indexOffset = 0, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkSemaphore prevPipeSemaphore = {}, TimingInfo timingInfo = {},const PriorityInfo& priorityinfo = {});
 
     VkSemaphore countBrushLinesAll(size_t dataSize, const std::vector<VkBuffer>& data, uint32_t binAmt, const std::vector<VkBuffer>& counts, const std::vector<uint32_t>& activeIndices, const brushing::RangeBrushes& rangeBrushes, const Polygons& lassoBrushes, bool andBrushes = true, bool clearCounts = false, ReductionTypes reductionType = ReductionAdd, VkSemaphore prevPipeSemaphore = {}, TimingInfo timingIfo = {});
 
     static const uint32_t maxAttributes{30};
 private:
     struct PairInfos{
-        uint32_t amtofDataPoints, aBins, bBins, indexOffset, allAmtOfPairs, attributeActive, countActive, padding;
+        uint32_t amtofDataPoints, aBins, bBins, indexOffset, allAmtOfPairs, attributeActive, countActive, priorityAttributeValue;
     };
 
     struct BPair{

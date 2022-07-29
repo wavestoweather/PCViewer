@@ -18,7 +18,10 @@ layout(binding = 4) uniform Infos{
     uint aBins, bBins;      // b bins is used to determine switch of attributes (needs to be done to account for not increasingly ordered attributes)
     uint indexOffset;
     uint amtOfCounts;
-    uint pa,dd,ing;
+    uint attributeActive;   // each bit stands for a single attribute which is needed for counting
+    uint countActive;
+    uint priorityAttributeValue;// combined attribute index in the upper 16 bits and priority value in the lower 16 bits, normalizes-> 65535 is max value, 0 the lowest
+    uint countIndices[];    // essentially this is an array containing the sorted indices
 };
 
 const uint reductionAdd = 0;
@@ -29,7 +32,7 @@ const uint reductionSubgroupAllAdd = 4;
 const uint reductionMin = 5;
 const uint reductionSubgroupMin = 6;
 const uint reductionMax = 7;        // currently unused
-const uint reductionSubgroupMax = 8;// currently unused
+const uint reductionSubgroupMax = 8;// used for priority rendering
 const uint reductionAddPartitionGeneric = 9;    // same as add partition but without nv things
 
 layout(constant_id = 0) const uint reductionType = reductionAdd;
@@ -43,10 +46,27 @@ void main(){
     uint act = activations[indexDiv32];
     if((act & (1 << (gl_GlobalInvocationID.x & 31))) == 0)
         return;
-    float aVal = unpackHalf2x16(a[0].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
-    const float invDist = aVal;
+    float priorityAxisValue;
+    uint priorityMapped;
+    uint priorityAttribute;
+    if(reductionType == reductionSubgroupMax){
+        priorityAttribute = priorityAttributeValue >> 16;
+        float priorityValue = float(priorityAttributeValue & 0xffff) / 65535.f;  //65535 = 2^16 - 1
+        priorityAxisValue = unpackHalf2x16(a[priorityAttribute].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+        priorityMapped = 65535 - uint(abs(priorityAxisValue - priorityValue) / max(priorityValue, 1.f - priorityValue) * 65535.f);  //65535 = 2^16 - 1
+    }
+    
+    float aVal;
+    if(reductionType == reductionSubgroupMax && priorityAttribute == 0)
+        aVal = priorityAxisValue;
+    else
+        aVal = unpackHalf2x16(a[0].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
     for(int i = 1; i <= amtOfCounts; ++i){
-        float bVal = unpackHalf2x16(a[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
+        float bVal;
+        if(reductionType == reductionSubgroupMax && priorityAttribute == i)
+            bVal = priorityAxisValue;
+        else
+            bVal = unpackHalf2x16(a[i].v[gl_GlobalInvocationID.x >> 1])[gl_GlobalInvocationID.x & 1];
         uint binA = min(uint(aVal * float(aBins)), aBins - 1);
         uint binB = min(uint(bVal * float(aBins)), aBins - 1);
         if(bool(bBins & (1 << (i - 1)))){ // switching bins if switching bit is set
@@ -105,7 +125,7 @@ void main(){
             break;
         case reductionSubgroupMax:
             // hardcoding center to 1 on first axis
-            val = uint(invDist * 10000);
+            val = priorityMapped;
 
             sg = subgroupPartitionNV(finalBin);
             m = subgroupPartitionedMaxNV(val, sg);

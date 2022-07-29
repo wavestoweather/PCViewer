@@ -39,7 +39,7 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
     // --------------------------------------------------------------------------------
     _renderLineCounter = RenderLineCounter::acquireReference(RenderLineCounter::CreateInfo{info.context});
     _lineCounter = LineCounter::acquireReference(LineCounter::CreateInfo{info.context});
-    _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.sampleCount, info.framebuffer});
+    _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.sampleCount, info.framebuffer, info.heatmapView, info.heatmapSampler});
     _computeBrusher = ComputeBrusher::acquireReference(ComputeBrusher::CreateInfo{info.context});
 }
 
@@ -87,7 +87,7 @@ void IndBinManager::forceCountUpdate(){
     updateCounts();
 }
 
-void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, bool clear){
+void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, compression::Renderer::RenderType renderType, bool clear){
     std::vector<int> activeIndices; // these are already ordered
     for(auto i: _attributeOrdering){
         if(_attributeActivations[i])
@@ -116,7 +116,7 @@ void IndBinManager::render(VkCommandBuffer commands,VkBuffer attributeInfos, boo
     compression::Renderer::RenderInfo renderInfo{
         commands,
         ss.str(),
-        compression::Renderer::RenderType::Polyline,
+        renderType,
         counts,
         axes,
         _attributeOrdering,
@@ -166,7 +166,7 @@ void IndBinManager::updateCounts(){
                     vkFreeMemory(_vkContext.device, _countResources[{a,b}].countMemory, nullptr);
                 }
                 // create resource if not yet available
-                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &(_countResources[{a,b}].countBuffer));
+                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &(_countResources[{a,b}].countBuffer));
                 VkMemoryAllocateInfo allocInfo{};
                 allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
                 VkMemoryRequirements memReq{};
@@ -476,7 +476,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
                 case CountingMethod::GpuComputeFullMax:             reductionType = LineCounter::ReductionSubgroupMax; break;
                 case CountingMethod::GpuComputeFullPartitionGeneric:reductionType = LineCounter::ReductionAddPartitionGeneric; break;
             }
-            curSemaphore = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, indexOffset, firstIter, reductionType, curSemaphore, {timingPool, timingIndex++, timingIndex++});
+            curSemaphore = t->_lineCounter->countLinesAll(curDataBlockSize, datas, t->columnBins, counts, activeIndices, t->_indexActivation, indexOffset, firstIter, reductionType, curSemaphore, {timingPool, timingIndex++, timingIndex++}, t->priorityInfo);
             break;
         }
         case CountingMethod::GpuComputeFullBrush:
@@ -597,6 +597,20 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
 
     finish:
     std::cout.flush();
+    if(t->priorityInfo.axis >= 0){
+        std::vector<VkBuffer> buffers;
+        std::vector<size_t> bufferSizes;
+        for(int i: irange(activeIndices.size() - 1)){
+            uint32_t a = activeIndices[i];
+            uint32_t b = activeIndices[i + 1];
+            if(a > b)
+                std::swap(a, b);
+            auto& res = t->_countResources[{a,b}];
+            buffers.push_back(res.countBuffer);
+            bufferSizes.push_back(res.binAmt);
+        }
+        t->_renderer->updatePriorityIndexlists({buffers, bufferSizes});
+    }
     t->requestRender = true;                   // ready to update rendering
     t->_countUpdateThreadActive = false;        // releasing the update thread
 }
