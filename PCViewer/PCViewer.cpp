@@ -598,6 +598,7 @@ struct PCSettings {
 	bool drawListForTemplateBrush = false;
 	int liveBrushThreshold = 5e5;
 	int lineBatchSize = 2e6;
+	bool enableClearOnRerender = true;
 
 	//variables for global brushes
 	bool toggleGlobalBrushes = true;
@@ -3051,19 +3052,32 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		VkUtil::createCommandBuffer(g_Device, g_PcPlotCommandPool, &line_batch_commands[0]);
 		vkCmdPipelineBarrier(line_batch_commands[0], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
 		std::vector<VkClearValue> clearValues{ { pcSettings.PcPlotBackCol.x,pcSettings.PcPlotBackCol.y,pcSettings.PcPlotBackCol.z,pcSettings.PcPlotBackCol.w } };
-		VkUtil::beginRenderPass(line_batch_commands[0], clearValues, g_PcPlotRenderPass, g_PcPlotFramebuffer, { g_PcPlotWidth, g_PcPlotHeight });
-		//vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
-		if (pcSettings.renderSplines)
+		if(pcSettings.enableClearOnRerender){
+			VkUtil::beginRenderPass(line_batch_commands[0], clearValues, g_PcPlotRenderPass, g_PcPlotFramebuffer, { g_PcPlotWidth, g_PcPlotHeight });
+			if (pcSettings.renderSplines)
 			vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline);
-		else
-			vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
+			else
+				vkCmdBindPipeline(line_batch_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline);
+			if (pcSettings.renderSplines)
+				vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+			else
+				vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+		}
+		else{
+			VkUtil::beginRenderPass(line_batch_commands.back(), clearValues, g_PcPlotRenderPass_noClear, g_PcPlotFramebuffer_noClear, { g_PcPlotWidth, g_PcPlotHeight });
+			if (pcSettings.renderSplines)
+				vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipeline_noClear);
+			else
+				vkCmdBindPipeline(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipeline_noClear);
+			if (pcSettings.renderSplines)
+				vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout_noClear, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+			else
+				vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout_noClear, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+		}		
 
 		//binding the all needed things
 		//vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
-		if (pcSettings.renderSplines)
-			vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotSplinePipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
-		else
-			vkCmdBindDescriptorSets(line_batch_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotPipelineLayout, 0, 1, &g_PcPlotDescriptorSet, 0, nullptr);
+		
 
 
 		if (g_PcPlotIndexBuffer && pcAttributes.size())
@@ -3133,7 +3147,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 					batchSizeLeft = 0;
 				}
 				uint32_t amtOfI = indices_count * (order.size() + 3);
-				uint32_t iOffset = curIndex * (order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
+				uint32_t iOffset = curIndex * (order.size() + 3);//(order.size() + 1 + ((pcSettings.renderSplines) ? 2 : 0));
 				vkCmdDrawIndexed(line_batch_commands.back(), amtOfI, 1, iOffset, 0, 0);
 
 				curIndex += indices_count;
@@ -10557,6 +10571,7 @@ int main(int, char**)
 				if(pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling)
 					ImGui::InputFloat("Random subsampling val", &pcSettings.defaultLoadRandomProbability);
 				ImGui::SliderInt("Line batch size", &pcSettings.lineBatchSize, 1e5, 1e7);
+				ImGui::Checkbox("enableClearOnRerender", &pcSettings.enableClearOnRerender);
 				if(ImGui::BeginMenu("Export Plot (no labels/ticks)")){
 					static std::string exportPath{};
 					ImGui::InputText("##pcExportPath", &exportPath);
