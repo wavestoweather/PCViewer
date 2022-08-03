@@ -49,6 +49,36 @@ static std::pair<cudaCompress::BitStream, uint32_t> compressVector(std::vector<f
     return t;
 }
 
+// compresses lowpass and high pass from the first dwt separately for less error and better compression
+// @return: bytevector lowpass, symbolsize lowpass, bytevector highpass, symbolsize highpass
+static std::tuple<std::vector<uint32_t>, uint32_t, std::vector<uint32_t>, uint32_t> compressSeparate(std::vector<float>& src, float qLowpass, float qHighpass){
+    std::vector<uint32_t> storageLow, storageHigh;
+    cudaCompress::BitStream bitStream(&storageLow), bitStreamHigh(&storageHigh);
+    uint32_t countLow, countHigh;
+    uint32_t alignedSize = PCUtil::alignedSize(src.size(), 4);
+    src.resize(alignedSize);
+    std::vector<float> tmp(alignedSize);
+    cudaCompress::util::dwtFloatForwardCPU(tmp.data(), src.data(), src.size(), 0, 0);
+    std::copy(tmp.begin(), tmp.begin() + alignedSize / 2, src.begin());
+    cudaCompress::util::dwtFloatForwardCPU(src.data(), tmp.data(), tmp.size() / 2, tmp.size() / 2, tmp.size() / 2);
+    
+    // compressing the lowpass with qLowpass
+    std::vector<cudaCompress::Symbol16> symbols(alignedSize / 2);
+    cudaCompress::util::quantizeToSymbols(symbols.data(), src.data(), symbols.size(), qLowpass);
+	cudaCompress::BitStream* arr[]{&bitStream};
+    std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
+    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size()); NOTE: 128 needed for correct decompression via gpu
+    countLow = symbols.size();
+
+    // compressing the highpass with qHighpass
+    cudaCompress::util::quantizeToSymbols(symbols.data(), src.data() + symbols.size(), symbols.size(), qHighpass);
+	arr[0] = {&bitStreamHigh};
+    cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size()); NOTE: 128 needed for correct decompression via gpu
+    countHigh = symbols.size();
+
+    return {storageLow, countLow, storageHigh, countHigh};
+} 
+
 static void decompressVector(const std::vector<uint32_t>& src, float quantizationStep, uint32_t symbolsSize, /*out*/ std::vector<float>& data){
     cudaCompress::BitStreamReadOnly bs(src.data(), src.size() * sizeof(src[0]) * 8);
 	cudaCompress::BitStreamReadOnly* dec[]{&bs};
@@ -62,6 +92,32 @@ static void decompressVector(const std::vector<uint32_t>& src, float quantizatio
     std::copy_n(data.begin(), data.size() / 2, result2.data());
 	cudaCompress::util::dwtFloatInverseCPU(result2.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
 	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
+}
+
+static std::vector<float> decompressSeparate(const std::vector<uint32_t>& bytesLow, uint32_t countLow, const std::vector<uint32_t> bytesHigh, uint32_t countHigh, float qLowpass, float qHighpass){
+    // decoding low pass band
+    cudaCompress::BitStreamReadOnly lowPassStream(bytesLow.data(), bytesLow.size() * 32);
+    cudaCompress::BitStreamReadOnly* dec[]{&lowPassStream};
+    std::vector<cudaCompress::Symbol16> lowSymbols(countLow);
+    std::vector<cudaCompress::Symbol16>* ss[]{&lowSymbols};
+    cudaCompress::decodeRLHuffCPU(dec, ss, countLow, 1, 128);
+    std::vector<float> result(countLow + countHigh), result2(result.size());
+    cudaCompress::util::unquantizeFromSymbols(result.data(), lowSymbols.data(), lowSymbols.size(), qLowpass);
+
+    // decoding high pass band
+    cudaCompress::BitStreamReadOnly highPassStream(bytesHigh.data(), bytesHigh.size() * 32);
+    dec[0] = {&highPassStream};
+    std::vector<cudaCompress::Symbol16> highymbols(countHigh);
+    ss[0] = {&highymbols};
+    cudaCompress::decodeRLHuffCPU(dec, ss, countHigh, 1, 128);
+    cudaCompress::util::unquantizeFromSymbols(result.data() + countLow, highymbols.data(), highymbols.size(), qHighpass);
+
+    // inverse dwt passes as normal
+    std::copy_n(result.begin(), result.size() / 2, result2.data());
+	cudaCompress::util::dwtFloatInverseCPU(result2.data(), result.data(), result.size() / 2, result.size() / 2, result.size() / 2);
+	cudaCompress::util::dwtFloatInverseCPU(result.data(), result2.data(), result.size());
+
+    return result;
 }
 
 static std::vector<uint32_t> compressQHuffman(const std::vector<float>& data, float quantizationStep){
@@ -132,6 +188,11 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vect
     RLHuffDecodeDataGpu gpuData(&gpu, cpuData);
 
     return vkDecompress(context, gpu, cpuData, gpuData, quantizationStep, symbolsSize);    
+}
+
+static std::vector<float> vkDecompressSeparate(const VkUtil::Context& context, std::vector<uint32_t> lowBits, uint32_t lowSize, std::vector<uint32_t> highBits, uint32_t highSize, float qLow, float qHigh){
+    vkCompress::GpuInstance gpu(context, 1, lowSize, 0, 0);
+    uint alignment = 0;
 }
 
 static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, vkCompress::GpuInstance& gpu, const RLHuffDecodeDataCpu& cpuData, const RLHuffDecodeDataGpu& gpuData, float quantizationStep, uint32_t symbolsSize){
@@ -272,6 +333,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testUnquantizePerformance = false;
     constexpr bool testUPloadSpeed = false;
     constexpr bool testQHuffmanCpu = false;
+    constexpr bool testSeparateComp = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -722,6 +784,77 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
                     bool test = true;
                 }
                 std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024 * 4) / bytesize) << std::endl;
+            }
+        }
+        std::cout << "[test] -------------------------------------------------------------" << std::endl << std::endl;
+    }
+    if constexpr(testSeparateComp){
+        // testing separate compression
+        std::vector<float> test(1<<5);
+        std::iota(test.begin(), test.end(), 0);
+        auto [lowpassBits, lowpassSize, highpassBits, highpassSize] = compressSeparate(test, .1, .1);
+        auto res = decompressSeparate(lowpassBits, lowpassSize, highpassBits, highpassSize, .1, .1);
+
+        // testing encoding times for real world data
+        std::cout << "[test] Real World Data separate vs single compression" << std::endl;
+        std::vector<std::string_view> filenames{"/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/tp.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/q.bin", "/run/media/lachei/3d02119e-bc93-4969-9fc5-523f06321708/w2w/takumi/scripts/NCCLOUD.bin"};
+        std::vector<float> quants{0.001f, .01f, .1f};
+        for(auto file: filenames){
+            for(float q: quants){
+                double meSingle{}, meSeparate{};
+                double mseSingle{}, mseSeparate{};
+                uint32_t sSingle, sLowpass, sHighpass;
+                std::vector<uint32_t> singleBits, lowpassBits, highpassBits;
+                size_t singleCount, lowpassCoutn, highpassCount;
+                // encoding
+                std::ifstream f(file.data(), std::ios_base::binary);
+                //assert(f);
+                std::vector<float> tpVals(1024 * 1024);
+ 
+                f.read(reinterpret_cast<char*>(tpVals.data()), tpVals.size() * sizeof(tpVals[0]));
+
+                {
+                    auto cpy = tpVals;
+                    {
+                    PCUtil::Stopwatch encode(std::cout, "Encode single " + std::to_string(q) + std::string(file));
+                    auto [stream, size] = compressVector(cpy, q);
+                    singleBits = std::move(stream.getVector());
+                    sSingle = size;
+                    }
+                    cpy = tpVals;
+                    PCUtil::Stopwatch encodeSeparate(std::cout, "Encode separate" + std::to_string(q) + std::string(file));
+                    std::tie(lowpassBits, sLowpass, highpassBits, sHighpass) = compressSeparate(cpy, q, q / 4);
+                }
+                {
+                    // decoding
+                    {
+                    PCUtil::Stopwatch decode(std::cout, "Decode " + std::to_string(q) + std::string(file));
+                    //std::vector<float> symb = vkDecompressBenchmark(context, bits, q, s);
+                    std::vector<float> data(sSingle);
+                    decompressVector(singleBits, q, sSingle, data);
+                    // error calc
+                    for(size_t i: irange(data)){
+                        float diff = std::abs(data[i] - tpVals[i]);
+                        meSingle += diff;
+                        mseSingle += diff * diff;
+                    }
+                    meSingle /= data.size();
+                    mseSingle /= data.size();
+                    }
+                    PCUtil::Stopwatch decodeSeparate(std::cout, "Decode separate" + std::to_string(q) + std::string(file));
+                    auto decomp = decompressSeparate(lowpassBits, sLowpass, highpassBits, sHighpass, q, q / 4);
+                    // error calc
+                    for(size_t i: irange(decomp)){
+                        float diff = std::abs(decomp[i] - tpVals[i]);
+                        meSeparate += diff;
+                        mseSeparate += diff * diff;
+                    }
+                    meSeparate /= decomp.size();
+                    mseSeparate /= decomp.size();
+                }
+                std::cout << "Compression Ratio: 1 : " << std::to_string(float(1024 * 1024) / singleBits.size()) << std::endl;
+                std::cout << "Compression Ratio Separate: 1 : " << std::to_string(float(2<<20) / (lowpassBits.size() + highpassBits.size())) << std::endl;
+                std::cout << "Errors: single me: "  << meSingle << ", single mse: " << mseSingle << ", separate me: " << meSeparate << ", separate mse: " << mseSeparate << std::endl;
             }
         }
         std::cout << "[test] -------------------------------------------------------------" << std::endl << std::endl;
