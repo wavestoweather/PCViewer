@@ -213,7 +213,6 @@ void main(){
             return;
 
         DecodeTable symbolTable = DecodeTable(infos[gl_WorkGroupID.y].decodeTable);
-        uint symbolTableByteOffset = 3 * MAX_CODEWORD_BITS * 4; //sizeof(int) = 4
         u16vec2 symbol;
         if(bool(longSymbols)){
             symbol = symbolTable.i[0];
@@ -229,7 +228,8 @@ void main(){
         uint writeIndex = warp * gl_SubgroupSize * codingBlockSize + threadWithinWarp;
 
         Symbols symbolStream = Symbols(infos[gl_WorkGroupID.y].symbolStream);
-        for(int i = 0; i < symbolsToDecode; i++) {
+        return; // currently just exits. Some strange error...
+        for(int i = 0;i < symbolsToDecode; i++) {
             if(bool(longSymbols)){
                 symbolStream.i[writeIndex] = symbol;
             }

@@ -72,7 +72,7 @@ static std::tuple<std::vector<uint32_t>, uint32_t, std::vector<uint32_t>, uint32
 
     // compressing the highpass with qHighpass
     cudaCompress::util::quantizeToSymbols(symbols.data(), src.data() + symbols.size(), symbols.size(), qHighpass);
-	arr[0] = {&bitStreamHigh};
+	arr[0] = &bitStreamHigh;
     cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size()); NOTE: 128 needed for correct decompression via gpu
     countHigh = symbols.size();
 
@@ -94,7 +94,7 @@ static void decompressVector(const std::vector<uint32_t>& src, float quantizatio
 	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
 }
 
-static std::vector<float> decompressSeparate(const std::vector<uint32_t>& bytesLow, uint32_t countLow, const std::vector<uint32_t> bytesHigh, uint32_t countHigh, float qLowpass, float qHighpass){
+static std::vector<float> decompressSeparate(const std::vector<uint32_t>& bytesLow, uint32_t countLow, const std::vector<uint32_t>& bytesHigh, uint32_t countHigh, float qLowpass, float qHighpass){
     // decoding low pass band
     cudaCompress::BitStreamReadOnly lowPassStream(bytesLow.data(), bytesLow.size() * 32);
     cudaCompress::BitStreamReadOnly* dec[]{&lowPassStream};
@@ -190,9 +190,63 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vect
     return vkDecompress(context, gpu, cpuData, gpuData, quantizationStep, symbolsSize);    
 }
 
-static std::vector<float> vkDecompressSeparate(const VkUtil::Context& context, std::vector<uint32_t> lowBits, uint32_t lowSize, std::vector<uint32_t> highBits, uint32_t highSize, float qLow, float qHigh){
-    vkCompress::GpuInstance gpu(context, 1, lowSize, 0, 0);
-    uint alignment = 0;
+static std::vector<float> vkDecompressSeparate(const VkUtil::Context& context, const std::vector<uint32_t>& lowBits, uint32_t lowSize, const std::vector<uint32_t>& highBits, uint32_t highSize, float qLow, float qHigh){
+    assert(lowSize == highSize);
+    uint symbolsSize = lowSize + highSize;
+    vkCompress::GpuInstance gpu(context, 1, lowSize + highSize + 1, 0, 0);
+    auto cpuDataLow = vkCompress::parseCpuRLHuffData(&gpu, lowBits, gpu.m_codingBlockSize);
+    auto cpuDataHigh = vkCompress::parseCpuRLHuffData(&gpu, highBits, gpu.m_codingBlockSize);
+    RLHuffDecodeDataGpu gpuDataLow(&gpu, cpuDataLow);
+    RLHuffDecodeDataGpu gpuDataHigh(&gpu, cpuDataHigh);
+
+    uint alignment = gpu.m_subgroupSize * gpu.m_codingBlockSize;
+    uint alignedSymmbols = PCUtil::alignedSize(lowSize + highSize, alignment);
+    uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {alignedSymmbols * sizeof(float), alignedSymmbols * sizeof(float)}, {flags, flags}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkCommandBuffer commands;
+    VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
+    
+    VkDeviceAddress srcA = VkUtil::getBufferAddress(context.device, symbolBuffer[0]); // the symbol buffer containes the quantized values
+    VkDeviceAddress dstA = VkUtil::getBufferAddress(context.device, symbolBuffer[1]); // is the padded offset * 2 as the offset is for halves
+
+    // decoding low pass
+    vkCompress::decodeRLHuffHalf(&gpu, cpuDataLow, gpuDataLow, srcA, commands);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    
+    vkCompress::unquantizeFromSymbols(&gpu, commands, dstA, srcA, lowSize, qLow);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+
+    // decoding high pass
+    vkCompress::decodeRLHuffHalf(&gpu, cpuDataHigh, gpuDataHigh, srcA, commands);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    
+    vkCompress::unquantizeFromSymbols(&gpu, commands, dstA + lowSize * sizeof(float), srcA, highSize, qHigh);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+
+    // dwt inverse
+    vkCompress::dwtFloatInverse(&gpu, commands, srcA, dstA, symbolsSize / 2, symbolsSize / 2, symbolsSize / 2);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    VkBufferCopy cpy{};
+    cpy.dstOffset = 0;
+    cpy.srcOffset = 0;
+    cpy.size = symbolsSize / 2 * sizeof(float);
+    //vkCmdCopyBuffer(commands, symbolBuffer[1], symbolBuffer[0], 1, &cpy);
+    vkCompress::copy(&gpu, commands, srcA, dstA, symbolsSize / 2 * sizeof(float));
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, {}, 0, {}, 0, {});
+    vkCompress::dwtFloatToHalfInverse(&gpu, commands, dstA, srcA, symbolsSize);
+
+    VkUtil::commitCommandBuffer(context.queue, commands);
+    auto err = vkQueueWaitIdle(context.queue); check_vk_result(err);
+    std::vector<half> final(symbolsSize);
+    //VkUtil::downloadData(context.device, mem, offs[1], symbolsSize * sizeof(final[0]), final.data());
+    //VkUtil::getBufferAddress(context.device, resources.symbolsZeroCounts) + resources.compactSymbolsOffset
+    //VkUtil::downloadDataIndirect(context, gpu.Encode.Decode[gpu.Encode.nextDecodeResources].symbolsZeroCounts, symbolsSize * sizeof(final[0]), final.data());
+    VkUtil::downloadDataIndirect(context, symbolBuffer[1], symbolsSize * sizeof(final[0]), final.data());
+    //std::vector<float> result(final.size());
+    //cudaCompress::util::unquantizeFromSymbols(result.data(), final.data(), final.size(), qLow); was correct
+
+    return std::vector<float>(final.begin(), final.end());
 }
 
 static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, vkCompress::GpuInstance& gpu, const RLHuffDecodeDataCpu& cpuData, const RLHuffDecodeDataGpu& gpuData, float quantizationStep, uint32_t symbolsSize){
@@ -333,7 +387,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testUnquantizePerformance = false;
     constexpr bool testUPloadSpeed = false;
     constexpr bool testQHuffmanCpu = false;
-    constexpr bool testSeparateComp = true;
+    constexpr bool testSeparateComp = false;
+    constexpr bool testSeparateGpuDecomp = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -858,5 +913,24 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
             }
         }
         std::cout << "[test] -------------------------------------------------------------" << std::endl << std::endl;
+    }
+    if constexpr(testSeparateGpuDecomp){
+        const uint size = 1 << 20;
+        const float quantStep = .01;
+        std::vector<float> orig(size, 1);
+        orig[0] = 5;
+        //srand(10);
+        //for(auto& f: orig)
+        //    f = random() / float(1u << 31);
+        //std::iota(orig.begin(), orig.end(), 0);
+
+        auto copy = orig;
+        auto [bitsLow, sizeLow, bitsHigh, sizeHigh] = compressSeparate(copy, quantStep, quantStep / 4);
+        copy = orig;
+        auto [singleStream, singleSize] = compressVector(copy, quantStep);
+        auto cpuDecomp = decompressSeparate(bitsLow, sizeLow, bitsHigh, sizeHigh, quantStep, quantStep / 4);
+        auto wtf = vkDecompress(context, singleStream.getVector(), quantStep, singleSize);
+        auto decomp = vkDecompressSeparate(context, bitsLow, sizeLow, bitsHigh, sizeHigh, quantStep, quantStep / 4);
+        bool letssee = true;
     }
 }
