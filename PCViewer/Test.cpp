@@ -388,7 +388,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testUPloadSpeed = false;
     constexpr bool testQHuffmanCpu = false;
     constexpr bool testSeparateComp = false;
-    constexpr bool testSeparateGpuDecomp = true;
+    constexpr bool testSeparateGpuDecomp = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;

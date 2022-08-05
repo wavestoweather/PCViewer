@@ -7,7 +7,7 @@ UploadManager::UploadManager(const VkUtil::Context& context, uint32_t transferQu
     _transfers(amtStagingBuffer),
     _transferCommands(amtStagingBuffer)
 {
-    size_t alignedStagingSize = PCUtil::alignedSize(stagingBufferSize, 128);
+    size_t alignedStagingSize = PCUtil::alignedSize(stagingBufferSize, 256);
     std::vector<size_t> sizes(amtStagingBuffer, alignedStagingSize);
     std::vector<VkBufferUsageFlags> usages(amtStagingBuffer, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     std::tie(_transferBuffers, _transferOffsets, _transferMemory) = VkUtil::createMultiBufferBound(context, sizes, usages, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
