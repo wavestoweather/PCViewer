@@ -197,9 +197,10 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     bool streamGpuData = t->countingMethod > CountingMethod::CpuRoaring && t->compressedData.uploadManager;
     bool combinedActivationCounting = t->countingMethod >= CountingMethod::GpuComputeFullBrush && t->countingMethod <= CountingMethod::GpuComputeFullBrushPartitionedNoAtomics;
     long blockSize = gpuDecompression ? t->compressedData.compressedBlockSize: streamGpuData ? t->compressedData.uploadManager->stagingBufferSize / sizeof(half): t->compressedData.dataSize;
+    uint32_t amtOfBlocks = (t->compressedData.dataSize + blockSize - 1) / blockSize;
+    long startOffset = t->_gpuDecompressForward ? 0: (amtOfBlocks - 1) * blockSize;
     if(!t->_gpuDecompressForward)
         blockSize = -blockSize;
-    long startOffset = t->_gpuDecompressForward ? 0: (t->compressedData.columnData[0].compressedRLHuffGpu.size() - 1) * t->compressedData.compressedBlockSize;
     //startOffset = 2 * 264305696;
     VkSemaphore curSemaphore{};
     std::set<uint32_t> neededIndices(activeIndices.begin(), activeIndices.end()); // getting all needed indices, not just the visible once, but also all brushed ones
@@ -592,7 +593,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         }
     }
 
-    if(gpuDecompression)
+    if(gpuDecompression || streamGpuData)
         t->_gpuDecompressForward ^= true;   // switch forward and backward for ping pong
 
     finish:

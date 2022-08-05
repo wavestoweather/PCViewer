@@ -12,6 +12,8 @@ class UploadManager{
 public:
     // Attribute section ------------------------------------------------------------
     const uint32_t stagingBufferSize;
+    bool useCachedData{true};                       // determines if the lastBufferData should be used to check if data is cached
+    std::map<VkBuffer, const void*> cachedData;     // map storing the last buffer data that was uploaded. When uploadTask() is called, it is checked if the buffer holds already the data and returns if it does
     
     // Method section ---------------------------------------------------------------
     UploadManager(const VkUtil::Context& context, uint32_t transferQueueIndex, uint32_t amtStagingBuffer, uint32_t stagingBufferSize);
@@ -47,6 +49,7 @@ private:
 
     PCUtil::Semaphore _taskSemaphore{};
     PCUtil::Semaphore _idleSemaphore{};
+    std::mutex _cacheMutex{};
     std::thread _transferThread{};
     std::atomic_uint32_t _nextFreeTransfer{};
     uint32_t _curTransferIndex{};

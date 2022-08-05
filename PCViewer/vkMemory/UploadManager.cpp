@@ -46,6 +46,17 @@ UploadManager::~UploadManager(){
 }
 
 VkFence UploadManager::uploadTask(const void* data, size_t byteSize, VkBuffer dstBuffer, size_t dstBufferOffset){
+    {
+        std::scoped_lock cacheLock(_cacheMutex);
+        if(useCachedData){
+            if(cachedData[dstBuffer] == data){
+                std::cout << "Skipping upload task" << std::endl;
+                return VK_NULL_HANDLE;
+            }
+        }
+        cachedData[dstBuffer] = data;
+    }
+    
     _taskSemaphore.acquire();   // trying to get free space, waiting if no space available
     uint32_t uplaodIndex = _nextFreeTransfer % _transferBuffers.size();
     _transfers[uplaodIndex] = {data, byteSize, dstBuffer, dstBufferOffset};
