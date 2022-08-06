@@ -266,16 +266,28 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
             //}
 
             PCUtil::AverageWatch upload(uploadTimingAverage, uploadTimingCount);
-            VkFence f;
-            for(int i: neededIndices){
-                assert((t->compressedData.columnData[i].cpuData.data() + dataOffset)[0] == t->compressedData.columnData[i].cpuData[dataOffset]);
-                //std::cout << "[task] " <<  reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data()) << "    " << reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data() + dataOffset) << std::endl; std::cout.flush();
-                f = t->compressedData.uploadManager->uploadTask(reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data() + dataOffset), curDataBlockSize * sizeof(half), t->compressedData.columnData[i].gpuHalfData);
+            bool lastIter = iteration == amtOfBlocks - 1;
+            if(lastIter)
+                std::cout << "Last iteration, clearing drawlistcounts in the upload manager" << std::endl;
+            std::vector<VkBuffer> uploadBuffers(neededIndices.size());
+            std::vector<const void*> uploadDatas(neededIndices.size());
+            std::vector<int> neededInd(neededIndices.begin(), neededIndices.end());
+            for(int i: irange(neededInd)){
+                uploadBuffers[i] = t->compressedData.columnData[neededInd[i]].gpuHalfData;
+                uploadDatas[i] = reinterpret_cast<const void*>(t->compressedData.columnData[neededInd[i]].cpuData.data() + dataOffset);
             }
-            // having to wait until upload task is in idle
-            while(!t->compressedData.uploadManager->idle())
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            t->compressedData.uploadManager->queueWaitIdle();
+            t->compressedData.uploadManager->uploadTaskMulti(uploadDatas, curDataBlockSize * sizeof(half), uploadBuffers, lastIter);
+            // kept in for reference -----------------------------------------------------
+            //VkFence f;
+            //for(int i: neededIndices){
+            //    assert((t->compressedData.columnData[i].cpuData.data() + dataOffset)[0] == t->compressedData.columnData[i].cpuData[dataOffset]);
+            //    //std::cout << "[task] " <<  reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data()) << "    " << reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data() + dataOffset) << std::endl; std::cout.flush();
+            //    f = t->compressedData.uploadManager->uploadTask(reinterpret_cast<const void*>(t->compressedData.columnData[i].cpuData.data() + dataOffset), curDataBlockSize * sizeof(half), t->compressedData.columnData[i].gpuHalfData);
+            //}
+            //// having to wait until upload task is in idle
+            //while(!t->compressedData.uploadManager->idle())
+            //    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            //t->compressedData.uploadManager->queueWaitIdle();
         }
 
         size_t indexOffset = streamGpuData ? 0: dataOffset;

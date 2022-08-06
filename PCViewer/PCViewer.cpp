@@ -2523,7 +2523,15 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
 				pcAttributeEnabled[i] = true;
 		}
 		//fillVertexBuffer(ds.buffer, dl.IndBinManager->retrieveNewDataC());
+		if(dl.indBinManager->compressedData.uploadManager){
+			dl.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = true;
+			dl.indBinManager->compressedData.uploadManager->drawlistCount++;
+		}
 		dl.indBinManager->notifyAttributeUpdate(pcAttrOrd, pcAttributes, pcAttributeEnabled);	// notify the indBinManager to be able to create the counts
+		if(dl.indBinManager->compressedData.uploadManager){
+			dl.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = false;
+			dl.indBinManager->compressedData.uploadManager->mainThreadSignalDrawlistCountDone();
+		}
 	}
 	else{
 		dl.indices = std::vector<uint32_t>(tl.indices);
@@ -6028,6 +6036,15 @@ static bool updateActiveIndices(DrawList& dl) {
 
 	// reevaluating large datasets when brush has changed
 	if(dl.indBinManager){
+		bool resetDrawlistCountUpdateMode = false;
+		if(dl.indBinManager->compressedData.uploadManager)
+			resetDrawlistCountUpdateMode = !dl.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode;
+		// setting the drawlistcountupdatemode if not yet done to safely be able to change the update counts
+		if(resetDrawlistCountUpdateMode)
+			dl.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = true;
+		// increase the update counts to signal the amount of drawlits which have to be updated
+		if(dl.indBinManager->compressedData.uploadManager)
+			dl.indBinManager->compressedData.uploadManager->drawlistCount++;
 		std::vector<brushing::RangeBrush> rangeBrushes; // first range brush is for the local brush
 		//adding local brushes
 		uint32_t axis = 0;
@@ -6066,6 +6083,13 @@ static bool updateActiveIndices(DrawList& dl) {
 		//if(prefSize || rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size())
 		dl.indBinManager->notifyBrushUpdate(rangeBrushes, scatterplotWorkbench->lassoSelections[dl.name]);
 		//prefSize = rangeBrushes.size() || scatterplotWorkbench->lassoSelections[dl.name].size();
+		
+		// if this function call has to reset the count update mode do so and release upload worker thread
+		if(resetDrawlistCountUpdateMode){
+			dl.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = false;
+			dl.indBinManager->compressedData.uploadManager->mainThreadSignalDrawlistCountDone();
+		}
+		
 		return false;	// rendering is requested upon completion of indexupdate
 	}
 
@@ -6622,8 +6646,20 @@ static bool updateActiveIndices(DrawList& dl) {
 //The return value indicates if brushing was performed (The method checks for live update)
 static bool updateAllActiveIndices() {
 	bool ret = false;
+	// setting the update drawlist count bool in all largeVis datasets to siganl updateActiveIndices() that it was called by this function
+	for (auto& ds: g_PcPlotDrawLists){
+		if(ds.indBinManager && ds.indBinManager->compressedData.uploadManager)
+			ds.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = true;
+	}
 	for (DrawList& dl : g_PcPlotDrawLists) {
 		ret = updateActiveIndices(dl);
+	}
+	// unsetting the drawlistcountupdatemode bool and signaling hte stream thread to start upload stream
+	for (auto& ds: g_PcPlotDrawLists){
+		if(ds.indBinManager && ds.indBinManager->compressedData.uploadManager){
+			ds.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = false;
+			ds.indBinManager->compressedData.uploadManager->mainThreadSignalDrawlistCountDone();
+		}
 	}
 	return ret;
 }

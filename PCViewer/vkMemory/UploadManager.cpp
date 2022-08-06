@@ -45,6 +45,33 @@ UploadManager::~UploadManager(){
         vkFreeMemory(d, _transferMemory, nullptr);
 }
 
+void UploadManager::uploadTaskMulti(const std::vector<const void*>& data, size_t byteSize, const std::vector<VkBuffer>& dstBuffer, bool last, const std::vector<size_t>& dstBufferOffset){
+    bool requireTransferUpdate = true;
+    {
+        std::scoped_lock cacheLock(_cacheMutex);
+        if(useCachedData){
+            if(cachedData[dstBuffer[0]] == data[0]){
+                std::cout << "Skipping upload task" << std::endl;
+                requireTransferUpdate = false;
+            }
+        }
+    }
+    if(requireTransferUpdate){
+        _singleCallTransfers.resize(dstBuffer.size());
+        for(int i: irange(dstBuffer)){
+            cachedData[dstBuffer[i]] = data[i];
+            _singleCallTransfers[i].dstBuffer = dstBuffer[i];
+            _singleCallTransfers[i].data = data[i];
+            _singleCallTransfers[i].byteSize = byteSize;
+            _singleCallTransfers[i].dstBufferOffset = dstBufferOffset.empty() ? 0: dstBufferOffset[i];
+        }
+        if(last)
+            drawlistCount = 0;      // resetting the drawlist count when the last upload is being issued
+    }
+    drawlistSignalDone();       // signaling the worker thread everything setup for upload
+    drawlistWaitForUpdate();    // waiting for upload completion
+}
+
 VkFence UploadManager::uploadTask(const void* data, size_t byteSize, VkBuffer dstBuffer, size_t dstBufferOffset){
     {
         std::scoped_lock cacheLock(_cacheMutex);
@@ -76,51 +103,100 @@ void UploadManager::threadExec(UploadManager* m){
     VkQueue queue = m->_transferQueue ? m->_transferQueue: m->_vkContext.queue;
 
     while(m->_running){
-        assert(m->_nextFreeTransfer - doneTransferIndex <= m->_transferBuffers.size());
-        uint32_t transfersInFlight = curTransferIndex - doneTransferIndex;
-        // check if the next transfer in flight is done, reset fence if so and signal the semaphor that a new task can be recorded
-        if(transfersInFlight > 0){
-            uint32_t index = doneTransferIndex % m->_transferBuffers.size();
-            if(vkWaitForFences(m->_vkContext.device, 1, &m->_transferFences[index], VK_TRUE, 0) == VK_SUCCESS){
-                //std::cout << "Reset for " << doneTransferIndex << std::endl; std::cout.flush();
-                vkResetFences(m->_vkContext.device, 1, &m->_transferFences[index]);
-                ++doneTransferIndex;
-                semaphore.release();        // signaling 1 task is able to be recorded
+        // single transfer task uploads
+        if(m->drawlistCount == 0){
+            assert(m->_nextFreeTransfer - doneTransferIndex <= m->_transferBuffers.size());
+            uint32_t transfersInFlight = curTransferIndex - doneTransferIndex;
+            // check if the next transfer in flight is done, reset fence if so and signal the semaphor that a new task can be recorded
+            if(transfersInFlight > 0){
+                uint32_t index = doneTransferIndex % m->_transferBuffers.size();
+                if(vkWaitForFences(m->_vkContext.device, 1, &m->_transferFences[index], VK_TRUE, 0) == VK_SUCCESS){
+                    //std::cout << "Reset for " << doneTransferIndex << std::endl; std::cout.flush();
+                    vkResetFences(m->_vkContext.device, 1, &m->_transferFences[index]);
+                    ++doneTransferIndex;
+                    semaphore.release();        // signaling 1 task is able to be recorded
+                }
             }
+
+            // check for new transfer task
+            if(curTransferIndex == m->_nextFreeTransfer)
+                continue;
+
+            if(m->_doneTransferIndex == m->_nextFreeTransfer && m->_idleSemaphore.peekCount() > 0)
+                m->_idleSemaphore.releaseN(m->_idleSemaphore.peekCount());
+
+            // working on copy task
+            auto transferIndex = curTransferIndex++ % m->_transferBuffers.size();
+            uint8_t* finalPointer = reinterpret_cast<uint8_t*>(m->_mappedMemory) + m->_transferOffsets[transferIndex];
+            //std::cout << "[upload] " << m->_transfers[transferIndex].data  << "  to  " << (void*)finalPointer << std::endl; std::cout.flush();
+            std::memcpy(finalPointer, m->_transfers[transferIndex].data, m->_transfers[transferIndex].byteSize);
+
+            VkCommandBuffer& commands = m->_transferCommands[transferIndex];
+            if(commands)
+                vkFreeCommandBuffers(m->_vkContext.device, pool, 1, &commands);
+            VkUtil::createCommandBuffer(m->_vkContext.device, pool, &commands);
+
+            VkBufferCopy copy{};
+            copy.dstOffset = m->_transfers[transferIndex].dstBufferOffset;
+            copy.size = m->_transfers[transferIndex].byteSize;
+            vkCmdCopyBuffer(commands, m->_transferBuffers[transferIndex], m->_transfers[transferIndex].dstBuffer, 1, &copy);
+            //std::cout << "Using " << curTransferIndex - 1 << std::endl; std::cout.flush();
+            assert(vkWaitForFences(m->_vkContext.device, 1, &m->_transferFences[transferIndex], VK_TRUE, 0) == VK_TIMEOUT);
+            // flush before command buffer submission to guarantee data upload
+            assert(m->_transfers[transferIndex].byteSize <= m->stagingBufferSize);
+            VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+            range.memory = m->_transferMemory;
+            range.offset = m->_transferOffsets[transferIndex];
+            range.size = PCUtil::alignedSize(m->_transfers[transferIndex].byteSize, 0x40);
+            vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
+            VkUtil::commitCommandBuffer(queue, commands, m->_transferFences[transferIndex]);
         }
+        // multi transfer task uploads
+        else if(m->drawlistCount > 0 || m->updateThreadCheckDrawlists() > 0){
+            // waiting for drawlist count setup
+            if(m->drawlistCountUpdateMode)
+                m->updateThreadWaitDrawlistCount();
+            // waiting for drawlist threads to setup upload tasks
+            m->updateThreadWaitDrawlists();
+            // executing upload tasks
+            for(int i : irange(m->_singleCallTransfers)){
+                auto transferIndex = i % m->_transferBuffers.size();
+                // waiting for fence to be done(max 10 secs)
+                if(transferIndex != i)
+                    check_vk_result(vkWaitForFences(m->_vkContext.device, 1, &m->_transferFences[transferIndex], VK_TRUE, 10e9));
+                vkResetFences(m->_vkContext.device, 1, &m->_transferFences[transferIndex]);
+                // working on copy task
+                uint8_t* finalPointer = reinterpret_cast<uint8_t*>(m->_mappedMemory) + m->_transferOffsets[transferIndex];
+                //std::cout << "[upload] " << m->_transfers[transferIndex].data  << "  to  " << (void*)finalPointer << std::endl; std::cout.flush();
+                std::memcpy(finalPointer, m->_singleCallTransfers[i].data, m->_singleCallTransfers[i].byteSize);
 
-        // check for new transfer task
-        if(curTransferIndex == m->_nextFreeTransfer)
-            continue;
+                VkCommandBuffer& commands = m->_transferCommands[transferIndex];
+                if(commands)
+                    vkFreeCommandBuffers(m->_vkContext.device, pool, 1, &commands);
+                VkUtil::createCommandBuffer(m->_vkContext.device, pool, &commands);
 
-        if(m->_doneTransferIndex == m->_nextFreeTransfer && m->_idleSemaphore.peekCount() > 0)
-            m->_idleSemaphore.releaseN(m->_idleSemaphore.peekCount());
-        
-        // working on copy task
-        auto transferIndex = curTransferIndex++ % m->_transferBuffers.size();
-        uint8_t* finalPointer = reinterpret_cast<uint8_t*>(m->_mappedMemory) + m->_transferOffsets[transferIndex];
-        //std::cout << "[upload] " << m->_transfers[transferIndex].data  << "  to  " << (void*)finalPointer << std::endl; std::cout.flush();
-        std::memcpy(finalPointer, m->_transfers[transferIndex].data, m->_transfers[transferIndex].byteSize);
-        
-        VkCommandBuffer& commands = m->_transferCommands[transferIndex];
-        if(commands)
-            vkFreeCommandBuffers(m->_vkContext.device, pool, 1, &commands);
-        VkUtil::createCommandBuffer(m->_vkContext.device, pool, &commands);
+                VkBufferCopy copy{};
+                copy.dstOffset = m->_singleCallTransfers[i].dstBufferOffset;
+                copy.size = m->_singleCallTransfers[i].byteSize;
+                vkCmdCopyBuffer(commands, m->_transferBuffers[transferIndex], m->_singleCallTransfers[i].dstBuffer, 1, &copy);
+                //std::cout << "Using " << curTransferIndex - 1 << std::endl; std::cout.flush();
+                assert(vkWaitForFences(m->_vkContext.device, 1, &m->_transferFences[transferIndex], VK_TRUE, 0) == VK_TIMEOUT);
+                // flush before command buffer submission to guarantee data upload
+                assert(m->_singleCallTransfers[i].byteSize <= m->stagingBufferSize);
+                VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+                range.memory = m->_transferMemory;
+                range.offset = m->_transferOffsets[transferIndex];
+                range.size = PCUtil::alignedSize(m->_singleCallTransfers[i].byteSize, 0x40);
+                vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
+                VkUtil::commitCommandBuffer(queue, commands, m->_transferFences[transferIndex]);
+            }
+            // waiting for transfer finishes
+            for(int i: irange(std::min(m->_transferBuffers.size(), m->_singleCallTransfers.size())))
+                check_vk_result(vkWaitForFences(m->_vkContext.device, 1, &m->_transferFences[i], VK_TRUE, 10e9));
 
-        VkBufferCopy copy{};
-        copy.dstOffset = m->_transfers[transferIndex].dstBufferOffset;
-        copy.size = m->_transfers[transferIndex].byteSize;
-        vkCmdCopyBuffer(commands, m->_transferBuffers[transferIndex], m->_transfers[transferIndex].dstBuffer, 1, &copy);
-        //std::cout << "Using " << curTransferIndex - 1 << std::endl; std::cout.flush();
-        assert(vkWaitForFences(m->_vkContext.device, 1, &m->_transferFences[transferIndex], VK_TRUE, 0) == VK_TIMEOUT);
-        // flush before command buffer submission to guarantee data upload
-        assert(m->_transfers[transferIndex].byteSize <= m->stagingBufferSize);
-        VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
-        range.memory = m->_transferMemory;
-        range.offset = m->_transferOffsets[transferIndex];
-        range.size = PCUtil::alignedSize(m->_transfers[transferIndex].byteSize, 0x40);
-        vkFlushMappedMemoryRanges(m->_vkContext.device, 1, &range);
-        VkUtil::commitCommandBuffer(queue, commands, m->_transferFences[transferIndex]);
+            // signaling the drawlists to continue
+            m->updateThreadSignalDone();
+        }
     }
     vkDeviceWaitIdle(m->_vkContext.device);
 }

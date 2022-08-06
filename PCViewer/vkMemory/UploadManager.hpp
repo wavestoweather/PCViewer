@@ -1,6 +1,7 @@
 #pragma once
 #include "../VkUtil.h"
 #include "../PCUtil.h"
+#include "../largeVis/DrawlistUpdateCoupler.hpp"
 #include <vector>
 #include <thread>
 #include <atomic>
@@ -8,7 +9,7 @@
 // class that makes it possible to asynchronously upload dat to the gpu via staging buffers, which are mapped all the time
 // the amount of staging buffers can be specified, uploading tasks can be recorded until all staging buffers are in use
 // when no staging buffer is free, thread that calls the uploadTask() method will be halted until the task was recorded
-class UploadManager{
+class UploadManager: public DrawlistUpdateCoupler{
 public:
     // Attribute section ------------------------------------------------------------
     const uint32_t stagingBufferSize;
@@ -22,6 +23,7 @@ public:
     UploadManager& operator=(const UploadManager&) = delete;
 
     VkFence uploadTask(const void* data, size_t byteSize, VkBuffer dstBuffer, size_t dstBufferOffset = 0);
+    void uploadTaskMulti(const std::vector<const void*>& data, size_t byteSize, const std::vector<VkBuffer>& dstBuffer, bool last = false, const std::vector<size_t>& dstBufferOffset = {});
 
     bool idle() const {return _doneTransferIndex == _nextFreeTransfer;};
     void queueWaitIdle() const{if(_transferQueue) check_vk_result(vkQueueWaitIdle(_transferQueue));};
@@ -43,6 +45,7 @@ private:
     std::vector<VkBuffer> _transferBuffers{};
     std::vector<size_t> _transferOffsets{};
     std::vector<Transfer> _transfers{};
+    std::vector<Transfer> _singleCallTransfers{};
     VkDeviceMemory _transferMemory{};
 
     void* _mappedMemory;
