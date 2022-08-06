@@ -6025,6 +6025,7 @@ static void updateWorkbenchRenderings(DrawList& dl){
 	}
 }
 
+static bool allUpdateRecord = false;
 static bool updateActiveIndices(DrawList& dl) {
 	//std::cout << dl.data->size() << std::endl;
 	//if(dl.data->size() == 0) return false;		// can happen for hierarchy files with delayed loading
@@ -6039,6 +6040,10 @@ static bool updateActiveIndices(DrawList& dl) {
 		bool resetDrawlistCountUpdateMode = false;
 		if(dl.indBinManager->compressedData.uploadManager)
 			resetDrawlistCountUpdateMode = !dl.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode;
+		if(resetDrawlistCountUpdateMode && dl.indBinManager->compressedData.uploadManager->drawlistCount != 0){
+			std::cout << "Update currently submitted, not upadting indices" << std::endl;
+			return false;	// skip
+		}
 		// setting the drawlistcountupdatemode if not yet done to safely be able to change the update counts
 		if(resetDrawlistCountUpdateMode)
 			dl.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = true;
@@ -6646,9 +6651,10 @@ static bool updateActiveIndices(DrawList& dl) {
 //The return value indicates if brushing was performed (The method checks for live update)
 static bool updateAllActiveIndices() {
 	bool ret = false;
+	allUpdateRecord = true;
 	// setting the update drawlist count bool in all largeVis datasets to siganl updateActiveIndices() that it was called by this function
 	for (auto& ds: g_PcPlotDrawLists){
-		if(ds.indBinManager && ds.indBinManager->compressedData.uploadManager)
+		if(ds.indBinManager && ds.indBinManager->compressedData.uploadManager && (!ds.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode && ds.indBinManager->compressedData.uploadManager->drawlistCount == 0))
 			ds.indBinManager->compressedData.uploadManager->drawlistCountUpdateMode = true;
 	}
 	for (DrawList& dl : g_PcPlotDrawLists) {
@@ -6661,6 +6667,7 @@ static bool updateAllActiveIndices() {
 			ds.indBinManager->compressedData.uploadManager->mainThreadSignalDrawlistCountDone();
 		}
 	}
+	allUpdateRecord = false;
 	return ret;
 }
 

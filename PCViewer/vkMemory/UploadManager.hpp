@@ -55,6 +55,7 @@ private:
     std::mutex _cacheMutex{};
     std::thread _transferThread{};
     std::atomic_uint32_t _nextFreeTransfer{};
+    std::atomic_bool _lastMultiUpdate{};
     uint32_t _curTransferIndex{};
     uint32_t _doneTransferIndex{};
 

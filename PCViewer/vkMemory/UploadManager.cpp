@@ -66,7 +66,7 @@ void UploadManager::uploadTaskMulti(const std::vector<const void*>& data, size_t
             _singleCallTransfers[i].dstBufferOffset = dstBufferOffset.empty() ? 0: dstBufferOffset[i];
         }
         if(last)
-            drawlistCount = 0;      // resetting the drawlist count when the last upload is being issued
+            _lastMultiUpdate = last;      // resetting the drawlist count when the last upload is being issued
     }
     drawlistSignalDone();       // signaling the worker thread everything setup for upload
     drawlistWaitForUpdate();    // waiting for upload completion
@@ -152,11 +152,12 @@ void UploadManager::threadExec(UploadManager* m){
             VkUtil::commitCommandBuffer(queue, commands, m->_transferFences[transferIndex]);
         }
         // multi transfer task uploads
-        else if(m->drawlistCount > 0 || m->updateThreadCheckDrawlists() > 0){
+        else{
             // waiting for drawlist count setup
             if(m->drawlistCountUpdateMode)
                 m->updateThreadWaitDrawlistCount();
             // waiting for drawlist threads to setup upload tasks
+            std::cout << "Number of update drawlists: " << m->drawlistCount << std::endl;
             m->updateThreadWaitDrawlists();
             // executing upload tasks
             for(int i : irange(m->_singleCallTransfers)){
@@ -196,6 +197,12 @@ void UploadManager::threadExec(UploadManager* m){
 
             // signaling the drawlists to continue
             m->updateThreadSignalDone();
+
+            // reset drawlist count after realeasing the drawlist threads
+            if(m->_lastMultiUpdate){
+                m->drawlistCount = 0;
+                m->_lastMultiUpdate = false;
+            }         
         }
     }
     vkDeviceWaitIdle(m->_vkContext.device);

@@ -187,8 +187,8 @@ void IndBinManager::updateCounts(){
 }
 
 void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> activeIndices){
-    static std::mutex countMutex;   // only used currently to avoid clashing
-    std::scoped_lock updateLock(countMutex);
+    //static std::mutex countMutex;   // only used currently to avoid clashing
+    //std::scoped_lock updateLock(countMutex);
 
     PCUtil::Stopwatch totalTime(std::cout, "Total Count update Time");
     // starting with updating the counts if needed to have all information available for the following counting/reduction
@@ -353,6 +353,11 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
 
         // Note: vulkan resources for the count images were already provided by main thread
         bool firstIter = dataOffset == startOffset;
+        static std::mutex updateMutex;
+        {
+        std::scoped_lock updateLock(updateMutex);
+        std::cout << "starting update pipelines for thread " << std::this_thread::get_id() << std::endl;
+        curSemaphore = VK_NULL_HANDLE;
         switch(t->countingMethod){
         case CountingMethod::CpuGeneric:{
             for(int i: irange(activeIndices.size() - 1)){
@@ -574,6 +579,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         {
             std::scoped_lock lock(*t->_vkContext.queueMutex);
             check_vk_result(vkQueueWaitIdle(t->_vkContext.queue));
+        }
         }
     }
     // wait for curSemaphore
