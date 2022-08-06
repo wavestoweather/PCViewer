@@ -106,13 +106,15 @@ enum class InheritanceFlags{
 enum class AlphaMappingTypes: uint32_t{
 	MappingMultiplicative,
 	MappingBound01,
-	MappingConstAlpha
+	MappingConstAlpha,
+	MappingAlphaAdoption
 };
 
 static std::vector<std::string_view> alphaMappingNames{
 	"MappingMultiplicative",
 	"MappingBound01",
-	"MappingConstAlpha"
+	"MappingConstAlpha",
+	"MappingAlphaAdoption"
 };
 
 // struct holding the information for a drawable instance of a TemplateList

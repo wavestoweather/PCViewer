@@ -29,6 +29,7 @@ layout(location = 1) out vec4 aPosBPos;	//containts 2 vec2: [aPos, bPos], with x
 const uint MappingMultiplicative = 0;	// standard
 const uint MappingBound01 = 1;			// all resulting alpha values have at least  alpha = .01
 const uint MappingConstAlpha = 2;		// when count > 0 alpha value from color is taken
+const uint MappingAlphaAdoption = 3;
 
 void main() {
 	float gap = 2.0f/(ubo.amtOfVerts - 1.0f); //gap is tested, and is correct
@@ -48,7 +49,7 @@ void main() {
 	// transforming according to axis scaling
 	y1 = y1 * ubo.vertexTransformations[aAxis].y + ubo.vertexTransformations[aAxis].z;
 	y2 = y2 * ubo.vertexTransformations[bAxis].y + ubo.vertexTransformations[bAxis].z;
-	float yDiff = (y1 - y2) * ubo.plotHeight * .5f;
+	float yDiff = abs((y1 - y2) * ubo.plotHeight);
 	//y /= (ubo.vertexTransformations[i].z - ubo.vertexTransformations[i].y);
 	y1 -= .5f;
 	y1 *= -2;
@@ -84,6 +85,13 @@ void main() {
 	case MappingConstAlpha:
 		if(count == 0)
 			color.a = 0;
+		break;
+	case MappingAlphaAdoption:
+		color.a = 1.-pow(1.-color.a, count);
+		if(count > 0){
+			float widthS = subWidth * subWidth;
+			color.a *= mix(widthS / (widthS + yDiff * yDiff), 1, color.a);//1 / (1 + yDiff * yDiff / (subWidth * subWidth));//;ubWidth / sqrt(subWidth * subWidth + yDiff * yDiff)
+		}
 		break;
 	}
 	
