@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <execution>
 #include <sys/mman.h>
+#include <cmath>
 
 // note: src vector is changed!
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
@@ -719,6 +720,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         std::vector<float> maxDiffsGpu(cols);
         std::vector<float> maxDiffsGpuMan(cols);
         std::vector<double> avgDiffsCpu(cols);
+        std::vector<double> avgSDiffsCpu(cols);
         std::vector<double> avgDiffsGpu(cols);
         std::vector<double> avgDiffsGpuMan(cols);
         for(int c: irange(cols)){
@@ -731,10 +733,14 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
                 maxDiffsGpu[c] = std::max(maxDiffsGpu[c], gpu);
                 maxDiffsGpuMan[c] = std::max(maxDiffsGpuMan[c], gpuMan);
                 avgDiffsCpu[c] += cpu / colSize;
+                avgSDiffsCpu[c] += cpu * cpu / colSize;
                 avgDiffsGpu[c] += gpu / colSize;
                 avgDiffsGpuMan[c] += gpuMan / colSize;
             }
         }
+        std::vector<double> psnr(cols);
+        for(int i: irange(psnr))
+            psnr[i] = 10 * log10(1. / avgSDiffsCpu[i]);
         bool test = true;
     }
 
