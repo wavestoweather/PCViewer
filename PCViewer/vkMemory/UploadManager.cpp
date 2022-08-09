@@ -1,5 +1,7 @@
 #include "UploadManager.hpp"
 #include "../range.hpp"
+#include <algorithm>
+#include <execution>
 
 UploadManager::UploadManager(const VkUtil::Context& context, uint32_t transferQueueIndex, uint32_t amtStagingBuffer, uint32_t stagingBufferSize):
     stagingBufferSize(stagingBufferSize),
@@ -100,7 +102,13 @@ void UploadManager::threadExec(UploadManager* m){
         auto transferIndex = curTransferIndex++ % m->_transferBuffers.size();
         uint8_t* finalPointer = reinterpret_cast<uint8_t*>(m->_mappedMemory) + m->_transferOffsets[transferIndex];
         //std::cout << "[upload] " << m->_transfers[transferIndex].data  << "  to  " << (void*)finalPointer << std::endl; std::cout.flush();
-        std::memcpy(finalPointer, m->_transfers[transferIndex].data, m->_transfers[transferIndex].byteSize);
+        constexpr size_t threadAmt = 8;
+        std::array<int, threadAmt> iter;
+        std::iota(iter.begin(), iter.end(), 0);
+        const uint32_t threadSize = (m->_transfers[transferIndex].byteSize + threadAmt - 1) / threadAmt;
+        std::for_each(std::execution::par ,iter.begin(), iter.end(), [&](int i){
+            std::memcpy(finalPointer + i * threadSize, m->_transfers[transferIndex].data + i * threadSize, threadSize);
+        });
         
         VkCommandBuffer& commands = m->_transferCommands[transferIndex];
         if(commands)

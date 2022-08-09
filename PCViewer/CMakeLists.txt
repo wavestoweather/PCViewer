@@ -29,6 +29,7 @@ find_package(netCDF CONFIG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(X11 REQUIRED)
+find_package(TBB REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 message("include dirs: ${netCDF_INCLUDE_DIR}")
 
@@ -90,7 +91,7 @@ if(WIN32)
 set(netCDF_LIBRARIES netCDF::netcdf)
 endif()
 
-target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES})# Eigen3::Eigen
+target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS

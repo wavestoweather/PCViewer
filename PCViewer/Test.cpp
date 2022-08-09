@@ -22,6 +22,9 @@
 #include "largeVis/OpenCompressedDataset.hpp"
 #include "largeVis/DecompressManager.hpp"
 #include "compression/cpuCompression/HuffmanCPU.h"
+#include <algorithm>
+#include <execution>
+#include <sys/mman.h>
 
 // note: src vector is changed!
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
@@ -386,8 +389,11 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testRealWorldHuffmanDetail = false;
     constexpr bool testUnquantizePerformance = false;
     constexpr bool testUPloadSpeed = false;
+    constexpr bool testUPloadSpeedSingleMap = false;
+    constexpr bool testUPloadSpeedMulti = false;
     constexpr bool testQHuffmanCpu = false;
     constexpr bool testSeparateComp = false;
+    constexpr bool encodeSingle = false;
     constexpr bool testSeparateGpuDecomp = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
@@ -801,14 +807,76 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         }
     }
     if constexpr(testUPloadSpeed){
-        uint32_t byteSize = 1<<30; // 1 gigabytes
-        auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);// | VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        uint32_t byteSize = 1<<31; // 1 gigabytes
+        constexpr uint32_t amtOfThreads = 2;
+        constexpr uint32_t mappings = 1;
+        auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);// | VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         std::vector<uint8_t> data(byteSize, 6);
         //VkUtil::uploadData(context.device, mem, 0, byteSize, data.data());
+        std::vector<std::thread> threads(amtOfThreads * mappings);
+        uint32_t mapSize = byteSize / mappings;
+        uint32_t byteBlock = mapSize / amtOfThreads;
+        std::vector<void*> mapped(threads.size());
         void *d;
-	    vkMapMemory(context.device, mem, 0, byteSize, 0, &d);
+	    //vkMapMemory(context.device, mem, 0, byteSize, 0, &d);
+        //for(int i: irange(mappings)){
+        //    vkMapMemory(context.device, mem, i * mapSize, mapSize, 0, &mapped[i]);
+        //}
+        auto ex = [&](int i, int j){
+            int cur = i * amtOfThreads + j;
+            vkMapMemory(context.device, mem, cur * byteBlock, byteBlock, 0, &mapped[cur]);
+            memcpy(mapped[cur], data.data() + byteBlock * (cur), byteBlock);
+        };
         PCUtil::Stopwatch upload(std::cout, "Upload Speed");
-	    memcpy(d, data.data(), byteSize);
+        for(int i: irange(mappings)){
+            for(int j: irange(amtOfThreads)){
+                threads[i * amtOfThreads + j] = std::thread(ex, i, j);
+                //threads[i * amtOfThreads + j] = std::thread(memcpy, mapped[i], data.data() + (i * amtOfThreads + j) * byteBlock, byteBlock);
+            }
+        }
+        for(int i: irange(threads))
+            threads[i].join();
+	    //memcpy(d, data.data(), byteSize);
+    }
+    if constexpr(testUPloadSpeedSingleMap){
+        uint32_t byteSize = 1<<30; // 2 gigabytes
+        constexpr uint32_t amtOfThreads = 8;
+        const uint32_t blockSize = byteSize / amtOfThreads;
+        auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);// | VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        std::vector<uint8_t> data(byteSize, 6);
+
+        std::array<int, amtOfThreads> iter;
+        std::iota(iter.begin(), iter.end(), 0);
+        void *d;
+        vkMapMemory(context.device, mem, 0, VK_WHOLE_SIZE, 0, &d);
+        //mlock(d, byteSize); // keeping the memory pinned
+        //mlock(data.data(), byteSize);
+        float time{};
+        uint32_t dummy{};
+        {
+        PCUtil::Stopwatch upload(std::cout, "Upload Speed single map");
+        PCUtil::AverageWatch uploadTime(time, dummy);
+        std::for_each(std::execution::par, iter.begin(), iter.end(),[&](int i){memcpy(d + i * blockSize, data.data() + i * blockSize, blockSize);});
+        }
+        std::cout << byteSize / double(1 << 30) / time / 1e-3 << "GB/s" << std::endl;
+        vkUnmapMemory(context.device, mem);
+        vkDestroyBuffer(context.device, buffer[0], nullptr);
+        vkFreeMemory(context.device, mem, nullptr);
+    }
+    if constexpr(testUPloadSpeedMulti){
+        uint32_t byteSize = 1<<30;
+        std::vector<uint8_t> data(byteSize, 6);
+        auto [buffer1, offsets1, mem1] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        auto [buffer2, offsets2, mem2] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+        std::vector<VkDeviceMemory> memories{mem1, mem2};
+        constexpr std::array<int, 2> iter{0,1};
+        PCUtil::Stopwatch upload(std::cout, "Upload Speed");
+        std::for_each(std::execution::par, iter.begin(), iter.end(), [&](int i){
+            void *d;
+            vkMapMemory(context.device, memories[i], 0, VK_WHOLE_SIZE, 0, &d);
+            memcpy(d, data.data(), data.size());
+        });
     }
     if constexpr(testQHuffmanCpu){
         // testing encoding times for real world data
@@ -914,11 +982,41 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         }
         std::cout << "[test] -------------------------------------------------------------" << std::endl << std::endl;
     }
+    if constexpr(encodeSingle){
+        constexpr uint32_t size = 1<<10;
+        std::vector<uint16_t> orig(size, 1);
+        std::vector<uint32_t> bits;
+        cudaCompress::BitStream bitStream(&bits);
+        cudaCompress::HuffmanTableCPU table;
+        table.design(orig);
+
+        table.writeToBitStream(bitStream);
+
+        cudaCompress::HuffmanDecodeTableCPU decodeTable;
+        decodeTable.build(table);
+
+        cudaCompress::HuffmanEncodeTableCPU encodeTable;
+        encodeTable.build(decodeTable);
+        std::vector<uint32_t> offsets;
+        cudaCompress::huffmanEncodeCPU(bitStream, orig, encodeTable, offsets, 128);
+
+        cudaCompress::BitStreamReadOnly streamRead(bits.data(), bits.size() * 32);
+        std::vector<uint16_t> res;
+        cudaCompress::huffmanDecodeCPU(streamRead, size, res, decodeTable);
+
+        // decoding with gpu
+        vkCompress::GpuInstance gpu(context, 1, size);
+        vkCompress::HuffmanDecodeTable gpuDecodeTable(&gpu);
+        //gpuDecodeTable.
+        //std::vector<size_t> sizes;
+        //sizes.push_back(decodeTable.)
+        bool lessee = false;
+    }
     if constexpr(testSeparateGpuDecomp){
         const uint size = 1 << 20;
         const float quantStep = .01;
         std::vector<float> orig(size, 1);
-        orig[0] = 5;
+        //orig[0] = 5;
         //srand(10);
         //for(auto& f: orig)
         //    f = random() / float(1u << 31);
