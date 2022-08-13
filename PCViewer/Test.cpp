@@ -392,6 +392,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testUPloadSpeed = false;
     constexpr bool testUPloadSpeedSingleMap = false;
     constexpr bool testUPloadSpeedMulti = false;
+    constexpr bool testDeviceLocalUplaod = true;
     constexpr bool testQHuffmanCpu = false;
     constexpr bool testSeparateComp = false;
     constexpr bool encodeSingle = false;
@@ -883,6 +884,32 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
             vkMapMemory(context.device, memories[i], 0, VK_WHOLE_SIZE, 0, &d);
             memcpy(d, data.data(), data.size());
         });
+    }
+    if constexpr(testDeviceLocalUplaod){
+        uint32_t byteSize = 1 << 27;
+        uint32_t iterationCount = 100;
+        auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        std::vector<uint8_t> data(byteSize, 6);
+
+        void* d;
+        mlock(d, byteSize); // keeping the memory pinned
+        vkMapMemory(context.device, mem, 0, VK_WHOLE_SIZE, 0, &d);
+        mlock(data.data(), byteSize);
+        float time{};
+        uint32_t dummy{};
+        {
+        PCUtil::Stopwatch upload(std::cout, "Upload Speed device local");
+        PCUtil::AverageWatch uploadTime(time, dummy);
+        for(int i: irange(iterationCount)){
+            memcpy(d, data.data(), byteSize);
+            VkMappedMemoryRange memRange{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, {}, mem, 0, VK_WHOLE_SIZE};
+            //vkFlushMappedMemoryRanges(context.device, 1, &memRange);
+        }
+        }
+        std::cout << byteSize / double(1 << 30) / time / 1e-3 * iterationCount << "GB/s" << std::endl;
+        vkUnmapMemory(context.device, mem);
+        vkDestroyBuffer(context.device, buffer[0], nullptr);
+        vkFreeMemory(context.device, mem, nullptr);
     }
     if constexpr(testQHuffmanCpu){
         // testing encoding times for real world data
