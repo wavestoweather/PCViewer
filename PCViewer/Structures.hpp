@@ -92,6 +92,10 @@ struct DataSet {
 	}
 };
 
+static const DataSet& getDataset(const std::list<DataSet>& datasets, std::string_view datasetId){
+	return *std::find_if(datasets.begin(), datasets.end(), [&](const DataSet& ds){return ds.name == datasetId;});
+}
+
 struct Brush {
 	int id;
 	std::pair<float, float> minMax;

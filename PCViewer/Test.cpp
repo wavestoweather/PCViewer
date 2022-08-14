@@ -392,7 +392,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testUPloadSpeed = false;
     constexpr bool testUPloadSpeedSingleMap = false;
     constexpr bool testUPloadSpeedMulti = false;
-    constexpr bool testDeviceLocalUplaod = true;
+    constexpr bool testDeviceLocalUplaod = false;
     constexpr bool testQHuffmanCpu = false;
     constexpr bool testSeparateComp = false;
     constexpr bool encodeSingle = false;
