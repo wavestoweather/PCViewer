@@ -72,6 +72,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "largeVis/RoaringCounter.hpp"
 #include "largeVis/IndBinManager.hpp"
 #include "largeVis/OpenCompressedDataset.hpp"
+#include "deriveData/DeriveWorkbench.hpp"
 #include "range.hpp"
 #include "Test.hpp"
 
@@ -692,6 +693,7 @@ static IsoSettings isoSurfSettings;
 static ScatterplotWorkbench* scatterplotWorkbench;
 
 static std::unique_ptr<CorrelationMatrixWorkbench> correlationMatrixWorkbench;
+static std::unique_ptr<DeriveWorkbench> deriveWorkbench;
 
 //variables for animation
 static std::chrono::steady_clock::time_point animationStart(std::chrono::duration<int>(0));
@@ -7890,6 +7892,10 @@ int main(int, char**)
 		correlationMatrixWorkbench = std::make_unique<CorrelationMatrixWorkbench>(c);
 	}
 
+	{// derive workbench
+		deriveWorkbench = std::make_unique<DeriveWorkbench>();
+	}
+
 	{// clustering workbench
 		clusteringWorkbench = std::make_shared<ClusteringWorkbench>(g_Device, pcAttributes, g_PcPlotDataSets, g_PcPlotDrawLists);
 	}
@@ -8474,6 +8480,7 @@ int main(int, char**)
 				ImGui::MenuItem("Scatterplot workbench", "", &scatterplotWorkbench->active);
 				ImGui::MenuItem("Correlation matrix workbench", "", &correlationMatrixWorkbench->active);
 				ImGui::MenuItem("Compression workbench", "", &compressionWorkbench->active);
+				ImGui::MenuItem("Derive workbench", "", &deriveWorkbench->active);
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Options")) {
@@ -15164,6 +15171,8 @@ int main(int, char**)
 		if(correlationMatrixWorkbench->requestUpdate){
 			correlationMatrixWorkbench->updateCorrelationScores(g_PcPlotDrawLists);
 		}
+
+		deriveWorkbench->show();
 
 		compressionWorkbench->draw();
 

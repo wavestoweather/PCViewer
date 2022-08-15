@@ -10,6 +10,8 @@
 #include <cmath>
 #include "../range.hpp"
 #include "../Structures.hpp"
+#include "../imgui_nodes/imgui_node_editor.h"
+#include "../imgui_nodes/utilities/widgets.h"
 
 namespace deriveData{
 template<class T, class Base = T>
@@ -41,6 +43,7 @@ inline std::vector<std::unique_ptr<Base>> createFilledVec(uint32_t size){
 class Type{
 public:
     virtual std::array<float, 4> color() const = 0;
+    ax::Widgets::IconType iconType() const{return ax::Widgets::IconType::Circle;};
 };
 
 class FloatType: public Type, public Creatable<FloatType, Type>{

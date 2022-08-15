@@ -1,5 +1,6 @@
 #pragma once
 #include <string_view>
+#include <atomic>
 
 class Workbench{
 public:
@@ -14,6 +15,7 @@ public:
 
 class DrawlistDependency{
 public:
+    std::atomic_bool updateSignal{false};
     virtual void addDrawlist(std::string_view drawlistId) = 0;
     virtual void updateDrawlist(std::string_view drawlistId) = 0;
     virtual void removeDrawlist(std::string_view drawlistId) = 0;
@@ -21,6 +23,7 @@ public:
 
 class DatasetDependency{
     public:
+    std::atomic_bool updateSignal{false};
     virtual void addDataset(std::string_view datasetId) = 0;
     virtual void removeDataset(std::string_view datasetId) = 0;
 };
