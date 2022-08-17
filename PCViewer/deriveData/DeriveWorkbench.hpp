@@ -1,12 +1,11 @@
 #pragma once
 #include "../WindowBases.hpp"
+#include "ExecutionGraph.hpp"
 #include <vector>
 
 namespace ax::NodeEditor{
     class EditorContext;
 }
-struct ExecutionGraph;
-
 
 class DeriveWorkbench: public Workbench, public DatasetDependency{
 public:

@@ -1,22 +1,49 @@
 #pragma once
 #include "Nodes.hpp"
+#include "../imgui_nodes/imgui_node_editor.h"
 #include <map>
 #include <set>
 
 struct Link{
-    std::string name{};
+    ax::NodeEditor::LinkId Id{};
+    ax::NodeEditor::PinId pinAId{};
+    ax::NodeEditor::PinId pinBId{};
 
     struct Connection{
         int nodeAId;
         int nodeBId;
         int nodeAAttribute;
         int nodeBAttribute;
+
+        bool operator<(const Connection& c) const{
+            return nodeAId < c.nodeAId || (nodeAId == c.nodeAId && nodeBId < c.nodeBId) || 
+            (nodeBId == c.nodeBId && nodeAAttribute < c.nodeAAttribute) || (nodeAAttribute == c.nodeAAttribute && nodeBAttribute < c.nodeBAttribute); 
+        }
     };
+};
+
+struct NodePins{
+    std::unique_ptr<deriveData::Node> node;
+    std::vector<int> inputIds;
+    std::vector<int> outputIds;
+
+    NodePins(std::unique_ptr<deriveData::Node> node = {}): node(std::move(node)){
+        if(!node)
+            return;
+        static int id{};
+        inputIds.resize(node->inputTypes.size());
+        outputIds.resize(node->outputTypes.size());
+        for(int i: irange(inputIds))
+            inputIds[i] = id++;
+        for(int i: irange(outputIds))
+            outputIds[i] = id++;
+    }
 };
 
 // handles the data and logic to edit and execute teh execution graph
 struct ExecutionGraph{
-    std::map<int, std::unique_ptr<deriveData::Node>> nodes;     // maps ids to nodes
+    std::map<int, NodePins> nodes;                  // maps ids to nodes
+    std::map<int, int> pinToNodes;    // maps pin ids to node ids
     std::map<Link::Connection, Link> links;         // maps which map
 
     bool hasCircularConnections() const{
@@ -42,6 +69,6 @@ struct ExecutionGraph{
                 }
             }
         }
-        return false
+        return false;
     }
 };

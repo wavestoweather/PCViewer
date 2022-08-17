@@ -90,6 +90,8 @@ file(GLOB derive_SRC
 
 file(GLOB imgui_nodes_SRC
     "imgui_nodes/*.cpp"
+    "imgui_nodes/utilities/widgets.cpp"
+    "imgui_nodes/utilities/drawing.cpp"
 )
 
 include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR})
