@@ -44,6 +44,8 @@ void DeriveWorkbench::show()
             nodes::BeginPin(nodePins.inputIds[i], nodes::PinKind::Input);
             ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
 
+            ImGui::PopStyleVar();
+
             nodes::EndPin();
         }
         ImGui::EndChild();
@@ -140,6 +142,7 @@ DeriveWorkbench::DeriveWorkbench()
 {
     _editorContext = ax::NodeEditor::CreateEditor();
     _executionGraphs.resize(1);
+    auto node = 
     _executionGraphs[0].nodes.insert({10000,NodePins(deriveData::MultiplicationInverseNode::create())});
     for(int pin: _executionGraphs[0].nodes[10000].inputIds)
         _executionGraphs[0].pinToNodes[pin] = 10000;

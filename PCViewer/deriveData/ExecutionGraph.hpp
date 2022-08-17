@@ -27,7 +27,7 @@ struct NodePins{
     std::vector<int> inputIds;
     std::vector<int> outputIds;
 
-    NodePins(std::unique_ptr<deriveData::Node> node = {}): node(std::move(node)){
+    NodePins(std::unique_ptr<deriveData::Node> n = {}): node(std::move(n)){
         if(!node)
             return;
         static int id{};
