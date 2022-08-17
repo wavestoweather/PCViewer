@@ -13,7 +13,7 @@ void DeriveWorkbench::show()
         return;
     ImGui::Begin("DeriveWorkbench", &active);
     nodes::SetCurrentEditor(_editorContext);
-    nodes::Begin("DeriveWorkbench");
+    nodes::Begin("DeriveWorkbench", {800, 800});
 
 
     auto& editorStyle = nodes::GetStyle();
@@ -33,7 +33,7 @@ void DeriveWorkbench::show()
         //ImGui::Separator();
         
         // drawing middle
-        ImGui::BeginChild("left pins");
+        ImGui::BeginChild("left pins", {80, 80}, true);
         for(int i: irange(node->inputTypes)){
             auto alpha = ImGui::GetStyle().Alpha;
 
@@ -50,7 +50,7 @@ void DeriveWorkbench::show()
         }
         ImGui::EndChild();
         ImGui::SameLine();
-        ImGui::BeginChild("right pins");
+        //ImGui::BeginChild("right pins");
         for(int i: irange(node->outputTypes)){
             auto alpha = ImGui::GetStyle().Alpha;
 
@@ -60,10 +60,11 @@ void DeriveWorkbench::show()
             auto color = ImColor(c[0], c[1], c[2], c[3]);
             nodes::BeginPin(nodePins.outputIds[i], nodes::PinKind::Output);
             ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
+            ImGui::PopStyleVar();
 
             nodes::EndPin();
         }
-        ImGui::EndChild();
+        //ImGui::EndChild();
 
         // drawing end
 
