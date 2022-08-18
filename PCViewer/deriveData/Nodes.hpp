@@ -65,7 +65,6 @@ public:
 // ------------------------------------------------------------------------------------------
 // types
 // ------------------------------------------------------------------------------------------
-
 class Type{
 public:
     virtual ImVec4 color() const = 0;
@@ -101,8 +100,6 @@ public:
     ImVec4 color() const override{return {.1, .1, .1, 1};};
 };
 
-
-
 // ------------------------------------------------------------------------------------------
 // nodes
 // ------------------------------------------------------------------------------------------
@@ -119,29 +116,39 @@ public:
     Node(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},
         std::vector<std::unique_ptr<Type>>&& outputTypes = {},
-        std::vector<std::string>&& outputNames = {}):
+        std::vector<std::string>&& outputNames = {}, 
+        std::string_view header = {}, std::string_view mt = {}):
         inputTypes(std::move(inputTypes)),
         inputNames(inputNames),
         outputTypes(std::move(outputTypes)),
-        outputNames(outputNames){}
+        outputNames(outputNames),
+        name(header),
+        middleText(mt){}
 
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const = 0;
     virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const = 0;
-    //virtual void isMathNode() const = 0;
 };
+
+struct NodesRegistry{
+    static std::map<std::string, std::function<std::unique_ptr<Node>()>> nodes;
+    NodesRegistry(std::string name, std::function<std::unique_ptr<Node>()> createFunction) {if(nodes.count(name) == 0) nodes[name] = createFunction;};
+};
+
+// registers the nodes with a standard constructor
+#define REGISTER_NODE(class) static NodesRegistry classReg_##class(#class , class::create<>);
 
 // ------------------------------------------------------------------------------------------
 // special nodes
 // ------------------------------------------------------------------------------------------
 
-class DatasetInputNode: public Node{
+class DatasetInputNode: public Node, public Creatable<DatasetInputNode>{
 public:
     const std::string_view datasetId;
     const std::list<DataSet>& datasets;
 
-    DatasetInputNode(std::string_view datasetId, const std::list<DataSet>& datasets, const std::vector<Attribute>& attributes):
-        datasets(datasets)
+    DatasetInputNode(std::string_view datasetId = {}, const std::list<DataSet>& datasets = {}, const std::vector<Attribute>& attributes = {}):
+        Node(createFilledVec<FloatType, Type>(1), {std::string()}, createFilledVec<FloatType, Type>(1),{std::string()}, "", ""), datasets(datasets)
     {
         const auto& d = getDataset(datasets, datasetId);
         for(int i: irange(d.data.columns.size())){
@@ -171,13 +178,13 @@ public:
 template<class T>
 class UnaryNode: public Node{
 public:
-    UnaryNode():
-        Node(createFilledVec<T, Type>(1), {std::string()}, createFilledVec<T, Type>(1),{std::string()}){};
+    UnaryNode(std::string_view header, std::string_view middle):
+        Node(createFilledVec<T, Type>(1), {std::string()}, createFilledVec<T, Type>(1),{std::string()}, header, middle){};
 };
 
 class MultiplicationInverseNode: public UnaryNode<FloatType>, public Creatable<MultiplicationInverseNode>{
 public:
-    MultiplicationInverseNode(): UnaryNode(){};
+    MultiplicationInverseNode(): UnaryNode("", "1/"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{     
         for(size_t i: irange(input)){
@@ -195,7 +202,7 @@ public:
 
 class AdditionInverseNode: public UnaryNode<FloatType>, public Creatable<AdditionInverseNode>{
 public:
-    AdditionInverseNode(): UnaryNode(){};
+    AdditionInverseNode(): UnaryNode("", "*-1"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{        
         for(size_t i: irange(input)){
@@ -219,7 +226,7 @@ public:
     };
     NormalizationType normalizationType{NormalizationType::ZeroOne};
 
-    NormalizationNode(): UnaryNode(){};
+    NormalizationNode(): UnaryNode("", "norm"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement
@@ -231,7 +238,7 @@ public:
 
 class AbsoluteValueNode: public UnaryNode<FloatType>, public Creatable<AbsoluteValueNode>{
 public:
-    AbsoluteValueNode(): UnaryNode(){};
+    AbsoluteValueNode(): UnaryNode("", "abs"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         for(size_t i: irange(input)){
@@ -249,7 +256,7 @@ public:
 
 class SquareNode: public UnaryNode<FloatType>, public Creatable<SquareNode>{
 public:
-    SquareNode(): UnaryNode(){};
+    SquareNode(): UnaryNode("", "square"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         for(size_t i: irange(input)){
@@ -267,7 +274,7 @@ public:
 
 class ExponentialNode: public UnaryNode<FloatType>, public Creatable<ExponentialNode>{
 public:
-    ExponentialNode(): UnaryNode(){};
+    ExponentialNode(): UnaryNode("", "exp"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         for(size_t i: irange(input)){
@@ -285,7 +292,7 @@ public:
 
 class LogarithmNode: public UnaryNode<FloatType>, public Creatable<LogarithmNode>{
 public:
-    LogarithmNode(): UnaryNode(){};
+    LogarithmNode(): UnaryNode("", "log"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement
@@ -297,7 +304,7 @@ public:
 
 class UnaryVec2Node: public UnaryNode<Vec2Type>{
 public:
-    UnaryVec2Node(): UnaryNode(){};
+    UnaryVec2Node(): UnaryNode("", ""){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement
@@ -351,7 +358,7 @@ public:
 
 class UnaryVec3Node: public UnaryNode<Vec3Type>{
 public:
-    UnaryVec3Node(): UnaryNode(){};
+    UnaryVec3Node(): UnaryNode("", ""){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement
@@ -403,9 +410,9 @@ public:
     }
 };
 
-class UnaryVec4Node: public UnaryNode<Vec4Type>, public Creatable<UnaryVec4Node>{
+class UnaryVec4Node: public UnaryNode<Vec4Type>{
 public:
-    UnaryVec4Node(): UnaryNode(){};
+    UnaryVec4Node(): UnaryNode("", ""){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement

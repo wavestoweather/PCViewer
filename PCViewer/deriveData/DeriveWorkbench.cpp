@@ -33,8 +33,8 @@ void DeriveWorkbench::show()
 
 
     auto& editorStyle = nodes::GetStyle();
-    static int nodeId = 0;
-    static int linkId = 0;
+    static int nodeId = 1;
+    static int linkId = 1;
     const ImVec4 headerColor{.1,.1,.1,1};
     const float pinIconSize = 15;
 
@@ -73,7 +73,7 @@ void DeriveWorkbench::show()
         // middle
         builder.Middle();
         ImGui::Spring(1, 0);
-        ImGui::TextUnformatted("sqrt");
+        ImGui::TextUnformatted(node->middleText.c_str());
         ImGui::Spring(1, 0);
         
         // outputs
@@ -135,8 +135,8 @@ void DeriveWorkbench::show()
                         auto& nodeBInput = nodes[pinToNodes[b.Get()]].inputIds;
                         connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == a.Get();}) - nodeAOutput.begin();
                         connection.nodeBAttribute = std::find_if(nodeBInput.begin(), nodeBInput.end(), [&](int i){return i == b.Get();}) - nodeBInput.begin();
-                        pinToLinks[a.Get()] = linkId;
-                        pinToLinks[b.Get()] = linkId;
+                        pinToLinks[a.Get()].push_back(linkId);
+                        pinToLinks[b.Get()] = {linkId};
                         links[connection] = {linkId++,a,b};
                     }
                 } 
@@ -225,8 +225,14 @@ void DeriveWorkbench::show()
     if(ImGui::BeginPopup("Create New Node")){
         ImGui::TextUnformatted("Create New Node");
 
-        std::unique_ptr<deriveData::Node> node;
+        std::unique_ptr<deriveData::Node> node{};
         //TODO:: add buttons for creating a node
+        for(const auto& [name, create]: deriveData::NodesRegistry::nodes){
+            if(ImGui::MenuItem(name.c_str())){
+                node = create();
+                std::cout << "Creating " << name << std::endl;
+            }
+        }
 
         if(node){
             int nId = nodeId++;
