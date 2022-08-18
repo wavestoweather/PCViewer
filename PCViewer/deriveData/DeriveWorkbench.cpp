@@ -2,6 +2,7 @@
 #include "../imgui/imgui.h"
 #include "../imgui/imgui_internal.h"
 #include "../imgui_nodes/imgui_node_editor.h"
+#include "../imgui_nodes/utilities/builders.h"
 #include "Nodes.hpp"
 #include "ExecutionGraph.hpp"
 
@@ -23,52 +24,55 @@ void DeriveWorkbench::show()
     const float pinIconSize = 8;
 
     auto& [nodes, pinToNodes, links] = _executionGraphs[0];
+
+    nodes::Utilities::BlueprintNodeBuilder nodeBuilder;
     
     auto cursorTopLeft = ImGui::GetCursorStartPos();
     for(auto& [id, nodePins]: nodes){
         auto& node = nodePins.node;
-        nodes::BeginNode(id);
-        // drawing header
-        //ImGui::Text(node->name.c_str());
-        //ImGui::Separator();
-        
-        // drawing middle
-        ImGui::BeginChild("left pins", {80, 80}, true);
-        for(int i: irange(node->inputTypes)){
-            auto alpha = ImGui::GetStyle().Alpha;
+        //nodes::BeginNode(id);
+        //
+        //// drawing middle
+        //ImGui::BeginVertical("inputs", ImVec2(0, 0), 0.0f);
+        //nodes::PushStyleVar(nodes::StyleVar_PivotAlignment, ImVec2(0, 0.5f));
+        //nodes::PushStyleVar(nodes::StyleVar_PivotSize, ImVec2(0, 0));
+        //for(int i: irange(node->inputTypes)){
+        //    auto alpha = ImGui::GetStyle().Alpha;
+//
+        //    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+        //    ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
+        //    auto c = node->inputTypes[i]->color();
+        //    auto color = ImColor(c[0], c[1], c[2], c[3]);
+        //    nodes::BeginPin(nodePins.inputIds[i], nodes::PinKind::Input);
+        //    ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
+//
+        //    ImGui::PopStyleVar();
+//
+        //    nodes::EndPin();
+        //}
+        //ImGui::PopStyleVar(2);
+        //ImGui::EndVertical();
+        //ImGui::SameLine();
+        ////ImGui::BeginChild("right pins");
+        //for(int i: irange(node->outputTypes)){
+        //    auto alpha = ImGui::GetStyle().Alpha;
+//
+        //    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+        //    ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
+        //    auto c = node->outputTypes[i]->color();
+        //    auto color = ImColor(c[0], c[1], c[2], c[3]);
+        //    nodes::BeginPin(nodePins.outputIds[i], nodes::PinKind::Output);
+        //    ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
+        //    ImGui::PopStyleVar();
+//
+        //    nodes::EndPin();
+        //}
+//
+        //// drawing end
+//
+        //nodes::EndNode();
 
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
-            auto c = node->inputTypes[i]->color();
-            auto color = ImColor(c[0], c[1], c[2], c[3]);
-            nodes::BeginPin(nodePins.inputIds[i], nodes::PinKind::Input);
-            ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
-
-            ImGui::PopStyleVar();
-
-            nodes::EndPin();
-        }
-        ImGui::EndChild();
-        ImGui::SameLine();
-        //ImGui::BeginChild("right pins");
-        for(int i: irange(node->outputTypes)){
-            auto alpha = ImGui::GetStyle().Alpha;
-
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
-            auto c = node->outputTypes[i]->color();
-            auto color = ImColor(c[0], c[1], c[2], c[3]);
-            nodes::BeginPin(nodePins.outputIds[i], nodes::PinKind::Output);
-            ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
-            ImGui::PopStyleVar();
-
-            nodes::EndPin();
-        }
-        //ImGui::EndChild();
-
-        // drawing end
-
-        nodes::EndNode();
+        // new test with node builder to come...
     }
 
     // handle creation action
