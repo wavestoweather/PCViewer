@@ -68,37 +68,37 @@ public:
 
 class Type{
 public:
-    virtual std::array<float, 4> color() const = 0;
+    virtual ImVec4 color() const = 0;
     ax::Widgets::IconType iconType() const{return ax::Widgets::IconType::Circle;};
 };
 
 class FloatType: public Type, public Creatable<FloatType, Type>{
 public:
-    std::array<float, 4> color() const override{return {1,0,0,1};};
+    ImVec4 color() const override{return {1,0,0,1};};
 };
 
 class ConstantFloatType: public Type, public Creatable<ConstantFloatType, Type>{
-    std::array<float, 4> color() const override{return {1, .5, 0, 1};};
+    ImVec4 color() const override{return {1, .5, 0, 1};};
 };
 
 class VectorType: public Type,  public Creatable<VectorType, Type>{
 public:
-    std::array<float, 4> color() const override{return {0,1,0,1};};
+    ImVec4 color() const override{return {0,1,0,1};};
 };
 
 class Vec2Type: public Type,  public Creatable<Vec2Type, Type>{
 public:
-    std::array<float, 4> color() const override{return {.5, .5, .5, 1};};
+    ImVec4 color() const override{return {.5, .5, .5, 1};};
 };
 
 class Vec3Type: public Type,  public Creatable<Vec3Type, Type>{
 public:
-    std::array<float, 4> color() const override{return {1,1,1,1};};
+    ImVec4 color() const override{return {1,1,1,1};};
 };
 
 class Vec4Type: public Type,  public Creatable<Vec4Type, Type>{
 public:
-    std::array<float, 4> color() const override{return {.1, .1, .1, 1};};
+    ImVec4 color() const override{return {.1, .1, .1, 1};};
 };
 
 
@@ -115,6 +115,7 @@ public:
     std::vector<std::string> outputNames;
 
     std::string name;
+    std::string middleText;
 
     Node(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},

@@ -2,6 +2,7 @@
 #include "../imgui/imgui.h"
 #include "../imgui/imgui_internal.h"
 #include "../imgui_nodes/imgui_node_editor.h"
+#include "../imgui_nodes/utilities/builders.h"
 #include "Nodes.hpp"
 #include "ExecutionGraph.hpp"
 
@@ -25,50 +26,102 @@ void DeriveWorkbench::show()
     auto& [nodes, pinToNodes, links] = _executionGraphs[0];
     
     auto cursorTopLeft = ImGui::GetCursorStartPos();
+    //for(auto& [id, nodePins]: nodes){
+    //    auto& node = nodePins.node;
+    //    nodes::BeginNode(id);
+    //    // drawing header
+    //    //ImGui::Text(node->name.c_str());
+    //    //ImGui::Separator();
+    //    
+    //    // drawing middle
+    //    ImGui::BeginChild("left pins", {80, 80}, true);
+    //    for(int i: irange(node->inputTypes)){
+    //        auto alpha = ImGui::GetStyle().Alpha;
+//
+    //        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+    //        ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
+    //        auto c = node->inputTypes[i]->color();
+    //        auto color = ImColor(c[0], c[1], c[2], c[3]);
+    //        nodes::BeginPin(nodePins.inputIds[i], nodes::PinKind::Input);
+    //        ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
+//
+    //        ImGui::PopStyleVar();
+//
+    //        nodes::EndPin();
+    //    }
+    //    ImGui::EndChild();
+    //    ImGui::SameLine();
+    //    //ImGui::BeginChild("right pins");
+    //    for(int i: irange(node->outputTypes)){
+    //        auto alpha = ImGui::GetStyle().Alpha;
+//
+    //        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+    //        ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
+    //        auto c = node->outputTypes[i]->color();
+    //        auto color = ImColor(c[0], c[1], c[2], c[3]);
+    //        nodes::BeginPin(nodePins.outputIds[i], nodes::PinKind::Output);
+    //        ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
+    //        ImGui::PopStyleVar();
+//
+    //        nodes::EndPin();
+    //    }
+    //    //ImGui::EndChild();
+//
+    //    // drawing end
+//
+    //    nodes::EndNode();
+    //}
+
+    nodes::Utilities::BlueprintNodeBuilder builder; // created without a header texture as not needed
     for(auto& [id, nodePins]: nodes){
         auto& node = nodePins.node;
-        nodes::BeginNode(id);
-        // drawing header
-        //ImGui::Text(node->name.c_str());
-        //ImGui::Separator();
-        
-        // drawing middle
-        ImGui::BeginChild("left pins", {80, 80}, true);
+        builder.Begin(id);
+        // header
+        if(node->name.size()){
+            builder.Header();
+            ImGui::Spring(0);
+            ImGui::TextUnformatted(node->name.c_str());
+            ImGui::Dummy({0,28});
+            builder.EndHeader();
+        }
+        // inputs
         for(int i: irange(node->inputTypes)){
+            builder.Input(nodePins.inputIds[i]);
             auto alpha = ImGui::GetStyle().Alpha;
-
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
-            auto c = node->inputTypes[i]->color();
-            auto color = ImColor(c[0], c[1], c[2], c[3]);
-            nodes::BeginPin(nodePins.inputIds[i], nodes::PinKind::Input);
-            ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
-
+            bool isLinked = true;
+            ax::Widgets::Icon({pinIconSize, pinIconSize}, node->inputTypes[i]->iconType(), isLinked, node->inputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
+            ImGui::Spring(0);
+            if(node->inputNames[i].size()){
+                ImGui::TextUnformatted(node->inputNames[i].c_str());
+                ImGui::Spring(0);
+            }
             ImGui::PopStyleVar();
-
-            nodes::EndPin();
+            builder.EndInput();
         }
-        ImGui::EndChild();
-        ImGui::SameLine();
-        //ImGui::BeginChild("right pins");
+
+        // middle
+        builder.Middle();
+        ImGui::Spring(1, 0);
+        ImGui::TextUnformatted("sqrt");
+        
+        // outputs
         for(int i: irange(node->outputTypes)){
+            builder.Input(nodePins.outputIds[i]);
             auto alpha = ImGui::GetStyle().Alpha;
-
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            ax::Widgets::IconType iconType = node->inputTypes[i]->iconType();
-            auto c = node->outputTypes[i]->color();
-            auto color = ImColor(c[0], c[1], c[2], c[3]);
-            nodes::BeginPin(nodePins.outputIds[i], nodes::PinKind::Output);
-            ax::Widgets::Icon({pinIconSize, pinIconSize}, iconType, true, color, ImColor(32, 32, 32, int(alpha * 255)));
+            bool isLinked = true;
+            ax::Widgets::Icon({pinIconSize, pinIconSize}, node->outputTypes[i]->iconType(), isLinked, node->outputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
+            ImGui::Spring(0);
+            if(node->outputNames[i].size()){
+                ImGui::TextUnformatted(node->outputNames[i].c_str());
+                ImGui::Spring(0);
+            }
             ImGui::PopStyleVar();
-
-            nodes::EndPin();
+            builder.EndInput();
         }
-        //ImGui::EndChild();
 
-        // drawing end
-
-        nodes::EndNode();
+        builder.End();
     }
 
     // handle creation action
