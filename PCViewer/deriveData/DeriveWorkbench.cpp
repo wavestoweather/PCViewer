@@ -107,7 +107,7 @@ void DeriveWorkbench::show()
         
         // outputs
         for(int i: irange(node->outputTypes)){
-            builder.Input(nodePins.outputIds[i]);
+            builder.Output(nodePins.outputIds[i]);
             auto alpha = ImGui::GetStyle().Alpha;
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
             bool isLinked = true;
@@ -118,7 +118,7 @@ void DeriveWorkbench::show()
                 ImGui::Spring(0);
             }
             ImGui::PopStyleVar();
-            builder.EndInput();
+            builder.EndOutput();
         }
 
         builder.End();

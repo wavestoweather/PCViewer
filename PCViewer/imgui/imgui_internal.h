@@ -1808,6 +1808,8 @@ struct IMGUI_API ImGuiWindowTempData
         StateStorage = NULL;
         CurrentColumns = NULL;
         LayoutType = ParentLayoutType = ImGuiLayoutType_Vertical;
+        CurrentLayout = NULL;
+        CurrentLayoutItem = NULL;
         FocusCounterRegular = FocusCounterTabStop = -1;
 
         ItemFlags = ImGuiItemFlags_Default_;
