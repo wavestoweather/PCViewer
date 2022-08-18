@@ -43,8 +43,9 @@ struct NodePins{
 // handles the data and logic to edit and execute teh execution graph
 struct ExecutionGraph{
     std::map<int, NodePins> nodes;                  // maps ids to nodes
-    std::map<int, int> pinToNodes;    // maps pin ids to node ids
+    std::map<int, int> pinToNodes;                  // maps pin ids to node ids
     std::map<Link::Connection, Link> links;         // maps which map
+    std::map<int, int> pinToLinks;                  // map pin ids to 
 
     bool hasCircularConnections() const{
         std::map<int, std::set<int>> connectedNodes;     // stores for each node id to which node id it connects

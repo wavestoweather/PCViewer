@@ -106,7 +106,6 @@ public:
 // ------------------------------------------------------------------------------------------
 // nodes
 // ------------------------------------------------------------------------------------------
-
 class Node{
 public:
     std::vector<std::unique_ptr<Type>> inputTypes;
@@ -129,6 +128,7 @@ public:
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const = 0;
     virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const = 0;
+    //virtual void isMathNode() const = 0;
 };
 
 // ------------------------------------------------------------------------------------------
@@ -295,7 +295,7 @@ public:
     }
 };
 
-class UnaryVec2Node: public UnaryNode<Vec2Type>, public Creatable<UnaryVec2Node>{
+class UnaryVec2Node: public UnaryNode<Vec2Type>{
 public:
     UnaryVec2Node(): UnaryNode(){};
 

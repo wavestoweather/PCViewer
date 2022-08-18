@@ -21,4 +21,9 @@ private:
 
     float _leftPaneWidth{400};
     float _rightPaneWidth{800};
+    bool _createNewNode{false};
+    int _newLinkPinId{0};
+    int _contextNodeId{};
+    int _contextPinId{};
+    int _contextLinkId{};
 };
