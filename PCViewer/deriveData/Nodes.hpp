@@ -152,8 +152,12 @@ public:
 };
 
 struct NodesRegistry{
-    static std::map<std::string, std::function<std::unique_ptr<Node>()>> nodes;
-    NodesRegistry(std::string name, std::function<std::unique_ptr<Node>()> createFunction) {if(nodes.count(name) == 0) nodes[name] = createFunction;};
+    struct Entry{
+        std::unique_ptr<Node> prototype;
+        std::function<std::unique_ptr<Node>()> create;
+    };
+    static std::map<std::string, Entry> nodes;
+    NodesRegistry(std::string name, std::function<std::unique_ptr<Node>()> createFunction) {if(nodes.count(name) == 0) nodes[name] = {createFunction(), createFunction};};
 };
 
 // registers the nodes with a standard constructor
@@ -193,6 +197,80 @@ public:
 class DerivationNode: public Node{
 public:
     // TODO: implement later...
+};
+
+
+class ZeroVectorNode: public Node, public Creatable<ZeroVectorNode>{
+public:
+    ZeroVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
+
+    void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
+        applyOperationInplaceCpu(output);
+    };
+
+    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
+        assert(inout[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
+        for(int i: irange(inout[0].size()))
+            inout[0][i] = 0;
+    };
+};
+
+class OneVectorNode: public Node, public Creatable<OneVectorNode>{
+public:
+    OneVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
+
+    void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
+        applyOperationInplaceCpu(output);
+    };
+
+    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
+        assert(inout[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
+        for(int i: irange(inout[0].size()))
+            inout[0][i] = 1;
+    };
+};
+
+class RandomVectorNode: public Node, public Creatable<RandomVectorNode>{
+public:
+    RandomVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
+
+    void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
+        applyOperationInplaceCpu(output);
+    };
+
+    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
+        assert(inout[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
+        for(int i: irange(inout[0].size()))
+            inout[0][i] = double(rand()) / RAND_MAX;
+    };
+};
+
+class PrintVectorNode: public Node, public Creatable<PrintVectorNode>{
+public:
+    PrintVectorNode(): Node(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){};
+
+    void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
+        applyOperationInplaceCpu(output);
+    };
+
+    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
+        // prints at max the first 50 and last 50 items of a vector
+        std::cout << "[ ";
+        if(inout[0].size() < 100){
+            for(int i: irange(inout[0].size()))
+                std::cout << inout[0][i] << ", ";
+        }
+        else{
+            for(int i: irange(50)){
+                std::cout << inout[0][i] << ", ";
+            }
+            std::cout << "  ...  ";
+            for(int i: irange(inout[0].size() - 50, inout[0].size())){
+                std::cout << inout[0][i] << ", ";
+            }
+        }
+        std::cout << "]" << std::endl;
+    };
 };
 
 // ------------------------------------------------------------------------------------------

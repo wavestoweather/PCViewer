@@ -1,8 +1,12 @@
 #include "Nodes.hpp"
 
 using namespace deriveData;
-std::map<std::string, std::function<std::unique_ptr<Node>()>> NodesRegistry::nodes{};
+std::map<std::string, NodesRegistry::Entry> NodesRegistry::nodes{};
 REGISTER_NODE(DatasetInputNode);
+REGISTER_NODE(ZeroVectorNode);
+REGISTER_NODE(OneVectorNode);
+REGISTER_NODE(RandomVectorNode);
+REGISTER_NODE(PrintVectorNode);
 REGISTER_NODE(MultiplicationInverseNode);
 REGISTER_NODE(AdditionInverseNode);
 REGISTER_NODE(NormalizationNode);

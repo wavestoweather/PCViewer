@@ -108,7 +108,7 @@ void DeriveWorkbench::show()
 
     // nodes drawing
     for(auto& [connection, link]: links)
-        nodes::Link(link.Id, link.pinAId, link.pinBId, {1, 1, 1, 1}, 2);
+        nodes::Link(link.Id, link.pinAId, link.pinBId, link.color, 2);
 
     // handle creation action
     if(!_createNewNode){
@@ -129,24 +129,27 @@ void DeriveWorkbench::show()
         a = {};
         if (nodes::QueryNewLink(&a, &b)){
             if(a && b){ // if link was created
-                if(a == b || pinToNodes[a.Get()] == pinToNodes[b.Get()]){
+                auto& nodeAInputs = nodes[pinToNodes[a.Get()]].inputIds;
+                bool change = std::count_if(nodeAInputs.begin(), nodeAInputs.end(), [&](int i){return i == a.Get();}) > 0;
+                if(change)
+                    std::swap(a, b);
+                Link::Connection connection{};
+                connection.nodeAId = _executionGraphs[0].pinToNodes[a.Get()];
+                connection.nodeBId = _executionGraphs[0].pinToNodes[b.Get()];
+                auto& nodeAOutput = nodes[pinToNodes[a.Get()]].outputIds;
+                auto& nodeBInput = nodes[pinToNodes[b.Get()]].inputIds;
+                connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == a.Get();}) - nodeAOutput.begin();
+                connection.nodeBAttribute = std::find_if(nodeBInput.begin(), nodeBInput.end(), [&](int i){return i == b.Get();}) - nodeBInput.begin();
+                
+                bool wrongType = connection.nodeAAttribute < nodeAOutput.size() && connection.nodeBAttribute < nodeBInput.size() && typeid(*nodes[pinToNodes[a.Get()]].node->outputTypes[connection.nodeAAttribute]) != typeid(*nodes[pinToNodes[b.Get()]].node->inputTypes[connection.nodeBAttribute]);
+                if(wrongType)
+                    showLabel("Incompatible types", {32, 45, 32, 180});
+                if(a == b || pinToNodes[a.Get()] == pinToNodes[b.Get()] || wrongType)
                     nodes::RejectNewItem({255, 0, 0, 255}, 2.f);
-                }
                 else{
                     showLabel("+ Create Link", {32, 45, 32, 180});
                     if(nodes::AcceptNewItem()){     // add check for validity
                         // adding the link to the links list
-                        auto& nodeAInputs = nodes[pinToNodes[a.Get()]].inputIds;
-                        bool change = std::count_if(nodeAInputs.begin(), nodeAInputs.end(), [&](int i){return i == a.Get();}) > 0;
-                        if(change)
-                            std::swap(a, b);
-                        Link::Connection connection{};
-                        connection.nodeAId = _executionGraphs[0].pinToNodes[a.Get()];
-                        connection.nodeBId = _executionGraphs[0].pinToNodes[b.Get()];
-                        auto& nodeAOutput = nodes[pinToNodes[a.Get()]].outputIds;
-                        auto& nodeBInput = nodes[pinToNodes[b.Get()]].inputIds;
-                        connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == a.Get();}) - nodeAOutput.begin();
-                        connection.nodeBAttribute = std::find_if(nodeBInput.begin(), nodeBInput.end(), [&](int i){return i == b.Get();}) - nodeBInput.begin();
                         pinToLinks[a.Get()].push_back(_curId);
                         // unlinking links to the new input
                         if(pinToLinks[b.Get()].size()){
@@ -161,7 +164,7 @@ void DeriveWorkbench::show()
                         }  
                         pinToLinks[b.Get()] = {_curId};
                         linkToConnection[_curId] = connection;
-                        links[connection] = {_curId++,a,b};
+                        links[connection] = {_curId++,a,b, nodes[pinToNodes[a.Get()]].node->outputTypes[connection.nodeAAttribute]->color()};
                     }
                 } 
             }
@@ -169,6 +172,8 @@ void DeriveWorkbench::show()
     }
     nodes::EndCreate();
     }
+    //else
+    //    _newLinkPinId = 0;
 
     // handle deletion action
     if(nodes::BeginDelete()){
@@ -248,11 +253,22 @@ void DeriveWorkbench::show()
         auto openPopupPosition = _popupPos;
         //ImGui::TextUnformatted("Create New Node");
 
+        deriveData::Type* prevType{};
+        if(_newLinkPinId > 0){
+            Link::Connection connection{};
+            connection.nodeAId = _executionGraphs[0].pinToNodes[_newLinkPinId];
+            auto& nodeAOutput = nodes[pinToNodes[_newLinkPinId]].outputIds;
+            connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == _newLinkPinId;}) - nodeAOutput.begin();
+            if(connection.nodeAAttribute < nodeAOutput.size())
+                prevType = nodes[connection.nodeAId].node->outputTypes[connection.nodeAAttribute].get();
+        }
+
         std::unique_ptr<deriveData::Node> node{};
-        //TODO:: add buttons for creating a node
-        for(const auto& [name, create]: deriveData::NodesRegistry::nodes){
+        for(const auto& [name, entry]: deriveData::NodesRegistry::nodes){
+            if(prevType && typeid(*prevType) != typeid(*entry.prototype->inputTypes[0]))
+                continue;
             if(ImGui::MenuItem(name.c_str())){
-                node = create();
+                node = entry.create();
                 //std::cout << "Creating " << name << std::endl;
             }
         }
@@ -278,19 +294,28 @@ void DeriveWorkbench::show()
                 pinToLinks[_newLinkPinId].push_back(_curId);
                 pinToLinks[nodes[nId].inputIds[0]] = {_curId};
                 linkToConnection[_curId] = connection;
-                links[connection] = {_curId++, _newLinkPinId, nodes[nId].inputIds[0]};
+                links[connection] = {_curId++, _newLinkPinId, nodes[nId].inputIds[0], nodes[connection.nodeAId].node->outputTypes[connection.nodeAAttribute]->color()};
                 _newLinkPinId = 0;
             }
         }
 
         ImGui::EndPopup();
     }
-    else
+    else{
         _createNewNode = false;
+        _newLinkPinId = {};
+    }
     ImGui::PopStyleVar();
     nodes::Resume();
 
     nodes::End();
+
+    // drawing as overlay the execute button
+    ImGui::SetCursorScreenPos(ImGui::GetWindowPos() + ImVec2{ImGui::GetWindowSize().x / 2, 30});
+    if(ImGui::Button("Execute Graph")){
+        std::cout << "Gotcha" << std::endl;
+    }
+
     ImGui::End();
 }
 

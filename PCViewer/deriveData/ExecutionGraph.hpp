@@ -8,6 +8,7 @@ struct Link{
     ax::NodeEditor::LinkId Id{};
     ax::NodeEditor::PinId pinAId{};
     ax::NodeEditor::PinId pinBId{};
+    ImVec4 color{1.f, 1.f, 1.f, 1.f};
 
     struct Connection{
         long nodeAId;
