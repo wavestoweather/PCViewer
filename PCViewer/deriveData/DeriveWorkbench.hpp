@@ -28,4 +28,6 @@ private:
     int _contextNodeId{};
     int _contextPinId{};
     int _contextLinkId{};
+
+    bool isInputPin(long pinId);
 };

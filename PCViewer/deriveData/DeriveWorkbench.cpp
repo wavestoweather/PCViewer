@@ -28,6 +28,10 @@ void DeriveWorkbench::show()
         return;
     ImGui::SetNextWindowSize({800, 800}, ImGuiCond_Once);
     ImGui::Begin("DeriveWorkbench", &active);
+    ImGui::Dummy({});ImGui::SameLine(ImGui::GetWindowSize().x / 2);
+    if(ImGui::Button("Execute Graph")){
+        std::cout << "Gotcha" << std::endl;
+    }
     nodes::SetCurrentEditor(_editorContext);
     nodes::Begin("DeriveWorkbench");
 
@@ -138,13 +142,18 @@ void DeriveWorkbench::show()
                 connection.nodeBId = _executionGraphs[0].pinToNodes[b.Get()];
                 auto& nodeAOutput = nodes[pinToNodes[a.Get()]].outputIds;
                 auto& nodeBInput = nodes[pinToNodes[b.Get()]].inputIds;
-                connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == a.Get();}) - nodeAOutput.begin();
-                connection.nodeBAttribute = std::find_if(nodeBInput.begin(), nodeBInput.end(), [&](int i){return i == b.Get();}) - nodeBInput.begin();
+                connection.nodeAAttribute = std::find(nodeAOutput.begin(), nodeAOutput.end(), a.Get()) - nodeAOutput.begin();
+                connection.nodeBAttribute = std::find(nodeBInput.begin(), nodeBInput.end(), b.Get()) - nodeBInput.begin();
                 
                 bool wrongType = connection.nodeAAttribute < nodeAOutput.size() && connection.nodeBAttribute < nodeBInput.size() && typeid(*nodes[pinToNodes[a.Get()]].node->outputTypes[connection.nodeAAttribute]) != typeid(*nodes[pinToNodes[b.Get()]].node->inputTypes[connection.nodeBAttribute]);
+                
+                bool inputToOutput = isInputPin(a.Get()) ^ isInputPin(b.Get());
+
                 if(wrongType)
                     showLabel("Incompatible types", {32, 45, 32, 180});
-                if(a == b || pinToNodes[a.Get()] == pinToNodes[b.Get()] || wrongType)
+                if(!inputToOutput)
+                    showLabel("One pin has to be output, the other input", {32, 45, 32, 180});
+                if(a == b || pinToNodes[a.Get()] == pinToNodes[b.Get()] || wrongType || !inputToOutput)
                     nodes::RejectNewItem({255, 0, 0, 255}, 2.f);
                 else{
                     showLabel("+ Create Link", {32, 45, 32, 180});
@@ -310,12 +319,6 @@ void DeriveWorkbench::show()
 
     nodes::End();
 
-    // drawing as overlay the execute button
-    ImGui::SetCursorScreenPos(ImGui::GetWindowPos() + ImVec2{ImGui::GetWindowSize().x / 2, 30});
-    if(ImGui::Button("Execute Graph")){
-        std::cout << "Gotcha" << std::endl;
-    }
-
     ImGui::End();
 }
 
@@ -327,6 +330,13 @@ void DeriveWorkbench::addDataset(std::string_view datasetId)
 void DeriveWorkbench::removeDataset(std::string_view datasetId) 
 {
     
+}
+
+bool DeriveWorkbench::isInputPin(long pinId) 
+{
+    auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
+    auto& node = nodes[pinToNodes[pinId]];
+    return std::count(node.inputIds.begin(), node.inputIds.end(), pinId) > 0;
 }
 
 DeriveWorkbench::DeriveWorkbench() 
