@@ -64,3 +64,29 @@ class static_irange {
    iterator begin() const { return iterator(T_begin); }
    iterator end() const { return iterator(T_end); }
 };
+
+template <class T>
+class enum_range{
+  public:
+    enum_range(unsigned long start = 0): _begin(start){};
+    class iterator{
+      public:
+        long int operator*() const {return _i;}
+        //T operator*() const{return static_cast<T>(_i);}
+        const iterator& operator++(){++_i; return *this;}
+        iterator operator++(int){iterator copy(*this); ++_i; return copy;}
+
+        bool operator==(const iterator &other) const { return _i == other._i;}
+        bool operator!=(const iterator &other) const { return _i != other._i;}
+
+      protected:
+        iterator(long int start): _i(start){}
+      private:
+        unsigned long _i;
+    };
+
+    iterator begin() const {return iterator(_begin);}
+    iterator end() const {return iterator(static_cast<long>(T::COUNT));}
+  private:
+    unsigned long _begin;
+};

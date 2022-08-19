@@ -147,6 +147,7 @@ public:
         middleText(mt){}
 
 
+    virtual bool isOutputNode() const {return false;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const = 0;
     virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const = 0;
 };
@@ -192,6 +193,7 @@ public:
     virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     };
+    bool isOutputNode() const override {return true;};
 };
 
 class DerivationNode: public Node{
@@ -271,6 +273,8 @@ public:
         }
         std::cout << "]" << std::endl;
     };
+
+    bool isOutputNode() const override {return true;};
 };
 
 // ------------------------------------------------------------------------------------------

@@ -339,6 +339,58 @@ bool DeriveWorkbench::isInputPin(long pinId)
     return std::count(node.inputIds.begin(), node.inputIds.end(), pinId) > 0;
 }
 
+void DeriveWorkbench::executeGraph() 
+{
+    auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
+
+    auto getPreviousNodes = [&](long cur){
+        std::set<long> output;
+
+        // getting the direct predecessors to the current node
+        for(auto& [connection, link]: links){
+            if(connection.nodeBId == cur)
+                output.insert(connection.nodeAId);
+        }
+
+        return output;  
+    };
+
+    // checkfor output nodes
+    std::set<long> outputNodes{};
+    for(auto& [id, nodePins]: nodes){
+        if(nodePins.node->isOutputNode())
+            outputNodes.insert(id);
+    }
+    if(outputNodes.empty()){
+        std::cout << "DeriveWorkbench::executeGraph() No output nodes in graph. Nothing done, as calculations would be lost" << std::endl;
+        return;
+    }
+
+    if(_executionGraphs[0].hasCircularConnections()){
+        std::cout << "Recursion detected in the graph. This is not allowed! Fix before rerun" << std::endl;
+        return;
+    }
+
+    // node info is used to keep track of execution and to cache output data
+    using data_block = std::vector<deriveData::memory_view<float>>;
+    struct NodeInfo{
+        std::vector<data_block> prevDataViews;
+        data_block dataView;
+        std::vector<std::vector<float>> storage;
+        int waitCount;          // count to indicate how many parents have to be evaluated (inserted constants are ignored)
+        int copyCount;          // count to indicate how often the output of the node has to be copied until consumed
+    };
+    std::map<long, NodeInfo> nodeInfos{};
+
+    // now executing for each output node the graph from the back and caching already calculated data in the node info map
+    for(auto node: outputNodes){
+        auto pred_nodes = getPreviousNodes(node);
+        while(pred_nodes.size()){
+            // getting a random previous node for execution (TODO: make better)
+        }
+    }
+}
+
 DeriveWorkbench::DeriveWorkbench() 
 {
     _editorContext = ax::NodeEditor::CreateEditor();
