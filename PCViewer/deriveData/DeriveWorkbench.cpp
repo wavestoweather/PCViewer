@@ -33,12 +33,10 @@ void DeriveWorkbench::show()
 
 
     auto& editorStyle = nodes::GetStyle();
-    static int nodeId = 1;
-    static int linkId = 1;
     const ImVec4 headerColor{.1,.1,.1,1};
     const float pinIconSize = 15;
 
-    auto& [nodes, pinToNodes, links, pinToLinks] = _executionGraphs[0];
+    auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
     
     auto cursorTopLeft = ImGui::GetCursorStartPos();
 
@@ -59,11 +57,24 @@ void DeriveWorkbench::show()
             builder.Input(nodePins.inputIds[i]);
             auto alpha = ImGui::GetStyle().Alpha;
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            bool isLinked = pinToLinks.count(nodePins.inputIds[i]) > 0;
+            bool isLinked = pinToLinks[nodePins.inputIds[i]].size() > 0;
             ax::Widgets::Icon({pinIconSize, pinIconSize}, node->inputTypes[i]->iconType(), isLinked, node->inputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
             ImGui::Spring(0);
             if(node->inputNames[i].size()){
                 ImGui::TextUnformatted(node->inputNames[i].c_str());
+                ImGui::Spring(0);
+            }
+            if(!isLinked){
+                auto memoryView = node->inputTypes[i]->data();
+                if(memoryView.size()){
+                    switch(memoryView.size()){
+                        case 1:
+                            ImGui::PushItemWidth(50);
+                            ImGui::InputFloat("##test", memoryView.data());
+                            ImGui::PopItemWidth;
+                        break;
+                    }
+                }
                 ImGui::Spring(0);
             }
             ImGui::PopStyleVar();
@@ -81,13 +92,13 @@ void DeriveWorkbench::show()
             builder.Output(nodePins.outputIds[i]);
             auto alpha = ImGui::GetStyle().Alpha;
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            bool isLinked = pinToLinks.count(nodePins.outputIds[i]) > 0;
-            ax::Widgets::Icon({pinIconSize, pinIconSize}, node->outputTypes[i]->iconType(), isLinked, node->outputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
-            ImGui::Spring(0);
+            bool isLinked = pinToLinks[nodePins.outputIds[i]].size() > 0;
             if(node->outputNames[i].size()){
                 ImGui::TextUnformatted(node->outputNames[i].c_str());
                 ImGui::Spring(0);
             }
+            ax::Widgets::Icon({pinIconSize, pinIconSize}, node->outputTypes[i]->iconType(), isLinked, node->outputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
+            ImGui::Spring(0);
             ImGui::PopStyleVar();
             builder.EndOutput();
         }
@@ -109,17 +120,18 @@ void DeriveWorkbench::show()
             if(nodes::AcceptNewItem()){
                 _createNewNode = true;
                 _newLinkPinId = a.Get();
-                //nodes::Suspend();
+                nodes::Suspend();
                 ImGui::OpenPopup("Create New Node");
-                //nodes::Resume();
+                nodes::Resume();
             }
         }
 
         a = {};
         if (nodes::QueryNewLink(&a, &b)){
             if(a && b){ // if link was created
-                if(a == b)
+                if(a == b || pinToNodes[a.Get()] == pinToNodes[b.Get()]){
                     nodes::RejectNewItem({255, 0, 0, 255}, 2.f);
+                }
                 else{
                     showLabel("+ Create Link", {32, 45, 32, 180});
                     if(nodes::AcceptNewItem()){     // add check for validity
@@ -135,9 +147,21 @@ void DeriveWorkbench::show()
                         auto& nodeBInput = nodes[pinToNodes[b.Get()]].inputIds;
                         connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == a.Get();}) - nodeAOutput.begin();
                         connection.nodeBAttribute = std::find_if(nodeBInput.begin(), nodeBInput.end(), [&](int i){return i == b.Get();}) - nodeBInput.begin();
-                        pinToLinks[a.Get()].push_back(linkId);
-                        pinToLinks[b.Get()] = {linkId};
-                        links[connection] = {linkId++,a,b};
+                        pinToLinks[a.Get()].push_back(_curId);
+                        // unlinking links to the new input
+                        if(pinToLinks[b.Get()].size()){
+                            long id = pinToLinks[b.Get()][0];
+                            auto& c = linkToConnection[id];
+                            auto& aLinks = pinToLinks[links[c].pinAId.Get()];
+                            aLinks.erase(std::find(aLinks.begin(), aLinks.end(), id));
+                            auto& bLinks = pinToLinks[links[c].pinBId.Get()];
+                            bLinks.erase(std::find(bLinks.begin(), bLinks.end(), id));
+                            links.erase(c);
+                            linkToConnection.erase(id);
+                        }  
+                        pinToLinks[b.Get()] = {_curId};
+                        linkToConnection[_curId] = connection;
+                        links[connection] = {_curId++,a,b};
                     }
                 } 
             }
@@ -151,16 +175,14 @@ void DeriveWorkbench::show()
         nodes::LinkId d{};
         while(nodes::QueryDeletedLink(&d)){
             if(nodes::AcceptDeletedItem()){
-                Link l{};
-                for(auto& [connection, link]: links){
-                    if(link.Id == d){
-                        l = link;
-                        links.erase(connection);
-                        break;
-                    }
-                }
-                pinToLinks.erase(l.pinAId.Get());
-                pinToLinks.erase(l.pinBId.Get());
+                Link::Connection c = linkToConnection[d.Get()];
+                linkToConnection.erase(d.Get());
+                auto& l = links[c];
+                auto& aLinks = pinToLinks[l.pinAId.Get()];
+                aLinks.erase(std::find(aLinks.begin(), aLinks.end(), l.Id.Get()));
+                auto& bLinks = pinToLinks[l.pinBId.Get()];
+                bLinks.erase(std::find(bLinks.begin(), bLinks.end(), l.Id.Get()));
+                links.erase(c);
             }
         }
         nodes::NodeId n{};
@@ -177,7 +199,7 @@ void DeriveWorkbench::show()
     nodes::EndDelete();
 
     // dialogue for node creation
-    auto openPopupPosition = ImGui::GetMousePos();
+    _popupPos = ImGui::GetMousePos();
     nodes::Suspend();
     nodes::NodeId n{};
     nodes::PinId p{};
@@ -223,26 +245,42 @@ void DeriveWorkbench::show()
     }
 
     if(ImGui::BeginPopup("Create New Node")){
-        ImGui::TextUnformatted("Create New Node");
+        auto openPopupPosition = _popupPos;
+        //ImGui::TextUnformatted("Create New Node");
 
         std::unique_ptr<deriveData::Node> node{};
         //TODO:: add buttons for creating a node
         for(const auto& [name, create]: deriveData::NodesRegistry::nodes){
             if(ImGui::MenuItem(name.c_str())){
                 node = create();
-                std::cout << "Creating " << name << std::endl;
+                //std::cout << "Creating " << name << std::endl;
             }
         }
 
         if(node){
-            int nId = nodeId++;
-            _createNewNode = false;
+            int nId = _curId++;
+            _createNewNode = false;            
             nodes::SetNodePosition(nId, openPopupPosition);
-            nodes.insert({nId, NodePins(std::move(node))});
+            nodes.insert({nId, NodePins(std::move(node), &_curId)});
             for(auto inputId: nodes[nId].inputIds)
                 pinToNodes[inputId] = nId;
             for(auto outputId: nodes[nId].outputIds)
                 pinToNodes[outputId] = nId;
+
+            if(_newLinkPinId != 0){
+                // adding the link to the links list
+                Link::Connection connection{};
+                connection.nodeAId = _executionGraphs[0].pinToNodes[_newLinkPinId];
+                connection.nodeBId = nId;
+                auto& nodeAOutput = nodes[pinToNodes[_newLinkPinId]].outputIds;
+                connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == _newLinkPinId;}) - nodeAOutput.begin();
+                connection.nodeBAttribute = 0;
+                pinToLinks[_newLinkPinId].push_back(_curId);
+                pinToLinks[nodes[nId].inputIds[0]] = {_curId};
+                linkToConnection[_curId] = connection;
+                links[connection] = {_curId++, _newLinkPinId, nodes[nId].inputIds[0]};
+                _newLinkPinId = 0;
+            }
         }
 
         ImGui::EndPopup();
@@ -271,7 +309,7 @@ DeriveWorkbench::DeriveWorkbench()
     _editorContext = ax::NodeEditor::CreateEditor();
     _executionGraphs.resize(1);
     auto node = 
-    _executionGraphs[0].nodes.insert({10000,NodePins(deriveData::CreateVec2Node::create())});
+    _executionGraphs[0].nodes.insert({10000,NodePins(deriveData::CreateVec2Node::create(), &_curId)});
     for(int pin: _executionGraphs[0].nodes[10000].inputIds)
         _executionGraphs[0].pinToNodes[pin] = 10000;
     for(int pin: _executionGraphs[0].nodes[10000].outputIds)

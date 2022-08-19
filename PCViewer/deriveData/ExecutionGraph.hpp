@@ -10,10 +10,10 @@ struct Link{
     ax::NodeEditor::PinId pinBId{};
 
     struct Connection{
-        int nodeAId;
-        int nodeBId;
-        int nodeAAttribute;
-        int nodeBAttribute;
+        long nodeAId;
+        long nodeBId;
+        long nodeAAttribute;
+        long nodeBAttribute;
 
         bool operator<(const Connection& c) const{
             return nodeAId < c.nodeAId || (nodeAId == c.nodeAId && nodeBId < c.nodeBId) || 
@@ -24,47 +24,48 @@ struct Link{
 
 struct NodePins{
     std::unique_ptr<deriveData::Node> node;
-    std::vector<int> inputIds;
-    std::vector<int> outputIds;
+    std::vector<long> inputIds;
+    std::vector<long> outputIds;
 
-    NodePins(std::unique_ptr<deriveData::Node> n = {}): node(std::move(n)){
+    NodePins(std::unique_ptr<deriveData::Node> n = {}, long* curId = {}): node(std::move(n)){
         if(!node)
             return;
-        static int id{};
+        assert(curId);
         inputIds.resize(node->inputTypes.size());
         outputIds.resize(node->outputTypes.size());
         for(int i: irange(inputIds))
-            inputIds[i] = id++;
+            inputIds[i] = (*curId)++;
         for(int i: irange(outputIds))
-            outputIds[i] = id++;
+            outputIds[i] = (*curId)++;
     }
 };
 
 // handles the data and logic to edit and execute teh execution graph
 struct ExecutionGraph{
-    std::map<int, NodePins> nodes;                  // maps ids to nodes
-    std::map<int, int> pinToNodes;                  // maps pin ids to node ids
-    std::map<Link::Connection, Link> links;         // maps which map
-    std::map<int, std::vector<int>> pinToLinks;     // maps pin ids to a vector of all link ids that are connected
+    std::map<long, NodePins> nodes;                     // maps ids to nodes
+    std::map<long, long> pinToNodes;                    // maps pin ids to node ids
+    std::map<Link::Connection, Link> links;             // maps which map
+    std::map<long, Link::Connection> linkToConnection;  // maps a link id to the connection
+    std::map<long, std::vector<long>> pinToLinks;       // maps pin ids to a vector of all link ids that are connected
 
     bool hasCircularConnections() const{
-        std::map<int, std::set<int>> connectedNodes;     // stores for each node id to which node id it connects
+        std::map<long, std::set<long>> connectedNodes;     // stores for each node id to which node id it connects
         for(const auto& [connection, link]: links)
             connectedNodes[connection.nodeAId].insert(connection.nodeBId);
 
-        std::set<int> visited;
+        std::set<long> visited;
         for(const auto& [id, node]: nodes){
             if(visited.count(id) > 0)
                 continue;
             visited.insert(id);
-            std::set<int> follower = connectedNodes[id];
-            std::set<int> curVisited = follower;
+            std::set<long> follower = connectedNodes[id];
+            std::set<long> curVisited = follower;
             while(follower.size()){
-                int id = *follower.begin();
+                long id = *follower.begin();
                 follower.erase(id);
                 curVisited.insert(id);
                 follower.insert(connectedNodes[id].begin(), connectedNodes[id].end());
-                for(int i: curVisited){
+                for(long i: curVisited){
                     if(follower.count(i) > 0)
                         return true;
                 }

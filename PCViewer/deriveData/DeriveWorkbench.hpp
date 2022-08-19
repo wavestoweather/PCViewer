@@ -21,7 +21,9 @@ private:
 
     float _leftPaneWidth{400};
     float _rightPaneWidth{800};
+    long _curId{1};
     bool _createNewNode{false};
+    ImVec2 _popupPos{};
     int _newLinkPinId{0};
     int _contextNodeId{};
     int _contextPinId{};
