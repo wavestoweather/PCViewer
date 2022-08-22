@@ -55,21 +55,19 @@ struct ExecutionGraph{
             connectedNodes[connection.nodeAId].insert(connection.nodeBId);
 
         std::set<long> visited;
-        for(const auto& [id, node]: nodes){
-            if(visited.count(id) > 0)
+        for(const auto& [nodeId, node]: nodes){
+            if(visited.count(nodeId) > 0)
                 continue;
-            visited.insert(id);
-            std::set<long> follower = connectedNodes[id];
+            visited.insert(nodeId);
+            std::set<long> follower = connectedNodes[nodeId];
             std::set<long> curVisited = follower;
             while(follower.size()){
                 long id = *follower.begin();
                 follower.erase(id);
                 curVisited.insert(id);
                 follower.insert(connectedNodes[id].begin(), connectedNodes[id].end());
-                for(long i: curVisited){
-                    if(follower.count(i) > 0)
-                        return true;
-                }
+                if(follower.count(nodeId) > 0)
+                    return true;
             }
         }
         return false;

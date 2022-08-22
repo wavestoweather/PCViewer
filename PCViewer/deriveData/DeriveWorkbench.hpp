@@ -44,4 +44,14 @@ private:
 
     bool isInputPin(long pinId);
     void executeGraph();
+    struct RecursionData{
+        std::vector<std::vector<float>> dataStorage;
+        struct NodeInfo{
+            std::vector<deriveData::memory_view<float>> dataView;
+            int waitCount;          // count to indicate how many parents have to be evaluated (inserted constants are ignored)
+            int copyCount;          // count to indicate how often the output of the node has to be copied until consumed
+        };
+        std::map<long, NodeInfo> nodeInfos{};
+    };
+    void buildCacheRecursive(long node, RecursionData& data);
 };

@@ -40,7 +40,7 @@ inline std::vector<std::unique_ptr<Base>> createFilledVec(uint32_t size){
 template<class T>
 class memory_view{
     T* _data{};
-    const size_t _size{};
+    size_t _size{};
 public:
     memory_view(){};
     memory_view(T& d): _data(&d), _size(1){};
@@ -52,6 +52,10 @@ public:
     memory_view(memory_view<U> m): _data(reinterpret_cast<T*>(m.data())), _size(m.size() * sizeof(U) / sizeof(T)){
         assert(m.size() * sizeof(U) == _size * sizeof(T));   // debug assert to check if the memory views can be converted to each other, e.g. if the element sizes align
     }
+    memory_view(const memory_view&) = default;
+    memory_view(memory_view&&) = default;
+    memory_view& operator=(const memory_view&) = default;
+    memory_view& operator=(memory_view&&) = default;
 
     T* data(){return _data;};
     const T* data() const {return _data;};
@@ -64,6 +68,11 @@ public:
         assert(i < _size);
         return _data[i];
     }
+
+    T* begin() {return _data;};
+    T* end() {return _data + _size;};
+    const T* begin() const {return _data;};
+    const T* end() const {return _data + _size;};
 };
 
 // ------------------------------------------------------------------------------------------
@@ -148,8 +157,8 @@ public:
 
 
     virtual bool isOutputNode() const {return false;};
-    virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const = 0;
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const = 0;
+    virtual int outputDimension() const {return 1;};
+    virtual void applyOperationCpu(const std::vector<memory_view<float>>& input, std::vector<memory_view<float>>& output) const = 0;
 };
 
 struct NodesRegistry{
@@ -190,9 +199,6 @@ public:
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement
     };
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
-    };
     bool isOutputNode() const override {return true;};
 };
 
@@ -207,13 +213,9 @@ public:
     ZeroVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        applyOperationInplaceCpu(output);
-    };
-
-    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        assert(inout[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
-        for(int i: irange(inout[0].size()))
-            inout[0][i] = 0;
+        assert(output[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
+        for(int i: irange(output[0].size()))
+            output[0][i] = 0;
     };
 };
 
@@ -222,13 +224,9 @@ public:
     OneVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        applyOperationInplaceCpu(output);
-    };
-
-    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        assert(inout[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
-        for(int i: irange(inout[0].size()))
-            inout[0][i] = 1;
+        assert(output[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
+        for(int i: irange(output[0].size()))
+            output[0][i] = 1;
     };
 };
 
@@ -237,13 +235,9 @@ public:
     RandomVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        applyOperationInplaceCpu(output);
-    };
-
-    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        assert(inout[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
-        for(int i: irange(inout[0].size()))
-            inout[0][i] = double(rand()) / RAND_MAX;
+        assert(output[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
+        for(int i: irange(output[0].size()))
+            output[0][i] = double(rand()) / RAND_MAX;
     };
 };
 
@@ -252,27 +246,24 @@ public:
     PrintVectorNode(): Node(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        applyOperationInplaceCpu(output);
-    };
-
-    void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // prints at max the first 50 and last 50 items of a vector
         std::cout << "[ ";
-        if(inout[0].size() < 100){
-            for(int i: irange(inout[0].size()))
-                std::cout << inout[0][i] << ", ";
+        if(input[0].size() < 100){
+            for(int i: irange(input[0].size()))
+                std::cout << input[0][i] << ", ";
         }
         else{
             for(int i: irange(50)){
-                std::cout << inout[0][i] << ", ";
+                std::cout << input[0][i] << ", ";
             }
             std::cout << "  ...  ";
-            for(int i: irange(inout[0].size() - 50, inout[0].size())){
-                std::cout << inout[0][i] << ", ";
+            for(int i: irange(input[0].size() - 50, input[0].size())){
+                std::cout << input[0][i] << ", ";
             }
         }
         std::cout << "]" << std::endl;
     };
+
 
     bool isOutputNode() const override {return true;};
 };
@@ -298,12 +289,6 @@ public:
                 output[i][j] = 1. / input[i][j];
         }
     }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        for(size_t i: irange(inout)){
-            for(size_t j: irange(inout[i].size()))
-                inout[i][j] = 1. / inout[i][j];
-        }
-    }
 };
 
 class AdditionInverseNode: public UnaryNode<FloatType>, public Creatable<AdditionInverseNode>{
@@ -314,12 +299,6 @@ public:
         for(size_t i: irange(input)){
             for(size_t j: irange(input[i].size()))
                 output[i][j] = -input[i][j];
-        }
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        for(size_t i: irange(inout)){
-            for(size_t j: irange(inout[i].size()))
-                inout[i][j] = -inout[i][j];
         }
     }
 };
@@ -335,10 +314,17 @@ public:
     NormalizationNode(): UnaryNode("", "norm"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
+        for(size_t i: irange(input)){
+            auto [mi, ma] = std::minmax(input[i].begin(), input[i].end());
+            float min = *mi;
+            float max = *ma;
+            if(min == max){
+                max += 1;
+                max *= 1.1;
+            }
+            for(size_t j: irange(input[i].size()))
+                output[i][j] = (input[i][j] - min) / (max - min);
+        }
     }
 };
 
@@ -350,12 +336,6 @@ public:
         for(size_t i: irange(input)){
             for(size_t j: irange(input.size()))
                 output[i][j] = std::abs(input[i][j]);
-        }
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        for(size_t i: irange(inout)){
-            for(size_t j: irange(inout[i].size()))
-                inout[i][j] = std::abs(inout[i][j]);
         }
     }
 };
@@ -370,12 +350,6 @@ public:
                 output[i][j] = input[i][j] * input[i][j];
         }
     }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        for(size_t i: irange(inout)){
-            for(size_t j: irange(inout[i].size()))
-                inout[i][j] = inout[i][j] * inout[i][j];
-        }
-    }
 };
 
 class ExponentialNode: public UnaryNode<FloatType>, public Creatable<ExponentialNode>{
@@ -388,12 +362,6 @@ public:
                 output[i][j] = std::exp(input[i][j]);
         }
     }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        for(size_t i: irange(inout)){
-            for(size_t j: irange(inout[i].size()))
-                inout[i][j] = std::exp(inout[i][j]);
-        }
-    }
 };
 
 class LogarithmNode: public UnaryNode<FloatType>, public Creatable<LogarithmNode>{
@@ -401,23 +369,16 @@ public:
     LogarithmNode(): UnaryNode("", "log"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
+        for(size_t i: irange(input)){
+            for(size_t j: irange(input[0].size()))
+                output[i][j] = std::log(input[i][j]);
+        }
     }
 };
 
 class UnaryVec2Node: public UnaryNode<Vec2Type>{
 public:
     UnaryVec2Node(std::string_view header = "", std::string_view body = ""): UnaryNode(header, body){};
-
-    virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
-    }
 };
 
 class CreateVec2Node: public UnaryVec2Node, public Creatable<CreateVec2Node>{
@@ -428,10 +389,8 @@ public:
         outputNames = {"vec2"};
     }
 
+    int outputDimension() const override{return 2;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     }
 };
@@ -444,10 +403,8 @@ public:
         outputNames = {"x", "y"};
     }
 
+    int outputDimension() const override{return 2;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     }
 };
@@ -459,21 +416,11 @@ public:
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement
     }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
-    }
 };
 
 class UnaryVec3Node: public UnaryNode<Vec3Type>{
 public:
     UnaryVec3Node(std::string_view header = "", std::string_view body = ""): UnaryNode(header, body){};
-
-    virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
-    }
 };
 
 class CreateVec3Node: public UnaryVec3Node, public Creatable<CreateVec3Node>{
@@ -484,10 +431,8 @@ public:
         outputNames = {"vec3"};
     }
 
+    int outputDimension() const override{return 3;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     }
 };
@@ -500,10 +445,8 @@ public:
         outputNames = {"x", "y", "z"};
     }
 
+    int outputDimension() const override{return 3;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     }
 };
@@ -515,21 +458,11 @@ public:
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // TODO implement
     }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
-    }
 };
 
 class UnaryVec4Node: public UnaryNode<Vec4Type>{
 public:
     UnaryVec4Node(std::string_view header = "", std::string_view body = ""): UnaryNode(header, body){};
-
-    virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
-    }
 };
 
 class CreateVec4Node: public UnaryVec4Node, public Creatable<CreateVec4Node>{
@@ -539,11 +472,8 @@ public:
         inputNames = {"x", "y", "z", "w"};
         outputNames = {"vec4"};
     }
-
+    int outputDimension() const override{return 4;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     }
 };
@@ -556,10 +486,8 @@ public:
         outputNames = {"x", "y", "z", "w"};
     };
 
+    int outputDimension() const override{return 4;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     }
 };
@@ -569,9 +497,6 @@ public:
     Vec4Norm(): UnaryVec4Node("", "len"){outputTypes[0] = FloatType::create();};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
         // TODO implement
     }
 };
@@ -585,13 +510,6 @@ class BinaryNode: public Node{
 public:
     BinaryNode(std::string_view header = "", std::string_view body = ""):
         Node(createFilledVec<T, Type>(2), {std::string(), std::string()}, createFilledVec<T, Type>(1), {std::string()}, header, body){};
-
-    virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
-    }
 };
 
 class PlusNode: public BinaryNode<FloatType>, public Creatable<PlusNode>{
@@ -599,10 +517,26 @@ public:
     PlusNode(): BinaryNode("", "+"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
+        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
+        assert(aSingle || bSingle || input[0].size() == input[0].size());
+        if(aSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][0] + input[input.size() / 2 + i][j];
+            }
+        }
+        else if(bSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] + input[input.size() / 2 + i][0];
+            }
+        }
+        else{
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] + input[input.size() / 2 + i][j];
+            }
+        }
     }
 };
 
@@ -611,10 +545,26 @@ public:
     MinusNode(): BinaryNode("", "-"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
+        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
+        assert(aSingle || bSingle || input[0].size() == input[0].size());
+        if(aSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][0] - input[input.size() / 2 + i][j];
+            }
+        }
+        else if(bSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] - input[input.size() / 2 + i][0];
+            }
+        }
+        else{
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] - input[input.size() / 2 + i][j];
+            }
+        }
     }
 };
 
@@ -623,10 +573,26 @@ public:
     MultiplicationNode(): BinaryNode("", "*"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
+        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
+        assert(aSingle || bSingle || input[0].size() == input[0].size());
+        if(aSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][0] * input[input.size() / 2 + i][j];
+            }
+        }
+        else if(bSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] * input[input.size() / 2 + i][0];
+            }
+        }
+        else{
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] * input[input.size() / 2 + i][j];
+            }
+        }
     }
 };
 
@@ -635,10 +601,26 @@ public:
     DivisionNode(): BinaryNode("", "/"){};
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
-    }
-    virtual void applyOperationInplaceCpu(std::vector<memory_view<float>>& inout) const override{
-        // TODO implement
+        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
+        assert(aSingle || bSingle || input[0].size() == input[0].size());
+        if(aSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][0] / input[input.size() / 2 + i][j];
+            }
+        }
+        else if(bSingle){
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] / input[input.size() / 2 + i][0];
+            }
+        }
+        else{
+            for(size_t i: irange(input.size() / 2)){
+                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                    output[i][j] = input[i][j] / input[input.size() / 2 + i][j];
+            }
+        }
     }
 };
 }

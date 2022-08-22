@@ -30,7 +30,7 @@ void DeriveWorkbench::show()
     ImGui::Begin("DeriveWorkbench", &active);
     ImGui::Dummy({});ImGui::SameLine(ImGui::GetWindowSize().x / 2);
     if(ImGui::Button("Execute Graph")){
-        std::cout << "Gotcha" << std::endl;
+        executeGraph();
     }
     nodes::SetCurrentEditor(_editorContext);
     nodes::Begin("DeriveWorkbench");
@@ -339,21 +339,71 @@ bool DeriveWorkbench::isInputPin(long pinId)
     return std::count(node.inputIds.begin(), node.inputIds.end(), pinId) > 0;
 }
 
+void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
+    auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
+    auto& [dataStorage, nodeInfos] = data;
+    // check cache for previous nodes, if not generated, generate
+    for(int i: irange(nodes[node].inputIds)){
+        if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
+            continue;
+        long linkId = pinToLinks[nodes[node].inputIds[i]][0];
+        long prevNodeId = linkToConnection[linkId].nodeAId;
+        if(nodeInfos.count(prevNodeId) == 0)
+            buildCacheRecursive(prevNodeId, data);
+    }
+    // check for in place data slot
+    std::vector<int> inplaceIndices;
+    for(long i: irange(nodes[node].inputIds)){
+        if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
+            continue;
+        long linkId = pinToLinks[nodes[node].inputIds[i]][0];
+        long prevNodeId = linkToConnection[linkId].nodeAId;
+        if(--data.nodeInfos[prevNodeId].copyCount == 0)
+            inplaceIndices.push_back(i);
+    }
+    // merging the data views for data processing
+    // input data
+    std::vector<deriveData::memory_view<float>> inputData;
+    for(long i: irange(nodes[node].inputIds)){
+        if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
+            continue;
+        long linkId = pinToLinks[nodes[node].inputIds[i]][0];
+        long prevNodeId = linkToConnection[linkId].nodeAId;
+        inputData.insert(inputData.end(), data.nodeInfos[prevNodeId].dataView.begin(), data.nodeInfos[prevNodeId].dataView.end());
+    }
+
+    // output data (first adding the inplace buffer, then creating missing buffer and adding them)
+    std::vector<deriveData::memory_view<float>> outputData;
+    for(int i: irange(inplaceIndices)){
+        long linkId = pinToLinks[nodes[node].inputIds[i]][0];
+        long prevNodeId = linkToConnection[linkId].nodeAId;
+        auto& prevNodeCache = nodeInfos[prevNodeId].dataView;
+        outputData.insert(outputData.end(), prevNodeCache.begin(), prevNodeCache.end());
+    }
+    size_t inputDataSize{};
+    if(inputData.size())
+        inputDataSize = inputData[0].size();
+    else
+        inputDataSize = nodes[node].node->inputTypes[0]->data()[0];
+    if(outputData.size() < nodes[node].node->outputDimension()){
+        int storageSize = data.dataStorage.size();
+        data.dataStorage.insert(data.dataStorage.end(), nodes[node].node->outputDimension() - outputData.size(), std::vector<float>(inputDataSize));
+        for(int i: irange(storageSize, data.dataStorage.size()))
+            outputData.push_back(data.dataStorage[i]);
+    }
+
+    // executin the node
+    nodes[node].node->applyOperationCpu(inputData, outputData);
+
+    // safing the cache and setting up the counts for the current data
+    for(int i: irange(nodes[node].outputIds))
+        data.nodeInfos[node].copyCount += pinToLinks[nodes[node].outputIds[i]].size();
+    data.nodeInfos[node].dataView = outputData;
+}
+
 void DeriveWorkbench::executeGraph() 
 {
     auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
-
-    auto getPreviousNodes = [&](long cur){
-        std::set<long> output;
-
-        // getting the direct predecessors to the current node
-        for(auto& [connection, link]: links){
-            if(connection.nodeBId == cur)
-                output.insert(connection.nodeAId);
-        }
-
-        return output;  
-    };
 
     // checkfor output nodes
     std::set<long> outputNodes{};
@@ -371,24 +421,12 @@ void DeriveWorkbench::executeGraph()
         return;
     }
 
-    // node info is used to keep track of execution and to cache output data
-    using data_block = std::vector<deriveData::memory_view<float>>;
-    struct NodeInfo{
-        std::vector<data_block> prevDataViews;
-        data_block dataView;
-        std::vector<std::vector<float>> storage;
-        int waitCount;          // count to indicate how many parents have to be evaluated (inserted constants are ignored)
-        int copyCount;          // count to indicate how often the output of the node has to be copied until consumed
-    };
-    std::map<long, NodeInfo> nodeInfos{};
+    RecursionData data;
+    for(auto node: outputNodes)
+        buildCacheRecursive(node, data);
 
-    // now executing for each output node the graph from the back and caching already calculated data in the node info map
-    for(auto node: outputNodes){
-        auto pred_nodes = getPreviousNodes(node);
-        while(pred_nodes.size()){
-            // getting a random previous node for execution (TODO: make better)
-        }
-    }
+    // wiht the execution of all output nodes all changes are already applied
+    std::cout << "Amount of data allocations: " << data.dataStorage.size() << std::endl;
 }
 
 DeriveWorkbench::DeriveWorkbench() 
