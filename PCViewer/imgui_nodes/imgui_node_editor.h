@@ -342,7 +342,8 @@ ImVec2 GetScreenSize();
 ImVec2 ScreenToCanvas(const ImVec2& pos);
 ImVec2 CanvasToScreen(const ImVec2& pos);
 
-
+bool BeginNodeCombo(const char* label, const char* preview_value, ImGuiComboFlags flags = 0);
+void EndNodeCombo();
 
 
 

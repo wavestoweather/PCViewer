@@ -198,7 +198,7 @@ public:
     std::string_view datasetId;
 
     DatasetInputNode(std::string_view datasetID = {""}):
-        InputNode(createFilledVec<FloatType, Type>(1), {std::string()}, createFilledVec<FloatType, Type>(1),{std::string()}, "", ""), datasetId(datasetID)
+        InputNode(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
     {
         name = "Dataset Input";
     }
@@ -271,12 +271,12 @@ public:
     };
 };
 
-class DatasetOutputNode: public OutputNode, public Creatable<DatasetInputNode>{
+class DatasetOutputNode: public OutputNode, public Creatable<DatasetOutputNode>{
 public:
     std::string_view datasetId;
 
     DatasetOutputNode(std::string_view datasetID = {""}):
-        OutputNode(createFilledVec<FloatType, Type>(1), {std::string()}, createFilledVec<FloatType, Type>(1),{std::string()}, "", ""), datasetId(datasetID)
+        OutputNode(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
     {
         name = "Dataset Output";
     }

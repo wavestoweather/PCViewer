@@ -47,7 +47,10 @@ void DeriveWorkbench::show()
     auto cursorTopLeft = ImGui::GetCursorStartPos();
 
     nodes::Utilities::BlueprintNodeBuilder builder; // created without a header texture as not needed
+    if(nodes.count(0))
+        nodes.erase(0);
     for(auto& [id, nodePins]: nodes){
+        assert(id > 0);
         auto& node = nodePins.node;
         builder.Begin(id);
         // header
@@ -70,7 +73,7 @@ void DeriveWorkbench::show()
                 ImGui::TextUnformatted(node->inputNames[i].c_str());
                 ImGui::Spring(0);
             }
-            if(!isLinked){
+            if(!isLinked && dynamic_cast<deriveData::OutputNode*>(node.get()) == nullptr){
                 auto memoryView = node->inputTypes[i]->data();
                 if(memoryView.size()){
                     switch(memoryView.size()){
@@ -92,9 +95,11 @@ void DeriveWorkbench::show()
         builder.Middle();
         if(deriveData::DatasetInputNode* datasetInput = dynamic_cast<deriveData::DatasetInputNode*>(node.get())){
             ImGui::Spring(1, 0);
-            if(ImGui::BeginCombo("", datasetInput->datasetId.data())){
+            ImGui::PushItemWidth(150);
+            if(nodes::BeginNodeCombo("", datasetInput->datasetId.data())){
                 for(const auto& ds: *_datasets){
                     if(ImGui::MenuItem(ds.name.c_str())){
+                        datasetInput->datasetId = ds.name;
                         // setting up the node outputs (delete all connections for the out pins, then recreat out pins)
                         // delet old links
                         for(long outId: nodePins.outputIds){
@@ -102,6 +107,8 @@ void DeriveWorkbench::show()
                                 _executionGraphs[0].removeLink(pinToLinks[outId][0]);
                         }
                         // adding new output type for each variable and assigning the type
+                        for(long pin: nodePins.outputIds)
+                            pinToNodes.erase(pin);
                         datasetInput->outputNames.clear();
                         datasetInput->outputTypes.clear();
                         nodePins.outputIds.clear();
@@ -109,18 +116,21 @@ void DeriveWorkbench::show()
                             datasetInput->outputNames.push_back(a.name);
                             datasetInput->outputTypes.push_back(deriveData::FloatType::create());
                             nodePins.outputIds.push_back(_curId++);
+                            pinToNodes[nodePins.outputIds.back()] = id;
                         }
                     }
                 }
-
-                ImGui::EndCombo();
+                nodes::EndNodeCombo();
             }
+            ImGui::PopItemWidth();
         }
         if(deriveData::DatasetOutputNode* datasetOutput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
             ImGui::Spring(1, 0);
-            if(ImGui::BeginCombo("", datasetOutput->datasetId.data())){
+            ImGui::PushItemWidth(150);
+            if(nodes::BeginNodeCombo("", datasetOutput->datasetId.data())){
                 for(const auto& ds: *_datasets){
                     if(ImGui::MenuItem(ds.name.c_str())){
+                        datasetOutput->datasetId = ds.name;
                         // setting up the node outputs (delete all connections for the out pins, then recreat out pins)
                         // delet old links
                         for(long outId: nodePins.inputIds){
@@ -128,6 +138,8 @@ void DeriveWorkbench::show()
                                 _executionGraphs[0].removeLink(pinToLinks[outId][0]);
                         }
                         // adding new output type for each variable and assigning the type
+                        for(long pin: nodePins.inputIds)
+                            pinToNodes.erase(pin);
                         datasetOutput->inputNames.clear();
                         datasetOutput->inputTypes.clear();
                         nodePins.inputIds.clear();
@@ -135,12 +147,13 @@ void DeriveWorkbench::show()
                             datasetOutput->inputNames.push_back(a.name);
                             datasetOutput->inputTypes.push_back(deriveData::FloatType::create());
                             nodePins.inputIds.push_back(_curId++);
+                            pinToNodes[nodePins.inputIds.back()] = id;
                         }
                     }
                 }
-
-                ImGui::EndCombo();
+                nodes::EndNodeCombo();
             }
+            ImGui::PopItemWidth();
         }
         ImGui::Spring(1, 0);
         ImGui::TextUnformatted(node->middleText.c_str());
@@ -306,7 +319,7 @@ void DeriveWorkbench::show()
 
         std::unique_ptr<deriveData::Node> node{};
         for(const auto& [name, entry]: deriveData::NodesRegistry::nodes){
-            if(prevType && typeid(*prevType) != typeid(*entry.prototype->inputTypes[0]))
+            if(prevType && (entry.prototype->inputTypes.empty() || typeid(*prevType) != typeid(*entry.prototype->inputTypes[0])))
                 continue;
             if(ImGui::MenuItem(name.c_str())){
                 node = entry.create();
