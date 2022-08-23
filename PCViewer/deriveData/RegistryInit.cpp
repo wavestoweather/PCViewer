@@ -7,6 +7,7 @@ REGISTER_NODE(ZeroVectorNode);
 REGISTER_NODE(OneVectorNode);
 REGISTER_NODE(RandomVectorNode);
 REGISTER_NODE(PrintVectorNode);
+REGISTER_NODE(DatasetOutputNode);
 REGISTER_NODE(MultiplicationInverseNode);
 REGISTER_NODE(AdditionInverseNode);
 REGISTER_NODE(NormalizationNode);

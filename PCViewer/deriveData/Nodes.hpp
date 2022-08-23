@@ -155,8 +155,6 @@ public:
         name(header),
         middleText(mt){}
 
-
-    virtual bool isOutputNode() const {return false;};
     virtual int outputDimension() const {return 1;};
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input, std::vector<memory_view<float>>& output) const = 0;
 };
@@ -177,29 +175,37 @@ struct NodesRegistry{
 // special nodes
 // ------------------------------------------------------------------------------------------
 
-class DatasetInputNode: public Node, public Creatable<DatasetInputNode>{
+class InputNode: public Node{
 public:
-    const std::string_view datasetId;
-    const std::list<DataSet>& datasets;
+    InputNode(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
+        std::vector<std::string>&& inputNames = {},
+        std::vector<std::unique_ptr<Type>>&& outputTypes = {},
+        std::vector<std::string>&& outputNames = {}, 
+        std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
+};
 
-    DatasetInputNode(std::string_view datasetId = {}, const std::list<DataSet>& datasets = {}, const std::vector<Attribute>& attributes = {}):
-        Node(createFilledVec<FloatType, Type>(1), {std::string()}, createFilledVec<FloatType, Type>(1),{std::string()}, "", ""), datasets(datasets)
+class OutputNode: public Node{
+public:
+    OutputNode(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
+        std::vector<std::string>&& inputNames = {},
+        std::vector<std::unique_ptr<Type>>&& outputTypes = {},
+        std::vector<std::string>&& outputNames = {}, 
+        std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
+};
+
+class DatasetInputNode: public InputNode, public Creatable<DatasetInputNode>{
+public:
+    std::string_view datasetId;
+
+    DatasetInputNode(std::string_view datasetID = {""}):
+        InputNode(createFilledVec<FloatType, Type>(1), {std::string()}, createFilledVec<FloatType, Type>(1),{std::string()}, "", ""), datasetId(datasetID)
     {
-        if(datasets.empty())
-            return;
-        const auto& d = getDataset(datasets, datasetId);
-            return;
-        for(int i: irange(d.data.columns.size())){
-            outputTypes.push_back(FloatType::create());
-            outputNames.push_back(attributes[i].originalName);
-        }
-        name = "Input data: " + d.name;
+        name = "Dataset Input";
     }
 
     virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
-        // TODO implement
+        // Nothing to do. The data is simply forwarded via a view
     };
-    bool isOutputNode() const override {return true;};
 };
 
 class DerivationNode: public Node{
@@ -208,9 +214,9 @@ public:
 };
 
 
-class ZeroVectorNode: public Node, public Creatable<ZeroVectorNode>{
+class ZeroVectorNode: public InputNode, public Creatable<ZeroVectorNode>{
 public:
-    ZeroVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
+    ZeroVectorNode(): InputNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         assert(output[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
@@ -219,9 +225,9 @@ public:
     };
 };
 
-class OneVectorNode: public Node, public Creatable<OneVectorNode>{
+class OneVectorNode: public InputNode, public Creatable<OneVectorNode>{
 public:
-    OneVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
+    OneVectorNode(): InputNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         assert(output[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
@@ -230,9 +236,9 @@ public:
     };
 };
 
-class RandomVectorNode: public Node, public Creatable<RandomVectorNode>{
+class RandomVectorNode: public InputNode, public Creatable<RandomVectorNode>{
 public:
-    RandomVectorNode(): Node(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
+    RandomVectorNode(): InputNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         assert(output[0].size() == inputTypes[0]->data()[0]);    // enough memory has to be allocated before this call is made..
@@ -241,9 +247,9 @@ public:
     };
 };
 
-class PrintVectorNode: public Node, public Creatable<PrintVectorNode>{
+class PrintVectorNode: public OutputNode, public Creatable<PrintVectorNode>{
 public:
-    PrintVectorNode(): Node(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){};
+    PrintVectorNode(): OutputNode(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){};
 
     void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
         // prints at max the first 50 and last 50 items of a vector
@@ -263,9 +269,21 @@ public:
         }
         std::cout << "]" << std::endl;
     };
+};
 
+class DatasetOutputNode: public OutputNode, public Creatable<DatasetInputNode>{
+public:
+    std::string_view datasetId;
 
-    bool isOutputNode() const override {return true;};
+    DatasetOutputNode(std::string_view datasetID = {""}):
+        OutputNode(createFilledVec<FloatType, Type>(1), {std::string()}, createFilledVec<FloatType, Type>(1),{std::string()}, "", ""), datasetId(datasetID)
+    {
+        name = "Dataset Output";
+    }
+
+    virtual void applyOperationCpu(const std::vector<memory_view<float>>& input ,std::vector<memory_view<float>>& output) const override{
+        // Nothing to do. The data has to be moved outside of the node as we need teh vector storing the data to move the data into the dataset
+    };
 };
 
 // ------------------------------------------------------------------------------------------
@@ -527,7 +545,7 @@ public:
         }
         else if(bSingle){
             for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                for(size_t j: irange(input[i].size()))
                     output[i][j] = input[i][j] + input[input.size() / 2 + i][0];
             }
         }
@@ -555,7 +573,7 @@ public:
         }
         else if(bSingle){
             for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                for(size_t j: irange(input[i].size()))
                     output[i][j] = input[i][j] - input[input.size() / 2 + i][0];
             }
         }
@@ -583,7 +601,7 @@ public:
         }
         else if(bSingle){
             for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                for(size_t j: irange(input[i].size()))
                     output[i][j] = input[i][j] * input[input.size() / 2 + i][0];
             }
         }
@@ -611,7 +629,7 @@ public:
         }
         else if(bSingle){
             for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
+                for(size_t j: irange(input[i].size()))
                     output[i][j] = input[i][j] / input[input.size() / 2 + i][0];
             }
         }

@@ -1,7 +1,9 @@
 #include "DeriveWorkbench.hpp"
 #include "../imgui/imgui.h"
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include "../imgui/imgui_internal.h"
 #include "../imgui_nodes/imgui_node_editor.h"
+#include "../imgui_nodes/imgui_node_editor_internal.h"
 #include "../imgui_nodes/utilities/builders.h"
 #include "Nodes.hpp"
 #include "ExecutionGraph.hpp"
@@ -85,8 +87,61 @@ void DeriveWorkbench::show()
             builder.EndInput();
         }
 
+
         // middle
         builder.Middle();
+        if(deriveData::DatasetInputNode* datasetInput = dynamic_cast<deriveData::DatasetInputNode*>(node.get())){
+            ImGui::Spring(1, 0);
+            if(ImGui::BeginCombo("", datasetInput->datasetId.data())){
+                for(const auto& ds: *_datasets){
+                    if(ImGui::MenuItem(ds.name.c_str())){
+                        // setting up the node outputs (delete all connections for the out pins, then recreat out pins)
+                        // delet old links
+                        for(long outId: nodePins.outputIds){
+                            while(pinToLinks.count(outId) && pinToLinks[outId].size())
+                                _executionGraphs[0].removeLink(pinToLinks[outId][0]);
+                        }
+                        // adding new output type for each variable and assigning the type
+                        datasetInput->outputNames.clear();
+                        datasetInput->outputTypes.clear();
+                        nodePins.outputIds.clear();
+                        for(const auto& a: ds.attributes){
+                            datasetInput->outputNames.push_back(a.name);
+                            datasetInput->outputTypes.push_back(deriveData::FloatType::create());
+                            nodePins.outputIds.push_back(_curId++);
+                        }
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+        }
+        if(deriveData::DatasetOutputNode* datasetOutput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
+            ImGui::Spring(1, 0);
+            if(ImGui::BeginCombo("", datasetOutput->datasetId.data())){
+                for(const auto& ds: *_datasets){
+                    if(ImGui::MenuItem(ds.name.c_str())){
+                        // setting up the node outputs (delete all connections for the out pins, then recreat out pins)
+                        // delet old links
+                        for(long outId: nodePins.inputIds){
+                            while(pinToLinks.count(outId) && pinToLinks[outId].size())
+                                _executionGraphs[0].removeLink(pinToLinks[outId][0]);
+                        }
+                        // adding new output type for each variable and assigning the type
+                        datasetOutput->inputNames.clear();
+                        datasetOutput->inputTypes.clear();
+                        nodePins.inputIds.clear();
+                        for(const auto& a: ds.attributes){
+                            datasetOutput->inputNames.push_back(a.name);
+                            datasetOutput->inputTypes.push_back(deriveData::FloatType::create());
+                            nodePins.inputIds.push_back(_curId++);
+                        }
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+        }
         ImGui::Spring(1, 0);
         ImGui::TextUnformatted(node->middleText.c_str());
         ImGui::Spring(1, 0);
@@ -115,6 +170,7 @@ void DeriveWorkbench::show()
         nodes::Link(link.Id, link.pinAId, link.pinBId, link.color, 2);
 
     // handle creation action
+    bool thisFrameCreate{false};
     if(!_createNewNode){
     if(nodes::BeginCreate()){
         nodes::PinId a, b;
@@ -124,6 +180,7 @@ void DeriveWorkbench::show()
             if(nodes::AcceptNewItem()){
                 _createNewNode = true;
                 _newLinkPinId = a.Get();
+                thisFrameCreate = true;
                 nodes::Suspend();
                 ImGui::OpenPopup("Create New Node");
                 nodes::Resume();
@@ -158,22 +215,7 @@ void DeriveWorkbench::show()
                 else{
                     showLabel("+ Create Link", {32, 45, 32, 180});
                     if(nodes::AcceptNewItem()){     // add check for validity
-                        // adding the link to the links list
-                        pinToLinks[a.Get()].push_back(_curId);
-                        // unlinking links to the new input
-                        if(pinToLinks[b.Get()].size()){
-                            long id = pinToLinks[b.Get()][0];
-                            auto& c = linkToConnection[id];
-                            auto& aLinks = pinToLinks[links[c].pinAId.Get()];
-                            aLinks.erase(std::find(aLinks.begin(), aLinks.end(), id));
-                            auto& bLinks = pinToLinks[links[c].pinBId.Get()];
-                            bLinks.erase(std::find(bLinks.begin(), bLinks.end(), id));
-                            links.erase(c);
-                            linkToConnection.erase(id);
-                        }  
-                        pinToLinks[b.Get()] = {_curId};
-                        linkToConnection[_curId] = connection;
-                        links[connection] = {_curId++,a,b, nodes[pinToNodes[a.Get()]].node->outputTypes[connection.nodeAAttribute]->color()};
+                        _executionGraphs[0].addLink(_curId, a.Get(), b.Get(), nodes[pinToNodes[a.Get()]].node->outputTypes[connection.nodeAAttribute]->color());
                     }
                 } 
             }
@@ -181,38 +223,26 @@ void DeriveWorkbench::show()
     }
     nodes::EndCreate();
     }
-    //else
-    //    _newLinkPinId = 0;
 
     // handle deletion action
     if(nodes::BeginDelete()){
         nodes::LinkId d{};
         while(nodes::QueryDeletedLink(&d)){
             if(nodes::AcceptDeletedItem()){
-                Link::Connection c = linkToConnection[d.Get()];
-                linkToConnection.erase(d.Get());
-                auto& l = links[c];
-                auto& aLinks = pinToLinks[l.pinAId.Get()];
-                aLinks.erase(std::find(aLinks.begin(), aLinks.end(), l.Id.Get()));
-                auto& bLinks = pinToLinks[l.pinBId.Get()];
-                bLinks.erase(std::find(bLinks.begin(), bLinks.end(), l.Id.Get()));
-                links.erase(c);
+                _executionGraphs[0].removeLink(d.Get());
             }
         }
         nodes::NodeId n{};
         while(nodes::QueryDeletedNode(&n)){
             if(nodes::AcceptDeletedItem()){
-                for(auto& pin: nodes[n.Get()].inputIds)
-                    pinToNodes.erase(pin);
-                for(auto & pin: nodes[n.Get()].outputIds)
-                    pinToNodes.erase(pin);
-                nodes.erase(n.Get());
+                _executionGraphs[0].removeNode(n.Get());
             }
         }
     }
     nodes::EndDelete();
 
     // dialogue for node creation
+    //if(thisFrameCreate)
     _popupPos = ImGui::GetMousePos();
     nodes::Suspend();
     nodes::NodeId n{};
@@ -234,7 +264,9 @@ void DeriveWorkbench::show()
         ImGui::OpenPopup("Create New Node");
         _createNewNode = false;
     }
+    nodes::Resume();
 
+    nodes::Suspend();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {8,8});
     if(ImGui::BeginPopup("Node Context Menu")){
         ImGui::TextUnformatted("Node Context Menu");
@@ -294,16 +326,7 @@ void DeriveWorkbench::show()
 
             if(_newLinkPinId != 0){
                 // adding the link to the links list
-                Link::Connection connection{};
-                connection.nodeAId = _executionGraphs[0].pinToNodes[_newLinkPinId];
-                connection.nodeBId = nId;
-                auto& nodeAOutput = nodes[pinToNodes[_newLinkPinId]].outputIds;
-                connection.nodeAAttribute = std::find_if(nodeAOutput.begin(), nodeAOutput.end(), [&](int i){return i == _newLinkPinId;}) - nodeAOutput.begin();
-                connection.nodeBAttribute = 0;
-                pinToLinks[_newLinkPinId].push_back(_curId);
-                pinToLinks[nodes[nId].inputIds[0]] = {_curId};
-                linkToConnection[_curId] = connection;
-                links[connection] = {_curId++, _newLinkPinId, nodes[nId].inputIds[0], nodes[connection.nodeAId].node->outputTypes[connection.nodeAAttribute]->color()};
+                _executionGraphs[0].addLink(_curId, _newLinkPinId, nodes[nId].inputIds[0], nodes[nId].node->inputTypes[0]->color());
                 _newLinkPinId = 0;
             }
         }
@@ -339,9 +362,24 @@ bool DeriveWorkbench::isInputPin(long pinId)
     return std::count(node.inputIds.begin(), node.inputIds.end(), pinId) > 0;
 }
 
+std::set<long> DeriveWorkbench::getActiveLinksRecursive(long node) 
+{
+    std::set<long> output;
+    auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
+    for(int i: nodes[node].inputIds){
+        if(pinToLinks.count(i) && pinToLinks[i].size()){
+            output.insert(i);
+            long prefNode = linkToConnection[pinToLinks[i][0]].nodeAId;
+            auto prefSet = getActiveLinksRecursive(prefNode);
+            output.insert(prefSet.begin(), prefSet.end());
+        }
+    }
+    return output;
+}
+
 void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
-    auto& [dataStorage, nodeInfos] = data;
+    auto& [activeLinks ,dataStorage, nodeInfos] = data;
     // check cache for previous nodes, if not generated, generate
     for(int i: irange(nodes[node].inputIds)){
         if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
@@ -358,33 +396,39 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
             continue;
         long linkId = pinToLinks[nodes[node].inputIds[i]][0];
         long prevNodeId = linkToConnection[linkId].nodeAId;
-        if(--data.nodeInfos[prevNodeId].copyCount == 0)
+        long prevNodeOutInd = linkToConnection[linkId].nodeAAttribute;
+        if(--data.nodeInfos[prevNodeId].copyCounts[prevNodeOutInd] == 0)
             inplaceIndices.push_back(i);
     }
     // merging the data views for data processing
     // input data
+    long inputDataSize{-1};
     std::vector<deriveData::memory_view<float>> inputData;
     for(long i: irange(nodes[node].inputIds)){
-        if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
-            continue;
-        long linkId = pinToLinks[nodes[node].inputIds[i]][0];
-        long prevNodeId = linkToConnection[linkId].nodeAId;
-        inputData.insert(inputData.end(), data.nodeInfos[prevNodeId].dataView.begin(), data.nodeInfos[prevNodeId].dataView.end());
+        if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty()){   // pin not connected, use inserted value
+            if(dynamic_cast<deriveData::InputNode*>(nodes[node].node.get()))
+                inputDataSize = nodes[node].node->inputTypes[i]->data()[0];
+            inputData.push_back(nodes[node].node->inputTypes[i]->data());
+        }
+        else{
+            long linkId = pinToLinks[nodes[node].inputIds[i]][0];
+            long prevNodeId = linkToConnection[linkId].nodeAId;
+            inputData.insert(inputData.end(), data.nodeInfos[prevNodeId].dataView.begin(), data.nodeInfos[prevNodeId].dataView.end());
+        }
+    }
+    if(inputDataSize < 0){
+        for(auto& data: inputData)
+            inputDataSize = std::max<long>(inputDataSize, data.size());
     }
 
     // output data (first adding the inplace buffer, then creating missing buffer and adding them)
     std::vector<deriveData::memory_view<float>> outputData;
     for(int i: irange(inplaceIndices)){
-        long linkId = pinToLinks[nodes[node].inputIds[i]][0];
+        long linkId = pinToLinks[nodes[node].inputIds[inplaceIndices[i]]][0];
         long prevNodeId = linkToConnection[linkId].nodeAId;
         auto& prevNodeCache = nodeInfos[prevNodeId].dataView;
         outputData.insert(outputData.end(), prevNodeCache.begin(), prevNodeCache.end());
     }
-    size_t inputDataSize{};
-    if(inputData.size())
-        inputDataSize = inputData[0].size();
-    else
-        inputDataSize = nodes[node].node->inputTypes[0]->data()[0];
     if(outputData.size() < nodes[node].node->outputDimension()){
         int storageSize = data.dataStorage.size();
         data.dataStorage.insert(data.dataStorage.end(), nodes[node].node->outputDimension() - outputData.size(), std::vector<float>(inputDataSize));
@@ -396,8 +440,12 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     nodes[node].node->applyOperationCpu(inputData, outputData);
 
     // safing the cache and setting up the counts for the current data
-    for(int i: irange(nodes[node].outputIds))
-        data.nodeInfos[node].copyCount += pinToLinks[nodes[node].outputIds[i]].size();
+    data.nodeInfos[node].copyCounts.resize(nodes[node].outputIds.size());
+    for(int i: irange(nodes[node].outputIds)){
+        data.nodeInfos[node].copyCounts[i] = pinToLinks[nodes[node].outputIds[i]].size();
+        if(deriveData::DatasetInputNode* datasetInput = dynamic_cast<deriveData::DatasetInputNode*>(nodes[node].node.get()))
+            ++data.nodeInfos[node].copyCounts[i];   // make the dataset input not movable
+    }
     data.nodeInfos[node].dataView = outputData;
 }
 
@@ -408,7 +456,7 @@ void DeriveWorkbench::executeGraph()
     // checkfor output nodes
     std::set<long> outputNodes{};
     for(auto& [id, nodePins]: nodes){
-        if(nodePins.node->isOutputNode())
+        if(dynamic_cast<deriveData::OutputNode*>(nodePins.node.get()))
             outputNodes.insert(id);
     }
     if(outputNodes.empty()){
@@ -421,7 +469,11 @@ void DeriveWorkbench::executeGraph()
         return;
     }
 
-    RecursionData data;
+    RecursionData data{};
+    for(auto node: outputNodes){
+        auto activeLinks = getActiveLinksRecursive(node);
+        data.activeLinks.insert(activeLinks.begin(), activeLinks.end());
+    }
     for(auto node: outputNodes)
         buildCacheRecursive(node, data);
 
@@ -429,7 +481,8 @@ void DeriveWorkbench::executeGraph()
     std::cout << "Amount of data allocations: " << data.dataStorage.size() << std::endl;
 }
 
-DeriveWorkbench::DeriveWorkbench() 
+DeriveWorkbench::DeriveWorkbench(std::list<DataSet>* datasets):
+    _datasets(datasets)
 {
     _editorContext = ax::NodeEditor::CreateEditor();
     _executionGraphs.resize(1);

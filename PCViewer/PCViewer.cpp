@@ -7893,7 +7893,7 @@ int main(int, char**)
 	}
 
 	{// derive workbench
-		deriveWorkbench = std::make_unique<DeriveWorkbench>();
+		deriveWorkbench = std::make_unique<DeriveWorkbench>(&g_PcPlotDataSets);
 	}
 
 	{// clustering workbench

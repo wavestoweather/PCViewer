@@ -16,6 +16,9 @@ struct Link{
         long nodeAAttribute;
         long nodeBAttribute;
 
+        bool operator==(const Connection& c) const{
+            return nodeAId == c.nodeAId && nodeBId == c.nodeBId && nodeAAttribute == c.nodeAAttribute && nodeBAttribute == c.nodeBAttribute;
+        }
         bool operator<(const Connection& c) const{
             return nodeAId < c.nodeAId || (nodeAId == c.nodeAId && nodeBId < c.nodeBId) || 
             (nodeBId == c.nodeBId && nodeAAttribute < c.nodeAAttribute) || (nodeAAttribute == c.nodeAAttribute && nodeBAttribute < c.nodeBAttribute); 
@@ -48,6 +51,68 @@ struct ExecutionGraph{
     std::map<Link::Connection, Link> links;             // maps which map
     std::map<long, Link::Connection> linkToConnection;  // maps a link id to the connection
     std::map<long, std::vector<long>> pinToLinks;       // maps pin ids to a vector of all link ids that are connected
+
+    void addNode(long& curId, std::unique_ptr<deriveData::Node>&& node){
+        long newId = curId++;
+        nodes.insert({newId++, NodePins(std::move(node), &curId)});
+        const auto& curNode = nodes[newId];
+        for(long i: curNode.inputIds)
+            pinToNodes[i] = newId;
+        for(long i: curNode.outputIds)
+            pinToNodes[i] = newId;
+    }
+    void removeNode(long nodeId){
+        const auto& curNode = nodes[nodeId];
+        for(long i: curNode.inputIds){
+            while(pinToLinks.count(i) > 0 && pinToLinks[i].size()){
+                removeLink(pinToLinks[i][0]);
+            }
+            pinToLinks.erase(i);
+            pinToNodes.erase(i);
+        }
+        for(long i: curNode.outputIds){
+            while(pinToLinks.count(i) > 0 && pinToLinks[i].size()){
+                removeLink(pinToLinks[i][0]);
+            }
+            pinToLinks.erase(i);
+            pinToNodes.erase(i);
+        }
+        nodes.erase(nodeId);
+    }
+    void addLink(long& curId, long pinAId, long pinBId, const ImVec4& color = {1.f, 1.f, 1.f, 1.f}){
+        Link::Connection c{};
+        c.nodeAId = pinToNodes[pinAId];
+        c.nodeBId = pinToNodes[pinBId];
+        c.nodeAAttribute = std::find(nodes[c.nodeAId].outputIds.begin(), nodes[c.nodeAId].outputIds.end(), pinAId) - nodes[c.nodeAId].outputIds.begin();
+        c.nodeBAttribute = std::find(nodes[c.nodeBId].inputIds.begin(), nodes[c.nodeBId].inputIds.end(), pinBId) - nodes[c.nodeBId].inputIds.begin();
+        if(links.count(c))  // link already exists, nothing to do
+            return;
+        long linkId = curId++;
+        links[c] = {linkId, pinAId, pinBId, color};
+        linkToConnection[linkId] = c;
+        if(pinToLinks.count(pinBId) && pinToLinks[pinBId].size())
+            removeLink(pinToLinks[pinBId][0]);
+        pinToLinks[pinAId].push_back(linkId);
+        pinToLinks[pinBId] = {linkId};
+    }
+    void removeLink(long link){
+        const auto& connection = linkToConnection[link];
+        const auto& linkRef = links[connection];
+        if(pinToLinks.count(linkRef.pinAId.Get()) > 0 && pinToLinks[linkRef.pinAId.Get()].size()){
+            auto& mappedLinks = pinToLinks[linkRef.pinAId.Get()];
+            mappedLinks.erase(std::find(mappedLinks.begin(), mappedLinks.end(), link));
+            if(mappedLinks.empty())
+                pinToLinks.erase(linkRef.pinAId.Get());
+        }
+        if(pinToLinks.count(linkRef.pinBId.Get()) > 0 && pinToLinks[linkRef.pinBId.Get()].size()){
+            auto& mappedLinks = pinToLinks[linkRef.pinBId.Get()];
+            mappedLinks.erase(std::find(mappedLinks.begin(), mappedLinks.end(), link));
+            if(mappedLinks.empty())
+                pinToLinks.erase(linkRef.pinBId.Get());
+        }
+        links.erase(connection);
+        linkToConnection.erase(link);
+    }
 
     bool hasCircularConnections() const{
         std::map<long, std::set<long>> connectedNodes;     // stores for each node id to which node id it connects

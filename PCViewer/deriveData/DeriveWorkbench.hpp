@@ -20,7 +20,7 @@ public:
         "Gpu"
     };
 
-    DeriveWorkbench();
+    DeriveWorkbench(std::list<DataSet>* datasets);
     ~DeriveWorkbench();
 
     void show() override;
@@ -29,6 +29,8 @@ public:
 
 
 private:
+    std::list<DataSet>* _datasets{};
+
     ax::NodeEditor::EditorContext* _editorContext{};
     std::vector<ExecutionGraph> _executionGraphs{};
 
@@ -43,14 +45,15 @@ private:
     int _contextLinkId{};
 
     bool isInputPin(long pinId);
+    std::set<long> getActiveLinksRecursive(long node);
     void executeGraph();
     struct RecursionData{
-        std::vector<std::vector<float>> dataStorage;
         struct NodeInfo{
             std::vector<deriveData::memory_view<float>> dataView;
-            int waitCount;          // count to indicate how many parents have to be evaluated (inserted constants are ignored)
-            int copyCount;          // count to indicate how often the output of the node has to be copied until consumed
+            std::vector<int> copyCounts;          // count to indicate how often the output of the node has to be copied until consumed
         };
+        std::set<long> activeLinks{};
+        std::vector<std::vector<float>> dataStorage{};
         std::map<long, NodeInfo> nodeInfos{};
     };
     void buildCacheRecursive(long node, RecursionData& data);
