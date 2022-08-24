@@ -20,8 +20,15 @@ struct Link{
             return nodeAId == c.nodeAId && nodeBId == c.nodeBId && nodeAAttribute == c.nodeAAttribute && nodeBAttribute == c.nodeBAttribute;
         }
         bool operator<(const Connection& c) const{
-            return nodeAId < c.nodeAId || (nodeAId == c.nodeAId && nodeBId < c.nodeBId) || 
-            (nodeBId == c.nodeBId && nodeAAttribute < c.nodeAAttribute) || (nodeAAttribute == c.nodeAAttribute && nodeBAttribute < c.nodeBAttribute); 
+            const uint32_t *t = reinterpret_cast<const uint32_t*>(this);
+            const uint32_t *o = reinterpret_cast<const uint32_t*>(&c);
+            for(int i: irange(sizeof(Connection) / sizeof(*t))){
+                if(t[i] < o[i])
+                    return true;
+                if(t[i] > o[i])
+                    return false;
+            }
+            return false;
         }
     };
 };
@@ -80,6 +87,7 @@ struct ExecutionGraph{
         nodes.erase(nodeId);
     }
     void addLink(long& curId, long pinAId, long pinBId, const ImVec4& color = {1.f, 1.f, 1.f, 1.f}){
+        assert(pinAId && pinBId);
         Link::Connection c{};
         c.nodeAId = pinToNodes[pinAId];
         c.nodeBId = pinToNodes[pinBId];
@@ -88,12 +96,15 @@ struct ExecutionGraph{
         if(links.count(c))  // link already exists, nothing to do
             return;
         long linkId = curId++;
-        links[c] = {linkId, pinAId, pinBId, color};
-        linkToConnection[linkId] = c;
+        assert(linkId);
         if(pinToLinks.count(pinBId) && pinToLinks[pinBId].size())
             removeLink(pinToLinks[pinBId][0]);
+        links[c] = {linkId, pinAId, pinBId, color};
+        linkToConnection[linkId] = c;
         pinToLinks[pinAId].push_back(linkId);
         pinToLinks[pinBId] = {linkId};
+        assert(links.count(c));
+        assert(links[c].Id.Get() && links[c].pinAId.Get() && links[c].pinBId.Get());
     }
     void removeLink(long link){
         const auto& connection = linkToConnection[link];
