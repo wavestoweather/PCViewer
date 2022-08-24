@@ -69,10 +69,16 @@ void DeriveWorkbench::show()
             bool isLinked = pinToLinks[nodePins.inputIds[i]].size() > 0;
             ax::Widgets::Icon({pinIconSize, pinIconSize}, node->inputTypes[i]->iconType(), isLinked, node->inputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
             ImGui::Spring(0);
-            if(node->inputNames[i].size()){
+            if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())){
+                if(variableInput->minNodes > nodePins.inputIds.size() && ImGui::Button(("X##p" + std::to_string(nodePins.inputIds[i])).c_str())){
+                    _executionGraphs[0].removePin(nodePins.inputIds[i], true);
+                }
+            }
+            else if(node->inputNames[i].size()){
                 ImGui::TextUnformatted(node->inputNames[i].c_str());
                 ImGui::Spring(0);
             }
+
             if(!isLinked && dynamic_cast<deriveData::OutputNode*>(node.get()) == nullptr){
                 auto memoryView = node->inputTypes[i]->data();
                 if(memoryView.size()){
@@ -89,6 +95,10 @@ void DeriveWorkbench::show()
             ImGui::PopStyleVar();
             builder.EndInput();
         }
+        if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())) 
+            if(nodePins.inputIds.size() < variableInput->maxNodes && ImGui::Button("Add Pin")){
+                _executionGraphs[0].addPin(_curId, id, std::to_string(nodePins.inputIds.size()), deriveData::FloatType::create(), true);
+            }
 
 
         // middle
@@ -100,24 +110,12 @@ void DeriveWorkbench::show()
                 for(const auto& ds: *_datasets){
                     if(ImGui::MenuItem(ds.name.c_str())){
                         datasetInput->datasetId = ds.name;
-                        // setting up the node outputs (delete all connections for the out pins, then recreat out pins)
-                        // delet old links
-                        for(long outId: nodePins.outputIds){
-                            while(pinToLinks.count(outId) && pinToLinks[outId].size())
-                                _executionGraphs[0].removeLink(pinToLinks[outId][0]);
-                        }
-                        // adding new output type for each variable and assigning the type
-                        for(long pin: nodePins.outputIds)
-                            pinToNodes.erase(pin);
-                        datasetInput->outputNames.clear();
-                        datasetInput->outputTypes.clear();
-                        nodePins.outputIds.clear();
-                        for(const auto& a: ds.attributes){
-                            datasetInput->outputNames.push_back(a.name);
-                            datasetInput->outputTypes.push_back(deriveData::FloatType::create());
-                            nodePins.outputIds.push_back(_curId++);
-                            pinToNodes[nodePins.outputIds.back()] = id;
-                        }
+
+                        while(nodePins.outputIds.size())
+                            _executionGraphs[0].removePin(nodePins.outputIds[0], false);
+                        
+                        for(const auto& a: ds.attributes)
+                            _executionGraphs[0].addPin(_curId, id, a.name, deriveData::FloatType::create(), false);
                     }
                 }
                 nodes::EndNodeCombo();
@@ -131,24 +129,14 @@ void DeriveWorkbench::show()
                 for(const auto& ds: *_datasets){
                     if(ImGui::MenuItem(ds.name.c_str())){
                         datasetOutput->datasetId = ds.name;
-                        // setting up the node outputs (delete all connections for the out pins, then recreat out pins)
-                        // delet old links
-                        for(long outId: nodePins.inputIds){
-                            while(pinToLinks.count(outId) && pinToLinks[outId].size())
-                                _executionGraphs[0].removeLink(pinToLinks[outId][0]);
-                        }
-                        // adding new output type for each variable and assigning the type
-                        for(long pin: nodePins.inputIds)
-                            pinToNodes.erase(pin);
-                        datasetOutput->inputNames.clear();
-                        datasetOutput->inputTypes.clear();
-                        nodePins.inputIds.clear();
-                        for(const auto& a: ds.attributes){
-                            datasetOutput->inputNames.push_back(a.name);
-                            datasetOutput->inputTypes.push_back(deriveData::FloatType::create());
-                            nodePins.inputIds.push_back(_curId++);
-                            pinToNodes[nodePins.inputIds.back()] = id;
-                        }
+                        
+                        while(nodePins.inputIds.size())
+                            _executionGraphs[0].removePin(nodePins.inputIds[0], true);
+
+                        for(const auto& a: ds.attributes)
+                            _executionGraphs[0].addPin(_curId, id, a.name, deriveData::FloatType::create(), true);
+
+                        dynamic_cast<deriveData::VariableInput*>(node.get())->minNodes = nodePins.inputIds.size() - 1;
                     }
                 }
                 nodes::EndNodeCombo();

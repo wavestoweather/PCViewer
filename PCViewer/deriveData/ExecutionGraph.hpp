@@ -87,7 +87,6 @@ struct ExecutionGraph{
         nodes.erase(nodeId);
     }
     void addLink(long& curId, long pinAId, long pinBId, const ImVec4& color = {1.f, 1.f, 1.f, 1.f}){
-        assert(pinAId && pinBId);
         Link::Connection c{};
         c.nodeAId = pinToNodes[pinAId];
         c.nodeBId = pinToNodes[pinBId];
@@ -96,15 +95,12 @@ struct ExecutionGraph{
         if(links.count(c))  // link already exists, nothing to do
             return;
         long linkId = curId++;
-        assert(linkId);
         if(pinToLinks.count(pinBId) && pinToLinks[pinBId].size())
             removeLink(pinToLinks[pinBId][0]);
         links[c] = {linkId, pinAId, pinBId, color};
         linkToConnection[linkId] = c;
         pinToLinks[pinAId].push_back(linkId);
         pinToLinks[pinBId] = {linkId};
-        assert(links.count(c));
-        assert(links[c].Id.Get() && links[c].pinAId.Get() && links[c].pinBId.Get());
     }
     void removeLink(long link){
         const auto& connection = linkToConnection[link];
@@ -123,6 +119,40 @@ struct ExecutionGraph{
         }
         links.erase(connection);
         linkToConnection.erase(link);
+    }
+    void addPin(long& curId, long nodeId, std::string_view name, std::unique_ptr<deriveData::Type>&& type, bool isInput){
+        long pinId = curId++;
+        if(isInput){
+            nodes[nodeId].inputIds.push_back(pinId);
+            nodes[nodeId].node->inputNames.push_back(std::string(name));
+            nodes[nodeId].node->inputTypes.push_back(std::move(type));
+        }
+        else{
+            nodes[nodeId].outputIds.push_back(pinId);
+            nodes[nodeId].node->outputNames.push_back(std::string(name));
+            nodes[nodeId].node->outputTypes.push_back(std::move(type));
+        }
+        pinToNodes[pinId] = nodeId;
+    }
+    void removePin(long pinId, bool isInput){
+        while(pinToLinks.count(pinId) > 0 && pinToLinks[pinId].size()){
+            removeLink(pinToLinks[pinId][0]);
+        }
+        pinToLinks.erase(pinId);
+        long nodeId = pinToNodes[pinId];
+        if(isInput){
+            int index = std::find(nodes[nodeId].inputIds.begin(), nodes[nodeId].inputIds.end(), pinId) - nodes[nodeId].inputIds.begin();
+            nodes[nodeId].inputIds.erase(nodes[nodeId].inputIds.begin() + index);
+            nodes[nodeId].node->inputNames.erase(nodes[nodeId].node->inputNames.begin() + index);
+            nodes[nodeId].node->inputTypes.erase(nodes[nodeId].node->inputTypes.begin() + index);
+        }
+        else{
+            int index = std::find(nodes[nodeId].outputIds.begin(), nodes[nodeId].outputIds.end(), pinId) - nodes[nodeId].outputIds.begin();
+            nodes[nodeId].outputIds.erase(nodes[nodeId].outputIds.begin() + index);
+            nodes[nodeId].node->outputNames.erase(nodes[nodeId].node->outputNames.begin() + index);
+            nodes[nodeId].node->outputTypes.erase(nodes[nodeId].node->outputTypes.begin() + index);
+        }
+        pinToNodes.erase(pinId);
     }
 
     bool hasCircularConnections() const{
