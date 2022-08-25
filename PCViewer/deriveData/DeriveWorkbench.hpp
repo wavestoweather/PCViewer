@@ -57,6 +57,7 @@ private:
         std::set<long> activeLinks{};
         std::vector<std::vector<float>> dataStorage{};
         std::map<long, NodeInfo> nodeInfos{};
+        std::vector<std::unique_ptr<uint32_t>> createVectorSizes;
     };
     void buildCacheRecursive(long node, RecursionData& data);
 };

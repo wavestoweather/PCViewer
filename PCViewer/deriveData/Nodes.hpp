@@ -117,7 +117,7 @@ public:
                     std::cout << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
                     std::cout << "), ";
-                if(i % 20 == 0)
+                if((i + 1) % 20 == 0)
                     std::cout << std::endl;
             }
         }
@@ -129,7 +129,7 @@ public:
                     std::cout << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
                     std::cout << "), ";
-                if(i % 20 == 0)
+                if((i + 1) % 20 == 0)
                     std::cout << std::endl;
             }
             std::cout << std::endl << "  ...  " << std::endl;
@@ -140,11 +140,11 @@ public:
                     std::cout << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
                     std::cout << "), ";
-                if(i % 20 == 0)
+                if((i + 1) % 20 == 0)
                     std::cout << std::endl;
             }
         }
-        std::cout << "]" << std::endl;
+        std::cout << "] (size: " << input[0].cols[0].size() << ")" << std::endl;
     };
 };
 

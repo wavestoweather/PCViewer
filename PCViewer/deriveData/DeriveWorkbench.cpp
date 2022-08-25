@@ -403,7 +403,7 @@ std::set<long> DeriveWorkbench::getActiveLinksRecursive(long node)
     auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
     for(int i: nodes[node].inputIds){
         if(pinToLinks.count(i) && pinToLinks[i].size()){
-            output.insert(i);
+            output.insert(pinToLinks[i][0]);    // there can only be a single input linked
             long prefNode = linkToConnection[pinToLinks[i][0]].nodeAId;
             auto prefSet = getActiveLinksRecursive(prefNode);
             output.insert(prefSet.begin(), prefSet.end());
@@ -414,7 +414,7 @@ std::set<long> DeriveWorkbench::getActiveLinksRecursive(long node)
 
 void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = _executionGraphs[0];
-    auto& [activeLinks ,dataStorage, nodeInfos] = data;
+    auto& [activeLinks ,dataStorage, nodeInfos, createVectorSizes] = data;
     // check cache for previous nodes, if not generated, generate
     for(int i: irange(nodes[node].inputIds)){
         if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
@@ -430,8 +430,8 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     deriveData::float_column_views inputData;
     long inputDataSize{-1};
     bool equalDataLayout = true;
-    const deriveData::column_memory_view<float>* curDataLayout{};
-    const deriveData::column_memory_view<float>* outputLayout{};
+    deriveData::column_memory_view<float> curDataLayout{};
+    deriveData::column_memory_view<float> outputLayout{};
     std::vector<int> inplaceIndices;
     for(long i: irange(nodes[node].inputIds)){
         if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty()){   // pin not connected, use inserted value
@@ -444,7 +444,7 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
             // add input data and check for integrity
             inputData.push_back(data.nodeInfos[prevNodeId].outputViews[prevNodeOutInd]);
             if(inputDataSize > 1 && inputDataSize != inputData.back().size())
-                throw std::runtime_error("DeriveWorkbench::buildCacheRecursive() Inputs to node (id=" + std::to_string(node) + ", type = \"" + nodes[node].node->middleText
+                throw std::runtime_error("DeriveWorkbench::buildCacheRecursive() Inputs to node (id = " + std::to_string(node) + ", type = \"" + nodes[node].node->middleText
                                         + "\") do not have the same size. Input at pin index " 
                                         + std::to_string(i) + " has size " + std::to_string(inputData.back().size()) + " while other inputs before have size " 
                                         + std::to_string(inputDataSize) + "!");
@@ -454,12 +454,12 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
                 inplaceIndices.push_back(i);
             // check data layout for inflation
             if(curDataLayout)
-                equalDataLayout &= inputData.back().equalDataLayout(*curDataLayout);
+                equalDataLayout &= inputData.back().equalDataLayout(curDataLayout);
             else
-                curDataLayout = &inputData.back();
+                curDataLayout = inputData.back();
             // setting the output dimensions
-            if(outputLayout == nullptr || inputData.back().dimensionSizes.size() > outputLayout->dimensionSizes.size())
-                outputLayout = &inputData.back();
+            if(outputLayout || inputData.back().dimensionSizes.size() > outputLayout.dimensionSizes.size())
+                outputLayout = inputData.back();
         }
         inputDataSize = std::max<long>(inputDataSize, inputData.back().size());
     }
@@ -467,13 +467,10 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     // handling vector cration nodes
     if(dynamic_cast<deriveData::DataCreationNode*>(nodes[node].node.get())){
         inputDataSize = inputData[0](0, 0);
-        static deriveData::column_memory_view<float> layout;
-        static uint32_t size;
         static uint32_t dimsIndex{0};
-        size = inputDataSize;
-        layout.dimensionSizes = deriveData::memory_view<uint32_t>(size);
-        layout.columnDimensionIndices = deriveData::memory_view<uint32_t>(dimsIndex);
-        outputLayout = &layout;
+        createVectorSizes.emplace_back(std::make_unique<uint32_t>(inputDataSize));
+        outputLayout.dimensionSizes = deriveData::memory_view<uint32_t>(*createVectorSizes.back());
+        outputLayout.columnDimensionIndices = deriveData::memory_view<uint32_t>(dimsIndex);
     }
 
     // removing inplace which can not be used due to data inflation (different data layouts)
@@ -492,7 +489,7 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     std::vector<deriveData::memory_view<float>> memoryViewPool;
     uint32_t poolStart{};
     for(int i: inplaceIndices){
-        if(inputData[i].equalDataLayout(*outputLayout))
+        if(inputData[i].equalDataLayout(outputLayout))
             memoryViewPool.insert(memoryViewPool.end(), inputData[i].cols.begin(), inputData[i].cols.end());
     }
     if(memoryViewPool.size() < nodes[node].node->outputChannels()){
@@ -504,13 +501,12 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     }
     for(int i: irange(nodes[node].outputIds)){
         deriveData::column_memory_view<float> columnMem;
-        columnMem.dimensionSizes = outputLayout->dimensionSizes;
-        columnMem.columnDimensionIndices = outputLayout->columnDimensionIndices;
+        columnMem.dimensionSizes = outputLayout.dimensionSizes;
+        columnMem.columnDimensionIndices = outputLayout.columnDimensionIndices;
         for(int j: irange(nodes[node].node->outputTypes[i]->data().cols))
             columnMem.cols.push_back(memoryViewPool[poolStart++]);
-        outputData.push_back(std::move(columnMem));
+        outputData[i] = std::move(columnMem);
     }
-    assert(poolStart == memoryViewPool.size());
 
     // executing the node
     nodes[node].node->applyOperationCpu(inputData, outputData);
@@ -519,7 +515,7 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     data.nodeInfos[node].outputCounts.resize(nodes[node].outputIds.size());
     for(int i: irange(nodes[node].outputIds)){
         for(const long link: pinToLinks[nodes[node].outputIds[i]]){
-            if(data.activeLinks.count(link) > 1)
+            if(data.activeLinks.count(link) > 0)
                 ++data.nodeInfos[node].outputCounts[i];
         }
 
@@ -558,20 +554,14 @@ void DeriveWorkbench::executeGraph()
         buildCacheRecursive(node, data);
 
     // wiht the execution of all output nodes all changes are already applied
-    std::cout << "Amount of data allocations: " << data.dataStorage.size() << std::endl;
+    std::cout << "Amount of data allocations: " << data.dataStorage.size() << std::endl << std::endl;
 }
 
 DeriveWorkbench::DeriveWorkbench(std::list<DataSet>* datasets):
-    _datasets(datasets)
+    _datasets(datasets), 
+    _editorContext(ax::NodeEditor::CreateEditor()), 
+    _executionGraphs(1)
 {
-    _editorContext = ax::NodeEditor::CreateEditor();
-    _executionGraphs.resize(1);
-    auto node = 
-    _executionGraphs[0].nodes.insert({10000,NodePins(deriveData::CreateVec2Node::create(), &_curId)});
-    for(int pin: _executionGraphs[0].nodes[10000].inputIds)
-        _executionGraphs[0].pinToNodes[pin] = 10000;
-    for(int pin: _executionGraphs[0].nodes[10000].outputIds)
-        _executionGraphs[0].pinToNodes[pin] = 10000;
 }
 
 DeriveWorkbench::~DeriveWorkbench() 
