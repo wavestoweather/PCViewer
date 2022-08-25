@@ -2,11 +2,13 @@
 #include "../imgui/imgui.h"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "../imgui/imgui_internal.h"
+#include "../imgui/imgui_stdlib.h"
 #include "../imgui_nodes/imgui_node_editor.h"
 #include "../imgui_nodes/imgui_node_editor_internal.h"
 #include "../imgui_nodes/utilities/builders.h"
 #include "Nodes.hpp"
 #include "ExecutionGraph.hpp"
+#include "../Structures.hpp"
 
 namespace nodes = ax::NodeEditor;
 
@@ -68,6 +70,8 @@ void DeriveWorkbench::show()
         }
         // inputs
         for(int i: irange(node->inputTypes)){
+            if(i >= node->inputTypes.size())
+                break;
             builder.Input(nodePins.inputIds[i]);
             auto alpha = ImGui::GetStyle().Alpha;
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
@@ -75,9 +79,17 @@ void DeriveWorkbench::show()
             ax::Widgets::Icon({pinIconSize, pinIconSize}, node->inputTypes[i]->iconType(), isLinked, node->inputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
             ImGui::Spring(0);
             if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())){
-                if(variableInput->minNodes > nodePins.inputIds.size() && ImGui::Button(("X##p" + std::to_string(nodePins.inputIds[i])).c_str())){
+                ImGui::PushItemWidth(100);
+                if(i > variableInput->minNodes)
+                    ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i]);
+                else
+                    ImGui::TextUnformatted(node->inputNames[i].c_str());
+                ImGui::PopItemWidth();
+                ImGui::Spring(0);
+                if(i > variableInput->minNodes && ImGui::Button(("X##p" + std::to_string(nodePins.inputIds[i])).c_str())){
                     _executionGraphs[0].removePin(nodePins.inputIds[i], true);
                 }
+                ImGui::Spring(0);
             }
             else if(node->inputNames[i].size()){
                 ImGui::TextUnformatted(node->inputNames[i].c_str());
@@ -125,6 +137,7 @@ void DeriveWorkbench::show()
         builder.Middle();
         if(deriveData::DatasetInputNode* datasetInput = dynamic_cast<deriveData::DatasetInputNode*>(node.get())){
             ImGui::Spring(1, 0);
+            ImGui::TextUnformatted("Choose Dataset:");
             ImGui::PushItemWidth(150);
             if(nodes::BeginNodeCombo("", datasetInput->datasetId.data())){
                 for(const auto& ds: *_datasets){
@@ -144,6 +157,7 @@ void DeriveWorkbench::show()
         }
         if(deriveData::DatasetOutputNode* datasetOutput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
             ImGui::Spring(1, 0);
+            ImGui::TextUnformatted("Choose Dataset:");
             ImGui::PushItemWidth(150);
             if(nodes::BeginNodeCombo("", datasetOutput->datasetId.data())){
                 for(const auto& ds: *_datasets){

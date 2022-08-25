@@ -3,10 +3,12 @@
 #include "ExecutionGraph.hpp"
 #include <vector>
 #include <array>
+#include <list>
 
 namespace ax::NodeEditor{
     class EditorContext;
 }
+struct DataSet;
 
 class DeriveWorkbench: public Workbench, public DatasetDependency{
 public:

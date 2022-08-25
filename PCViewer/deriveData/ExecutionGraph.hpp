@@ -1,5 +1,5 @@
 #pragma once
-#include "Nodes.hpp"
+#include "NodeBase.hpp"
 #include "../imgui_nodes/imgui_node_editor.h"
 #include <map>
 #include <set>
