@@ -32,7 +32,12 @@ void DeriveWorkbench::show()
     ImGui::Begin("DeriveWorkbench", &active);
     ImGui::Dummy({});ImGui::SameLine(ImGui::GetWindowSize().x / 2);
     if(ImGui::Button("Execute Graph")){
-        executeGraph();
+        try{
+            executeGraph();
+        }
+        catch(const std::runtime_error& e){
+            std::cout << "[Error] " << e.what() << std::endl;
+        }
     }
     nodes::SetCurrentEditor(_editorContext);
     nodes::Begin("DeriveWorkbench");
@@ -81,13 +86,28 @@ void DeriveWorkbench::show()
 
             if(!isLinked && dynamic_cast<deriveData::OutputNode*>(node.get()) == nullptr){
                 auto memoryView = node->inputTypes[i]->data();
-                if(memoryView.size()){
-                    switch(memoryView.size()){
+                if(memoryView.cols.size()){
+                    switch(memoryView.cols.size()){
                         case 1:
                             ImGui::PushItemWidth(50);
-                            ImGui::InputFloat("##test", memoryView.data());
-                            ImGui::PopItemWidth;
-                        break;
+                            ImGui::InputFloat("##test", memoryView.cols[0].data());
+                            ImGui::PopItemWidth();
+                            break;
+                        case 2:
+                            ImGui::PushItemWidth(100);
+                            ImGui::InputFloat2("##inputv2", memoryView.cols[0].data());
+                            ImGui::PopItemWidth();
+                            break;
+                        case 3:
+                            ImGui::PushItemWidth(150);
+                            ImGui::InputFloat3("##inputv3", memoryView.cols[0].data());
+                            ImGui::PopItemWidth();
+                            break;
+                        case 4:
+                            ImGui::PushItemWidth(200);
+                            ImGui::InputFloat4("##inputv4", memoryView.cols[0].data());
+                            ImGui::PopItemWidth();
+                            break;
                     }
                 }
                 ImGui::Spring(0);
@@ -390,64 +410,109 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
         if(nodeInfos.count(prevNodeId) == 0)
             buildCacheRecursive(prevNodeId, data);
     }
-    // check for in place data slot
-    std::vector<int> inplaceIndices;
-    for(long i: irange(nodes[node].inputIds)){
-        if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
-            continue;
-        long linkId = pinToLinks[nodes[node].inputIds[i]][0];
-        long prevNodeId = linkToConnection[linkId].nodeAId;
-        long prevNodeOutInd = linkToConnection[linkId].nodeAAttribute;
-        if(--data.nodeInfos[prevNodeId].copyCounts[prevNodeOutInd] == 0)
-            inplaceIndices.push_back(i);
-    }
+
     // merging the data views for data processing
     // input data
+    deriveData::float_column_views inputData;
     long inputDataSize{-1};
-    std::vector<deriveData::memory_view<float>> inputData;
+    bool equalDataLayout = true;
+    const deriveData::column_memory_view<float>* curDataLayout{};
+    const deriveData::column_memory_view<float>* outputLayout{};
+    std::vector<int> inplaceIndices;
     for(long i: irange(nodes[node].inputIds)){
         if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty()){   // pin not connected, use inserted value
-            if(dynamic_cast<deriveData::InputNode*>(nodes[node].node.get()))
-                inputDataSize = nodes[node].node->inputTypes[i]->data()[0];
             inputData.push_back(nodes[node].node->inputTypes[i]->data());
         }
-        else{
+        else{   // pin connected
             long linkId = pinToLinks[nodes[node].inputIds[i]][0];
             long prevNodeId = linkToConnection[linkId].nodeAId;
-            inputData.insert(inputData.end(), data.nodeInfos[prevNodeId].dataView.begin(), data.nodeInfos[prevNodeId].dataView.end());
+            long prevNodeOutInd = linkToConnection[linkId].nodeAAttribute;
+            // add input data and check for integrity
+            inputData.push_back(data.nodeInfos[prevNodeId].outputViews[prevNodeOutInd]);
+            if(inputDataSize > 1 && inputDataSize != inputData.back().size())
+                throw std::runtime_error("DeriveWorkbench::buildCacheRecursive() Inputs to node (id=" + std::to_string(node) + ", type = \"" + nodes[node].node->middleText
+                                        + "\") do not have the same size. Input at pin index " 
+                                        + std::to_string(i) + " has size " + std::to_string(inputData.back().size()) + " while other inputs before have size " 
+                                        + std::to_string(inputDataSize) + "!");
+            // check for inplace
+            bool inplace = --data.nodeInfos[prevNodeId].outputCounts[prevNodeOutInd] == 0;
+            if(inplace)
+                inplaceIndices.push_back(i);
+            // check data layout for inflation
+            if(curDataLayout)
+                equalDataLayout &= inputData.back().equalDataLayout(*curDataLayout);
+            else
+                curDataLayout = &inputData.back();
+            // setting the output dimensions
+            if(outputLayout == nullptr || inputData.back().dimensionSizes.size() > outputLayout->dimensionSizes.size())
+                outputLayout = &inputData.back();
         }
+        inputDataSize = std::max<long>(inputDataSize, inputData.back().size());
     }
-    if(inputDataSize < 0){
-        for(auto& data: inputData)
-            inputDataSize = std::max<long>(inputDataSize, data.size());
+    assert(inputDataSize != -1);
+    // handling vector cration nodes
+    if(dynamic_cast<deriveData::DataCreationNode*>(nodes[node].node.get())){
+        inputDataSize = inputData[0](0, 0);
+        static deriveData::column_memory_view<float> layout;
+        static uint32_t size;
+        static uint32_t dimsIndex{0};
+        size = inputDataSize;
+        layout.dimensionSizes = deriveData::memory_view<uint32_t>(size);
+        layout.columnDimensionIndices = deriveData::memory_view<uint32_t>(dimsIndex);
+        outputLayout = &layout;
     }
 
-    // output data (first adding the inplace buffer, then creating missing buffer and adding them)
-    std::vector<deriveData::memory_view<float>> outputData;
-    for(int i: irange(inplaceIndices)){
-        long linkId = pinToLinks[nodes[node].inputIds[inplaceIndices[i]]][0];
-        long prevNodeId = linkToConnection[linkId].nodeAId;
-        auto& prevNodeCache = nodeInfos[prevNodeId].dataView;
-        outputData.insert(outputData.end(), prevNodeCache.begin(), prevNodeCache.end());
+    // removing inplace which can not be used due to data inflation (different data layouts)
+    if(!equalDataLayout){
+        std::cout << "[Warning] Data layouts for node " << node << " with title " << nodes[node].node->name << " and body " << nodes[node].node->middleText << " has to inflate data because the input data has not euqal data layout" << std::endl;
+        std::vector<int> keptInplaceIndices;
+        for(int i: inplaceIndices){
+            if(inputData[i].full())
+                keptInplaceIndices.push_back(i);
+        }
+        inplaceIndices = std::move(keptInplaceIndices);
     }
-    if(outputData.size() < nodes[node].node->outputDimension()){
+
+    // output data (merging the inplace buffers and adding new buffers. if the data layout does not fit to the outputLayout inplace can not be used)
+    deriveData::float_column_views outputData(nodes[node].outputIds.size());
+    std::vector<deriveData::memory_view<float>> memoryViewPool;
+    uint32_t poolStart{};
+    for(int i: inplaceIndices){
+        if(inputData[i].equalDataLayout(*outputLayout))
+            memoryViewPool.insert(memoryViewPool.end(), inputData[i].cols.begin(), inputData[i].cols.end());
+    }
+    if(memoryViewPool.size() < nodes[node].node->outputChannels()){
         int storageSize = data.dataStorage.size();
-        data.dataStorage.insert(data.dataStorage.end(), nodes[node].node->outputDimension() - outputData.size(), std::vector<float>(inputDataSize));
+        int missingBuffer = nodes[node].node->outputChannels() - memoryViewPool.size();
+        data.dataStorage.insert(data.dataStorage.end(), missingBuffer, std::vector<float>(inputDataSize));
         for(int i: irange(storageSize, data.dataStorage.size()))
-            outputData.push_back(data.dataStorage[i]);
+            memoryViewPool.push_back(data.dataStorage[i]);
     }
+    for(int i: irange(nodes[node].outputIds)){
+        deriveData::column_memory_view<float> columnMem;
+        columnMem.dimensionSizes = outputLayout->dimensionSizes;
+        columnMem.columnDimensionIndices = outputLayout->columnDimensionIndices;
+        for(int j: irange(nodes[node].node->outputTypes[i]->data().cols))
+            columnMem.cols.push_back(memoryViewPool[poolStart++]);
+        outputData.push_back(std::move(columnMem));
+    }
+    assert(poolStart == memoryViewPool.size());
 
-    // executin the node
+    // executing the node
     nodes[node].node->applyOperationCpu(inputData, outputData);
 
     // safing the cache and setting up the counts for the current data
-    data.nodeInfos[node].copyCounts.resize(nodes[node].outputIds.size());
+    data.nodeInfos[node].outputCounts.resize(nodes[node].outputIds.size());
     for(int i: irange(nodes[node].outputIds)){
-        data.nodeInfos[node].copyCounts[i] = pinToLinks[nodes[node].outputIds[i]].size();
+        for(const long link: pinToLinks[nodes[node].outputIds[i]]){
+            if(data.activeLinks.count(link) > 1)
+                ++data.nodeInfos[node].outputCounts[i];
+        }
+
         if(deriveData::DatasetInputNode* datasetInput = dynamic_cast<deriveData::DatasetInputNode*>(nodes[node].node.get()))
-            ++data.nodeInfos[node].copyCounts[i];   // make the dataset input not movable
+            ++data.nodeInfos[node].outputCounts[i];   // make the dataset input not movable
     }
-    data.nodeInfos[node].dataView = outputData;
+    data.nodeInfos[node].outputViews = outputData;
 }
 
 void DeriveWorkbench::executeGraph() 

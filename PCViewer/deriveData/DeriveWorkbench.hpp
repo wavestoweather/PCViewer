@@ -49,8 +49,8 @@ private:
     void executeGraph();
     struct RecursionData{
         struct NodeInfo{
-            std::vector<deriveData::memory_view<float>> dataView;
-            std::vector<int> copyCounts;          // count to indicate how often the output of the node has to be copied until consumed
+            deriveData::float_column_views outputViews;
+            std::vector<int> outputCounts;              // count to indicate how often the output of the node has to be copied until consumed
         };
         std::set<long> activeLinks{};
         std::vector<std::vector<float>> dataStorage{};

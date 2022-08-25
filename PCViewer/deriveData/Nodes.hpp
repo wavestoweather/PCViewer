@@ -72,6 +72,7 @@ public:
     bool operator==(const memory_view& o) const{
         return _data == o._data && _size == o._size;
     }
+    operator bool() const {return _data && _size;};
 
     bool equalData(const memory_view& o) const{
         if(_size != o._size)
@@ -98,33 +99,47 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
     column_memory_view() = default;
     column_memory_view(memory_view<T> data, memory_view<uint32_t> dimensionSizes = {}, memory_view<uint32_t> columnDimensionIndices = {}):
         dimensionSizes(dimensionSizes),
-        columnDimensionIndices(columnDimensionIndices),
-        data({data}){};
+        columnDimensionIndices(columnDimensionIndices)
+        {
+            // checking for column or single row data in case of a constant
+            if(dimensionSizes.empty()){  // row data
+                for(int i: irange(data.size()))
+                    cols.push_back(memory_view(data.data() + i, 1));            
+            }
+            else{
+                cols = {data};
+            }
+        };
     column_memory_view(std::vector<memory_view<T>> dataVec, memory_view<uint32_t> dimensionSizes = {}, memory_view<uint32_t> columnDimensionIndices = {}):
         dimensionSizes(dimensionSizes),
         columnDimensionIndices(columnDimensionIndices),
-        data(dataVec){};
+        cols(dataVec){};
 
     
-
+    // returns the amount of elements in this column_memory_view
+    // Note: diemnsionSizes.empty() indicates a constant in which case the size = 1
     uint64_t size() const{
         uint64_t ret{1};
         for(auto s: irange(dimensionSizes.size())) ret *= dimensionSizes[s];
         return ret;
     }
+    // returns if the columns span all dimensions
+    bool full() const{
+        return size() == cols[0].size();
+    }
 
     bool operator==(const column_memory_view& o) const{
-        return dimensionSizes == o.dimensionSizes && columnDimensionIndices == o.columnDimensionIndices && data == o.data;
+        return dimensionSizes == o.dimensionSizes && columnDimensionIndices == o.columnDimensionIndices && cols == o.cols;
     }
     bool equalData(const column_memory_view& o) const{
-        if(data.size() != o.data.size())
+        if(cols.size() != o.cols.size())
             return false;
-        if(!dimensionSizes.equalData(o.dimensionSizes);)
+        if(!dimensionSizes.equalData(o.dimensionSizes))
             return false;
         if(!columnDimensionIndices.equalData(o.columnDimensionIndices))
             return false;
-        for(auto c: irange(data)){
-            if(!data[c].equalData(o.data[c]))
+        for(auto c: irange(cols)){
+            if(!cols[c].equalData(o.cols[c]))
                 return false;
         }
         return true;
@@ -139,11 +154,17 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
     }
 
     T& operator()(uint64_t index, uint32_t column){
-        return cols[column][columnIndex(index)];
+        auto cI = columnIndex(index);
+        assert(cI < cols[column].size());
+        return cols[column][cI];
     }
     const T& operator()(uint64_t index, uint32_t column) const{
-        return cols[column][columnIndex(index)];
+        auto cI = columnIndex(index);
+        assert(cI < cols[column].size());
+        return cols[column][cI];
     }
+
+    operator bool() const{ return cols.size();};
 private:
     uint64_t dimensionIndex(const std::vector<uint64_t>& dimensionIndices) const{
         uint32_t columnIndex = 0;
@@ -157,12 +178,12 @@ private:
         return columnIndex;
     }
     uint64_t columnIndex(uint64_t index) const{
-        std::vector<uint64_t> dimnsionIndices(dimensionSizes.size());
-        for(int i = dimensionSizes.size() - 1; i >= 0; --i)){
+        std::vector<uint64_t> dimensionIndices(dimensionSizes.size());
+        for(int i = dimensionSizes.size() - 1; i >= 0; --i){
             dimensionIndices[i] = index % dimensionSizes[i];
             index /= dimensionSizes[i];
         }
-        return dimensionIndex(dimnsionIndices);
+        return dimensionIndex(dimensionIndices);
     }
 };
 
@@ -247,7 +268,7 @@ public:
         name(header),
         middleText(mt){}
 
-    virtual int outputDimension() const {return 1;};
+    virtual int outputChannels() const { uint32_t count{}; for(const auto& t: outputTypes) count += t->data().cols.size();return count;};
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;
 };
 
@@ -300,9 +321,18 @@ public:
     };
 };
 
-class ZeroVectorNode: public InputNode, public Creatable<ZeroVectorNode>{
+class DataCreationNode: public InputNode{
 public:
-    ZeroVectorNode(): InputNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
+    DataCreationNode(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
+        std::vector<std::string>&& inputNames = {},
+        std::vector<std::unique_ptr<Type>>&& outputTypes = {},
+        std::vector<std::string>&& outputNames = {}, 
+        std::string_view header = {}, std::string_view mt = {}): InputNode(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
+};
+
+class ZeroVectorNode: public DataCreationNode, public Creatable<ZeroVectorNode>{
+public:
+    ZeroVectorNode(): DataCreationNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         assert(input[0].dimensionSizes.empty());            // check for single value constant in input
@@ -313,9 +343,9 @@ public:
     };
 };
 
-class OneVectorNode: public InputNode, public Creatable<OneVectorNode>{
+class OneVectorNode: public DataCreationNode, public Creatable<OneVectorNode>{
 public:
-    OneVectorNode(): InputNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
+    OneVectorNode(): DataCreationNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         assert(input[0].dimensionSizes.empty());            // check for single value constant in input
@@ -326,9 +356,9 @@ public:
     };
 };
 
-class RandomVectorNode: public InputNode, public Creatable<RandomVectorNode>{
+class RandomVectorNode: public DataCreationNode, public Creatable<RandomVectorNode>{
 public:
-    RandomVectorNode(): InputNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
+    RandomVectorNode(): DataCreationNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         assert(input[0].dimensionSizes.empty());            // check for single value constant in input
@@ -360,11 +390,25 @@ public:
         }
         else{
             for(int i: irange(50)){
-                std::cout << input[0][i] << ", ";
+                 if(input[0].cols.size() > 1)
+                    std::cout << "(";
+                for(int j: irange(input[0].cols))
+                    std::cout << input[0].cols[j][i] << ", ";
+                if(input[0].cols.size() > 1)
+                    std::cout << "), ";
+                if(i % 20 == 0)
+                    std::cout << std::endl;
             }
-            std::cout << "  ...  ";
+            std::cout << std::endl << "  ...  " << std::endl;
             for(int i: irange(input[0].size() - 50, input[0].size())){
-                std::cout << input[0][i] << ", ";
+                if(input[0].cols.size() > 1)
+                    std::cout << "(";
+                for(int j: irange(input[0].cols))
+                    std::cout << input[0].cols[j][i] << ", ";
+                if(input[0].cols.size() > 1)
+                    std::cout << "), ";
+                if(i % 20 == 0)
+                    std::cout << std::endl;
             }
         }
         std::cout << "]" << std::endl;
@@ -419,10 +463,9 @@ public:
     InverseNode(): UnaryNode("", "1/"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{     
-        for(size_t i: irange(input)){
-            for(size_t j: irange(input[i].size()))
-                output[i][j] = 1. / input[i][j];
-        }
+        assert(input[0].equalDataLayout(output[0]));
+        for(size_t i: irange(input[0].cols[0].size()))
+            output[0].cols[0][i] = 1. / input[0].cols[0][i];
     }
 };
 
@@ -431,10 +474,9 @@ public:
     NegateNode(): UnaryNode("", "*-1"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{        
-        for(size_t i: irange(input)){
-            for(size_t j: irange(input[i].size()))
-                output[i][j] = -input[i][j];
-        }
+        assert(input[0].equalDataLayout(output[0]));
+        for(size_t i: irange(input[0].cols[0].size()))
+            output[0].cols[0][i] = -input[0].cols[0][i];
     }
 };
 
@@ -449,17 +491,15 @@ public:
     NormalizationNode(): UnaryNode("", "norm"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        for(size_t i: irange(input)){
-            auto [mi, ma] = std::minmax(input[i].begin(), input[i].end());
-            float min = *mi;
-            float max = *ma;
-            if(min == max){
-                max += 1;
-                max *= 1.1;
-            }
-            for(size_t j: irange(input[i].size()))
-                output[i][j] = (input[i][j] - min) / (max - min);
+        auto [mi, ma] = std::minmax(input[0].cols[0].begin(), input[0].cols[0].end());
+        float min = *mi;
+        float max = *ma;
+        if(min == max){
+            max += 1;
+            max *= 1.1;
         }
+        for(size_t i: irange(input[0].cols[0].size()))
+            output[0].cols[0][i] = (input[0].cols[0][i] - min) / (max - min);
     }
 };
 
@@ -468,10 +508,9 @@ public:
     AbsoluteValueNode(): UnaryNode("", "abs"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        for(size_t i: irange(input)){
-            for(size_t j: irange(input.size()))
-                output[i][j] = std::abs(input[i][j]);
-        }
+        assert(input[0].equalDataLayout(output[0]));
+        for(size_t i: irange(input[0].cols[0].size()))
+            output[0].cols[0][i] = std::abs(input[0].cols[0][i]);
     }
 };
 
@@ -480,10 +519,9 @@ public:
     SquareNode(): UnaryNode("", "square"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        for(size_t i: irange(input)){
-            for(size_t j: irange(input[i].size()))
-                output[i][j] = input[i][j] * input[i][j];
-        }
+        assert(input[0].equalDataLayout(output[0]));
+        for(size_t i: irange(input[0].cols[0].size()))
+            output[0].cols[0][i] = input[0].cols[0][i] * input[0].cols[0][i];
     }
 };
 
@@ -492,10 +530,9 @@ public:
     ExponentialNode(): UnaryNode("", "exp"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        for(size_t i: irange(input)){
-            for(size_t j: irange(input[i].size()))
-                output[i][j] = std::exp(input[i][j]);
-        }
+        assert(input[0].equalDataLayout(output[0]));
+        for(size_t i: irange(input[0].cols[0].size()))
+            output[0].cols[0][i] = std::exp(input[0].cols[0][i]);
     }
 };
 
@@ -504,10 +541,9 @@ public:
     LogarithmNode(): UnaryNode("", "log"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        for(size_t i: irange(input)){
-            for(size_t j: irange(input[0].size()))
-                output[i][j] = std::log(input[i][j]);
-        }
+        assert(input[0].equalDataLayout(output[0]));
+        for(size_t i: irange(input[0].cols[0].size()))
+            output[0].cols[0][i] = std::log(input[0].cols[0][i]);
     }
 };
 
@@ -524,7 +560,6 @@ public:
         outputNames = {"vec2"};
     }
 
-    int outputDimension() const override{return 2;};
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO implement
     }
@@ -538,7 +573,6 @@ public:
         outputNames = {"x", "y"};
     }
 
-    int outputDimension() const override{return 2;};
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO implement
     }
@@ -566,7 +600,6 @@ public:
         outputNames = {"vec3"};
     }
 
-    int outputDimension() const override{return 3;};
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO implement
     }
@@ -580,7 +613,6 @@ public:
         outputNames = {"x", "y", "z"};
     }
 
-    int outputDimension() const override{return 3;};
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO implement
     }
@@ -607,7 +639,7 @@ public:
         inputNames = {"x", "y", "z", "w"};
         outputNames = {"vec4"};
     }
-    int outputDimension() const override{return 4;};
+
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO implement
     }
@@ -621,7 +653,6 @@ public:
         outputNames = {"x", "y", "z", "w"};
     };
 
-    int outputDimension() const override{return 4;};
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO implement
     }
@@ -652,24 +683,15 @@ public:
     PlusNode(): BinaryNode("", "+"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
-        assert(aSingle || bSingle || input[0].size() == input[0].size());
-        if(aSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][0] + input[input.size() / 2 + i][j];
+        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
+        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
+            for(long i: irange(output[0].cols[0].size())){
+                output[0].cols[0][i] = input[0].cols[0][i] + input[1].cols[0][i];
             }
         }
-        else if(bSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[i].size()))
-                    output[i][j] = input[i][j] + input[input.size() / 2 + i][0];
-            }
-        }
-        else{
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][j] + input[input.size() / 2 + i][j];
+        else{   // less efficient but more general
+            for(long i: irange(output[0].size())){
+                output[0](i, 0) = input[0](i, 0) + input[1](i, 0);
             }
         }
     }
@@ -680,24 +702,15 @@ public:
     MinusNode(): BinaryNode("", "-"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
-        assert(aSingle || bSingle || input[0].size() == input[0].size());
-        if(aSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][0] - input[input.size() / 2 + i][j];
+        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
+        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
+            for(long i: irange(output[0].cols[0].size())){
+                output[0].cols[0][i] = input[0].cols[0][i] - input[1].cols[0][i];
             }
         }
-        else if(bSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[i].size()))
-                    output[i][j] = input[i][j] - input[input.size() / 2 + i][0];
-            }
-        }
-        else{
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][j] - input[input.size() / 2 + i][j];
+        else{   // less efficient but more general
+            for(long i: irange(output[0].size())){
+                output[0](i, 0) = input[0](i, 0) - input[1](i, 0);
             }
         }
     }
@@ -708,24 +721,15 @@ public:
     MultiplicationNode(): BinaryNode("", "*"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
-        assert(aSingle || bSingle || input[0].size() == input[0].size());
-        if(aSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][0] * input[input.size() / 2 + i][j];
+        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
+        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
+            for(long i: irange(output[0].cols[0].size())){
+                output[0].cols[0][i] = input[0].cols[0][i] * input[1].cols[0][i];
             }
         }
-        else if(bSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[i].size()))
-                    output[i][j] = input[i][j] * input[input.size() / 2 + i][0];
-            }
-        }
-        else{
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][j] * input[input.size() / 2 + i][j];
+        else{   // less efficient but more general
+            for(long i: irange(output[0].size())){
+                output[0](i, 0) = input[0](i, 0) * input[1](i, 0);
             }
         }
     }
@@ -736,24 +740,15 @@ public:
     DivisionNode(): BinaryNode("", "/"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        bool aSingle = input[0].size() == 1, bSingle = input[input.size() / 2].size() == 1;
-        assert(aSingle || bSingle || input[0].size() == input[0].size());
-        if(aSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][0] / input[input.size() / 2 + i][j];
+        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
+        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
+            for(long i: irange(output[0].cols[0].size())){
+                output[0].cols[0][i] = input[0].cols[0][i] / input[1].cols[0][i];
             }
         }
-        else if(bSingle){
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[i].size()))
-                    output[i][j] = input[i][j] / input[input.size() / 2 + i][0];
-            }
-        }
-        else{
-            for(size_t i: irange(input.size() / 2)){
-                for(size_t j: irange(input[input.size() / 2 + i].size()))
-                    output[i][j] = input[i][j] / input[input.size() / 2 + i][j];
+        else{   // less efficient but more general
+            for(long i: irange(output[0].size())){
+                output[0](i, 0) = input[0](i, 0) / input[1](i, 0);
             }
         }
     }
