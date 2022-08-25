@@ -886,20 +886,20 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         });
     }
     if constexpr(testDeviceLocalUplaod){
-        uint32_t byteSize = 1 << 27;
+        uint32_t byteSize = 1 << 29;
         uint32_t iterationCount = 100;
-        auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        auto [buffer, offset, mem] = VkUtil::createMultiBufferBound(context, {byteSize}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
         std::vector<uint8_t> data(byteSize, 6);
 
         void* d;
-        mlock(d, byteSize); // keeping the memory pinned
+        //mlock(d, byteSize); // keeping the memory pinned
         vkMapMemory(context.device, mem, 0, VK_WHOLE_SIZE, 0, &d);
-        mlock(data.data(), byteSize);
+        //mlock(data.data(), byteSize);
         float time{};
-        uint32_t dummy{};
+        uint32_t timeCounter{};
         {
-        PCUtil::Stopwatch upload(std::cout, "Upload Speed device local");
-        PCUtil::AverageWatch uploadTime(time, dummy);
+        PCUtil::Stopwatch upload(std::cout, "Upload Speed host visible");
+        PCUtil::AverageWatch uploadTime(time, timeCounter);
         for(int i: irange(iterationCount)){
             memcpy(d, data.data(), byteSize);
             VkMappedMemoryRange memRange{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, {}, mem, 0, VK_WHOLE_SIZE};

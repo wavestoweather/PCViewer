@@ -5324,6 +5324,7 @@ static bool openDataset(const char* filename) {
 	//printing Amount of data loaded
 	std::cout << "Amount of data loaded: " << g_PcPlotDataSets.back().data.size() << std::endl;
 	g_PcPlotDataSets.back().attributes = pcAttributes;
+	g_PcPlotDataSets.back().originalAttributeSize = pcAttributes.size();
 
 	//adding path to the recent files list if not yet added and resizing the list if too large
 	if (std::find(recentFiles.begin(), recentFiles.end(), std::string(filename)) == recentFiles.end()) {

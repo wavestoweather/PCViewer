@@ -129,7 +129,16 @@ void DeriveWorkbench::show()
         }
         if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())) 
             if(nodePins.inputIds.size() < variableInput->maxNodes && ImGui::Button("Add Pin")){
-                _executionGraphs[0].addPin(_curId, id, std::to_string(nodePins.inputIds.size()), deriveData::FloatType::create(), true);
+                std::string number = std::to_string(nodePins.inputIds.size());
+                if(deriveData::DatasetInputNode* dsInput = dynamic_cast<deriveData::DatasetInputNode*>(node.get())){
+                    auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
+                    ds->attributes.push_back(Attribute{number, number});
+                    ds->data.columns.push_back({});
+                    ds->data.columnDimensions.push_back({});
+                    updateSignal = true;
+                    updatedDatasets.push_back(ds->name);
+                }
+                _executionGraphs[0].addPin(_curId, id, number, deriveData::FloatType::create(), true);
             }
 
 
@@ -170,7 +179,7 @@ void DeriveWorkbench::show()
                         for(const auto& a: ds.attributes)
                             _executionGraphs[0].addPin(_curId, id, a.name, deriveData::FloatType::create(), true);
 
-                        dynamic_cast<deriveData::VariableInput*>(node.get())->minNodes = nodePins.inputIds.size() - 1;
+                        dynamic_cast<deriveData::VariableInput*>(node.get())->minNodes = ds.originalAttributeSize - 1;
                     }
                 }
                 nodes::EndNodeCombo();
@@ -383,6 +392,27 @@ void DeriveWorkbench::show()
 void DeriveWorkbench::addDataset(std::string_view datasetId) 
 {
     
+}
+
+void DeriveWorkbench::signalDatasetUpdate(std::vector<std::string_view> datasetIds) 
+{
+    // go through all nodes and check if a dataset input node exists, update
+    for(auto& [id, node]: _executionGraphs[0].nodes){
+        if(deriveData::DatasetInputNode* n = dynamic_cast<deriveData::DatasetInputNode*>(node.node.get())){
+            auto ds = std::find(datasetIds.begin(), datasetIds.end(), n->datasetId);
+            auto das = std::find_if(_datasets->begin(), _datasets->end(), [&](const DataSet& d){return d.name == *ds;});
+            if(ds != datasetIds.end()){
+                for(int i: irange(das->originalAttributeSize, das->attributes.size())){
+                    if(node.outputIds.size() >= i)
+                        break;
+                    _executionGraphs[0].removePin(node.outputIds[i], false);
+                }
+                for(int i: irange(das->originalAttributeSize, das->attributes.size())){
+                    _executionGraphs[0].addPin(_curId, id, das->attributes[i].name, deriveData::FloatType::create(), false);
+                }
+            }
+        }
+    }
 }
 
 void DeriveWorkbench::removeDataset(std::string_view datasetId) 

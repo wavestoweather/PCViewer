@@ -86,6 +86,7 @@ struct DataSet {
 	std::vector<uint8_t> additionalData{};		//byte vector for additional data. For Hierarchical data this is where teh hierarchy folder is stored
 	CompressedData compressedData{};
 	std::vector<Attribute> attributes{};
+	uint32_t originalAttributeSize{};
 	// herer should go space for roaring bins
 
 	bool operator==(const DataSet& other) const {
