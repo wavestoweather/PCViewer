@@ -644,7 +644,7 @@ static float CalcMaxPopupHeightFromItemCount(int items_count)
     return (g.FontSize + g.Style.ItemSpacing.y) * items_count - g.Style.ItemSpacing.y + (g.Style.WindowPadding.y * 2);
 }
 
-bool ax::NodeEditor::BeginNodeCombo(const char* label, const char* preview_value, ImGuiComboFlags flags)
+bool ax::NodeEditor::BeginNodeCombo(const char* label, const char* preview_value, ImGuiComboFlags flags, float scale)
 {
     using namespace ImGui;
 
@@ -737,7 +737,10 @@ bool ax::NodeEditor::BeginNodeCombo(const char* label, const char* preview_value
                 popup_window->AutoPosLastDirection = ImGuiDir_Left; // "Below, Toward Left"
             else
                 popup_window->AutoPosLastDirection = ImGuiDir_Down; // "Below, Toward Right (default)"
+            auto prefVal = popup_window->ViewportAllowPlatformMonitorExtend;
+            popup_window->ViewportAllowPlatformMonitorExtend = -1;
             ImRect r_outer = GetWindowAllowedExtentRect(popup_window);
+            popup_window->ViewportAllowPlatformMonitorExtend = prefVal;
             ImVec2 pos = FindBestWindowPosForPopupEx(frame_bb.GetBL(), size_expected, &popup_window->AutoPosLastDirection, r_outer, frame_bb, ImGuiPopupPositionPolicy_ComboBox);
             SetNextWindowPos(CanvasToScreen(pos));
         }
@@ -757,6 +760,7 @@ bool ax::NodeEditor::BeginNodeCombo(const char* label, const char* preview_value
         IM_ASSERT(0);   // This should never happen as we tested for IsPopupOpen() above
         return false;
     }
+    //ImGui::SetWindowFontScale(scale);
     return true;
 }
 

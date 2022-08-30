@@ -44,7 +44,6 @@ void DeriveWorkbench::show()
     nodes::SetCurrentEditor(_editorContext);
     nodes::Begin("DeriveWorkbench");
 
-
     auto& editorStyle = nodes::GetStyle();
     const ImVec4 headerColor{.1,.1,.1,1};
     const float pinIconSize = 15;
@@ -163,7 +162,7 @@ void DeriveWorkbench::show()
             ImGui::Spring(1, 0);
             ImGui::TextUnformatted("Choose Dataset:");
             ImGui::PushItemWidth(150);
-            if(nodes::BeginNodeCombo("", datasetInput->datasetId.data())){
+            if(nodes::BeginNodeCombo("##input", datasetInput->datasetId.data(), 0, 1.f / nodes::GetCurrentZoom())){
                 for(const auto& ds: *_datasets){
                     if(ImGui::MenuItem(ds.name.c_str())){
                         datasetInput->datasetId = ds.name;
@@ -183,7 +182,7 @@ void DeriveWorkbench::show()
             ImGui::Spring(1, 0);
             ImGui::TextUnformatted("Choose Dataset:");
             ImGui::PushItemWidth(150);
-            if(nodes::BeginNodeCombo("", datasetOutput->datasetId.data())){
+            if(nodes::BeginNodeCombo("##output", datasetOutput->datasetId.data(), 0, 1.f / nodes::GetCurrentZoom())){
                 for(const auto& ds: *_datasets){
                     if(ImGui::MenuItem(ds.name.c_str())){
                         datasetOutput->datasetId = ds.name;
@@ -301,8 +300,6 @@ void DeriveWorkbench::show()
     nodes::EndDelete();
 
     // dialogue for node creation
-    //if(thisFrameCreate)
-    _popupPos = ImGui::GetMousePos();
     nodes::Suspend();
     nodes::NodeId n{};
     nodes::PinId p{};
@@ -322,6 +319,7 @@ void DeriveWorkbench::show()
     else if(nodes::ShowBackgroundContextMenu()){
         ImGui::OpenPopup("Create New Node");
         _createNewNode = false;
+        thisFrameCreate = true;
     }
     nodes::Resume();
 
@@ -398,6 +396,8 @@ void DeriveWorkbench::show()
     }
     ImGui::PopStyleVar();
     nodes::Resume();
+    if(thisFrameCreate)
+        _popupPos = ImGui::GetMousePos();
 
     nodes::End();
 
@@ -654,6 +654,7 @@ DeriveWorkbench::DeriveWorkbench(std::list<DataSet>* datasets):
     _editorContext(ax::NodeEditor::CreateEditor()), 
     _executionGraphs(1)
 {
+    nodes::SetCurrentEditor(_editorContext);
 }
 
 DeriveWorkbench::~DeriveWorkbench() 
