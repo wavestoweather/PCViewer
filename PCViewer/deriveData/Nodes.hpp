@@ -109,8 +109,8 @@ public:
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // prints at max the first 50 and last 50 items of a vector
         std::cout << "[ ";
-        if(input[0].size() < 100){
-            for(int i: irange(input[0].size())){
+        if(input[0].columnSize() < 100){
+            for(int i: irange(input[0].columnSize())){
                 if(input[0].cols.size() > 1)
                     std::cout << "(";
                 for(int j: irange(input[0].cols))
@@ -133,7 +133,7 @@ public:
                     std::cout << std::endl;
             }
             std::cout << std::endl << "  ...  " << std::endl;
-            for(int i: irange(input[0].size() - 50, input[0].size())){
+            for(int i: irange(input[0].columnSize() - 50, input[0].columnSize())){
                 if(input[0].cols.size() > 1)
                     std::cout << "(";
                 for(int j: irange(input[0].cols))
@@ -144,7 +144,7 @@ public:
                     std::cout << std::endl;
             }
         }
-        std::cout << "] (size: " << input[0].cols[0].size() << ")" << std::endl;
+        std::cout << "] (size: " << input[0].size() << ", column size: " << input[0].columnSize() << ")" << std::endl;
     };
 };
 

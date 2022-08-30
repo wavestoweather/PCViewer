@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <type_traits>
 #include "../range.hpp"
 
 namespace deriveData{
@@ -12,6 +13,7 @@ public:
     memory_view(){};
     memory_view(T& d): _data(&d), _size(1){};
     memory_view(std::vector<T>& v): _data(v.data()), _size(v.size()){};
+    //memory_view(const std::vector<std::remove_const<T>::type>& v): _data(v.data()), _size(v.size()){static_assert(std::is_const<T>::value);}
     template<size_t size>
     memory_view(std::array<T, size>& a): _data(a.data()), _size(size){};
     memory_view(T* data, size_t size): _data(data), _size(size){};
@@ -90,6 +92,11 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
         for(auto s: irange(dimensionSizes.size())) ret *= dimensionSizes[s];
         return ret;
     }
+    uint64_t columnSize() const{
+        uint64_t ret{1};
+        for(auto s: irange(columnDimensionIndices.size())) ret *= dimensionSizes[columnDimensionIndices[s]];
+        return ret;
+    }
     // returns if the columns span all dimensions
     bool full() const{
         return size() == cols[0].size();
@@ -109,6 +116,12 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
             if(!cols[c].equalData(o.cols[c]))
                 return false;
         }
+        return true;
+    }
+    // only checks dimension Sizes
+    bool equalDimensions(const column_memory_view& o) const{
+        if(!dimensionSizes.equalData(o.dimensionSizes))
+            return false;
         return true;
     }
     // only checks dimensionSizes and columnDimensionIndices for equality

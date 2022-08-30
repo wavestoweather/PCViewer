@@ -74,6 +74,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "largeVis/OpenCompressedDataset.hpp"
 #include "deriveData/DeriveWorkbench.hpp"
 #include "range.hpp"
+#include "WindowBases.hpp"
 #include "Test.hpp"
 
 #include "DrawlistColorMatrixEditor.hpp"
@@ -764,6 +765,8 @@ static std::shared_ptr<ClusteringWorkbench> clusteringWorkbench;
 static std::shared_ptr<PCRenderer> pcRenderer;
 static std::shared_ptr<CompressionWorkbench> compressionWorkbench;
 static CompressionRenderer* compressionRenderer;
+
+static std::vector<DatasetDependency*> datasetDependantWindows;
 
 //method declarations
 template <typename T,typename T2>
@@ -7896,6 +7899,7 @@ int main(int, char**)
 
 	{// derive workbench
 		deriveWorkbench = std::make_unique<DeriveWorkbench>(&g_PcPlotDataSets);
+		datasetDependantWindows.push_back(deriveWorkbench.get());
 	}
 
 	{// clustering workbench
@@ -15195,6 +15199,16 @@ int main(int, char**)
 				if(dl.indBinManager->requestRender)
 					pcPlotRender = true;
 			}
+		}
+
+		for(auto w: datasetDependantWindows){
+			if(w->updateSignal){
+				for(auto u: datasetDependantWindows){
+					u->signalDatasetUpdate(w->updatedDatasets);
+				}
+			}
+			w->updateSignal = false;
+			w->updatedDatasets.clear();
 		}
 
 		pcSettings.rescaleTableColumns = false;

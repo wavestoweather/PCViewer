@@ -8,10 +8,10 @@ class irange {
  public:
    irange(unsigned long end): _begin(0), _end(end), _step(1){}; // single element constructor
 
-   irange(unsigned long begin, unsigned long end, unsigned long step = 1):
+   irange(unsigned long begin, unsigned long end, long step = 1):
     _begin(begin), _end(end), _step(step){
         assert(step != 0 && ((begin > end && step < 0) || step > 0) && "Infinit loop detected");
-        assert((end - begin) % step == 0 && "range results in an infinit loop");
+        assert(((end - begin) % step == 0 || -(end - begin) % -step == 0) && "range results in an infinit loop");
     };
 
     template<class T> 
@@ -38,7 +38,8 @@ class irange {
    iterator begin() const { return iterator(_begin, _step); }
    iterator end() const { return iterator(_end); }
   private:
-   unsigned long _begin, _end, _step;
+   unsigned long _begin, _end;
+   long _step;
 };
 
 template <long int T_begin, long int T_end>

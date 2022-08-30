@@ -27,7 +27,7 @@ public:
 
     void show() override;
     void addDataset(std::string_view datasetId) override;
-    void signalDatasetUpdate(std::vector<std::string_view> datasetIds);
+    void signalDatasetUpdate(const std::vector<std::string_view>& datasetIds) override;
     void removeDataset(std::string_view datasetId) override;
 
 private:

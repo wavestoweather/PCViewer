@@ -80,13 +80,28 @@ void DeriveWorkbench::show()
             ImGui::Spring(0);
             if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())){
                 ImGui::PushItemWidth(100);
-                if(i > variableInput->minNodes)
-                    ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i]);
+                if(i > variableInput->minNodes){
+                    if(ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i])){
+                        if(deriveData::DatasetOutputNode* dsInput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
+                            auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
+                            ds->attributes[i].name = node->inputNames[i];
+                            updatedDatasetsAccess().push_back(dsInput->datasetId);
+                        }
+                    }
+                }
                 else
                     ImGui::TextUnformatted(node->inputNames[i].c_str());
                 ImGui::PopItemWidth();
                 ImGui::Spring(0);
                 if(i > variableInput->minNodes && ImGui::Button(("X##p" + std::to_string(nodePins.inputIds[i])).c_str())){
+                    if(deriveData::DatasetOutputNode* dsInput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
+                        auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
+                        ds->attributes.erase(ds->attributes.begin() + i);
+                        ds->data.columns.erase(ds->data.columns.begin() + i);
+                        ds->data.columnDimensions.erase(ds->data.columnDimensions.begin() + i);
+                        updateSignal = true;
+                        updatedDatasets.push_back(ds->name);
+                    }
                     _executionGraphs[0].removePin(nodePins.inputIds[i], true);
                 }
                 ImGui::Spring(0);
@@ -130,10 +145,10 @@ void DeriveWorkbench::show()
         if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())) 
             if(nodePins.inputIds.size() < variableInput->maxNodes && ImGui::Button("Add Pin")){
                 std::string number = std::to_string(nodePins.inputIds.size());
-                if(deriveData::DatasetInputNode* dsInput = dynamic_cast<deriveData::DatasetInputNode*>(node.get())){
+                if(deriveData::DatasetOutputNode* dsInput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
                     auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
                     ds->attributes.push_back(Attribute{number, number});
-                    ds->data.columns.push_back({});
+                    ds->data.columns.push_back({0});
                     ds->data.columnDimensions.push_back({});
                     updateSignal = true;
                     updatedDatasets.push_back(ds->name);
@@ -394,7 +409,7 @@ void DeriveWorkbench::addDataset(std::string_view datasetId)
     
 }
 
-void DeriveWorkbench::signalDatasetUpdate(std::vector<std::string_view> datasetIds) 
+void DeriveWorkbench::signalDatasetUpdate(const std::vector<std::string_view>& datasetIds) 
 {
     // go through all nodes and check if a dataset input node exists, update
     for(auto& [id, node]: _executionGraphs[0].nodes){
@@ -402,12 +417,14 @@ void DeriveWorkbench::signalDatasetUpdate(std::vector<std::string_view> datasetI
             auto ds = std::find(datasetIds.begin(), datasetIds.end(), n->datasetId);
             auto das = std::find_if(_datasets->begin(), _datasets->end(), [&](const DataSet& d){return d.name == *ds;});
             if(ds != datasetIds.end()){
-                for(int i: irange(das->originalAttributeSize, das->attributes.size())){
-                    if(node.outputIds.size() >= i)
-                        break;
+                for(int i: irange(std::max(node.outputIds.size(), das->attributes.size()) - 1, das->originalAttributeSize - 1, -1)){
+                    if(node.outputIds.size() <= i)
+                        continue;                    
                     _executionGraphs[0].removePin(node.outputIds[i], false);
                 }
-                for(int i: irange(das->originalAttributeSize, das->attributes.size())){
+                for(int i: irange(das->originalAttributeSize, std::max(node.outputIds.size(), das->attributes.size()))){
+                    if(i >= das->attributes.size())
+                        continue;
                     _executionGraphs[0].addPin(_curId, id, das->attributes[i].name, deriveData::FloatType::create(), false);
                 }
             }
@@ -493,7 +510,7 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
         }
         inputDataSize = std::max<long>(inputDataSize, inputData.back().size());
     }
-    assert(inputDataSize != -1);
+    assert(inputDataSize != -1 || nodes[node].inputIds.empty());
     // handling vector cration nodes
     if(dynamic_cast<deriveData::DataCreationNode*>(nodes[node].node.get())){
         inputDataSize = inputData[0](0, 0);
@@ -518,24 +535,37 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     deriveData::float_column_views outputData(nodes[node].outputIds.size());
     std::vector<deriveData::memory_view<float>> memoryViewPool;
     uint32_t poolStart{};
-    for(int i: inplaceIndices){
-        if(inputData[i].equalDataLayout(outputLayout))
-            memoryViewPool.insert(memoryViewPool.end(), inputData[i].cols.begin(), inputData[i].cols.end());
+    if(deriveData::DatasetInputNode* inputNode = dynamic_cast<deriveData::DatasetInputNode*>(nodes[node].node.get())){
+        auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const DataSet& d){return d.name == inputNode->datasetId;});
+        assert(ds != _datasets->end());
+        for(int i: irange(outputData)){
+            deriveData::column_memory_view<float> columnView;
+            columnView.dimensionSizes = deriveData::memory_view<uint32_t>(ds->data.dimensionSizes);
+            columnView.columnDimensionIndices = deriveData::memory_view<uint32_t>(ds->data.columnDimensions[i]);
+            columnView.cols = {deriveData::memory_view<float>(ds->data.columns[i])};
+            outputData[i] = columnView;
+        }
     }
-    if(memoryViewPool.size() < nodes[node].node->outputChannels()){
-        int storageSize = data.dataStorage.size();
-        int missingBuffer = nodes[node].node->outputChannels() - memoryViewPool.size();
-        data.dataStorage.insert(data.dataStorage.end(), missingBuffer, std::vector<float>(inputDataSize));
-        for(int i: irange(storageSize, data.dataStorage.size()))
-            memoryViewPool.push_back(data.dataStorage[i]);
-    }
-    for(int i: irange(nodes[node].outputIds)){
-        deriveData::column_memory_view<float> columnMem;
-        columnMem.dimensionSizes = outputLayout.dimensionSizes;
-        columnMem.columnDimensionIndices = outputLayout.columnDimensionIndices;
-        for(int j: irange(nodes[node].node->outputTypes[i]->data().cols))
-            columnMem.cols.push_back(memoryViewPool[poolStart++]);
-        outputData[i] = std::move(columnMem);
+    else{
+        for(int i: inplaceIndices){
+            if(inputData[i].equalDataLayout(outputLayout))
+                memoryViewPool.insert(memoryViewPool.end(), inputData[i].cols.begin(), inputData[i].cols.end());
+        }
+        if(memoryViewPool.size() < nodes[node].node->outputChannels()){
+            int storageSize = data.dataStorage.size();
+            int missingBuffer = nodes[node].node->outputChannels() - memoryViewPool.size();
+            data.dataStorage.insert(data.dataStorage.end(), missingBuffer, std::vector<float>(inputDataSize));
+            for(int i: irange(storageSize, data.dataStorage.size()))
+                memoryViewPool.push_back(data.dataStorage[i]);
+        }
+        for(int i: irange(nodes[node].outputIds)){
+            deriveData::column_memory_view<float> columnMem;
+            columnMem.dimensionSizes = outputLayout.dimensionSizes;
+            columnMem.columnDimensionIndices = outputLayout.columnDimensionIndices;
+            for(int j: irange(nodes[node].node->outputTypes[i]->data().cols))
+                columnMem.cols.push_back(memoryViewPool[poolStart++]);
+            outputData[i] = std::move(columnMem);
+        }
     }
 
     // executing the node
@@ -553,6 +583,38 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
             ++data.nodeInfos[node].outputCounts[i];   // make the dataset input not movable
     }
     data.nodeInfos[node].outputViews = outputData;
+
+    // checking for dataset output and moving or copying the data to the output
+    if(deriveData::DatasetOutputNode* n = dynamic_cast<deriveData::DatasetOutputNode*>(nodes[node].node.get())){
+        // getting the dataset data layout
+        deriveData::column_memory_view<float> datasetLayout;
+        DataSet* dataset;
+        for(auto& ds: *_datasets){
+            if(ds.name == n->datasetId){
+                dataset = &ds;
+                datasetLayout.dimensionSizes = deriveData::memory_view<uint32_t>(ds.data.dimensionSizes);
+            }
+        }
+        for(int i: irange(inputData)){
+            if(pinToLinks.count(nodes[node].inputIds[i]) == 0)  // not connected
+                continue;
+            // checking for consistent dataset layout 
+            if(inputData[i].dimensionSizes.size() && !inputData[i].equalDimensions(datasetLayout))
+                throw std::runtime_error("DeriveWorkbench::buildCacheRecursive() Data layout at dataset output node for dataset " + 
+                    std::string(n->datasetId) + " for attribute " + n->inputNames[i] + " does not match the output of the previous node. Aborting...");
+            
+            // searching the vector which contains the data and move to dataset data
+            for(auto& d: data.dataStorage){
+                if(d.data() == inputData[i].cols[0].data()){
+                    if(std::count(inplaceIndices.begin(), inplaceIndices.end(), i))
+                        dataset->data.columns[i] = std::move(d);
+                    else
+                        dataset->data.columns[i] = d;
+                    dataset->data.columnDimensions[i] = std::vector<uint32_t>(inputData[i].columnDimensionIndices.begin(), inputData[i].columnDimensionIndices.end());
+                }
+            }
+        }
+    }
 }
 
 void DeriveWorkbench::executeGraph() 
