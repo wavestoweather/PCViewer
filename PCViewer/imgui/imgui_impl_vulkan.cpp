@@ -93,6 +93,9 @@ static VkDescriptorSetLayout    g_DescriptorSetLayout = VK_NULL_HANDLE;
 static VkPipelineLayout         g_PipelineLayout = VK_NULL_HANDLE;
 static VkDescriptorSet          g_DescriptorSet = VK_NULL_HANDLE;
 static VkPipeline               g_Pipeline = VK_NULL_HANDLE;
+static uint32_t                 g_Subpass = 0;
+static VkShaderModule           g_ShaderModuleVert;
+static VkShaderModule           g_ShaderModuleFrag;
 
 // Font data
 static VkSampler                g_FontSampler = VK_NULL_HANDLE;

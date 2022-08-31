@@ -7599,7 +7599,7 @@ bool ImGui::TabItemLabelAndCloseButton(ImDrawList* draw_list, const ImRect& bb, 
     bool close_button_pressed = false;
     bool close_button_visible = false;
     if (close_button_id != 0)
-        if (is_contents_visible || bb.GetWidth() >= g.Style.TabMinWidthForUnselectedCloseButton)
+        if (is_contents_visible || bb.GetWidth() >= g.Style.TabMinWidthForCloseButton)
             if (g.HoveredId == tab_id || g.HoveredId == close_button_id || g.ActiveId == close_button_id)
                 close_button_visible = true;
     if (close_button_visible)
