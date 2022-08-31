@@ -146,7 +146,7 @@ void DeriveWorkbench::show()
                 std::string number = std::to_string(nodePins.inputIds.size());
                 if(deriveData::DatasetOutputNode* dsInput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
                     auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
-                    ds->attributes.push_back(Attribute{number, number});
+                    ds->attributes.push_back(Attribute{number, number, {}, {}, -.1f, .1f});
                     ds->data.columns.push_back({0});
                     ds->data.columnDimensions.push_back({});
                     updateSignal = true;
@@ -595,9 +595,11 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
                 datasetLayout.dimensionSizes = deriveData::memory_view<uint32_t>(ds.data.dimensionSizes);
             }
         }
+        bool anyChange = false;
         for(int i: irange(inputData)){
-            if(pinToLinks.count(nodes[node].inputIds[i]) == 0)  // not connected
+            if(pinToLinks.count(nodes[node].inputIds[i]) == 0 || pinToLinks[nodes[node].inputIds[i]].empty())  // not connected
                 continue;
+            anyChange = true;
             // checking for consistent dataset layout 
             if(inputData[i].dimensionSizes.size() && !inputData[i].equalDimensions(datasetLayout))
                 throw std::runtime_error("DeriveWorkbench::buildCacheRecursive() Data layout at dataset output node for dataset " + 
@@ -613,7 +615,21 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
                     dataset->data.columnDimensions[i] = std::vector<uint32_t>(inputData[i].columnDimensionIndices.begin(), inputData[i].columnDimensionIndices.end());
                 }
             }
+
+            // updating min and max of the attributes
+            dataset->attributes[i].min = std::numeric_limits<float>::max();
+            dataset->attributes[i].max = -std::numeric_limits<float>::max();
+            for(float f: dataset->data.columns[i]){
+                dataset->attributes[i].min = std::min(f, dataset->attributes[i].min);
+                dataset->attributes[i].max = std::max(f, dataset->attributes[i].max);
+            }
+            if(dataset->attributes[i].min == dataset->attributes[i].max){
+                dataset->attributes[i].max += .1f;
+                dataset->attributes[i].min -= .1f;
+            }
         }
+        if(anyChange)
+            updatedDatasetsAccess().push_back(n->datasetId);
     }
 }
 

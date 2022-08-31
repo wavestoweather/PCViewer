@@ -15206,6 +15206,27 @@ int main(int, char**)
 				for(auto u: datasetDependantWindows){
 					u->signalDatasetUpdate(w->updatedDatasets);
 				}
+
+				// temporary workaround to at least have parallel coordinates
+				if(g_PcPlotDataSets.size() == 1 && g_PcPlotDrawLists.size()){
+					pcAttributes = g_PcPlotDataSets.front().attributes;
+					pcAttrOrd.resize(pcAttributes.size());
+					std::iota(pcAttrOrd.begin(), pcAttrOrd.end(), 0);
+					delete[] pcAttributeEnabled;
+					pcAttributeEnabled = new bool[pcAttributes.size()];
+					std::memset(pcAttributeEnabled, true, pcAttributes.size());
+					std::string prevName = g_PcPlotDrawLists.front().name;
+					auto prefColor = g_PcPlotDrawLists.front().color;
+					removePcPlotDrawList(g_PcPlotDrawLists.front());
+					destroyPcPlotVertexBuffer(g_PcPlotDataSets.front().buffer);
+					createPcPlotVertexBuffer(pcAttributes, g_PcPlotDataSets.front().data);
+					g_PcPlotDataSets.front().buffer = g_PcPlotVertexBuffers.back();
+					g_PcPlotDataSets.front().drawLists.front().buffer = g_PcPlotDataSets.front().buffer.buffer;
+					createPcPlotDrawList(g_PcPlotDataSets.front().drawLists.front(), g_PcPlotDataSets.front(), prevName.c_str());
+					updateActiveIndices(g_PcPlotDrawLists.back());
+					g_PcPlotDrawLists.front().color = prefColor;
+					pcPlotRender = true;
+				}
 			}
 			w->updateSignal = false;
 			w->updatedDatasets.clear();
