@@ -93,8 +93,12 @@ file(GLOB imgui_nodes_SRC
     "imgui_nodes/utilities/*.cpp"
 )
 
+file(GLOB imgui_file_dialog_SRC
+    "imgui_file_dialog/*.cpp"
+)
+
 include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR})
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC})
+add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC})
 
 if(WIN32)
 set(netCDF_LIBRARIES netCDF::netcdf)

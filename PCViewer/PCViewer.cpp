@@ -77,6 +77,8 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "range.hpp"
 #include "WindowBases.hpp"
 #include "Test.hpp"
+#include "imgui_file_dialog/ImGuiFileDialog.h"
+#include "imgui_file_dialog/CustomFont.cpp"
 
 #include "DrawlistColorMatrixEditor.hpp"
 #include "ColorPalette.h"
@@ -7769,15 +7771,25 @@ int main(int, char**)
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 	io.ConfigViewportsNoDecoration = false;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;	// Enable Gamepad Controls
+
+	static const ImWchar icons_ranges[] = { ICON_MIN_IGFD, ICON_MAX_IGFD, 0 };
+	ImFontConfig icons_config{}; icons_config.MergeMode = true; icons_config.PixelSnapH = true;
+
 	ImFontConfig fontConf{};
 	fontConf.OversampleH = 2;
 	fontConf.OversampleV = 2;
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Regular.ttf", 15.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_IGFD, 15.0f, &icons_config, icons_ranges);
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Regular.ttf", 10.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_IGFD, 10.0f, &icons_config, icons_ranges);
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Regular.ttf", 25.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_IGFD, 25.0f, &icons_config, icons_ranges);
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 10.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_IGFD, 10.0f, &icons_config, icons_ranges);
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 15.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_IGFD, 15.0f, &icons_config, icons_ranges);
 	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 25.0f, &fontConf, io.Fonts->GetGlyphRangesDefault());
+	io.Fonts->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_IGFD, 25.0f, &icons_config, icons_ranges);
 
 	// Setup Platform/Renderer bindings
 	ImGui_ImplSDL2_InitForVulkan(window);
@@ -8339,45 +8351,51 @@ int main(int, char**)
 
 					//Opening a new Dataset into the Viewer
 					if (ImGui::Button("Open") || open) {
-						std::string f = pcFilePath;
-						std::string fileExtension = f.substr(f.find_last_of("/\\") + 1);
-						size_t pos = fileExtension.find_last_of(".");
-						if (pos != std::string::npos) {		//entered discrete file
-							bool success = openDataset(pcFilePath);
-							if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
-								//pcPlotRender = true;
-								createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-								pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
-							}
-							else if(success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling){
-								// creating random indices and exchanging the default template list tepmorary for the random indices
-								std::vector<uint32_t> randomIndices;
-								std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
-								std::random_device rd;
-								std::mt19937 gen(rd());
-								std::uniform_real_distribution<> dis(0, 1);
-								for(uint32_t i: irange(originalIndices)){
-									if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
-										randomIndices.push_back(originalIndices[i]);
-									}
-								}
-								g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
-								createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-								updateActiveIndices(g_PcPlotDrawLists.back());
-								pcPlotRender = true;
-								g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
-							}
+						if(std::string_view(pcFilePath).empty()){
+							// opening the file dialogue
+							ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey", "Choose File", ".*,.nc,.csv", ".", 0);
 						}
-						else {					//entered folder -> open open dataset dialogue
-							for (const auto& entry : std::filesystem::directory_iterator(f)) {
-								if (entry.is_regular_file()) {	//only process normal enties
-									fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
-									if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
-									droppedPaths.emplace_back(entry.path().u8string());
-									droppedPathActive.emplace_back(1);
-									pathDropped = true;
-									f = entry.path().u8string();
-									queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
+						else{
+							std::string f = pcFilePath;
+							std::string fileExtension = f.substr(f.find_last_of("/\\") + 1);
+							size_t pos = fileExtension.find_last_of(".");
+							if (pos != std::string::npos) {		//entered discrete file
+								bool success = openDataset(pcFilePath);
+								if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
+									//pcPlotRender = true;
+									createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+									pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+								}
+								else if(success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling){
+									// creating random indices and exchanging the default template list tepmorary for the random indices
+									std::vector<uint32_t> randomIndices;
+									std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
+									std::random_device rd;
+									std::mt19937 gen(rd());
+									std::uniform_real_distribution<> dis(0, 1);
+									for(uint32_t i: irange(originalIndices)){
+										if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
+											randomIndices.push_back(originalIndices[i]);
+										}
+									}
+									g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
+									createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+									updateActiveIndices(g_PcPlotDrawLists.back());
+									pcPlotRender = true;
+									g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
+								}
+							}
+							else {					//entered folder -> open open dataset dialogue
+								for (const auto& entry : std::filesystem::directory_iterator(f)) {
+									if (entry.is_regular_file()) {	//only process normal enties
+										fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
+										if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
+										droppedPaths.emplace_back(entry.path().u8string());
+										droppedPathActive.emplace_back(1);
+										pathDropped = true;
+										f = entry.path().u8string();
+										queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
+									}
 								}
 							}
 						}
@@ -11200,45 +11218,51 @@ int main(int, char**)
 
 			//Opening a new Dataset into the Viewer
 			if (ImGui::Button("Open") || open) {
-				std::string f = pcFilePath;
-				std::string fileExtension = f.substr(f.find_last_of("/\\") + 1);
-				size_t pos = fileExtension.find_last_of(".");
-				if (pos != std::string::npos) {		//entered discrete file
-					bool success = openDataset(pcFilePath);
-					if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
-						//pcPlotRender = true;
-						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-						pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
-					}
-					else if (success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling) {
-						// creating random indices and exchanging the default template list tepmorary for the random indices
-						std::vector<uint32_t> randomIndices;
-						std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
-						std::random_device rd;
-						std::mt19937 gen(rd());
-						std::uniform_real_distribution<> dis(0, 1);
-						for(uint32_t i: irange(originalIndices)){
-							if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
-								randomIndices.push_back(originalIndices[i]);
-							}
-						}
-						g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
-						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
-						updateActiveIndices(g_PcPlotDrawLists.back());
-						pcPlotRender = true;
-						g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
-					}
+				if(std::string_view(pcFilePath).empty()){
+					// opening the file dialogue
+					ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey", "Choose File", ".*,.nc,.csv", ".", 0);
 				}
-				else {					//entered folder -> open open dataset dialogue
-					for (const auto& entry : std::filesystem::directory_iterator(f)) {
-						if (entry.is_regular_file()) {	//only process normal enties
-							fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
-							if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
-							droppedPaths.emplace_back(entry.path().u8string());
-							droppedPathActive.emplace_back(1);
-							pathDropped = true;
-							f = entry.path().u8string();
-							queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
+				else{
+					std::string f = pcFilePath;
+					std::string fileExtension = f.substr(f.find_last_of("/\\") + 1);
+					size_t pos = fileExtension.find_last_of(".");
+					if (pos != std::string::npos) {		//entered discrete file
+						bool success = openDataset(pcFilePath);
+						if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
+							//pcPlotRender = true;
+							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+							pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+						}
+						else if (success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling) {
+							// creating random indices and exchanging the default template list tepmorary for the random indices
+							std::vector<uint32_t> randomIndices;
+							std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
+							std::random_device rd;
+							std::mt19937 gen(rd());
+							std::uniform_real_distribution<> dis(0, 1);
+							for(uint32_t i: irange(originalIndices)){
+								if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
+									randomIndices.push_back(originalIndices[i]);
+								}
+							}
+							g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
+							createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+							updateActiveIndices(g_PcPlotDrawLists.back());
+							pcPlotRender = true;
+							g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
+						}
+					}
+					else {					//entered folder -> open open dataset dialogue
+						for (const auto& entry : std::filesystem::directory_iterator(f)) {
+							if (entry.is_regular_file()) {	//only process normal enties
+								fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
+								if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
+								droppedPaths.emplace_back(entry.path().u8string());
+								droppedPathActive.emplace_back(1);
+								pathDropped = true;
+								f = entry.path().u8string();
+								queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
+							}
 						}
 					}
 				}
@@ -15231,6 +15255,59 @@ int main(int, char**)
 			}
 			w->updateSignal = false;
 			w->updatedDatasets.clear();
+		}
+
+		if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")){
+			if(ImGuiFileDialog::Instance()->IsOk()){
+				auto selection = ImGuiFileDialog::Instance()->GetSelection();
+				std::string file = selection.begin()->second;
+				std::cout << file << std::endl;
+
+				std::string fileExtension = file.substr(file.find_last_of("/\\") + 1);
+				size_t pos = fileExtension.find_last_of(".");
+				if (pos != std::string::npos) {		//entered discrete file
+					queryAttributes = queryFileAttributes(file.c_str());
+					bool success = openDataset(file.c_str());
+					if (success && pcSettings.createDefaultOnLoad == DefaultLoad::Full) {
+						//pcPlotRender = true;
+						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+						pcPlotRender = updateActiveIndices(g_PcPlotDrawLists.back());
+					}
+					else if (success && pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling) {
+						// creating random indices and exchanging the default template list tepmorary for the random indices
+						std::vector<uint32_t> randomIndices;
+						std::vector<uint32_t> originalIndices = std::move(g_PcPlotDataSets.back().drawLists.front().indices);
+						std::random_device rd;
+						std::mt19937 gen(rd());
+						std::uniform_real_distribution<> dis(0, 1);
+						for(uint32_t i: irange(originalIndices)){
+							if(dis(gen) <= pcSettings.defaultLoadRandomProbability){
+								randomIndices.push_back(originalIndices[i]);
+							}
+						}
+						g_PcPlotDataSets.back().drawLists.front().indices = std::move(randomIndices);
+						createPcPlotDrawList(g_PcPlotDataSets.back().drawLists.front(), g_PcPlotDataSets.back(), g_PcPlotDataSets.back().name.c_str());
+						updateActiveIndices(g_PcPlotDrawLists.back());
+						pcPlotRender = true;
+						g_PcPlotDataSets.back().drawLists.front().indices = std::move(originalIndices);
+					}
+				}
+				else {					//entered folder -> open open dataset dialogue
+					for (const auto& entry : std::filesystem::directory_iterator(file)) {
+						if (entry.is_regular_file()) {	//only process normal enties
+							fileExtension = entry.path().u8string().substr(entry.path().u8string().find_last_of("."));
+							if (std::find(supportedDataFormats.begin(), supportedDataFormats.end(), fileExtension) == supportedDataFormats.end()) continue;	//ignore unsupported file formats
+							droppedPaths.emplace_back(entry.path().u8string());
+							droppedPathActive.emplace_back(1);
+							pathDropped = true;
+							file = entry.path().u8string();
+							queryAttributes = queryFileAttributes((entry.path().u8string()).c_str());
+						}
+					}
+				}
+			}
+
+			ImGuiFileDialog::Instance()->Close();
 		}
 
 		pcSettings.rescaleTableColumns = false;
