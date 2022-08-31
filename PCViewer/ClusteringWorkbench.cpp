@@ -1,6 +1,7 @@
-#define NOSTATICS
+//#define NOSTATICS
 #include "ClusteringWorkbench.hpp"
-#undef NOSTATICS
+//#undef NOSTATICS
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui/imgui_internal.h"
 
 ClusteringWorkbench::ClusteringWorkbench(VkDevice device, const std::vector<Attribute>& attributes, std::list<DataSet>& datasets, std::list<DrawList>& drawLists): 

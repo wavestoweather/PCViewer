@@ -2,6 +2,8 @@
 #include "DrawlistColorMatrixEditor.hpp"
 #include "range.hpp"
 #include "Structures.hpp"
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui/imgui_internal.h"
 #include <string>
 
 auto sqDist = [](auto a, auto b){return (a * a) + (b * b);};

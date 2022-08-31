@@ -732,14 +732,14 @@ bool ax::NodeEditor::BeginNodeCombo(const char* label, const char* preview_value
         if (popup_window->WasActive)
         {
             // Always override 'AutoPosLastDirection' to not leave a chance for a past value to affect us.
-            ImVec2 size_expected = CalcWindowExpectedSize(popup_window);
+            ImVec2 size_expected = CalcWindowNextAutoFitSize(popup_window);
             if (flags & ImGuiComboFlags_PopupAlignLeft)
                 popup_window->AutoPosLastDirection = ImGuiDir_Left; // "Below, Toward Left"
             else
                 popup_window->AutoPosLastDirection = ImGuiDir_Down; // "Below, Toward Right (default)"
             auto prefVal = popup_window->ViewportAllowPlatformMonitorExtend;
             popup_window->ViewportAllowPlatformMonitorExtend = -1;
-            ImRect r_outer = GetWindowAllowedExtentRect(popup_window);
+            ImRect r_outer = GetPopupAllowedExtentRect(popup_window);
             popup_window->ViewportAllowPlatformMonitorExtend = prefVal;
             ImVec2 pos = FindBestWindowPosForPopupEx(frame_bb.GetBL(), size_expected, &popup_window->AutoPosLastDirection, r_outer, frame_bb, ImGuiPopupPositionPolicy_ComboBox);
             SetNextWindowPos(CanvasToScreen(pos));

@@ -33,6 +33,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_sdl.h"
 #include "imgui/imgui_impl_vulkan.h"
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui/imgui_internal.h"
 #include "imgui/imgui_stdlib.h"
 #include "cimg/CImg.h"
@@ -7529,7 +7530,7 @@ void violinDrawListPlotAddDrawList(ViolinDrawlistPlot& drawPlot, DrawList& dl, u
 void addExportMenu() {
 	if (ImGui::BeginMenu("Export Image")) {
 		ImGui::DragFloat("Size muliplicator", &g_ExportScale, .5f, .5f, 20);
-		ImVec2 size = ImGui::GetWindowViewport()->GetWorkSize();
+		ImVec2 size = ImGui::GetWindowViewport()->WorkSize;
 		ImGui::Text("Resulting size: {%d, %d}", (int)(size.x * g_ExportScale), (int)(size.y * g_ExportScale));
 		ImGui::InputText("Export file(including filepath)", g_ExportPath, 200);
 		if (ImGui::MenuItem("Export")) {
@@ -8184,8 +8185,8 @@ int main(int, char**)
 
 		//Main docking window including the main menu
 		ImGuiViewport* viewport = ImGui::GetMainViewport();
-		ImGui::SetNextWindowPos(viewport->GetWorkPos());
-		ImGui::SetNextWindowSize(viewport->GetWorkSize());
+		ImGui::SetNextWindowPos(viewport->WorkPos);
+		ImGui::SetNextWindowSize(viewport->WorkSize);
 		ImGui::SetNextWindowViewport(viewport->ID);
 		ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus;
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -8397,7 +8398,7 @@ int main(int, char**)
 				if (ImGui::BeginMenu("Export")) {
 					if (ImGui::MenuItem("Png")) {
 						ImGuiID id = ImGui::GetWindowViewport()->ID;
-						ImVec2 size = ImGui::GetWindowViewport()->GetWorkSize();
+						ImVec2 size = ImGui::GetWindowViewport()->WorkSize;
 						for (int i = 0; i < ImGui::GetCurrentContext()->Viewports.Size; i++) {
 							if (ImGui::GetCurrentContext()->Viewports[i]->ID == id) {
 								g_ExportViewportNumber = i;
@@ -8504,7 +8505,7 @@ int main(int, char**)
 
 					ImGui::EndMenu();
 				}
-				ImGui::InputFloat("Mu add factor", &pcSettings.brushMuFactor, 0.000001, 0.001, 10);
+				ImGui::InputFloat("Mu add factor", &pcSettings.brushMuFactor, 0.000001, 0.001);
 
 				ImGui::Separator();
 				if (ImGui::InputInt("Max fraction depth", &pcSettings.maxFractionDepth, 1, 1)) {
@@ -8583,7 +8584,7 @@ int main(int, char**)
 				}
 				ImGui::Separator();
 				ImGui::DragFloat("Size muliplicator", &g_ExportScale, .5f, .5f, 20);
-				ImVec2 size = ImGui::GetWindowViewport()->GetWorkSize();
+				ImVec2 size = ImGui::GetWindowViewport()->WorkSize;
 				ImGui::Text("Resulting size: {%d, %d}", (int)(size.x* g_ExportScale), (int)(size.y* g_ExportScale));
 				ImGui::InputText("Export file(including filepath)", g_ExportPath, 200);
 				if (ImGui::MenuItem("Export")) {
@@ -12750,8 +12751,8 @@ int main(int, char**)
 
 
 				if (ImGui::BeginMenu("Camera position")) {
-					ImGui::InputFloat3("Position", isoSurfaceRenderer->cameraPositionGUI, 3);
-					ImGui::InputFloat2("Rotation", isoSurfaceRenderer->cameraRotationGUI, 3);
+					ImGui::InputFloat3("Position", isoSurfaceRenderer->cameraPositionGUI);
+					ImGui::InputFloat2("Rotation", isoSurfaceRenderer->cameraRotationGUI);
 					if (ImGui::Button("get current camera position"))
 					{
 						float *p = isoSurfaceRenderer->cameraRotationGUI;
@@ -13200,8 +13201,8 @@ int main(int, char**)
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Camera position")) {
-					ImGui::InputFloat3("Position", brushIsoSurfaceRenderer->directIsoRendererCameraPosition, 3);
-					ImGui::InputFloat2("Rotation", brushIsoSurfaceRenderer->cameraRotationGUI, 3);
+					ImGui::InputFloat3("Position", brushIsoSurfaceRenderer->directIsoRendererCameraPosition);
+					ImGui::InputFloat2("Rotation", brushIsoSurfaceRenderer->cameraRotationGUI);
 					if (ImGui::Button("get current camera position"))
 					{
 						float* p = brushIsoSurfaceRenderer->cameraRotationGUI;

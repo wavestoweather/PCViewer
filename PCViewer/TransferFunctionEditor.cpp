@@ -1,4 +1,6 @@
 #include "TransferFunctionEditor.h"
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui/imgui_internal.h"
 
 TransferFunctionEditor::TransferFunctionEditor(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue queue, VkDescriptorPool descriptorPool):
 	device(device), physicalDevice(physicalDevice), commandPool(commandPool), queue(queue), descriptorPool(descriptorPool), editorWidth(500), editorHeight(250), previewHeight(50), transferFormat(VK_FORMAT_R8G8B8A8_UNORM), active(false), changed(false), activeChannel(3), pos({ 100, 100 }), pivot({ 0,0 })
