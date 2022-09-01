@@ -10,8 +10,107 @@
 #include <iostream>
 #include "NodeBase.hpp"
 #include "MemoryView.hpp"
+#include <set>
 
 namespace deriveData{
+namespace Nodes{
+// convenience function
+inline void applyNonaryFunction(const float_column_views& input, float_column_views& output, uint32_t col, std::function<float()> f){
+    assert(input[0].dimensionSizes.empty());            // check for single value constant in input
+    assert(input[0].cols.size() && output[0].cols.size()); // check for columns
+    assert(output[0].size() == input[0].cols[col][0]);    // enough memory has to be allocated before this call is made..
+    for(int i: irange(output[0].size()))
+        output[0].cols[0][i] = f();
+};
+
+inline void applyUnaryFunction(const float_column_views& input, float_column_views& output, uint32_t col, std::function<float(float)> f){
+    assert(input[0].equalDataLayout(output[0]));
+    for(size_t i: irange(input[0].cols[0].size()))
+        output[0].cols[col][i] = f(input[0].cols[col][i]);
+};
+
+inline void applyMultiDimUnaryFunction(const float_column_views& input, float_column_views& output, const std::vector<uint32_t>& dims, std::function<float(const std::vector<float>&)> f){
+    assert(input[0].equalDataLayout(output[0]));
+    std::vector<float> in(dims.size());
+    for(int i: irange(output[0].cols[0].size())){
+        for(int j: irange(dims))
+            in[j] = input[0].cols[dims[j]][i];
+        output[0].cols[0][i] = f(in);
+    }
+};
+
+inline float unaryReductionFunction(const float_column_views& input, uint32_t col, float initVal, std::function<float(float, float)> f){
+    for(int i: irange(input[0].cols[col].size()))
+        initVal = f(initVal, input[0].cols[i]);
+    return initVal;
+};
+
+inline void applyBinaryFunction(const float_column_views& input, float_column_views& output, uint32_t col, std::function<float(float, float)> f){
+    assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
+    if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){      // fast operation possible
+        for(long i: irange(output[0].cols[col].size())){
+            output[0].cols[col][i] = f(input[0].cols[col][i], input[1].cols[col][i]);
+        }
+    }
+    else{                                                                               // less efficient but more general
+        for(long i: irange(output[0].size())){
+            output[0](i, col) = f(input[0](i, col), input[1](i, col));
+        }
+    }
+};
+
+inline std::tuple<float, float> binaryReductionFunction(const float_column_views& input, uint32_t col, std::tuple<float, float> initVal, std::function<std::tuple<float, float>(std::tuple<float, float>, float)> f){
+    for(int i: irange(input[0].cols[col].size()))
+        initVal = f(initVal, input[0].cols[i]);
+    return initVal;
+};
+
+inline void tryAlignInputOutput(const float_column_views& input, float_column_views& output, uint32_t viewIndex = 0){
+    assert(input.size() == output.size());
+    assert(input[viewIndex].equalDataLayout(output[viewIndex]));
+    assert(input[viewIndex].cols.size() == output[viewIndex].cols.size());
+    if(input[viewIndex].cols.size() == 1)
+        return;
+    std::vector<int> preferredPlace(output[viewIndex].cols.size(), -1);
+    // getting the preferred place
+    for(int i: irange(output[viewIndex].cols.size())){
+        for(int j: irange(input[viewIndex].cols.size())){
+            if(input[viewIndex].cols[j] == output[viewIndex].cols[i]){
+                preferredPlace[i] = j;
+                break;
+            }
+        }
+    }
+    // eliminate injective places (multiple outputs want to be matched to the same input)
+    std::set<int> takenSpaces;
+    for(int& i: preferredPlace){
+        if(i != -1){
+            if(takenSpaces.count(i) > 0)
+                i = -1;
+            if(i != -1)
+                takenSpaces.insert(i);
+        }
+    }
+    // switching to the preferred place
+    float_column_views newOutput(1);
+    newOutput[0].dimensionSizes = output[viewIndex].dimensionSizes;
+    newOutput[0].columnDimensionIndices = output[viewIndex].columnDimensionIndices;
+    newOutput[0].cols.resize(output[viewIndex].cols.size());
+    for(int i: irange(preferredPlace)){
+        if(preferredPlace[i] == -1) // no preferred place, skip
+            continue;
+        newOutput[0].cols[preferredPlace[i]] = output[viewIndex].cols[i];
+    }
+    int currentIndex = 0;
+    for(int i: irange(preferredPlace)){
+        if(preferredPlace[i] != -1) // was already added, skip
+            continue;
+        while(newOutput[0].cols[currentIndex]) ++currentIndex;  // get next free spot
+        newOutput[0].cols[currentIndex++] = output[viewIndex].cols[i];
+    }
+    output[viewIndex] = newOutput[0];
+};
+
 // ------------------------------------------------------------------------------------------
 // nodes
 // ------------------------------------------------------------------------------------------
@@ -21,30 +120,30 @@ namespace deriveData{
 // special nodes
 // ------------------------------------------------------------------------------------------
 
-class InputNode: public Node{
+class Input: public Node{
 public:
-    InputNode(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
+    Input(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},
         std::vector<std::unique_ptr<Type>>&& outputTypes = {},
         std::vector<std::string>&& outputNames = {}, 
         std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
 };
 
-class OutputNode: public Node{
+class Output: public Node{
 public:
-    OutputNode(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
+    Output(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},
         std::vector<std::unique_ptr<Type>>&& outputTypes = {},
         std::vector<std::string>&& outputNames = {}, 
         std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
 };
 
-class DatasetInputNode: public InputNode, public Creatable<DatasetInputNode>{
+class DatasetInput: public Input, public Creatable<DatasetInput>{
 public:
     std::string_view datasetId;
 
-    DatasetInputNode(std::string_view datasetID = {""}):
-        InputNode(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
+    DatasetInput(std::string_view datasetID = {""}):
+        Input(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
     {
         name = "Dataset Input";
     }
@@ -54,57 +153,45 @@ public:
     };
 };
 
-class DataCreationNode: public InputNode{
+class DataCreation: public Input{
 public:
-    DataCreationNode(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
+    DataCreation(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},
         std::vector<std::unique_ptr<Type>>&& outputTypes = {},
         std::vector<std::string>&& outputNames = {}, 
-        std::string_view header = {}, std::string_view mt = {}): InputNode(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
+        std::string_view header = {}, std::string_view mt = {}): Input(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
 };
 
-class ZeroVectorNode: public DataCreationNode, public Creatable<ZeroVectorNode>{
+class VectorZero: public DataCreation, public Creatable<VectorZero>{
 public:
-    ZeroVectorNode(): DataCreationNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
+    VectorZero(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].dimensionSizes.empty());            // check for single value constant in input
-        assert(input[0].cols.size() && output[0].cols.size());  // check for columns
-        assert(output[0].size() == input[0].cols[0][0]);    // enough memory has to be allocated before this call is made..
-        for(int i: irange(output[0].size()))
-            output[0].cols[0][i] = 0;
+        applyNonaryFunction(input, output, 0, [](){return 0;});
     };
 };
 
-class OneVectorNode: public DataCreationNode, public Creatable<OneVectorNode>{
+class VectorOne: public DataCreation, public Creatable<VectorOne>{
 public:
-    OneVectorNode(): DataCreationNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
+    VectorOne(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].dimensionSizes.empty());            // check for single value constant in input
-        assert(input[0].cols.size() && output[0].cols.size());  // check for columns
-        assert(output[0].size() == input[0].cols[0][0]);    // enough memory has to be allocated before this call is made..
-        for(int i: irange(output[0].size()))
-            output[0].cols[0][i] = 1;
+        applyNonaryFunction(input, output, 0, [](){return 1;});
     };
 };
 
-class RandomVectorNode: public DataCreationNode, public Creatable<RandomVectorNode>{
+class VectorRandom: public DataCreation, public Creatable<VectorRandom>{
 public:
-    RandomVectorNode(): DataCreationNode(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
+    VectorRandom(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].dimensionSizes.empty());            // check for single value constant in input
-        assert(input[0].cols.size() && output[0].cols.size());  // check for columns
-        assert(output[0].size() == input[0].cols[0][0]);    // enough memory has to be allocated before this call is made..
-        for(int i: irange(output[0].size()))
-            output[0].cols[0][i] = double(rand()) / RAND_MAX;
+        applyNonaryFunction(input, output, 0, [](){return double(rand()) / RAND_MAX;});
     };
 };
 
-class PrintVectorNode: public OutputNode, public Creatable<PrintVectorNode>{
+class PrintVector: public Output, public Creatable<PrintVector>{
 public:
-    PrintVectorNode(): OutputNode(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){};
+    PrintVector(): Output(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // prints at max the first 50 and last 50 items of a vector
@@ -156,12 +243,12 @@ public:
     VariableInput(int minInputs = 0, int maxInputs = std::numeric_limits<int>::max()): minNodes(minInputs), maxNodes(maxInputs){}
 };
 
-class DatasetOutputNode: public OutputNode, public VariableInput, public Creatable<DatasetOutputNode>{
+class DatasetOutput: public Output, public VariableInput, public Creatable<DatasetOutput>{
 public:
     std::string_view datasetId;
 
-    DatasetOutputNode(std::string_view datasetID = {""}):
-        OutputNode(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
+    DatasetOutput(std::string_view datasetID = {""}):
+        Output(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
     {
         name = "Dataset Output";
     }
@@ -171,9 +258,9 @@ public:
     };
 };
 
-class DerivationNode: public Node, public VariableInput, public Creatable<DerivationNode>{
+class Derivation: public Node, public VariableInput, public Creatable<Derivation>{
 public:
-    DerivationNode(): Node(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(1), {""}, "Derivation"){};
+    Derivation(): Node(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(1), {""}, "Derivation"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO: implement
@@ -185,35 +272,31 @@ public:
 // ------------------------------------------------------------------------------------------
 
 template<class T>
-class UnaryNode: public Node{
+class Unary: public Node{
 public:
-    UnaryNode(std::string_view header, std::string_view middle):
+    Unary(std::string_view header, std::string_view middle):
         Node(createFilledVec<T, Type>(1), {std::string()}, createFilledVec<T, Type>(1),{std::string()}, header, middle){};
 };
 
-class InverseNode: public UnaryNode<FloatType>, public Creatable<InverseNode>{
+class Inverse: public Unary<FloatType>, public Creatable<Inverse>{
 public:
-    InverseNode(): UnaryNode("", "1/"){};
+    Inverse(): Unary("", "1/"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{     
-        assert(input[0].equalDataLayout(output[0]));
-        for(size_t i: irange(input[0].cols[0].size()))
-            output[0].cols[0][i] = 1. / input[0].cols[0][i];
+        applyUnaryFunction(input, output, 0, [](float in){return 1. / in;});
     }
 };
 
-class NegateNode: public UnaryNode<FloatType>, public Creatable<NegateNode>{
+class Negate: public Unary<FloatType>, public Creatable<Negate>{
 public:
-    NegateNode(): UnaryNode("", "*-1"){};
+    Negate(): Unary("", "*-1"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{        
-        assert(input[0].equalDataLayout(output[0]));
-        for(size_t i: irange(input[0].cols[0].size()))
-            output[0].cols[0][i] = -input[0].cols[0][i];
+        applyUnaryFunction(input, output, 0, [](float in){return -in;});
     }
 };
 
-class NormalizationNode: public UnaryNode<FloatType>, public Creatable<NormalizationNode>{
+class Normalization: public Unary<FloatType>, public Creatable<Normalization>{
 public:
     enum class NormalizationType{
         ZeroOne,
@@ -221,182 +304,270 @@ public:
     };
     NormalizationType normalizationType{NormalizationType::ZeroOne};
 
-    NormalizationNode(): UnaryNode("", "norm"){};
+    Normalization(): Unary("", "norm"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        auto [mi, ma] = std::minmax(input[0].cols[0].begin(), input[0].cols[0].end());
-        float min = *mi;
-        float max = *ma;
+        auto [min, max] = binaryReductionFunction(input, 0, {std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()}, [](std::tuple<float, float> prev, float cur){return std::tuple<float, float>{std::min(std::get<0>(prev), cur), std::max(std::get<1>(prev), cur)};});
         if(min == max){
             max += 1;
             max *= 1.1;
         }
-        for(size_t i: irange(input[0].cols[0].size()))
-            output[0].cols[0][i] = (input[0].cols[0][i] - min) / (max - min);
+        applyUnaryFunction(input, output, 0, [&](float in){return (in - min) / (max - min);});
+            //output[0].cols[0][i] = (input[0].cols[0][i] - min) / (max - min);
     }
 };
 
-class AbsoluteValueNode: public UnaryNode<FloatType>, public Creatable<AbsoluteValueNode>{
+class AbsoluteValue: public Unary<FloatType>, public Creatable<AbsoluteValue>{
 public:
-    AbsoluteValueNode(): UnaryNode("", "abs"){};
+    AbsoluteValue(): Unary("", "abs"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].equalDataLayout(output[0]));
-        for(size_t i: irange(input[0].cols[0].size()))
-            output[0].cols[0][i] = std::abs(input[0].cols[0][i]);
+        applyUnaryFunction(input, output, 0, [](float in){return std::abs(in);});
     }
 };
 
-class SquareNode: public UnaryNode<FloatType>, public Creatable<SquareNode>{
+class Square: public Unary<FloatType>, public Creatable<Square>{
 public:
-    SquareNode(): UnaryNode("", "square"){};
+    Square(): Unary("", "square"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].equalDataLayout(output[0]));
-        for(size_t i: irange(input[0].cols[0].size()))
-            output[0].cols[0][i] = input[0].cols[0][i] * input[0].cols[0][i];
+        applyUnaryFunction(input, output, 0, [](float in){return in * in;});
     }
 };
 
-class ExponentialNode: public UnaryNode<FloatType>, public Creatable<ExponentialNode>{
+class Sqrt: public Unary<FloatType>, public Creatable<Sqrt>{
 public:
-    ExponentialNode(): UnaryNode("", "exp"){};
+    Sqrt(): Unary("", "sqrt"){};
+
+    virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::sqrt(in);});
+    }
+};
+
+class Exponential: public Unary<FloatType>, public Creatable<Exponential>{
+public:
+    Exponential(): Unary("", "exp"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].equalDataLayout(output[0]));
-        for(size_t i: irange(input[0].cols[0].size()))
-            output[0].cols[0][i] = std::exp(input[0].cols[0][i]);
+        applyUnaryFunction(input, output, 0, [](float in){return std::exp(in);});
     }
 };
 
-class LogarithmNode: public UnaryNode<FloatType>, public Creatable<LogarithmNode>{
+class Logarithm: public Unary<FloatType>, public Creatable<Logarithm>{
 public:
-    LogarithmNode(): UnaryNode("", "log"){};
+    Logarithm(): Unary("", "log"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].equalDataLayout(output[0]));
-        for(size_t i: irange(input[0].cols[0].size()))
-            output[0].cols[0][i] = std::log(input[0].cols[0][i]);
+        applyUnaryFunction(input, output, 0, [](float in){return std::log(in);});
     }
 };
 
-class UnaryVec2Node: public UnaryNode<Vec2Type>{
+class ViewTransformNode{};  // simple type to signal that the deriving class does a view transformation to signal that for dataset input nodes an out pin with outputCounts == 1 can be forwared // TODO complex interactions are at work, think about
+
+class UnaryVec2: public Unary<Vec2Type>{
 public:
-    UnaryVec2Node(std::string_view header = "", std::string_view body = ""): UnaryNode(header, body){};
+    UnaryVec2(std::string_view header = "", std::string_view body = ""): Unary(header, body){};
 };
 
-class CreateVec2Node: public UnaryVec2Node, public Creatable<CreateVec2Node>{
+class CreateVec2: public UnaryVec2, public Creatable<CreateVec2>{
 public:
-    CreateVec2Node(): UnaryVec2Node(){
+    CreateVec2(): UnaryVec2(){
         inputTypes = createFilledVec<FloatType, Type>(2);
         inputNames = {"x", "y"};
         outputNames = {"vec2"};
     }
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        // if different memory addresses, copy
+        assert(input.size() == 2 && input[0].cols.size() == 1 && input[1].cols.size() == 1 && output.size() == 1 && output[0].cols.size() == 2);
+        const float_column_views inputPaired = {column_memory_view<float>{input[0].dimensionSizes, input[0].columnDimensionIndices, {input[0].cols[0], input[1].cols[0]}}};
+        tryAlignInputOutput(inputPaired, output);
+        for(int col: irange(2)){
+            if(inputPaired[0].cols[col] != output[0].cols[col]){
+                applyUnaryFunction(inputPaired, output, col, [](float in){return in;});
+            }
+        }
     }
 };
 
-class SplitVec2: public UnaryVec2Node, public Creatable<SplitVec2>{
+class SplitVec2: public UnaryVec2, public Creatable<SplitVec2>{
 public:
-    SplitVec2(): UnaryVec2Node(){
+    SplitVec2(): UnaryVec2(){
         inputNames = {"vec2"};
         outputTypes = createFilledVec<FloatType, Type>(2);
         outputNames = {"x", "y"};
     }
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        // if different memory addresses, copy
+        assert(input.size() == 1 && input[0].cols.size() == 2 && output.size() == 2 && output[0].cols.size() == 1 && output[1].cols.size() == 1);
+        float_column_views outputPaired = {column_memory_view<float>{output[0].dimensionSizes, output[0].columnDimensionIndices, {output[0].cols[0], output[1].cols[0]}}};
+        tryAlignInputOutput(input, outputPaired);
+        for(int col: irange(2)){
+            if(input[0].cols[col] != outputPaired[0].cols[col]){
+                applyUnaryFunction(input, outputPaired, col, [](float in){return in;});
+            }
+        }
+        output[0].cols = {outputPaired[0].cols[0]};
+        output[1].cols = {outputPaired[0].cols[1]};
     }
 };
 
-class Vec2Norm: public UnaryVec2Node, public Creatable<Vec2Norm>{
+class Vec2Norm: public UnaryVec2, public Creatable<Vec2Norm>{
 public:
-    Vec2Norm(): UnaryVec2Node("", "len"){outputTypes[0] = FloatType::create();};
+    Vec2Norm(): UnaryVec2("", "len"){outputTypes[0] = FloatType::create();};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        applyMultiDimUnaryFunction(input, output, {0,1}, [](const std::vector<float>& in){return std::sqrt(in[0] * in[0] + in[1] * in[1]);});
     }
 };
 
-class UnaryVec3Node: public UnaryNode<Vec3Type>{
-public:
-    UnaryVec3Node(std::string_view header = "", std::string_view body = ""): UnaryNode(header, body){};
+class Vec2Square: public UnaryVec2, public Creatable<Vec2Square>{
+    Vec2Square(): UnaryVec2("", "square"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return in * in;});
+        applyUnaryFunction(input, output, 1, [](float in){return in * in;});
+    }
 };
 
-class CreateVec3Node: public UnaryVec3Node, public Creatable<CreateVec3Node>{
+class UnaryVec3: public Unary<Vec3Type>{
 public:
-    CreateVec3Node(): UnaryVec3Node(){
+    UnaryVec3(std::string_view header = "", std::string_view body = ""): Unary(header, body){};
+};
+
+class CreateVec3: public UnaryVec3, public Creatable<CreateVec3>{
+public:
+    CreateVec3(): UnaryVec3(){
         inputTypes = createFilledVec<FloatType, Type>(3);
         inputNames = {"x", "y", "z"};
         outputNames = {"vec3"};
     }
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        // if different memory addresses, copy
+        assert(input.size() == 3 && input[0].cols.size() == 1 && input[1].cols.size() == 1 && output.size() == 1 && output[0].cols.size() == 3);
+        const float_column_views inputPaired = {column_memory_view<float>{input[0].dimensionSizes, input[0].columnDimensionIndices, {input[0].cols[0], input[1].cols[0], input[2].cols[0]}}};
+        tryAlignInputOutput(inputPaired, output);
+        for(int col: irange(3)){
+            if(inputPaired[0].cols[col] != output[0].cols[col]){
+                applyUnaryFunction(inputPaired, output, col, [](float in){return in;});
+            }
+        }
     }
 };
 
-class SplitVec3: public UnaryVec3Node, public Creatable<SplitVec3>{
+class SplitVec3: public UnaryVec3, public Creatable<SplitVec3>{
 public:
-    SplitVec3(): UnaryVec3Node(){
+    SplitVec3(): UnaryVec3(){
         inputNames = {"vec3"};
         outputTypes = createFilledVec<FloatType, Type>(3);
         outputNames = {"x", "y", "z"};
     }
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        // if different memory addresses, copy
+        assert(input.size() == 1 && input[0].cols.size() == 3 && output.size() == 3 && output[0].cols.size() == 1 && output[1].cols.size() == 1);
+        float_column_views outputPaired = {column_memory_view<float>{output[0].dimensionSizes, output[0].columnDimensionIndices, {output[0].cols[0], output[1].cols[0], output[2].cols[0]}}};
+        tryAlignInputOutput(input, outputPaired);
+        for(int col: irange(3)){
+            if(input[0].cols[col] != outputPaired[0].cols[col]){
+                applyUnaryFunction(input, outputPaired, col, [](float in){return in;});
+            }
+        }
+        output[0].cols = {outputPaired[0].cols[0]};
+        output[1].cols = {outputPaired[0].cols[1]};
+        output[2].cols = {outputPaired[0].cols[2]};
     }
 };
 
-class Vec3Norm: public UnaryVec3Node, public Creatable<Vec3Norm>{
+class Vec3Norm: public UnaryVec3, public Creatable<Vec3Norm>{
 public:
-    Vec3Norm(): UnaryVec3Node("", "len"){outputTypes[0] = FloatType::create();};
+    Vec3Norm(): UnaryVec3("", "len"){outputTypes[0] = FloatType::create();};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        applyMultiDimUnaryFunction(input, output, {0,1,2}, [](const std::vector<float>& in){return std::sqrt(in[0] * in[0] + in[1] * in[1] + in[2] * in[2]);});
     }
 };
 
-class UnaryVec4Node: public UnaryNode<Vec4Type>{
-public:
-    UnaryVec4Node(std::string_view header = "", std::string_view body = ""): UnaryNode(header, body){};
+class Vec3Square: public UnaryVec3, public Creatable<Vec3Square>{
+    Vec3Square(): UnaryVec3("", "square"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return in * in;});
+        applyUnaryFunction(input, output, 1, [](float in){return in * in;});
+        applyUnaryFunction(input, output, 2, [](float in){return in * in;});
+    }
 };
 
-class CreateVec4Node: public UnaryVec4Node, public Creatable<CreateVec4Node>{
+class UnaryVec4: public Unary<Vec4Type>{
 public:
-    CreateVec4Node(): UnaryVec4Node(){
+    UnaryVec4(std::string_view header = "", std::string_view body = ""): Unary(header, body){};
+};
+
+class CreateVec4: public UnaryVec4, public Creatable<CreateVec4>{
+public:
+    CreateVec4(): UnaryVec4(){
         inputTypes = createFilledVec<FloatType, Type>(4);
         inputNames = {"x", "y", "z", "w"};
         outputNames = {"vec4"};
     }
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        // if different memory addresses, copy
+        assert(input.size() == 4 && input[0].cols.size() == 1 && input[1].cols.size() == 1 && output.size() == 1 && output[0].cols.size() == 4);
+        const float_column_views inputPaired = {column_memory_view<float>{input[0].dimensionSizes, input[0].columnDimensionIndices, {input[0].cols[0], input[1].cols[0], input[2].cols[0], input[3].cols[0]}}};
+        tryAlignInputOutput(inputPaired, output);
+        for(int col: irange(4)){
+            if(inputPaired[0].cols[col] != output[0].cols[col]){
+                applyUnaryFunction(inputPaired, output, col, [](float in){return in;});
+            }
+        }
     }
 };
 
-class SplitVec4: public UnaryVec4Node, public Creatable<SplitVec4>{
+class SplitVec4: public UnaryVec4, public Creatable<SplitVec4>{
 public:
-    SplitVec4(): UnaryVec4Node(){
+    SplitVec4(): UnaryVec4(){
         inputNames = {"vec4"};
         outputTypes = createFilledVec<FloatType, Type>(4);
         outputNames = {"x", "y", "z", "w"};
     };
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        // if different memory addresses, copy
+        assert(input.size() == 1 && input[0].cols.size() == 4 && output.size() == 4 && output[0].cols.size() == 1 && output[1].cols.size() == 1);
+        float_column_views outputPaired = {column_memory_view<float>{output[0].dimensionSizes, output[0].columnDimensionIndices, {output[0].cols[0], output[1].cols[0], output[2].cols[0], output[3].cols[0]}}};
+        tryAlignInputOutput(input, outputPaired);
+        for(int col: irange(4)){
+            if(input[0].cols[col] != outputPaired[0].cols[col]){
+                applyUnaryFunction(input, outputPaired, col, [](float in){return in;});
+            }
+        }
+        output[0].cols = {outputPaired[0].cols[0]};
+        output[1].cols = {outputPaired[0].cols[1]};
+        output[2].cols = {outputPaired[0].cols[2]};
+        output[3].cols = {outputPaired[0].cols[3]};
     }
 };
 
-class Vec4Norm: public UnaryVec4Node, public Creatable<Vec4Norm>{
+class Vec4Norm: public UnaryVec4, public Creatable<Vec4Norm>{
 public:
-    Vec4Norm(): UnaryVec4Node("", "len"){outputTypes[0] = FloatType::create();};
+    Vec4Norm(): UnaryVec4("", "len"){outputTypes[0] = FloatType::create();};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO implement
+        applyMultiDimUnaryFunction(input, output, {0,1,2,3}, [](const std::vector<float>& in){return std::sqrt(in[0] * in[0] + in[1] * in[1] + in[2] * in[2]);});
+    }
+};
+
+class Vec4Square: public UnaryVec4, public Creatable<Vec4Square>{
+    Vec4Square(): UnaryVec4("", "square"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return in * in;});
+        applyUnaryFunction(input, output, 1, [](float in){return in * in;});
+        applyUnaryFunction(input, output, 2, [](float in){return in * in;});
+        applyUnaryFunction(input, output, 3, [](float in){return in * in;});
     }
 };
 
@@ -405,85 +576,95 @@ public:
 // ------------------------------------------------------------------------------------------
 
 template<class T>
-class BinaryNode: public Node{
+class Binary: public Node{
 public:
-    BinaryNode(std::string_view header = "", std::string_view body = ""):
+    Binary(std::string_view header = "", std::string_view body = ""):
         Node(createFilledVec<T, Type>(2), {std::string(), std::string()}, createFilledVec<T, Type>(1), {std::string()}, header, body){};
 };
 
-class PlusNode: public BinaryNode<FloatType>, public Creatable<PlusNode>{
+class Plus: public Binary<FloatType>, public Creatable<Plus>{
 public:
-    PlusNode(): BinaryNode("", "+"){};
+    Plus(): Binary("", "+"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
-        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
-            for(long i: irange(output[0].cols[0].size())){
-                output[0].cols[0][i] = input[0].cols[0][i] + input[1].cols[0][i];
-            }
-        }
-        else{   // less efficient but more general
-            for(long i: irange(output[0].size())){
-                output[0](i, 0) = input[0](i, 0) + input[1](i, 0);
-            }
-        }
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a + b;});
     }
 };
 
-class MinusNode: public BinaryNode<FloatType>, public Creatable<MinusNode>{
+class Minus: public Binary<FloatType>, public Creatable<Minus>{
 public:
-    MinusNode(): BinaryNode("", "-"){};
+    Minus(): Binary("", "-"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
-        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
-            for(long i: irange(output[0].cols[0].size())){
-                output[0].cols[0][i] = input[0].cols[0][i] - input[1].cols[0][i];
-            }
-        }
-        else{   // less efficient but more general
-            for(long i: irange(output[0].size())){
-                output[0](i, 0) = input[0](i, 0) - input[1](i, 0);
-            }
-        }
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a - b;});
     }
 };
 
-class MultiplicationNode: public BinaryNode<FloatType>, public Creatable<MultiplicationNode>{
+class Multiplication: public Binary<FloatType>, public Creatable<Multiplication>{
 public:
-    MultiplicationNode(): BinaryNode("", "*"){};
+    Multiplication(): Binary("", "*"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
-        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
-            for(long i: irange(output[0].cols[0].size())){
-                output[0].cols[0][i] = input[0].cols[0][i] * input[1].cols[0][i];
-            }
-        }
-        else{   // less efficient but more general
-            for(long i: irange(output[0].size())){
-                output[0](i, 0) = input[0](i, 0) * input[1](i, 0);
-            }
-        }
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a * b;});
     }
 };
 
-class DivisionNode: public BinaryNode<FloatType>, public Creatable<DivisionNode>{
+class Division: public Binary<FloatType>, public Creatable<Division>{
 public:
-    DivisionNode(): BinaryNode("", "/"){};
+    Division(): Binary("", "/"){};
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
-        if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){ // fast addition possible
-            for(long i: irange(output[0].cols[0].size())){
-                output[0].cols[0][i] = input[0].cols[0][i] / input[1].cols[0][i];
-            }
-        }
-        else{   // less efficient but more general
-            for(long i: irange(output[0].size())){
-                output[0](i, 0) = input[0](i, 0) / input[1](i, 0);
-            }
-        }
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a / b;});
     }
 };
+
+class Pow: public Binary<FloatType>, public Creatable<Pow>{
+public:
+    Pow(): Binary("", "pow"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return std::pow(a, b);});
+    }
+};
+
+class PlusVec2: public Binary<Vec2Type>, public Creatable<PlusVec2>{
+public:
+    PlusVec2(): Binary("", "+"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a + b;});
+        applyBinaryFunction(input, output, 1, [](float a, float b){return a + b;});
+    }
+};
+
+class MinusVec2: public Binary<Vec2Type>, public Creatable<MinusVec2>{
+public:
+    MinusVec2(): Binary("", "+"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a - b;});
+        applyBinaryFunction(input, output, 1, [](float a, float b){return a - b;});
+    }
+};
+
+class MultiplicationVec2: public Binary<Vec2Type>, public Creatable<MultiplicationVec2>{
+public:
+    MultiplicationVec2(): Binary("", "+"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a * b;});
+        applyBinaryFunction(input, output, 1, [](float a, float b){return a * b;});
+    }
+};
+
+class DivisionVec2: public Binary<Vec2Type>, public Creatable<DivisionVec2>{
+public:
+    DivisionVec2(): Binary("", "+"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return a / b;});
+        applyBinaryFunction(input, output, 1, [](float a, float b){return a / b;});
+    }
+};
+}
 }

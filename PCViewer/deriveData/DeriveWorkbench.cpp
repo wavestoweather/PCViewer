@@ -32,7 +32,7 @@ void DeriveWorkbench::show()
         return;
     ImGui::SetNextWindowSize({800, 800}, ImGuiCond_Once);
     ImGui::Begin("DeriveWorkbench", &active);
-    ImGui::Dummy({});ImGui::SameLine(ImGui::GetWindowSize().x / 2);
+    //ImGui::Dummy({});ImGui::SameLine(ImGui::GetWindowSize().x / 2);
     if(ImGui::Button("Execute Graph")){
         try{
             executeGraph();
@@ -77,11 +77,11 @@ void DeriveWorkbench::show()
             bool isLinked = pinToLinks[nodePins.inputIds[i]].size() > 0;
             ax::Widgets::Icon({pinIconSize, pinIconSize}, node->inputTypes[i]->iconType(), isLinked, node->inputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
             ImGui::Spring(0);
-            if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())){
+            if(deriveData::Nodes::VariableInput* variableInput = dynamic_cast<deriveData::Nodes::VariableInput*>(node.get())){
                 ImGui::PushItemWidth(100);
                 if(i > variableInput->minNodes){
                     if(ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i])){
-                        if(deriveData::DatasetOutputNode* dsInput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
+                        if(deriveData::Nodes::DatasetOutput* dsInput = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                             auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
                             ds->attributes[i].name = node->inputNames[i];
                             updatedDatasetsAccess().push_back(dsInput->datasetId);
@@ -93,7 +93,7 @@ void DeriveWorkbench::show()
                 ImGui::PopItemWidth();
                 ImGui::Spring(0);
                 if(i > variableInput->minNodes && ImGui::Button(("X##p" + std::to_string(nodePins.inputIds[i])).c_str())){
-                    if(deriveData::DatasetOutputNode* dsInput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
+                    if(deriveData::Nodes::DatasetOutput* dsInput = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                         auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
                         ds->attributes.erase(ds->attributes.begin() + i);
                         ds->data.columns.erase(ds->data.columns.begin() + i);
@@ -110,7 +110,7 @@ void DeriveWorkbench::show()
                 ImGui::Spring(0);
             }
 
-            if(!isLinked && dynamic_cast<deriveData::OutputNode*>(node.get()) == nullptr){
+            if(!isLinked && dynamic_cast<deriveData::Nodes::Output*>(node.get()) == nullptr){
                 auto memoryView = node->inputTypes[i]->data();
                 if(memoryView.cols.size()){
                     switch(memoryView.cols.size()){
@@ -141,10 +141,10 @@ void DeriveWorkbench::show()
             ImGui::PopStyleVar();
             builder.EndInput();
         }
-        if(deriveData::VariableInput* variableInput = dynamic_cast<deriveData::VariableInput*>(node.get())) 
+        if(deriveData::Nodes::VariableInput* variableInput = dynamic_cast<deriveData::Nodes::VariableInput*>(node.get())) 
             if(nodePins.inputIds.size() < variableInput->maxNodes && ImGui::Button("Add Pin")){
                 std::string number = std::to_string(nodePins.inputIds.size());
-                if(deriveData::DatasetOutputNode* dsInput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
+                if(deriveData::Nodes::DatasetOutput* dsInput = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                     auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const auto& ds){return ds.name == dsInput->datasetId;});
                     ds->attributes.push_back(Attribute{number, number, {}, {}, -.1f, .1f});
                     ds->data.columns.push_back({0});
@@ -158,7 +158,7 @@ void DeriveWorkbench::show()
 
         // middle
         builder.Middle();
-        if(deriveData::DatasetInputNode* datasetInput = dynamic_cast<deriveData::DatasetInputNode*>(node.get())){
+        if(deriveData::Nodes::DatasetInput* datasetInput = dynamic_cast<deriveData::Nodes::DatasetInput*>(node.get())){
             ImGui::Spring(1, 0);
             ImGui::TextUnformatted("Choose Dataset:");
             ImGui::PushItemWidth(150);
@@ -178,7 +178,7 @@ void DeriveWorkbench::show()
             }
             ImGui::PopItemWidth();
         }
-        if(deriveData::DatasetOutputNode* datasetOutput = dynamic_cast<deriveData::DatasetOutputNode*>(node.get())){
+        if(deriveData::Nodes::DatasetOutput* datasetOutput = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
             ImGui::Spring(1, 0);
             ImGui::TextUnformatted("Choose Dataset:");
             ImGui::PushItemWidth(150);
@@ -193,7 +193,7 @@ void DeriveWorkbench::show()
                         for(const auto& a: ds.attributes)
                             _executionGraphs[0].addPin(_curId, id, a.name, deriveData::FloatType::create(), true);
 
-                        dynamic_cast<deriveData::VariableInput*>(node.get())->minNodes = ds.originalAttributeSize - 1;
+                        dynamic_cast<deriveData::Nodes::VariableInput*>(node.get())->minNodes = ds.originalAttributeSize - 1;
                     }
                 }
                 nodes::EndNodeCombo();
@@ -361,8 +361,8 @@ void DeriveWorkbench::show()
                 prevType = nodes[connection.nodeAId].node->outputTypes[connection.nodeAAttribute].get();
         }
 
-        std::unique_ptr<deriveData::Node> node{};
-        for(const auto& [name, entry]: deriveData::NodesRegistry::nodes){
+        std::unique_ptr<deriveData::Nodes::Node> node{};
+        for(const auto& [name, entry]: deriveData::Nodes::Registry::nodes){
             if(prevType && (entry.prototype->inputTypes.empty() || typeid(*prevType) != typeid(*entry.prototype->inputTypes[0])))
                 continue;
             if(ImGui::MenuItem(name.c_str())){
@@ -413,7 +413,7 @@ void DeriveWorkbench::signalDatasetUpdate(const std::vector<std::string_view>& d
 {
     // go through all nodes and check if a dataset input node exists, update
     for(auto& [id, node]: _executionGraphs[0].nodes){
-        if(deriveData::DatasetInputNode* n = dynamic_cast<deriveData::DatasetInputNode*>(node.node.get())){
+        if(deriveData::Nodes::DatasetInput* n = dynamic_cast<deriveData::Nodes::DatasetInput*>(node.node.get())){
             auto ds = std::find(datasetIds.begin(), datasetIds.end(), n->datasetId);
             auto das = std::find_if(_datasets->begin(), _datasets->end(), [&](const DataSet& d){return d.name == *ds;});
             if(ds != datasetIds.end()){
@@ -512,7 +512,7 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     }
     assert(inputDataSize != -1 || nodes[node].inputIds.empty());
     // handling vector cration nodes
-    if(dynamic_cast<deriveData::DataCreationNode*>(nodes[node].node.get())){
+    if(dynamic_cast<deriveData::Nodes::DataCreation*>(nodes[node].node.get())){
         inputDataSize = inputData[0](0, 0);
         static uint32_t dimsIndex{0};
         createVectorSizes.emplace_back(std::make_unique<uint32_t>(inputDataSize));
@@ -535,7 +535,7 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
     deriveData::float_column_views outputData(nodes[node].outputIds.size());
     std::vector<deriveData::memory_view<float>> memoryViewPool;
     uint32_t poolStart{};
-    if(deriveData::DatasetInputNode* inputNode = dynamic_cast<deriveData::DatasetInputNode*>(nodes[node].node.get())){
+    if(deriveData::Nodes::DatasetInput* inputNode = dynamic_cast<deriveData::Nodes::DatasetInput*>(nodes[node].node.get())){
         auto ds = std::find_if(_datasets->begin(), _datasets->end(), [&](const DataSet& d){return d.name == inputNode->datasetId;});
         assert(ds != _datasets->end());
         for(int i: irange(outputData)){
@@ -579,13 +579,13 @@ void DeriveWorkbench::buildCacheRecursive(long node, RecursionData& data){
                 ++data.nodeInfos[node].outputCounts[i];
         }
 
-        if(deriveData::DatasetInputNode* datasetInput = dynamic_cast<deriveData::DatasetInputNode*>(nodes[node].node.get()))
+        if(deriveData::Nodes::DatasetInput* datasetInput = dynamic_cast<deriveData::Nodes::DatasetInput*>(nodes[node].node.get()))
             ++data.nodeInfos[node].outputCounts[i];   // make the dataset input not movable
     }
     data.nodeInfos[node].outputViews = outputData;
 
     // checking for dataset output and moving or copying the data to the output
-    if(deriveData::DatasetOutputNode* n = dynamic_cast<deriveData::DatasetOutputNode*>(nodes[node].node.get())){
+    if(deriveData::Nodes::DatasetOutput* n = dynamic_cast<deriveData::Nodes::DatasetOutput*>(nodes[node].node.get())){
         // getting the dataset data layout
         deriveData::column_memory_view<float> datasetLayout;
         DataSet* dataset;
@@ -640,7 +640,7 @@ void DeriveWorkbench::executeGraph()
     // checkfor output nodes
     std::set<long> outputNodes{};
     for(auto& [id, nodePins]: nodes){
-        if(dynamic_cast<deriveData::OutputNode*>(nodePins.node.get()))
+        if(dynamic_cast<deriveData::Nodes::Output*>(nodePins.node.get()))
             outputNodes.insert(id);
     }
     if(outputNodes.empty()){
