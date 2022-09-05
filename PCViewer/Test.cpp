@@ -26,6 +26,8 @@
 #include <execution>
 #include <sys/mman.h>
 #include <cmath>
+#include <change_tracker.hpp>
+#include <attributes.hpp>
 
 // note: src vector is changed!
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
@@ -397,6 +399,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testSeparateComp = false;
     constexpr bool encodeSingle = false;
     constexpr bool testSeparateGpuDecomp = false;
+    constexpr bool testChangeTracker = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -1063,5 +1066,19 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         auto wtf = vkDecompress(context, singleStream.getVector(), quantStep, singleSize);
         auto decomp = vkDecompressSeparate(context, bitsLow, sizeLow, bitsHigh, sizeHigh, quantStep, quantStep / 4);
         bool letssee = true;
+    }
+    if constexpr(testChangeTracker){
+        structures::change_tracker<std::vector<int>> changableVector;
+        bool a = changableVector.changed;
+        int b = changableVector().size();
+        bool c = changableVector.changed;
+        changableVector->push_back(6);
+        bool d = changableVector.changed;
+        int e = changableVector().back();
+        changableVector.changed = false;
+        for(const auto& i: changableVector())
+            std::cout << i;
+        bool f = changableVector.changed;
+        bool howIsIt;
     }
 }
