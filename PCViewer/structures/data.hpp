@@ -43,9 +43,9 @@ class data{
     std::vector<std::vector<uint32_t>> columnDimensions;        // for constant columns their corresponding vector here is empty
     std::vector<std::vector<T>> columns;
 
-    Data(){};
+    data(){};
     // suggested way is to use default constructor and directly fill the vectors. Thus no copy constructor for the vectors is invoked
-    Data(const std::vector<uint32_t>& dimensionSizes,const std::vector<std::vector<uint32_t>>& columnDimensions,const std::vector<std::vector<T>>& columns):
+    data(const std::vector<uint32_t>& dimensionSizes,const std::vector<std::vector<uint32_t>>& columnDimensions,const std::vector<std::vector<T>>& columns):
         dimensionSizes(dimensionSizes), columnDimensions(columnDimensions), columns(columns){};
 
     void clear() {

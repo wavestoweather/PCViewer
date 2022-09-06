@@ -28,6 +28,8 @@
 #include <cmath>
 #include <change_tracker.hpp>
 #include <attributes.hpp>
+#include <datasets.hpp>
+#include <vk_context.hpp>
 
 // note: src vector is changed!
 static void compressVector(std::vector<float>& src, float quantizationStep, /*out*/ cudaCompress::BitStream& bitStream, uint32_t& symbolsSize){
@@ -1080,5 +1082,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
             std::cout << i;
         bool f = changableVector.changed;
         bool howIsIt;
+        std::unique_ptr<structures::change_tracker<structures::dataset>> ptr{};
+        globals::datasets->insert({std::string_view("Hello"), std::move(ptr)});
+        std::cout << globals::datasets().size();
     }
 }

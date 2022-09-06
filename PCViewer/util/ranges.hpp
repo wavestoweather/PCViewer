@@ -52,6 +52,8 @@ public:
         unsigned long _i;
     };
 
+    iterator begin() const { return iterator(0); }
+    iterator end() const { return iterator(_end); }
 private:
     unsigned long _end;
 };
