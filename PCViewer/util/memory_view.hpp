@@ -2,6 +2,7 @@
 #include <vector>
 #include <type_traits>
 #include <ranges.hpp>
+#include <iostream>
 
 namespace util{
 // writeable memory view
@@ -166,4 +167,13 @@ private:
         return dimensionIndex(dimensionIndices);
     }
 };  
+}
+
+template<class T>
+std::ostream& operator<<(std::ostream &stream, util::memory_view<T> var) {
+    stream << "[ ";
+    for(int i: util::size_range(var)){
+        stream << var[i] << ", ";
+    }
+    return stream << "]";
 }

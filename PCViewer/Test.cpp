@@ -401,7 +401,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testSeparateComp = false;
     constexpr bool encodeSingle = false;
     constexpr bool testSeparateGpuDecomp = false;
-    constexpr bool testChangeTracker = true;
+    constexpr bool testChangeTracker = false;
+    constexpr bool testGlobalVkContext = true;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
@@ -1072,18 +1073,44 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     if constexpr(testChangeTracker){
         structures::change_tracker<std::vector<int>> changableVector;
         bool a = changableVector.changed;
+        assert(!a);
         int b = changableVector().size();
         bool c = changableVector.changed;
+        assert(!c);
         changableVector->push_back(6);
         bool d = changableVector.changed;
+        assert(d);
         int e = changableVector().back();
         changableVector.changed = false;
         for(const auto& i: changableVector())
             std::cout << i;
         bool f = changableVector.changed;
-        bool howIsIt;
+        assert(!f);
         std::unique_ptr<structures::change_tracker<structures::dataset>> ptr{};
         globals::datasets->insert({std::string_view("Hello"), std::move(ptr)});
-        std::cout << globals::datasets().size();
+        assert(globals::datasets().size() == 1);
+        
+    }
+    if constexpr(testGlobalVkContext){
+        std::vector<const char*> enabled_instance_layers{"VK_LAYER_KHRONOS_validation"};
+        std::vector<const char*> enabled_instance_extensions{VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, VK_EXT_DEBUG_REPORT_EXTENSION_NAME};
+        std::vector<const char*> enabled_device_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE_4_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
+        VkPhysicalDeviceFeatures2 device_features{};
+        VkPhysicalDeviceVulkan11Features v11feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+        v11feat.storageBuffer16BitAccess = VK_TRUE;
+        device_features.pNext = &v11feat;
+
+        structures::VkContextInitInfo init_info{};
+        init_info.physical_device_index = -1;   // automatic detection
+        init_info.api_version = VK_API_VERSION_1_2;
+        init_info.application_name = "PCViewerTest";
+        init_info.enabled_instance_layers = enabled_instance_layers;
+        init_info.enabled_instance_extensions = enabled_instance_extensions;
+        init_info.enabled_device_extensions = enabled_device_extensions;
+        init_info.device_features = device_features;
+        auto info = globals::vk_context.init(init_info);
+        std::cout << "Available gpus: " << std::endl << util::memory_view(info.physical_device_names) << std::endl;
+        std::cout << "Selected gpu: " << info.physical_device_names[info.physical_device_index] << std::endl;
+        globals::vk_context.cleanup();
     }
 }

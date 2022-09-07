@@ -22,7 +22,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     create_info.ppEnabledExtensionNames = info.enabled_instance_extensions.data();
     create_info.pApplicationInfo = &app_info;
 
-    res = vkCreateInstance(&create_info, &allocation_callbacks, &instance);
+    res = vkCreateInstance(&create_info, allocation_callbacks, &instance);
     util::check_vk_result(res);
 
     // go through all physical devices, check for available physical device features
@@ -36,7 +36,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     res = vkEnumeratePhysicalDevices(instance, &gpu_count, physical_devices.data());
     util::check_vk_result(res);
 
-    struct score_index{int score, index;};
+    struct score_index{long score; int index;};
     std::vector<score_index> scores(gpu_count);
     for(int i: util::i_range(gpu_count)){
         scores[i].index = i;
@@ -46,6 +46,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
 
         auto feature = util::copy_features(info.device_features);
         vkGetPhysicalDeviceFeatures2(physical_devices[i], &feature.feature);
+        feature.feature.features = available_features;                          // has to be done as vkGetPhysicalDeviceFeatures2 does not fill the base feature
 
         void* cur_available = feature.feature.pNext;
         void* cur_required = info.device_features.pNext;
@@ -67,6 +68,10 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
                 cur_available = static_cast<VkPhysicalDeviceVulkan13Features*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDeviceVulkan13Features*>(cur_required)->pNext;
             break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT:
+                all_features_avail &= util::all_features_available<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>(*static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available), *static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required));
+                cur_available = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available)->pNext;
+                cur_required = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required)->pNext;
             default:
                 throw std::runtime_error(std::string("structures::vk_context::init(...) Unhandled feature type in pNext chain: ") + string_VkStructureType(*static_cast<VkStructureType*>(cur_available)));
             }
@@ -155,11 +160,13 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     device_create_info.pQueueCreateInfos = queue_info.data();
     device_create_info.enabledExtensionCount = info.enabled_device_extensions.size();
     device_create_info.ppEnabledExtensionNames = info.enabled_device_extensions.data();
-    res = vkCreateDevice(physical_device, &device_create_info, &allocation_callbacks, &device);
+    res = vkCreateDevice(physical_device, &device_create_info, allocation_callbacks, &device);
     util::check_vk_result(res);
     vkGetDeviceQueue(device, g_queue_family, 0, &graphics_queue);
     vkGetDeviceQueue(device, c_queue_family, 0, &compute_queue);
     vkGetDeviceQueue(device, t_queue_family, 0, &transfer_queue);
+
+    return ret;
 }
 
 void vk_context::cleanup(){
@@ -167,19 +174,19 @@ void vk_context::cleanup(){
         throw std::runtime_error("vk_context::cleanup() Context was already deleted. Missing call vk_context::init()");
 
     for(auto& pipeline: registered_pipelines)
-        vkDestroyPipeline(device, pipeline, &allocation_callbacks);
+        vkDestroyPipeline(device, pipeline, allocation_callbacks);
     registered_pipelines.clear();
     for(auto& pipeline_layout: registered_pipeline_layouts)
-        vkDestroyPipelineLayout(device, pipeline_layout, &allocation_callbacks);
+        vkDestroyPipelineLayout(device, pipeline_layout, allocation_callbacks);
     registered_pipeline_layouts.clear();
     for(auto& command_pool: registered_command_pools)
-        vkDestroyCommandPool(device, command_pool, &allocation_callbacks);
+        vkDestroyCommandPool(device, command_pool, allocation_callbacks);
     registered_command_pools.clear();
     for(auto& descriptor_pool: registered_descriptor_pools)
-        vkDestroyDescriptorPool(device, descriptor_pool, &allocation_callbacks);
+        vkDestroyDescriptorPool(device, descriptor_pool, allocation_callbacks);
     registered_descriptor_pools.clear();
     for(auto& descriptor_set_layout: registered_descriptor_set_layouts)
-        vkDestroyDescriptorSetLayout(device, descriptor_set_layout, &allocation_callbacks);
+        vkDestroyDescriptorSetLayout(device, descriptor_set_layout, allocation_callbacks);
     registered_descriptor_set_layouts.clear();
     for(auto& buffer_info: registered_buffers)
         vmaDestroyBuffer(allocator, buffer_info.buffer, buffer_info.allocation);
@@ -187,13 +194,13 @@ void vk_context::cleanup(){
     for(auto& image_info: registered_images){
         vmaDestroyImage(allocator, image_info.image, image_info.allocation);
         if(image_info.image_view)
-            vkDestroyImageView(device, image_info.image_view, &allocation_callbacks);
+            vkDestroyImageView(device, image_info.image_view, allocation_callbacks);
     }
     registered_images.clear();
 
     vmaDestroyAllocator(allocator);
     allocator = {};
-    vkDestroyDevice(device, &allocation_callbacks);
+    vkDestroyDevice(device, allocation_callbacks);
     device = {};
     transfer_queue = {};
     compute_queue = {};

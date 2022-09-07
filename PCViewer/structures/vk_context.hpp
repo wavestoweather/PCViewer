@@ -76,7 +76,7 @@ struct vk_context{
     VmaAllocator        allocator{};
 
     // currently no used
-    VkAllocationCallbacks allocation_callbacks{};
+    VkAllocationCallbacks* allocation_callbacks{};
 
     // section for registrated vulkan resources which have to be destroyed for cleanup
     robin_hood::unordered_set<VkPipeline>       registered_pipelines;
@@ -99,7 +99,7 @@ struct vk_context{
     // no move construction
     vk_context(vk_context&&) = delete;
     vk_context& operator=(vk_context&&) = delete;
-    ~vk_context(){if(physical_device) throw std::runtime_error("vk_context::~vk_context() Context has to be cleanuped via vk_context::cleanup() before context destruction.");}
+    ~vk_context(){assert(!physical_device && "Missing call to vk_context.cleanup()");}
 };
 }
 
