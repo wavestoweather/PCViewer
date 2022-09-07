@@ -175,8 +175,8 @@ struct DrawList {
 	std::vector<uint32_t> indices;
 	//std::vector<uint32_t> activeInd;
 	std::vector<std::vector<Brush>> brushes;		//the pair contains first min and then max for the brush
-	LineBundles* lineBundles;
-	ClusterBundles* clusterBundles;
+	LineBundles* lineBundles;						// line bundles are bundles from 1d clustered (canopy clustering) clustering
+	ClusterBundles* clusterBundles;					// cluster bundles are bundles lines from a dimensional clustering
 	bool renderBundles, renderClusterBundles;
 	uint32_t activeLinesAmt;						//contains the amount of lines after brushing has been applied
 	std::shared_ptr<IndBinManager> indBinManager;	//optional import manger for large vis files

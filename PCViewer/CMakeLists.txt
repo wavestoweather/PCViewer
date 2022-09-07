@@ -103,6 +103,7 @@ set(structures_INCLUDE_DIR
     "half/"
     "vulkanMemoryAllocator/include/"
     "robin_hood_map"
+    "imgui"
 )
 
 file(GLOB structures_SRC

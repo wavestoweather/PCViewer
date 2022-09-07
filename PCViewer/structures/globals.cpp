@@ -1,8 +1,11 @@
-#include "datasets.hpp"
 #define VMA_IMPLEMENTATION  // vma allocations cpu
+#include <vk_mem_alloc.h>
+#include <datasets.hpp>
 #include "vk_context.hpp"
 #include <vk_util.hpp>
 #include <ranges.hpp>
+#include <brushes.hpp>
+#include <drawlists.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -44,32 +47,32 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
         VkPhysicalDeviceFeatures available_features;
         vkGetPhysicalDeviceFeatures(physical_devices[i], &available_features);
 
-        auto feature = util::copy_features(info.device_features);
+        auto feature = util::vk::copy_features(info.device_features);
         vkGetPhysicalDeviceFeatures2(physical_devices[i], &feature.feature);
         feature.feature.features = available_features;                          // has to be done as vkGetPhysicalDeviceFeatures2 does not fill the base feature
 
         void* cur_available = feature.feature.pNext;
         void* cur_required = info.device_features.pNext;
-        bool all_features_avail = util::all_features_available<VkPhysicalDeviceFeatures2>(feature.feature, info.device_features);
+        bool all_features_avail = util::vk::all_features_available<VkPhysicalDeviceFeatures2>(feature.feature, info.device_features);
         while(cur_available){
             switch(*static_cast<VkStructureType*>(cur_available)){
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
-                all_features_avail &= util::all_features_available<VkPhysicalDeviceVulkan11Features>(*static_cast<VkPhysicalDeviceVulkan11Features*>(cur_available), *static_cast<VkPhysicalDeviceVulkan11Features*>(cur_required));
+                all_features_avail &= util::vk::all_features_available<VkPhysicalDeviceVulkan11Features>(*static_cast<VkPhysicalDeviceVulkan11Features*>(cur_available), *static_cast<VkPhysicalDeviceVulkan11Features*>(cur_required));
                 cur_available = static_cast<VkPhysicalDeviceVulkan11Features*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDeviceVulkan11Features*>(cur_required)->pNext;
             break;
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
-                all_features_avail &= util::all_features_available<VkPhysicalDeviceVulkan12Features>(*static_cast<VkPhysicalDeviceVulkan12Features*>(cur_available), *static_cast<VkPhysicalDeviceVulkan12Features*>(cur_required));
+                all_features_avail &= util::vk::all_features_available<VkPhysicalDeviceVulkan12Features>(*static_cast<VkPhysicalDeviceVulkan12Features*>(cur_available), *static_cast<VkPhysicalDeviceVulkan12Features*>(cur_required));
                 cur_available = static_cast<VkPhysicalDeviceVulkan12Features*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDeviceVulkan12Features*>(cur_required)->pNext;
             break;
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
-                all_features_avail &= util::all_features_available<VkPhysicalDeviceVulkan13Features>(*static_cast<VkPhysicalDeviceVulkan13Features*>(cur_available), *static_cast<VkPhysicalDeviceVulkan13Features*>(cur_required));
+                all_features_avail &= util::vk::all_features_available<VkPhysicalDeviceVulkan13Features>(*static_cast<VkPhysicalDeviceVulkan13Features*>(cur_available), *static_cast<VkPhysicalDeviceVulkan13Features*>(cur_required));
                 cur_available = static_cast<VkPhysicalDeviceVulkan13Features*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDeviceVulkan13Features*>(cur_required)->pNext;
             break;
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT:
-                all_features_avail &= util::all_features_available<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>(*static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available), *static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required));
+                all_features_avail &= util::vk::all_features_available<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>(*static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available), *static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required));
                 cur_available = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required)->pNext;
             default:
@@ -139,7 +142,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     // creating the logical device
     
     // getting all available extensions from the selected physical device to enable them
-    auto available_device_features = util::copy_features(info.device_features);
+    auto available_device_features = util::vk::copy_features(info.device_features);
     vkGetPhysicalDeviceFeatures2(physical_device, &available_device_features.feature);
 
     std::set<uint32_t> distinct_queue_families{g_queue_family, c_queue_family, t_queue_family};
@@ -211,7 +214,12 @@ void vk_context::cleanup(){
 }
 
 namespace globals{
+structures::vk_context vk_context{};
+
 datasets_t datasets{};
 
-structures::vk_context vk_context{};
+structures::drawlists_t drawlists{};
+
+structures::tracked_brushes global_brushes{};
+
 }

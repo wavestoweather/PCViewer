@@ -39,6 +39,10 @@ public:
         assert(i < _size);
         return _data[i];
     }
+    T* operator->(){
+        assert(_size);
+        return _data;
+    }
     bool operator==(const memory_view& o) const{
         return _data == o._data && _size == o._size;
     }

@@ -9,6 +9,7 @@ namespace util{
         if(err != 0) throw std::runtime_error(std::string("VkResult ") + string_VkResult(err));
     }
 
+    namespace vk{
     template<class T>
     struct feature_wrapper{
         T feature;
@@ -66,5 +67,6 @@ namespace util{
                 return false;
         }
         return true;
+    }
     }
 }
