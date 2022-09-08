@@ -202,6 +202,21 @@ void vk_context::cleanup(){
             vkDestroyImageView(device, image_info.image_view, allocation_callbacks);
     }
     registered_images.clear();
+    for(auto& image_view: registered_image_views)
+        vkDestroyImageView(device, image_view, allocation_callbacks);
+    registered_image_views.clear();
+    for(auto& render_pass: registered_render_passes)
+        vkDestroyRenderPass(device, render_pass, allocation_callbacks);
+    registered_render_passes.clear();
+    for(auto& framebuffer: registered_framebuffer)
+        vkDestroyFramebuffer(device, framebuffer, allocation_callbacks);
+    registered_framebuffer.clear();
+    for(auto& sampler: registered_sampler)
+        vkDestroySampler(device, sampler, allocation_callbacks);
+    registered_sampler.clear();
+    for(auto& pipeline_cache: registered_pipeline_caches)
+        vkDestroyPipelineCache(device, pipeline_cache, allocation_callbacks);
+    registered_pipeline_caches.clear();
 
     vmaDestroyAllocator(allocator);
     allocator = {};

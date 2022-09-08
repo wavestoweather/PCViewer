@@ -6,6 +6,7 @@
 #include <exception>
 #include <robin_hood.h>
 #include <memory_view.hpp>
+#include <std_util.hpp>
 
 namespace structures{
 struct buffer_info{
@@ -20,14 +21,6 @@ struct image_info{
 }
 
 namespace std{
-    template <class T>
-    inline size_t hash_combine(std::size_t seed, const T& v)
-    {
-        std::hash<T> hasher;
-        seed ^= hasher(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
-        return seed;
-    }
-
     template<> struct hash<structures::buffer_info>{
         size_t operator()(const structures::buffer_info & x) const
         {
@@ -86,6 +79,11 @@ struct vk_context{
     robin_hood::unordered_set<VkDescriptorSetLayout> registered_descriptor_set_layouts;
     robin_hood::unordered_set<buffer_info>      registered_buffers;
     robin_hood::unordered_set<image_info>       registered_images;
+    robin_hood::unordered_set<VkImageView>      registered_image_views;                 // only used when for an image a second image view has to be registered
+    robin_hood::unordered_set<VkRenderPass>     registered_render_passes;
+    robin_hood::unordered_set<VkFramebuffer>    registered_framebuffer;
+    robin_hood::unordered_set<VkSampler>        registered_sampler;
+    robin_hood::unordered_set<VkPipelineCache>  registered_pipeline_caches;
 
     // initializes this vulkan context. Init function as global object has no well defined lifetime
     VkContextInitReturnInfo init(const VkContextInitInfo& info);

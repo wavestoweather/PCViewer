@@ -3,6 +3,8 @@
 #include <type_traits>
 #include <ranges.hpp>
 #include <iostream>
+#include <array>
+#include <std_util.hpp>
 
 namespace util{
 // writeable memory view
@@ -57,11 +59,27 @@ public:
         }
         return true;
     }
+    
+    bool contains(const T& el){
+        for(T* b = begin(); b != end(); ++b)
+            if(*b == el)
+                return true;
+        return false;
+    }
+
+    size_t dataHash() const{
+        size_t seed{};
+        std::hash<T> hasher;
+        for(T* b = begin(); b != end(); ++b)
+            seed = std::hash_combine(seed, hasher(*b));
+        return seed;
+    }
 
     T* begin() {return _data;};
     T* end() {return _data + _size;};
     const T* begin() const {return _data;};
     const T* end() const {return _data + _size;};
+
 };
 
 template<class T>

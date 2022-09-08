@@ -3,8 +3,10 @@
 #include <data.hpp>
 #include <memory_view.hpp>
 #include <imgui.h>
-#include <array>
 #include <brushes.hpp>
+#include <vk_context.hpp>
+#include <datasets.hpp>
+#include <enum_names.hpp>
 
 namespace structures{
 
@@ -15,25 +17,11 @@ enum class median_type: uint32_t{
     geometric,
     COUNT
 };
-static std::array<std::string_view, static_cast<size_t>(median_type::COUNT)> median_type_names{
+static enum_names<median_type> median_type_names{
     "none",
     "arithmetic",
     "synthetic",
     "geometric"
-};
-
-enum class alpha_mapping_type: uint32_t{
-	multiplicative,
-	bound01,
-	const_alpha,
-	alpha_adoption,
-    COUNT
-};
-static std::array<std::string_view, static_cast<size_t>(alpha_mapping_type::COUNT)> alpha_mapping_type_names{
-	"multiplicative",
-	"bound01",
-	"const_alpha",
-	"alpha_adoption"
 };
 
 struct drawlist{
@@ -56,8 +44,8 @@ struct drawlist{
     buffer_info             index_buffer;
     buffer_info             median_buffer;              // linear array buffer containing the median values for all attributes
     buffer_info             active_indices_bitmap_gpu;
+    std::vector<buffer_info> derived_data_infos;        // vulkan buffer need e.g. for large vis counting
     tracked_brushes         local_brushes;
-    alpha_mapping_type      alpha_mapping_typ;
 
     //TODO: add cluster and line bundles
 
