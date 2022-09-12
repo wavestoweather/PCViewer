@@ -11,13 +11,13 @@ public:
 
     std::atomic_bool changed{false};
 
-    const T& const_ref() const {return _obj;}
-    const T& operator()() const {return _obj;}
-
-    T& ref() {changed = true; return _obj;}
-    T* operator->() {changed = true; return &_obj;}
-    T* operator*() {changed = true; return &_obj;}
-
+    // constant (reading) data access
+    const T& read() const {return _obj;}
+    // quick non const (writing) data access
+    T& operator()() {changed = true; return _obj;}
+    // explicit non const (writing) data access
+    T& write() {changed = true; return _obj;}
+    // non const (writing) data access no change signal
     T& ref_no_track(){return _obj;}
 
 private:
@@ -33,14 +33,14 @@ public:
 
     std::atomic_bool changed{false};
 
-    const T& const_ref() const {return *_obj;}
-    const T& operator()() const {return *_obj;}
-
-    T& ref() {changed = true; return *_obj;}
-    T* operator->() {changed = true; return _obj.get();}
-    T* operator*() {changed = true; return _obj.get();}
-
-    T& ref_no_track(){return _obj;}
+    // constant (reading) data access
+    const T& read() const {return *_obj;}
+    // non const (writing) data access
+    T& operator()() {changed = true; return *_obj;}
+    // explicit non const (writing) data access
+    T& write() {changed = true; return *_obj;}
+    // non const (writing) data access no change signal
+    T& ref_no_track(){return *_obj;}
 
 private:
     std::unique_ptr<T> _obj{};

@@ -3,11 +3,13 @@
 #include <datasets.hpp>
 #include "vk_context.hpp"
 #include <vk_util.hpp>
+#include <vk_initializers.hpp>
 #include <ranges.hpp>
 #include <brushes.hpp>
 #include <drawlists.hpp>
 #include <settings_manager.hpp>
 #include <fstream>
+#include <commandline_parser.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -196,11 +198,8 @@ void vk_context::cleanup(){
     for(auto& buffer_info: registered_buffers)
         vmaDestroyBuffer(allocator, buffer_info.buffer, buffer_info.allocation);
     registered_buffers.clear();
-    for(auto& image_info: registered_images){
+    for(auto& image_info: registered_images)
         vmaDestroyImage(allocator, image_info.image, image_info.allocation);
-        if(image_info.image_view)
-            vkDestroyImageView(device, image_info.image_view, allocation_callbacks);
-    }
     registered_images.clear();
     for(auto& image_view: registered_image_views)
         vkDestroyImageView(device, image_view, allocation_callbacks);
@@ -354,6 +353,7 @@ void settings_manager::load_settings(std::string_view filename)
 }
 }
 
+// globals definition
 namespace globals{
 structures::vk_context vk_context{};
 
@@ -364,4 +364,6 @@ structures::drawlists_t drawlists{};
 structures::tracked_brushes global_brushes{};
 
 structures::settings_manager settings_manager{};
+
+structures::commandline_parser commandline_parser{};
 }

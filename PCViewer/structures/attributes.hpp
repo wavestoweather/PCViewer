@@ -21,7 +21,7 @@ struct attribute{
     min_max<float>                  data_bounds;                         // for normalized data the normalization bounds
     std::map<std::string_view, float> categories;
     std::vector<std::pair<std::string_view, float>> ctegories_ordered;
-    bool operator==(const attribute& o) const {return id == o.id && bounds() == o.bounds();}
+    bool operator==(const attribute& o) const {return id == o.id && bounds.read() == o.bounds.read();}
 };
 
 struct query_attribute{

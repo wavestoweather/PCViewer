@@ -40,7 +40,8 @@ namespace parallel_coordinates_renderer{
         uint32_t                width;
         uint32_t                height;
         VkSampleCountFlagBits   sample_count;
-        render_type             render_typ;
+        VkFormat                format;
+        render_type             render_type;
 
 		bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equalData(util::memory_view<const uint32_t>(util::memory_view(o)));};
     };
@@ -51,7 +52,9 @@ namespace parallel_coordinates_renderer{
         VkRenderPass            render_pass;
         VkFramebuffer           framebuffer;
         structures::image_info  image;
-        std::optional<structures::image_info> multi_sample_image;
+        VkImageView             image_view;      
+        structures::image_info  multi_sample_image;
+        VkImageView             multi_sample_view;
     };
 
 	using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;

@@ -15,7 +15,6 @@ struct buffer_info{
 };
 struct image_info{
     VkImage         image{};
-    VkImageView     image_view{};
     VmaAllocation   allocation{};
 };
 }
@@ -33,7 +32,6 @@ namespace std{
         size_t operator()(const structures::image_info & x) const
         {
             size_t seed = hash<VkImage>{}(x.image);
-            seed = hash_combine(seed, x.image_view);
             return hash_combine(seed, x.allocation);
         }
     };
@@ -68,7 +66,7 @@ struct vk_context{
 
     VmaAllocator        allocator{};
 
-    // currently no used
+    // currently not used
     VkAllocationCallbacks* allocation_callbacks{};
 
     // section for registrated vulkan resources which have to be destroyed for cleanup

@@ -105,10 +105,18 @@ inline VkMemoryBarrier memoryBarrier()
     return memoryBarrier;
 }
 
-inline VkImageCreateInfo imageCreateInfo()
+inline VkImageCreateInfo imageCreateInfo(VkFormat format, VkExtent3D extent, VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VkImageType type = VK_IMAGE_TYPE_2D, uint32_t mipLevels = 1, uint32_t arrayLayers = 1, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL)
 {
     VkImageCreateInfo imageCreateInfo {};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.format = format;
+    imageCreateInfo.extent = extent;
+    imageCreateInfo.usage = usage;
+    imageCreateInfo.imageType = type;
+    imageCreateInfo.mipLevels = mipLevels;
+    imageCreateInfo.arrayLayers = arrayLayers;
+    imageCreateInfo.samples = samples;
+    imageCreateInfo.tiling = tiling;
     return imageCreateInfo;
 }
 
@@ -263,43 +271,25 @@ inline VkDescriptorSetLayoutBinding descriptorSetLayoutBinding(
 }
 
 inline VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(
-    const VkDescriptorSetLayoutBinding* pBindings,
-    uint32_t bindingCount)
+    const util::memory_view<VkDescriptorSetLayoutBinding> bindings)
 {
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {};
     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.pBindings = pBindings;
-    descriptorSetLayoutCreateInfo.bindingCount = bindingCount;
-    return descriptorSetLayoutCreateInfo;
-}
-
-inline VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(
-    const std::vector<VkDescriptorSetLayoutBinding>& bindings)
-{
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
-    descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     descriptorSetLayoutCreateInfo.pBindings = bindings.data();
-    descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    descriptorSetLayoutCreateInfo.bindingCount = bindings.size();
     return descriptorSetLayoutCreateInfo;
 }
 
 inline VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo(
-    const VkDescriptorSetLayout* pSetLayouts,
-    uint32_t setLayoutCount = 1)
+    const util::memory_view<VkDescriptorSetLayout> descSetLayouts = {}, const util::memory_view<VkPushConstantRange> pushConstantRanges = {}, VkPipelineLayoutCreateFlags createFlags = {})
 {
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = setLayoutCount;
-    pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;
-    return pipelineLayoutCreateInfo;
-}
-
-inline VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo(
-    uint32_t setLayoutCount = 1)
-{
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
-    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = setLayoutCount;
+    pipelineLayoutCreateInfo.flags = createFlags;
+    pipelineLayoutCreateInfo.setLayoutCount = descSetLayouts.size();
+    pipelineLayoutCreateInfo.pSetLayouts = descSetLayouts.data();
+    pipelineLayoutCreateInfo.pushConstantRangeCount = pushConstantRanges.size();
+    pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
     return pipelineLayoutCreateInfo;
 }
 
@@ -655,6 +645,26 @@ inline VkWriteDescriptorSetAccelerationStructureKHR writeDescriptorSetAccelerati
     VkWriteDescriptorSetAccelerationStructureKHR writeDescriptorSetAccelerationStructureKHR{};
     writeDescriptorSetAccelerationStructureKHR.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
     return writeDescriptorSetAccelerationStructureKHR;
+}
+
+inline VkShaderModuleCreateInfo shaderModuleCreateInfo(const util::memory_view<uint32_t> shader_bytes, VkShaderModuleCreateFlags create_flags = {}){
+    VkShaderModuleCreateInfo shaderModuleCreateInfo{};
+    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCreateInfo.codeSize = shader_bytes.byteSize();
+    shaderModuleCreateInfo.pCode = shader_bytes.data();
+    shaderModuleCreateInfo.flags = create_flags;
+    return shaderModuleCreateInfo;
+}
+
+inline VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo(VkShaderStageFlagBits stage, VkShaderModule module, const VkSpecializationInfo* specialization_info = {}, VkPipelineShaderStageCreateFlags create_flags = {}, std::string_view entry_name = {"main"}){
+    VkPipelineShaderStageCreateInfo  pipelineShaderStageCreateInfo{};
+    pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipelineShaderStageCreateInfo.flags = create_flags;
+    pipelineShaderStageCreateInfo.stage = stage;
+    pipelineShaderStageCreateInfo.module = module;
+    pipelineShaderStageCreateInfo.pName = entry_name.data();
+    pipelineShaderStageCreateInfo.pSpecializationInfo = specialization_info;
+    return pipelineShaderStageCreateInfo;
 }
 }
 }

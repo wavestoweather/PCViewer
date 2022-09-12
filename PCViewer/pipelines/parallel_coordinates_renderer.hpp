@@ -14,6 +14,12 @@ class parallel_coordinates_renderer{
     using output_specs = structures::parallel_coordinates_renderer::output_specs;
     using pipeline_data = structures::parallel_coordinates_renderer::pipeline_data;
 
+    struct push_constants{VkDeviceAddress attribute_info_address;};
+
+    const std::string_view vertex_shader_path{""};
+    const std::string_view geometry_shader_path{""};
+    const std::string_view fragment_shader_path{""};
+
     // vulkan resources that are the same for all drawlists/parallel_coordinates_windows
     structures::buffer_info                                 _attribute_info_buffer;
 

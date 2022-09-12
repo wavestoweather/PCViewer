@@ -1075,20 +1075,20 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         structures::change_tracker<std::vector<int>> changableVector;
         bool a = changableVector.changed;
         assert(!a);
-        int b = changableVector().size();
+        int b = changableVector.read().size();
         bool c = changableVector.changed;
         assert(!c);
-        changableVector->push_back(6);
+        changableVector().push_back(6);
         bool d = changableVector.changed;
         assert(d);
-        int e = changableVector().back();
+        int e = changableVector.read().back();
         changableVector.changed = false;
         for(const auto& i: changableVector())
             std::cout << i;
         bool f = changableVector.changed;
         assert(!f);
         structures::unique_tracker<structures::dataset> ptr{};
-        globals::datasets->insert({std::string_view("Hello"), std::move(ptr)});
+        globals::datasets().insert({std::string_view("Hello"), std::move(ptr)});
         assert(globals::datasets().size() == 1);
         
     }

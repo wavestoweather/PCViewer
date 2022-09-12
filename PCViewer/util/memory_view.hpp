@@ -29,10 +29,11 @@ public:
     memory_view& operator=(const memory_view&) = default;
     memory_view& operator=(memory_view&&) = default;
 
-    T* data(){return _data;};
-    const T* data() const {return _data;};
-    size_t size() const {return _size;};
-    bool empty() const {return _size == 0;};
+    T* data()               {return _data;};
+    const T* data() const   {return _data;};
+    size_t size() const     {return _size;};
+    size_t byteSize() const {return _size * sizeof(T);};
+    bool empty() const      {return _size == 0;};
     T& operator[](size_t i){
         assert(i < _size);   // debug assert for in bounds check
         return _data[i];

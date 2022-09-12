@@ -49,10 +49,10 @@ struct drawlist{
 
     //TODO: add cluster and line bundles
 
-    dataset&                    get_dataset()   const {return globals::datasets->at(parent_dataset).ref();}
-    const structures::dataset&  const_dataset() const {return globals::datasets().at(parent_dataset)();} 
-    templatelist&               get_templatelist() const {return *globals::datasets->at(parent_dataset)->templatelist_index[parent_templatelist];}
-    const structures::templatelist& const_templatelist()const {return *globals::datasets().at(parent_dataset)().templatelist_index.at(parent_templatelist);}
+    dataset&                    dataset_write() const       {return globals::datasets().at(parent_dataset)();}
+    const structures::dataset&  dataset_read() const        {return globals::datasets.read().at(parent_dataset).read();} 
+    templatelist&               templatelist_write() const  {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
+    const structures::templatelist& const_templatelist()const {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
 };
 using tracked_drawlist = unique_tracker<drawlist>;
 using drawlists_t = change_tracker<std::vector<tracked_drawlist>>;
