@@ -240,6 +240,32 @@ inline void destroy_framebuffer(VkFramebuffer framebuffer){
     globals::vk_context.registered_framebuffer.erase(framebuffer);
 }
 
+inline VkSemaphore create_semaphore(const VkSemaphoreCreateInfo& info){
+    VkSemaphore semaphore{};
+    auto res = vkCreateSemaphore(globals::vk_context.device, &info, globals::vk_context.allocation_callbacks, &semaphore);
+    check_vk_result(res);
+    globals::vk_context.registered_semaphores.insert(semaphore);
+    return semaphore;
+}
+
+inline void destroy_semaphore(VkSemaphore semaphore){
+    vkDestroySemaphore(globals::vk_context.device, semaphore, globals::vk_context.allocation_callbacks);
+    globals::vk_context.registered_semaphores.erase(semaphore);
+}
+
+inline VkFence create_fence(const VkFenceCreateInfo& info){
+    VkFence fence{};
+    auto res = vkCreateFence(globals::vk_context.device, &info, globals::vk_context.allocation_callbacks, &fence);
+    check_vk_result(res);
+    globals::vk_context.registered_fences.insert(fence);
+    return fence;
+}
+
+inline void destroy_fence(VkFence fence){
+    vkDestroyFence(globals::vk_context.device, fence, globals::vk_context.allocation_callbacks);
+    globals::vk_context.registered_fences.erase(fence);
+}
+
 // ----------------------------------------------------------------------------------------------------------------
 // Create helper functions with bundled functionality. No registering in the context going on
 // ----------------------------------------------------------------------------------------------------------------
@@ -281,5 +307,11 @@ inline void end_commit_command_buffer(VkCommandBuffer commands, VkQueue queue, u
     vkQueueSubmit(queue, 1, &submit_info, fence);
 }
 
+inline void wait_semaphore(VkCommandPool commandPool, VkQueue queue, VkSemaphore semaphore){
+    auto commands = create_begin_command_buffer(commandPool);
+    end_commit_command_buffer(commands, queue, semaphore);
+    auto res = vkQueueWaitIdle(queue);
+    check_vk_result(res);
+}
 }
 }

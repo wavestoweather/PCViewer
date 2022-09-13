@@ -14,15 +14,12 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;
     std::vector<std::unique_ptr<structures::median_type>>    _storage_median_type;
 public:
-    
-
     std::vector<drawlist_info>                  drawlist_infos{};     // the order here is the render order of the drawlists
     structures::alpha_mapping_type              alpha_mapping_typ{};
     structures::image_info                      plot_image{};
     VkImageView                                 plot_image_view{};
 
     void show() override;
-
 };
 
 }

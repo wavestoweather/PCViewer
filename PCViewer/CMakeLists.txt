@@ -105,6 +105,7 @@ set(structures_INCLUDE_DIR
     "robin_hood_map"
     "imgui"
     "pipelines"
+    "workbenches"
 )
 
 file(GLOB structures_SRC

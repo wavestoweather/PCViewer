@@ -6,6 +6,11 @@
 #include <rendering_structs.hpp>
 #include <drawlists.hpp>
 #include <optional>
+#include <chrono>
+
+namespace workbenches{
+    class parallel_coordinates_workbench;
+}
 
 namespace pipelines{
 
@@ -13,6 +18,7 @@ class parallel_coordinates_renderer{
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using output_specs = structures::parallel_coordinates_renderer::output_specs;
     using pipeline_data = structures::parallel_coordinates_renderer::pipeline_data;
+    using time_point = std::chrono::time_point<std::chrono::system_clock>;
 
     struct push_constants{VkDeviceAddress attribute_info_address;};
 
@@ -23,8 +29,10 @@ class parallel_coordinates_renderer{
 
     // vulkan resources that are the same for all drawlists/parallel_coordinates_windows
     structures::buffer_info                                 _attribute_info_buffer;
+    VkCommandPool                                           _command_pool;
 
-    robin_hood::unordered_map<output_specs, pipeline_data> _pipelines;
+    robin_hood::unordered_map<output_specs, pipeline_data>  _pipelines;
+    robin_hood::unordered_map<VkPipeline, time_point>       _pipeline_last_use;
 
     const pipeline_data& get_or_create_pipeline(const output_specs& output_specs);
 
@@ -38,7 +46,9 @@ public:
 
     static parallel_coordinates_renderer& instance();
 
-    uint32_t max_pipeline_count;
+    VkSemaphore render(const workbenches::parallel_coordinates_workbench& workbench);
+
+    uint32_t max_pipeline_count{20};
 };
     
 };

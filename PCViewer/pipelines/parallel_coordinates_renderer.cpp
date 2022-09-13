@@ -4,6 +4,7 @@
 #include <vk_util.hpp>
 #include <file_util.hpp>
 #include <array>
+#include <parallel_coordinates_workbench.hpp>
 
 namespace pipelines
 {
@@ -14,6 +15,21 @@ parallel_coordinates_renderer::parallel_coordinates_renderer()
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
     if(!_pipelines.contains(output_specs)){
+        if(_pipelines.size() > max_pipeline_count){
+            auto [pipeline, time] = *std::min_element(_pipeline_last_use.begin(), _pipeline_last_use.end(), [](const auto& l, const auto& r){return l.second < r.second;});
+            auto [key, val] = *std::find_if(_pipelines.begin(), _pipelines.end(), [&](const auto& e){return e.second.pipeline == pipeline;});
+            util::vk::destroy_pipeline(val.pipeline);
+            util::vk::destroy_pipeline_layout(val.pipeline_layout);
+            util::vk::destroy_framebuffer(val.framebuffer);
+            util::vk::destroy_render_pass(val.render_pass);
+            if(val.multi_sample_image)
+                util::vk::destroy_image(val.multi_sample_image);
+            if(val.multi_sample_view)
+                util::vk::destroy_image_view(val.multi_sample_view);
+            _pipeline_last_use.erase(pipeline);
+            _pipelines.erase(key);
+        }
+
         pipeline_data pipe_data{};
         // creating the rendering buffers  -------------------------------------------------------------------------------
         // output image after multisample reduction (already given by parallel coordinates workbench)
@@ -178,11 +194,16 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         }
 
     }
+    _pipeline_last_use[_pipelines[output_specs].pipeline] = std::chrono::system_clock::now();
     return _pipelines[output_specs];
 }
 
 parallel_coordinates_renderer& parallel_coordinates_renderer::instance(){
     static parallel_coordinates_renderer renderer;
     return renderer;
+}
+
+VkSemaphore parallel_coordinates_renderer::render(const workbenches::parallel_coordinates_workbench& workbench){
+
 }
 }

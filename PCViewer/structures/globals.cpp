@@ -216,6 +216,12 @@ void vk_context::cleanup(){
     for(auto& pipeline_cache: registered_pipeline_caches)
         vkDestroyPipelineCache(device, pipeline_cache, allocation_callbacks);
     registered_pipeline_caches.clear();
+    for(auto& semaphore: registered_semaphores)
+        vkDestroySemaphore(device, semaphore, allocation_callbacks);
+    registered_semaphores.clear();
+    for(auto& fence: registered_fences)
+        vkDestroyFence(device, fence, allocation_callbacks);
+    registered_fences.clear();
 
     vmaDestroyAllocator(allocator);
     allocator = {};

@@ -13,13 +13,15 @@ struct buffer_info{
     VkBuffer        buffer{};
     VmaAllocation   allocation{};
 
-    bool operator==(const buffer_info& o) const {return buffer == o.buffer && allocation == o.allocation;}
+    bool operator==(const buffer_info& o)   const {return buffer == o.buffer && allocation == o.allocation;}
+    operator bool()                         const {return buffer && allocation;}
 };
 struct image_info{
     VkImage         image{};
     VmaAllocation   allocation{};
 
-    bool operator==(const image_info& o) const {return image == o.image && allocation == o.allocation;}
+    bool operator==(const image_info& o)    const {return image == o.image && allocation == o.allocation;}
+    operator bool()                         const {return image && allocation;}
 };
 }
 
@@ -58,6 +60,11 @@ struct VkContextInitReturnInfo{
 };
 
 struct vk_context{
+    struct consume_semaphore{
+        VkSemaphore     semaphore{};
+        bool            consumed{};
+    };
+
     VkInstance          instance{};
     VkPhysicalDevice    physical_device{};
     VkDevice            device{};
@@ -67,6 +74,9 @@ struct vk_context{
     std::mutex          graphics_mutex{};
     std::mutex          compute_mutex{};
     std::mutex          transfer_mutex{};
+    std::vector<consume_semaphore> graphics_semaphores{};  // semaphore queue of the graphics pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
+    std::vector<consume_semaphore> compute_semaphore{};    // semaphore queue of the compute pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
+    std::vector<consume_semaphore> transfer_semaphore{};   // semaphore queue of the transfer pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
 
     VmaAllocator        allocator{};
 
@@ -86,12 +96,16 @@ struct vk_context{
     robin_hood::unordered_set<VkFramebuffer>    registered_framebuffer;
     robin_hood::unordered_set<VkSampler>        registered_sampler;
     robin_hood::unordered_set<VkPipelineCache>  registered_pipeline_caches;
+    robin_hood::unordered_set<VkSemaphore>      registered_semaphores;
+    robin_hood::unordered_set<VkFence>          registered_fences;
 
     // initializes this vulkan context. Init function as global object has no well defined lifetime
     VkContextInitReturnInfo init(const VkContextInitInfo& info);
 
     // cleanup this vulkan context. Cleanup function as global object has no well defined lifetime
     void cleanup();
+
+    void wait_and_clear_semaphores();
 
     // no copy construction
     vk_context(const vk_context&) = delete;
