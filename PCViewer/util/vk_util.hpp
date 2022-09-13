@@ -3,6 +3,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 #include <vk_context.hpp>
 #include <vk_initializers.hpp>
+#include <file_util.hpp>
 #include <stdexcept>
 #include <ranges.hpp>
 
@@ -135,6 +136,11 @@ inline VkPipelineCache create_pipeline_cache(const VkPipelineCacheCreateInfo& in
     return cache;
 }
 
+inline void destroy_pipeline_cache(VkPipelineCache cache){
+    vkDestroyPipelineCache(globals::vk_context.device, cache, globals::vk_context.allocation_callbacks);
+    globals::vk_context.registered_pipeline_caches.erase(cache);
+}
+
 inline VkPipelineLayout create_pipeline_layout(const VkPipelineLayoutCreateInfo& info){
     VkPipelineLayout layout;
     auto res = vkCreatePipelineLayout(globals::vk_context.device, &info, globals::vk_context.allocation_callbacks, &layout);
@@ -196,7 +202,7 @@ inline void destroy_descriptorset_layout(VkDescriptorSetLayout layout){
 }
 
 inline VkCommandPool create_command_pool(const VkCommandPoolCreateInfo& info){
-    VkCommandPool pool;
+    VkCommandPool pool{};
     auto res = vkCreateCommandPool(globals::vk_context.device, &info, globals::vk_context.allocation_callbacks, &pool);
     check_vk_result(res);
     globals::vk_context.registered_command_pools.insert(pool);
@@ -208,9 +214,43 @@ inline void destroy_command_pool(VkCommandPool pool){
     globals::vk_context.registered_command_pools.erase(pool);
 }
 
+inline VkRenderPass create_render_pass(const VkRenderPassCreateInfo& info){
+    VkRenderPass render_pass{};
+    auto res = vkCreateRenderPass(globals::vk_context.device, &info, globals::vk_context.allocation_callbacks, &render_pass);
+    check_vk_result(res);
+    globals::vk_context.registered_render_passes.insert(render_pass);
+    return render_pass;
+}
+
+inline void destroy_render_pass(VkRenderPass renderPass){
+    vkDestroyRenderPass(globals::vk_context.device, renderPass, globals::vk_context.allocation_callbacks);
+    globals::vk_context.registered_render_passes.erase(renderPass);
+}
+
+inline VkFramebuffer create_framebuffer(const VkFramebufferCreateInfo& info){
+    VkFramebuffer framebuffer{};
+    auto res = vkCreateFramebuffer(globals::vk_context.device, &info, globals::vk_context.allocation_callbacks, &framebuffer);
+    check_vk_result(res);
+    globals::vk_context.registered_framebuffer.insert(framebuffer);
+    return framebuffer;
+}
+
+inline void destroy_framebuffer(VkFramebuffer framebuffer){
+    vkDestroyFramebuffer(globals::vk_context.device, framebuffer, globals::vk_context.allocation_callbacks);
+    globals::vk_context.registered_framebuffer.erase(framebuffer);
+}
+
 // ----------------------------------------------------------------------------------------------------------------
 // Create helper functions with bundled functionality. No registering in the context going on
 // ----------------------------------------------------------------------------------------------------------------
+inline VkShaderModule create_shader_module(std::string_view filename){
+    VkShaderModule module;
+    auto bytes = util::read_file(filename);
+    auto module_info = util::vk::initializers::shaderModuleCreateInfo(bytes);
+    auto res = vkCreateShaderModule(globals::vk_context.device, &module_info, globals::vk_context.allocation_callbacks, &module); 
+    util::check_vk_result(res);
+    return module;
+}
 
 inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool){
     VkCommandBuffer command;
@@ -220,7 +260,7 @@ inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool){
     auto res = vkAllocateCommandBuffers(globals::vk_context.device, &info, &command);
     check_vk_result(res);
     VkCommandBufferBeginInfo begin_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    auto res = vkBeginCommandBuffer(command, &begin_info);
+    res = vkBeginCommandBuffer(command, &begin_info);
     check_vk_result(res);
     return command;
 }

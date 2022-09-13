@@ -71,10 +71,16 @@ inline VkRenderPassBeginInfo renderPassBeginInfo()
     return renderPassBeginInfo;
 }
 
-inline VkRenderPassCreateInfo renderPassCreateInfo()
+inline VkRenderPassCreateInfo renderPassCreateInfo(const memory_view<VkAttachmentDescription> attachments = {}, const memory_view<VkSubpassDescription> subpasses = {}, const memory_view<VkSubpassDependency> dependencies = {})
 {
     VkRenderPassCreateInfo renderPassCreateInfo {};
     renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassCreateInfo.attachmentCount = attachments.size();
+    renderPassCreateInfo.pAttachments = attachments.data();
+    renderPassCreateInfo.subpassCount = subpasses.size();
+    renderPassCreateInfo.pSubpasses = subpasses.data();
+    renderPassCreateInfo.dependencyCount = dependencies.size();
+    renderPassCreateInfo.pDependencies = dependencies.data();
     return renderPassCreateInfo;
 }
 
@@ -139,10 +145,16 @@ inline VkImageViewCreateInfo imageViewCreateInfo(VkImage image = {}, VkImageView
     return imageViewCreateInfo;
 }
 
-inline VkFramebufferCreateInfo framebufferCreateInfo()
+inline VkFramebufferCreateInfo framebufferCreateInfo(VkRenderPass renderPass = {}, const memory_view<VkImageView> attachments = {}, uint32_t width = {}, uint32_t height = {}, uint32_t layers = {})
 {
     VkFramebufferCreateInfo framebufferCreateInfo {};
     framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.attachmentCount = attachments.size();
+    framebufferCreateInfo.pAttachments = attachments.data();
+    framebufferCreateInfo.width = width;
+    framebufferCreateInfo.height = height;
+    framebufferCreateInfo.layers = layers;
     return framebufferCreateInfo;
 }
 
@@ -375,16 +387,9 @@ inline VkVertexInputAttributeDescription vertexInputAttributeDescription(
     return vInputAttribDescription;
 }
 
-inline VkPipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo()
-{
-    VkPipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo {};
-    pipelineVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    return pipelineVertexInputStateCreateInfo;
-}
-
 inline VkPipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo(
-    const std::vector<VkVertexInputBindingDescription> &vertexBindingDescriptions,
-    const std::vector<VkVertexInputAttributeDescription> &vertexAttributeDescriptions
+    const memory_view<VkVertexInputBindingDescription> vertexBindingDescriptions = {},
+    const memory_view<VkVertexInputAttributeDescription> vertexAttributeDescriptions = {}
 )
 {
     VkPipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo{};
@@ -437,20 +442,19 @@ inline VkPipelineColorBlendAttachmentState pipelineColorBlendAttachmentState(
 }
 
 inline VkPipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo(
-    uint32_t attachmentCount,
-    const VkPipelineColorBlendAttachmentState * pAttachments)
+    const memory_view<VkPipelineColorBlendAttachmentState> attachments)
 {
     VkPipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo {};
     pipelineColorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    pipelineColorBlendStateCreateInfo.attachmentCount = attachmentCount;
-    pipelineColorBlendStateCreateInfo.pAttachments = pAttachments;
+    pipelineColorBlendStateCreateInfo.attachmentCount = attachments.size();
+    pipelineColorBlendStateCreateInfo.pAttachments = attachments.data();
     return pipelineColorBlendStateCreateInfo;
 }
 
 inline VkPipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo(
     VkBool32 depthTestEnable,
     VkBool32 depthWriteEnable,
-    VkCompareOp depthCompareOp)
+    VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS)
 {
     VkPipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo {};
     pipelineDepthStencilStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -486,26 +490,13 @@ inline VkPipelineMultisampleStateCreateInfo pipelineMultisampleStateCreateInfo(
 }
 
 inline VkPipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo(
-    const VkDynamicState * pDynamicStates,
-    uint32_t dynamicStateCount,
-    VkPipelineDynamicStateCreateFlags flags = 0)
-{
-    VkPipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo {};
-    pipelineDynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    pipelineDynamicStateCreateInfo.pDynamicStates = pDynamicStates;
-    pipelineDynamicStateCreateInfo.dynamicStateCount = dynamicStateCount;
-    pipelineDynamicStateCreateInfo.flags = flags;
-    return pipelineDynamicStateCreateInfo;
-}
-
-inline VkPipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo(
-    const std::vector<VkDynamicState>& pDynamicStates,
+    const memory_view<VkDynamicState> dynamicStates,
     VkPipelineDynamicStateCreateFlags flags = 0)
 {
     VkPipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo{};
     pipelineDynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    pipelineDynamicStateCreateInfo.pDynamicStates = pDynamicStates.data();
-    pipelineDynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t>(pDynamicStates.size());
+    pipelineDynamicStateCreateInfo.pDynamicStates = dynamicStates.data();
+    pipelineDynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     pipelineDynamicStateCreateInfo.flags = flags;
     return pipelineDynamicStateCreateInfo;
 }
@@ -518,25 +509,19 @@ inline VkPipelineTessellationStateCreateInfo pipelineTessellationStateCreateInfo
     return pipelineTessellationStateCreateInfo;
 }
 
-inline VkGraphicsPipelineCreateInfo pipelineCreateInfo(
-    VkPipelineLayout layout,
-    VkRenderPass renderPass,
-    VkPipelineCreateFlags flags = 0)
+inline VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo(
+    const memory_view<VkPipelineShaderStageCreateInfo> shaderStages = {},
+    VkPipelineLayout layout = {},
+    VkRenderPass renderPass = {},
+    VkPipelineCreateFlags flags = {})
 {
     VkGraphicsPipelineCreateInfo pipelineCreateInfo {};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineCreateInfo.layout = layout;
     pipelineCreateInfo.renderPass = renderPass;
     pipelineCreateInfo.flags = flags;
-    pipelineCreateInfo.basePipelineIndex = -1;
-    pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-    return pipelineCreateInfo;
-}
-
-inline VkGraphicsPipelineCreateInfo pipelineCreateInfo()
-{
-    VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
-    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineCreateInfo.stageCount = shaderStages.size();
+    pipelineCreateInfo.pStages = shaderStages.data();
     pipelineCreateInfo.basePipelineIndex = -1;
     pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
     return pipelineCreateInfo;
@@ -666,6 +651,34 @@ inline VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo(VkShaderSta
     pipelineShaderStageCreateInfo.pSpecializationInfo = specialization_info;
     return pipelineShaderStageCreateInfo;
 }
+
+inline VkAttachmentDescription attachmentDescription(VkFormat format, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE, VkAttachmentLoadOp stencilLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE, VkAttachmentStoreOp stencilStore = VK_ATTACHMENT_STORE_OP_STORE, VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR){
+    VkAttachmentDescription attachmentDescription{};
+    attachmentDescription.format = format;
+    attachmentDescription.samples = samples;
+    attachmentDescription.loadOp = loadOp;
+    attachmentDescription.storeOp = storeOp;
+    attachmentDescription.stencilLoadOp = stencilLoad;
+    attachmentDescription.stencilStoreOp = stencilStore;
+    attachmentDescription.initialLayout = initialLayout;
+    attachmentDescription.finalLayout = finalLayout;
+    return attachmentDescription;
+}
+
+inline VkSubpassDescription subpassDescription(VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, const memory_view<VkAttachmentReference> inputAttechments = {}, const memory_view<VkAttachmentReference> colorAttachments = {}, const memory_view<VkAttachmentReference> resolveAttachments = {}, const memory_view<VkAttachmentReference> depthStencilAttachment = {}, const memory_view<uint32_t> preserveAttachments = {}){
+    VkSubpassDescription subpassDescription{};
+    subpassDescription.pipelineBindPoint = bindPoint;
+    subpassDescription.inputAttachmentCount = inputAttechments.size();
+    subpassDescription.pInputAttachments = inputAttechments.data();
+    subpassDescription.colorAttachmentCount = colorAttachments.size();
+    subpassDescription.pColorAttachments = colorAttachments.data();
+    subpassDescription.pResolveAttachments = resolveAttachments.data();
+    subpassDescription.pDepthStencilAttachment = depthStencilAttachment.data();
+    subpassDescription.preserveAttachmentCount = preserveAttachments.size();
+    subpassDescription.pPreserveAttachments = preserveAttachments.data();
+    return subpassDescription;
+}
+
 }
 }
 }

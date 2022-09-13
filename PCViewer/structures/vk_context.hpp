@@ -12,10 +12,14 @@ namespace structures{
 struct buffer_info{
     VkBuffer        buffer{};
     VmaAllocation   allocation{};
+
+    bool operator==(const buffer_info& o) const {return buffer == o.buffer && allocation == o.allocation;}
 };
 struct image_info{
     VkImage         image{};
     VmaAllocation   allocation{};
+
+    bool operator==(const image_info& o) const {return image == o.image && allocation == o.allocation;}
 };
 }
 

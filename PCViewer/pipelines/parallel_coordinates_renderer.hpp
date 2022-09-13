@@ -17,6 +17,7 @@ class parallel_coordinates_renderer{
     struct push_constants{VkDeviceAddress attribute_info_address;};
 
     const std::string_view vertex_shader_path{""};
+    const std::string_view large_vis_vertex_shader_path{""};
     const std::string_view geometry_shader_path{""};
     const std::string_view fragment_shader_path{""};
 
@@ -36,6 +37,8 @@ public:
     parallel_coordinates_renderer& operator=(const parallel_coordinates_renderer&) = delete;
 
     static parallel_coordinates_renderer& instance();
+
+    uint32_t max_pipeline_count;
 };
     
 };

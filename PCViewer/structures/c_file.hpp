@@ -15,9 +15,9 @@ struct c_file{
 	c_file(const c_file&) = delete;
 	c_file& operator=(const c_file&) = delete;
     template<class T>
-	size_t read(util::memory_view<T> data) {return fread(data.data(), sizeof(T), data.size());}
+	size_t read(util::memory_view<T> data) {return fread(data.data(), sizeof(T), data.size(), handle);}
     template<class T>
-    size_t write(const util::memory_view<T> data) {return fwrite(data.data(), sizeof(T), data.size());}
+    size_t write(const util::memory_view<T> data) {return fwrite(data.data(), sizeof(T), data.size(), handle);}
     int seek(long offset, origin origin) {return fseek(handle, offset, static_cast<int>(origin));}
     long tell() {return ftell(handle);}
 	FILE* handle;
