@@ -1,6 +1,18 @@
 #include "parallel_coordinates_workbench.hpp"
+#include <vk_initializers.hpp>
+#include <vma_initializers.hpp>
+#include <vk_util.hpp>
+#include <parallel_coordinates_renderer.hpp>
 
 namespace workbenches{
+
+parallel_coordinates_workbench::parallel_coordinates_workbench(const std::string_view id):
+    id(id)
+{
+    auto image_info = util::vk::initializers::imageCreateInfo(plot_data.read().image_format, {plot_data.read().width, plot_data.read().height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    auto alloc_info = util::vma::initializers::allocationCreateInfo();
+    std::tie(plot_data.ref_no_track().image, plot_data.ref_no_track().image_view) = util::vk::create_image_with_view(image_info, alloc_info);
+}
 
 void parallel_coordinates_workbench::show(){
     if(!active)
@@ -90,6 +102,32 @@ void parallel_coordinates_workbench::show(){
     ImGui::EndHorizontal();
 
     ImGui::End();
+
+    // checking for changed image
+    if(plot_data.changed){
+        std::cout << "plot_data changed, recreating..." << std::endl;
+        if(plot_data.read().image)
+            util::vk::destroy_image(plot_data().image);
+        if(plot_data.read().image_view)
+            util::vk::destroy_image_view(plot_data().image_view);
+
+        auto image_info = util::vk::initializers::imageCreateInfo(plot_data.read().image_format, {plot_data.read().width, plot_data.read().height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TYPE_2D, 1, 1, plot_data.read().image_samples);
+        auto alloc_info = util::vma::initializers::allocationCreateInfo();
+        std::tie(plot_data.ref_no_track().image, plot_data.ref_no_track().image_view) = util::vk::create_image_with_view(image_info, alloc_info);
+        plot_data.changed = false;
+
+        render_plot();
+    }
+}
+
+void parallel_coordinates_workbench::render_plot()
+{
+    pipelines::parallel_coordinates_renderer::render_info render_info{
+        *this,  // workbench
+        {},     // wait_semaphores;
+        {}      // signal_semaphores;
+    };
+    pipelines::parallel_coordinates_renderer::instance().render(render_info);
 }
 
 }

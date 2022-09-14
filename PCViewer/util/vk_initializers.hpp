@@ -433,12 +433,27 @@ inline VkPipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateIn
 }
 
 inline VkPipelineColorBlendAttachmentState pipelineColorBlendAttachmentState(
-    VkColorComponentFlags colorWriteMask,
-    VkBool32 blendEnable)
+    VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |VK_COLOR_COMPONENT_A_BIT,
+    VkBool32 blendEnable = VK_FALSE)
 {
     VkPipelineColorBlendAttachmentState pipelineColorBlendAttachmentState {};
     pipelineColorBlendAttachmentState.colorWriteMask = colorWriteMask;
     pipelineColorBlendAttachmentState.blendEnable = blendEnable;
+    return pipelineColorBlendAttachmentState;
+}
+
+inline VkPipelineColorBlendAttachmentState pipelineColorBlendAttachmentStateStandardAlphaBlend(
+    VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |VK_COLOR_COMPONENT_A_BIT)
+{
+    VkPipelineColorBlendAttachmentState pipelineColorBlendAttachmentState {};
+    pipelineColorBlendAttachmentState.colorWriteMask = colorWriteMask;
+    pipelineColorBlendAttachmentState.blendEnable = VK_TRUE;
+    pipelineColorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	pipelineColorBlendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	pipelineColorBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+	pipelineColorBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	pipelineColorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	pipelineColorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
     return pipelineColorBlendAttachmentState;
 }
 

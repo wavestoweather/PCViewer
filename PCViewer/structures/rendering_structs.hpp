@@ -36,6 +36,16 @@ namespace parallel_coordinates_renderer{
         "large_vis_density"
     };
 
+    enum class data_type: uint32_t{
+        floatt,
+        half,
+        COUNT
+    };
+    const structures::enum_names<data_type> data_type_names{
+        "float",
+        "half"
+    };
+
     struct output_specs{
         uint32_t                width{};
         uint32_t                height{};
@@ -43,6 +53,7 @@ namespace parallel_coordinates_renderer{
         VkFormat                format{};
         render_type             render_typ{};
         VkImageView             plot_image_view{};
+        data_type               data_typ{};
 
 		bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equalData(util::memory_view<const uint32_t>(util::memory_view(o)));};
     };

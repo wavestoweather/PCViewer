@@ -55,7 +55,7 @@ struct drawlist{
     const structures::templatelist& const_templatelist()const {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
 };
 using tracked_drawlist = unique_tracker<drawlist>;
-using drawlists_t = change_tracker<std::vector<tracked_drawlist>>;
+using drawlists_t = change_tracker<std::map<std::string_view, tracked_drawlist>>;
 }
 
 namespace globals{

@@ -12,13 +12,13 @@ public:
     std::atomic_bool changed{false};
 
     // constant (reading) data access
-    const T& read() const {return _obj;}
+    inline const T& read() const {return _obj;}
     // quick non const (writing) data access
-    T& operator()() {changed = true; return _obj;}
+    inline T& operator()() {changed = true; return _obj;}
     // explicit non const (writing) data access
-    T& write() {changed = true; return _obj;}
+    inline T& write() {changed = true; return _obj;}
     // non const (writing) data access no change signal
-    T& ref_no_track(){return _obj;}
+    inline T& ref_no_track(){return _obj;}
 
 private:
     T _obj{};
@@ -34,13 +34,13 @@ public:
     std::atomic_bool changed{false};
 
     // constant (reading) data access
-    const T& read() const {return *_obj;}
+    inline const T& read() const {return *_obj;}
     // non const (writing) data access
-    T& operator()() {changed = true; return *_obj;}
+    inline T& operator()() {changed = true; return *_obj;}
     // explicit non const (writing) data access
-    T& write() {changed = true; return *_obj;}
+    inline T& write() {changed = true; return *_obj;}
     // non const (writing) data access no change signal
-    T& ref_no_track(){return *_obj;}
+    inline T& ref_no_track(){return *_obj;}
 
 private:
     std::unique_ptr<T> _obj{};

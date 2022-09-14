@@ -5,6 +5,7 @@
 #include <iostream>
 #include <array>
 #include <std_util.hpp>
+#include <functional>
 
 namespace util{
 // writeable memory view
@@ -74,6 +75,24 @@ public:
         for(T* b = begin(); b != end(); ++b)
             seed = std::hash_combine(seed, hasher(*b));
         return seed;
+    }
+
+    T& find(const T& e){
+        for(auto &el: *this)
+            if(el == e)
+                return el;
+    }
+    const T& find(const T& e) const {
+        return find(e);
+    }
+
+    T& find(std::function<bool(const T& e)> f){
+        for(auto &e: *this)
+            if(f(e))
+                return e;
+    }
+    const T& find(std::function<bool(const T& e)> f) const{
+        return find(f);
     }
 
     T* begin() {return _data;};

@@ -32,7 +32,7 @@ class parallel_coordinates_renderer{
     size_t                                                  _attribute_info_buffer_size{};
     VkCommandPool                                           _command_pool{};
     VkFence                                                 _render_fence{};    // needed as only a single attribute info buffer exists
-    VkCommandBuffer                                         _render_commands{};
+    std::vector<VkCommandBuffer>                            _render_commands{};
 
     robin_hood::unordered_map<output_specs, pipeline_data>  _pipelines{};
     robin_hood::unordered_map<VkPipeline, time_point>       _pipeline_last_use{};

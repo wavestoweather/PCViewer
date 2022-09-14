@@ -2,6 +2,7 @@
 #include <vk_initializers.hpp>
 #include <vma_initializers.hpp>
 #include <vk_util.hpp>
+#include <vma_util.hpp>
 #include <file_util.hpp>
 #include <array>
 #include <parallel_coordinates_workbench.hpp>
@@ -19,6 +20,8 @@ parallel_coordinates_renderer::parallel_coordinates_renderer()
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
     if(!_pipelines.contains(output_specs)){
+        std::cout << "[info] parallel_coordinates_renderer::get_or_create_pipeline() creating new pipeline for output_specs " << util::memory_view<const uint32_t>(util::memory_view(output_specs)) << std::endl;
+
         if(_pipelines.size() > max_pipeline_count){
             auto [pipeline, time] = *std::min_element(_pipeline_last_use.begin(), _pipeline_last_use.end(), [](const auto& l, const auto& r){return l.second < r.second;});
             auto [key, val] = *std::find_if(_pipelines.begin(), _pipelines.end(), [&](const auto& e){return e.second.pipeline == pipeline;});
@@ -87,13 +90,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         auto pipeline_rasterizer = util::vk::initializers::pipelineRasterizationStateCreateInfo(VK_POLYGON_MODE_LINE, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         pipeline_rasterizer.lineWidth = 1;
 
-        auto pipeline_color_blend_attachment = util::vk::initializers::pipelineColorBlendAttachmentState(0xf, VK_TRUE);
-        pipeline_color_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	    pipeline_color_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	    pipeline_color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
-	    pipeline_color_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	    pipeline_color_blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	    pipeline_color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+        auto pipeline_color_blend_attachment = util::vk::initializers::pipelineColorBlendAttachmentStateStandardAlphaBlend();
 
         auto pipeline_color_blend = util::vk::initializers::pipelineColorBlendStateCreateInfo(pipeline_color_blend_attachment);
 
@@ -106,8 +103,20 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         auto pipeline_multi_sample = util::vk::initializers::pipelineMultisampleStateCreateInfo(output_specs.sample_count);
         
-        auto vertex_input_binding = util::vk::initializers::vertexInputBindingDescription(0, sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
-        auto vertex_input_attribute = util::vk::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R32_SFLOAT, 0);
+        VkVertexInputBindingDescription vertex_input_binding{};
+        VkVertexInputAttributeDescription vertex_input_attribute{};
+        switch(output_specs.data_typ){
+        case structures::parallel_coordinates_renderer::data_type::floatt:
+            vertex_input_binding = util::vk::initializers::vertexInputBindingDescription(0, sizeof(half), VK_VERTEX_INPUT_RATE_VERTEX);
+            vertex_input_attribute = util::vk::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R16_SFLOAT, 0);
+            break;
+        case structures::parallel_coordinates_renderer::data_type::half:
+            vertex_input_binding = util::vk::initializers::vertexInputBindingDescription(0, sizeof(half), VK_VERTEX_INPUT_RATE_VERTEX);
+            vertex_input_attribute = util::vk::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R16_SFLOAT, 0);
+            break;
+        default:
+            assert(false && "unknown data type");
+        }
         auto pipeline_vertex_state = util::vk::initializers::pipelineVertexInputStateCreateInfo(vertex_input_binding, vertex_input_attribute);
 
         switch(output_specs.render_typ){
@@ -207,8 +216,8 @@ const structures::buffer_info& parallel_coordinates_renderer::get_or_resize_info
         if(_attribute_info_buffer)
             util::vk::destroy_buffer(_attribute_info_buffer);
         
-        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, byte_size);
-        auto allocation_info = util::vma::initializers::allocationCreateInfo();
+        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, byte_size);
+        auto allocation_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
         _attribute_info_buffer = util::vk::create_buffer(buffer_info, allocation_info);
     }
     return _attribute_info_buffer;
@@ -224,18 +233,52 @@ void parallel_coordinates_renderer::render(const render_info& info){
         int test;
     };
 
-    output_specs out_specs{info.workbench.plot_width, info.workbench.plot_height, info.workbench.plot_image_samples, info.workbench.plot_image_format, info.workbench.render_type, info.workbench.plot_image_view}; 
+    const auto& drawlists = globals::drawlists.read();
+    auto first_dl = info.workbench.drawlist_infos[0].drawlist_id;
+    auto data_type = globals::drawlists.read().at(first_dl).read().dataset_read().data_flags.half ? structures::parallel_coordinates_renderer::data_type::half: structures::parallel_coordinates_renderer::data_type::floatt;
+    output_specs out_specs{
+        info.workbench.plot_data.read().width, 
+        info.workbench.plot_data.read().height, 
+        info.workbench.plot_data.read().image_samples, 
+        info.workbench.plot_data.read().image_format, 
+        info.workbench.render_type, 
+        info.workbench.plot_data.read().image_view, 
+        data_type}; 
     auto pipeline_info = get_or_create_pipeline(out_specs);
 
     structures::dynamic_struct<pipeline_uniform_infos, ImVec4> pipeline_uniforms(info.workbench.attributes.size());
     auto attribute_infos = get_or_resize_info_buffer(pipeline_uniforms.data().byteSize());
-    globals::vk_context.upload_to_staging_buffer(pipeline_uniforms.data());
 
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, 1e10); util::check_vk_result(res);  // 10 seconds waiting
-    if(_render_commands)
-        vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_render_commands);
-    _render_commands = util::vk::create_begin_command_buffer(_command_pool);
+    
+    util::vma::upload_data(pipeline_uniforms.data(), attribute_infos);
+    vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
+    _render_commands.resize(1);
+    _render_commands[0] = util::vk::create_begin_command_buffer(_command_pool);
 
-    util::vk::end_commit_command_buffer(_render_commands, globals::vk_context.graphics_queue, info.wait_semaphores, {}, info.signal_semaphores, _render_fence);
+    size_t batch_size{};
+    switch(info.workbench.render_strategy){
+    case workbenches::parallel_coordinates_workbench::render_strategy::all:
+        for(const auto& dl: info.workbench.drawlist_infos){
+            const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
+            batch_size += ds.float_data.read().size() + ds.half_data.read().size();
+        }
+        break;
+    case workbenches::parallel_coordinates_workbench::render_strategy::batched:
+        batch_size = info.workbench.render_batch_size;
+        break;
+    }
+
+    size_t cur_batch_lines{};
+    for(const auto& dl: info.workbench.drawlist_infos){
+        const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
+        size_t data_size = ds.data_flags.half ? ds.half_data.size(): ds.float_data.size();
+        size_t cur_offset = 0;
+        while(cur_offset < data_size){
+            // TODO: first rework shaders, then come here and update pipelines etc...
+        }
+    }
+
+    util::vk::end_commit_command_buffer(_render_commands.back(), globals::vk_context.graphics_queue, info.wait_semaphores, {}, info.signal_semaphores, _render_fence);
 }
 }
