@@ -43,10 +43,11 @@ inline VkCommandBufferAllocateInfo commandBufferAllocateInfo(
     return commandBufferAllocateInfo;
 }
 
-inline VkCommandPoolCreateInfo commandPoolCreateInfo()
+inline VkCommandPoolCreateInfo commandPoolCreateInfo(uint32_t queueFamilyIndex = 0)
 {
     VkCommandPoolCreateInfo cmdPoolCreateInfo {};
     cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cmdPoolCreateInfo.queueFamilyIndex = queueFamilyIndex;
     return cmdPoolCreateInfo;
 }
 

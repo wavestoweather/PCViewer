@@ -83,6 +83,7 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "DrawlistColorMatrixEditor.hpp"
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
+#include <parallel_coordinates_workbench.hpp>
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -679,6 +680,7 @@ static BubblePlotter* bubblePlotter;
 static SettingsManager* settingsManager;
 static DrawlistColorPalette* drawListColorPalette;
 static DrawlistColorMatrixEditor* drawlistMatrixEditor;
+static std::unique_ptr<workbenches::parallel_coordinates_workbench> parallel_coordinates_workbench;
 
 static GpuBrusher* gpuBrusher;
 
@@ -7917,6 +7919,11 @@ int main(int, char**)
 
 	{// clustering workbench
 		clusteringWorkbench = std::make_shared<ClusteringWorkbench>(g_Device, pcAttributes, g_PcPlotDataSets, g_PcPlotDrawLists);
+	}
+
+	{
+		parallel_coordinates_workbench = std::make_unique<workbenches::parallel_coordinates_workbench>("ParallelCoodinatesWorkbenchTest");
+		//parallel_coordinates_workbench->active = true;
 	}
 
 	//{// testing sorter
@@ -15206,6 +15213,8 @@ int main(int, char**)
 		deriveWorkbench->show();
 
 		compressionWorkbench->draw();
+
+		parallel_coordinates_workbench->show();
 
 		//checking data from hierarch importer
 		for(auto& dl: g_PcPlotDrawLists){

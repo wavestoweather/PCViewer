@@ -74,6 +74,9 @@ struct vk_context{
     std::mutex          graphics_mutex{};
     std::mutex          compute_mutex{};
     std::mutex          transfer_mutex{};
+    uint32_t            graphics_queue_family_index{};
+    uint32_t            compute_queue_family_index{};
+    uint32_t            transfer_queue_family_index{};
     std::vector<consume_semaphore> graphics_semaphores{};  // semaphore queue of the graphics pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
     std::vector<consume_semaphore> compute_semaphore{};    // semaphore queue of the compute pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
     std::vector<consume_semaphore> transfer_semaphore{};   // semaphore queue of the transfer pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
@@ -99,6 +102,8 @@ struct vk_context{
     robin_hood::unordered_set<VkSemaphore>      registered_semaphores;
     robin_hood::unordered_set<VkFence>          registered_fences;
 
+    buffer_info                                 staging_buffer{};
+
     // initializes this vulkan context. Init function as global object has no well defined lifetime
     VkContextInitReturnInfo init(const VkContextInitInfo& info);
 
@@ -107,6 +112,10 @@ struct vk_context{
 
     void wait_and_clear_semaphores();
 
+    // uploads the data into the staging buffer and makes shure the staging buffer can hold the amount of the data
+    void upload_to_staging_buffer(const util::memory_view<uint8_t> data);
+
+    vk_context() = default;
     // no copy construction
     vk_context(const vk_context&) = delete;
     vk_context& operator=(const vk_context&) = delete;
@@ -114,6 +123,9 @@ struct vk_context{
     vk_context(vk_context&&) = delete;
     vk_context& operator=(vk_context&&) = delete;
     ~vk_context(){assert(!physical_device && "Missing call to vk_context.cleanup()");}
+private:
+    size_t                                      _staging_buffer_size{};
+    void*                                       _staging_buffer_mappped{};
 };
 }
 

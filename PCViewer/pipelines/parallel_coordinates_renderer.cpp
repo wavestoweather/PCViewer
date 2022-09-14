@@ -5,12 +5,16 @@
 #include <file_util.hpp>
 #include <array>
 #include <parallel_coordinates_workbench.hpp>
+#include <array_struct.hpp>
 
 namespace pipelines
 {
 parallel_coordinates_renderer::parallel_coordinates_renderer() 
 {
-    
+    auto pool_info = util::vk::initializers::commandPoolCreateInfo(globals::vk_context.graphics_queue_family_index);
+    _command_pool = util::vk::create_command_pool(pool_info);
+    auto fence_info = util::vk::initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
+    _render_fence = util::vk::create_fence(fence_info);
 }
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
@@ -198,12 +202,40 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
     return _pipelines[output_specs];
 }
 
+const structures::buffer_info& parallel_coordinates_renderer::get_or_resize_info_buffer(size_t byte_size){
+    if(byte_size > _attribute_info_buffer_size){
+        if(_attribute_info_buffer)
+            util::vk::destroy_buffer(_attribute_info_buffer);
+        
+        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, byte_size);
+        auto allocation_info = util::vma::initializers::allocationCreateInfo();
+        _attribute_info_buffer = util::vk::create_buffer(buffer_info, allocation_info);
+    }
+    return _attribute_info_buffer;
+}
+
 parallel_coordinates_renderer& parallel_coordinates_renderer::instance(){
     static parallel_coordinates_renderer renderer;
     return renderer;
 }
 
-VkSemaphore parallel_coordinates_renderer::render(const workbenches::parallel_coordinates_workbench& workbench){
+void parallel_coordinates_renderer::render(const render_info& info){
+    struct pipeline_uniform_infos{
+        int test;
+    };
 
+    output_specs out_specs{info.workbench.plot_width, info.workbench.plot_height, info.workbench.plot_image_samples, info.workbench.plot_image_format, info.workbench.render_type, info.workbench.plot_image_view}; 
+    auto pipeline_info = get_or_create_pipeline(out_specs);
+
+    structures::dynamic_struct<pipeline_uniform_infos, ImVec4> pipeline_uniforms(info.workbench.attributes.size());
+    auto attribute_infos = get_or_resize_info_buffer(pipeline_uniforms.data().byteSize());
+    globals::vk_context.upload_to_staging_buffer(pipeline_uniforms.data());
+
+    auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, 1e10); util::check_vk_result(res);  // 10 seconds waiting
+    if(_render_commands)
+        vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_render_commands);
+    _render_commands = util::vk::create_begin_command_buffer(_command_pool);
+
+    util::vk::end_commit_command_buffer(_render_commands, globals::vk_context.graphics_queue, info.wait_semaphores, {}, info.signal_semaphores, _render_fence);
 }
 }

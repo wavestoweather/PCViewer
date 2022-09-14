@@ -3,6 +3,7 @@
 #include <datasets.hpp>
 #include "vk_context.hpp"
 #include <vk_util.hpp>
+#include <vma_initializers.hpp>
 #include <vk_initializers.hpp>
 #include <ranges.hpp>
 #include <brushes.hpp>
@@ -169,6 +170,9 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     device_create_info.ppEnabledExtensionNames = info.enabled_device_extensions.data();
     res = vkCreateDevice(physical_device, &device_create_info, allocation_callbacks, &device);
     util::check_vk_result(res);
+    graphics_queue_family_index = g_queue_family;
+    compute_queue_family_index = c_queue_family;
+    transfer_queue_family_index = t_queue_family;
     vkGetDeviceQueue(device, g_queue_family, 0, &graphics_queue);
     vkGetDeviceQueue(device, c_queue_family, 0, &compute_queue);
     vkGetDeviceQueue(device, t_queue_family, 0, &transfer_queue);
@@ -232,6 +236,21 @@ void vk_context::cleanup(){
     graphics_queue = {};
     physical_device = {};
     instance = {};
+}
+
+void vk_context::upload_to_staging_buffer(const util::memory_view<uint8_t> data){
+    if(data.byteSize() > _staging_buffer_size){
+        if(staging_buffer)
+            util::vk::destroy_buffer(staging_buffer);
+        
+        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data.byteSize());
+        auto alloc_create_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
+        VmaAllocationInfo alloc_info{};
+        staging_buffer = util::vk::create_buffer(buffer_info, alloc_create_info), &alloc_info;
+        _staging_buffer_mappped = alloc_info.pMappedData;
+    }
+
+    memcpy(_staging_buffer_mappped, data.data(), data.byteSize());
 }
 
 settings_manager::settings_manager()
