@@ -272,7 +272,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
     size_t cur_batch_lines{};
     for(const auto& dl: info.workbench.drawlist_infos){
         const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
-        size_t data_size = ds.data_flags.half ? ds.half_data.size(): ds.float_data.size();
+        size_t data_size = ds.data_flags.half ? ds.half_data.read().size(): ds.float_data.read().size();
+        size_t cur_batch_size = std::min(data_size, batch_size);
         size_t cur_offset = 0;
         while(cur_offset < data_size){
             // TODO: first rework shaders, then come here and update pipelines etc...
