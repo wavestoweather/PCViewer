@@ -6,7 +6,6 @@
 #include "CpuLineCounter.hpp"
 #include "RoaringCounter.hpp"
 #include "../Brushing.hpp"
-#include "HistogramDimensionReducer.hpp"
 #include <math.h>
 #include <filesystem>
 
@@ -42,6 +41,7 @@ IndBinManager::IndBinManager(const CreateInfo& info) :
     _lineCounter = LineCounter::acquireReference(LineCounter::CreateInfo{info.context});
     _renderer = compression::Renderer::acquireReference(compression::Renderer::CreateInfo{info.context, info.renderPass, info.sampleCount, info.framebuffer, info.heatmapView, info.heatmapSampler});
     _computeBrusher = ComputeBrusher::acquireReference(ComputeBrusher::CreateInfo{info.context});
+    _histogramReducer = HistogramDimensionReducer::acquireReference(info.context);
 }
 
 
@@ -55,6 +55,8 @@ IndBinManager::~IndBinManager(){
         _renderer->release();
     if(_computeBrusher)
         _computeBrusher->release();
+    if(_histogramReducer)
+        _histogramReducer->release();
     // count resource is destructed automatically by destructor
 
     if(_indexActivation)
@@ -167,7 +169,7 @@ void IndBinManager::updateCounts(){
                     vkFreeMemory(_vkContext.device, _countResources[{a,b}].countMemory, nullptr);
                 }
                 // create resource if not yet available
-                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &(_countResources[{a,b}].countBuffer));
+                VkUtil::createBuffer(_vkContext.device, columnBins * columnBins * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, &(_countResources[{a,b}].countBuffer));
                 VkMemoryAllocateInfo allocInfo{};
                 allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
                 VkMemoryRequirements memReq{};
@@ -178,6 +180,28 @@ void IndBinManager::updateCounts(){
                 vkBindBufferMemory(_vkContext.device, _countResources[{a,b}].countBuffer, _countResources[{a,b}].countMemory, 0);
                 _countResources[{a,b}].binAmt = columnBins * columnBins;
                 _countResources[{a,b}]._vkDevice = _vkContext.device;
+            }
+            if(!_countResources[{a}].countBuffer || _countResources[{a}].binAmt != columnBins){
+                if(_countResources[{a}].countBuffer){
+                    vkDestroyBuffer(_vkContext.device, _countResources[{a}].countBuffer, nullptr);
+                    vkFreeMemory(_vkContext.device, _countResources[{a}].countMemory, nullptr);
+                }
+                std::vector<VkBuffer> buf;
+                std::tie(buf, std::ignore, _countResources[{a}].countMemory) = VkUtil::createMultiBufferBound(_vkContext, {columnBins * sizeof(uint32_t)}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                _countResources[{a}].countBuffer = buf[0];
+                _countResources[{a}].binAmt = columnBins;
+                _countResources[{a}]._vkDevice = _vkContext.device;
+            }
+            if(!_countResources[{b}].countBuffer || _countResources[{b}].binAmt != columnBins){
+                if(_countResources[{b}].countBuffer){
+                    vkDestroyBuffer(_vkContext.device, _countResources[{b}].countBuffer, nullptr);
+                    vkFreeMemory(_vkContext.device, _countResources[{b}].countMemory, nullptr);
+                }
+                std::vector<VkBuffer> buf;
+                std::tie(buf, std::ignore, _countResources[{b}].countMemory) = VkUtil::createMultiBufferBound(_vkContext, {columnBins * sizeof(uint32_t)}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                _countResources[{b}].countBuffer = buf[0];
+                _countResources[{b}].binAmt = columnBins;
+                _countResources[{b}]._vkDevice = _vkContext.device;
             }
         }
         _countBrushState = _currentBrushState;
@@ -570,6 +594,35 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
         uint64_t val{};
         VkSemaphoreWaitInfo info{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, {}, 0, 1, &curSemaphore, &val};
         check_vk_result(vkWaitSemaphores(t->_vkContext.device, &info, 5e9));
+    }
+
+    // project the 2d histograms
+    {
+        std::scoped_lock lock(*t->_vkContext.queueMutex);
+        VkCommandBuffer projectCommands{};
+        VkUtil::createCommandBuffer(t->_vkContext.device, t->_vkContext.commandPool, &projectCommands);
+        for(int i: irange(activeIndices.size() -1)){
+            uint32_t a = activeIndices[i];
+            uint32_t b = activeIndices[i + 1];
+            if(a > b)
+                std::swap(a, b);
+            HistogramDimensionReducer::reduceInfo info{};
+            info.commands = projectCommands;
+            info.dstHistogram = VkUtil::getBufferAddress(t->_vkContext.device, t->_countResources[{a}].countBuffer);
+            info.srcHistogram = VkUtil::getBufferAddress(t->_vkContext.device, t->_countResources[{a, b}].countBuffer);
+            info.histogramWidth = t->_countResources[{a}].binAmt;
+            info.xReduce = 1;
+            t->_histogramReducer->reduceHistogram(info);
+            if(i == activeIndices.size() - 2){
+                info.dstHistogram = VkUtil::getBufferAddress(t->_vkContext.device, t->_countResources[{b}].countBuffer);
+                info.srcHistogram = VkUtil::getBufferAddress(t->_vkContext.device, t->_countResources[{a, b}].countBuffer);
+                info.xReduce = 0;
+                t->_histogramReducer->reduceHistogram(info);
+            }
+        }
+        VkUtil::commitCommandBuffer(t->_vkContext.queue, projectCommands);
+        check_vk_result(vkQueueWaitIdle(t->_vkContext.queue));
+        vkFreeCommandBuffers(t->_vkContext.device, t->_vkContext.commandPool, 1, &projectCommands);
     }
 
     // printing single pipeline timings

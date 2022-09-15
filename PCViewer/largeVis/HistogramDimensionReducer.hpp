@@ -31,7 +31,7 @@ class HistogramDimensionReducer{
 
     VkUtil::Context         _vkContext{};
 
-    const std::string_view  _shaderPath{"shaders/largeVisDimReduce.comp.spv"};
+    const std::string_view  _shaderPath{"shader/largeVisDimReduce.comp.spv"};
 
     VkUtil::PipelineInfo    _pipeline{};
     std::atomic_uint32_t    _refCounter{};
@@ -59,7 +59,9 @@ public:
 
     static HistogramDimensionReducer* acquireReference(const VkUtil::Context& context){if(!_singleton) _singleton = new HistogramDimensionReducer(context); ++_singleton->_refCounter; return _singleton;}
 
-    void release() {--_refCounter; if(_refCounter == 0){delete _singleton; _singleton = nullptr;}}
+    void release() {--_refCounter; 
+        if(_refCounter == 0)
+            {delete _singleton; _singleton = nullptr;}}
     // non realtime (only records the commands into reduceInfo::commands)
     void reduceHistogram(reduceInfo& info);
 };

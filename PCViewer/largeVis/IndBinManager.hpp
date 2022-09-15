@@ -15,6 +15,7 @@
 #include "Renderer.hpp"
 #include "LineCounter.hpp"
 #include "ComputeBrusher.hpp"
+#include "HistogramDimensionReducer.hpp"
 #include <atomic>
 #include <future>
 #include <roaring64map.hh>
@@ -139,7 +140,7 @@ public:
 private:
     // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
     struct CountResource{
-        size_t binAmt{1 << 20}; // needed to check if resolution got updated and the buffer has to be recreated
+        size_t binAmt{}; // needed to check if resolution got updated and the buffer has to be recreated
         VkBuffer countBuffer{};
         VkDeviceMemory countMemory{};
         size_t brushingId{std::numeric_limits<size_t>::max()};      // used to identify brushing state (when brushing state is not on the current state recalculation of indices is required)
@@ -200,6 +201,7 @@ private:
     LineCounter* _lineCounter{};
     compression::Renderer* _renderer{};
     ComputeBrusher* _computeBrusher{};
+    HistogramDimensionReducer* _histogramReducer{};
 
     size_t _curBrushingId{};                        // brush id to check brush status and need for count update
     uint32_t _managerByteSize{};                    // used to keep track of memory consumption to dynamically release intersection lists in "intersectionIndices"
