@@ -6,6 +6,7 @@
 #include "CpuLineCounter.hpp"
 #include "RoaringCounter.hpp"
 #include "../Brushing.hpp"
+#include "HistogramDimensionReducer.hpp"
 #include <math.h>
 #include <filesystem>
 
