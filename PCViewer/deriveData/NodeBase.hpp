@@ -88,6 +88,7 @@ private:
 
 
 using float_column_views = std::vector<column_memory_view<float>>;
+namespace Nodes{
 class Node{
 public:
     std::vector<std::unique_ptr<Type>> inputTypes;
@@ -114,16 +115,17 @@ public:
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;
 };
 
-struct NodesRegistry{
+struct Registry{
     struct Entry{
         std::unique_ptr<Node> prototype;
         std::function<std::unique_ptr<Node>()> create;
     };
     static std::map<std::string, Entry> nodes;
-    NodesRegistry(std::string name, std::function<std::unique_ptr<Node>()> createFunction) {if(nodes.count(name) == 0) nodes[name] = {createFunction(), createFunction};};
+    Registry(std::string name, std::function<std::unique_ptr<Node>()> createFunction) {if(nodes.count(name) == 0) nodes[name] = {createFunction(), createFunction};};
 };
 
 // registers the nodes with a standard constructor
-#define REGISTER_NODE(class) static NodesRegistry classReg_##class(#class , class::create<>);
+#define REGISTER(class) static Registry classReg_##class(#class , class::create<>);
 
+}
 }

@@ -30,17 +30,10 @@ public:
     const T* data() const {return _data;};
     size_t size() const {return _size;};
     bool empty() const {return _size == 0;};
-    T& operator[](size_t i){
-        assert(i < _size);   // debug assert for in bounds check
-        return _data[i];
-    }
-    const T& operator[](size_t i) const{
-        assert(i < _size);
-        return _data[i];
-    }
-    bool operator==(const memory_view& o) const{
-        return _data == o._data && _size == o._size;
-    }
+    T& operator[](size_t i){ assert(i < _size); return _data[i];}
+    const T& operator[](size_t i) const {assert(i < _size); return _data[i];}
+    bool operator==(const memory_view& o) const{ return _data == o._data && _size == o._size;}
+    bool operator!=(const memory_view& o) const{ return !(*this == o);}
     operator bool() const {return _data && _size;};
 
     bool equalData(const memory_view& o) const{
@@ -66,6 +59,7 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
     std::vector<memory_view<T>> cols{};
 
     column_memory_view() = default;
+    column_memory_view(memory_view<uint32_t> sizes, memory_view<uint32_t> indices, std::vector<memory_view<T>> c): dimensionSizes(sizes), columnDimensionIndices(indices), cols(c){}
     column_memory_view(memory_view<T> data, memory_view<uint32_t> dimensionSizes = {}, memory_view<uint32_t> columnDimensionIndices = {}):
         dimensionSizes(dimensionSizes),
         columnDimensionIndices(columnDimensionIndices)
