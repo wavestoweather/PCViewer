@@ -36,6 +36,16 @@ public:
         VkBuffer attributeInformation;                      // contains mapping information for axis scaling, axis positioning and padding
         bool clear;                                         // indicates if the framebuffer should be cleared before rendered to
     };
+    struct HistogramRenderInfo{
+        VkCommandBuffer renderCommands;
+        VkDeviceAddress histValues;
+        float           yLow;
+        float           yHigh;
+        float           xStart;
+        float           xEnd;
+        uint32_t        histValuesCount;
+        float           alpha;
+    };
     // only used for priority rendering
     struct IndexlistUpdateInfo{
         std::vector<VkBuffer>& counts;
@@ -52,10 +62,20 @@ public:
     void updatePipeline(const CreateInfo& createInfo);
     void updateFramebuffer(VkFramebuffer framebuffer, uint32_t newWidth, uint32_t newHeight);   // used to update the framebuffer of the renderer incase of image resizing(future use)
     void render(const RenderInfo& renderInfo);
+    void renderHistogram(const HistogramRenderInfo& info);
     void updatePriorityIndexlists(const IndexlistUpdateInfo& info);
 private:
     struct PushConstants{
         uint32_t aAxis, bAxis, aSize, bSize;
+    };
+    struct HistogramPushConstants{
+        VkDeviceAddress histValues;
+        float           yLow;
+        float           yHigh;
+        float           xStart;
+        float           xEnd;
+        uint32_t        histValuesCount;
+        float           alpha;
     };
 
     Renderer(const CreateInfo& info);
@@ -70,7 +90,7 @@ private:
     VkFramebuffer _framebuffer;     // holds the framebuffer for teh pcviewer image
 
     // vulkan resources that have to be destroyed
-    VkUtil::PipelineInfo _polyPipeInfo{}, _splinePipeInfo{};
+    VkUtil::PipelineInfo _polyPipeInfo{}, _splinePipeInfo{}, _histogramPipeInfo{};
 
     std::map<std::string, VkDescriptorSet> _infoDescSets{}; // contains for each drawlist a descriptor set as multiple descriptor sets might be required
     VkDescriptorSetLayout _heatmapSetLayout{};
@@ -83,6 +103,7 @@ private:
     VkFence             _fence{};
 
     const std::string _vertexShader = "shader/largeVis.vert.spv";
+    const std::string_view _histogrammVertexShader = "shader/largeVisHistogram.vert.spv";
     const std::string _geometryShader = "shader/largeVis.geom.spv";
     const std::string _fragmentShader = "shader/largeVis.frag.spv";
 };

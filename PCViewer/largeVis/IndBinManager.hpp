@@ -15,6 +15,7 @@
 #include "Renderer.hpp"
 #include "LineCounter.hpp"
 #include "ComputeBrusher.hpp"
+#include "HistogramDimensionReducer.hpp"
 #include <atomic>
 #include <future>
 #include <roaring64map.hh>
@@ -98,6 +99,25 @@ public:
         VkSampler heatmapSampler;
     };
 
+    // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
+    struct CountResource{
+        size_t binAmt{}; // needed to check if resolution got updated and the buffer has to be recreated
+        VkBuffer countBuffer{};
+        VkDeviceMemory countMemory{};
+        size_t brushingId{std::numeric_limits<size_t>::max()};      // used to identify brushing state (when brushing state is not on the current state recalculation of indices is required)
+
+        VkDevice _vkDevice{};     // device handle needed for destruction
+        CountResource() = default;
+        ~CountResource(){
+            if(countBuffer)
+                vkDestroyBuffer(_vkDevice, countBuffer, nullptr);
+            if(countMemory)
+                vkFreeMemory(_vkDevice, countMemory, nullptr);
+        }
+        CountResource(const CountResource&) = delete;           // type is not copyable, only movable
+        CountResource& operator=(const CountResource&) = delete;
+    };
+
     // maxDrawLines describes the max lines inbetween two attributes
     IndBinManager(const CreateInfo& info);
     IndBinManager(const IndBinManager&) = delete;   // no copy constructor
@@ -115,6 +135,8 @@ public:
     void forceCountUpdate();
     // renders the current 2d bin counts to the pc plot (is done on main thread, as the main framebuffer is locked)
     void render(VkCommandBuffer commands, VkBuffer attributeInfos, compression::Renderer::RenderType renderType, bool clear = false);
+    // workaround for quick access
+    const robin_hood::unordered_map<std::vector<uint32_t>, CountResource, UVecHash>& getCounts() const {return _countResources;}
     // checks if an update is enqueued
     void checkUpdateQueue(){
         if(_currentBrushState != _countBrushState && !_countUpdateThreadActive){
@@ -137,25 +159,6 @@ public:
     PriorityInfo priorityInfo{};                    // when the attribute in priority info is set to a positive value the count update will produce a max operation for the count images
     bool printDeocmpressionTimes{true};
 private:
-    // struct for holding all information for a counting image such as the vulkan resources, brushing infos...
-    struct CountResource{
-        size_t binAmt{1 << 20}; // needed to check if resolution got updated and the buffer has to be recreated
-        VkBuffer countBuffer{};
-        VkDeviceMemory countMemory{};
-        size_t brushingId{std::numeric_limits<size_t>::max()};      // used to identify brushing state (when brushing state is not on the current state recalculation of indices is required)
-
-        VkDevice _vkDevice{};     // device handle needed for destruction
-        CountResource() = default;
-        ~CountResource(){
-            if(countBuffer)
-                vkDestroyBuffer(_vkDevice, countBuffer, nullptr);
-            if(countMemory)
-                vkFreeMemory(_vkDevice, countMemory, nullptr);
-        }
-        CountResource(const CountResource&) = delete;           // type is not copyable, only movable
-        CountResource& operator=(const CountResource&) = delete;
-    };
-
     struct BrushState{
         std::vector<RangeBrush> rangeBrushes;
         Polygons lassoBrushes;
@@ -200,6 +203,7 @@ private:
     LineCounter* _lineCounter{};
     compression::Renderer* _renderer{};
     ComputeBrusher* _computeBrusher{};
+    HistogramDimensionReducer* _histogramReducer{};
 
     size_t _curBrushingId{};                        // brush id to check brush status and need for count update
     uint32_t _managerByteSize{};                    // used to keep track of memory consumption to dynamically release intersection lists in "intersectionIndices"

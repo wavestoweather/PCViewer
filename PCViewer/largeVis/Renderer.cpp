@@ -15,6 +15,7 @@ Renderer::Renderer(const CreateInfo& info) :
 Renderer::~Renderer(){
     _polyPipeInfo.vkDestroy(_vkContext);
     _splinePipeInfo.vkDestroy(_vkContext);
+    _histogramPipeInfo.vkDestroy(_vkContext);
     if(_heatmapSetLayout)
         vkDestroyDescriptorSetLayout(_vkContext.device, _heatmapSetLayout, nullptr);
     for(auto b: _indexBuffers)
@@ -144,6 +145,26 @@ void Renderer::updatePipeline(const CreateInfo& info){
     VkUtil::createDescriptorSets(info.context.device, {_heatmapSetLayout}, info.context.descriptorPool, &_heatmapSet);
     VkUtil::updateImageDescriptorSet(info.context.device, info.heatmapSampler, info.heatmapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _heatmapSet);
 
+    //----------------------------------------------------------------------------------------------
+	//creating the pipeline for spline rendering
+	//----------------------------------------------------------------------------------------------
+    vertexBytes = PCUtil::readByteFile(_histogrammVertexShader);
+    shaderModules[0] = VkUtil::createShaderModule(info.context.device, vertexBytes);
+    shaderModules[3] = {};
+    fragmentBytes = PCUtil::readByteFile(_fragmentShader);
+    shaderModules[4] = VkUtil::createShaderModule(info.context.device, fragmentBytes);
+
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+
+    vertexInfo.vertexAttributeDescriptionCount = 0;
+    vertexInfo.vertexBindingDescriptionCount = 0;
+
+    pushConstants = {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(HistogramPushConstants)}};
+    VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, {}, &_renderPass, &_histogramPipeInfo.pipelineLayout, &_histogramPipeInfo.pipeline, pushConstants);
+
     _fence = VkUtil::createFence(_vkContext.device, 0);
 }
 
@@ -239,6 +260,20 @@ void Renderer::render(const RenderInfo& renderInfo)
     //auto res = vkQueueWaitIdle(_vkContext.queue); check_vk_result(res);
 //
     //vkFreeCommandBuffers(_vkContext.device, _vkContext.commandPool, 1, &commands);
+}
+
+void Renderer::renderHistogram(const HistogramRenderInfo& info){
+    HistogramPushConstants pc{};
+    pc.histValues = info.histValues;
+    pc.histValuesCount = info.histValuesCount;
+    pc.yLow = info.yLow;
+    pc.yHigh = info.yHigh;
+    pc.xStart = info.xStart;
+    pc.xEnd = info.xEnd;
+    pc.alpha = info.alpha;
+    vkCmdPushConstants(info.renderCommands, _histogramPipeInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+    vkCmdBindPipeline(info.renderCommands, VK_PIPELINE_BIND_POINT_GRAPHICS, _histogramPipeInfo.pipeline);
+    vkCmdDraw(info.renderCommands, info.histValuesCount * 2, 1, 0, 0);
 }
 
 void Renderer::updatePriorityIndexlists(const IndexlistUpdateInfo& info){

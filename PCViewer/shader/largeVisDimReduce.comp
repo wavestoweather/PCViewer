@@ -1,0 +1,57 @@
+// shader info:
+// shader reduces 2d histograms to 1d histograms
+// constants::width describes width of the 2d square of the histograms
+// constants::x_reduce is 1 when reduction should be in x direction (everything saved in row majoer, x fastest increasing)
+// the local index x describes position along reduction dimension, the global index y the position accross the reduction dimension
+
+#version 460
+
+#extension GL_EXT_scalar_block_layout: enable
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference2: require
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+
+layout(buffer_reference, scalar) buffer Data {uint d[];};  // raw data
+
+layout(push_constant) uniform constants{
+    uint width;
+    uint x_reduce;
+    uint64_t srcAddress;   //1 indicates 32 bit symbols, 0 indicates 16 bit symbols
+    uint64_t dstAddress;
+};
+
+layout (local_size_x = 256, local_size_y=1, local_size_z=1) in;
+
+shared uint groupCount;
+void main(){
+    if(gl_LocalInvocationID.x == 0)
+        groupCount = 0;
+    uint localCount = 0;
+    Data src = Data(srcAddress);
+    if(x_reduce == 1){       // reduction in x dimension
+        uint startIndex = gl_GlobalInvocationID.y * width + gl_LocalInvocationID.x;
+        const uint endIndex  = min(startIndex + width, (gl_GlobalInvocationID.y + 1) * width);
+        for(; startIndex < endIndex; startIndex += gl_WorkGroupSize.x){
+            localCount += src.d[startIndex];
+        }
+    }
+    else{                   // reduction in y dimension
+        uint startIndex = gl_GlobalInvocationID.y + gl_LocalInvocationID.x * width;
+        const uint endIndex  = width * width;
+        for(; startIndex < endIndex; startIndex += gl_WorkGroupSize.x * width){
+            localCount += src.d[startIndex];
+        }
+    }
+    // subgroup reduction
+    uint subgroupCount = subgroupAdd(localCount);
+
+    barrier();
+    if(subgroupElect())
+        atomicAdd(groupCount, subgroupCount);
+    barrier();
+    if(gl_LocalInvocationID.x == 0){
+        Data dst = Data(dstAddress);
+        dst.d[gl_GlobalInvocationID.y] = groupCount;
+    }
+}

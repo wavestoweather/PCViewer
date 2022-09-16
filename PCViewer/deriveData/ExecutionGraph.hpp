@@ -34,11 +34,11 @@ struct Link{
 };
 
 struct NodePins{
-    std::unique_ptr<deriveData::Node> node;
+    std::unique_ptr<deriveData::Nodes::Node> node;
     std::vector<long> inputIds;
     std::vector<long> outputIds;
 
-    NodePins(std::unique_ptr<deriveData::Node> n = {}, long* curId = {}): node(std::move(n)){
+    NodePins(std::unique_ptr<deriveData::Nodes::Node> n = {}, long* curId = {}): node(std::move(n)){
         if(!node)
             return;
         assert(curId);
@@ -59,7 +59,7 @@ struct ExecutionGraph{
     std::map<long, Link::Connection> linkToConnection;  // maps a link id to the connection
     std::map<long, std::vector<long>> pinToLinks;       // maps pin ids to a vector of all link ids that are connected
 
-    void addNode(long& curId, std::unique_ptr<deriveData::Node>&& node){
+    void addNode(long& curId, std::unique_ptr<deriveData::Nodes::Node>&& node){
         long newId = curId++;
         nodes.insert({newId++, NodePins(std::move(node), &curId)});
         const auto& curNode = nodes[newId];

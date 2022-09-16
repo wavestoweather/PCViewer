@@ -2070,7 +2070,7 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	//creating the density rect buffer
 	g_PcPlotDensityRectBufferOffset = allocInfo.allocationSize;
-	bufferInfo.size = sizeof(Vec4) * 4 * pcAttributes.size() + 1;
+	bufferInfo.size = sizeof(Vec4) * 4 * (pcAttributes.size() + 1);
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotDensityRectBuffer);
 	check_vk_result(err);
@@ -3407,7 +3407,33 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		}
 		//uploading the vertexbuffer
 		//void* d;
-		if(g_PcPlotIndexBuffer){
+		if(!g_PcPlotIndexBufferMemory && !g_PcPlotHistogrammIndex){
+			std::vector<VkBuffer> buffers;
+			std::vector<VkDeviceSize> offsets;
+			std::tie(buffers, offsets, g_PcPlotIndexBufferMemory) = VkUtil::createMultiBufferBound(VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex}, {sizeof(uint16_t) * 6 * pcAttributes.size(), sizeof(RectVertex) * 4 * pcAttributes.size(), sizeof(Vec4) * 4 * (pcAttributes.size() + 1), sizeof(DensityUniformBuffer)}, {VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			g_PcPlotHistogrammIndex = buffers[0];
+			g_PcPlotHistogrammRect = buffers[1];
+			g_PcPlotHistogrammRectOffset = offsets[1];
+			g_PcPlotDensityRectBuffer = buffers[2];
+			g_PcPlotDensityRectBufferOffset = offsets[2];
+			g_PcPlotDensityUbo = buffers[3];
+			g_PcPLotDensityUboOffset = offsets[3];
+			std::vector<uint16_t> indexBuffer(pcAttributes.size() * 6);
+			for (int i = 0; i < pcAttributes.size(); i++) {
+				indexBuffer[i * 6] = i * 4;
+				indexBuffer[i * 6 + 1] = i * 4 + 2;
+				indexBuffer[i * 6 + 2] = i * 4 + 1;
+				indexBuffer[i * 6 + 3] = i * 4;
+				indexBuffer[i * 6 + 4] = i * 4 + 3;
+				indexBuffer[i * 6 + 5] = i * 4 + 2;
+			}
+			VkUtil::uploadData(g_Device, g_PcPlotIndexBufferMemory, 0, indexBuffer.size() * sizeof(indexBuffer[0]), indexBuffer.data());
+			uploadDensityUiformBuffer();
+			Vec4 rect[4] = { {-1,1,0,1},{-1,-1,0,1},{1,-1,0,1},{1,1,0,1} };
+			VkUtil::uploadData(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset, sizeof(rect), rect);
+		}
+
+		if(g_PcPlotIndexBufferMemory){
 			vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotHistogrammRectOffset, sizeof(RectVertex) * pcAttributes.size() * 4, 0, &d);
 			memcpy(d, rects, sizeof(RectVertex) * pcAttributes.size() * 4);
 			vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
@@ -3431,6 +3457,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 		else {
 			vkCmdBindPipeline(g_PcPlotCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_PcPlotHistoPipeline);
 		}
+
+		compression::Renderer* large_vis_rendere{};
 
 		//the offset which has to be added to draw the histogramms next to one another
 		uint32_t amtOfHisto = 0;
@@ -3456,12 +3484,34 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				//binding the correct vertex and indexbuffer
 				VkDeviceSize offsets[] = { 0 };
 				//vkCmdBindVertexBuffers(g_PcPlotCommandBuffer, 0, 1, &drawList->buffer, offsets);
-				vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->indicesBuffer, 0, VK_INDEX_TYPE_UINT32);
+				if(!drawList->indBinManager)
+					vkCmdBindIndexBuffer(g_PcPlotCommandBuffer, drawList->indicesBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 				//iterating through the Attributes to render every histogramm
 				float x = -1.0f;
 				int count = 0;
 				for (int i = 0; i < pcAttributes.size(); i++) {
+					if(drawList->indBinManager){
+						if(!pcAttributeEnabled[i])
+							continue;
+						if(!large_vis_rendere)
+							large_vis_rendere = compression::Renderer::acquireReference({VkUtil::Context{{g_PcPlotWidth, g_PcPlotHeight}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue, &g_QueueMutex}, g_PcPlotRenderPass_noClear, g_pcPlotSampleCount, g_PcPlotFramebuffer_noClear, g_PcPLotDensityIronMapView, g_PcPlotDensityIronMapSampler});
+						compression::Renderer::HistogramRenderInfo info{};
+						info.xStart = -1 + placeOfInd(i) * gap + xOffset;
+						info.xEnd = info.xStart + width;
+						info.yLow = (drawList->indBinManager->compressedData.attributes[i].min - pcAttributes[i].min) / (pcAttributes[i].max - pcAttributes[i].min);
+						info.yHigh = (drawList->indBinManager->compressedData.attributes[i].max - pcAttributes[i].min) / (pcAttributes[i].max - pcAttributes[i].min);
+						info.alpha = drawList->color.w;
+						info.renderCommands = g_PcPlotCommandBuffer;
+						uint32_t ui{static_cast<uint32_t>(i)};
+						if(drawList->indBinManager->getCounts().count({ui}) == 0)
+							continue;
+						info.histValues = VkUtil::getBufferAddress(g_Device, drawList->indBinManager->getCounts().at({ui}).countBuffer);
+						info.histValuesCount = drawList->indBinManager->getCounts().at({ui}).binAmt;
+						large_vis_rendere->renderHistogram(info);
+						continue;
+					}
+
 					//setting the missing parameters in the hubo
 					hubo.maxVal = pcAttributes[i].max;
 					hubo.minVal = pcAttributes[i].min;
@@ -3494,6 +3544,8 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				xOffset += width;
 			}
 		}
+		if(large_vis_rendere)
+			large_vis_rendere->release();
 
 		if (pcSettings.histogrammDensity) {
 			//ending the pass to blit the image
@@ -3524,7 +3576,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				verts[i * 4 + 3] = { gap * i + pcSettings.histogrammWidth - 1,1,0,0 };
 			}
 
-			if(g_PcPlotIndexBuffer){
+			if(g_PcPlotIndexBufferMemory){
 				vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset + sizeof(Vec4) * 4, sizeof(Vec4) * amtOfIndeces * 4, 0, &d);
 				memcpy(d, verts, sizeof(Vec4) * amtOfIndeces * 4);
 				vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
@@ -6641,6 +6693,9 @@ static bool updateAllActiveIndices() {
 }
 
 static void uploadDensityUiformBuffer() {
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, g_PcPlotDensityDescriptorSet);
+	VkUtil::updateDescriptorSet(g_Device, g_PcPlotDensityUbo, sizeof(DensityUniformBuffer), 1, g_PcPlotDensityDescriptorSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, g_PcPlotDensityDescriptorSet);
 	DensityUniformBuffer ubo = {};
 	ubo.enableMapping = pcSettings.enableDensityMapping | ((uint8_t)(pcSettings.histogrammDensity && pcSettings.enableDensityMapping)) * 2 | uint32_t(pcSettings.enableDensityGreyscale)<<2;
 	ubo.gaussRange = pcSettings.densityRadius;
@@ -6671,7 +6726,7 @@ static void uploadDensityUiformBuffer() {
 		ubo.compare = -1;
 	}
 	void* d;
-	if(g_PcPlotIndexBuffer){
+	if(g_PcPlotIndexBufferMemory){
 		vkMapMemory(g_Device, g_PcPlotIndexBufferMemory, g_PcPLotDensityUboOffset, sizeof(DensityUniformBuffer), 0, &d);
 		memcpy(d, &ubo, sizeof(DensityUniformBuffer));
 		vkUnmapMemory(g_Device, g_PcPlotIndexBufferMemory);
