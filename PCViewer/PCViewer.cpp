@@ -2068,7 +2068,7 @@ static void createPcPlotVertexBuffer(const std::vector<Attribute>& Attributes, c
 
 	//creating the density rect buffer
 	g_PcPlotDensityRectBufferOffset = allocInfo.allocationSize;
-	bufferInfo.size = sizeof(Vec4) * 4 * pcAttributes.size() + 1;
+	bufferInfo.size = sizeof(Vec4) * 4 * (pcAttributes.size() + 1);
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	err = vkCreateBuffer(g_Device, &bufferInfo, nullptr, &g_PcPlotDensityRectBuffer);
 	check_vk_result(err);
@@ -3426,10 +3426,7 @@ static void drawPcPlot(const std::vector<Attribute>& attributes, const std::vect
 				indexBuffer[i * 6 + 5] = i * 4 + 2;
 			}
 			VkUtil::uploadData(g_Device, g_PcPlotIndexBufferMemory, 0, indexBuffer.size() * sizeof(indexBuffer[0]), indexBuffer.data());
-			VkUtil::updateDescriptorSet(g_Device, g_PcPlotDensityUbo, sizeof(DensityUniformBuffer), 1, g_PcPlotDensityDescriptorSet);
 			uploadDensityUiformBuffer();
-			VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, g_PcPlotDensityDescriptorSet);
-			VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, g_PcPlotDensityDescriptorSet);
 			Vec4 rect[4] = { {-1,1,0,1},{-1,-1,0,1},{1,-1,0,1},{1,1,0,1} };
 			VkUtil::uploadData(g_Device, g_PcPlotIndexBufferMemory, g_PcPlotDensityRectBufferOffset, sizeof(rect), rect);
 		}
@@ -6694,6 +6691,9 @@ static bool updateAllActiveIndices() {
 }
 
 static void uploadDensityUiformBuffer() {
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityImageSampler, g_PcPlotDensityImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, g_PcPlotDensityDescriptorSet);
+	VkUtil::updateDescriptorSet(g_Device, g_PcPlotDensityUbo, sizeof(DensityUniformBuffer), 1, g_PcPlotDensityDescriptorSet);
+	VkUtil::updateImageDescriptorSet(g_Device, g_PcPlotDensityIronMapSampler, g_PcPLotDensityIronMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, g_PcPlotDensityDescriptorSet);
 	DensityUniformBuffer ubo = {};
 	ubo.enableMapping = pcSettings.enableDensityMapping | ((uint8_t)(pcSettings.histogrammDensity && pcSettings.enableDensityMapping)) * 2 | uint32_t(pcSettings.enableDensityGreyscale)<<2;
 	ubo.gaussRange = pcSettings.densityRadius;
