@@ -21,8 +21,9 @@ layout(location = 0) out vec4 color;	//color contains the count value in its alp
 void main() {
     uint count = UVec(histValues).i[gl_VertexIndex >> 1];
     gl_Position.x = (gl_VertexIndex & 1) == 0 ? xStart: xEnd;
-    gl_Position.y = (gl_VertexIndex >> 1) / (histValuesCount - 1) * (yHigh - yLow) + yLow;
-    gl_Position.y = gl_Position.y * 2 - 1;
+    gl_Position.y = float(gl_VertexIndex >> 1) / (histValuesCount - 1) * (yHigh - yLow) + yLow;
+    gl_Position.y = gl_Position.y * -2 + 1;
     gl_Position.z = 0;
+    gl_Position.w = 1;
     color = vec4(vec3(float(count)), alpha);
 }

@@ -44,8 +44,8 @@ void main() {
 	x1 *= 1-ubo.padding;
 	x2 *= 1-ubo.padding;
 
-	float y1 = float(aIndex) / float(aSize);
-	float y2 = float(bIndex) / float(bSize);
+	float y1 = float(aIndex) / float(aSize - 1);
+	float y2 = float(bIndex) / float(bSize - 1);
 	// transforming according to axis scaling
 	y1 = y1 * ubo.vertexTransformations[aAxis].y + ubo.vertexTransformations[aAxis].z;
 	y2 = y2 * ubo.vertexTransformations[bAxis].y + ubo.vertexTransformations[bAxis].z;
