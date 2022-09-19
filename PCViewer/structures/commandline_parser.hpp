@@ -25,7 +25,7 @@ struct commandline_parser{
 	    add("gpulist", { "-gl", "--listgpus" }, false, "Display a list of available Vulkan devices");
         add("jsonsettings", { "-js", "--jsonsettings" }, true, "Set json settings file. For available json commands see xxx");
     }
-	void add(std::string name, std::vector<std::string> commands, bool hasValue, std::string help){
+	void add(const std::string& name, const std::vector<std::string>& commands, bool hasValue, const std::string& help){
         options[name].commands = commands;
 	    options[name].help = help;
 	    options[name].set = false;
@@ -73,13 +73,13 @@ struct commandline_parser{
 	    	options["help"].set = true;
 	    }
     }
-	bool isSet(std::string name)    {return ((options.find(name) != options.end()) && options[name].set);}
-	std::string getValueAsString(std::string name, std::string defaultValue){
+	bool isSet(const std::string& name)    {return ((options.find(name) != options.end()) && options[name].set);}
+	std::string getValueAsString(const std::string& name, const std::string& defaultValue){
         assert(options.find(name) != options.end());
 	    std::string value = options[name].value;
 	    return (value != "") ? value : defaultValue;
     }
-	int32_t getValueAsInt(std::string name, int32_t defaultValue){
+	int32_t getValueAsInt(const std::string& name, int32_t defaultValue){
         assert(options.find(name) != options.end());
 	    std::string value = options[name].value;
 	    if (value != "") {

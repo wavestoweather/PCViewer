@@ -23,7 +23,7 @@ public:
     memory_view(T* data, size_t size): _data(data), _size(size){};
     template<class U>
     memory_view(memory_view<U> m): _data(reinterpret_cast<T*>(m.data())), _size(m.size() * sizeof(U) / sizeof(T)){
-        assert(m.size() * sizeof(U) == _size * sizeof(T));   // debug assert to check if the memory views can be converted to each other, e.g. if the element sizes align
+        static_assert(sizeof(U) % sizeof(T) == 0 || sizeof(T) % sizeof(U) == 0);   // debug assert to check if the memory views can be converted to each other, e.g. if the element sizes align
     }
     memory_view(const memory_view&) = default;
     memory_view(memory_view&&) = default;
@@ -71,7 +71,7 @@ public:
 
     size_t dataHash() const{
         size_t seed{};
-        std::hash<T> hasher;
+        std::hash<typename std::remove_const<T>::type> hasher;
         for(T* b = begin(); b != end(); ++b)
             seed = std::hash_combine(seed, hasher(*b));
         return seed;

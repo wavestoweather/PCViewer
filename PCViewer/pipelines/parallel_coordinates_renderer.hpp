@@ -22,10 +22,10 @@ class parallel_coordinates_renderer{
 
     struct push_constants{VkDeviceAddress attribute_info_address;};
 
-    const std::string_view vertex_shader_path{""};
+    const std::string_view vertex_shader_path{"shader/parallel_coordinates_renderer.vert.spv"};
     const std::string_view large_vis_vertex_shader_path{""};
-    const std::string_view geometry_shader_path{""};
-    const std::string_view fragment_shader_path{""};
+    const std::string_view geometry_shader_path{"shader/parallel_coordinates_renderer.geom.spv"};
+    const std::string_view fragment_shader_path{"shader/parallel_coordinates_renderer.frag.spv"};
 
     // vulkan resources that are the same for all drawlists/parallel_coordinates_windows
     structures::buffer_info                                 _attribute_info_buffer{};
@@ -41,6 +41,9 @@ class parallel_coordinates_renderer{
     const structures::buffer_info& get_or_resize_info_buffer(size_t byte_size);
 
     parallel_coordinates_renderer();
+
+    void pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
+    void post_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
 
 public:
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;

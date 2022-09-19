@@ -16,6 +16,11 @@ IF (UNIX AND CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_options(-D_GLIBCXX_DEBUG)
 ENDIF()
 
+IF (CMAKE_BUILD_TYPE MATCHES "Debug")
+    message("Enabling vulkan validation layers")
+    add_compile_definitions(USEVKVALIDATIONLAYER)
+ENDIF()
+
 # enable jpeg and png support for CImg library
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_png")
 
@@ -36,10 +41,9 @@ message("include dirs: ${netCDF_INCLUDE_DIR}")
 #include_directories(${Eigen3_DIR})
 
 file(GLOB pcviewer_SRC
-    "*.h"
     "*.cpp"
-    "*.hpp"
 )
+list(REMOVE_ITEM pcviewer_SRC ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
     
 file(GLOB imgui_SRC
     "imgui/*.h"
@@ -122,12 +126,14 @@ file(GLOB pipelines_SRC
 
 include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR}; ${structures_INCLUDE_DIR})
 add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC} ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC})
+add_executable (PCViewer_new main.cpp ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC})
 
 if(WIN32)
 set(netCDF_LIBRARIES netCDF::netcdf)
 endif()
 
 target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS

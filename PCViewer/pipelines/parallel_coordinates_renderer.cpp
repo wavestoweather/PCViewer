@@ -7,6 +7,7 @@
 #include <array>
 #include <parallel_coordinates_workbench.hpp>
 #include <array_struct.hpp>
+#include <descriptor_set_storage.hpp>
 
 namespace pipelines
 {
@@ -16,6 +17,18 @@ parallel_coordinates_renderer::parallel_coordinates_renderer()
     _command_pool = util::vk::create_command_pool(pool_info);
     auto fence_info = util::vk::initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
     _render_fence = util::vk::create_fence(fence_info);
+}
+
+void parallel_coordinates_renderer::pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs)
+{
+    const auto& pipe_data = _pipelines[output_specs];
+    auto begin_info = util::vk::initializers::renderPassBeginInfo(pipe_data.render_pass, pipe_data.framebuffer, {static_cast<int>(output_specs.width), static_cast<int>(output_specs.height)}, VkClearValue{});
+    vkCmdBeginRenderPass(commands, &begin_info, {});
+}
+
+void parallel_coordinates_renderer::post_render_commands(VkCommandBuffer commands, const output_specs& output_specs)
+{
+    vkCmdEndRenderPass(commands);
 }
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
@@ -83,7 +96,8 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         // pipeline layout creation
         auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants), 0);
-        auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo({}, util::memory_view(push_constant_range));
+        assert(globals::descriptor_sets.contains("iron_map"));      // the iron map has to be already created before the pipeliens are created
+        auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets["iron_map"].layout, util::memory_view(push_constant_range));
         pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
         // pipeline creation
@@ -255,6 +269,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
     vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
     _render_commands.resize(1);
     _render_commands[0] = util::vk::create_begin_command_buffer(_command_pool);
+    pre_render_commands(_render_commands[0], out_specs);
 
     size_t batch_size{};
     switch(info.workbench.render_strategy){

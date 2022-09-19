@@ -65,10 +65,15 @@ inline VkCommandBufferInheritanceInfo commandBufferInheritanceInfo()
     return cmdBufferInheritanceInfo;
 }
 
-inline VkRenderPassBeginInfo renderPassBeginInfo()
+inline VkRenderPassBeginInfo renderPassBeginInfo(VkRenderPass renderPass = {}, VkFramebuffer framebuffer = {}, VkRect2D renderArea = {}, util::memory_view<const VkClearValue> clearValues = {})
 {
     VkRenderPassBeginInfo renderPassBeginInfo {};
     renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBeginInfo.renderPass = renderPass;
+    renderPassBeginInfo.framebuffer = framebuffer;
+    renderPassBeginInfo.renderArea = renderArea;
+    renderPassBeginInfo.clearValueCount = clearValues.size();
+    renderPassBeginInfo.pClearValues = clearValues.data();
     return renderPassBeginInfo;
 }
 

@@ -266,6 +266,33 @@ inline void destroy_fence(VkFence fence){
     globals::vk_context.registered_fences.erase(fence);
 }
 
+inline VkSampler create_sampler(const VkSamplerCreateInfo& info){
+    VkSampler sampler{};
+    auto res = vkCreateSampler(globals::vk_context.device, &info, globals::vk_context.allocation_callbacks, &sampler);
+    check_vk_result(res);
+    globals::vk_context.registered_sampler.insert(sampler);
+    return sampler;
+}
+
+inline void destroy_sampler(VkSampler sampler){
+    vkDestroySampler(globals::vk_context.device, sampler, globals::vk_context.allocation_callbacks);
+    globals::vk_context.registered_sampler.erase(sampler);
+}
+
+inline void setup_debug_report_callback(PFN_vkDebugUtilsMessengerCallbackEXT callback){
+	auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(globals::vk_context.instance, "vkCreateDebugUtilsMessengerEXT");
+	assert(vkCreateDebugUtilsMessengerEXT != NULL);
+
+	VkDebugUtilsMessengerCreateInfoEXT debug_report_ci = {};
+	debug_report_ci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+	debug_report_ci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    debug_report_ci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    debug_report_ci.pfnUserCallback = callback;
+	debug_report_ci.pUserData = NULL;
+	auto res = vkCreateDebugUtilsMessengerEXT(globals::vk_context.instance, &debug_report_ci, globals::vk_context.allocation_callbacks, &globals::vk_context.debug_report_callback);
+	check_vk_result(res);
+}
+
 // ----------------------------------------------------------------------------------------------------------------
 // Create helper functions with bundled functionality. No registering in the context going on
 // ----------------------------------------------------------------------------------------------------------------

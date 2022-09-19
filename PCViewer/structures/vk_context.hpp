@@ -7,23 +7,8 @@
 #include <robin_hood.h>
 #include <memory_view.hpp>
 #include <std_util.hpp>
-
-namespace structures{
-struct buffer_info{
-    VkBuffer        buffer{};
-    VmaAllocation   allocation{};
-
-    bool operator==(const buffer_info& o)   const {return buffer == o.buffer && allocation == o.allocation;}
-    operator bool()                         const {return buffer && allocation;}
-};
-struct image_info{
-    VkImage         image{};
-    VmaAllocation   allocation{};
-
-    bool operator==(const image_info& o)    const {return image == o.image && allocation == o.allocation;}
-    operator bool()                         const {return image && allocation;}
-};
-}
+#include <buffer_info.hpp>
+#include <image_info.hpp>
 
 namespace std{
     template<> struct hash<structures::buffer_info>{
@@ -104,10 +89,12 @@ struct vk_context{
 
     buffer_info                                 staging_buffer{};
 
+    VkDebugUtilsMessengerEXT                    debug_report_callback{};
+
     // initializes this vulkan context. Init function as global object has no well defined lifetime
     VkContextInitReturnInfo init(const VkContextInitInfo& info);
 
-    // cleanup this vulkan context. Cleanup function as global object has no well defined lifetime
+    // cleanup this vulkan context. Cleanup function needed as global object has no well defined lifetime
     void cleanup();
 
     void wait_and_clear_semaphores();

@@ -11,6 +11,9 @@
 #include <settings_manager.hpp>
 #include <fstream>
 #include <commandline_parser.hpp>
+#include <texture_storage.hpp>
+#include <persistent_samplers.hpp>
+#include <descriptor_set_storage.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -227,15 +230,25 @@ void vk_context::cleanup(){
         vkDestroyFence(device, fence, allocation_callbacks);
     registered_fences.clear();
 
+
     vmaDestroyAllocator(allocator);
     allocator = {};
     vkDestroyDevice(device, allocation_callbacks);
     device = {};
+
+    if(debug_report_callback){
+        auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+        assert(vkDestroyDebugUtilsMessengerEXT != NULL);
+	    //vkDestroyDebugUtilsMessengerEXT(instance, debug_report_callback, allocation_callbacks);
+    }
+
     transfer_queue = {};
     compute_queue = {};
     graphics_queue = {};
     physical_device = {};
+    vkDestroyInstance(instance, allocation_callbacks);
     instance = {};
+    
 }
 
 void vk_context::upload_to_staging_buffer(const util::memory_view<uint8_t> data){
@@ -376,6 +389,12 @@ void settings_manager::load_settings(std::string_view filename)
 
 	file.close();
 }
+
+VkSampler persistent_samplers::get(const VkSamplerCreateInfo& sampler_info){
+    if(globals::persistent_samplers._samplers.count(sampler_info) == 0)
+        globals::persistent_samplers._samplers[sampler_info] = util::vk::create_sampler(sampler_info);
+    return globals::persistent_samplers._samplers[sampler_info];
+}
 }
 
 // globals definition
@@ -391,4 +410,10 @@ structures::tracked_brushes global_brushes{};
 structures::settings_manager settings_manager{};
 
 structures::commandline_parser commandline_parser{};
+
+robin_hood::unordered_map<std::string, structures::texture> textures{};
+
+structures::persistent_samplers persistent_samplers{};
+
+robin_hood::unordered_map<std::string, structures::descriptor_info> descriptor_sets{};
 }

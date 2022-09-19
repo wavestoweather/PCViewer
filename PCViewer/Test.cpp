@@ -403,7 +403,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool encodeSingle = false;
     constexpr bool testSeparateGpuDecomp = false;
     constexpr bool testChangeTracker = false;
-    constexpr bool testGlobalVkContext = true;
+    constexpr bool testGlobalVkContext = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
         const uint symbolsSize = 1 << 20;
