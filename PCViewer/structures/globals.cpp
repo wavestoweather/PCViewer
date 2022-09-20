@@ -14,6 +14,7 @@
 #include <texture_storage.hpp>
 #include <persistent_samplers.hpp>
 #include <descriptor_set_storage.hpp>
+#include <laod_behaviour.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -31,6 +32,8 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     VkInstanceCreateInfo create_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     create_info.enabledExtensionCount = info.enabled_instance_extensions.size();
     create_info.ppEnabledExtensionNames = info.enabled_instance_extensions.data();
+    create_info.enabledLayerCount = info.enabled_instance_layers.size();
+    create_info.ppEnabledLayerNames = info.enabled_instance_layers.data();
     create_info.pApplicationInfo = &app_info;
 
     res = vkCreateInstance(&create_info, allocation_callbacks, &instance);
@@ -180,6 +183,20 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     vkGetDeviceQueue(device, c_queue_family, 0, &compute_queue);
     vkGetDeviceQueue(device, t_queue_family, 0, &transfer_queue);
 
+    VmaVulkanFunctions vulkan_functions = {};
+    vulkan_functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    vulkan_functions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+    
+    VmaAllocatorCreateInfo allocator_create_info = {};
+    allocator_create_info.vulkanApiVersion = VK_API_VERSION_1_2;
+    allocator_create_info.physicalDevice = physical_device;
+    allocator_create_info.device = device;
+    allocator_create_info.instance = instance;
+    allocator_create_info.pVulkanFunctions = &vulkan_functions;
+
+    res = vmaCreateAllocator(&allocator_create_info, &allocator);
+    util::check_vk_result(res);
+
     return ret;
 }
 
@@ -239,7 +256,8 @@ void vk_context::cleanup(){
     if(debug_report_callback){
         auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
         assert(vkDestroyDebugUtilsMessengerEXT != NULL);
-	    //vkDestroyDebugUtilsMessengerEXT(instance, debug_report_callback, allocation_callbacks);
+	    vkDestroyDebugUtilsMessengerEXT(instance, debug_report_callback, allocation_callbacks);
+        debug_report_callback = {};
     }
 
     transfer_queue = {};
@@ -404,6 +422,7 @@ structures::vk_context vk_context{};
 datasets_t datasets{};
 
 structures::drawlists_t drawlists{};
+std::vector<std::string_view> selected_drawlists{};
 
 structures::tracked_brushes global_brushes{};
 
@@ -416,4 +435,6 @@ robin_hood::unordered_map<std::string, structures::texture> textures{};
 structures::persistent_samplers persistent_samplers{};
 
 robin_hood::unordered_map<std::string, structures::descriptor_info> descriptor_sets{};
+
+structures::load_behaviour load_behaviour{};
 }

@@ -7,7 +7,7 @@
 
 namespace workbenches{
 
-class parallel_coordinates_workbench: public structures::workbench, public structures::drawlist_dependency{
+class parallel_coordinates_workbench: public structures::workbench, public structures::drawlist_dataset_dependency{
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using drawlist_info = pipelines::parallel_coordinates_renderer::drawlist_info;
 
@@ -42,9 +42,6 @@ public:
     util::memory_view<structures::attribute>    attributes{};
     render_strategy                             render_strategy;
     size_t                                      render_batch_size;
-
-
-    const std::string                           id;
 
     parallel_coordinates_workbench(const std::string_view id);
 

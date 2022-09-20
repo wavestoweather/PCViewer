@@ -20,6 +20,9 @@ public:
     // non const (writing) data access no change signal
     inline T& ref_no_track(){return _obj;}
 
+    // write via equal operator
+    inline change_tracker<T>& operator=(const T& o){changed = true; _obj = o; return *this;}
+
 private:
     T _obj{};
 };

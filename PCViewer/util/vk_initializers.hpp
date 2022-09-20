@@ -240,24 +240,12 @@ inline VkBufferCreateInfo bufferCreateInfo(
 }
 
 inline VkDescriptorPoolCreateInfo descriptorPoolCreateInfo(
-    uint32_t poolSizeCount,
-    VkDescriptorPoolSize* pPoolSizes,
-    uint32_t maxSets)
-{
-    VkDescriptorPoolCreateInfo descriptorPoolInfo {};
-    descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolInfo.poolSizeCount = poolSizeCount;
-    descriptorPoolInfo.pPoolSizes = pPoolSizes;
-    descriptorPoolInfo.maxSets = maxSets;
-    return descriptorPoolInfo;
-}
-
-inline VkDescriptorPoolCreateInfo descriptorPoolCreateInfo(
-    const std::vector<VkDescriptorPoolSize>& poolSizes,
-    uint32_t maxSets)
+    const util::memory_view<VkDescriptorPoolSize> poolSizes,
+    uint32_t maxSets, VkDescriptorPoolCreateFlags flags = 0)
 {
     VkDescriptorPoolCreateInfo descriptorPoolInfo{};
     descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptorPoolInfo.flags = flags;
     descriptorPoolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     descriptorPoolInfo.pPoolSizes = poolSizes.data();
     descriptorPoolInfo.maxSets = maxSets;
@@ -698,6 +686,12 @@ inline VkSubpassDescription subpassDescription(VkPipelineBindPoint bindPoint = V
     subpassDescription.preserveAttachmentCount = preserveAttachments.size();
     subpassDescription.pPreserveAttachments = preserveAttachments.data();
     return subpassDescription;
+}
+
+inline VkPhysicalDeviceFeatures2 physicalDeviceFeatures2(){
+    VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
+    physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    return physicalDeviceFeatures2;
 }
 
 }

@@ -5,14 +5,9 @@
 #include <map>
 #include <array>
 #include <change_tracker.hpp>
+#include <min_max.hpp>
 
 namespace structures{
-template<class T>
-struct min_max{
-    T min{std::numeric_limits<T>::max()};
-    T max{std::numeric_limits<T>::lowest()};
-    bool operator==(const min_max<T>& o) const {return min == o.min && max == o.max;};
-};
 
 struct attribute{
     const std::string               id;

@@ -7,7 +7,7 @@
 namespace workbenches{
 
 parallel_coordinates_workbench::parallel_coordinates_workbench(const std::string_view id):
-    id(id)
+    workbench(id)
 {
     auto image_info = util::vk::initializers::imageCreateInfo(plot_data.read().image_format, {plot_data.read().width, plot_data.read().height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     auto alloc_info = util::vma::initializers::allocationCreateInfo();

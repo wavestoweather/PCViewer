@@ -2,6 +2,7 @@
 #include <vector>
 #include <robin_hood.h>
 #include <string>
+#include <memory_view.hpp>
 
 namespace structures{
 class settings_manager {
@@ -10,6 +11,11 @@ public:
 		std::string id;
 		std::string type;
 		std::vector<uint8_t> storage;
+
+		template<class T>
+		T& get(){ assert(sizeof(T) == storage.size()); return *reinterpret_cast<T*>(storage.data());}
+		template<class T>
+		util::memory_view<T> data(){return util::memory_view<T>(util::memory_view(storage));}
 
 		bool operator==(const setting& other) const{
 			return id == other.id;

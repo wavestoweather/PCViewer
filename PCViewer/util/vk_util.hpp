@@ -305,14 +305,13 @@ inline VkShaderModule create_shader_module(std::string_view filename){
     return module;
 }
 
-inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool){
+inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool, VkCommandBufferBeginInfo begin_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO}){
     VkCommandBuffer command;
     VkCommandBufferAllocateInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     info.commandBufferCount = 1;
     info.commandPool = pool;    
     auto res = vkAllocateCommandBuffers(globals::vk_context.device, &info, &command);
     check_vk_result(res);
-    VkCommandBufferBeginInfo begin_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     res = vkBeginCommandBuffer(command, &begin_info);
     check_vk_result(res);
     return command;

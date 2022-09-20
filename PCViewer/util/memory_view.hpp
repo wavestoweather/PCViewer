@@ -25,6 +25,7 @@ public:
     memory_view(memory_view<U> m): _data(reinterpret_cast<T*>(m.data())), _size(m.size() * sizeof(U) / sizeof(T)){
         static_assert(sizeof(U) % sizeof(T) == 0 || sizeof(T) % sizeof(U) == 0);   // debug assert to check if the memory views can be converted to each other, e.g. if the element sizes align
     }
+    memory_view(std::initializer_list<typename std::remove_const<T>::type> l): _data(l.begin()), _size(l.size()){}
     memory_view(const memory_view&) = default;
     memory_view(memory_view&&) = default;
     memory_view& operator=(const memory_view&) = default;

@@ -14,7 +14,8 @@ struct commandline_parser{
 		std::string help;
 		bool set = false;
 	};
-	robin_hood::unordered_map<std::string, CommandLineOption> options;
+	robin_hood::unordered_map<std::string, CommandLineOption> 	options;
+	std::vector<std::string_view>								options_ordered;	// order is taken from the order the options were added
 
 	commandline_parser(){
         add("help", { "--help" }, false, "Show help");
@@ -31,20 +32,22 @@ struct commandline_parser{
 	    options[name].set = false;
 	    options[name].hasValue = hasValue;
 	    options[name].value = "";
+		options_ordered.push_back(options.find(name)->first);
     }
 	void printHelp(){
         std::cout << "Available command line options:\n";
-	    for (auto option : options) {
+	    for (auto option_view : options_ordered) {
+			std::string option(option_view);
 	    	std::cout << " ";
-	    	for (size_t i = 0; i < option.second.commands.size(); i++) {
-	    		std::cout << option.second.commands[i];
-	    		if (i < option.second.commands.size() - 1) {
+	    	for (size_t i = 0; i < options[option].commands.size(); i++) {
+	    		std::cout << options[option].commands[i];
+	    		if (i < options[option].commands.size() - 1) {
 	    			std::cout << ", ";
 	    		}
 	    	}
-	    	std::cout << ": " << option.second.help << "\n";
+	    	std::cout << ": " << options[option].help << "\n";
 	    }
-	    std::cout << "Press any key to close...";
+	    //std::cout << "Press any key to close...";
     }
 	void parse(util::memory_view<const char*> arguments){
         bool printHelp = false;

@@ -3,12 +3,13 @@
 #include <memory_view.hpp>
 #include <atomic>
 
-
 namespace structures{
 struct workbench{
-    // attribuete to indicate if the workbench should be shown
-    bool active{false};
+    // attribute to indicate if the workbench should be shown
+    bool                active{false};
+    const std::string   id;
 
+    workbench(std::string_view id): id(id) {};
     // method to show the imgui window
     virtual void show() = 0;
 };
@@ -24,7 +25,7 @@ struct dataset_dependency{
     virtual void removeDataset(std::string_view datasetId) = 0;
 };
 
-struct drawlist_dependency: public dataset_dependency{
+struct drawlist_dataset_dependency: public dataset_dependency{
     virtual void addDrawlist(std::string_view drawlistId) = 0;
     virtual void signalDrawlistUpdate(const util::memory_view<std::string_view>& drawlistIds) = 0;
     virtual void removeDrawlist(std::string_view drawlistId) = 0;

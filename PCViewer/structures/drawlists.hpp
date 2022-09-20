@@ -38,7 +38,7 @@ struct drawlist{
     std::vector<float>      brush_ratios_to_parent;
     change_tracker<bool>    immune_to_global_brushes;
     change_tracker<appearance> appearance_median;
-    median_type             median_typ;  
+    change_tracker<median_type> median_typ;  
     std::vector<bool>       active_indices_bitmap;                
 
     buffer_info             index_buffer;
@@ -60,4 +60,5 @@ using drawlists_t = change_tracker<std::map<std::string_view, tracked_drawlist>>
 
 namespace globals{
 extern structures::drawlists_t drawlists;
+extern std::vector<std::string_view> selected_drawlists;
 }
