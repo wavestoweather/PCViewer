@@ -174,6 +174,7 @@ int main(int argc,const char* argv[]){
     ImGuiIO&                    io = ImGui::GetIO();
     bool                        done = false;
     bool                        rebuild_swapchain = false;
+    bool                        first_frame = true;
     id_t                        swapchain_width = 0, swapchain_height = 0;
     while(!done){
         // Poll and handle events (inputs, window resize, etc.)
@@ -218,18 +219,19 @@ int main(int argc,const char* argv[]){
 		ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings;
         ImGui::Begin("MainDockWindow", NULL, dockingWindow_flags);
         ImGuiID main_dock_id = ImGui::GetID("MainDock");
-		if (ImGui::DockBuilderGetNode(main_dock_id) == NULL) {
+		if (first_frame) {
 			ImGui::DockBuilderRemoveNode(main_dock_id);
 			ImGuiDockNodeFlags dockSpaceFlags = 0;
 			dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
 			ImGui::DockBuilderAddNode(main_dock_id, dockSpaceFlags);
+            ImGui::DockBuilderSetNodeSize(main_dock_id, {viewport->WorkSize.x, viewport->WorkSize.y});
             ImGuiID main_dock_bottom, main_dock_top;
-            ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, .4f, &main_dock_bottom, &main_dock_top);
+            ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, .3f, &main_dock_bottom, &main_dock_top);
 			ImGui::DockBuilderDockWindow(main_workbench->id.data(), main_dock_bottom);
             ImGui::DockBuilderDockWindow(workbenches[1]->id.data(), main_dock_top);
-            ImGui::DockBuilderSetNodeSize(main_dock_bottom, {viewport->WorkSize.x, viewport->WorkSize.y * .3f});
             ImGuiDockNode* node = ImGui::DockBuilderGetNode(main_dock_bottom);
             node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+            ImGui::DockBuilderFinish(main_dock_id);
 		}
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
         ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
@@ -257,6 +259,7 @@ int main(int argc,const char* argv[]){
         }
 
         frame_limiter.end_frame();
+        first_frame = false;
     }
     auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
    

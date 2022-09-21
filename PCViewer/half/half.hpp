@@ -107,7 +107,12 @@ public:
 	 */
 	inline HalfFloat(const double);
 
-
+	inline HalfFloat(int other);
+	inline HalfFloat(uint32_t other);
+	inline HalfFloat(int64_t other);
+	inline HalfFloat(uint64_t other);
+	inline HalfFloat(long long unsigned int other);
+	inline HalfFloat(long long int other);
 
 	/** Conversion operator to convert from half to float
 	 */

@@ -28,6 +28,7 @@ struct dataset{
     robin_hood::unordered_map<std::string_view, templatelist*> templatelist_index;
     change_tracker<data<float>>         float_data{};
     change_tracker<data<half>>          half_data{};
+    change_tracker<data<uint32_t>>      compressed_data{};
     std::vector<structures::buffer_info> gpu_data{};    // each column has its own buffer to enable uploading only part of the data for large vis
     struct data_flags{
         bool gpuStream: 1;          // data has to be streamed from ram to gpu as not enough space available
@@ -55,7 +56,8 @@ namespace globals{
 
 template<class T>
 using changing = structures::change_tracker<T>;
-using datasets_t = changing<std::map<std::string_view, structures::unique_tracker<structures::dataset>>>;
+using dataset_t = structures::unique_tracker<structures::dataset>;
+using datasets_t = changing<std::map<std::string_view, dataset_t>>;
 extern datasets_t datasets;
 
 }
