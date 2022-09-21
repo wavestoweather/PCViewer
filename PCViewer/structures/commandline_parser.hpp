@@ -25,6 +25,7 @@ struct commandline_parser{
 	    add("gpuselection", { "-g", "--gpu" }, true, "Select GPU to run on");
 	    add("gpulist", { "-gl", "--listgpus" }, false, "Display a list of available Vulkan devices");
         add("jsonsettings", { "-js", "--jsonsettings" }, true, "Set json settings file. For available json commands see xxx");
+        add("printfontinfo", { "-fi", "--fontinfo" }, false, "Print loaded fonts information");
     }
 	void add(const std::string& name, const std::vector<std::string>& commands, bool hasValue, const std::string& help){
         options[name].commands = commands;

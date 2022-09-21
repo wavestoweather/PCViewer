@@ -10,8 +10,10 @@
 #include <data_workbench.hpp>
 #include <laod_behaviour.hpp>
 #include <imgui_util.hpp>
+#include <imgui_internal.h>
 #include <data_workbench.hpp>
 #include <parallel_coordinates_workbench.hpp>
+#include <frame_limiter.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -27,11 +29,13 @@ setup_worbenches_datasetdeps_drawlist_deps(){
     structures::workbench*                              main_workbench{};
     // register all available workbenches
     auto data_wb = std::make_unique<workbenches::data_workbench>("Data workbench");
+    data_wb->active = true;
     dataset_dependecies.push_back(data_wb.get());
     main_workbench = data_wb.get();
     workbenches.emplace_back(std::move(data_wb));
 
     auto parallel_coordinates_wb = std::make_unique<workbenches::parallel_coordinates_workbench>("Parallel coordinates workbench");
+    parallel_coordinates_wb->active = true;
     dataset_dependecies.push_back(parallel_coordinates_wb.get());
     workbenches.emplace_back(std::move(parallel_coordinates_wb));
 
@@ -40,12 +44,13 @@ setup_worbenches_datasetdeps_drawlist_deps(){
 
 int main(int argc,const char* argv[]){
     // variables for all of the execution
-    SDL_Window*                                         window ;
+    SDL_Window*                                         window{};
     ImGui_ImplVulkanH_Window                            imgui_window_data;
     std::vector<std::unique_ptr<structures::workbench>> workbenches{};
     std::vector<structures::drawlist_dataset_dependency*> dataset_dependecies{};
     std::vector<structures::drawlist_dataset_dependency*> drawlist_dependencies{};
     structures::workbench*                              main_workbench;
+    constexpr int                                       min_image_count = 2;
 
     // init global states (including imgui) ---------------------------------------------------------------------
 
@@ -120,15 +125,19 @@ int main(int argc,const char* argv[]){
 
     VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_IMMEDIATE_KHR };   // current workaround, otherwise on linux lagging
     imgui_window_data.PresentMode = ImGui_ImplVulkanH_SelectPresentMode(globals::vk_context.physical_device, imgui_window_data.Surface, &present_modes[0], IM_ARRAYSIZE(present_modes));
-    constexpr int min_image_count = 2;
 	ImGui_ImplVulkanH_CreateOrResizeWindow(globals::vk_context.instance, globals::vk_context.physical_device, globals::vk_context.device, &imgui_window_data, globals::vk_context.graphics_queue_family_index, globals::vk_context.allocation_callbacks, w, h, min_image_count);
     
     //TODO: recreate export window (not yet setup for export)
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
+    ImGui::GetIO().ConfigViewportsNoDecoration = false;
     std::vector<float> font_sizes{5.f, 10.f, 15.f};
     util::imgui::load_fonts("fonts/", font_sizes);
+    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[2];
+    if(globals::commandline_parser.isSet("printfontinfo"))
+        std::cout << "[info] Amount of fonts available: " << ImGui::GetIO().Fonts->Fonts.size() / font_sizes.size() << std::endl;
 
     ImGui_ImplSDL2_InitForVulkan(window);
 
@@ -146,6 +155,7 @@ int main(int argc,const char* argv[]){
 	init_info.CheckVkResultFn = util::check_vk_result;
 	ImGui_ImplVulkan_Init(&init_info, imgui_window_data.RenderPass);
 
+    // uploading fonts
     auto setup_command_pool = util::vk::create_command_pool(util::vk::initializers::commandPoolCreateInfo(globals::vk_context.graphics_queue_family_index));
     auto setup_commands = util::vk::create_begin_command_buffer(setup_command_pool);
     auto setup_fence = util::vk::create_fence(util::vk::initializers::fenceCreateInfo());
@@ -160,7 +170,11 @@ int main(int argc,const char* argv[]){
     }
 
     // main loop ---------------------------------------------------------------------
-    bool done = false;
+    structures::frame_limiter   frame_limiter;
+    ImGuiIO&                    io = ImGui::GetIO();
+    bool                        done = false;
+    bool                        rebuild_swapchain = false;
+    id_t                        swapchain_width = 0, swapchain_height = 0;
     while(!done){
         // Poll and handle events (inputs, window resize, etc.)
 		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -184,8 +198,67 @@ int main(int argc,const char* argv[]){
                 //SDL_free(event.drop.file);              // Free dropped_filedir memory;
             }
         }
-    }
 
+        if(rebuild_swapchain && swapchain_width > 0 && swapchain_height > 0){
+            ImGui_ImplVulkan_SetMinImageCount(min_image_count);
+	        ImGui_ImplVulkanH_CreateOrResizeWindow(globals::vk_context.instance, globals::vk_context.physical_device, globals::vk_context.device, &imgui_window_data, globals::vk_context.graphics_queue_family_index, globals::vk_context.allocation_callbacks, swapchain_width, swapchain_height, min_image_count);
+	        imgui_window_data.FrameIndex = 0;
+        }
+
+        // start imgui frame
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL2_NewFrame(window);
+        ImGui::NewFrame();
+
+        // main docking window with menu bar
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(viewport->WorkPos);
+		ImGui::SetNextWindowSize(viewport->WorkSize);
+		ImGui::SetNextWindowViewport(viewport->ID);
+		ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings;
+        ImGui::Begin("MainDockWindow", NULL, dockingWindow_flags);
+        ImGuiID main_dock_id = ImGui::GetID("MainDock");
+		if (ImGui::DockBuilderGetNode(main_dock_id) == NULL) {
+			ImGui::DockBuilderRemoveNode(main_dock_id);
+			ImGuiDockNodeFlags dockSpaceFlags = 0;
+			dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
+			ImGui::DockBuilderAddNode(main_dock_id, dockSpaceFlags);
+            ImGuiID main_dock_bottom, main_dock_top;
+            ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, .4f, &main_dock_bottom, &main_dock_top);
+			ImGui::DockBuilderDockWindow(main_workbench->id.data(), main_dock_bottom);
+            ImGui::DockBuilderDockWindow(workbenches[1]->id.data(), main_dock_top);
+            ImGui::DockBuilderSetNodeSize(main_dock_bottom, {viewport->WorkSize.x, viewport->WorkSize.y * .3f});
+            ImGuiDockNode* node = ImGui::DockBuilderGetNode(main_dock_bottom);
+            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+		}
+        auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
+        ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
+
+        for(const auto& wb: workbenches)
+            wb->show();
+
+        ImGui::End();   // main dock
+
+        ImGui::Render();
+        ImDrawData* draw_data = ImGui::GetDrawData();
+        const bool minimized = draw_data->DisplaySize.x <= 0 || draw_data->DisplaySize.y <= 0;
+        {   // rendering scope
+            std::scoped_lock lock(globals::vk_context.graphics_mutex);
+            if(!minimized)
+                util::imgui::frame_render(&imgui_window_data, draw_data);
+
+            if(io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable){
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+            }
+
+            if(!minimized)
+                std::tie(rebuild_swapchain, swapchain_width, swapchain_height) = util::imgui::frame_present(&imgui_window_data, window);
+        }
+
+        frame_limiter.end_frame();
+    }
+    auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
    
     ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
