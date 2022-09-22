@@ -10,12 +10,11 @@
 namespace structures{
 
 struct attribute{
-    const std::string               id;
-    std::string                     display_name;
-    change_tracker<min_max<float>>  bounds;                              // global shown bounds
-    min_max<float>                  data_bounds;                         // for normalized data the normalization bounds
-    std::map<std::string_view, float> categories;
-    std::vector<std::pair<std::string_view, float>> ctegories_ordered;
+    std::string                     id{};
+    std::string                     display_name{};
+    change_tracker<min_max<float>>  bounds{};                              // global shown bounds
+    min_max<float>                  data_bounds{};                         // for normalized data the normalization bounds
+    std::map<std::string_view, float> categories{};
     bool operator==(const attribute& o) const {return id == o.id && bounds.read() == o.bounds.read();}
 };
 

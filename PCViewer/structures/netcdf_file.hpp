@@ -43,9 +43,9 @@ public:
             return _variable_infos;
         _variable_infos.resize(variable_count);
         for(int i: util::i_range(variable_count)){
-            _variable_infos[i].name.resize(NC_MAX_NAME);
+            _variable_infos[i].name.resize(NC_MAX_NAME, 0);
             int res = nc_inq_varname(_file_handle, i, _variable_infos[i].name.data());
-            _variable_infos[i].name.shrink_to_fit();
+            _variable_infos[i].name = _variable_infos[i].name.substr(0, _variable_infos[i].name.find('\0'));
             if(res)
                 throw std::runtime_error("netcdf_file::get_variable_infos() Failed to get variable name");
             int dims;

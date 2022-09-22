@@ -17,13 +17,21 @@ struct load_information{
 template<class T>
 struct load_result{
     structures::data<T>                             data{};
-    std::vector<structures::min_max<T>>             min_max_values;
+    std::vector<structures::attribute>              attributes{};
     std::vector<std::optional<T>>                   fill_values{};
-    std::map<uint32_t, std::map<std::string, T>>    categories{};
 };
 
+load_result<float> open_netcdf_float(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {});
+load_result<half> open_netcdf_half(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {});
 template<class T>
-load_result<T> open_netcdf(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {});
+load_result<T> open_netcdf(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {}){
+    if constexpr(std::is_same_v<T, float>)
+        return open_netcdf_float(filename, query_attributes, partial_info);
+    if constexpr(std::is_same_v<T, half>)
+        return open_netcdf_half(filename, query_attributes, partial_info);
+    return {};
+}
+
 load_result<float> open_csv_float(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {});
 load_result<half> open_csv_half(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {});
 template<class T>
@@ -71,7 +79,14 @@ inline void check_datasets_to_open(){
 
         if(ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
             // TODO: change to real opening (creation of a dataset)
-            auto data = open_internals::open_csv<float>(globals::paths_to_open[0]);
+            try{
+                auto dataset = open_dataset(globals::paths_to_open[0], globals::attribute_query);
+                bool ok = false;
+            }
+            catch(std::runtime_error e){
+                std::cout << "[info] Error for file " << globals::paths_to_open[0] << " occured (was not loaded):" << std::endl;
+                std::cout << "[error] " << e.what() << std::endl;
+            }
             ImGui::CloseCurrentPopup();
             globals::paths_to_open.clear();
             globals::attribute_query.clear();

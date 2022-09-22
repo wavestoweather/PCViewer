@@ -145,10 +145,10 @@ public:
 	inline bool operator<= (HalfFloat other) const;
 	inline bool operator>= (HalfFloat other) const;
 
-	inline bool operator<  (float other) const;
-	inline bool operator>  (float other) const;
-	inline bool operator<= (float other) const;
-	inline bool operator>= (float other) const;
+	inline bool operator<  (float other) const {return *this < HalfFloat(other);}
+	inline bool operator>  (float other) const {return *this > HalfFloat(other);}
+	inline bool operator<= (float other) const {return *this <= HalfFloat(other);}
+	inline bool operator>= (float other) const {return *this >= HalfFloat(other);}
 
 
 	/** Combined assignment operators
