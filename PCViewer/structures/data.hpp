@@ -26,38 +26,38 @@
 *   The packed header layout is the follwoing:
 *   float dimensionCount
 *   float columnCount
-*   float dimensionSizes[dimensionCount]
-*   float columnDimensionsCounts[columnCount]
+*   float dimension_sizes[dimensionCount]
+*   float column_dimensionsCounts[columnCount]
 *   float columnDimensionOffsets[columnCount]           //points to the index where the column dimension struct begins, offset in float array offset
 *   float dataOffsets[columnCount]                      //poitns to the index where the data for each column begins
-*   ColumnDimension columnDimensions[columnCount]
+*   ColumnDimension column_dimensions[columnCount]
 *       ---- ColumnDimension:
-*               float columnDimensions[columnDimensionCount]
+*               float column_dimensions[columnDimensionCount]
 */  
 namespace structures{
 template<class T = float>
 class data{
     public:
     
-    std::vector<uint32_t> dimensionSizes;
-    std::vector<std::vector<uint32_t>> columnDimensions;        // for constant columns their corresponding vector here is empty
+    std::vector<uint32_t> dimension_sizes;
+    std::vector<std::vector<uint32_t>> column_dimensions;        // for constant columns their corresponding vector here is empty
     std::vector<std::vector<T>> columns;
 
     data(){};
     // suggested way is to use default constructor and directly fill the vectors. Thus no copy constructor for the vectors is invoked
-    data(const std::vector<uint32_t>& dimensionSizes,const std::vector<std::vector<uint32_t>>& columnDimensions,const std::vector<std::vector<T>>& columns):
-        dimensionSizes(dimensionSizes), columnDimensions(columnDimensions), columns(columns){};
+    data(const std::vector<uint32_t>& dimension_sizes,const std::vector<std::vector<uint32_t>>& column_dimensions,const std::vector<std::vector<T>>& columns):
+        dimension_sizes(dimension_sizes), column_dimensions(column_dimensions), columns(columns){};
 
     void clear() {
-        dimensionSizes.clear();
-        columnDimensions.clear();
+        dimension_sizes.clear();
+        column_dimensions.clear();
         columns.clear();
     }
 
     uint64_t size() const{
-        if(dimensionSizes.empty()) return 0;
+        if(dimension_sizes.empty()) return 0;
         uint64_t ret = 1;
-        for(int i: dimensionSizes) ret *= i;
+        for(int i: dimension_sizes) ret *= i;
         return ret;
     };
 
@@ -67,7 +67,7 @@ class data{
         return headerSize + dataSize;
     };
 
-    // access data by an index \in[0, cross(dimensionSizes)] and a column
+    // access data by an index \in[0, cross(dimension_sizes)] and a column
     T& operator()(uint32_t index, uint32_t column){
         uint64_t colIndex = columnIndex(index, column);
         return columns[column][colIndex];
@@ -87,10 +87,10 @@ class data{
     }
     // converts data index to column index (needed for non full dimensional columns)
     uint64_t columnIndex(uint32_t index, uint32_t column) const{
-        std::vector<uint32_t> dimensionIndices(dimensionSizes.size());
-        for(int i = dimensionSizes.size() - 1; i >= 0; --i){
-            dimensionIndices[i] = index % dimensionSizes[i];
-            index /= dimensionSizes[i];
+        std::vector<uint32_t> dimensionIndices(dimension_sizes.size());
+        for(int i = dimension_sizes.size() - 1; i >= 0; --i){
+            dimensionIndices[i] = index % dimension_sizes[i];
+            index /= dimension_sizes[i];
         }
         return this->index(dimensionIndices, column);
     }
@@ -109,9 +109,9 @@ class data{
 
     // shrinks all vectors to fit the data and removes unused dimensions to avoid unnesecary index accessing
     void compress(){
-        dimensionSizes.shrink_to_fit();
-        columnDimensions.shrink_to_fit();
-        for(auto& column: columnDimensions) column.shrink_to_fit();
+        dimension_sizes.shrink_to_fit();
+        column_dimensions.shrink_to_fit();
+        for(auto& column: column_dimensions) column.shrink_to_fit();
         columns.shrink_to_fit();
         for(auto& column: columns) column.shrink_to_fit();
         removeUnusedDimension();
@@ -121,11 +121,11 @@ class data{
     void subsampleTrim(const std::vector<uint32_t>& samplingRates, const std::vector<std::pair<uint32_t, uint32_t>>& trimIndices){    
         std::vector<uint32_t> normalSampling(samplingRates.size(), 1);
         std::vector<std::pair<uint32_t, uint32_t>> noTrim;
-        for(auto dim: dimensionSizes) noTrim.push_back({0, dim});
+        for(auto dim: dimension_sizes) noTrim.push_back({0, dim});
         if(samplingRates == normalSampling && trimIndices == noTrim) return;        //nothing has to be done
 
-        std::vector<uint32_t> reducedDimensions(dimensionSizes.size());
-        for(int d = 0; d < dimensionSizes.size(); ++d){
+        std::vector<uint32_t> reducedDimensions(dimension_sizes.size());
+        for(int d = 0; d < dimension_sizes.size(); ++d){
             reducedDimensions[d] = trimIndices[d].second - trimIndices[d].first;
             reducedDimensions[d] += samplingRates[d] - 1;
             reducedDimensions[d] /= samplingRates[d];
@@ -133,29 +133,29 @@ class data{
 
         for(int c = 0; c < columns.size(); ++c){
             bool trimmedSubsampled = false; 
-            for(auto dim: columnDimensions[c]){
-                if(samplingRates[dim] != 1 || trimIndices[c] != std::pair<uint32_t, uint32_t>(0, dimensionSizes[c])){
+            for(auto dim: column_dimensions[c]){
+                if(samplingRates[dim] != 1 || trimIndices[c] != std::pair<uint32_t, uint32_t>(0, dimension_sizes[c])){
                     trimmedSubsampled = true;
                     break;
                 }
             }
             if(!trimmedSubsampled) continue;            //discarding columns which dont depend on any subsampled/trimmed dimension
 
-            std::vector<uint32_t> redDimIndices(columnDimensions[c].size(), 0);
-            std::vector<uint32_t> redDimIncrements(columnDimensions[c].size(), 1);
-            std::vector<uint32_t> redDimStarts(columnDimensions[c].size());
-            std::vector<uint32_t> redDimStops(columnDimensions[c].size());
-            for(int cd = 0; cd < columnDimensions[c].size(); ++cd){
-                redDimIndices[cd] = trimIndices[columnDimensions[c][cd]].first;
-                redDimIncrements[cd] = samplingRates[columnDimensions[c][cd]];
+            std::vector<uint32_t> redDimIndices(column_dimensions[c].size(), 0);
+            std::vector<uint32_t> redDimIncrements(column_dimensions[c].size(), 1);
+            std::vector<uint32_t> redDimStarts(column_dimensions[c].size());
+            std::vector<uint32_t> redDimStops(column_dimensions[c].size());
+            for(int cd = 0; cd < column_dimensions[c].size(); ++cd){
+                redDimIndices[cd] = trimIndices[column_dimensions[c][cd]].first;
+                redDimIncrements[cd] = samplingRates[column_dimensions[c][cd]];
                 redDimStarts[cd] = redDimIndices[cd];
-                redDimStops[cd] = trimIndices[columnDimensions[c][cd]].second;
+                redDimStops[cd] = trimIndices[column_dimensions[c][cd]].second;
             }
             uint32_t redColumnSize = 1;
-            for(auto d: columnDimensions[c]) redColumnSize *= reducedDimensions[d];
-            std::vector<float> redData(redColumnSize);
+            for(auto d: column_dimensions[c]) redColumnSize *= reducedDimensions[d];
+            std::vector<T> redData(redColumnSize);
             uint32_t redDataCur = 0;
-            while(redDimIndices[0] < redDimStops[columnDimensions[c][0]]){
+            while(redDimIndices[0] < redDimStops[column_dimensions[c][0]]){
                 //copy value
                 redData[redDataCur++] = columns[c][indexReducedDimIndices(redDimIndices, c)];
                 //increase dimension itertor
@@ -171,55 +171,55 @@ class data{
             columns[c] = redData;
         }
 
-        dimensionSizes = reducedDimensions;
+        dimension_sizes = reducedDimensions;
     }
 
     // remove dimension by slicing at one index
     void removeDim(uint32_t dimension, uint32_t slice){
         // currently uses lazy implementation based on subsampleTrim, should be made more efficient
-        std::vector<uint32_t> samplingRates(dimensionSizes.size(), 1);   //no subsampling
-        std::vector<std::pair<uint32_t, uint32_t>> trimIndices(dimensionSizes.size());
+        std::vector<uint32_t> samplingRates(dimension_sizes.size(), 1);   //no subsampling
+        std::vector<std::pair<uint32_t, uint32_t>> trimIndices(dimension_sizes.size());
         for(int d = 0; d < trimIndices.size(); ++d){
             if(d == dimension) trimIndices[d] = {slice, slice + 1};
-            else trimIndices[d] = {0, dimensionSizes[d]};
+            else trimIndices[d] = {0, dimension_sizes[d]};
         }
         subsampleTrim(samplingRates, trimIndices);
 
         //removing the dimension, updating column dimensions(indices might have to be decremented)
-        dimensionSizes.erase(dimensionSizes.begin() + dimension);
-        for(int c = 0; c < columnDimensions.size(); ++c){
+        dimension_sizes.erase(dimension_sizes.begin() + dimension);
+        for(int c = 0; c < column_dimensions.size(); ++c){
             int dimIndex = -1;
-            for(int d = 0; d < columnDimensions[c].size(); ++d){
-                int dim = columnDimensions[c][d];
+            for(int d = 0; d < column_dimensions[c].size(); ++d){
+                int dim = column_dimensions[c][d];
                 if(dim == dimension) dimIndex = d;
-                if(dim > dimension) --columnDimensions[c][d];
+                if(dim > dimension) --column_dimensions[c][d];
             }
             if(dimIndex >= 0)
-                columnDimensions[c].erase(columnDimensions[c].begin() + dimIndex);
+                column_dimensions[c].erase(column_dimensions[c].begin() + dimIndex);
         }
     }
 
     void removeColumn(uint32_t column){
         columns.erase(columns.begin() + column);
-        columnDimensions.erase(columnDimensions.begin() + column);
+        column_dimensions.erase(column_dimensions.begin() + column);
     }
 
     void removeUnusedDimension(){
         std::set<uint32_t> usedDims;
-        for(auto& columnDims: columnDimensions) for(auto& dim: columnDims) usedDims.insert(dim);
+        for(auto& columnDims: column_dimensions) for(auto& dim: columnDims) usedDims.insert(dim);
         std::vector<uint32_t> unusedDims;
-        if(usedDims.size() < dimensionSizes.size()){  //unused dims exist
-            for(int d = 0; d < dimensionSizes.size(); ++d){
+        if(usedDims.size() < dimension_sizes.size()){  //unused dims exist
+            for(int d = 0; d < dimension_sizes.size(); ++d){
                 if(usedDims.find(d) == usedDims.end())
                     unusedDims.push_back(d);
             }
-            for(int c = 0; c < columnDimensions.size(); ++c){
-                for(int d = 0; d < columnDimensions[c].size(); ++d){
+            for(int c = 0; c < column_dimensions.size(); ++c){
+                for(int d = 0; d < column_dimensions[c].size(); ++d){
                     int decrement = 0;
                     for(auto unused: unusedDims){
-                        if(columnDimensions[c][d] > unused) ++decrement;
+                        if(column_dimensions[c][d] > unused) ++decrement;
                     }
-                    columnDimensions[c][d] -= decrement;
+                    column_dimensions[c][d] -= decrement;
                 }
             }
         }
@@ -239,9 +239,9 @@ class data{
 private:
     // header size in bytes
     uint64_t calcHeaderSize() const{
-        uint64_t columnDimensionSize = 0;
-        for(auto& cd: columnDimensions) columnDimensionSize += cd.size();
-        return (2 + dimensionSizes.size() + 3 * columns.size() + columnDimensionSize) * sizeof(float);
+        uint64_t column_dimensionsize = 0;
+        for(auto& cd: column_dimensions) column_dimensionsize += cd.size();
+        return (2 + dimension_sizes.size() + 3 * columns.size() + column_dimensionsize) * sizeof(float);
     }
     // data size in bytes
     uint64_t calcDataSize() const{
@@ -254,12 +254,12 @@ private:
     // returns the index for a column given the diemension indices
     uint32_t index(const std::vector<uint32_t>& dimensionIndices, uint32_t column) const{
         uint32_t columnIndex = 0;
-        for(int d = 0; d < columnDimensions[column].size(); ++d){
+        for(int d = 0; d < column_dimensions[column].size(); ++d){
             uint32_t factor = 1;
-            for(int i = d + 1; i < columnDimensions[column].size(); ++i){
-                factor *= dimensionSizes[columnDimensions[column][i]];
+            for(int i = d + 1; i < column_dimensions[column].size(); ++i){
+                factor *= dimension_sizes[column_dimensions[column][i]];
             }
-            columnIndex += factor * dimensionIndices[columnDimensions[column][d]];
+            columnIndex += factor * dimensionIndices[column_dimensions[column][d]];
         }
         return columnIndex;
     }
@@ -267,10 +267,10 @@ private:
     //  returns the index for a column given the dimension indices. Dimension indices only include indices for the current dimension, no mapping needed
     uint32_t indexReducedDimIndices(const std::vector<uint32_t>& dimensionIndices, uint32_t column) const{
         uint32_t columnIndex = 0;
-        for(int d = 0; d < columnDimensions[column].size(); ++d){
+        for(int d = 0; d < column_dimensions[column].size(); ++d){
             uint32_t factor = 1;
-            for(int i = d + 1; i < columnDimensions[column].size(); ++i){
-                factor *= dimensionSizes[columnDimensions[column][i]];
+            for(int i = d + 1; i < column_dimensions[column].size(); ++i){
+                factor *= dimension_sizes[column_dimensions[column][i]];
             }
             columnIndex += factor * dimensionIndices[d];
         }
@@ -281,23 +281,23 @@ private:
     void createPackedHeaderData(std::vector<uint8_t>& dst) const{
         uint32_t headerSize = calcHeaderSize();
         uint32_t curPos = 0;
-        *reinterpret_cast<float*>(&dst[curPos]) = dimensionSizes.size();
+        *reinterpret_cast<float*>(&dst[curPos]) = dimension_sizes.size();
         curPos += 4;
         *reinterpret_cast<float*>(&dst[curPos]) = columns.size();
         curPos += 4;
-        for(int i = 0; i < dimensionSizes.size(); ++i){ //diemnsion sizes
-            *reinterpret_cast<float*>(&dst[curPos]) = dimensionSizes[i];
+        for(int i = 0; i < dimension_sizes.size(); ++i){ //diemnsion sizes
+            *reinterpret_cast<float*>(&dst[curPos]) = dimension_sizes[i];
             curPos += 4;
         }
         std::vector<uint32_t> columnDimensionOffsets(columns.size());
-        uint32_t baseDimensionOffset = 2 + dimensionSizes.size() + columns.size() * 3;
+        uint32_t baseDimensionOffset = 2 + dimension_sizes.size() + columns.size() * 3;
         for(int i = 0; i < columns.size(); ++i){        //column dimension counts
-            *reinterpret_cast<float*>(&dst[curPos]) = columnDimensions[i].size();
+            *reinterpret_cast<float*>(&dst[curPos]) = column_dimensions[i].size();
             curPos += 4;
             if(i == 0)
                 columnDimensionOffsets[i] = baseDimensionOffset;
             else
-                columnDimensionOffsets[i] = columnDimensionOffsets[i - 1] + columnDimensions[i - 1].size();
+                columnDimensionOffsets[i] = columnDimensionOffsets[i - 1] + column_dimensions[i - 1].size();
         }
         for(int i = 0; i < columnDimensionOffsets.size(); ++i){ //column dimensions offsets
             *reinterpret_cast<float*>(&dst[curPos]) = columnDimensionOffsets[i];
@@ -309,9 +309,9 @@ private:
             curPos += 4;
             curOffset += columns[i].size();
         }
-        for(int i = 0; i < columnDimensions.size(); ++i){   // column dimensions information
-            for(int j = 0; j < columnDimensions[i].size(); ++j){
-                *reinterpret_cast<float*>(&dst[curPos]) = columnDimensions[i][j];
+        for(int i = 0; i < column_dimensions.size(); ++i){   // column dimensions information
+            for(int j = 0; j < column_dimensions[i].size(); ++j){
+                *reinterpret_cast<float*>(&dst[curPos]) = column_dimensions[i][j];
                 curPos += 4;
             }
         }

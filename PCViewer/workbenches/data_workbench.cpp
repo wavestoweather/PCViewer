@@ -4,6 +4,8 @@
 #include <drawlists.hpp>
 #include <imgui_stdlib.h>
 #include <dataset_util.hpp>
+#include <open_filepaths.hpp>
+#include <../imgui_file_dialog/ImGuiFileDialog.h>
 
 namespace workbenches
 {
@@ -37,6 +39,26 @@ void data_workbench::show()
 
         // c1
         ImGui::TableNextColumn();
+
+        bool open = ImGui::InputText("Directory Path", &_open_filename, ImGuiInputTextFlags_EnterReturnsTrue);
+		if (ImGui::IsItemHovered()) {
+			ImGui::BeginTooltip();
+			ImGui::Text("Enter either a file including filepath,\nOr a folder (division with /) and all datasets in the folder will be loaded\nOr drag and drop files to load onto application.");
+			ImGui::EndTooltip();
+		}
+
+		ImGui::SameLine();
+
+		//Opening a new Dataset into the Viewer
+		if (ImGui::Button("Open") || open) {
+			if(_open_filename.empty()){
+				// opening the file dialogue
+				ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey", "Choose File", ".*,.nc,.csv", ".", 0);
+			}
+            else{
+                globals::paths_to_open.push_back(_open_filename);
+            }
+        }
         for(const auto& [id, dataset]: globals::datasets.read()){
             if(ImGui::TreeNode(id.data())){
                 for(const structures::templatelist& tl: dataset.read().templatelists){

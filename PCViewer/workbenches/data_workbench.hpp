@@ -8,6 +8,7 @@ namespace workbenches{
 class data_workbench: public structures::workbench, public structures::drawlist_dataset_dependency{
     std::string_view                _popup_ds_id{};
     std::string_view                _popup_tl_id{};
+    std::string                     _open_filename{};
     
     structures::dataset_convert_data _ds_convert_data{};
 

@@ -14,6 +14,8 @@
 #include <data_workbench.hpp>
 #include <parallel_coordinates_workbench.hpp>
 #include <frame_limiter.hpp>
+#include "imgui_file_dialog/ImGuiFileDialog.h"
+#include <dataset_util.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -189,14 +191,8 @@ int main(int argc,const char* argv[]){
             if (event.type == SDL_QUIT)
                 done = true;
             else if(event.type == SDL_DROPFILE) {       // In case if dropped file
-                //droppedPaths.push_back(std::string(event.drop.file));
-				//droppedPathActive.push_back(1);
-                //pathDropped = true;
-				//std::string file(event.drop.file);
-				//if (droppedPaths.size() == 1) {
-				//	queryAttributes = queryFileAttributes(event.drop.file);
-				//}
-                //SDL_free(event.drop.file);              // Free dropped_filedir memory;
+                globals::paths_to_open.push_back(std::string(event.drop.file));
+                SDL_free(event.drop.file);              // Free dropped_filedir memory;
             }
         }
 
@@ -236,8 +232,22 @@ int main(int argc,const char* argv[]){
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
         ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
 
+        // updating the query attributes if they are not updated to files which should be opened and showing the open dialogue
+        util::dataset::check_datasets_to_open();
+
         for(const auto& wb: workbenches)
             wb->show();
+
+        if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")){
+            if(ImGuiFileDialog::Instance()->IsOk()){
+                auto selection = ImGuiFileDialog::Instance()->GetSelection();
+                std::string_view first_sel = selection.begin()->second;
+                
+                for(auto& [id, path]: selection)
+                    globals::paths_to_open.push_back(path);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
 
         ImGui::End();   // main dock
 

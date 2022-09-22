@@ -15,6 +15,7 @@
 #include <persistent_samplers.hpp>
 #include <descriptor_set_storage.hpp>
 #include <laod_behaviour.hpp>
+#include <open_filepaths.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -437,4 +438,7 @@ structures::persistent_samplers persistent_samplers{};
 robin_hood::unordered_map<std::string, structures::descriptor_info> descriptor_sets{};
 
 structures::load_behaviour load_behaviour{};
+
+std::vector<std::string> paths_to_open{};
+std::vector<structures::query_attribute> attribute_query{};
 }

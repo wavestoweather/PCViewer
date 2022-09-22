@@ -96,6 +96,13 @@ public:
         return find(f);
     }
 
+    T& back(){
+        return *(_data + _size - 1);
+    }
+    const T& back() const{
+        return *(_data + _size - 1);
+    }
+
     T* begin() {return _data;};
     T* end() {return _data + _size;};
     const T* begin() const {return _data;};

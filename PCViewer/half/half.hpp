@@ -271,6 +271,8 @@ class numeric_limits<HalfFloat> {
 		{return HalfFloat(0,1,0);}
     static HalfFloat max ()
 		{return HalfFloat(~0,HalfFloat::MAX_EXPONENT_VALUE-1,0);}
+	static HalfFloat lowest ()
+		{return -max();}
     static const int radix = 2;
     static const int digits = 10;   // conservative assumption
     static const int digits10 = 2;  // conservative assumption
