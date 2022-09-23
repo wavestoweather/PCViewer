@@ -496,6 +496,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 	dataset().display_name = dataset.read().id;
 	dataset().backing_data = filename;
 	structures::templatelist templatelist{};
+	templatelist.name = "All indices";
 	templatelist.indices.resize(dataset.read().data_size);
 	std::iota(templatelist.indices.begin(), templatelist.indices.end(), 0);
 	templatelist.min_maxs.resize(dataset.read().attributes.size());

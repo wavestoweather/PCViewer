@@ -59,6 +59,7 @@ void data_workbench::show()
                 globals::paths_to_open.push_back(_open_filename);
             }
         }
+        ImGui::Separator();
         for(const auto& [id, dataset]: globals::datasets.read()){
             if(ImGui::TreeNode(id.data())){
                 for(const structures::templatelist& tl: dataset.read().templatelists){

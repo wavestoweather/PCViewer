@@ -108,7 +108,7 @@ inline void check_datasets_to_open(){
             for(std::string_view path: globals::paths_to_open){
                 try{
                     auto dataset = open_dataset(path, globals::attribute_query);
-                    bool ok = false;
+                    globals::datasets().insert({dataset.read().id, std::move(dataset)});
                 }
                 catch(std::runtime_error e){
                     std::cout << "[error] " << e.what() << std::endl;
