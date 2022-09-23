@@ -1,12 +1,15 @@
 #include "dataset_util.hpp"
 #include <netcdf_file.hpp>
 #include <c_file.hpp>
+#include <file_util.hpp>
 #include <sstream>
 #include <filesystem>
 #include <charconv>
 #include <robin_hood.h>
 #include <functional>
 #include <set>
+#include <numeric>
+#include <fstream>
 
 namespace util{
 namespace dataset{
@@ -241,7 +244,7 @@ load_result<half> open_csv_half(std::string_view filename, memory_view<structure
 		}
 		if(query_attributes.size()){
 			for(int var: util::size_range(variable_names)){
-				if(query_attributes.size() <= var || variable_names[var] != query_attributes[var].id)
+				if(query_attributes.size() > var || variable_names[var] != query_attributes[var].id)
 					throw std::runtime_error{"open_csv() Attributes of the attribute query are not consistent with the csv file"};
 			}
 		}
@@ -328,15 +331,130 @@ load_result<half> open_combined(std::string_view folder, memory_view<structures:
 load_result<uint32_t> open_combined_compressed(std::string_view folder, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
 	return {};
 }
+
+std::vector<structures::query_attribute> get_netcdf_qeuery_attributes(std::string_view file){
+	if(!std::filesystem::exists(file))
+		throw std::runtime_error{"get_netcdf_qeuery_attributes() file " + std::string(file) + " does not exist"};
+
+	structures::netcdf_file netcdf(file);
+	auto& variables = netcdf.get_variable_infos();
+	auto& dimensions = netcdf.get_dimension_infos();
+	std::vector<structures::query_attribute> query(variables.size());
+
+	// checking stringlength dimensions
+	std::vector<bool> is_string_length_dim(dimensions.size());
+	for(int dim: util::size_range(dimensions)){
+		bool is_string_length = true;
+		for(int var: util::size_range(variables)){
+			auto& variable = variables[var];
+			if(std::count(variable.dependant_dimensions.begin(), variable.dependant_dimensions.end(), dim) > 0){
+				if(netcdf.var_type(var) != NC_CHAR){
+					is_string_length = false;
+					break;
+				}
+			}
+		}
+		is_string_length_dim[dim] = is_string_length;	
+	}
+	
+	// adding the variables
+	size_t data_size = 1;
+	for(int dim: util::size_range(dimensions))
+		if(!is_string_length_dim[dim])
+			data_size *= dimensions[dim].size;
+	for(int var: util::size_range(variables)){
+		auto dims_without_stringlength = variables[var].dependant_dimensions;
+		erase_if(dims_without_stringlength, [&](int dim){return is_string_length_dim[dim];});
+		query[var] = structures::query_attribute{
+			false,	// no dim
+			false, 	// string dim
+			true, 	// dim_active
+			true,	// active
+			false,	// linearize
+			variables[var].name, 	//id
+			0, 		// dimensions size
+			dims_without_stringlength, // dependant dimensions
+			1,		// dimension subsampling
+			0,		// dimension slice
+			{0, data_size}// trim bounds
+		};
+	}
+
+	// adding dimension values
+	for(int dim: util::size_range(dimensions)){
+		query.push_back(structures::query_attribute{
+			true,	// dim
+			is_string_length_dim[dim], 	// string dim
+			true, 	// dim_active
+			true,	// active
+			false,	// linearize
+			dimensions[dim].name, //id
+			dimensions[dim].size, // dimensions size
+			{}, 	// dependant dimensions
+			1,		// dimension subsampling
+			0,		// dimension slice
+			{0, dimensions[dim].size}// trim bounds
+		});
+	}
+
+	return std::move(query);
+}
+std::vector<structures::query_attribute> get_csv_query_attributes(std::string_view file){
+	if(!std::filesystem::exists(file))
+		throw std::runtime_error{"get_csv_query_attributes() file " + std::string(file) + " does not exist"};
+
+	std::ifstream filestream(std::string(file), std::ios_base::binary);
+	std::string first_line; filestream >> first_line;
+	std::string_view first_line_view{first_line};
+
+	std::vector<structures::query_attribute> query{};
+	for(std::string_view variable; getline(first_line_view, variable, ',');){
+		query.push_back(structures::query_attribute{
+			false,	// dim
+			false, 	// string dim
+			true, 	// dim_active
+			true,	// active
+			false,	// linearize
+			std::string(variable), //id
+			0, 		// dimensions size
+			{0}, 	// dependant dimensions
+			1,		// dimension subsampling
+			0,		// dimension slice
+			{0, size_t(-1)}// trim bounds
+		});
+	}
+	query.push_back(structures::query_attribute{
+		true,	// dim
+		false, 	// string dim
+		true, 	// dim_active
+		true,	// active
+		false,	// linearize
+		"index", //id
+		size_t(-1), // dimensions size
+		{}, 	// dependant dimensions
+		1,		// dimension subsampling
+		0,		// dimension slice
+		{0, size_t(-1)} // trim bounds
+	});
+
+	return std::move(query);
+}
+std::vector<structures::query_attribute> get_combined_query_attributes(std::string_view folder){
+	if(!std::filesystem::exists(folder))
+		throw std::runtime_error{"get_combined_query_attributes() file " + std::string(folder) + " does not exist"};
+	return {};
+}
 }
 
 globals::dataset_t open_dataset(std::string_view filename, memory_view<structures::query_attribute> query_attributes, data_type_preference data_type_pref){
 	// this method will open only a single dataset. If all datasets from a folder should be opened, handle the readout of all datasets outside this function
 	// compressed data will be read nevertheless
 
+	if(!std::filesystem::exists(filename))
+		throw std::runtime_error{"open_dataset() file " + std::string(filename) + " does not exist"};
+
 	globals::dataset_t dataset;
-	std::string_view file = filename.substr(filename.find_last_of("/\\") + 1);
-	std::string_view file_extension = file.substr(file.find_last_of("."));
+	auto [file, file_extension] = util::get_file_extension(filename);
 	dataset().id = file;
 	switch(data_type_pref){
 	case data_type_preference::float_precision:
@@ -353,6 +471,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 			dataset().attributes = data.attributes;
 			dataset().float_data = std::move(data.data);
 		}
+		dataset().data_size = dataset.read().float_data.read().size();
 		break;
 	case data_type_preference::half_precision:
 		if(file_extension.empty()){
@@ -368,10 +487,21 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 			dataset().attributes = data.attributes;
 			dataset().half_data = std::move(data.data);
 		}
+		dataset().data_size = dataset.read().half_data.read().size();
+		dataset().data_flags.half = true;
 		break;
 	default:
 		throw std::runtime_error{"[warning] open_dataset() unrecognized data_type_preference"};
 	}
+	dataset().display_name = dataset.read().id;
+	dataset().backing_data = filename;
+	structures::templatelist templatelist{};
+	templatelist.indices.resize(dataset.read().data_size);
+	std::iota(templatelist.indices.begin(), templatelist.indices.end(), 0);
+	templatelist.min_maxs.resize(dataset.read().attributes.size());
+	for(int i: util::size_range(dataset.read().attributes))
+		templatelist.min_maxs[i] = dataset.read().attributes[i].data_bounds;
+	dataset().templatelists.push_back(std::move(templatelist));
 	return std::move(dataset);
 }
 

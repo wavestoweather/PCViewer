@@ -74,6 +74,25 @@ public:
         return _dimension_infos;
     }
 
+    // care the size here is calculated including stringlength dimensions
+    size_t data_size() {
+        if(_dimension_infos.empty())
+            get_dimension_infos();
+        
+        size_t size = 1;
+        for(const auto& dim_info: _dimension_infos)
+            size *= dim_info.size;
+        return size;
+    }
+
+    nc_type var_type(int variable) const {
+        nc_type type;
+        int res = nc_inq_vartype(_file_handle, variable, &type);
+        if(res)
+            throw std::runtime_error("netcdf_file::var_type() Failed to get variable type");
+        return type;
+    }
+
     template<class T>
     std::tuple<std::vector<T>, std::optional<T>> read_variable(int variable){
         if(_variable_infos.empty())

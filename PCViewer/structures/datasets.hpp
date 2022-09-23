@@ -12,8 +12,8 @@ namespace structures{
 struct templatelist{
     std::string                 name{};
     std::vector<uint32_t>       indices{};
-    std::vector<min_max<float>> minMax{};
-    float                       pointRatio{};
+    std::vector<min_max<float>> min_maxs{};
+    float                       point_ratio{};
 };
 
 struct dataset{

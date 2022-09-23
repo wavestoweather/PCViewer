@@ -6,6 +6,8 @@
 #include <map>
 #include <open_filepaths.hpp>
 #include <imgui.h>
+#include <filesystem>
+#include <file_util.hpp>
 
 namespace util{
 namespace dataset{
@@ -44,6 +46,10 @@ load_result<T> open_csv(std::string_view filename, memory_view<structures::query
 }
 load_result<half> open_combined(std::string_view folder, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {});
 load_result<uint32_t> open_combined_compressed(std::string_view folder, memory_view<structures::query_attribute> query_attributes = {}, const load_information* partial_info = {});
+
+std::vector<structures::query_attribute> get_netcdf_qeuery_attributes(std::string_view file);
+std::vector<structures::query_attribute> get_csv_query_attributes(std::string_view file);
+std::vector<structures::query_attribute> get_combined_query_attributes(std::string_view folder);
 }
 enum class data_type_preference{
     half_precision,
@@ -56,12 +62,33 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 
 void convert_dataset(const structures::dataset_convert_data& convert_data);
 
+inline void fill_query_attributes(){
+    // the attribute query is done for the first dataset to open
+    for(std::string_view path: globals::paths_to_open){
+        if(std::filesystem::exists(path)){
+            try{
+                auto [file, file_extension] = util::get_file_extension(path);
+                if(file_extension.empty())
+                    globals::attribute_query = open_internals::get_combined_query_attributes(path);
+                else if(file_extension == ".nc")
+                    globals::attribute_query = open_internals::get_netcdf_qeuery_attributes(path);
+                else if(file_extension == ".csv")
+                    globals::attribute_query = open_internals::get_csv_query_attributes(path);
+                break;
+            }
+            catch(std::runtime_error e){
+                std::cout << "[error] " << e.what() << std::endl;
+            }
+        }
+    }
+}
+
 inline void check_datasets_to_open(){
     const std::string_view open_dataset_popup_name{"Open dataset(s)"};
 
     if(globals::paths_to_open.size()){
         if(globals::attribute_query.empty()){
-            // TODO: add attribute query on the first dataset
+            fill_query_attributes();
         }
 
         ImGui::OpenPopup(open_dataset_popup_name.data());
@@ -78,14 +105,14 @@ inline void check_datasets_to_open(){
             ImGui::Checkbox(globals::paths_to_open[i].c_str(), reinterpret_cast<bool*>(activations.data()));
 
         if(ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
-            // TODO: change to real opening (creation of a dataset)
-            try{
-                auto dataset = open_dataset(globals::paths_to_open[0], globals::attribute_query);
-                bool ok = false;
-            }
-            catch(std::runtime_error e){
-                std::cout << "[info] Error for file " << globals::paths_to_open[0] << " occured (was not loaded):" << std::endl;
-                std::cout << "[error] " << e.what() << std::endl;
+            for(std::string_view path: globals::paths_to_open){
+                try{
+                    auto dataset = open_dataset(path, globals::attribute_query);
+                    bool ok = false;
+                }
+                catch(std::runtime_error e){
+                    std::cout << "[error] " << e.what() << std::endl;
+                }
             }
             ImGui::CloseCurrentPopup();
             globals::paths_to_open.clear();
