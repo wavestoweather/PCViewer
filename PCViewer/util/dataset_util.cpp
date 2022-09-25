@@ -368,7 +368,6 @@ std::vector<structures::query_attribute> get_netcdf_qeuery_attributes(std::strin
 		query[var] = structures::query_attribute{
 			false,	// no dim
 			false, 	// string dim
-			true, 	// dim_active
 			true,	// active
 			false,	// linearize
 			variables[var].name, 	//id
@@ -385,7 +384,6 @@ std::vector<structures::query_attribute> get_netcdf_qeuery_attributes(std::strin
 		query.push_back(structures::query_attribute{
 			true,	// dim
 			is_string_length_dim[dim], 	// string dim
-			true, 	// dim_active
 			true,	// active
 			false,	// linearize
 			dimensions[dim].name, //id
@@ -412,7 +410,6 @@ std::vector<structures::query_attribute> get_csv_query_attributes(std::string_vi
 		query.push_back(structures::query_attribute{
 			false,	// dim
 			false, 	// string dim
-			true, 	// dim_active
 			true,	// active
 			false,	// linearize
 			std::string(variable), //id
@@ -426,7 +423,6 @@ std::vector<structures::query_attribute> get_csv_query_attributes(std::string_vi
 	query.push_back(structures::query_attribute{
 		true,	// dim
 		false, 	// string dim
-		true, 	// dim_active
 		true,	// active
 		false,	// linearize
 		"index", //id
@@ -508,6 +504,137 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 
 void convert_dataset(const structures::dataset_convert_data& convert_data){
     // TODO implement
+}
+
+void check_datasets_to_open(){
+	{
+    const std::string_view open_dataset_popup_name{"Open dataset(s)"};
+
+    if(globals::paths_to_open.size()){
+        if(globals::attribute_query.empty()){
+            fill_query_attributes();
+        }
+
+        ImGui::OpenPopup(open_dataset_popup_name.data());
+    }
+
+    if(ImGui::BeginPopupModal(open_dataset_popup_name.data(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)){
+        if(ImGui::CollapsingHeader("Variables/Dimensions settings")){
+            ImGui::Text("Variable Settings");
+            if(ImGui::Button("Activate all")){
+                for(auto& q: globals::attribute_query){
+                    if(q.is_dimension)
+                        break;
+                    q.is_active = true;
+                }
+            }
+            ImGui::SameLine();
+            if(ImGui::Button("Deactivate all")){
+                for(auto& q: globals::attribute_query){
+                    if(q.is_dimension)
+                        break;
+                    q.is_active = false;
+                }
+            }
+            if(ImGui::BeginTable("Var query table", 4)){
+				ImGui::TableSetupColumn("Name");
+        		ImGui::TableSetupColumn("Dimensionality");
+        		ImGui::TableSetupColumn("Active");
+        		ImGui::TableSetupColumn("Linearize");
+        		ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Name");
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Dimensionality");
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Active");
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Linearize");
+
+               	for(auto& q: globals::attribute_query){
+                    if(q.is_dimension)
+                        continue;
+                    ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+					ImGui::Text("%s", q.id.c_str());
+					ImGui::TableNextColumn();
+					std::stringstream dims; dims << util::memory_view(q.dependant_dimensions);
+					ImGui::Text("%s", dims.str().c_str());
+					ImGui::TableNextColumn();
+					bool act = q.is_active; ImGui::Checkbox(("##active" + q.id).c_str(), &act); q.is_active = act;
+					ImGui::TableNextColumn();
+					act = q.linearize; ImGui::Checkbox(("##lin" + q.id).c_str(), &act); q.linearize = act;
+                } 
+            ImGui::EndTable();
+            }
+			if(ImGui::BeginTable("Dim query table", 4)){
+				ImGui::TableSetupColumn("Name");
+        		ImGui::TableSetupColumn("Active");
+        		ImGui::TableSetupColumn("Subsampling");
+        		ImGui::TableSetupColumn("Trim indices");
+        		ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Name");
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Active");
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Subsampling");
+        		ImGui::TableNextColumn();
+        		ImGui::TableHeader("Trim indices");
+
+				for(auto& q: globals::attribute_query){
+					if(!q.is_dimension && !q.is_string_length_dimension)
+						continue;
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+					ImGui::Text("%s", q.id.c_str());
+					ImGui::TableNextColumn();
+					bool act = q.is_active; ImGui::Checkbox(("##active" + q.id).c_str(), &act); q.is_active = act;
+					ImGui::TableNextColumn();
+					ImGui::SetNextItemWidth(75);
+					ImGui::InputInt(("##sub" + q.id).c_str(), &q.dimension_subsample);
+					ImGui::TableNextColumn();
+					ImGui::SetNextItemWidth(150);
+					if(ImGui::InputScalarN(("##trim" + q.id).c_str(), ImGuiDataType_U64, q.trim_indices.data(), 2)){
+						q.trim_indices.max = std::min(q.trim_indices.max, q.dimension_size);
+						q.trim_indices.max = std::max(q.trim_indices.min + 1, q.trim_indices.max);
+						q.trim_indices.min = std::min(q.trim_indices.min, q.trim_indices.max - 1);
+					}
+					if(!act)
+						q.trim_indices.max = q.trim_indices.min + 1;
+				}
+				ImGui::EndTable();
+			}
+        }
+        static std::vector<uint8_t> activations;
+        if(activations.size() != globals::paths_to_open.size())
+            activations = std::vector<uint8_t>(globals::paths_to_open.size(), true);
+        for(int i: util::size_range(activations))
+            ImGui::Checkbox(globals::paths_to_open[i].c_str(), reinterpret_cast<bool*>(activations.data()));
+
+        if(ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
+            for(std::string_view path: globals::paths_to_open){
+                try{
+                    auto dataset = open_dataset(path, globals::attribute_query);
+                    globals::datasets().insert({dataset.read().id, std::move(dataset)});
+                }
+                catch(std::runtime_error e){
+                    std::cout << "[error] " << e.what() << std::endl;
+                }
+            }
+            ImGui::CloseCurrentPopup();
+            globals::paths_to_open.clear();
+            globals::attribute_query.clear();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)){
+            ImGui::CloseCurrentPopup();
+            globals::paths_to_open.clear();
+            globals::attribute_query.clear();
+        }
+        ImGui::EndPopup();
+    }
+}
 }
 }
 }

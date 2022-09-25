@@ -83,50 +83,7 @@ inline void fill_query_attributes(){
     }
 }
 
-inline void check_datasets_to_open(){
-    const std::string_view open_dataset_popup_name{"Open dataset(s)"};
-
-    if(globals::paths_to_open.size()){
-        if(globals::attribute_query.empty()){
-            fill_query_attributes();
-        }
-
-        ImGui::OpenPopup(open_dataset_popup_name.data());
-    }
-
-    if(ImGui::BeginPopupModal(open_dataset_popup_name.data())){
-        if(ImGui::CollapsingHeader("Variables/Dimensions settings")){
-            // TODO complete
-        }
-        static std::vector<uint8_t> activations;
-        if(activations.size() != globals::paths_to_open.size())
-            activations = std::vector<uint8_t>(globals::paths_to_open.size(), true);
-        for(int i: util::size_range(activations))
-            ImGui::Checkbox(globals::paths_to_open[i].c_str(), reinterpret_cast<bool*>(activations.data()));
-
-        if(ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
-            for(std::string_view path: globals::paths_to_open){
-                try{
-                    auto dataset = open_dataset(path, globals::attribute_query);
-                    globals::datasets().insert({dataset.read().id, std::move(dataset)});
-                }
-                catch(std::runtime_error e){
-                    std::cout << "[error] " << e.what() << std::endl;
-                }
-            }
-            ImGui::CloseCurrentPopup();
-            globals::paths_to_open.clear();
-            globals::attribute_query.clear();
-        }
-        ImGui::SameLine();
-        if(ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)){
-            ImGui::CloseCurrentPopup();
-            globals::paths_to_open.clear();
-            globals::attribute_query.clear();
-        }
-        ImGui::EndPopup();
-    }
-}
+void check_datasets_to_open();
 
 };
 };

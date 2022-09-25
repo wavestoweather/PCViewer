@@ -21,7 +21,6 @@ struct attribute{
 struct query_attribute{
     bool            is_dimension: 1;
     bool            is_string_length_dimension: 1;
-    bool            is_dim_active: 1;
     bool            is_active: 1;
     bool            linearize: 1;
     std::string     id;
