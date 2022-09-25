@@ -8,12 +8,14 @@
 #include <optional>
 
 namespace structures{
+template<typename T>
+using const_unique = std::unique_ptr<const T>;
 
 struct templatelist{
     std::string                 name{};
     std::vector<uint32_t>       indices{};
     std::vector<min_max<float>> min_maxs{};
-    float                       point_ratio{};
+    float                       point_ratio{};  // currently unused
 };
 
 struct dataset{
@@ -24,8 +26,8 @@ struct dataset{
     std::vector<attribute>              attributes{};
     uint32_t                            original_attribute_size{};
     change_tracker<std::set<uint32_t>>  visible_attributes{};
-    std::vector<templatelist>           templatelists{};
-    robin_hood::unordered_map<std::string_view, templatelist*> templatelist_index;
+    std::vector<const_unique<templatelist>> templatelists{};
+    robin_hood::unordered_map<std::string_view, const templatelist*> templatelist_index;
     change_tracker<data<float>>         float_data{};
     change_tracker<data<half>>          half_data{};
     change_tracker<data<uint32_t>>      compressed_data{};

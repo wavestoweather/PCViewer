@@ -25,33 +25,33 @@ static enum_names<median_type> median_type_names{
 };
 
 struct drawlist{
-    std::string             id;
-    std::string             name;
-    std::string_view        parent_dataset;
-    std::string_view        parent_templatelist;
+    std::string             id{};
+    std::string             name{};
+    std::string_view        parent_dataset{};
+    std::string_view        parent_templatelist{};
     struct appearance{
-        ImVec4      color;
-        bool        show;
-        bool        show_histogram;
+        ImVec4      color{1,1,1,1};
+        bool        show{true};
+        bool        show_histogram{};
     };
-    change_tracker<appearance> appearance_drawlist;
-    std::vector<float>      brush_ratios_to_parent;
-    change_tracker<bool>    immune_to_global_brushes;
-    change_tracker<appearance> appearance_median;
-    change_tracker<median_type> median_typ;  
-    std::vector<bool>       active_indices_bitmap;                
+    change_tracker<appearance> appearance_drawlist{};
+    std::vector<float>      brush_ratios_to_parent{};
+    change_tracker<bool>    immune_to_global_brushes{};
+    change_tracker<appearance> appearance_median{};
+    change_tracker<median_type> median_typ{};  
+    std::vector<bool>       active_indices_bitmap{};                
 
-    buffer_info             index_buffer;
-    buffer_info             median_buffer;              // linear array buffer containing the median values for all attributes
-    buffer_info             active_indices_bitmap_gpu;
-    std::vector<buffer_info> derived_data_infos;        // vulkan buffer need e.g. for large vis counting
-    tracked_brushes         local_brushes;
+    buffer_info             index_buffer{};
+    buffer_info             median_buffer{};              // linear array buffer containing the median values for all attributes
+    buffer_info             active_indices_bitmap_gpu{};
+    std::vector<buffer_info> derived_data_infos{};        // vulkan buffer need e.g. for large vis counting
+    tracked_brushes         local_brushes{};
 
     //TODO: add cluster and line bundles
 
     dataset&                    dataset_write() const       {return globals::datasets().at(parent_dataset)();}
     const structures::dataset&  dataset_read() const        {return globals::datasets.read().at(parent_dataset).read();} 
-    templatelist&               templatelist_write() const  {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
+    //templatelist&               templatelist_write() const  {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
     const structures::templatelist& const_templatelist()const {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
 };
 using tracked_drawlist = unique_tracker<drawlist>;

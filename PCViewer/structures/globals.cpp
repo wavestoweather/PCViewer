@@ -16,6 +16,7 @@
 #include <descriptor_set_storage.hpp>
 #include <laod_behaviour.hpp>
 #include <open_filepaths.hpp>
+#include <stager.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -414,6 +415,37 @@ VkSampler persistent_samplers::get(const VkSamplerCreateInfo& sampler_info){
         globals::persistent_samplers._samplers[sampler_info] = util::vk::create_sampler(sampler_info);
     return globals::persistent_samplers._samplers[sampler_info];
 }
+
+void stager::init(){
+    auto fence_info = util::vk::initializers::fenceCreateInfo();
+    _upload_fence = util::vk::create_fence(fence_info);
+    auto command_pool_info = util::vk::initializers::commandPoolCreateInfo(globals::vk_context.transfer_queue_family_index);
+    _command_pool = util::vk::create_command_pool(command_pool_info);
+    _task_thread = std::thread(&stager::_task_thread_function, this);
+}
+void stager::cleanup(){
+    _thread_finish = true;
+    _task_thread.join();
+    _task_thread = {};
+}
+void stager::add_staging_task(const stage_info& stage_info){
+    std::scoped_lock lock(_task_add_mutex);
+    _staging_tasks.push_back(stage_info);
+}
+void stager::_task_thread_function(){
+    if(_thread_finish)
+        return;
+    // getting the next stage_info
+    stage_info cur;
+    {
+        std::scoped_lock lock(_task_add_mutex);
+        cur = _staging_tasks.front();
+        _staging_tasks.erase(_staging_tasks.begin());
+    }
+    if(_thread_finish)
+        return;
+    
+}
 }
 
 // globals definition
@@ -441,4 +473,6 @@ structures::load_behaviour load_behaviour{};
 
 std::vector<std::string> paths_to_open{};
 std::vector<structures::query_attribute> attribute_query{};
+
+structures::stager stager{};
 }

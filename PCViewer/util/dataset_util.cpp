@@ -10,6 +10,12 @@
 #include <set>
 #include <numeric>
 #include <fstream>
+#include <laod_behaviour.hpp>
+#include <drawlists.hpp>
+#include <random>
+#include <vk_util.hpp>
+#include <vk_initializers.hpp>
+#include <vma_initializers.hpp>
 
 namespace util{
 namespace dataset{
@@ -467,6 +473,8 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 			dataset().attributes = data.attributes;
 			dataset().float_data = std::move(data.data);
 		}
+		else
+			throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
 		dataset().data_size = dataset.read().float_data.read().size();
 		break;
 	case data_type_preference::half_precision:
@@ -483,6 +491,8 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 			dataset().attributes = data.attributes;
 			dataset().half_data = std::move(data.data);
 		}
+		else
+			throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
 		dataset().data_size = dataset.read().half_data.read().size();
 		dataset().data_flags.half = true;
 		break;
@@ -498,12 +508,99 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 	templatelist.min_maxs.resize(dataset.read().attributes.size());
 	for(int i: util::size_range(dataset.read().attributes))
 		templatelist.min_maxs[i] = dataset.read().attributes[i].data_bounds;
-	dataset().templatelists.push_back(std::move(templatelist));
+	dataset().templatelists.push_back(std::make_unique<const structures::templatelist>(std::move(templatelist)));
 	return std::move(dataset);
 }
 
 void convert_dataset(const structures::dataset_convert_data& convert_data){
-    // TODO implement
+	auto& ds = globals::datasets.ref_no_track()[convert_data.ds_id];
+    switch(convert_data.dst){
+	case structures::dataset_convert_data::destination::drawlist:{
+		structures::drawlist drawlist{};
+		drawlist.id = convert_data.dst_name;
+		drawlist.name = convert_data.dst_name;
+		drawlist.parent_dataset = convert_data.ds_id;
+		drawlist.parent_templatelist = convert_data.tl_id;
+		drawlist.active_indices_bitmap.resize(drawlist.const_templatelist().indices.size());
+		auto buffer_create_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, drawlist.const_templatelist().indices.size() * sizeof(uint32_t));
+		auto alloc_info = util::vma::initializers::allocationCreateInfo();
+		drawlist.index_buffer = util::vk::create_buffer(buffer_create_info, alloc_info);
+		// TODO upload via staging thread
+		
+		break;
+	}
+	case structures::dataset_convert_data::destination::templatelist:{
+		structures::templatelist templatelist{};
+		templatelist.name = "On_load";
+		templatelist.indices.resize((convert_data.trim.max - convert_data.trim.min + convert_data.subsampling - 1) / convert_data.subsampling);
+		if(convert_data.random_subsampling){
+			std::default_random_engine generator;
+			std::uniform_int_distribution<uint32_t> distribution(convert_data.trim.min, convert_data.trim.max);
+			for(uint32_t& u: templatelist.indices)
+				u = distribution(generator);
+		}
+		else{
+			for(uint32_t i: util::i_range(convert_data.trim.min, convert_data.trim.max, convert_data.subsampling))
+				templatelist.indices[(i - convert_data.trim.min) / convert_data.subsampling] = i;
+		}
+		templatelist.min_maxs.resize(ds.read().attributes.size());
+		if(ds.read().data_flags.half){
+			for(int var: util::size_range(ds.read().attributes)){
+				for(uint32_t i: templatelist.indices){
+					auto val = ds.read().half_data.read()(i, var);
+					if(val < templatelist.min_maxs[var].min)
+						templatelist.min_maxs[var].min = val;
+					if(val > templatelist.min_maxs[var].max)
+						templatelist.min_maxs[var].max = val;
+				}
+			}
+		}
+		else{
+			for(int var: util::size_range(ds.read().attributes)){
+				for(uint32_t i: templatelist.indices){
+					auto val = ds.read().float_data.read()(i, var);
+					if(val < templatelist.min_maxs[var].min)
+						templatelist.min_maxs[var].min = val;
+					if(val > templatelist.min_maxs[var].max)
+						templatelist.min_maxs[var].max = val;
+				}
+			}
+		}
+		templatelist.point_ratio = templatelist.indices.size() / float(ds.read().data_size);
+		ds.ref_no_track().templatelists.push_back(std::make_unique<const structures::templatelist>(std::move(templatelist)));
+		ds.ref_no_track().templatelist_index.insert({ds.read().templatelists.back()->name, ds.read().templatelists.back().get()});
+		break;
+	}
+	default:
+		throw std::runtime_error("convert_dataset() Destination unkkown (should be either structures::dataset_convert_data::destination::drawlist or structures::dataset_convert_data::destination::templatelist)");
+	}
+}
+
+void execute_laod_behaviour(globals::dataset_t& ds){
+	for(int load_behaviour_index: util::size_range(globals::load_behaviour.on_load)){
+		auto &load_behaviour = globals::load_behaviour.on_load[load_behaviour_index];
+		// creating the new drawlist
+		structures::drawlist drawlist{std::string(ds.read().id), std::string(ds.read().id), ds.read().id};
+		if(load_behaviour.subsampling != 1 || load_behaviour.trim.min != 0 || load_behaviour.trim.max != ds.read().data_size){
+			// creating a new template list
+		
+			structures::dataset_convert_data convert_info{};
+			convert_info.ds_id = ds.read().id;
+			convert_info.tl_id = ds.read().templatelists[0]->name;
+			convert_info.dst_name = "On_load";
+			convert_info.trim = load_behaviour.trim;
+			convert_info.dst = structures::dataset_convert_data::destination::templatelist;
+			convert_dataset(convert_info);
+		}
+
+		structures::dataset_convert_data convert_info{};
+		convert_info.ds_id = ds.read().id;
+		convert_info.tl_id = ds.read().templatelists.back()->name;
+		convert_info.dst_name = ds.read().id;
+		convert_info.trim = {0, ds.read().templatelist_index.at(convert_info.tl_id)->indices.size()};
+		convert_info.dst = structures::dataset_convert_data::destination::drawlist;
+		convert_dataset(convert_info);
+	}
 }
 
 void check_datasets_to_open(){
@@ -605,6 +702,7 @@ void check_datasets_to_open(){
 				}
 				ImGui::EndTable();
 			}
+			ImGui::Separator();
         }
         static std::vector<uint8_t> activations;
         if(activations.size() != globals::paths_to_open.size())
@@ -616,7 +714,10 @@ void check_datasets_to_open(){
             for(std::string_view path: globals::paths_to_open){
                 try{
                     auto dataset = open_dataset(path, globals::attribute_query);
-                    globals::datasets().insert({dataset.read().id, std::move(dataset)});
+                    auto [ds, inserted] = globals::datasets().insert({dataset.read().id, std::move(dataset)});
+					if(!inserted)
+						throw std::runtime_error{"check_dataset_to_open() Could not add dataset to the internal datasets"};
+					
                 }
                 catch(std::runtime_error e){
                     std::cout << "[error] " << e.what() << std::endl;

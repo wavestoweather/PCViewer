@@ -62,9 +62,9 @@ void data_workbench::show()
         ImGui::Separator();
         for(const auto& [id, dataset]: globals::datasets.read()){
             if(ImGui::TreeNode(id.data())){
-                for(const structures::templatelist& tl: dataset.read().templatelists){
-                    if(ImGui::MenuItem(tl.name.c_str())){
-                        _popup_tl_id = tl.name;
+                for(const auto& tl: dataset.read().templatelists){
+                    if(ImGui::MenuItem(tl->name.c_str())){
+                        _popup_tl_id = tl->name;
                         _popup_ds_id = id;
                         ImGui::OpenPopup(popup_tl_to_dltl.data());
                     }
