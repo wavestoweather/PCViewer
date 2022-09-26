@@ -516,6 +516,11 @@ void stager::_task_thread_function(){
             auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
             std::scoped_lock lock(globals::vk_context.transfer_mutex);
             util::vk::end_commit_command_buffer(_command_buffers[fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[fence_index]);
+
+            if(cur.transfer_dir == transfer_direction::download){
+                res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+                std::memcpy(cur.data_download.data() + cur_span.min, _staging_buffer_mapped, copy_size);
+            }
         }
         if(cur.cpu_semaphore)
             cur.cpu_semaphore->release();
