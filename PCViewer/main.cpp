@@ -164,11 +164,11 @@ int main(int argc,const char* argv[]){
     id_t                        swapchain_width = 0, swapchain_height = 0;
     while(!done){
         // Poll and handle events (inputs, window resize, etc.)
-		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-		// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
-		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
-		// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-		SDL_Event event;
+        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
+        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
+        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+        SDL_Event event;
         while (SDL_PollEvent(&event))
         {
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -182,37 +182,37 @@ int main(int argc,const char* argv[]){
 
         if(rebuild_swapchain && swapchain_width > 0 && swapchain_height > 0){
             ImGui_ImplVulkan_SetMinImageCount(min_image_count);
-	        ImGui_ImplVulkanH_CreateOrResizeWindow(globals::vk_context.instance, globals::vk_context.physical_device, globals::vk_context.device, &imgui_window_data, globals::vk_context.graphics_queue_family_index, globals::vk_context.allocation_callbacks, swapchain_width, swapchain_height, min_image_count);
-	        imgui_window_data.FrameIndex = 0;
-        }
-
+            ImGui_ImplVulkanH_CreateOrResizeWindow(globals::vk_context.instance, globals::vk_context.physical_device, globals::vk_context.device, &imgui_window_data, globals::vk_context.graphics_queue_family_index, globals::vk_context.allocation_callbacks, swapchain_width, swapchain_height, min_image_count);
+            imgui_window_data.FrameIndex = 0;
+        }   
+            
         // start imgui frame
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame(window);
-        ImGui::NewFrame();
+        ImGui::NewFrame();  
 
         // main docking window with menu bar
         ImGuiViewport* viewport = ImGui::GetMainViewport();
-		ImGui::SetNextWindowPos(viewport->WorkPos);
-		ImGui::SetNextWindowSize(viewport->WorkSize);
-		ImGui::SetNextWindowViewport(viewport->ID);
-		ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings;
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
+        ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings;
         ImGui::Begin("MainDockWindow", NULL, dockingWindow_flags);
         ImGuiID main_dock_id = ImGui::GetID("MainDock");
-		if (first_frame) {
-			ImGui::DockBuilderRemoveNode(main_dock_id);
-			ImGuiDockNodeFlags dockSpaceFlags = 0;
-			dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
-			ImGui::DockBuilderAddNode(main_dock_id, dockSpaceFlags);
+        if (first_frame) {
+            ImGui::DockBuilderRemoveNode(main_dock_id);
+            ImGuiDockNodeFlags dockSpaceFlags = 0;
+            dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
+            ImGui::DockBuilderAddNode(main_dock_id, dockSpaceFlags);
             ImGui::DockBuilderSetNodeSize(main_dock_id, {viewport->WorkSize.x, viewport->WorkSize.y});
             ImGuiID main_dock_bottom, main_dock_top;
             ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, .3f, &main_dock_bottom, &main_dock_top);
-			ImGui::DockBuilderDockWindow(globals::primary_workbench->id.data(), main_dock_bottom);
+            ImGui::DockBuilderDockWindow(globals::primary_workbench->id.data(), main_dock_bottom);
             ImGui::DockBuilderDockWindow(globals::secondary_workbench->id.data(), main_dock_top);
             ImGuiDockNode* node = ImGui::DockBuilderGetNode(main_dock_bottom);
             node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
             ImGui::DockBuilderFinish(main_dock_id);
-		}
+        }
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
         ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
 
@@ -258,15 +258,15 @@ int main(int argc,const char* argv[]){
     auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
    
     ImGui_ImplVulkan_Shutdown();
-	ImGui_ImplSDL2_Shutdown();
-	ImGui::DestroyContext();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
 
-	ImGui_ImplVulkanH_DestroyWindow(globals::vk_context.instance, globals::vk_context.device, &imgui_window_data, globals::vk_context.allocation_callbacks);
+    ImGui_ImplVulkanH_DestroyWindow(globals::vk_context.instance, globals::vk_context.device, &imgui_window_data, globals::vk_context.allocation_callbacks);
     globals::stager.cleanup();
     globals::vk_context.cleanup();
 
-	SDL_DestroyWindow(window);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 
-	return 0;
+    return 0;
 }
