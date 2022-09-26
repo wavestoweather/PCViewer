@@ -18,6 +18,7 @@
 #include <open_filepaths.hpp>
 #include <stager.hpp>
 #include <util.hpp>
+#include <workbench_base.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -423,7 +424,7 @@ VkSampler persistent_samplers::get(const VkSamplerCreateInfo& sampler_info){
 
 void stager::init(){
     auto fence_info = util::vk::initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
-    _upload_fences = {util::vk::create_fence(fence_info), util::vk::create_fence(fence_info)};
+    _task_fences = {util::vk::create_fence(fence_info), util::vk::create_fence(fence_info)};
     auto command_pool_info = util::vk::initializers::commandPoolCreateInfo(globals::vk_context.transfer_queue_family_index);
     _command_pool = util::vk::create_command_pool(command_pool_info);
     _task_thread = std::thread(&stager::_task_thread_function, this);
@@ -441,6 +442,11 @@ void stager::add_staging_task(const staging_info& stage_info){
 }
 void stager::set_staging_buffer_size(size_t size){
     _staging_buffer_size = util::align(size, 512ul);
+}
+void stager::wait_for_completion(){
+    _wait_completion = true;
+    _task_semaphore.release();
+    _completion_sempahore.acquire();    // waiting for execution thread to finish waiting
 }
 void stager::_task_thread_function(){
     while(!_thread_finish){
@@ -460,6 +466,13 @@ void stager::_task_thread_function(){
             _staging_buffer_mapped = alloc_info.pMappedData;
         }
 
+        if(_staging_tasks.empty() && _wait_completion){
+            auto res = vkWaitForFences(globals::vk_context.device, 2, _task_fences.data(), VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+            _wait_completion = false;
+            _completion_sempahore.release(_completion_sempahore.peekCount());
+            continue;
+        }
+
         // getting the next stage_info
         staging_info cur;
         {
@@ -471,29 +484,38 @@ void stager::_task_thread_function(){
             return;
 
         int fence_index = 0;    // also indicates which part of the staging buffer should be used (0 front, 1 back)
-        for(structures::min_max<size_t> cur_span{0, buffer_size / 2}; cur_span.min < cur.data.size() && !_thread_finish; cur_span.min = cur_span.max, cur_span.max += buffer_size / 2, fence_index = (++fence_index) % _upload_fences.size()){
+        size_t data_size = cur.transfer_dir == transfer_direction::upload ? cur.data_upload.size() : cur.data_download.size();
+        for(structures::min_max<size_t> cur_span{0, buffer_size / 2}; cur_span.min < data_size && !_thread_finish; cur_span.min = cur_span.max, cur_span.max += buffer_size / 2, fence_index = (++fence_index) % _task_fences.size()){
             // wait for completion of previous transfer operation (otherwise we write to not yet copied data in the staging bufffer)
-            auto res = vkWaitForFences(globals::vk_context.device, 1, &_upload_fences[fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max());
-            util::check_vk_result(res);
-            vkResetFences(globals::vk_context.device, 1, &_upload_fences[fence_index]);
+            auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+            vkResetFences(globals::vk_context.device, 1, &_task_fences[fence_index]);
 
-            size_t copy_size = std::min(cur_span.max - cur_span.min, cur.data.size() - cur_span.min);
-            std::memcpy(_staging_buffer_mapped, cur.data.data() + cur_span.min, copy_size);
+            size_t copy_size = std::min(cur_span.max - cur_span.min, data_size - cur_span.min);
+            if(cur.transfer_dir == transfer_direction::upload)
+                std::memcpy(_staging_buffer_mapped, cur.data_upload.data() + cur_span.min, copy_size);
+
 
             if(_command_buffers[fence_index])
                 vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_command_buffers[fence_index]);
             _command_buffers[fence_index] = util::vk::create_begin_command_buffer(_command_pool);
 
             VkBufferCopy buffer_copy{};
-            buffer_copy.srcOffset = fence_index * (buffer_size / 2);
-            buffer_copy.dstOffset = cur.dst_buffer_offset + cur_span.min;
             buffer_copy.size = copy_size;
-            vkCmdCopyBuffer(_command_buffers[fence_index], _staging_buffer.buffer, cur.dst_buffer, 1, &buffer_copy);
+            if(cur.transfer_dir == transfer_direction::upload){
+                buffer_copy.srcOffset = fence_index * (buffer_size / 2);
+                buffer_copy.dstOffset = cur.dst_buffer_offset + cur_span.min;
+                vkCmdCopyBuffer(_command_buffers[fence_index], _staging_buffer.buffer, cur.dst_buffer, 1, &buffer_copy);
+            }
+            else if(cur.transfer_dir == transfer_direction::download){
+                buffer_copy.srcOffset = cur.dst_buffer_offset + cur_span.min;
+                buffer_copy.dstOffset = fence_index * (buffer_size / 2);
+                vkCmdCopyBuffer(_command_buffers[fence_index], cur.dst_buffer, _staging_buffer.buffer, 1, &buffer_copy);
+            }
             auto wait_semaphores = cur_span.min < buffer_size ? cur.wait_semaphores: util::memory_view<VkSemaphore>{};
             auto wait_flags = cur_span.min < buffer_size ? cur.wait_flags : util::memory_view<uint32_t>{};
-            auto signal_semaphores = cur_span.min + buffer_size >= cur.data.size() ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
+            auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
             std::scoped_lock lock(globals::vk_context.transfer_mutex);
-            util::vk::end_commit_command_buffer(_command_buffers[fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _upload_fences[fence_index]);
+            util::vk::end_commit_command_buffer(_command_buffers[fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[fence_index]);
         }
         if(cur.cpu_semaphore)
             cur.cpu_semaphore->release();
@@ -528,4 +550,10 @@ std::vector<std::string> paths_to_open{};
 std::vector<structures::query_attribute> attribute_query{};
 
 structures::stager stager{};
+
+workbenches_t workbenches{};
+structures::workbench* primary_workbench{};
+structures::workbench* secondary_workbench{};
+dataset_dependencies_t dataset_dependencies{};
+drawlist_dataset_dependencies_t drawlist_dataset_dependencies{}; 
 }

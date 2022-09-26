@@ -24,6 +24,7 @@ static enum_names<median_type> median_type_names{
     "synthetic",
     "geometric"
 };
+using median_iteration = enum_iteration<median_type>;
 
 struct drawlist{
     std::string             id{};

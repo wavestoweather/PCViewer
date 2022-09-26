@@ -10,10 +10,17 @@ namespace structures{
 // stager uses a single staging buffer which is used in fifo mode for uploading data larger than the staging buffer
 class stager{
 public:
+    enum class transfer_direction{
+        upload,
+        download,
+        COUNT
+    };
     struct staging_info{
+        transfer_direction                  transfer_dir{transfer_direction::upload};
         VkBuffer                            dst_buffer{};
         size_t                              dst_buffer_offset{};
-        util::memory_view<const uint8_t>    data{};
+        util::memory_view<const uint8_t>    data_upload{};
+        util::memory_view<uint8_t>          data_download{};
         util::memory_view<VkSemaphore>      wait_semaphores{};
         util::memory_view<uint32_t>         wait_flags{};
         util::memory_view<VkSemaphore>      signal_semaphores{};
@@ -28,6 +35,8 @@ public:
     void add_staging_task(const staging_info& stage_info);
     // set staging buffer size (defaults to 128 MB)
     void set_staging_buffer_size(size_t size);
+    // waiting for completion of all upload tasks
+    void wait_for_completion();
 
     ~stager() {assert(!_task_thread.joinable() && "Call to cleanup() missing before destruction");}
 
@@ -35,9 +44,11 @@ private:
     semaphore               _task_semaphore{};
     std::vector<staging_info> _staging_tasks{};
     std::mutex              _task_add_mutex{};
-    std::array<VkFence, 2>  _upload_fences{};
+    std::array<VkFence, 2>  _task_fences{};
     std::thread             _task_thread{};
     std::atomic_bool        _thread_finish{};
+    std::atomic_bool        _wait_completion{};
+    structures::semaphore   _completion_sempahore{};
     VkCommandPool           _command_pool{};
     std::array<VkCommandBuffer, 2>_command_buffers{};
     std::atomic_size_t      _staging_buffer_size{1u<<27}; // default size is 128 MB

@@ -2,6 +2,7 @@
 #include <string_view>
 #include <memory_view.hpp>
 #include <atomic>
+#include <memory>
 
 namespace structures{
 struct workbench{
@@ -20,14 +21,26 @@ struct dataset_dependency{
         bool fragmented_first: 1;
         bool fragmented_last: 1;
     };
-    virtual void addDataset(std::string_view datasetId) = 0;
-    virtual void signalDatasetUpdate(const util::memory_view<std::string_view>& datasetIds, update_flags flags) = 0;
-    virtual void removeDataset(std::string_view datasetId) = 0;
+    virtual void add_dataset(std::string_view dataset_id) = 0;
+    virtual void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags) = 0;
+    virtual void remove_dataset(std::string_view dataset_id) = 0;
 };
 
 struct drawlist_dataset_dependency: public dataset_dependency{
-    virtual void addDrawlist(std::string_view drawlistId) = 0;
-    virtual void signalDrawlistUpdate(const util::memory_view<std::string_view>& drawlistIds) = 0;
-    virtual void removeDrawlist(std::string_view drawlistId) = 0;
+    virtual void add_drawlist(std::string_view drawlist_id) = 0;
+    virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids) = 0;
+    virtual void remove_drawlist(std::string_view drawlist_id) = 0;
 };
+}
+
+namespace globals{
+using unique_workbench = std::unique_ptr<structures::workbench>;
+using workbenches_t = std::vector<unique_workbench>;
+extern workbenches_t workbenches;
+extern structures::workbench* primary_workbench;
+extern structures::workbench* secondary_workbench;
+using dataset_dependencies_t = std::vector<structures::dataset_dependency*>;
+extern dataset_dependencies_t dataset_dependencies;
+using drawlist_dataset_dependencies_t = std::vector<structures::drawlist_dataset_dependency*>;
+extern drawlist_dataset_dependencies_t drawlist_dataset_dependencies;
 }

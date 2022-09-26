@@ -68,11 +68,12 @@ namespace parallel_coordinates_renderer{
     };
 
 	using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
+    using median_tracker = structures::change_tracker<structures::median_type>;
 	struct drawlist_info{
         std::string_view                        drawlist_id;
         bool                                    linked_with_drawlist;
         util::memory_view<appearance_tracker>   appearance;
-        util::memory_view<structures::median_type> median;
+        util::memory_view<median_tracker>       median;
     };
 }
 }

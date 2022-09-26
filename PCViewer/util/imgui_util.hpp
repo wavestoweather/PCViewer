@@ -17,7 +17,7 @@ inline void load_fonts(std::string_view font_folder, util::memory_view<float> fo
     ImFontConfig font_conf{};
 	font_conf.OversampleH = 2;
 	font_conf.OversampleV = 2;
-    ImWchar icons_ranges[] = { ICON_MIN_IGFD, ICON_MAX_IGFD, 0 };
+    static const ImWchar icons_ranges[] = { ICON_MIN_IGFD, ICON_MAX_IGFD, 0 };
 	ImFontConfig icons_config{}; icons_config.MergeMode = true; icons_config.PixelSnapH = true;
     for(const auto& entry: std::filesystem::directory_iterator(font_folder)){
         if(entry.is_regular_file() && entry.path().has_extension() && entry.path().extension().string() == ".ttf"){

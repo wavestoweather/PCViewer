@@ -7977,7 +7977,7 @@ int main(int, char**)
 	}
 
 	{
-		parallel_coordinates_workbench = std::make_unique<workbenches::parallel_coordinates_workbench>("ParallelCoodinatesWorkbenchTest");
+		//parallel_coordinates_workbench = std::make_unique<workbenches::parallel_coordinates_workbench>("ParallelCoodinatesWorkbenchTest");
 		//parallel_coordinates_workbench->active = true;
 	}
 
@@ -15269,7 +15269,7 @@ int main(int, char**)
 
 		compressionWorkbench->draw();
 
-		parallel_coordinates_workbench->show();
+		//parallel_coordinates_workbench->show();
 
 		//checking data from hierarch importer
 		for(auto& dl: g_PcPlotDrawLists){

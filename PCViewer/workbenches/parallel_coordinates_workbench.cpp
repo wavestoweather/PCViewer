@@ -67,32 +67,36 @@ void parallel_coordinates_workbench::show(){
             ImGui::TableHeader("Color");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Median");
-
-            ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("dl.drawlist_id.data()");
-                ImGui::TableNextColumn();
-                ImGui::ArrowButton("##testu", ImGuiDir_Up);
-                ImGui::TableNextColumn();
-                ImGui::ArrowButton("##testd", ImGuiDir_Down);
-                ImGui::TableNextColumn();
-                ImGui::Button("X##testx");
-                ImGui::TableNextColumn();
-                bool t;
-                ImGui::Checkbox("##testact", &t);
             
-            for(auto& dl: drawlist_infos){
+            for(auto& dl: drawlist_infos.ref_no_track()){
+                std::string dl_string(dl.drawlist_id);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text(dl.drawlist_id.data());
-                ImGui::NextColumn();
-                ImGui::ArrowButton("##testu", ImGuiDir_Up);
-                ImGui::NextColumn();
-                ImGui::ArrowButton("##testd", ImGuiDir_Down);
-                ImGui::NextColumn();
-                ImGui::Button("X##testx");
-                ImGui::NextColumn();
-                ImGui::Checkbox("##testact", &dl.appearance->ref_no_track().show);
+                ImGui::TableNextColumn();
+                if(ImGui::ArrowButton(("##u" + dl_string).c_str(), ImGuiDir_Up))
+                    drawlist_infos.write();
+                ImGui::TableNextColumn();
+                if(ImGui::ArrowButton(("##d" + dl_string).c_str(), ImGuiDir_Down))
+                    drawlist_infos.write();
+                ImGui::TableNextColumn();
+                if(ImGui::Button(("X##x" + dl_string).c_str()))
+                    drawlist_infos.write();
+                ImGui::TableNextColumn();
+                if(ImGui::Checkbox(("##act" + dl_string).c_str(), &dl.appearance->ref_no_track().show))
+                    dl.appearance->write();
+                ImGui::TableNextColumn();
+                if(ImGui::ColorEdit4(("##col" + dl_string).c_str(), &dl.appearance->ref_no_track().color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+                    dl.appearance->write();
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(100);
+                if(ImGui::BeginCombo(("##med" + dl_string).c_str(), structures::median_type_names[dl.median->read()].data())){
+                    for(auto m: structures::median_iteration{}){
+                        if(ImGui::MenuItem(structures::median_type_names[m].data()))
+                            dl.median->write() = m;
+                    }
+                    ImGui::EndCombo();
+                }
             }
 
             ImGui::EndTable();
@@ -128,6 +132,21 @@ void parallel_coordinates_workbench::render_plot()
         {}      // signal_semaphores;
     };
     pipelines::parallel_coordinates_renderer::instance().render(render_info);
+}
+
+void parallel_coordinates_workbench::add_drawlist(std::string_view drawlist_id){
+    auto& dl = globals::drawlists.write().at(drawlist_id).write();
+    auto& ds = dl.dataset_read();
+    if(drawlist_infos.read().empty()){
+        // setting up the internal states
+        attributes.write() = ds.attributes;
+    }
+    // check attribute consistency
+    for(int var: util::size_range(attributes.read()))
+        if(attributes.read()[var].id != ds.attributes[var].id)
+            throw std::runtime_error{"parallel_coordinates_workbench::addDrawlist() Inconsistent attributes for the new drawlist"};
+    
+    drawlist_infos.write().push_back(drawlist_info{drawlist_id, true, dl.appearance_drawlist, dl.median_typ});
 }
 
 }

@@ -17,13 +17,13 @@ public:
 
     void show() override;
 
-    void addDataset(std::string_view datasetId) override {};
-    void signalDatasetUpdate(const util::memory_view<std::string_view>& datasetIds, update_flags flags) override {};
-    void removeDataset(std::string_view datasetId) override {};
+    void add_dataset(std::string_view datasetId) override {};
+    void signal_dataset_update(const util::memory_view<std::string_view>& datasetIds, update_flags flags) override {};
+    void remove_dataset(std::string_view datasetId) override {};
 
-    void addDrawlist(std::string_view drawlistId) override {};
-    void signalDrawlistUpdate(const util::memory_view<std::string_view>& drawlistIds) override {};
-    void removeDrawlist(std::string_view drawlistId) override {};
+    void add_drawlist(std::string_view drawlistId) override {};
+    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlistIds) override {};
+    void remove_drawlist(std::string_view drawlistId) override {};
 };
 
 }

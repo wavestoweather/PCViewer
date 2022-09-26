@@ -18,6 +18,7 @@
 #include <vma_initializers.hpp>
 #include <stager.hpp>
 #include <util.hpp>
+#include <workbench_base.hpp>
 
 namespace util{
 namespace dataset{
@@ -501,7 +502,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 		dataset().data_flags.half = true;
 		break;
 	default:
-		throw std::runtime_error{"[warning] open_dataset() unrecognized data_type_preference"};
+		throw std::runtime_error{"open_dataset() unrecognized data_type_preference"};
 	}
 	dataset().display_name = dataset.read().id;
 	dataset().backing_data = filename;
@@ -525,31 +526,30 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 		auto semaphore_info = util::vk::initializers::semaphoreCreateInfo();
 		std::array<VkSemaphore, 2> upload_semaphores{util::vk::create_semaphore(semaphore_info), util::vk::create_semaphore(semaphore_info)};
 		std::array<std::unique_ptr<structures::semaphore>, 2> cpu_semaphores{std::make_unique<structures::semaphore>(), std::make_unique<structures::semaphore>()};
-		structures::drawlist drawlist{};
-		drawlist.id = convert_data.dst_name;
-		drawlist.name = convert_data.dst_name;
-		drawlist.parent_dataset = convert_data.ds_id;
-		drawlist.parent_templatelist = convert_data.tl_id;
-		drawlist.active_indices_bitset.resize(ds.read().data_size, false);
-		for(auto i: drawlist.const_templatelist().indices)
-			drawlist.active_indices_bitset[i] = true;
-		auto buffer_create_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, drawlist.const_templatelist().indices.size() * sizeof(uint32_t));
+		structures::tracked_drawlist drawlist{};
+		drawlist().id = convert_data.dst_name;
+		drawlist().name = convert_data.dst_name;
+		drawlist().parent_dataset = convert_data.ds_id;
+		drawlist().parent_templatelist = convert_data.tl_id;
+		drawlist().active_indices_bitset.resize(ds.read().data_size, false);
+		for(auto i: drawlist.read().const_templatelist().indices)
+			drawlist().active_indices_bitset[i] = true;
+		auto buffer_create_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, drawlist.read().const_templatelist().indices.size() * sizeof(uint32_t));
 		auto alloc_info = util::vma::initializers::allocationCreateInfo();
-		drawlist.index_buffer = util::vk::create_buffer(buffer_create_info, alloc_info);
+		drawlist().index_buffer = util::vk::create_buffer(buffer_create_info, alloc_info);
 		// uploading index buffer
-		util::memory_view<uint8_t const> data(util::memory_view<uint32_t const>(drawlist.const_templatelist().indices));//.data(), drawlist.const_templatelist().indices.size()));
-		auto signal_semaphores = util::memory_view(upload_semaphores[0]);
-		structures::stager::staging_info staging_info{drawlist.index_buffer.buffer, 0ul, data, {}, {}, signal_semaphores, cpu_semaphores[0].get()};
+		util::memory_view<uint8_t const> data(util::memory_view<uint32_t const>(drawlist.read().const_templatelist().indices));//.data(), drawlist.const_templatelist().indices.size()));
+		structures::stager::staging_info staging_info{structures::stager::transfer_direction::upload, drawlist.read().index_buffer.buffer, 0ul, data, {}, {}, {}, util::memory_view(upload_semaphores[0]), cpu_semaphores[0].get()};
 		globals::stager.add_staging_task(staging_info);
 
 		auto median_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (ds.read().attributes.size() + 2) * sizeof(float));
-		drawlist.median_buffer = util::vk::create_buffer(median_buffer_info, alloc_info);
-		auto bitmap_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (drawlist.active_indices_bitset.size() + 31) / 8); // / 8 = / 32 * 4
-		drawlist.active_indices_bitset_gpu = util::vk::create_buffer(bitmap_buffer_info, alloc_info);
+		drawlist().median_buffer = util::vk::create_buffer(median_buffer_info, alloc_info);
+		auto bitmap_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (drawlist.read().active_indices_bitset.size() + 31) / 8); // / 8 = / 32 * 4
+		drawlist().active_indices_bitset_gpu = util::vk::create_buffer(bitmap_buffer_info, alloc_info);
 		// uploading bitset_vector
-		data = util::memory_view(drawlist.active_indices_bitset.data(), (drawlist.active_indices_bitset.size() + drawlist.active_indices_bitset.bits_per_block - 1) / drawlist.active_indices_bitset.bits_per_block);
-		signal_semaphores = util::memory_view(upload_semaphores[1]);
-		staging_info = {drawlist.active_indices_bitset_gpu.buffer, 0ul, data, {}, {}, signal_semaphores, cpu_semaphores[1].get()};
+		// TODO: might be unnecesary, as this bitvector will be filled by brushing pipeline
+		data = util::memory_view(drawlist.read().active_indices_bitset.data(), (drawlist.read().active_indices_bitset.size() + drawlist.read().active_indices_bitset.bits_per_block - 1) / drawlist.read().active_indices_bitset.bits_per_block);
+		staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, data, {}, {}, {}, util::memory_view(upload_semaphores[1]), cpu_semaphores[1].get()};
 		globals::stager.add_staging_task(staging_info);
 
 		// waiting uploads
@@ -564,6 +564,7 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 		util::vk::destroy_fence(fence);
 		util::vk::destroy_semaphore(upload_semaphores[0]);
 		util::vk::destroy_semaphore(upload_semaphores[1]);
+		globals::drawlists.write().insert({drawlist.read().id, std::move(drawlist)});
 		break;
 	}
 	case structures::dataset_convert_data::destination::templatelist:{
@@ -637,6 +638,15 @@ void execute_laod_behaviour(globals::dataset_t& ds){
 		convert_info.trim = {0, ds.read().templatelist_index.at(convert_info.tl_id)->indices.size()};
 		convert_info.dst = structures::dataset_convert_data::destination::drawlist;
 		convert_dataset(convert_info);
+		for(std::string_view wb_id: load_behaviour.coupled_workbenches){
+			auto wb = util::memory_view(globals::workbenches).find([&](const globals::unique_workbench& work){return work->id == wb_id;}).get();
+			if(structures::drawlist_dataset_dependency* ddd = dynamic_cast<structures::drawlist_dataset_dependency*>(wb)){
+				try{
+					ddd->add_drawlist(globals::drawlists.read().at(ds.read().id).read().id);}
+				catch(const std::runtime_error& e){
+					std::cout << "[error] " << e.what() << std::endl;}
+			}
+		}
 	}
 }
 
@@ -754,7 +764,7 @@ void check_datasets_to_open(){
 						throw std::runtime_error{"check_dataset_to_open() Could not add dataset to the internal datasets"};
 					execute_laod_behaviour(ds->second);
                 }
-                catch(std::runtime_error e){
+                catch(const std::runtime_error& e){
                     std::cout << "[error] " << e.what() << std::endl;
                 }
             }

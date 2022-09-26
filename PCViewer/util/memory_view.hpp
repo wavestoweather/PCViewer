@@ -49,6 +49,10 @@ public:
         assert(_size);
         return _data;
     }
+    T& operator*(){
+        assert(_size);
+        return *_data;
+    }
     bool operator==(const memory_view& o) const{
         return _data == o._data && _size == o._size;
     }
@@ -83,6 +87,7 @@ public:
         for(auto &el: *this)
             if(el == e)
                 return el;
+        throw std::runtime_error{"util::memory_view::find() Element does not exist."};
     }
     const T& find(const T& e) const {
         return find(e);
@@ -92,6 +97,7 @@ public:
         for(auto &e: *this)
             if(f(e))
                 return e;
+        throw std::runtime_error{"util::memory_view::find() Element does not exist."};
     }
     const T& find(std::function<bool(const T& e)> f) const{
         return find(f);

@@ -135,8 +135,9 @@ void data_workbench::show()
                     globals::drawlists()[id]().appearance_drawlist().color;
                 ImGui::TableNextColumn();
                 auto& median_no_track = globals::drawlists.ref_no_track()[id].ref_no_track().appearance_median.ref_no_track();
+                ImGui::SetNextItemWidth(100);
                 if(ImGui::BeginCombo(("##medtyp" + std::string(id)).c_str(), structures::median_type_names[dl.read().median_typ.read()].data())){
-                    for(auto median_type: structures::enum_iteration<structures::median_type>()){
+                    for(auto median_type: structures::median_iteration{}){
                         if(ImGui::MenuItem(structures::median_type_names[median_type].data()))
                             globals::drawlists()[id]().median_typ = median_type;
                     }

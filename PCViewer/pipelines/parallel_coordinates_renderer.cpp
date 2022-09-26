@@ -248,7 +248,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
     };
 
     const auto& drawlists = globals::drawlists.read();
-    auto first_dl = info.workbench.drawlist_infos[0].drawlist_id;
+    auto first_dl = info.workbench.drawlist_infos.read()[0].drawlist_id;
     auto data_type = globals::drawlists.read().at(first_dl).read().dataset_read().data_flags.half ? structures::parallel_coordinates_renderer::data_type::half: structures::parallel_coordinates_renderer::data_type::floatt;
     output_specs out_specs{
         info.workbench.plot_data.read().width, 
@@ -260,7 +260,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         data_type}; 
     auto pipeline_info = get_or_create_pipeline(out_specs);
 
-    structures::dynamic_struct<pipeline_uniform_infos, ImVec4> pipeline_uniforms(info.workbench.attributes.size());
+    structures::dynamic_struct<pipeline_uniform_infos, ImVec4> pipeline_uniforms(info.workbench.attributes.read().size());
     auto attribute_infos = get_or_resize_info_buffer(pipeline_uniforms.data().byteSize());
 
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, 1e10); util::check_vk_result(res);  // 10 seconds waiting
@@ -274,7 +274,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
     size_t batch_size{};
     switch(info.workbench.render_strategy){
     case workbenches::parallel_coordinates_workbench::render_strategy::all:
-        for(const auto& dl: info.workbench.drawlist_infos){
+        for(const auto& dl: info.workbench.drawlist_infos.read()){
             const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
             batch_size += ds.float_data.read().size() + ds.half_data.read().size();
         }
@@ -285,7 +285,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
     }
 
     size_t cur_batch_lines{};
-    for(const auto& dl: info.workbench.drawlist_infos){
+    for(const auto& dl: info.workbench.drawlist_infos.read()){
         const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
         size_t data_size = ds.data_flags.half ? ds.half_data.read().size(): ds.float_data.read().size();
         size_t cur_batch_size = std::min(data_size, batch_size);

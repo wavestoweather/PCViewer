@@ -17,6 +17,7 @@
 #include "imgui_file_dialog/ImGuiFileDialog.h"
 #include <dataset_util.hpp>
 #include <stager.hpp>
+#include <workbenches_util.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -24,37 +25,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFl
     return VK_FALSE;
 }
 
-std::tuple<std::vector<std::unique_ptr<structures::workbench>>, std::vector<structures::drawlist_dataset_dependency*>, std::vector<structures::drawlist_dataset_dependency*>, structures::workbench*>
-setup_worbenches_datasetdeps_drawlist_deps(){
-    std::vector<std::unique_ptr<structures::workbench>> workbenches{};
-    std::vector<structures::drawlist_dataset_dependency*> dataset_dependecies{};
-    std::vector<structures::drawlist_dataset_dependency*> drawlist_dependencies{};
-    structures::workbench*                              main_workbench{};
-    // register all available workbenches
-    auto data_wb = std::make_unique<workbenches::data_workbench>("Data workbench");
-    data_wb->active = true;
-    dataset_dependecies.push_back(data_wb.get());
-    main_workbench = data_wb.get();
-    workbenches.emplace_back(std::move(data_wb));
-
-    auto parallel_coordinates_wb = std::make_unique<workbenches::parallel_coordinates_workbench>("Parallel coordinates workbench");
-    parallel_coordinates_wb->active = true;
-    dataset_dependecies.push_back(parallel_coordinates_wb.get());
-    workbenches.emplace_back(std::move(parallel_coordinates_wb));
-
-    globals::load_behaviour.on_load.push_back({false, 1, {0, std::numeric_limits<size_t>::max()}, {"Parallel coordinates workbench"}});
-
-    return {std::move(workbenches), std::move(dataset_dependecies), std::move(drawlist_dependencies), main_workbench};
-}
-
 int main(int argc,const char* argv[]){
     // variables for all of the execution
     SDL_Window*                                         window{};
     ImGui_ImplVulkanH_Window                            imgui_window_data;
-    std::vector<std::unique_ptr<structures::workbench>> workbenches{};
-    std::vector<structures::drawlist_dataset_dependency*> dataset_dependecies{};
-    std::vector<structures::drawlist_dataset_dependency*> drawlist_dependencies{};
-    structures::workbench*                              main_workbench;
     constexpr int                                       min_image_count = 2;
 
     // init global states (including imgui) ---------------------------------------------------------------------
@@ -144,9 +118,9 @@ int main(int argc,const char* argv[]){
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
     ImGui::GetIO().ConfigViewportsNoDecoration = false;
-    std::vector<float> font_sizes{5.f, 10.f, 15.f};
+    std::vector<float> font_sizes{10.f, 15.f, 25.f};
     util::imgui::load_fonts("fonts/", font_sizes);
-    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[2];
+    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
     if(globals::commandline_parser.isSet("printfontinfo"))
         std::cout << "[info] Amount of fonts available: " << ImGui::GetIO().Fonts->Fonts.size() / font_sizes.size() << std::endl;
 
@@ -175,9 +149,10 @@ int main(int argc,const char* argv[]){
     auto res = vkWaitForFences(globals::vk_context.device, 1, &setup_fence, VK_TRUE, 20e9); util::check_vk_result(res);
     util::vk::destroy_fence(setup_fence);
     util::vk::destroy_command_pool(setup_command_pool);
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
 
-    // workbench setup
-    std::tie(workbenches, dataset_dependecies, drawlist_dependencies, main_workbench) = setup_worbenches_datasetdeps_drawlist_deps();
+    // workbenches setup
+    util::workbench::setup_default_workbenches();
     }
 
     // main loop ---------------------------------------------------------------------
@@ -232,8 +207,8 @@ int main(int argc,const char* argv[]){
             ImGui::DockBuilderSetNodeSize(main_dock_id, {viewport->WorkSize.x, viewport->WorkSize.y});
             ImGuiID main_dock_bottom, main_dock_top;
             ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, .3f, &main_dock_bottom, &main_dock_top);
-			ImGui::DockBuilderDockWindow(main_workbench->id.data(), main_dock_bottom);
-            ImGui::DockBuilderDockWindow(workbenches[1]->id.data(), main_dock_top);
+			ImGui::DockBuilderDockWindow(globals::primary_workbench->id.data(), main_dock_bottom);
+            ImGui::DockBuilderDockWindow(globals::secondary_workbench->id.data(), main_dock_top);
             ImGuiDockNode* node = ImGui::DockBuilderGetNode(main_dock_bottom);
             node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
             ImGui::DockBuilderFinish(main_dock_id);
@@ -244,7 +219,9 @@ int main(int argc,const char* argv[]){
         // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
         util::dataset::check_datasets_to_open();
 
-        for(const auto& wb: workbenches)
+        ImGui::ShowFontSelector("selectxxx");
+
+        for(const auto& wb: globals::workbenches)
             wb->show();
 
         if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")){
