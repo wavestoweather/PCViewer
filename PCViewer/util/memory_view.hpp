@@ -17,6 +17,7 @@ public:
     memory_view(){};
     memory_view(T& d): _data(&d), _size(1){};
     memory_view(std::vector<T>& v): _data(v.data()), _size(v.size()){};
+    memory_view(const std::vector<typename std::remove_const<T>::type>& v): _data(v.data()), _size(v.size()){};
     //memory_view(const std::vector<std::remove_const<T>::type>& v): _data(v.data()), _size(v.size()){static_assert(std::is_const<T>::value);}
     template<size_t size>
     memory_view(std::array<T, size>& a): _data(a.data()), _size(size){};

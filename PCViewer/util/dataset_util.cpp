@@ -16,6 +16,8 @@
 #include <vk_util.hpp>
 #include <vk_initializers.hpp>
 #include <vma_initializers.hpp>
+#include <stager.hpp>
+#include <util.hpp>
 
 namespace util{
 namespace dataset{
@@ -449,6 +451,8 @@ std::vector<structures::query_attribute> get_combined_query_attributes(std::stri
 }
 
 globals::dataset_t open_dataset(std::string_view filename, memory_view<structures::query_attribute> query_attributes, data_type_preference data_type_pref){
+	const std::string_view default_templatelist_name = "All indices";
+	
 	// this method will open only a single dataset. If all datasets from a folder should be opened, handle the readout of all datasets outside this function
 	// compressed data will be read nevertheless
 
@@ -502,13 +506,15 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 	dataset().display_name = dataset.read().id;
 	dataset().backing_data = filename;
 	structures::templatelist templatelist{};
-	templatelist.name = "All indices";
+	templatelist.name = default_templatelist_name;
 	templatelist.indices.resize(dataset.read().data_size);
 	std::iota(templatelist.indices.begin(), templatelist.indices.end(), 0);
 	templatelist.min_maxs.resize(dataset.read().attributes.size());
 	for(int i: util::size_range(dataset.read().attributes))
 		templatelist.min_maxs[i] = dataset.read().attributes[i].data_bounds;
 	dataset().templatelists.push_back(std::make_unique<const structures::templatelist>(std::move(templatelist)));
+	dataset().templatelist_index[default_templatelist_name] = dataset().templatelists.back().get();
+	// TODO: upload data and dater header
 	return std::move(dataset);
 }
 
@@ -516,17 +522,48 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 	auto& ds = globals::datasets.ref_no_track()[convert_data.ds_id];
     switch(convert_data.dst){
 	case structures::dataset_convert_data::destination::drawlist:{
+		auto semaphore_info = util::vk::initializers::semaphoreCreateInfo();
+		std::array<VkSemaphore, 2> upload_semaphores{util::vk::create_semaphore(semaphore_info), util::vk::create_semaphore(semaphore_info)};
+		std::array<std::unique_ptr<structures::semaphore>, 2> cpu_semaphores{std::make_unique<structures::semaphore>(), std::make_unique<structures::semaphore>()};
 		structures::drawlist drawlist{};
 		drawlist.id = convert_data.dst_name;
 		drawlist.name = convert_data.dst_name;
 		drawlist.parent_dataset = convert_data.ds_id;
 		drawlist.parent_templatelist = convert_data.tl_id;
-		drawlist.active_indices_bitmap.resize(drawlist.const_templatelist().indices.size());
-		auto buffer_create_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, drawlist.const_templatelist().indices.size() * sizeof(uint32_t));
+		drawlist.active_indices_bitset.resize(ds.read().data_size, false);
+		for(auto i: drawlist.const_templatelist().indices)
+			drawlist.active_indices_bitset[i] = true;
+		auto buffer_create_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, drawlist.const_templatelist().indices.size() * sizeof(uint32_t));
 		auto alloc_info = util::vma::initializers::allocationCreateInfo();
 		drawlist.index_buffer = util::vk::create_buffer(buffer_create_info, alloc_info);
-		// TODO upload via staging thread
-		
+		// uploading index buffer
+		util::memory_view<uint8_t const> data(util::memory_view<uint32_t const>(drawlist.const_templatelist().indices));//.data(), drawlist.const_templatelist().indices.size()));
+		auto signal_semaphores = util::memory_view(upload_semaphores[0]);
+		structures::stager::staging_info staging_info{drawlist.index_buffer.buffer, 0ul, data, {}, {}, signal_semaphores, cpu_semaphores[0].get()};
+		globals::stager.add_staging_task(staging_info);
+
+		auto median_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (ds.read().attributes.size() + 2) * sizeof(float));
+		drawlist.median_buffer = util::vk::create_buffer(median_buffer_info, alloc_info);
+		auto bitmap_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (drawlist.active_indices_bitset.size() + 31) / 8); // / 8 = / 32 * 4
+		drawlist.active_indices_bitset_gpu = util::vk::create_buffer(bitmap_buffer_info, alloc_info);
+		// uploading bitset_vector
+		data = util::memory_view(drawlist.active_indices_bitset.data(), (drawlist.active_indices_bitset.size() + drawlist.active_indices_bitset.bits_per_block - 1) / drawlist.active_indices_bitset.bits_per_block);
+		signal_semaphores = util::memory_view(upload_semaphores[1]);
+		staging_info = {drawlist.active_indices_bitset_gpu.buffer, 0ul, data, {}, {}, signal_semaphores, cpu_semaphores[1].get()};
+		globals::stager.add_staging_task(staging_info);
+
+		// waiting uploads
+		auto fence = util::vk::create_fence(util::vk::initializers::fenceCreateInfo());
+		std::array<VkPipelineStageFlags, 2> wait_masks{VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT};
+		cpu_semaphores[0]->acquire();
+		cpu_semaphores[1]->acquire();
+		auto wait_commands = util::vk::create_begin_command_buffer(globals::vk_context.general_graphics_command_pool);
+		util::vk::end_commit_command_buffer(wait_commands, globals::vk_context.graphics_queue, upload_semaphores, wait_masks, {}, fence);
+		auto res = vkWaitForFences(globals::vk_context.device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+		vkFreeCommandBuffers(globals::vk_context.device, globals::vk_context.general_graphics_command_pool, 1, &wait_commands);
+		util::vk::destroy_fence(fence);
+		util::vk::destroy_semaphore(upload_semaphores[0]);
+		util::vk::destroy_semaphore(upload_semaphores[1]);
 		break;
 	}
 	case structures::dataset_convert_data::destination::templatelist:{
@@ -581,7 +618,7 @@ void execute_laod_behaviour(globals::dataset_t& ds){
 		auto &load_behaviour = globals::load_behaviour.on_load[load_behaviour_index];
 		// creating the new drawlist
 		structures::drawlist drawlist{std::string(ds.read().id), std::string(ds.read().id), ds.read().id};
-		if(load_behaviour.subsampling != 1 || load_behaviour.trim.min != 0 || load_behaviour.trim.max != ds.read().data_size){
+		if(load_behaviour.subsampling != 1 || load_behaviour.trim.min != 0 || load_behaviour.trim.max < ds.read().data_size){
 			// creating a new template list
 		
 			structures::dataset_convert_data convert_info{};
@@ -617,7 +654,6 @@ void check_datasets_to_open(){
 
     if(ImGui::BeginPopupModal(open_dataset_popup_name.data(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)){
         if(ImGui::CollapsingHeader("Variables/Dimensions settings")){
-            ImGui::Text("Variable Settings");
             if(ImGui::Button("Activate all")){
                 for(auto& q: globals::attribute_query){
                     if(q.is_dimension)
@@ -633,14 +669,14 @@ void check_datasets_to_open(){
                     q.is_active = false;
                 }
             }
-            if(ImGui::BeginTable("Var query table", 4)){
+            if(ImGui::BeginTable("Var query table", 4, ImGuiTableFlags_BordersOuter)){
 				ImGui::TableSetupColumn("Name");
         		ImGui::TableSetupColumn("Dimensionality");
         		ImGui::TableSetupColumn("Active");
         		ImGui::TableSetupColumn("Linearize");
         		ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         		ImGui::TableNextColumn();
-        		ImGui::TableHeader("Name");
+        		ImGui::TableHeader("Variable name");
         		ImGui::TableNextColumn();
         		ImGui::TableHeader("Dimensionality");
         		ImGui::TableNextColumn();
@@ -664,14 +700,14 @@ void check_datasets_to_open(){
                 } 
             ImGui::EndTable();
             }
-			if(ImGui::BeginTable("Dim query table", 4)){
+			if(ImGui::BeginTable("Dim query table", 4, ImGuiTableFlags_BordersOuter)){
 				ImGui::TableSetupColumn("Name");
         		ImGui::TableSetupColumn("Active");
         		ImGui::TableSetupColumn("Subsampling");
         		ImGui::TableSetupColumn("Trim indices");
         		ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         		ImGui::TableNextColumn();
-        		ImGui::TableHeader("Name");
+        		ImGui::TableHeader("Dimension name");
         		ImGui::TableNextColumn();
         		ImGui::TableHeader("Active");
         		ImGui::TableNextColumn();
@@ -702,7 +738,6 @@ void check_datasets_to_open(){
 				}
 				ImGui::EndTable();
 			}
-			ImGui::Separator();
         }
         static std::vector<uint8_t> activations;
         if(activations.size() != globals::paths_to_open.size())
@@ -717,7 +752,7 @@ void check_datasets_to_open(){
                     auto [ds, inserted] = globals::datasets().insert({dataset.read().id, std::move(dataset)});
 					if(!inserted)
 						throw std::runtime_error{"check_dataset_to_open() Could not add dataset to the internal datasets"};
-					
+					execute_laod_behaviour(ds->second);
                 }
                 catch(std::runtime_error e){
                     std::cout << "[error] " << e.what() << std::endl;

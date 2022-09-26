@@ -305,7 +305,7 @@ inline VkShaderModule create_shader_module(std::string_view filename){
     return module;
 }
 
-inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool, VkCommandBufferBeginInfo begin_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO}){
+inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool, const VkCommandBufferBeginInfo& begin_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO}){
     VkCommandBuffer command;
     VkCommandBufferAllocateInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     info.commandBufferCount = 1;
@@ -317,7 +317,8 @@ inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool, VkCommand
     return command;
 }
 
-inline void end_commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkPipelineStageFlags> wait_flags = {}, util::memory_view<VkSemaphore> signal_semaphores = {}, VkFence fence = {}){
+inline void end_commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkPipelineStageFlags> wait_masks = {}, util::memory_view<VkSemaphore> signal_semaphores = {}, VkFence fence = {}){
+    assert(wait_masks.size() == wait_semaphores.size());
     auto res = vkEndCommandBuffer(commands);
     check_vk_result(res);
     VkCommandBufferSubmitInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
@@ -325,7 +326,7 @@ inline void end_commit_command_buffer(VkCommandBuffer commands, VkQueue queue, u
     VkSubmitInfo submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit_info.waitSemaphoreCount = wait_semaphores.size();
     submit_info.pWaitSemaphores = wait_semaphores.data();
-    submit_info.pWaitDstStageMask = wait_flags.data();
+    submit_info.pWaitDstStageMask = wait_masks.data();
     submit_info.signalSemaphoreCount = signal_semaphores.size();
     submit_info.pSignalSemaphores = signal_semaphores.data();
     submit_info.commandBufferCount = 1;

@@ -62,9 +62,9 @@ struct vk_context{
     uint32_t            graphics_queue_family_index{};
     uint32_t            compute_queue_family_index{};
     uint32_t            transfer_queue_family_index{};
-    std::vector<consume_semaphore> graphics_semaphores{};  // semaphore queue of the graphics pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
-    std::vector<consume_semaphore> compute_semaphore{};    // semaphore queue of the compute pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
-    std::vector<consume_semaphore> transfer_semaphore{};   // semaphore queue of the transfer pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
+    //std::vector<consume_semaphore> graphics_semaphores{};  // semaphore queue of the graphics pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
+    //std::vector<consume_semaphore> compute_semaphore{};    // semaphore queue of the compute pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
+    //std::vector<consume_semaphore> transfer_semaphore{};   // semaphore queue of the transfer pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
 
     VmaAllocator        allocator{};
 
@@ -87,6 +87,7 @@ struct vk_context{
     robin_hood::unordered_set<VkSemaphore>      registered_semaphores;
     robin_hood::unordered_set<VkFence>          registered_fences;
 
+    VkCommandPool                               general_graphics_command_pool{};
     buffer_info                                 staging_buffer{};
 
     VkDebugUtilsMessengerEXT                    debug_report_callback{};

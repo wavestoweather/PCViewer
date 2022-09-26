@@ -16,6 +16,7 @@
 #include <frame_limiter.hpp>
 #include "imgui_file_dialog/ImGuiFileDialog.h"
 #include <dataset_util.hpp>
+#include <stager.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -40,6 +41,8 @@ setup_worbenches_datasetdeps_drawlist_deps(){
     parallel_coordinates_wb->active = true;
     dataset_dependecies.push_back(parallel_coordinates_wb.get());
     workbenches.emplace_back(std::move(parallel_coordinates_wb));
+
+    globals::load_behaviour.on_load.push_back({false, 1, {0, std::numeric_limits<size_t>::max()}, {"Parallel coordinates workbench"}});
 
     return {std::move(workbenches), std::move(dataset_dependecies), std::move(drawlist_dependencies), main_workbench};
 }
@@ -89,7 +92,10 @@ int main(int argc,const char* argv[]){
 
     // vulkan init
     std::vector<const char*> device_extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE3_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
+    VkPhysicalDeviceVulkan12Features vk_12_features = util::vk::initializers::physicalDeviceVulkan12Features();
+    vk_12_features.bufferDeviceAddress = VK_TRUE;
     VkPhysicalDeviceFeatures2 device_features = util::vk::initializers::physicalDeviceFeatures2();
+    device_features.pNext = &vk_12_features;
     int physical_device_index = globals::commandline_parser.getValueAsInt("gpuselection", -1);
     structures::VkContextInitInfo vk_init{
         physical_device_index,
@@ -108,6 +114,9 @@ int main(int argc,const char* argv[]){
 #ifdef USEVKVALIDATIONLAYER
     util::vk::setup_debug_report_callback(debug_report);
 #endif
+
+    // global stager buffer init
+    globals::stager.init();
 
     // imgui init
     if(SDL_Vulkan_CreateSurface(window, globals::vk_context.instance, &imgui_window_data.Surface) == SDL_FALSE){
@@ -232,7 +241,7 @@ int main(int argc,const char* argv[]){
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
         ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
 
-        // updating the query attributes if they are not updated to files which should be opened and showing the open dialogue
+        // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
         util::dataset::check_datasets_to_open();
 
         for(const auto& wb: workbenches)
@@ -240,9 +249,7 @@ int main(int argc,const char* argv[]){
 
         if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")){
             if(ImGuiFileDialog::Instance()->IsOk()){
-                auto selection = ImGuiFileDialog::Instance()->GetSelection();
-                std::string_view first_sel = selection.begin()->second;
-                
+                auto selection = ImGuiFileDialog::Instance()->GetSelection();                
                 for(auto& [id, path]: selection)
                     globals::paths_to_open.push_back(path);
             }
@@ -278,6 +285,7 @@ int main(int argc,const char* argv[]){
 	ImGui::DestroyContext();
 
 	ImGui_ImplVulkanH_DestroyWindow(globals::vk_context.instance, globals::vk_context.device, &imgui_window_data, globals::vk_context.allocation_callbacks);
+    globals::stager.cleanup();
     globals::vk_context.cleanup();
 
 	SDL_DestroyWindow(window);

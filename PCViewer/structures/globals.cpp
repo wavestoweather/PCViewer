@@ -17,6 +17,7 @@
 #include <laod_behaviour.hpp>
 #include <open_filepaths.hpp>
 #include <stager.hpp>
+#include <util.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -190,6 +191,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     vulkan_functions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
     
     VmaAllocatorCreateInfo allocator_create_info = {};
+    allocator_create_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
     allocator_create_info.vulkanApiVersion = VK_API_VERSION_1_2;
     allocator_create_info.physicalDevice = physical_device;
     allocator_create_info.device = device;
@@ -198,6 +200,9 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
 
     res = vmaCreateAllocator(&allocator_create_info, &allocator);
     util::check_vk_result(res);
+
+    auto command_pool_info = util::vk::initializers::commandPoolCreateInfo(graphics_queue_family_index);
+    general_graphics_command_pool = util::vk::create_command_pool(command_pool_info);
 
     return ret;
 }
@@ -417,34 +422,82 @@ VkSampler persistent_samplers::get(const VkSamplerCreateInfo& sampler_info){
 }
 
 void stager::init(){
-    auto fence_info = util::vk::initializers::fenceCreateInfo();
-    _upload_fence = util::vk::create_fence(fence_info);
+    auto fence_info = util::vk::initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
+    _upload_fences = {util::vk::create_fence(fence_info), util::vk::create_fence(fence_info)};
     auto command_pool_info = util::vk::initializers::commandPoolCreateInfo(globals::vk_context.transfer_queue_family_index);
     _command_pool = util::vk::create_command_pool(command_pool_info);
     _task_thread = std::thread(&stager::_task_thread_function, this);
 }
 void stager::cleanup(){
     _thread_finish = true;
+    _task_semaphore.release();     // waking up the worker thread
     _task_thread.join();
     _task_thread = {};
 }
-void stager::add_staging_task(const stage_info& stage_info){
+void stager::add_staging_task(const staging_info& stage_info){
     std::scoped_lock lock(_task_add_mutex);
     _staging_tasks.push_back(stage_info);
+    _task_semaphore.release();
+}
+void stager::set_staging_buffer_size(size_t size){
+    _staging_buffer_size = util::align(size, 512ul);
 }
 void stager::_task_thread_function(){
-    if(_thread_finish)
-        return;
-    // getting the next stage_info
-    stage_info cur;
-    {
-        std::scoped_lock lock(_task_add_mutex);
-        cur = _staging_tasks.front();
-        _staging_tasks.erase(_staging_tasks.begin());
+    while(!_thread_finish){
+        _task_semaphore.acquire();
+        if(_thread_finish)
+            return;
+
+        // check staging buffer size change
+        size_t buffer_size = _staging_buffer_size;
+        if(!_staging_buffer || _staging_buffer.allocation->GetSize() != buffer_size){
+            if(_staging_buffer)
+                util::vk::destroy_buffer(_staging_buffer);
+            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer_size);
+            auto alloc_create_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
+            VmaAllocationInfo alloc_info{};
+            _staging_buffer = util::vk::create_buffer(buffer_info, alloc_create_info, &alloc_info);
+            _staging_buffer_mapped = alloc_info.pMappedData;
+        }
+
+        // getting the next stage_info
+        staging_info cur;
+        {
+            std::scoped_lock lock(_task_add_mutex);
+            cur = _staging_tasks.front();
+            _staging_tasks.erase(_staging_tasks.begin());
+        }
+        if(_thread_finish)
+            return;
+
+        int fence_index = 0;    // also indicates which part of the staging buffer should be used (0 front, 1 back)
+        for(structures::min_max<size_t> cur_span{0, buffer_size / 2}; cur_span.min < cur.data.size() && !_thread_finish; cur_span.min = cur_span.max, cur_span.max += buffer_size / 2, fence_index = (++fence_index) % _upload_fences.size()){
+            // wait for completion of previous transfer operation (otherwise we write to not yet copied data in the staging bufffer)
+            auto res = vkWaitForFences(globals::vk_context.device, 1, &_upload_fences[fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max());
+            util::check_vk_result(res);
+            vkResetFences(globals::vk_context.device, 1, &_upload_fences[fence_index]);
+
+            size_t copy_size = std::min(cur_span.max - cur_span.min, cur.data.size() - cur_span.min);
+            std::memcpy(_staging_buffer_mapped, cur.data.data() + cur_span.min, copy_size);
+
+            if(_command_buffers[fence_index])
+                vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_command_buffers[fence_index]);
+            _command_buffers[fence_index] = util::vk::create_begin_command_buffer(_command_pool);
+
+            VkBufferCopy buffer_copy{};
+            buffer_copy.srcOffset = fence_index * (buffer_size / 2);
+            buffer_copy.dstOffset = cur.dst_buffer_offset + cur_span.min;
+            buffer_copy.size = copy_size;
+            vkCmdCopyBuffer(_command_buffers[fence_index], _staging_buffer.buffer, cur.dst_buffer, 1, &buffer_copy);
+            auto wait_semaphores = cur_span.min < buffer_size ? cur.wait_semaphores: util::memory_view<VkSemaphore>{};
+            auto wait_flags = cur_span.min < buffer_size ? cur.wait_flags : util::memory_view<uint32_t>{};
+            auto signal_semaphores = cur_span.min + buffer_size >= cur.data.size() ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
+            std::scoped_lock lock(globals::vk_context.transfer_mutex);
+            util::vk::end_commit_command_buffer(_command_buffers[fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _upload_fences[fence_index]);
+        }
+        if(cur.cpu_semaphore)
+            cur.cpu_semaphore->release();
     }
-    if(_thread_finish)
-        return;
-    
 }
 }
 

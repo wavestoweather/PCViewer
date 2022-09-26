@@ -7,6 +7,7 @@
 #include <vk_context.hpp>
 #include <datasets.hpp>
 #include <enum_names.hpp>
+#include <dynamic_bitset.hpp>
 
 namespace structures{
 
@@ -39,12 +40,12 @@ struct drawlist{
     change_tracker<bool>    immune_to_global_brushes{};
     change_tracker<appearance> appearance_median{};
     change_tracker<median_type> median_typ{};  
-    std::vector<bool>       active_indices_bitmap{};                
+    dynamic_bitset<uint32_t> active_indices_bitset{};                
 
     buffer_info             index_buffer{};
-    buffer_info             median_buffer{};              // linear array buffer containing the median values for all attributes
-    buffer_info             active_indices_bitmap_gpu{};
-    std::vector<buffer_info> derived_data_infos{};        // vulkan buffer need e.g. for large vis counting
+    buffer_info             median_buffer{};                // linear array buffer containing the median values for all attributes
+    buffer_info             active_indices_bitset_gpu{};
+    std::vector<buffer_info> derived_data_infos{};          // vulkan buffer need e.g. for large vis counting
     tracked_brushes         local_brushes{};
 
     //TODO: add cluster and line bundles

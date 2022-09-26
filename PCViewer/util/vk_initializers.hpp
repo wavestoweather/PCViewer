@@ -694,6 +694,24 @@ inline VkPhysicalDeviceFeatures2 physicalDeviceFeatures2(){
     return physicalDeviceFeatures2;
 }
 
+inline VkPhysicalDeviceVulkan11Features physicalDeviceVulkan11Features(){
+    VkPhysicalDeviceVulkan11Features physicalDeviceVulkan11Features{};
+    physicalDeviceVulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+    return physicalDeviceVulkan11Features;
+}
+
+inline VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features(){
+    VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features{};
+    physicalDeviceVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    return physicalDeviceVulkan12Features;
+}
+
+inline VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features(){
+    VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features{};
+    physicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    return physicalDeviceVulkan13Features;
+}
+
 }
 }
 }
