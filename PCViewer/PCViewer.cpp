@@ -83,7 +83,6 @@ Other than that, we wish you a beautiful day and a lot of fun with this program.
 #include "DrawlistColorMatrixEditor.hpp"
 #include "ColorPalette.h"
 #include "ColorMaps.hpp"
-#include <parallel_coordinates_workbench.hpp>
 
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
@@ -680,7 +679,6 @@ static BubblePlotter* bubblePlotter;
 static SettingsManager* settingsManager;
 static DrawlistColorPalette* drawListColorPalette;
 static DrawlistColorMatrixEditor* drawlistMatrixEditor;
-static std::unique_ptr<workbenches::parallel_coordinates_workbench> parallel_coordinates_workbench;
 
 static GpuBrusher* gpuBrusher;
 

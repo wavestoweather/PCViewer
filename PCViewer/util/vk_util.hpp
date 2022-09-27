@@ -346,5 +346,15 @@ inline VkDeviceAddress get_buffer_address(const structures::buffer_info& buffer)
     info.buffer = buffer.buffer;
     return vkGetBufferDeviceAddress(globals::vk_context.device, &info);
 }
+
+inline void convert_image_layouts_execute(util::memory_view<VkImageMemoryBarrier> image_barriers){
+    auto commands = create_begin_command_buffer(globals::vk_context.general_graphics_command_pool);
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, {}, 0, {}, 0, {}, image_barriers.size(), image_barriers.data());
+    auto fence = create_fence(initializers::fenceCreateInfo());
+    end_commit_command_buffer(commands, globals::vk_context.graphics_queue, {}, {}, {}, fence);
+    auto res = vkWaitForFences(globals::vk_context.device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); check_vk_result(res);
+    destroy_fence(fence);
+    vkFreeCommandBuffers(globals::vk_context.device, globals::vk_context.general_graphics_command_pool, 1, &commands);
+}
 }
 }

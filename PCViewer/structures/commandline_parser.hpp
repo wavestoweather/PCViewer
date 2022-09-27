@@ -26,6 +26,7 @@ struct commandline_parser{
 	    add("gpulist", { "-gl", "--listgpus" }, false, "Display a list of available Vulkan devices");
         add("jsonsettings", { "-js", "--jsonsettings" }, true, "Set json settings file. For available json commands see xxx");
         add("printfontinfo", { "-fi", "--fontinfo" }, false, "Print loaded fonts information");
+		add("vulkanvalidation", {"-vv", "--vulkanvalidation"}, false, "Enable vulkan validation layers");
     }
 	void add(const std::string& name, const std::vector<std::string>& commands, bool hasValue, const std::string& help){
         options[name].commands = commands;
@@ -77,7 +78,8 @@ struct commandline_parser{
 	    	options["help"].set = true;
 	    }
     }
-	bool isSet(const std::string& name)    {return ((options.find(name) != options.end()) && options[name].set);}
+	bool isSet(const std::string& name) {return ((options.find(name) != options.end()) && options[name].set);}
+	void set(const std::string& name) {if(options.contains(name)) options[name].set = true;}
 	std::string getValueAsString(const std::string& name, const std::string& defaultValue){
         assert(options.find(name) != options.end());
 	    std::string value = options[name].value;

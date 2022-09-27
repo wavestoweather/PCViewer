@@ -3,15 +3,31 @@
 #include <vma_initializers.hpp>
 #include <vk_util.hpp>
 #include <parallel_coordinates_renderer.hpp>
+#include <imgui_util.hpp>
 
 namespace workbenches{
 
 parallel_coordinates_workbench::parallel_coordinates_workbench(const std::string_view id):
     workbench(id)
 {
+    _update_plot_image();
+}
+
+void parallel_coordinates_workbench::_update_plot_image(){
+    if(plot_data.ref_no_track().image)
+        util::vk::destroy_image(plot_data.ref_no_track().image);
+    if(plot_data.ref_no_track().image_view)
+        util::vk::destroy_image_view(plot_data.ref_no_track().image_view);
+    if(plot_data.ref_no_track().image_descriptor)
+        util::imgui::free_image_descriptor_set(plot_data.ref_no_track().image_descriptor);
     auto image_info = util::vk::initializers::imageCreateInfo(plot_data.read().image_format, {plot_data.read().width, plot_data.read().height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     auto alloc_info = util::vma::initializers::allocationCreateInfo();
     std::tie(plot_data.ref_no_track().image, plot_data.ref_no_track().image_view) = util::vk::create_image_with_view(image_info, alloc_info);
+    plot_data.ref_no_track().image_descriptor = util::imgui::create_image_descriptor_set(plot_data.read().image_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    // updating the image layout
+    auto image_barrier = util::vk::initializers::imageMemoryBarrier(plot_data.ref_no_track().image.image, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}, {}, {}, {}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    util::vk::convert_image_layouts_execute(image_barrier);
 }
 
 void parallel_coordinates_workbench::show(){
@@ -22,6 +38,9 @@ void parallel_coordinates_workbench::show(){
     // -------------------------------------------------------------------------------
     // Plot region including labels and min max values
     // -------------------------------------------------------------------------------
+    auto content_size = ImGui::GetWindowContentRegionMax();
+
+    ImGui::Image(plot_data.read().image_descriptor, {content_size.x, content_size.y * .7f});
 
     // -------------------------------------------------------------------------------
     // settings region
@@ -127,7 +146,7 @@ void parallel_coordinates_workbench::show(){
 void parallel_coordinates_workbench::render_plot()
 {
     pipelines::parallel_coordinates_renderer::render_info render_info{
-        *this,  // workbench
+        *this,  // workbench (is not changed, the renderer only reads information)
         {},     // wait_semaphores;
         {}      // signal_semaphores;
     };

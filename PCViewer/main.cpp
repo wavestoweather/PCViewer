@@ -18,18 +18,21 @@
 #include <dataset_util.hpp>
 #include <stager.hpp>
 #include <workbenches_util.hpp>
+#include <imgui_globals.hpp>
+#include <logger.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
-    std::cout << "[Vk validation] " << pCallbackData->pMessage << std::endl;
+    logger << "[Vk validation] " << pCallbackData->pMessage << logging::endl;
     return VK_FALSE;
 }
 
 int main(int argc,const char* argv[]){
     // variables for all of the execution
-    SDL_Window*                                         window{};
-    ImGui_ImplVulkanH_Window                            imgui_window_data;
-    constexpr int                                       min_image_count = 2;
+    SDL_Window*                 window{};
+    ImGui_ImplVulkanH_Window    imgui_window_data;
+    constexpr int               min_image_count{2};
+    const std::string_view      log_window_name{"log window"};
 
     // init global states (including imgui) ---------------------------------------------------------------------
 
@@ -39,6 +42,9 @@ int main(int argc,const char* argv[]){
         globals::commandline_parser.printHelp();
         return 0;
     }
+#ifdef USEVKVALIDATIONLAYER
+    globals::commandline_parser.set("vulkanvalidation");
+#endif
 
     // sdl init
     {
@@ -57,12 +63,12 @@ int main(int argc,const char* argv[]){
     SDL_Vulkan_GetInstanceExtensions(window, &instance_extension_count, instance_extensions.data());
     instance_extensions.push_back("VK_KHR_get_physical_device_properties2");
     std::vector<const char*> instance_layers;
-#ifdef USEVKVALIDATIONLAYER
-    std::cout << "[info] Using vulkan validation layers" << std::endl;
-    instance_extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-    instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    instance_layers.push_back("VK_LAYER_KHRONOS_validation");
-#endif
+    if(globals::commandline_parser.isSet("vulkanvalidation")){
+        logger << "[info] Using vulkan validation layers" << logging::endl;
+        instance_extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+        instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        instance_layers.push_back("VK_LAYER_KHRONOS_validation");
+    }
 
     // vulkan init
     std::vector<const char*> device_extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE3_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
@@ -82,26 +88,26 @@ int main(int argc,const char* argv[]){
     };
     auto chosen_gpu = globals::vk_context.init(vk_init);
     if(globals::commandline_parser.isSet("gpulist"))
-        std::cout << "[info] Available GPUs: " << util::memory_view(chosen_gpu.physical_device_names) << std::endl;
-    std::cout << "[info] Chosen gpu: " << chosen_gpu.physical_device_names[chosen_gpu.physical_device_index] << std::endl;
-    std::cout << "[info] If different GPU should be chosen specify --gpu parameter in the command line arguments" << std::endl;
-#ifdef USEVKVALIDATIONLAYER
-    util::vk::setup_debug_report_callback(debug_report);
-#endif
+        logger << "[info] Available GPUs: " << util::memory_view(chosen_gpu.physical_device_names) << logging::endl;
+    logger << "[info] Chosen gpu: " << chosen_gpu.physical_device_names[chosen_gpu.physical_device_index] << logging::endl;
+    logger << "[info] If different GPU should be chosen specify --gpu parameter in the command line arguments" << logging::endl;
+    if(globals::commandline_parser.isSet("vulkanvalidation"))
+        util::vk::setup_debug_report_callback(debug_report);
 
-    // global stager buffer init
+
+    // global stager init
     globals::stager.init();
 
     // imgui init
     if(SDL_Vulkan_CreateSurface(window, globals::vk_context.instance, &imgui_window_data.Surface) == SDL_FALSE){
-        std::cout << "[error] SDL_Vulkan_CreateSurface() Failed to create Vulkan surface." << std::endl;
+        logger << "[error] SDL_Vulkan_CreateSurface() Failed to create Vulkan surface." << logging::endl;
         return -1;
     }
     int w, h; 
     SDL_GetWindowSize(window, &w, &h);
     VkBool32 supported; vkGetPhysicalDeviceSurfaceSupportKHR(globals::vk_context.physical_device, globals::vk_context.graphics_queue_family_index, imgui_window_data.Surface, &supported);
     if(!supported){
-        std::cout << "[error] vkGetPhysicalDeviceSurfaceSupportKHR WSI not suported on this physical device." << std::endl;
+        logger<< "[error] vkGetPhysicalDeviceSurfaceSupportKHR WSI not suported on this physical device." << logging::endl;
         return -1;
     }
     const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM };
@@ -122,11 +128,11 @@ int main(int argc,const char* argv[]){
     util::imgui::load_fonts("fonts/", font_sizes);
     ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
     if(globals::commandline_parser.isSet("printfontinfo"))
-        std::cout << "[info] Amount of fonts available: " << ImGui::GetIO().Fonts->Fonts.size() / font_sizes.size() << std::endl;
+        logger << "[info] Amount of fonts available: " << ImGui::GetIO().Fonts->Fonts.size() / font_sizes.size() << logging::endl;
 
     ImGui_ImplSDL2_InitForVulkan(window);
 
-    ImGui_ImplVulkan_InitInfo init_info{};
+    ImGui_ImplVulkan_InitInfo& init_info = globals::imgui.init_info;
     init_info.Instance = globals::vk_context.instance;
 	init_info.PhysicalDevice = globals::vk_context.physical_device;
 	init_info.Device = globals::vk_context.device;
@@ -197,7 +203,11 @@ int main(int argc,const char* argv[]){
         ImGui::SetNextWindowSize(viewport->WorkSize);
         ImGui::SetNextWindowViewport(viewport->ID);
         ImGuiWindowFlags dockingWindow_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings;
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         ImGui::Begin("MainDockWindow", NULL, dockingWindow_flags);
+        ImGui::PopStyleVar(3);
         ImGuiID main_dock_id = ImGui::GetID("MainDock");
         if (first_frame) {
             ImGui::DockBuilderRemoveNode(main_dock_id);
@@ -205,12 +215,16 @@ int main(int argc,const char* argv[]){
             dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
             ImGui::DockBuilderAddNode(main_dock_id, dockSpaceFlags);
             ImGui::DockBuilderSetNodeSize(main_dock_id, {viewport->WorkSize.x, viewport->WorkSize.y});
-            ImGuiID main_dock_bottom, main_dock_top;
+            ImGuiID main_dock_bottom, main_dock_top, main_dock_lowest;
             ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, .3f, &main_dock_bottom, &main_dock_top);
+            ImGui::DockBuilderSplitNode(main_dock_bottom, ImGuiDir_Down, .1f, &main_dock_lowest, &main_dock_bottom);
             ImGui::DockBuilderDockWindow(globals::primary_workbench->id.data(), main_dock_bottom);
             ImGui::DockBuilderDockWindow(globals::secondary_workbench->id.data(), main_dock_top);
+            ImGui::DockBuilderDockWindow(log_window_name.data(), main_dock_lowest);
             ImGuiDockNode* node = ImGui::DockBuilderGetNode(main_dock_bottom);
             node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+            node = ImGui::DockBuilderGetNode(main_dock_lowest);
+            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoDocking | ImGuiDockNodeFlags_NoResize;
             ImGui::DockBuilderFinish(main_dock_id);
         }
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
@@ -219,10 +233,25 @@ int main(int argc,const char* argv[]){
         // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
         util::dataset::check_datasets_to_open();
 
-        ImGui::ShowFontSelector("selectxxx");
-
         for(const auto& wb: globals::workbenches)
             wb->show();
+
+        ImGui::Begin(log_window_name.data());
+        ImGui::SetWindowFontScale(.8f);
+        for(int i: util::i_range(logger.buffer_size)){
+            auto last_line = logger.get_last_line(logger.buffer_size - 1 - i);
+            if(last_line.empty())
+                continue;
+
+            if(std::string_view(last_line).substr(0, logging::warning_prefix.size()) == logging::warning_prefix)
+                ImGui::TextColored({.8f, .8f, 0, 1}, "%s", last_line.c_str());
+            else if(std::string_view(last_line).substr(0, logging::error_prefix.size()) == logging::error_prefix)
+                ImGui::TextColored({.8, 0, .2, 1}, "%s", last_line.c_str());
+            else
+                ImGui::Text("%s", last_line.c_str());
+        }
+        ImGui::SetScrollHereY(1);
+        ImGui::End();   // log window
 
         if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")){
             if(ImGuiFileDialog::Instance()->IsOk()){

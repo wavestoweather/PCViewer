@@ -19,6 +19,8 @@
 #include <stager.hpp>
 #include <util.hpp>
 #include <workbench_base.hpp>
+#include <imgui_globals.hpp>
+#include <logger.hpp>
 
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
@@ -561,4 +563,8 @@ structures::workbench* primary_workbench{};
 structures::workbench* secondary_workbench{};
 dataset_dependencies_t dataset_dependencies{};
 drawlist_dataset_dependencies_t drawlist_dataset_dependencies{}; 
+
+structures::imgui_globals imgui{};
 }
+
+structures::logger<20> logger{};

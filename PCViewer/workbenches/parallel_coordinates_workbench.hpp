@@ -14,14 +14,17 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     // both are unique_ptrs to avoid issues with the memory_views when data elements are deleted in the vector
     std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;
     std::vector<std::unique_ptr<structures::median_type>>    _storage_median_type;
+
+    void _update_plot_image();
 public:
     struct plot_data{
-        uint32_t                                    width{1024};
-        uint32_t                                    height{480};
-        structures::image_info                      image{};
-        VkImageView                                 image_view{};
-        VkSampleCountFlagBits                       image_samples{VK_SAMPLE_COUNT_1_BIT};
-        VkFormat                                    image_format{VK_FORMAT_R16G16B16A16_UNORM};
+        uint32_t                width{1024};
+        uint32_t                height{480};
+        structures::image_info  image{};
+        VkImageView             image_view{};
+        VkSampleCountFlagBits   image_samples{VK_SAMPLE_COUNT_1_BIT};
+        VkFormat                image_format{VK_FORMAT_R16G16B16A16_UNORM};
+        ImTextureID             image_descriptor{}; // called descriptor as internally it is a descriptor
     };
     enum class render_strategy{
         all,

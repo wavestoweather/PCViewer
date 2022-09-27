@@ -91,12 +91,18 @@ inline VkRenderPassCreateInfo renderPassCreateInfo(const memory_view<VkAttachmen
 }
 
 /** @brief Initialize an image memory barrier with no image transfer ownership */
-inline VkImageMemoryBarrier imageMemoryBarrier()
+inline VkImageMemoryBarrier imageMemoryBarrier(VkImage image, VkImageSubresourceRange range = {}, VkAccessFlags srcAccess = {}, VkAccessFlags dstAccess = {}, VkImageLayout oldLayout = {}, VkImageLayout newLayout = {}, uint32_t srcQueueIndex = VK_QUEUE_FAMILY_IGNORED, uint32_t dstQueueIndex = VK_QUEUE_FAMILY_IGNORED)
 {
     VkImageMemoryBarrier imageMemoryBarrier {};
     imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imageMemoryBarrier.srcAccessMask = srcAccess;
+    imageMemoryBarrier.dstAccessMask = dstAccess;
+    imageMemoryBarrier.oldLayout = oldLayout;
+    imageMemoryBarrier.newLayout = newLayout;
     imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imageMemoryBarrier.image = image;
+    imageMemoryBarrier.subresourceRange = range;
     return imageMemoryBarrier;
 }
 
@@ -132,10 +138,12 @@ inline VkImageCreateInfo imageCreateInfo(VkFormat format, VkExtent3D extent, VkI
     return imageCreateInfo;
 }
 
-inline VkSamplerCreateInfo samplerCreateInfo()
+inline VkSamplerCreateInfo samplerCreateInfo(VkFilter filter = VK_FILTER_NEAREST)
 {
     VkSamplerCreateInfo samplerCreateInfo {};
     samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCreateInfo.magFilter = filter;
+    samplerCreateInfo.minFilter = filter;
     samplerCreateInfo.maxAnisotropy = 1.0f;
     return samplerCreateInfo;
 }

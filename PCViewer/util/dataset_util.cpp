@@ -19,6 +19,7 @@
 #include <stager.hpp>
 #include <util.hpp>
 #include <workbench_base.hpp>
+#include <logger.hpp>
 
 namespace util{
 namespace dataset{
@@ -644,7 +645,7 @@ void execute_laod_behaviour(globals::dataset_t& ds){
 				try{
 					ddd->add_drawlist(globals::drawlists.read().at(ds.read().id).read().id);}
 				catch(const std::runtime_error& e){
-					std::cout << "[error] " << e.what() << std::endl;}
+					logger << "[error] " << e.what() << logging::endl;}
 			}
 		}
 	}
@@ -765,7 +766,7 @@ void check_datasets_to_open(){
 					execute_laod_behaviour(ds->second);
                 }
                 catch(const std::runtime_error& e){
-                    std::cout << "[error] " << e.what() << std::endl;
+                    logger << "[error] " << e.what() << logging::endl;
                 }
             }
             ImGui::CloseCurrentPopup();

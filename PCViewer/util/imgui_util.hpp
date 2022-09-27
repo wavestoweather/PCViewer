@@ -5,6 +5,9 @@
 #include <vk_initializers.hpp>
 #include <vk_util.hpp>
 #include "../imgui_file_dialog/CustomFont.cpp"
+#include <imgui_globals.hpp>
+#include <SDL.h>
+#include <persistent_samplers.hpp>
 
 namespace util{
 namespace imgui{
@@ -129,6 +132,15 @@ inline std::tuple<bool, int, int> frame_present(ImGui_ImplVulkanH_Window* wd, SD
     check_vk_result(res);
     wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->ImageCount; // Now we can use the next set of semaphores
     return {false, wd->Width, wd->Height};
+}
+
+inline ImTextureID create_image_descriptor_set(VkImageView image_view, VkImageLayout image_layout){
+	auto sampler_info = util::vk::initializers::samplerCreateInfo(VK_FILTER_LINEAR);
+	return ImGui_ImplVulkan_AddTexture(globals::persistent_samplers.get(sampler_info), image_view, image_layout, globals::imgui.init_info.Device, globals::imgui.init_info.DescriptorPool);
+}
+
+inline void free_image_descriptor_set(ImTextureID texture){
+	vkFreeDescriptorSets(globals::imgui.init_info.Device, globals::imgui.init_info.DescriptorPool, 1, reinterpret_cast<VkDescriptorSet*>(&texture));
 }
 
 }
