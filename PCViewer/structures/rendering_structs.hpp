@@ -74,6 +74,8 @@ namespace parallel_coordinates_renderer{
         bool                                    linked_with_drawlist;
         util::memory_view<appearance_tracker>   appearance;
         util::memory_view<median_tracker>       median;
+
+        bool any_change() const {return appearance->changed || median->changed;}
     };
 }
 }

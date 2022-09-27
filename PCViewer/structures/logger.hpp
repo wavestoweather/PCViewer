@@ -67,6 +67,7 @@ static structures::logger<20>::endline  endl;
 static std::string_view                 info_prefix{"[info]"};
 static std::string_view                 warning_prefix{"[warning]"};
 static std::string_view                 error_prefix{"[error]"};
+static std::string_view                 vulkan_validation_prefix{"[vk validation]"};
 }
 
 extern structures::logger<20> logger;

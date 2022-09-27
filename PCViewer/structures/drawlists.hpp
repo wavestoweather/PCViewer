@@ -51,6 +51,8 @@ struct drawlist{
 
     //TODO: add cluster and line bundles
 
+    bool                        any_change() const          {return appearance_drawlist.changed || immune_to_global_brushes.changed || appearance_median.changed || median_typ.changed || local_brushes.changed;}
+
     dataset&                    dataset_write() const       {return globals::datasets().at(parent_dataset)();}
     const structures::dataset&  dataset_read() const        {return globals::datasets.read().at(parent_dataset).read();} 
     //templatelist&               templatelist_write() const  {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}

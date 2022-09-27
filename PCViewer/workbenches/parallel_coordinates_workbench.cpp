@@ -89,9 +89,10 @@ void parallel_coordinates_workbench::show(){
             
             for(auto& dl: drawlist_infos.ref_no_track()){
                 std::string dl_string(dl.drawlist_id);
+                const auto& drawlist = globals::drawlists.read().at(dl.drawlist_id);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text(dl.drawlist_id.data());
+                ImGui::Text(drawlist.read().name.c_str());
                 ImGui::TableNextColumn();
                 if(ImGui::ArrowButton(("##u" + dl_string).c_str(), ImGuiDir_Up))
                     drawlist_infos.write();
@@ -126,6 +127,26 @@ void parallel_coordinates_workbench::show(){
 
     ImGui::End();
 
+    // checking for drawlist change (if drawlist has changed, render_plot() will be called later in the frame by update_drawlists)
+    // checking for local change
+    bool any_drawlist_change{false};
+    bool local_change{false};
+    bool request_render{false};
+    for(const auto dl_info: drawlist_infos.read()){
+        const auto& dl = globals::drawlists.read().at(dl_info.drawlist_id);
+        if(!dl.changed)
+            continue;
+
+        any_drawlist_change |= dl.read().any_change();
+        if(any_drawlist_change)
+            break;
+
+        if(!drawlist_infos.changed)
+            continue;
+        local_change |= dl_info.any_change();
+    }
+    request_render |= !any_drawlist_change && local_change;
+
     // checking for changed image
     if(plot_data.changed){
         std::cout << "plot_data changed, recreating..." << std::endl;
@@ -139,8 +160,11 @@ void parallel_coordinates_workbench::show(){
         std::tie(plot_data.ref_no_track().image, plot_data.ref_no_track().image_view) = util::vk::create_image_with_view(image_info, alloc_info);
         plot_data.changed = false;
 
-        render_plot();
+        request_render |= !any_drawlist_change;
     }
+
+    if(request_render)
+        render_plot();
 }
 
 void parallel_coordinates_workbench::render_plot()

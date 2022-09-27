@@ -23,7 +23,7 @@
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
-    logger << "[Vk validation] " << pCallbackData->pMessage << logging::endl;
+    logger << logging::vulkan_validation_prefix << " " << pCallbackData->pMessage << logging::endl;
     return VK_FALSE;
 }
 
@@ -246,7 +246,9 @@ int main(int argc,const char* argv[]){
             if(std::string_view(last_line).substr(0, logging::warning_prefix.size()) == logging::warning_prefix)
                 ImGui::TextColored({.8f, .8f, 0, 1}, "%s", last_line.c_str());
             else if(std::string_view(last_line).substr(0, logging::error_prefix.size()) == logging::error_prefix)
-                ImGui::TextColored({.8, 0, .2, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({.8f, 0, .2f, 1}, "%s", last_line.c_str());
+            else if(std::string_view(last_line).substr(0, logging::vulkan_validation_prefix.size()) == logging::vulkan_validation_prefix)
+                ImGui::TextColored({.8f, .8f, .8f, 1}, "%s", last_line.c_str());
             else
                 ImGui::Text("%s", last_line.c_str());
         }

@@ -49,6 +49,10 @@ public:
         assert(_size);
         return _data;
     }
+    const T* operator->() const {
+        assert(_size);
+        return _data;
+    }
     T& operator*(){
         assert(_size);
         return *_data;

@@ -22,6 +22,45 @@
 #include <imgui_globals.hpp>
 #include <logger.hpp>
 
+// globals definition
+structures::logger<20> logger{};
+
+namespace globals{
+structures::vk_context vk_context{};
+
+datasets_t datasets{};
+
+structures::drawlists_t drawlists{};
+std::vector<std::string_view> selected_drawlists{};
+
+structures::tracked_brushes global_brushes{};
+
+structures::settings_manager settings_manager{};
+
+structures::commandline_parser commandline_parser{};
+
+robin_hood::unordered_map<std::string, structures::texture> textures{};
+
+structures::persistent_samplers persistent_samplers{};
+
+robin_hood::unordered_map<std::string, structures::descriptor_info> descriptor_sets{};
+
+structures::load_behaviour load_behaviour{};
+
+std::vector<std::string> paths_to_open{};
+std::vector<structures::query_attribute> attribute_query{};
+
+structures::stager stager{};
+
+workbenches_t workbenches{};
+structures::workbench* primary_workbench{};
+structures::workbench* secondary_workbench{};
+dataset_dependencies_t dataset_dependencies{};
+drawlist_dataset_dependencies_t drawlist_dataset_dependencies{}; 
+
+structures::imgui_globals imgui{};
+}
+
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     if(physical_device)
@@ -367,7 +406,7 @@ void settings_manager::load_settings(std::string_view filename)
 	std::ifstream file(std::string(filename), std::ifstream::binary);
 
 	if (!file.is_open()) {
-		std::cout << "Settingsfile was not found or no settings exist." << std::endl;
+		::logger << "[warning] Settingsfile was not found or no settings exist. Creating empty settings" << logging::endl;
 		return;
 	}
 
@@ -529,42 +568,3 @@ void stager::_task_thread_function(){
     }
 }
 }
-
-// globals definition
-namespace globals{
-structures::vk_context vk_context{};
-
-datasets_t datasets{};
-
-structures::drawlists_t drawlists{};
-std::vector<std::string_view> selected_drawlists{};
-
-structures::tracked_brushes global_brushes{};
-
-structures::settings_manager settings_manager{};
-
-structures::commandline_parser commandline_parser{};
-
-robin_hood::unordered_map<std::string, structures::texture> textures{};
-
-structures::persistent_samplers persistent_samplers{};
-
-robin_hood::unordered_map<std::string, structures::descriptor_info> descriptor_sets{};
-
-structures::load_behaviour load_behaviour{};
-
-std::vector<std::string> paths_to_open{};
-std::vector<structures::query_attribute> attribute_query{};
-
-structures::stager stager{};
-
-workbenches_t workbenches{};
-structures::workbench* primary_workbench{};
-structures::workbench* secondary_workbench{};
-dataset_dependencies_t dataset_dependencies{};
-drawlist_dataset_dependencies_t drawlist_dataset_dependencies{}; 
-
-structures::imgui_globals imgui{};
-}
-
-structures::logger<20> logger{};
