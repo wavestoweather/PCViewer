@@ -1,0 +1,2 @@
+glslangValidator -V -o parallel_coordinates_renderer.vert.spv parallel_coordinates_renderer.vert
+glslangValidator -V -o parallel_coordinates_renderer.frag.spv parallel_coordinates_renderer.frag

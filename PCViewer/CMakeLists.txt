@@ -140,6 +140,8 @@ endif()
 target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
 target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
 
+add_subdirectory(shader_new)
+
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS
 "${CMAKE_CURRENT_SOURCE_DIR}/shader/*.spv"
