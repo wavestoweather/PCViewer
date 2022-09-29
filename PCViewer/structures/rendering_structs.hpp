@@ -23,15 +23,13 @@ static enum_names<alpha_mapping_type> alpha_mapping_type_names{
 
 namespace parallel_coordinates_renderer{
     enum class render_type: uint32_t{
-        polyline,
-        spline,
+        polyline_spline,
         large_vis_lines,
         large_vis_density,
         COUNT
     };
     const structures::enum_names<render_type> render_type_names{
-        "polyline",
-        "spline",
+        "polyline_spline",
         "large_vis_lines",
         "large_vis_density"
     };

@@ -7,6 +7,7 @@
 #include <drawlists.hpp>
 #include <optional>
 #include <chrono>
+#include <imgui.h>
 
 namespace workbenches{
     class parallel_coordinates_workbench;
@@ -20,11 +21,17 @@ class parallel_coordinates_renderer{
     using pipeline_data = structures::parallel_coordinates_renderer::pipeline_data;
     using time_point = std::chrono::time_point<std::chrono::system_clock>;
 
-    struct push_constants{VkDeviceAddress attribute_info_address;};
+    struct push_constants{
+        VkDeviceAddress 	attribute_info_address;
+	    VkDeviceAddress 	data_header_address;
+	    VkDeviceAddress	    priorities_address;
+	    uint		        vertex_count_per_line;		// is at least as high as attribute_count (when equal, polyline rendering)
+	    float 		        padding;
+	    ImVec4 		        color;
+    };
 
     const std::string_view vertex_shader_path{"shader/parallel_coordinates_renderer.vert.spv"};
     const std::string_view large_vis_vertex_shader_path{""};
-    const std::string_view geometry_shader_path{"shader/parallel_coordinates_renderer.geom.spv"};
     const std::string_view fragment_shader_path{"shader/parallel_coordinates_renderer.frag.spv"};
 
     // vulkan resources that are the same for all drawlists/parallel_coordinates_windows
@@ -42,8 +49,8 @@ class parallel_coordinates_renderer{
 
     parallel_coordinates_renderer();
 
-    void pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
-    void post_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
+    void _pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs, const push_constants& pc);
+    void _post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores, bool last_command_buffer);
 
 public:
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;

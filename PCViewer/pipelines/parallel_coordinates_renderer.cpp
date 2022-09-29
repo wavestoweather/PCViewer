@@ -7,7 +7,7 @@
 #include <array>
 #include <parallel_coordinates_workbench.hpp>
 #include <array_struct.hpp>
-#include <descriptor_set_storage.hpp>
+#include <global_descriptor_set_util.hpp>
 
 namespace pipelines
 {
@@ -19,16 +19,25 @@ parallel_coordinates_renderer::parallel_coordinates_renderer()
     _render_fence = util::vk::create_fence(fence_info);
 }
 
-void parallel_coordinates_renderer::pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs)
+void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs, const push_constants& pc)
 {
     const auto& pipe_data = _pipelines[output_specs];
     auto begin_info = util::vk::initializers::renderPassBeginInfo(pipe_data.render_pass, pipe_data.framebuffer, {static_cast<int>(output_specs.width), static_cast<int>(output_specs.height)}, VkClearValue{});
     vkCmdBeginRenderPass(commands, &begin_info, {});
+    vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_data.pipeline);
+    vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_data.pipeline_layout, 0, 1, &globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->descriptor_set, 0, {});
 }
 
-void parallel_coordinates_renderer::post_render_commands(VkCommandBuffer commands, const output_specs& output_specs)
+void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores, bool last_command_buffer)
 {
     vkCmdEndRenderPass(commands);
+    std::vector<VkPipelineStageFlags> stage_flags(wait_semaphores.size(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+    std::scoped_lock lock(globals::vk_context.graphics_mutex);
+    if(last_command_buffer)
+        util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags, signal_semaphores, _render_fence);
+    else
+        util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags);
+
 }
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
@@ -50,7 +59,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             _pipelines.erase(key);
         }
 
-        pipeline_data pipe_data{};
+        pipeline_data& pipe_data = _pipelines[output_specs];
         // creating the rendering buffers  -------------------------------------------------------------------------------
         // output image after multisample reduction (already given by parallel coordinates workbench)
 
@@ -134,7 +143,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         auto pipeline_vertex_state = util::vk::initializers::pipelineVertexInputStateCreateInfo(vertex_input_binding, vertex_input_attribute);
 
         switch(output_specs.render_typ){
-        case structures::parallel_coordinates_renderer::render_type::polyline:{
+        case structures::parallel_coordinates_renderer::render_type::polyline_spline:{
             VkShaderModule vertex_module = util::vk::create_shader_module(vertex_shader_path); 
             VkShaderModule fragment_module = util::vk::create_shader_module(fragment_shader_path);  
 
@@ -160,37 +169,8 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             vkDestroyShaderModule(globals::vk_context.device, fragment_module, globals::vk_context.allocation_callbacks);
             break;
         }
-        case structures::parallel_coordinates_renderer::render_type::spline:{
-            VkShaderModule vertex_module = util::vk::create_shader_module(vertex_shader_path); 
-            VkShaderModule geometry_module = util::vk::create_shader_module(geometry_shader_path);
-            VkShaderModule fragment_module = util::vk::create_shader_module(fragment_shader_path); 
-
-            std::array<VkPipelineShaderStageCreateInfo, 2> shader_infos{};
-            shader_infos[0] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module);
-            shader_infos[1] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module);
-
-            auto pipeline_input_assembly = util::vk::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY, 0, VK_TRUE);
-
-            auto pipeline_create_info = util::vk::initializers::graphicsPipelineCreateInfo(shader_infos, pipe_data.pipeline_layout, pipe_data.render_pass);
-            pipeline_create_info.pVertexInputState = &pipeline_vertex_state;
-            pipeline_create_info.pInputAssemblyState = &pipeline_input_assembly;
-            pipeline_create_info.pRasterizationState = &pipeline_rasterizer;
-            pipeline_create_info.pColorBlendState = &pipeline_color_blend;
-            pipeline_create_info.pMultisampleState = &pipeline_multi_sample;
-            pipeline_create_info.pViewportState = &pipeline_viewport;
-            pipeline_create_info.pDepthStencilState = &pipeline_depth_stencil;
-            pipeline_create_info.pDynamicState = &pipeline_dynamic_states;
-
-            pipe_data.pipeline = util::vk::create_graphics_pipline(pipeline_create_info);
-
-            vkDestroyShaderModule(globals::vk_context.device, vertex_module, globals::vk_context.allocation_callbacks);
-            vkDestroyShaderModule(globals::vk_context.device, geometry_module, globals::vk_context.allocation_callbacks);
-            vkDestroyShaderModule(globals::vk_context.device, fragment_module, globals::vk_context.allocation_callbacks);
-            break;
-        }
         case structures::parallel_coordinates_renderer::render_type::large_vis_lines:{
             VkShaderModule vertex_module = util::vk::create_shader_module(large_vis_vertex_shader_path); 
-            VkShaderModule geometry_module = util::vk::create_shader_module(geometry_shader_path);
             VkShaderModule fragment_module = util::vk::create_shader_module(fragment_shader_path); 
 
             std::array<VkPipelineShaderStageCreateInfo, 2> shader_infos{};
@@ -212,14 +192,12 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             pipe_data.pipeline = util::vk::create_graphics_pipline(pipeline_create_info);
 
             vkDestroyShaderModule(globals::vk_context.device, vertex_module, globals::vk_context.allocation_callbacks);
-            vkDestroyShaderModule(globals::vk_context.device, geometry_module, globals::vk_context.allocation_callbacks);
             vkDestroyShaderModule(globals::vk_context.device, fragment_module, globals::vk_context.allocation_callbacks);
             break;
         }
         default:
             throw std::runtime_error("parallel_coordinates_renderer::get_or_create_pipeline() render_type " + (std::string)structures::parallel_coordinates_renderer::render_type_names[output_specs.render_typ] + " not yet implemented.");
         }
-
     }
     _pipeline_last_use[_pipelines[output_specs].pipeline] = std::chrono::system_clock::now();
     return _pipelines[output_specs];
@@ -243,9 +221,16 @@ parallel_coordinates_renderer& parallel_coordinates_renderer::instance(){
 }
 
 void parallel_coordinates_renderer::render(const render_info& info){
-    struct pipeline_uniform_infos{
-        int test;
+    struct attribute_infos{
+	    uint 	attribute_count;				// amount of active attributes
+	    uint 	_, __;
+	    uint 	data_flags;
     };
+
+    std::vector<uint32_t> active_attribute_indices;     // these inlcude the order
+    for(int place_index: util::size_range(info.workbench.attributes_order_info.read()))
+        if(info.workbench.attributes_order_info.read()[place_index].active)
+            active_attribute_indices.push_back(info.workbench.attributes_order_info.read()[place_index].attribut_index);
 
     const auto& drawlists = globals::drawlists.read();
     auto first_dl = info.workbench.drawlist_infos.read()[0].drawlist_id;
@@ -255,28 +240,37 @@ void parallel_coordinates_renderer::render(const render_info& info){
         info.workbench.plot_data.read().height, 
         info.workbench.plot_data.read().image_samples, 
         info.workbench.plot_data.read().image_format, 
-        info.workbench.render_type, 
+        info.workbench.render_type.read(), 
         info.workbench.plot_data.read().image_view, 
         data_type}; 
     auto pipeline_info = get_or_create_pipeline(out_specs);
 
-    structures::dynamic_struct<pipeline_uniform_infos, ImVec4> pipeline_uniforms(info.workbench.attributes.read().size());
-    auto attribute_infos = get_or_resize_info_buffer(pipeline_uniforms.data().byteSize());
+    structures::dynamic_struct<attribute_infos, ImVec4> attribute_infos(active_attribute_indices.size());
+    attribute_infos->attribute_count = active_attribute_indices.size();
+    attribute_infos->data_flags = {};
+    for(int active_attribute_index: util::size_range(active_attribute_indices)){
+        uint32_t cur_attribute_index = active_attribute_indices[active_attribute_index];
+        attribute_infos[active_attribute_index].x = float(cur_attribute_index);
+        attribute_infos[active_attribute_index].y = info.workbench.attributes.read()[cur_attribute_index].bounds.read().min;
+        attribute_infos[active_attribute_index].z = info.workbench.attributes.read()[cur_attribute_index].bounds.read().max;
+    }
+    auto attribute_infos_gpu = get_or_resize_info_buffer(attribute_infos.data().byteSize());
 
-    auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, 1e10); util::check_vk_result(res);  // 10 seconds waiting
-    
-    util::vma::upload_data(pipeline_uniforms.data(), attribute_infos);
+    auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);  // wait indefenitely for prev rendering
+    vkResetFences(globals::vk_context.device, 1, &_render_fence);
+
+    util::vma::upload_data(attribute_infos.data(), attribute_infos_gpu);
     vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
     _render_commands.resize(1);
     _render_commands[0] = util::vk::create_begin_command_buffer(_command_pool);
-    pre_render_commands(_render_commands[0], out_specs);
+    _pre_render_commands(_render_commands[0], out_specs);
 
     size_t batch_size{};
     switch(info.workbench.render_strategy){
     case workbenches::parallel_coordinates_workbench::render_strategy::all:
         for(const auto& dl: info.workbench.drawlist_infos.read()){
             const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
-            batch_size += ds.float_data.read().size() + ds.half_data.read().size();
+            batch_size += ds.data_size;
         }
         break;
     case workbenches::parallel_coordinates_workbench::render_strategy::batched:
@@ -287,7 +281,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
     size_t cur_batch_lines{};
     for(const auto& dl: info.workbench.drawlist_infos.read()){
         const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
-        size_t data_size = ds.data_flags.half ? ds.half_data.read().size(): ds.float_data.read().size();
+        size_t data_size = globals::drawlists.read().at(dl.drawlist_id).read().const_templatelist().indices.size();
         size_t cur_batch_size = std::min(data_size, batch_size);
         size_t cur_offset = 0;
         while(cur_offset < data_size){
@@ -295,6 +289,6 @@ void parallel_coordinates_renderer::render(const render_info& info){
         }
     }
 
-    util::vk::end_commit_command_buffer(_render_commands.back(), globals::vk_context.graphics_queue, info.wait_semaphores, {}, info.signal_semaphores, _render_fence);
+    
 }
 }

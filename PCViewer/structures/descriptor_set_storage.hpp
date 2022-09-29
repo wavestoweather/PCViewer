@@ -6,6 +6,7 @@
 namespace structures{
 // describes a single instance of a descriptor allocated from a descriptor set layout. Serves as a singleton descriptor from a single use descriptor set layout with already updated descriptor set (ready to use)
 struct descriptor_info{
+    std::string             id;
     VkDescriptorSetLayout   layout;
     VkDescriptorSet         descriptor_set;
 
@@ -14,5 +15,6 @@ struct descriptor_info{
 }
 
 namespace globals{
-extern robin_hood::unordered_map<std::string, structures::descriptor_info> descriptor_sets;
+using uniqe_descriptor_info = std::unique_ptr<structures::descriptor_info>;
+extern robin_hood::unordered_map<std::string_view, uniqe_descriptor_info> descriptor_sets;
 }

@@ -43,7 +43,7 @@ robin_hood::unordered_map<std::string, structures::texture> textures{};
 
 structures::persistent_samplers persistent_samplers{};
 
-robin_hood::unordered_map<std::string, structures::descriptor_info> descriptor_sets{};
+robin_hood::unordered_map<std::string_view, uniqe_descriptor_info> descriptor_sets{};
 
 structures::load_behaviour load_behaviour{};
 
