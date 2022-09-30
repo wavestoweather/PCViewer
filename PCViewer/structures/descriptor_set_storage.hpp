@@ -12,9 +12,9 @@ struct descriptor_info{
 
     bool operator==(const descriptor_info & o) const {return layout == o.layout && descriptor_set == o.descriptor_set;}
 };
+using uniqe_descriptor_info = std::unique_ptr<descriptor_info>;
 }
 
 namespace globals{
-using uniqe_descriptor_info = std::unique_ptr<structures::descriptor_info>;
-extern robin_hood::unordered_map<std::string_view, uniqe_descriptor_info> descriptor_sets;
+extern robin_hood::unordered_map<std::string_view, structures::uniqe_descriptor_info> descriptor_sets;
 }

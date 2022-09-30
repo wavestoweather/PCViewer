@@ -106,7 +106,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         // pipeline layout creation
         auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants), 0);
         assert(globals::descriptor_sets.contains("iron_map"));      // the iron map has to be already created before the pipeliens are created
-        auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets["iron_map"].layout, util::memory_view(push_constant_range));
+        auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets["iron_map"]->layout, util::memory_view(push_constant_range));
         pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
         // pipeline creation
@@ -256,6 +256,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
     }
     auto attribute_infos_gpu = get_or_resize_info_buffer(attribute_infos.data().byteSize());
 
+    push_constants pc{};
+
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);  // wait indefenitely for prev rendering
     vkResetFences(globals::vk_context.device, 1, &_render_fence);
 
@@ -263,7 +265,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
     vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
     _render_commands.resize(1);
     _render_commands[0] = util::vk::create_begin_command_buffer(_command_pool);
-    _pre_render_commands(_render_commands[0], out_specs);
+    _pre_render_commands(_render_commands[0], out_specs, pc);
 
     size_t batch_size{};
     switch(info.workbench.render_strategy){

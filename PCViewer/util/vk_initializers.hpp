@@ -273,7 +273,7 @@ inline VkDescriptorPoolSize descriptorPoolSize(
 inline VkDescriptorSetLayoutBinding descriptorSetLayoutBinding(
     VkDescriptorType type,
     VkShaderStageFlags stageFlags,
-    uint32_t binding,
+    uint32_t binding = 0,
     uint32_t descriptorCount = 1)
 {
     VkDescriptorSetLayoutBinding setLayoutBinding {};
@@ -309,14 +309,13 @@ inline VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo(
 
 inline VkDescriptorSetAllocateInfo descriptorSetAllocateInfo(
     VkDescriptorPool descriptorPool,
-    const VkDescriptorSetLayout* pSetLayouts,
-    uint32_t descriptorSetCount)
+    util::memory_view<const VkDescriptorSetLayout> layouts)
 {
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {};
     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     descriptorSetAllocateInfo.descriptorPool = descriptorPool;
-    descriptorSetAllocateInfo.pSetLayouts = pSetLayouts;
-    descriptorSetAllocateInfo.descriptorSetCount = descriptorSetCount;
+    descriptorSetAllocateInfo.descriptorSetCount = layouts.size();
+    descriptorSetAllocateInfo.pSetLayouts = layouts.data();
     return descriptorSetAllocateInfo;
 }
 

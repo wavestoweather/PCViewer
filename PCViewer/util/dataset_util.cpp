@@ -540,7 +540,7 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 		drawlist().index_buffer = util::vk::create_buffer(buffer_create_info, alloc_info);
 		// uploading index buffer
 		util::memory_view<uint8_t const> data(util::memory_view<uint32_t const>(drawlist.read().const_templatelist().indices));//.data(), drawlist.const_templatelist().indices.size()));
-		structures::stager::staging_info staging_info{structures::stager::transfer_direction::upload, drawlist.read().index_buffer.buffer, 0ul, data, {}, {}, {}, util::memory_view(upload_semaphores[0]), cpu_semaphores[0].get()};
+		structures::stager::staging_buffer_info staging_info{structures::stager::transfer_direction::upload, drawlist.read().index_buffer.buffer, 0ul, structures::stager::task_common{data, {}, {}, {}, util::memory_view(upload_semaphores[0]), cpu_semaphores[0].get()}};
 		globals::stager.add_staging_task(staging_info);
 
 		auto median_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (ds.read().attributes.size() + 2) * sizeof(float));
@@ -550,7 +550,7 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 		// uploading bitset_vector
 		// TODO: might be unnecesary, as this bitvector will be filled by brushing pipeline
 		data = util::memory_view(drawlist.read().active_indices_bitset.data(), (drawlist.read().active_indices_bitset.size() + drawlist.read().active_indices_bitset.bits_per_block - 1) / drawlist.read().active_indices_bitset.bits_per_block);
-		staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, data, {}, {}, {}, util::memory_view(upload_semaphores[1]), cpu_semaphores[1].get()};
+		staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, structures::stager::task_common{data, {}, {}, {}, util::memory_view(upload_semaphores[1]), cpu_semaphores[1].get()}};
 		globals::stager.add_staging_task(staging_info);
 
 		// waiting uploads

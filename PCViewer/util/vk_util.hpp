@@ -6,10 +6,11 @@
 #include <file_util.hpp>
 #include <stdexcept>
 #include <ranges.hpp>
+#include <logger.hpp>
 
 namespace util{
 inline void check_vk_result(VkResult err){
-    if(err > 0) std::cout << "VkResult " << string_VkResult(err);
+    if(err > 0) logger << "[warning] VkResult: " << string_VkResult(err) << logging::endl;
     if(err < 0) throw std::runtime_error(std::string("VkResult ") + string_VkResult(err));
 }
 

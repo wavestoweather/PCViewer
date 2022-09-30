@@ -20,6 +20,7 @@
 #include <workbenches_util.hpp>
 #include <imgui_globals.hpp>
 #include <logger.hpp>
+#include <global_descriptor_set_util.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -159,6 +160,7 @@ int main(int argc,const char* argv[]){
 
     // workbenches setup
     util::workbench::setup_default_workbenches();
+    util::global_descriptors::setup_default_descriptors();
     }
 
     // main loop ---------------------------------------------------------------------

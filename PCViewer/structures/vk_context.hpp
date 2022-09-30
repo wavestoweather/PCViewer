@@ -31,13 +31,13 @@ namespace std{
 namespace structures{
 // info struct to insert things such as api version, physical device selection
 struct VkContextInitInfo{
-    int                                 physical_device_index;  // set to -1 for automatic detection
-    uint32_t                            api_version;
-    std::string_view                    application_name;
-    util::memory_view<const char*>      enabled_instance_layers;         // has to include debug layers. init() does not add this
-    util::memory_view<const char*>      enabled_instance_extensions;
-    util::memory_view<const char*>      enabled_device_extensions;
-    VkPhysicalDeviceFeatures2           device_features;
+    int                                 physical_device_index{-1};  // set to -1 for automatic detection
+    uint32_t                            api_version{};
+    std::string_view                    application_name{};
+    util::memory_view<const char*>      enabled_instance_layers{};         // has to include debug layers. init() does not add this
+    util::memory_view<const char*>      enabled_instance_extensions{};
+    util::memory_view<const char*>      enabled_device_extensions{};
+    VkPhysicalDeviceFeatures2           device_features{};
 };
 struct VkContextInitReturnInfo{
     int                                 physical_device_index;
@@ -88,6 +88,7 @@ struct vk_context{
     robin_hood::unordered_set<VkFence>          registered_fences;
 
     VkCommandPool                               general_graphics_command_pool{};
+    VkDescriptorPool                            general_descriptor_pool{};
     buffer_info                                 staging_buffer{};
 
     VkDebugUtilsMessengerEXT                    debug_report_callback{};
