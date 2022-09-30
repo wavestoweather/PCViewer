@@ -20,6 +20,7 @@
 #include <util.hpp>
 #include <workbench_base.hpp>
 #include <logger.hpp>
+#include <data_util.hpp>
 
 namespace util{
 namespace dataset{
@@ -516,7 +517,35 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 		templatelist.min_maxs[i] = dataset.read().attributes[i].data_bounds;
 	dataset().templatelists.push_back(std::make_unique<const structures::templatelist>(std::move(templatelist)));
 	dataset().templatelist_index[default_templatelist_name] = dataset().templatelists.back().get();
-	// TODO: upload data and dater header
+	
+	// gpu_data setup
+	const size_t header_size = dataset.read().data_flags.half ? dataset.read().half_data.read().headerSize() : dataset.read().float_data.read().headerSize();
+	const uint32_t column_count = dataset.read().data_flags.half ? dataset.read().half_data.read().columns.size() : dataset.read().float_data.read().columns.size();
+	VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+	auto header_info = util::vk::initializers::bufferCreateInfo(buffer_usage, header_size);
+	auto header_alloc_info = util::vma::initializers::allocationCreateInfo();
+	dataset().gpu_data.header = util::vk::create_buffer(header_info, header_alloc_info);
+	auto header_bytes = dataset.read().data_flags.half ? util::data::create_packed_header(dataset.read().half_data.read(), {}) : util::data::create_packed_header(dataset.read().float_data.read(), {});
+	dataset().gpu_data.columns.resize(column_count);
+	for(int i: util::i_range(column_count)){
+		auto column_alloc_info = util::vma::initializers::allocationCreateInfo();
+		VkBufferCreateInfo column_info{};
+		util::memory_view<const uint8_t> upload_data;
+		if(dataset.read().data_flags.half)
+			upload_data = util::memory_view<const half>(dataset.read().half_data.read().columns[i]);
+		else
+			upload_data = util::memory_view<const float>(dataset.read().float_data.read().columns[i]);
+		column_info = util::vk::initializers::bufferCreateInfo(buffer_usage, upload_data.byteSize());
+		dataset().gpu_data.columns[i] = util::vk::create_buffer(column_info, column_alloc_info);
+		// uploading the data as soon as buffer is available via the staging buffer
+		structures::stager::staging_buffer_info staging_info{};
+		staging_info.dst_buffer = dataset().gpu_data.columns[i].buffer;
+		staging_info.common.data_upload = upload_data;
+		globals::stager.add_staging_task(staging_info);
+	}
+	
+	globals::stager.wait_for_completion();	// wait for uploadsd, then continue
+
 	return std::move(dataset);
 }
 

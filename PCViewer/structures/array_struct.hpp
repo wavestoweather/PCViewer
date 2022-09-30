@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <memory_view.hpp>
+#include <cstring>
 
 namespace structures{
 template<typename infos, typename T_array>

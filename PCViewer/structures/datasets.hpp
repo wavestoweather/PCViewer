@@ -18,6 +18,11 @@ struct templatelist{
     float                       point_ratio{};  // currently unused
 };
 
+struct gpu_data_t{
+    buffer_info                 header{};
+    std::vector<buffer_info>    columns{};
+};
+
 struct dataset{
     std::string                         id{};
     std::string                         display_name{};
@@ -31,8 +36,7 @@ struct dataset{
     change_tracker<data<float>>         float_data{};
     change_tracker<data<half>>          half_data{};
     change_tracker<data<uint32_t>>      compressed_data{};
-    buffer_info                         gpu_data_header{}; 
-    std::vector<buffer_info>            gpu_data{};    // each column has its own buffer to enable uploading only part of the data for large vis
+    gpu_data_t                          gpu_data{};
     struct data_flags{
         bool gpuStream: 1;          // data has to be streamed from ram to gpu as not enough space available
         bool cpuStream: 1;          // data has to be streamed from hdd to cpu as not enough space available

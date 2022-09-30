@@ -6,6 +6,7 @@
 #include<algorithm>
 #include<cassert>
 #include<limits>
+#include<array_struct.hpp>
 
 /*  This class holds the data in optimized format
 *
@@ -61,10 +62,8 @@ class data{
         return ret;
     };
 
-    uint64_t packedByteSize() const{
-        uint64_t headerSize = calcHeaderSize();
-        uint64_t dataSize = calcDataSize();
-        return headerSize + dataSize;
+    uint64_t headerSize() const{
+        return calcHeaderSize();
     };
 
     // access data by an index \in[0, cross(dimension_sizes)] and a column
@@ -241,7 +240,7 @@ private:
     uint64_t calcHeaderSize() const{
         uint64_t column_dimensionsize = 0;
         for(auto& cd: column_dimensions) column_dimensionsize += cd.size();
-        return (2 + dimension_sizes.size() + 3 * columns.size() + column_dimensionsize) * sizeof(float);
+        return (dimension_sizes.size() + 3 * columns.size() + column_dimensionsize) * sizeof(uint32_t);
     }
     // data size in bytes
     uint64_t calcDataSize() const{

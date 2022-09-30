@@ -6,6 +6,7 @@
 #include <vma_initializers.hpp>
 #include <stager.hpp>
 #include "../vulkan/vk_format_util.hpp"
+#include <persistent_samplers.hpp>
 
 namespace util{
 namespace global_descriptors{
@@ -37,6 +38,9 @@ void setup_default_descriptors(){
     heatmap_desc->layout = util::vk::create_descriptorset_layout(descriptor_info);
     auto descriptor_alloc_info = util::vk::initializers::descriptorSetAllocateInfo(globals::vk_context.general_descriptor_pool, heatmap_desc->layout);
     auto res = vkAllocateDescriptorSets(globals::vk_context.device, &descriptor_alloc_info, &heatmap_desc->descriptor_set); check_vk_result(res);
+    VkDescriptorImageInfo desc_image_info{globals::persistent_samplers.get(util::vk::initializers::samplerCreateInfo(VK_FILTER_LINEAR)), view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    auto write_desc_set = util::vk::initializers::writeDescriptorSet(heatmap_desc->descriptor_set, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &desc_image_info);
+    vkUpdateDescriptorSets(globals::vk_context.device, 1, &write_desc_set, {}, {});
     globals::descriptor_sets[heatmap_desc->id] = std::move(heatmap_desc);
 
     globals::stager.wait_for_completion();  // waiting for all image uploads
