@@ -49,7 +49,7 @@ class parallel_coordinates_renderer{
 
     parallel_coordinates_renderer();
 
-    void _pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs, const push_constants& pc);
+    void _pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
     void _post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores, bool last_command_buffer);
 
 public:

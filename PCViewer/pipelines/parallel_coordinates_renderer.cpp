@@ -19,7 +19,7 @@ parallel_coordinates_renderer::parallel_coordinates_renderer()
     _render_fence = util::vk::create_fence(fence_info);
 }
 
-void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs, const push_constants& pc)
+void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs)
 {
     const auto& pipe_data = _pipelines[output_specs];
     auto begin_info = util::vk::initializers::renderPassBeginInfo(pipe_data.render_pass, pipe_data.framebuffer, {static_cast<int>(output_specs.width), static_cast<int>(output_specs.height)}, VkClearValue{});
@@ -256,8 +256,6 @@ void parallel_coordinates_renderer::render(const render_info& info){
     }
     auto attribute_infos_gpu = get_or_resize_info_buffer(attribute_infos.data().byteSize());
 
-    push_constants pc{};
-
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);  // wait indefenitely for prev rendering
     vkResetFences(globals::vk_context.device, 1, &_render_fence);
 
@@ -265,7 +263,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
     vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
     _render_commands.resize(1);
     _render_commands[0] = util::vk::create_begin_command_buffer(_command_pool);
-    _pre_render_commands(_render_commands[0], out_specs, pc);
+    _pre_render_commands(_render_commands[0], out_specs);
 
     size_t batch_size{};
     switch(info.workbench.render_strategy){
@@ -282,7 +280,16 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
     size_t cur_batch_lines{};
     for(const auto& dl: info.workbench.drawlist_infos.read()){
-        const auto& ds = globals::drawlists.read().at(dl.drawlist_id).read().dataset_read();
+        const auto& ds = drawlists.at(dl.drawlist_id).read().dataset_read();
+        
+        push_constants pc{};
+        pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
+        pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
+        pc.vertex_count_per_line = active_attribute_indices.size();
+        pc.color = dl.drawlist_read().appearance_drawlist.read().color;
+        vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+
+
         size_t data_size = globals::drawlists.read().at(dl.drawlist_id).read().const_templatelist().indices.size();
         size_t cur_batch_size = std::min(data_size, batch_size);
         size_t cur_offset = 0;

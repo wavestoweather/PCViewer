@@ -73,7 +73,9 @@ namespace parallel_coordinates_renderer{
         util::memory_view<appearance_tracker>   appearance;
         util::memory_view<median_tracker>       median;
 
-        bool any_change() const {return appearance->changed || median->changed;}
+        bool any_change() const                 {return appearance->changed || median->changed;}
+        const structures::drawlist& drawlist_read() const   {return globals::drawlists.read().at(drawlist_id).read();}
+        structures::drawlist drawlist_write() const         {return globals::drawlists()[drawlist_id]();}
     };
 }
 }

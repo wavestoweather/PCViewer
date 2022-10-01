@@ -519,13 +519,12 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 	dataset().templatelist_index[default_templatelist_name] = dataset().templatelists.back().get();
 	
 	// gpu_data setup
-	const size_t header_size = dataset.read().data_flags.half ? dataset.read().half_data.read().headerSize() : dataset.read().float_data.read().headerSize();
+	const size_t header_size = dataset.read().data_flags.half ? dataset.read().half_data.read().header_size() : dataset.read().float_data.read().header_size();
 	const uint32_t column_count = dataset.read().data_flags.half ? dataset.read().half_data.read().columns.size() : dataset.read().float_data.read().columns.size();
 	VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 	auto header_info = util::vk::initializers::bufferCreateInfo(buffer_usage, header_size);
 	auto header_alloc_info = util::vma::initializers::allocationCreateInfo();
 	dataset().gpu_data.header = util::vk::create_buffer(header_info, header_alloc_info);
-	auto header_bytes = dataset.read().data_flags.half ? util::data::create_packed_header(dataset.read().half_data.read(), {}) : util::data::create_packed_header(dataset.read().float_data.read(), {});
 	dataset().gpu_data.columns.resize(column_count);
 	for(int i: util::i_range(column_count)){
 		auto column_alloc_info = util::vma::initializers::allocationCreateInfo();
@@ -543,7 +542,12 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 		staging_info.common.data_upload = upload_data;
 		globals::stager.add_staging_task(staging_info);
 	}
-	
+	auto header_bytes = dataset.read().data_flags.half ? util::data::create_packed_header(dataset.read().half_data.read(), dataset.read().gpu_data.columns) : util::data::create_packed_header(dataset.read().float_data.read(), dataset.read().gpu_data.columns);
+	structures::stager::staging_buffer_info staging_info{};
+	staging_info.dst_buffer = dataset().gpu_data.header.buffer;
+	staging_info.common.data_upload = header_bytes.data();
+	globals::stager.add_staging_task(staging_info);
+
 	globals::stager.wait_for_completion();	// wait for uploadsd, then continue
 
 	return std::move(dataset);

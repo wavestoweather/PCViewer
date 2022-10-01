@@ -38,8 +38,11 @@ struct dynamic_struct{
 	//void push_back(T_array&& e) {_storage.insert(_storage.end(), sizeof(T_array), {}); ++array_size; _info_ptr = reinterpret_cast<T_info*>(_storage.data()); _array_ptr = reinterpret_cast<T_array*>(_storage.data() + sizeof(T_info)); _array_ptr[_array_size - 1] = std::move(e)};
 
 	T_info* operator->() {return _info_ptr;}
-	T_array& operator[](size_t i) {return _array_ptr[i];}
-	const T_array& operator[](size_t i) const {return _array_ptr[i];}
+	T_array& operator[](size_t i) {assert(i < _array_size); return _array_ptr[i];}
+	const T_array& operator[](size_t i) const {assert(i < _array_size); return _array_ptr[i];}
+	// reinterprets the array type (offset given in original type)
+	template<typename T>
+	T& reinterpret_at(size_t i){assert(i + (sizeof(T) - sizeof(T_array)) / sizeof(T) < _array_size); return *reinterpret_cast<T*>(&_array_ptr[i]);}
 private:
 	std::vector<uint8_t> 	_storage;
 	T_info* 				_info_ptr;

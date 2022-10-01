@@ -55,15 +55,23 @@ class data{
         columns.clear();
     }
 
+    uint64_t header_size() const{
+        uint64_t size = 3;                  // header fields
+        size += dimension_sizes.size();     // dimension sizes
+        size += column_dimensions.size();   // column dimension counts
+        size += column_dimensions.size();   // colummn dimension offsets
+        for(const auto& a: column_dimensions)
+            size += a.size();               // column dimension
+        size *= sizeof(uint32_t);
+        size += columns.size() * sizeof(uint64_t); // column data addresses
+        return size;
+    }
+
     uint64_t size() const{
         if(dimension_sizes.empty()) return 0;
         uint64_t ret = 1;
         for(int i: dimension_sizes) ret *= i;
         return ret;
-    };
-
-    uint64_t headerSize() const{
-        return calcHeaderSize();
     };
 
     // access data by an index \in[0, cross(dimension_sizes)] and a column
@@ -93,18 +101,6 @@ class data{
         }
         return this->index(dimensionIndices, column);
     }
-
-
-    // packs all data for the gpu in float format(also indexing information in the header so it can be used by standard cast to int)
-    // handle over the mapped memory address of the data buffer to instantly upload to gpu
-    void packData(void* dst) const{
-        uint64_t headerSize = calcHeaderSize();
-        uint64_t dataSize = calcDataSize();
-        std::vector<uint8_t> data(headerSize + dataSize);       //byte vector
-        createPackedHeaderData(data);
-        createPackedData(data, headerSize);
-        std::copy(data.begin(), data.end(), (uint8_t*)dst);
-    };
 
     // shrinks all vectors to fit the data and removes unused dimensions to avoid unnesecary index accessing
     void compress(){
@@ -236,20 +232,6 @@ class data{
     }
 
 private:
-    // header size in bytes
-    uint64_t calcHeaderSize() const{
-        uint64_t column_dimensionsize = 0;
-        for(auto& cd: column_dimensions) column_dimensionsize += cd.size();
-        return (dimension_sizes.size() + 3 * columns.size() + column_dimensionsize) * sizeof(uint32_t);
-    }
-    // data size in bytes
-    uint64_t calcDataSize() const{
-        uint64_t dataSize = 0;
-        for(auto& column: columns){
-            dataSize += column.size() * sizeof(column[0]);
-        }
-        return dataSize;
-    }
     // returns the index for a column given the diemension indices
     uint32_t index(const std::vector<uint32_t>& dimensionIndices, uint32_t column) const{
         uint32_t columnIndex = 0;
@@ -274,58 +256,6 @@ private:
             columnIndex += factor * dimensionIndices[d];
         }
         return columnIndex;
-    }
-
-    // puts header data into the beginning of the dst vector(cast to floats)
-    void createPackedHeaderData(std::vector<uint8_t>& dst) const{
-        uint32_t headerSize = calcHeaderSize();
-        uint32_t curPos = 0;
-        *reinterpret_cast<float*>(&dst[curPos]) = dimension_sizes.size();
-        curPos += 4;
-        *reinterpret_cast<float*>(&dst[curPos]) = columns.size();
-        curPos += 4;
-        for(int i = 0; i < dimension_sizes.size(); ++i){ //diemnsion sizes
-            *reinterpret_cast<float*>(&dst[curPos]) = dimension_sizes[i];
-            curPos += 4;
-        }
-        std::vector<uint32_t> columnDimensionOffsets(columns.size());
-        uint32_t baseDimensionOffset = 2 + dimension_sizes.size() + columns.size() * 3;
-        for(int i = 0; i < columns.size(); ++i){        //column dimension counts
-            *reinterpret_cast<float*>(&dst[curPos]) = column_dimensions[i].size();
-            curPos += 4;
-            if(i == 0)
-                columnDimensionOffsets[i] = baseDimensionOffset;
-            else
-                columnDimensionOffsets[i] = columnDimensionOffsets[i - 1] + column_dimensions[i - 1].size();
-        }
-        for(int i = 0; i < columnDimensionOffsets.size(); ++i){ //column dimensions offsets
-            *reinterpret_cast<float*>(&dst[curPos]) = columnDimensionOffsets[i];
-            curPos += 4;
-        }
-        uint32_t curOffset = headerSize / sizeof(float);
-        for(int i = 0; i < columns.size(); ++i){        // data offsets(are transferred as uints)
-            *reinterpret_cast<uint32_t*>(&dst[curPos]) = curOffset;
-            curPos += 4;
-            curOffset += columns[i].size();
-        }
-        for(int i = 0; i < column_dimensions.size(); ++i){   // column dimensions information
-            for(int j = 0; j < column_dimensions[i].size(); ++j){
-                *reinterpret_cast<float*>(&dst[curPos]) = column_dimensions[i][j];
-                curPos += 4;
-            }
-        }
-        assert(curPos == headerSize);           //safety check
-    }
-
-    void createPackedData(std::vector<uint8_t>& dst, uint32_t startOffset) const{
-        uint64_t curPos = startOffset;
-        for(int i = 0; i < columns.size(); ++i){
-            for(int j =0 ; j < columns[i].size(); ++j){
-                *reinterpret_cast<T*>(&dst[curPos]) = columns[i][j];
-                curPos += sizeof(columns[i][0]);
-            }
-        }
-        assert(curPos - startOffset == calcDataSize()); //safety check
     }
 };
 }
