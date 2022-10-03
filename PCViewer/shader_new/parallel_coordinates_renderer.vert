@@ -15,6 +15,10 @@ layout(buffer_reference, scalar) buffer AttributeInfos{
 	vec4 	vertex_transformations[];		// x holds the attribute index, y and z hold the lower and the upper bound respectivley for the first amtOfAttributes positions (in x axis position to variable is stored)
 };
 
+layout(buffer_reference, scalar) buffer IndexBuffer{
+	uint i[];
+};
+
 layout(buffer_reference, scalar) buffer PriorityValues{
 	uint8_t vals[];
 };
@@ -25,8 +29,11 @@ layout(push_constant) uniform PCs{
 	uint64_t 	attribute_info_address;
 	uint64_t 	data_header_address;
 	uint64_t	priorities_address;
+	uint64_t	index_buffer_address;
 	uint		vertex_count_per_line;		// is at least as high as attribute_count (when equal, polyline rendering)
 	float 		padding;
+	uint		identity_index;				// 1 if index buffer readout is not needed (index buffer is simply iota)
+	uint 		_;
 	vec4 		color;
 };
 
@@ -39,6 +46,9 @@ void main() {
 	int vertex_index = gl_VertexIndex;
 
 	AttributeInfos attr_infos = AttributeInfos(attribute_info_address);
+	IndexBuffer index_buffer = IndexBuffer(index_buffer_address);
+	if(identity_index == 0)
+		vertex_index = int(index_buffer.i[vertex_index]);
 
 	float gap = 2.0f/(vertex_count_per_line - 1.0f);
 	float x = -1.0f + vertex_index * gap;
@@ -48,7 +58,7 @@ void main() {
 	if(vertex_count_per_line == attr_infos.attribute_count){	// polyline rendering
 		uint attribute_index = uint(attr_infos.vertex_transformations[vertex_index]);
 		float val = get_packed_data(data_index, attribute_index);
-		y = (val - attr_infos.vertex_transformations[vertex_index].x) / (attr_infos.vertex_transformations[vertex_index].z - attr_infos.vertex_transformations[vertex_index].y);
+		y = (val - attr_infos.vertex_transformations[vertex_index].y) / (attr_infos.vertex_transformations[vertex_index].z - attr_infos.vertex_transformations[vertex_index].y);
 		y = y * 2 - 1;
 	}
 	else{

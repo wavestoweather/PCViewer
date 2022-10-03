@@ -21,15 +21,15 @@ struct dataset_dependency{
         bool fragmented_first: 1;
         bool fragmented_last: 1;
     };
-    virtual void add_dataset(std::string_view dataset_id) = 0;
+    virtual void add_datasets(const util::memory_view<std::string_view>& dataset_ids) = 0;
     virtual void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags) = 0;
-    virtual void remove_dataset(std::string_view dataset_id) = 0;
+    virtual void remove_datasets(const util::memory_view<std::string_view>& dataset_ids) = 0;
 };
 
 struct drawlist_dataset_dependency: public dataset_dependency{
-    virtual void add_drawlist(std::string_view drawlist_id) = 0;
+    virtual void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids) = 0;
     virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids) = 0;
-    virtual void remove_drawlist(std::string_view drawlist_id) = 0;
+    virtual void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids) = 0;
 };
 }
 

@@ -19,7 +19,7 @@ void setup_default_descriptors(){
     auto [image, view] = util::vk::create_image_with_view(image_info, alloc_info);
 
     // uploading image
-    uint32_t texel_size = FormatSize(image_info.format);
+    const uint32_t texel_size = FormatSize(image_info.format);
     structures::stager::staging_image_info image_staging{};
     image_staging.dst_image = image.image;
     image_staging.start_layout = VK_IMAGE_LAYOUT_UNDEFINED;

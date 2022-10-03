@@ -25,8 +25,11 @@ class parallel_coordinates_renderer{
         VkDeviceAddress 	attribute_info_address;
 	    VkDeviceAddress 	data_header_address;
 	    VkDeviceAddress	    priorities_address;
+        VkDeviceAddress     index_buffer_address;
 	    uint		        vertex_count_per_line;		// is at least as high as attribute_count (when equal, polyline rendering)
-	    uint 		        _;
+	    float               padding;
+        uint                identity_index;
+        uint 		        _;
 	    ImVec4 		        color;
     };
 
@@ -50,7 +53,7 @@ class parallel_coordinates_renderer{
     parallel_coordinates_renderer();
 
     void _pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
-    void _post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores, bool last_command_buffer);
+    void _post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, VkFence fence = {}, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkSemaphore> signal_semaphores = {});
 
 public:
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;

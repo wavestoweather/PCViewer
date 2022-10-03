@@ -52,11 +52,11 @@ struct drawlist{
     //TODO: add cluster and line bundles
 
     bool                        any_change() const          {return appearance_drawlist.changed || immune_to_global_brushes.changed || appearance_median.changed || median_typ.changed || local_brushes.changed;}
-
+    void                        clear_change()              {appearance_drawlist.changed = false; immune_to_global_brushes.changed = false; appearance_median.changed = false; median_typ.changed = false; local_brushes.changed = false;}
     dataset&                    dataset_write() const       {return globals::datasets().at(parent_dataset)();}
     const structures::dataset&  dataset_read() const        {return globals::datasets.read().at(parent_dataset).read();} 
     //templatelist&               templatelist_write() const  {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
-    const structures::templatelist& const_templatelist()const {return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
+    const structures::templatelist& const_templatelist()const{return *globals::datasets().at(parent_dataset)().templatelist_index[parent_templatelist];}
 };
 using tracked_drawlist = unique_tracker<drawlist>;
 using drawlists_t = change_tracker<std::map<std::string_view, tracked_drawlist>>;

@@ -2,11 +2,14 @@
 #include <vector>
 #include <string_view>
 #include <c_file.hpp>
+#include <filesystem>
 
 namespace util{
 inline std::vector<uint32_t> read_file(std::string_view filename){
     structures::c_file input(filename, "rb");
-    std::vector<uint32_t> data;
+    if(!input)
+        throw std::runtime_error{"util::read_file() file not found: " + std::string(filename)};
+    std::vector<uint32_t> data(std::filesystem::file_size(filename) / sizeof(uint32_t));
     input.read(util::memory_view(data));
     return data;
 }

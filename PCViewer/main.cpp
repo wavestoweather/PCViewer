@@ -268,6 +268,39 @@ int main(int argc,const char* argv[]){
 
         ImGui::End();   // main dock
 
+        // check for dataset updates
+        if(globals::datasets.changed){
+            std::vector<std::string_view> changed_datasets;
+            for(const auto& [ds_id, ds]: globals::datasets.read()){
+                if(ds.changed)
+                    changed_datasets.push_back(ds_id);
+            }
+            for(auto& workbench: globals::dataset_dependencies)
+                workbench->signal_dataset_update(changed_datasets, {});
+            for(auto& workbench: globals::drawlist_dataset_dependencies)
+                workbench->signal_dataset_update(changed_datasets, {});
+            for(auto id: changed_datasets){
+                globals::datasets.ref_no_track()[id].ref_no_track().clear_change();
+                globals::datasets.ref_no_track()[id].changed = false;
+            }
+            globals::datasets.changed = false;
+        }
+        // check for drwawlist updates
+        if(globals::drawlists.changed){
+            std::vector<std::string_view> changed_drawlists;
+            for(const auto& [dl_id, dl]: globals::drawlists.read()){
+                if(dl.changed)
+                    changed_drawlists.push_back(dl_id);
+            }
+            for(auto& workbench: globals::drawlist_dataset_dependencies)
+                workbench->signal_drawlist_update(changed_drawlists);
+            for(auto id: changed_drawlists){
+                globals::drawlists.ref_no_track()[id].ref_no_track().clear_change();
+                globals::drawlists.ref_no_track()[id].changed = false;
+            }
+            globals::drawlists.changed = false;
+        }
+
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
         const bool minimized = draw_data->DisplaySize.x <= 0 || draw_data->DisplaySize.y <= 0;

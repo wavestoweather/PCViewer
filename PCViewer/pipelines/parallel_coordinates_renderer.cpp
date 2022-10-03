@@ -22,22 +22,26 @@ parallel_coordinates_renderer::parallel_coordinates_renderer()
 void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs)
 {
     const auto& pipe_data = _pipelines[output_specs];
-    auto begin_info = util::vk::initializers::renderPassBeginInfo(pipe_data.render_pass, pipe_data.framebuffer, {static_cast<int>(output_specs.width), static_cast<int>(output_specs.height)}, VkClearValue{});
+    auto begin_info = util::vk::initializers::renderPassBeginInfo(pipe_data.render_pass, pipe_data.framebuffer, {0, 0, output_specs.width, output_specs.height}, VkClearValue{});
     vkCmdBeginRenderPass(commands, &begin_info, {});
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_data.pipeline);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_data.pipeline_layout, 0, 1, &globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->descriptor_set, 0, {});
+    VkViewport viewport{};
+    viewport.width = output_specs.width;
+    viewport.height = output_specs.height;
+    viewport.maxDepth = 1;
+    vkCmdSetViewport(commands, 0, 1, &viewport);
+    VkRect2D scissor{};
+    scissor.extent = {output_specs.width, output_specs.height};
+    vkCmdSetScissor(commands, 0, 1, &scissor);
 }
 
-void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores, bool last_command_buffer)
+void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, VkFence fence, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores)
 {
     vkCmdEndRenderPass(commands);
     std::vector<VkPipelineStageFlags> stage_flags(wait_semaphores.size(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
     std::scoped_lock lock(globals::vk_context.graphics_mutex);
-    if(last_command_buffer)
-        util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags, signal_semaphores, _render_fence);
-    else
-        util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags);
-
+    util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags, signal_semaphores, fence);
 }
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
@@ -105,8 +109,8 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         // pipeline layout creation
         auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants), 0);
-        assert(globals::descriptor_sets.contains("iron_map"));      // the iron map has to be already created before the pipeliens are created
-        auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets["iron_map"]->layout, util::memory_view(push_constant_range));
+        assert(globals::descriptor_sets.contains(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
+        auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout, util::memory_view(push_constant_range));
         pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
         // pipeline creation
@@ -119,28 +123,14 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         auto pipeline_viewport = util::vk::initializers::pipelineViewportStateCreateInfo(1, 1);
 
-        std::vector<VkDynamicState> dynamic_states;
+        std::vector<VkDynamicState> dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
         auto pipeline_dynamic_states = util::vk::initializers::pipelineDynamicStateCreateInfo(dynamic_states); 
 
         auto pipeline_depth_stencil = util::vk::initializers::pipelineDepthStencilStateCreateInfo(VK_FALSE, VK_FALSE);
 
         auto pipeline_multi_sample = util::vk::initializers::pipelineMultisampleStateCreateInfo(output_specs.sample_count);
-        
-        VkVertexInputBindingDescription vertex_input_binding{};
-        VkVertexInputAttributeDescription vertex_input_attribute{};
-        switch(output_specs.data_typ){
-        case structures::parallel_coordinates_renderer::data_type::floatt:
-            vertex_input_binding = util::vk::initializers::vertexInputBindingDescription(0, sizeof(half), VK_VERTEX_INPUT_RATE_VERTEX);
-            vertex_input_attribute = util::vk::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R16_SFLOAT, 0);
-            break;
-        case structures::parallel_coordinates_renderer::data_type::half:
-            vertex_input_binding = util::vk::initializers::vertexInputBindingDescription(0, sizeof(half), VK_VERTEX_INPUT_RATE_VERTEX);
-            vertex_input_attribute = util::vk::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R16_SFLOAT, 0);
-            break;
-        default:
-            assert(false && "unknown data type");
-        }
-        auto pipeline_vertex_state = util::vk::initializers::pipelineVertexInputStateCreateInfo(vertex_input_binding, vertex_input_attribute);
+
+        auto pipeline_vertex_state = util::vk::initializers::pipelineVertexInputStateCreateInfo();//(vertex_input_binding, vertex_input_attribute);
 
         switch(output_specs.render_typ){
         case structures::parallel_coordinates_renderer::render_type::polyline_spline:{
@@ -151,7 +141,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             shader_infos[0] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module);
             shader_infos[1] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module);
 
-            auto pipeline_input_assembly = util::vk::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, 0, VK_TRUE);
+            auto pipeline_input_assembly = util::vk::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_LINE_STRIP, 0, VK_FALSE);
 
             auto pipeline_create_info = util::vk::initializers::graphicsPipelineCreateInfo(shader_infos, pipe_data.pipeline_layout, pipe_data.render_pass);
             pipeline_create_info.pVertexInputState = &pipeline_vertex_state;
@@ -208,7 +198,7 @@ const structures::buffer_info& parallel_coordinates_renderer::get_or_resize_info
         if(_attribute_info_buffer)
             util::vk::destroy_buffer(_attribute_info_buffer);
         
-        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, byte_size);
+        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, byte_size);
         auto allocation_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
         _attribute_info_buffer = util::vk::create_buffer(buffer_info, allocation_info);
     }
@@ -234,7 +224,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
     const auto& drawlists = globals::drawlists.read();
     auto first_dl = info.workbench.drawlist_infos.read()[0].drawlist_id;
-    auto data_type = globals::drawlists.read().at(first_dl).read().dataset_read().data_flags.half ? structures::parallel_coordinates_renderer::data_type::half: structures::parallel_coordinates_renderer::data_type::floatt;
+    auto data_type = globals::drawlists.read().at(first_dl).read().dataset_read().data_flags.half ? structures::parallel_coordinates_renderer::data_type::half_t: structures::parallel_coordinates_renderer::data_type::float_t;
     output_specs out_specs{
         info.workbench.plot_data.read().width, 
         info.workbench.plot_data.read().height, 
@@ -260,10 +250,18 @@ void parallel_coordinates_renderer::render(const render_info& info){
     vkResetFences(globals::vk_context.device, 1, &_render_fence);
 
     util::vma::upload_data(attribute_infos.data(), attribute_infos_gpu);
-    vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
+    if(_render_commands.size())
+        vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
     _render_commands.resize(1);
     _render_commands[0] = util::vk::create_begin_command_buffer(_command_pool);
     _pre_render_commands(_render_commands[0], out_specs);
+    VkClearAttachment clear_value{};
+    clear_value.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    clear_value.clearValue.color.float32[3] = 1;
+    VkClearRect clear_rect{};
+    clear_rect.layerCount = 1;
+    clear_rect.rect.extent = {out_specs.width, out_specs.height};
+    vkCmdClearAttachments(_render_commands[0], 1, &clear_value, 1, &clear_rect);
 
     size_t batch_size{};
     switch(info.workbench.render_strategy){
@@ -281,23 +279,34 @@ void parallel_coordinates_renderer::render(const render_info& info){
     size_t cur_batch_lines{};
     for(const auto& dl: info.workbench.drawlist_infos.read()){
         const auto& ds = drawlists.at(dl.drawlist_id).read().dataset_read();
-        
-        push_constants pc{};
-        pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
-        pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
-        pc.vertex_count_per_line = active_attribute_indices.size();
-        pc.color = dl.drawlist_read().appearance_drawlist.read().color;
-        vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-
 
         size_t data_size = globals::drawlists.read().at(dl.drawlist_id).read().const_templatelist().indices.size();
         size_t cur_batch_size = std::min(data_size, batch_size);
         size_t cur_offset = 0;
-        while(cur_offset < data_size){
-            // TODO: first rework shaders, then come here and update pipelines etc...
-        }
+        do{
+            push_constants pc{};
+            pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
+            pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
+            pc.index_buffer_address = util::vk::get_buffer_address(dl.drawlist_read().const_templatelist().gpu_indices);
+            pc.identity_index = uint(dl.drawlist_read().const_templatelist().flags.identity_indices);
+            pc.vertex_count_per_line = active_attribute_indices.size();
+            pc.color = dl.drawlist_read().appearance_drawlist.read().color;
+            vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+            vkCmdDraw(_render_commands.back(), pc.vertex_count_per_line, cur_batch_size, 0, cur_offset);
+
+            cur_offset += cur_batch_size;
+            cur_batch_lines += cur_batch_size;
+            if(cur_batch_lines >= batch_size){
+                // dispatching command buffer
+                _post_render_commands(_render_commands.back(), out_specs);
+                _render_commands.push_back(util::vk::create_begin_command_buffer(_command_pool));
+                _pre_render_commands(_render_commands.back(), out_specs);
+                cur_batch_lines = 0;
+            }
+        } while(cur_offset < data_size);
     }
 
-    
+    // committing last command buffer
+    _post_render_commands(_render_commands.back(), out_specs, _render_fence);    
 }
 }

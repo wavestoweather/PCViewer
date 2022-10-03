@@ -11,11 +11,16 @@ namespace structures{
 template<typename T>
 using const_unique = std::unique_ptr<const T>;
 
+static const std::string_view default_templatelist_name{"On_load"};
 struct templatelist{
     std::string                 name{};
     std::vector<uint32_t>       indices{};
+    buffer_info                 gpu_indices{};
     std::vector<min_max<float>> min_maxs{};
     float                       point_ratio{};  // currently unused
+    struct flags{
+        bool identity_indices: 1;
+    }                           flags{};
 };
 
 struct gpu_data_t{
@@ -55,6 +60,9 @@ struct dataset{
     std::optional<data_stream_infos>    cpu_stream_infos{};
 
     bool operator==(const dataset& o) const {return id == o.id;}
+
+    bool any_change() const {return visible_attributes.changed  || float_data.changed || half_data.changed || compressed_data.changed;}
+    void clear_change()     {visible_attributes.changed = false; float_data.changed = false; half_data.changed = false; compressed_data.changed = false;}
 };
 
 }

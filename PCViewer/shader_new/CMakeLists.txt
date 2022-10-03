@@ -29,7 +29,7 @@ file(GLOB compiled_shaders "*.spv")
 foreach(shader IN LISTS compiled_shaders)
     set(current_shader_path ${shader})
     get_filename_component(shader_filename ${current_shader_path} NAME)
-    set(current_output_path ${CMAKE_BINARY_DIR}/shader/${shader_filename})
+    set(current_output_path ${CMAKE_BINARY_DIR}/PCViewer/shader/${shader_filename})
 
     get_filename_component(current_output_directory ${current_output_path} DIRECTORY)
     file(MAKE_DIRECTORY ${current_output_directory})
@@ -39,10 +39,10 @@ foreach(shader IN LISTS compiled_shaders)
     add_custom_command(
            OUTPUT ${current_output_path}
            COMMAND ${CMAKE_COMMAND} -E copy ${current_shader_path} ${current_output_path}
-           DEPENDS ${current_shader_path}
+           MAIN_DEPENDENCY ${current_shader_path}
            VERBATIM)
-    list(APPEND compiled_shaders ${current_output_path})
+    list(APPEND compiled_shaders_depend ${current_output_path})
 endforeach()
 
-add_custom_target(copy_shaders DEPENDS ${compiled_shaders})
+add_custom_target(copy_shaders DEPENDS ${compiled_shaders_depend})
 add_dependencies(PCViewer_new copy_shaders)

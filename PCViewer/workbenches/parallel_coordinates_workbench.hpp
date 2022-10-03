@@ -27,8 +27,8 @@ public:
         ImTextureID             image_descriptor{}; // called descriptor as internally it is a descriptor
     };
     struct attribute_order_info{
-        uint32_t    attribut_index;
-        bool        active;
+        uint32_t    attribut_index{};
+        bool        active{true};
     };
     enum class render_strategy{
         all,
@@ -56,12 +56,12 @@ public:
     // overriden methods
     void show() override;
 
-    void add_dataset(std::string_view dataset_id) override{};
-    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_id, structures::dataset_dependency::update_flags flags) override{};
-    void remove_dataset(std::string_view dataset_id) override{};
-    void add_drawlist(std::string_view drawlist_id) override;
-    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_id) override{};
-    void remove_drawlist(std::string_view drawlist_id) override{};
+    void add_datasets(const util::memory_view<std::string_view>& dataset_ids) override{};
+    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, structures::dataset_dependency::update_flags flags) override{};
+    void remove_datasets(const util::memory_view<std::string_view>& dataset_ids) override{};
+    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids) override;
+    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids) override;
+    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids) override{};
 };
 
 }

@@ -512,6 +512,13 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 	templatelist.name = default_templatelist_name;
 	templatelist.indices.resize(dataset.read().data_size);
 	std::iota(templatelist.indices.begin(), templatelist.indices.end(), 0);
+	auto indices_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, templatelist.indices.size() * sizeof(templatelist.indices[0]));
+	auto indices_alloc_info = util::vma::initializers::allocationCreateInfo();
+	templatelist.gpu_indices = util::vk::create_buffer(indices_info, indices_alloc_info);
+	structures::stager::staging_buffer_info staging_info{};
+	staging_info.dst_buffer = templatelist.gpu_indices.buffer;
+	staging_info.common.data_upload = util::memory_view(templatelist.indices);
+	globals::stager.add_staging_task(staging_info);
 	templatelist.min_maxs.resize(dataset.read().attributes.size());
 	for(int i: util::size_range(dataset.read().attributes))
 		templatelist.min_maxs[i] = dataset.read().attributes[i].data_bounds;
@@ -537,13 +544,11 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 		column_info = util::vk::initializers::bufferCreateInfo(buffer_usage, upload_data.byteSize());
 		dataset().gpu_data.columns[i] = util::vk::create_buffer(column_info, column_alloc_info);
 		// uploading the data as soon as buffer is available via the staging buffer
-		structures::stager::staging_buffer_info staging_info{};
 		staging_info.dst_buffer = dataset().gpu_data.columns[i].buffer;
 		staging_info.common.data_upload = upload_data;
 		globals::stager.add_staging_task(staging_info);
 	}
 	auto header_bytes = dataset.read().data_flags.half ? util::data::create_packed_header(dataset.read().half_data.read(), dataset.read().gpu_data.columns) : util::data::create_packed_header(dataset.read().float_data.read(), dataset.read().gpu_data.columns);
-	structures::stager::staging_buffer_info staging_info{};
 	staging_info.dst_buffer = dataset().gpu_data.header.buffer;
 	staging_info.common.data_upload = header_bytes.data();
 	globals::stager.add_staging_task(staging_info);
@@ -603,7 +608,7 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 	}
 	case structures::dataset_convert_data::destination::templatelist:{
 		structures::templatelist templatelist{};
-		templatelist.name = "On_load";
+		templatelist.name = convert_data.dst_name;
 		templatelist.indices.resize((convert_data.trim.max - convert_data.trim.min + convert_data.subsampling - 1) / convert_data.subsampling);
 		if(convert_data.random_subsampling){
 			std::default_random_engine generator;
@@ -615,6 +620,14 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 			for(uint32_t i: util::i_range(convert_data.trim.min, convert_data.trim.max, convert_data.subsampling))
 				templatelist.indices[(i - convert_data.trim.min) / convert_data.subsampling] = i;
 		}
+		auto indices_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, templatelist.indices.size() * sizeof(templatelist.indices[0]));
+		auto indices_alloc_info = util::vma::initializers::allocationCreateInfo();
+		templatelist.gpu_indices = util::vk::create_buffer(indices_info, indices_alloc_info);
+		structures::stager::staging_buffer_info staging_info{};
+		staging_info.dst_buffer = templatelist.gpu_indices.buffer;
+		staging_info.common.data_upload = util::memory_view(templatelist.indices);
+		globals::stager.add_staging_task(staging_info);
+		
 		templatelist.min_maxs.resize(ds.read().attributes.size());
 		if(ds.read().data_flags.half){
 			for(int var: util::size_range(ds.read().attributes)){
@@ -639,6 +652,9 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 			}
 		}
 		templatelist.point_ratio = templatelist.indices.size() / float(ds.read().data_size);
+		if(templatelist.name == structures::default_templatelist_name)
+			templatelist.flags.identity_indices = true;
+		globals::stager.wait_for_completion();	// waiting before moving to make sure the memory view for the data upload stays valid
 		ds.ref_no_track().templatelists.push_back(std::make_unique<const structures::templatelist>(std::move(templatelist)));
 		ds.ref_no_track().templatelist_index.insert({ds.read().templatelists.back()->name, ds.read().templatelists.back().get()});
 		break;
@@ -659,7 +675,7 @@ void execute_laod_behaviour(globals::dataset_t& ds){
 			structures::dataset_convert_data convert_info{};
 			convert_info.ds_id = ds.read().id;
 			convert_info.tl_id = ds.read().templatelists[0]->name;
-			convert_info.dst_name = "On_load";
+			convert_info.dst_name = std::string(structures::default_templatelist_name);
 			convert_info.trim = load_behaviour.trim;
 			convert_info.dst = structures::dataset_convert_data::destination::templatelist;
 			convert_dataset(convert_info);
@@ -676,7 +692,8 @@ void execute_laod_behaviour(globals::dataset_t& ds){
 			auto wb = util::memory_view(globals::workbenches).find([&](const globals::unique_workbench& work){return work->id == wb_id;}).get();
 			if(structures::drawlist_dataset_dependency* ddd = dynamic_cast<structures::drawlist_dataset_dependency*>(wb)){
 				try{
-					ddd->add_drawlist(globals::drawlists.read().at(ds.read().id).read().id);}
+					std::vector<std::string_view> dl{globals::drawlists.read().at(ds.read().id).read().id};
+					ddd->add_drawlists(dl);}
 				catch(const std::runtime_error& e){
 					logger << "[error] " << e.what() << logging::endl;}
 			}
