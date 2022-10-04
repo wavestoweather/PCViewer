@@ -50,8 +50,8 @@ namespace parallel_coordinates_renderer{
         VkSampleCountFlagBits   sample_count{};
         VkFormat                format{};
         render_type             render_typ{};
-        VkImageView             plot_image_view{};
         data_type               data_typ{};
+        VkImageView             plot_image_view{};
 
 		bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equalData(util::memory_view<const uint32_t>(util::memory_view(o)));};
     };

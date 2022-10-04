@@ -69,9 +69,13 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         // multisample image
         if(output_specs.sample_count != VK_SAMPLE_COUNT_1_BIT){
-            auto image_info = util::vk::initializers::imageCreateInfo(output_specs.format, {output_specs.width, output_specs.height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR, VK_IMAGE_TYPE_2D, 1, 1, output_specs.sample_count);
+            auto image_info = util::vk::initializers::imageCreateInfo(output_specs.format, {output_specs.width, output_specs.height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TYPE_2D, 1, 1, output_specs.sample_count);
             auto allocation_info = util::vma::initializers::allocationCreateInfo();
             std::tie(pipe_data.multi_sample_image, pipe_data.multi_sample_view) = util::vk::create_image_with_view(image_info, allocation_info);
+
+            // updating the image layout
+            auto image_barrier = util::vk::initializers::imageMemoryBarrier(pipe_data.multi_sample_image.image, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}, {}, {}, {}, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            util::vk::convert_image_layouts_execute(image_barrier);
         }
 
         // render pass
@@ -82,6 +86,8 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         attachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         attachments.push_back(attachment);
         if(output_specs.sample_count != VK_SAMPLE_COUNT_1_BIT){
+            attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             attachment.samples = output_specs.sample_count;
             attachments.push_back(attachment);
         }
@@ -90,8 +96,8 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         attachment_references.push_back(attachment_reference);
         util::memory_view<VkAttachmentReference> resolve_reference{};
         if(output_specs.sample_count != VK_SAMPLE_COUNT_1_BIT){
-            attachment_reference.attachment = 1;
-            attachment_references.push_back(attachment_reference);
+            attachment_references.back().attachment = 1;    // normal rendering goes to attachment 1 in multisampling case (at index 1 multisample image is attached)
+            attachment_reference.attachment = 0;
             resolve_reference = util::memory_view(attachment_reference);
         }
         auto subpass_description = util::vk::initializers::subpassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, {}, attachment_references, resolve_reference);
@@ -231,8 +237,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
         info.workbench.plot_data.read().image_samples, 
         info.workbench.plot_data.read().image_format, 
         info.workbench.render_type.read(), 
-        info.workbench.plot_data.read().image_view, 
-        data_type}; 
+        data_type, 
+        info.workbench.plot_data.read().image_view};
     auto pipeline_info = get_or_create_pipeline(out_specs);
 
     structures::dynamic_struct<attribute_infos, ImVec4> attribute_infos(active_attribute_indices.size());

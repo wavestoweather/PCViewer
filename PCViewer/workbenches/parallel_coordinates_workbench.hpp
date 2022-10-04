@@ -22,7 +22,7 @@ public:
         uint32_t                height{480};
         structures::image_info  image{};
         VkImageView             image_view{};
-        VkSampleCountFlagBits   image_samples{VK_SAMPLE_COUNT_1_BIT};
+        VkSampleCountFlagBits   image_samples{VK_SAMPLE_COUNT_8_BIT};
         VkFormat                image_format{VK_FORMAT_R16G16B16A16_UNORM};
         ImTextureID             image_descriptor{}; // called descriptor as internally it is a descriptor
     };
