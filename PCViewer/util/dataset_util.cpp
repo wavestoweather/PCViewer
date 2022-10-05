@@ -4,7 +4,7 @@
 #include <file_util.hpp>
 #include <sstream>
 #include <filesystem>
-#include <charconv>
+#include <fast_float.h>
 #include <robin_hood.h>
 #include <functional>
 #include <set>
@@ -173,7 +173,7 @@ load_result<float> open_csv_float(std::string_view filename, memory_view<structu
 			
 			T val{};
 			if(element.size()){
-				auto parse_res = std::from_chars(element.begin(), element.end(), val);
+				auto parse_res = fast_float::from_chars(element.begin(), element.end(), val);
 				if(parse_res.ec != std::errc{}){	// parsing error -> exchnage for category
 					std::string el(element);
 					if(ret.attributes[var].categories.count(el) > 0)
@@ -279,7 +279,7 @@ load_result<half> open_csv_half(std::string_view filename, memory_view<structure
 			T val{};
 			if(element.size()){
 				float v;
-				auto parse_res = std::from_chars(element.begin(), element.end(), v);
+				auto parse_res = fast_float::from_chars(element.begin(), element.end(), v);
 				val = v;
 				if(parse_res.ec != std::errc{}){	// parsing error -> exchnage for category
 					std::string el(element);

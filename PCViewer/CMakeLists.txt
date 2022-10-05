@@ -110,6 +110,7 @@ set(structures_INCLUDE_DIR
     "imgui"
     "pipelines"
     "workbenches"
+    "fast_float"
 )
 
 file(GLOB structures_SRC
