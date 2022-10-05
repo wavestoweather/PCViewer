@@ -39,7 +39,6 @@ class parallel_coordinates_renderer{
 
     // vulkan resources that are the same for all drawlists/parallel_coordinates_windows
     structures::buffer_info                                 _attribute_info_buffer{};
-    size_t                                                  _attribute_info_buffer_size{};
     VkCommandPool                                           _command_pool{};
     VkFence                                                 _render_fence{};    // needed as only a single attribute info buffer exists
     std::vector<VkCommandBuffer>                            _render_commands{};

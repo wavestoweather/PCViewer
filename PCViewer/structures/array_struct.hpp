@@ -34,7 +34,7 @@ struct dynamic_struct{
 
 	size_t byte_size() const {return _storage.size();}
 
-	util::memory_view<const uint8_t> data() const {return util::memory_view<uint8_t>(_storage);}
+	util::memory_view<const uint8_t> data() {return util::memory_view<uint8_t>(_storage);}
 
 	//void push_back(const T_array& e) {_storage.insert(_storage.end(), sizeof(T_array), {}); ++array_size; _info_ptr = reinterpret_cast<T_info*>(_storage.data()); _array_ptr = reinterpret_cast<T_array*>(_storage.data() + sizeof(T_info)); _array_ptr[_array_size - 1] = e};
 	//void push_back(T_array&& e) {_storage.insert(_storage.end(), sizeof(T_array), {}); ++array_size; _info_ptr = reinterpret_cast<T_info*>(_storage.data()); _array_ptr = reinterpret_cast<T_array*>(_storage.data() + sizeof(T_info)); _array_ptr[_array_size - 1] = std::move(e)};

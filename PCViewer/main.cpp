@@ -272,9 +272,7 @@ int main(int argc,const char* argv[]){
 
         // check for updates --------------------------------------------------------------------------------
         util::brushes::upload_changed_brushes();
-
-        // updating active indices
-        
+        util::brushes::update_drawlist_active_indices();
 
         // check for dataset updates
         if(globals::datasets.changed){
