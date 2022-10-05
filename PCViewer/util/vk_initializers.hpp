@@ -545,12 +545,14 @@ inline VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo(
 
 inline VkComputePipelineCreateInfo computePipelineCreateInfo(
     VkPipelineLayout layout, 
+    VkPipelineShaderStageCreateInfo shader_stage_create_info = {},
     VkPipelineCreateFlags flags = 0)
 {
     VkComputePipelineCreateInfo computePipelineCreateInfo {};
     computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     computePipelineCreateInfo.layout = layout;
     computePipelineCreateInfo.flags = flags;
+    computePipelineCreateInfo.stage = shader_stage_create_info;
     return computePipelineCreateInfo;
 }
 

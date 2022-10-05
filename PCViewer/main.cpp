@@ -21,6 +21,8 @@
 #include <imgui_globals.hpp>
 #include <logger.hpp>
 #include <global_descriptor_set_util.hpp>
+#include <brusher.hpp>
+#include <brush_util.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -268,6 +270,12 @@ int main(int argc,const char* argv[]){
 
         ImGui::End();   // main dock
 
+        // check for updates --------------------------------------------------------------------------------
+        util::brushes::upload_changed_brushes();
+
+        // updating active indices
+        
+
         // check for dataset updates
         if(globals::datasets.changed){
             std::vector<std::string_view> changed_datasets;
@@ -301,6 +309,7 @@ int main(int argc,const char* argv[]){
             globals::drawlists.changed = false;
         }
 
+        // final drawlist rendering ---------------------------------------------------------------------------
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
         const bool minimized = draw_data->DisplaySize.x <= 0 || draw_data->DisplaySize.y <= 0;
