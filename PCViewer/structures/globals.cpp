@@ -150,7 +150,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     if(info.physical_device_index < scores.size() && scores[info.physical_device_index].score > 0)
         ret.physical_device_index = info.physical_device_index;
     else
-        ret.physical_device_index = std::max_element(scores.begin(), scores.end(), [](const score_index& l, const score_index& r){return l.score > r.score;})->index;
+        ret.physical_device_index = std::max_element(scores.begin(), scores.end(), [](const score_index& l, const score_index& r){return l.score < r.score;})->index;
     
     if(scores[ret.physical_device_index].score < 0)
         throw std::runtime_error("vk_context::init() No physical device supports all needed features");
