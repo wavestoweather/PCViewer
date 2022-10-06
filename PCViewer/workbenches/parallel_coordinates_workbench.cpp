@@ -276,7 +276,8 @@ void parallel_coordinates_workbench::show(){
 
 void parallel_coordinates_workbench::render_plot()
 {
-    logger << logging::info_prefix << " parallel_coordinates_workbench::render_plot()" << logging::endl;
+    if(logger.logging_level >= logging::level::l_5)
+        logger << logging::info_prefix << " parallel_coordinates_workbench::render_plot()" << logging::endl;
     pipelines::parallel_coordinates_renderer::render_info render_info{
         *this,  // workbench (is not changed, the renderer only reads information)
         {},     // wait_semaphores;

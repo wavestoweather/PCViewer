@@ -56,9 +56,10 @@ struct vk_context{
     VkQueue             graphics_queue{}; // Note: use semaphores for queue sync
     VkQueue             compute_queue{};  // Note: use semaphores for queue sync
     VkQueue             transfer_queue{}; // Note: use semaphores for queue sync
-    std::mutex          graphics_mutex{};
-    std::mutex          compute_mutex{};
-    std::mutex          transfer_mutex{};
+    std::mutex*         graphics_mutex{};
+    std::mutex*         compute_mutex{};
+    std::mutex*         transfer_mutex{};
+    std::vector<std::unique_ptr<std::mutex>> mutex_storage{};   // holds the mutexes which can be ealily accessed via transfer/graphics/compute_mutex
     uint32_t            graphics_queue_family_index{};
     uint32_t            compute_queue_family_index{};
     uint32_t            transfer_queue_family_index{};

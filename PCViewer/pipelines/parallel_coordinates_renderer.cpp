@@ -40,13 +40,14 @@ void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer comman
 {
     vkCmdEndRenderPass(commands);
     std::vector<VkPipelineStageFlags> stage_flags(wait_semaphores.size(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
-    std::scoped_lock lock(globals::vk_context.graphics_mutex);
+    std::scoped_lock lock(*globals::vk_context.graphics_mutex);
     util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags, signal_semaphores, fence);
 }
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
     if(!_pipelines.contains(output_specs)){
-        std::cout << "[info] parallel_coordinates_renderer::get_or_create_pipeline() creating new pipeline for output_specs " << util::memory_view<const uint32_t>(util::memory_view(output_specs)) << std::endl;
+        if(logger.logging_level >= logging::level::l_4)
+            logger << "[info] parallel_coordinates_renderer::get_or_create_pipeline() creating new pipeline for output_specs " << util::memory_view<const uint32_t>(util::memory_view(output_specs)) << logging::endl;
 
         if(_pipelines.size() > max_pipeline_count){
             auto [pipeline, time] = *std::min_element(_pipeline_last_use.begin(), _pipeline_last_use.end(), [](const auto& l, const auto& r){return l.second < r.second;});

@@ -349,7 +349,7 @@ inline VkDeviceAddress get_buffer_address(const structures::buffer_info& buffer)
 }
 
 inline void convert_image_layouts_execute(util::memory_view<VkImageMemoryBarrier> image_barriers){
-    std::scoped_lock lock(globals::vk_context.graphics_mutex);
+    std::scoped_lock lock(*globals::vk_context.graphics_mutex);
     auto commands = create_begin_command_buffer(globals::vk_context.general_graphics_command_pool);
     vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, {}, 0, {}, 0, {}, image_barriers.size(), image_barriers.data());
     auto fence = create_fence(initializers::fenceCreateInfo());

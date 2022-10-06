@@ -813,6 +813,9 @@ void check_datasets_to_open(){
                     auto [ds, inserted] = globals::datasets().insert({dataset.read().id, std::move(dataset)});
 					if(!inserted)
 						throw std::runtime_error{"check_dataset_to_open() Could not add dataset to the internal datasets"};
+					if(logger.logging_level >= logging::level::l_4)
+						logger << logging::info_prefix << " Loaded dataset with size " << ds->second.read().data_size << logging::endl;
+
 					execute_laod_behaviour(ds->second);
                 }
                 catch(const std::runtime_error& e){

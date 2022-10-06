@@ -100,6 +100,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     for(int i: util::i_range(gpu_count)){
         scores[i].index = i;
 
+        // checking physical device features
         VkPhysicalDeviceFeatures available_features;
         vkGetPhysicalDeviceFeatures(physical_devices[i], &available_features);
 
@@ -138,6 +139,15 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
         if(!all_features_avail){
             scores[i].score = std::numeric_limits<int>::lowest();
             continue;
+        }
+
+        // checking device extensions
+        for(const auto extension: info.enabled_device_extensions){
+            uint32_t _;
+            if(vkEnumerateDeviceExtensionProperties(physical_devices[i], extension, &_, {})== VK_ERROR_LAYER_NOT_PRESENT){
+                scores[i].score = std::numeric_limits<int>::lowest();
+                break;
+            }
         }
 
         VkPhysicalDeviceProperties props;
@@ -202,6 +212,9 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     vkGetPhysicalDeviceFeatures2(physical_device, &available_device_features.feature);
 
     std::set<uint32_t> distinct_queue_families{g_queue_family, c_queue_family, t_queue_family};
+    std::map<uint32_t, std::unique_ptr<std::mutex>> distinct_mutexes;
+    for(uint32_t family: distinct_queue_families)
+        distinct_mutexes[family] = std::make_unique<std::mutex>();
     std::vector<uint32_t> distinct_families_v(distinct_queue_families.begin(), distinct_queue_families.end());
     std::vector<VkDeviceQueueCreateInfo> queue_info(distinct_queue_families.size());
     const float queue_priority[] = { 1.0f };
@@ -227,6 +240,11 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     vkGetDeviceQueue(device, g_queue_family, 0, &graphics_queue);
     vkGetDeviceQueue(device, c_queue_family, 0, &compute_queue);
     vkGetDeviceQueue(device, t_queue_family, 0, &transfer_queue);
+    graphics_mutex = distinct_mutexes[g_queue_family].get();
+    compute_mutex = distinct_mutexes[c_queue_family].get();
+    transfer_mutex = distinct_mutexes[t_queue_family].get();
+    for(auto& [queue, mutex]: distinct_mutexes)
+        mutex_storage.push_back(std::move(mutex));
 
     VmaVulkanFunctions vulkan_functions = {};
     vulkan_functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
@@ -530,7 +548,7 @@ void stager::_task_thread_function(){
             auto wait_semaphores = cur_span.min < buffer_size ? cur.common.wait_semaphores: util::memory_view<VkSemaphore>{};
             auto wait_flags = cur_span.min < buffer_size ? cur.common.wait_flags : util::memory_view<uint32_t>{};
             auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.common.signal_semaphores : util::memory_view<VkSemaphore>{};
-            std::scoped_lock lock(globals::vk_context.transfer_mutex);
+            std::scoped_lock lock(*globals::vk_context.transfer_mutex);
             util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
 
             if(cur.transfer_dir == transfer_direction::download){
@@ -598,7 +616,7 @@ void stager::_task_thread_function(){
             auto wait_semaphores = cur_span.min < buffer_size ? cur.common.wait_semaphores: util::memory_view<VkSemaphore>{};
             auto wait_flags = cur_span.min < buffer_size ? cur.common.wait_flags : util::memory_view<uint32_t>{};
             auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.common.signal_semaphores : util::memory_view<VkSemaphore>{};
-            std::scoped_lock lock(globals::vk_context.transfer_mutex);
+            std::scoped_lock lock(*globals::vk_context.transfer_mutex);
             util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
 
             if(cur.transfer_dir == transfer_direction::download){

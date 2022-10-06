@@ -4,6 +4,24 @@
 #include <sstream>
 #include <array>
 #include <ranges.hpp>
+
+namespace logging{
+struct endline{}; static endline        endl;
+static std::string_view                 info_prefix{"[info]"};
+static std::string_view                 warning_prefix{"[warning]"};
+static std::string_view                 error_prefix{"[error]"};
+static std::string_view                 vulkan_validation_prefix{"[vk validation]"};
+
+enum class level{
+    l_1,        // only errors
+    l_2,        // + vulkan validatin
+    l_3,        // + warnings
+    l_4,        // + additional info
+    l_5,        // + per frame info
+    all
+};
+}
+
 namespace structures{
 template<uint32_t buffered_lines = 20>
 class logger: public std::ostream{
@@ -11,16 +29,15 @@ class logger: public std::ostream{
     uint32_t                                        _write_head{};
     std::string                                     _buffered_lines{};
 public:
-    struct endline{};
-
     logger() = default;
     logger(const logger&) = delete;
     logger& operator=(const logger&) = delete;
 
-    bool write_to_cout{true};
-    bool prepare_full_lines_string{false};
+    bool                        write_to_cout{true};
+    bool                        prepare_full_lines_string{false};
+    logging::level              logging_level{logging::level::l_4};
 
-    static constexpr uint32_t buffer_size{buffered_lines};
+    static constexpr uint32_t   buffer_size{buffered_lines};
 
     template<typename T>
     logger& operator<<(const T& o){
@@ -32,7 +49,7 @@ public:
         return *this;
     }
 
-    logger& operator<<(const endline& o){
+    logger& operator<<(const logging::endline& o){
         _write_head = ++_write_head % buffered_lines;
         _last_lines[_write_head].str("");
 
@@ -60,14 +77,6 @@ public:
         return _buffered_lines;
     }
 };
-}
-
-namespace logging{
-static structures::logger<20>::endline  endl;
-static std::string_view                 info_prefix{"[info]"};
-static std::string_view                 warning_prefix{"[warning]"};
-static std::string_view                 error_prefix{"[error]"};
-static std::string_view                 vulkan_validation_prefix{"[vk validation]"};
 }
 
 extern structures::logger<20> logger;

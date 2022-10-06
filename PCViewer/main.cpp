@@ -312,7 +312,7 @@ int main(int argc,const char* argv[]){
         ImDrawData* draw_data = ImGui::GetDrawData();
         const bool minimized = draw_data->DisplaySize.x <= 0 || draw_data->DisplaySize.y <= 0;
         {   // rendering scope
-            std::scoped_lock lock(globals::vk_context.graphics_mutex);
+            std::scoped_lock lock(*globals::vk_context.graphics_mutex);
             if(!minimized)
                 util::imgui::frame_render(&imgui_window_data, draw_data);
 
