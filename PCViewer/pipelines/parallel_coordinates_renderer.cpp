@@ -279,7 +279,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         }
         break;
     case workbenches::parallel_coordinates_workbench::render_strategy::batched:
-        batch_size = info.workbench.render_batch_size;
+        batch_size = info.workbench.setting.render_batch_size;
         break;
     }
 

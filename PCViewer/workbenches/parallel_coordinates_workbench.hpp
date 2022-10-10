@@ -16,7 +16,24 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     std::vector<std::unique_ptr<structures::median_type>>    _storage_median_type;
 
     void _update_plot_image();
+    void _draw_setting_list();
 public:
+    struct settings{
+        bool        enable_axis_lines{true};
+        bool        min_max_labes{false};
+        bool        axis_tick_label{};
+        std::string axis_tick_fmt{"%6.4g"};
+        int         axis_tick_count{0};
+        ImVec4      plot_background{0,0,0,1};
+        size_t      render_batch_size{};
+        float       brush_box_width{20};
+        float       brush_box_border_width{2};
+        float       brush_box_border_hover_width{5};
+        ImVec4      brush_box_global_color{.2f, 0, .8f, 1};
+        ImVec4      brush_box_local_color{1, 0, .1f, 1};
+        ImVec4      brush_box_selected_color{.8f, .8f, 0, 1};
+        float       brush_arrow_button_move{.01f};
+    };
     struct plot_data{
         uint32_t                width{1024};
         uint32_t                height{480};
@@ -39,8 +56,9 @@ public:
         "all",
         "batched",
     };
-    const std::array<VkFormat, 4>               available_formats{VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
+    const std::array<VkFormat, 4>                           available_formats{VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
 
+    settings                                                setting{};
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};     // the order here is the render order of the drawlists
     structures::alpha_mapping_type                          alpha_mapping_typ{};
     structures::change_tracker<structures::parallel_coordinates_renderer::render_type> render_type{};
@@ -48,7 +66,6 @@ public:
     structures::change_tracker<std::vector<structures::attribute>> attributes{};
     structures::change_tracker<std::vector<attribute_order_info>> attributes_order_info{};
     render_strategy                                         render_strategy{};
-    size_t                                                  render_batch_size{};
 
     parallel_coordinates_workbench(const std::string_view id);
 
