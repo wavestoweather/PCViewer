@@ -13,7 +13,7 @@ inline T normalize_val_for_range(const T& val, const T& min, const T& max){
 }
 
 inline bool point_in_box(const ImVec2& point, const ImVec2& a, const ImVec2& b){
-    return point.x > a.x && point.y < b.x && point.y > a.y && point.y < b.y;
+    return point.x > a.x && point.x < b.x && point.y > a.y && point.y < b.y;
 }
 
 inline ImU32 vec4_to_imu32(const ImVec4& v){

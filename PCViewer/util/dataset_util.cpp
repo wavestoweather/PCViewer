@@ -603,6 +603,7 @@ void convert_dataset(const structures::dataset_convert_data& convert_data){
 		util::vk::destroy_fence(fence);
 		util::vk::destroy_semaphore(upload_semaphores[0]);
 		util::vk::destroy_semaphore(upload_semaphores[1]);
+		drawlist.ref_no_track().local_brushes.ref_no_track().ranges[globals::cur_global_brush_id++] = {};
 		globals::drawlists.write().insert({drawlist.read().id, std::move(drawlist)});
 		break;
 	}

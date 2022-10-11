@@ -33,6 +33,7 @@ public:
         ImVec4      brush_box_local_color{1, 0, .1f, 1};
         ImVec4      brush_box_selected_color{.8f, .8f, 0, 1};
         float       brush_arrow_button_move{.01f};
+        float       brush_drag_threshold{.5f};
     };
     struct plot_data{
         uint32_t                width{1024};

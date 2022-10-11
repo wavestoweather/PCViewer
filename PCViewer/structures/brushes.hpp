@@ -52,12 +52,12 @@ struct brush_edit_data{
     brush_type          brush_type{};
     brush_id            global_brush_id{}; 
     std::string_view    local_brush_id{};  // drawlist id
-    brush_region        hovered_region{brush_region::COUNT};
+    brush_region        hovered_region_on_click{brush_region::COUNT};
     robin_hood::unordered_set<range_id>  selected_ranges{};
 
     void clear(){
         brush_type = brush_type::none;
-        hovered_region = brush_region::COUNT;
+        hovered_region_on_click = brush_region::COUNT;
         selected_ranges.clear();
     }
 };

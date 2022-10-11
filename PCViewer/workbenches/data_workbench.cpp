@@ -6,6 +6,7 @@
 #include <dataset_util.hpp>
 #include <open_filepaths.hpp>
 #include <../imgui_file_dialog/ImGuiFileDialog.h>
+#include <drawlist_util.hpp>
 
 namespace workbenches
 {
@@ -119,7 +120,39 @@ void data_workbench::show()
             for(const auto& [id, dl]: globals::drawlists.read()){
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Selectable(id.data(), false);
+                bool selected = util::memory_view(globals::selected_drawlists).contains(id);
+                if(ImGui::Selectable(id.data(), selected)){
+                    // updating drawlist selection
+                    if(selected && ImGui::GetIO().KeyCtrl)
+                        globals::selected_drawlists.erase(std::find(globals::selected_drawlists.begin(), globals::selected_drawlists.end(), id));
+                    else if(selected)
+                        globals::selected_drawlists.clear();
+                    else if(ImGui::GetIO().KeyShift){
+                        uint32_t start_index = util::drawlist::drawlist_index(globals::selected_drawlists.back());
+                        uint32_t end_index = ImGui::TableGetRowIndex() - 1;
+                        if(start_index > end_index)
+                            std::swap(start_index, end_index);
+                        uint32_t cur_ind{};
+                        for(const auto& [id_, dl_]: globals::drawlists.read()){
+                            if(cur_ind > end_index)
+                                break;
+                            if(cur_ind > start_index)
+                                globals::selected_drawlists.push_back(id_);
+                            cur_ind++;
+                        }
+                    }
+                    else if(ImGui::GetIO().KeyCtrl)
+                        globals::selected_drawlists.push_back(id);
+                    else
+                        globals::selected_drawlists = {id};
+
+                    // updating the brush selection
+                    globals::brush_edit_data.clear();
+                    if(globals::selected_drawlists.size()){
+                        globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::local;
+                        globals::brush_edit_data.local_brush_id = id;
+                    }
+                }
                 ImGui::TableNextColumn();
                 if(ImGui::Button(("X##" + std::string(id)).c_str())){
                     _popup_ds_id = id;

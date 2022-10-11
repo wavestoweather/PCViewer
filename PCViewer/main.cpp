@@ -190,6 +190,12 @@ int main(int argc,const char* argv[]){
             }
         }
 
+        // disable keyboard navigation if brushes are active
+        if(globals::brush_edit_data.selected_ranges.size() && (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard))
+        	ImGui::GetIO().ConfigFlags ^= ImGuiConfigFlags_NavEnableKeyboard; //deactivate keyboard navigation
+		if (globals::brush_edit_data.selected_ranges.empty() && !(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard)) 
+			ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; //enable keyboard navigation
+
         if(rebuild_swapchain && swapchain_width > 0 && swapchain_height > 0){
             ImGui_ImplVulkan_SetMinImageCount(min_image_count);
             ImGui_ImplVulkanH_CreateOrResizeWindow(globals::vk_context.instance, globals::vk_context.physical_device, globals::vk_context.device, &imgui_window_data, globals::vk_context.graphics_queue_family_index, globals::vk_context.allocation_callbacks, swapchain_width, swapchain_height, min_image_count);

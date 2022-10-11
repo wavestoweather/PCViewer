@@ -87,13 +87,13 @@ public:
         return seed;
     }
 
-    T& find(const T& e){
+    T* find(const T& e){
         for(auto &el: *this)
             if(el == e)
-                return el;
-        throw std::runtime_error{"util::memory_view::find() Element does not exist."};
+                return &el;
+        return end();
     }
-    const T& find(const T& e) const {
+    const T* find(const T& e) const {
         return find(e);
     }
 
@@ -105,6 +105,18 @@ public:
     }
     const T& find(std::function<bool(const T& e)> f) const{
         return find(f);
+    }
+    bool contains(const T& t) const{
+        for(const auto& e: *this)
+            if(e == t)
+                return true;
+        return false;
+    }
+    size_t index_of(const T& t) const{
+        for(size_t i: i_range(_size))
+            if(_data[i] == t)
+                return i;
+        return _size;
     }
 
     T& back(){

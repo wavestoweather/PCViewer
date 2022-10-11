@@ -15,7 +15,7 @@ class brusher{
         VkDeviceAddress data_address;
         VkDeviceAddress index_buffer_address;
         uint32_t        local_global_brush_combine;
-        uint32_t        line_count;
+        uint32_t        data_size;
     };
 
     const std::string_view  compute_shader_path{"shader/brusher.comp.spv"};
