@@ -285,17 +285,19 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
     size_t cur_batch_lines{};
     for(const auto& dl: info.workbench.drawlist_infos.read()){
+        const auto& drawlist = drawlists.at(dl.drawlist_id).read();
         const auto& ds = drawlists.at(dl.drawlist_id).read().dataset_read();
 
-        size_t data_size = globals::drawlists.read().at(dl.drawlist_id).read().const_templatelist().indices.size();
+        size_t data_size = globals::drawlists.read().at(dl.drawlist_id).read().const_templatelist().data_size;
         size_t cur_batch_size = std::min(data_size, batch_size);
         size_t cur_offset = 0;
         do{
             push_constants pc{};
             pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
             pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
+            pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
             pc.index_buffer_address = util::vk::get_buffer_address(dl.drawlist_read().const_templatelist().gpu_indices);
-            pc.identity_index = uint(dl.drawlist_read().const_templatelist().flags.identity_indices);
+            pc.activation_bitset_address = util::vk::get_buffer_address(drawlist.active_indices_bitset_gpu);
             pc.vertex_count_per_line = active_attribute_indices.size();
             pc.color = dl.drawlist_read().appearance_drawlist.read().color;
             vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);

@@ -11,13 +11,15 @@ namespace structures{
 template<typename T>
 using const_unique = std::unique_ptr<const T>;
 
-static const std::string_view default_templatelist_name{"On_load"};
+static const std::string_view templatelist_name_all_indices{"All indices"};
+static const std::string_view templatelist_name_load_behaviour{"On load"};
 struct templatelist{
     std::string                 name{};
     std::vector<uint32_t>       indices{};
     buffer_info                 gpu_indices{};
     std::vector<min_max<float>> min_maxs{};
     float                       point_ratio{};  // currently unused
+    size_t                      data_size{};
     struct flags{
         bool identity_indices: 1;
     }                           flags{};
@@ -52,6 +54,7 @@ struct dataset{
     // optional data for certain data types
     struct data_stream_infos{
         uint32_t                cur_block_index{};
+        size_t                  cur_block_size{};
         uint32_t                block_count{};
         size_t                  block_size{};
         bool                    forward_upload{};

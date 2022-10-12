@@ -20,6 +20,14 @@ void data_workbench::show()
     const static std::string_view popup_add_empty_ds{"Add empty dataset"};
     const static std::string_view popup_delete_dl{"Delete drawlist"};
 
+    bool popup_open_tl_to_brush{false};
+    bool popup_open_tl_to_dltl{false};
+    bool popup_open_add_tl{false};
+    bool popup_open_split_ds{false};
+    bool popup_open_delete_ds{false};
+    bool popup_open_add_empty_ds{false};
+    bool popup_open_delete_dl{false};
+
     ImGui::Begin(id.c_str());
     // 3 column layout with the following layout
     //  |   c1      |    c2     |    c3     |
@@ -67,11 +75,12 @@ void data_workbench::show()
                     if(ImGui::MenuItem(tl->name.c_str())){
                         _popup_tl_id = tl->name;
                         _popup_ds_id = id;
-                        ImGui::OpenPopup(popup_tl_to_dltl.data());
+                        _tl_convert_data.trim = {0, tl->data_size};
+                        popup_open_tl_to_dltl = true;
                     }
                     if(ImGui::Button("Add templatelist")){
                         _popup_ds_id = id;
-                        ImGui::OpenPopup(popup_add_tl.data());
+                        popup_open_add_tl = true;
                     }
                     if(ImGui::Button("Split dataset")){
                         _popup_ds_id = id;
@@ -194,35 +203,40 @@ void data_workbench::show()
     ImGui::End();
 
     // popups -------------------------------------------------------
+    if(popup_open_tl_to_dltl)
+        ImGui::OpenPopup(popup_tl_to_dltl.data());
     if(ImGui::BeginPopupModal(popup_tl_to_dltl.data())){
         const auto& tl = *globals::datasets.read().at(_popup_ds_id).read().templatelist_index.at(_popup_tl_id);
 		if(ImGui::BeginTabBar("Destination")){
 			if(ImGui::BeginTabItem("Drawlist")){
-				_ds_convert_data.dst = structures::dataset_convert_data::destination::drawlist;
+				_tl_convert_data.dst = structures::templatelist_convert_data::destination::drawlist;
 				ImGui::Text("%s", (std::string("Creating a DRAWLIST list from ") + tl.name).c_str());
 				ImGui::EndTabItem();
 			}
 			if(ImGui::BeginTabItem("TemplateList")){
-				_ds_convert_data.dst = structures::dataset_convert_data::destination::templatelist;
+				_tl_convert_data.dst = structures::templatelist_convert_data::destination::templatelist;
 				ImGui::Text("%s", (std::string("Creating a TEMPLATELIST from ") + tl.name).c_str());
 				ImGui::EndTabItem();
 			}
 			ImGui::EndTabBar();
 		}
-        ImGui::InputText("Output name", &_ds_convert_data.dst_name);
+        ImGui::InputText("Output name", &_tl_convert_data.dst_name);
         if(ImGui::CollapsingHeader("Subsample/Trim")){
-            ImGui::Checkbox("Random subsampling (If enabled subsampling rate is transformed into probaility)", &_ds_convert_data.random_subsampling);
-            if(ImGui::InputInt("Subsampling Rate", &_ds_convert_data.subsampling)) _ds_convert_data.subsampling = std::max(_ds_convert_data.subsampling, 1);
-            if(ImGui::InputScalarN("Trim indcies", ImGuiDataType_U64, _ds_convert_data.trim.data(), 2)){
-				_ds_convert_data.trim.min = std::clamp<size_t>(_ds_convert_data.trim.min, 0u, _ds_convert_data.trim.max - 1);
-				_ds_convert_data.trim.max = std::clamp<size_t>(_ds_convert_data.trim.max, _ds_convert_data.trim.min + 1, size_t(tl.indices.size()));
+            ImGui::Checkbox("Random subsampling (If enabled subsampling rate is transformed into probaility)", &_tl_convert_data.random_subsampling);
+            if(ImGui::InputInt("Subsampling Rate", &_tl_convert_data.subsampling)) _tl_convert_data.subsampling = std::max(_tl_convert_data.subsampling, 1);
+            if(ImGui::InputScalarN("Trim indcies", ImGuiDataType_U64, _tl_convert_data.trim.data(), 2)){
+				_tl_convert_data.trim.min = std::clamp<size_t>(_tl_convert_data.trim.min, 0u, _tl_convert_data.trim.max - 1);
+				_tl_convert_data.trim.max = std::clamp<size_t>(_tl_convert_data.trim.max, _tl_convert_data.trim.min + 1, size_t(tl.data_size));
 			}
         }
 
         if(ImGui::Button("Create") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
             ImGui::CloseCurrentPopup();
-            util::dataset::convert_dataset(_ds_convert_data);
+            util::dataset::convert_templatelist(_tl_convert_data);
         }
+        ImGui::SameLine();
+        if(ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
 
         ImGui::EndPopup();
     }
@@ -232,6 +246,8 @@ void data_workbench::show()
         ImGui::EndPopup();
     }
 
+    if(popup_open_add_tl)
+        ImGui::OpenPopup(popup_add_tl.data());
     if(ImGui::BeginPopupModal(popup_add_tl.data())){
         // TODO: implemnet
         ImGui::EndPopup();

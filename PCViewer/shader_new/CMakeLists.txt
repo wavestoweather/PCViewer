@@ -1,5 +1,6 @@
 ## compile shaders
 file(GLOB shaders "*.comp" "*.vert" "*.frag")
+file(GLOB headers "*.glsl")
 
 foreach(shader IN LISTS shaders)
     find_program(GLSLC glslc)
@@ -13,7 +14,7 @@ foreach(shader IN LISTS shaders)
     add_custom_command(
         OUTPUT ${current_shader_out_path}
         COMMAND ${GLSLC} --target-spv=spv1.4 -o ${current_shader_out_path} ${current_shader_path}
-        DEPENDS ${current_shader_path}
+        DEPENDS ${current_shader_path} ${headers}
         IMPLICIT_DEPENDS CXX ${current_shader_path}
         VERBATIM)
     list(APPEND spriv_binary_files ${current_shader_out_path})

@@ -29,8 +29,8 @@ layout(push_constant) uniform PCs{
     uint64_t    activation_bitset_address;
 	uint64_t 	data_header_address;
 	uint64_t	index_buffer_address;
-	uint		data_size;
     uint        brush_combination;
+	uint		data_size;
 };
 
 const uint combine_and = 0;
@@ -40,6 +40,7 @@ const uint combine_xor = 2;
 const uint local_size = 256;
 layout(local_size_x = local_size) in;
 
+// contains maxAmtOfColumns variable (maybe should be changed to specialization constants)
 #include "data_access.glsl"
 
 shared uint act[local_size];
@@ -57,73 +58,85 @@ void write_activations(uint iteration, bool a){
     }
 }
 
-uint check_activations(inout Brushes brushes){
-    uint ret = 0;
-    
-    return ret;
+bool check_activations(uint index, in Brushes brushes, inout float cached_values[maxAmtOfColumns]){
+    bool a = brushes.range_brush_count == 0 || brush_combination == combine_and;
+    for(int range_brush = 0; range_brush < brushes.range_brush_count; ++range_brush){
+        bool inside = true;
+        uint brush_offset = uint(brushes.data[range_brush]);
+        for(int axis_map = 0; axis_map < brushes.data[brush_offset]; ++axis_map){
+            uint axis_map_offset = uint(brushes.data[brush_offset + 1 + axis_map]);
+            uint axis = uint(brushes.data[axis_map_offset + 1]);
+            if(isnan(cached_values[axis]))
+                cached_values[axis] = get_packed_data(index, axis);
+            float data = cached_values[axis];
+            bool in_range = false;
+            for(int range = 0; range < brushes.data[axis_map_offset]; ++range){
+                float min = brushes.data[axis_map_offset + 2 + 2 * range];
+                float max = brushes.data[axis_map_offset + 2 + 2 * range + 1];
+                if(data >= min && data <= max){
+                    in_range = true;
+                    break;
+                }
+            }
+            inside = inside && in_range;
+            if(!inside)
+                break;
+        }
+        if(brush_combination == combine_and && !inside)
+            return false;
+        else if(brush_combination == combine_or && inside)
+            return true;
+    }
+
+    // lasso brushes (TODO)
+
+    return a;
 }
 
 // it is guaranteed that if the pipeline is executed there do exist brushes (so check for on brushes is useless)
 void main(){
-    if(gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 >= data_size)
+    if(gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 + gl_LocalInvocationID.x >= data_size)
         return;
+
+    float cached_values[maxAmtOfColumns];
 
     ActivationBitset activation_bitset = ActivationBitset(activation_bitset_address);
     bool identity_index = index_buffer_address == 0;
     IndexBuffer index_buffer;
     if(!identity_index)
         index_buffer = IndexBuffer(index_buffer_address);
-    Brushes global_brushes;
-    if(brushes_address != 0)
-        global_brushes = Brushes(global_brushes_address);
-    Brushes local_brushes = Brushes(local_brushes_address);
 
     uint iteration = 0;
-    for(uint i = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x; i < data_size && i < (gl_WorkGroupID.x + 1) * gl_WorkGroupSize.x; i += gl_WorkGroupSize.x, ++iteration){
-        bool a = brushes.range_brush_count == 0 || brush_combination == combine_and;
+    for(uint i = gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 + gl_LocalInvocationID.x; i < data_size && i < (gl_WorkGroupID.x + 1) * gl_WorkGroupSize.x * 32; i += gl_WorkGroupSize.x, ++iteration){
+        for(int j = 0; j < maxAmtOfColumns; ++j)
+            cached_values[j] = nan;
+        
         uint index = i;
         if(!identity_index)
             index = index_buffer.i[index];
 
+        bool a = false;
         // global range brushes
-        for(int range_brush = 0; range_brush < brushes.range_brush_count; ++range_brush){
-            bool inside = true;
-            uint brush_offset = uint(brushes.data[range_brush]);
-            for(int axis_map = 0; axis_map < brushes.data[brush_offset]; ++axis_map){
-                uint axis_map_offset = uint(brushes.data[brush_offset + 1 + axis_map]);
-                uint axis = uint(brushes.data[axis_map_offset + 1]);
-                float data = get_packed_data(index, axis);
-                bool in_range = false;
-                for(int range = 0; range < brushes.data[axis_map_offset]; ++range){
-                    float min = brushes.data[axis_map_offset + 2 + 2 * range];
-                    float max = brushes.data[axis_map_offset + 2 + 2 * range + 1];
-                    if(data >= min && data <= max){
-                        in_range = true;
-                        break;
-                    }
-                }
-                inside = inside && in_range;
-                if(!inside)
-                    break;
-            }
-            if(brush_combination == combine_and && !inside){
-                a = false;
-                break;
-            }
-            else if(brush_combination == combine_or && inside){
-                a = true;
-                break;
-            }
+        if(global_brushes_address != 0)
+            a = check_activations(index, Brushes(global_brushes_address), cached_values);
+        // local range brushes
+        if(global_brushes_address == 0)
+            a = check_activations(index, Brushes(local_brushes_address), cached_values);
+        else if(local_brushes_address != 0 && ((a == true && brush_combination == combine_and) || (a == false && brush_combination == combine_or))){
+            bool v = check_activations(index, Brushes(local_brushes_address), cached_values);
+            if(brush_combination == combine_and)
+                a = a && v;
+            else if(brush_combination == combine_or)
+                a = a || v;
         }
-
-        // lasso brushes (TODO)
+        //a = index < 4000;
+        //a = false;
+        
         write_activations(iteration, a);
     }
-    
-    for(int i = 0; i < 32; ++i)
-        write_activations(iteration, bool((activations >> i) & 1);
     barrier();
 
     // writeout of activation
-    activation_bitset.i[gl_GlobalInvocationID.x] = act[gl_LocalInvocationID.x];
+    if(gl_GlobalInvocationID.x / 32 < data_size)
+        activation_bitset.i[gl_GlobalInvocationID.x] = act[gl_LocalInvocationID.x];
 }

@@ -10,7 +10,7 @@ class data_workbench: public structures::workbench, public structures::drawlist_
     std::string_view                _popup_tl_id{};
     std::string                     _open_filename{};
     
-    structures::dataset_convert_data _ds_convert_data{};
+    structures::templatelist_convert_data _tl_convert_data{};
 
 public:
     data_workbench(std::string_view id): workbench(id) {};

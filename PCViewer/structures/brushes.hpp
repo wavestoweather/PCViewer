@@ -33,6 +33,8 @@ struct brushes{
     range_brushes_map   ranges;
     lasso_brushes_map   lassos;
     buffer_info         brushes_gpu;
+
+    bool empty() const {for(const auto& [id, range]: ranges) if(range.size()) return false; for(const auto& [id, lasso]: lassos) if(lasso.size()) return false ;return true;}
 };
 using tracked_brushes = change_tracker<brushes>;
 

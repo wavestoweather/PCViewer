@@ -343,6 +343,8 @@ inline void wait_semaphore(VkCommandPool commandPool, VkQueue queue, VkSemaphore
 }
 
 inline VkDeviceAddress get_buffer_address(const structures::buffer_info& buffer){
+    if(!buffer)
+        return {};
     VkBufferDeviceAddressInfo info{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
     info.buffer = buffer.buffer;
     return vkGetBufferDeviceAddress(globals::vk_context.device, &info);

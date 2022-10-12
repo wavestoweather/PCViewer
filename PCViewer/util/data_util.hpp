@@ -15,6 +15,7 @@ struct gpu_header{
     uint32_t dimension_count;
     uint32_t column_count;
     uint32_t data_address_offset;
+    uint32_t _;
 };
 
 template<typename T = float>

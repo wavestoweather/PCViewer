@@ -33,11 +33,13 @@ public:
     enum struct brush_combination: uint32_t{
         and_c,
         or_c,
+        xor_c,
         COUNT
     };
     const structures::enum_names<brush_combination> brush_combination_names{
         "and",
-        "or"
+        "or",
+        "xor"
     };
     struct brush_info{
         std::string_view                drawlist_id{};

@@ -43,9 +43,9 @@ struct drawlist{
     change_tracker<median_type> median_typ{};  
     dynamic_bitset<uint32_t> active_indices_bitset{};                
 
-    buffer_info             index_buffer{};
     buffer_info             median_buffer{};                // linear array buffer containing the median values for all attributes
     buffer_info             active_indices_bitset_gpu{};
+    buffer_info             priority_colors_gpu{};
     std::vector<buffer_info> derived_data_infos{};          // vulkan buffer need e.g. for large vis counting
     tracked_brushes         local_brushes{};
 

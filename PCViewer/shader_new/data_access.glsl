@@ -2,6 +2,7 @@ layout(buffer_reference, scalar) buffer DataHeader{
     uint dimension_count;
     uint column_count;
     uint data_address_offset;
+    uint _;
     uint data[];
 };
 
@@ -10,6 +11,7 @@ layout(buffer_reference, scalar) buffer Data{
 };
 
 const uint maxAmtOfColumns = 50;
+#define nan uintBitsToFloat(0x7ff80000);
 
 float get_packed_data(uint index, uint column){
     DataHeader data_header = DataHeader(data_header_address);

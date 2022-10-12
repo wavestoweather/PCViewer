@@ -231,7 +231,7 @@ void parallel_coordinates_workbench::show(){
                 hovered_region = structures::brush_edit_data::brush_region::top;
             else if(util::point_in_box(mouse_pos, {x, y + height}, {x + setting.brush_box_width, y + height + setting.brush_box_border_hover_width}))
                 hovered_region = structures::brush_edit_data::brush_region::bottom;
-            if(!ImGui::IsWindowFocused())
+            if(!ImGui::IsWindowHovered())
                 hovered_region = structures::brush_edit_data::brush_region::COUNT;  // resetting hover to avoid dragging when window is not focues
             bool brush_hovered = hovered_region != structures::brush_edit_data::brush_region::COUNT;
             
@@ -340,7 +340,7 @@ void parallel_coordinates_workbench::show(){
             if(!attr_ref.active)
                 continue;
             float x = brush_gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.brush_box_width / 2;
-            bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + setting.brush_box_width, pic_pos.y + pic_size.y}) && ImGui::IsWindowFocused();
+            bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + setting.brush_box_width, pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
             if(!any_hover && axis_hover && globals::brush_edit_data.selected_ranges.empty()){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 

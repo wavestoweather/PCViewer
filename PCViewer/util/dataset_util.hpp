@@ -60,7 +60,7 @@ enum class data_type_preference{
 globals::dataset_t open_dataset(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, data_type_preference data_type_pref = data_type_preference::float_precision);
 
 
-void convert_dataset(const structures::dataset_convert_data& convert_data);
+void convert_templatelist(const structures::templatelist_convert_data& convert_data);
 
 inline void fill_query_attributes(){
     // the attribute query is done for the first dataset to open

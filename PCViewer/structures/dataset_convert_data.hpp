@@ -3,7 +3,7 @@
 #include <min_max.hpp>
 
 namespace structures{
-struct dataset_convert_data{
+struct templatelist_convert_data{
     enum class destination: uint32_t{
         drawlist,
         templatelist,

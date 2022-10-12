@@ -19,6 +19,10 @@ layout(buffer_reference, scalar) buffer IndexBuffer{
 	uint i[];
 };
 
+layout(buffer_reference, scalar) buffer ActivationBitset{
+	uint i[];
+};
+
 layout(buffer_reference, scalar) buffer PriorityValues{
 	uint8_t vals[];
 };
@@ -30,10 +34,9 @@ layout(push_constant) uniform PCs{
 	uint64_t 	data_header_address;
 	uint64_t	priorities_address;
 	uint64_t	index_buffer_address;
+	uint64_t	activation_bitset_address;
 	uint		vertex_count_per_line;		// is at least as high as attribute_count (when equal, polyline rendering)
 	float 		padding;
-	uint		identity_index;				// 1 if index buffer readout is not needed (index buffer is simply iota)
-	uint 		_;
 	vec4 		color;
 };
 
@@ -45,10 +48,21 @@ void main() {
 	int data_index = gl_InstanceIndex;
 	int vertex_index = gl_VertexIndex;
 
+
+	ActivationBitset activation_bitset = ActivationBitset(activation_bitset_address);
+	bool act = (activation_bitset.i[data_index / 32] & (1 << (data_index % 32))) > 0;
+	if(!act){
+		out_color = vec4(0);
+		gl_Position = vec4(-2);
+		return;
+	}
+
 	AttributeInfos attr_infos = AttributeInfos(attribute_info_address);
-	IndexBuffer index_buffer = IndexBuffer(index_buffer_address);
-	if(identity_index == 0)
+	
+	if(index_buffer_address != 0){
+		IndexBuffer index_buffer = IndexBuffer(index_buffer_address);
 		vertex_index = int(index_buffer.i[vertex_index]);
+	}
 
 	float gap = 2.0f/(vertex_count_per_line - 1.0f);
 	float x = -1.0f + vertex_index * gap;
