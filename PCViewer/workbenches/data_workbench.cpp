@@ -196,6 +196,24 @@ void data_workbench::show()
         // c3
         ImGui::TableNextColumn();
 
+        if(ImGui::BeginTable("glboal_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit)){
+            ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Active");
+            ImGui::TableSetupColumn("Delete");
+            
+            // top row
+            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Name");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Active");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Delete");
+            ImGui::TableNextColumn();
+
+            ImGui::EndTable();
+        }
 
         ImGui::EndTable();
     }

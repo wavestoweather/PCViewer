@@ -506,7 +506,7 @@ void parallel_coordinates_workbench::show(){
 
         // general settings
         ImGui::BeginVertical("GeneralSettings");
-        ImGui::BeginChild("testwarpp",{200, 0});
+        ImGui::BeginChild("testwarpp",{400, 0});
         // activating the attributes
         struct attr_ref_t{
             std::string_view name; bool* active;
@@ -560,7 +560,12 @@ void parallel_coordinates_workbench::show(){
                 const auto& drawlist = globals::drawlists.read().at(dl.drawlist_id);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("%s", drawlist.read().name.c_str());
+                bool selected = util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id);
+                if(ImGui::Selectable((drawlist.read().name + "##pc_wb").c_str(), selected)){
+                    globals::selected_drawlists.clear();
+                    if(!selected)
+                        globals::selected_drawlists.push_back(drawlist.read().name);
+                }
                 ImGui::TableNextColumn();
                 if(ImGui::ArrowButton(("##u" + dl_string).c_str(), ImGuiDir_Up))
                     drawlist_infos.write();
