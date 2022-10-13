@@ -201,7 +201,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 }
 
 const structures::buffer_info& parallel_coordinates_renderer::get_or_resize_info_buffer(size_t byte_size){
-    if(byte_size > util::vma::get_buffer_size(_attribute_info_buffer)){
+    if(byte_size > _attribute_info_buffer.size){
         if(_attribute_info_buffer)
             util::vk::destroy_buffer(_attribute_info_buffer);
         

@@ -118,7 +118,7 @@ inline void upload_changed_brushes(){
         for(const auto& [id, lasso_brush]: globals::global_brushes.read().lassos)
             lasso_brushes.push_back(&lasso_brush);
         global_brush_data = create_gpu_brush_data(range_brushes, lasso_brushes);
-        if(global_brush_data.byte_size() > util::vma::get_buffer_size(globals::global_brushes.read().brushes_gpu)){
+        if(global_brush_data.byte_size() > globals::global_brushes.read().brushes_gpu.size){
             util::vk::destroy_buffer(globals::global_brushes().brushes_gpu);
             auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, global_brush_data.byte_size());
             auto alloc_info = util::vma::initializers::allocationCreateInfo();
@@ -145,7 +145,7 @@ inline void upload_changed_brushes(){
             local_brush_data.push_back(create_gpu_brush_data(range_brushes, lasso_brushes));
             auto& brush_data = local_brush_data.back();
 
-            if(brush_data.byte_size() > util::vma::get_buffer_size(dl.read().local_brushes.read().brushes_gpu)){
+            if(brush_data.byte_size() > dl.read().local_brushes.read().brushes_gpu.size){
                 util::vk::destroy_buffer(dl.read().local_brushes.read().brushes_gpu);
                 auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, brush_data.byte_size());
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();

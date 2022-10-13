@@ -56,7 +56,7 @@ class data{
     }
 
     uint64_t header_size() const{
-        uint64_t size = 3;                  // header fields
+        uint64_t size = 4;                  // header fields
         size += dimension_sizes.size();     // dimension sizes
         size += column_dimensions.size();   // column dimension counts
         size += column_dimensions.size();   // colummn dimension offsets

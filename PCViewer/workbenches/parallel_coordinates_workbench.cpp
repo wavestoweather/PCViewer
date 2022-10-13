@@ -422,7 +422,7 @@ void parallel_coordinates_workbench::show(){
                 const auto& drawlist = globals::drawlists.read().at(dl.drawlist_id);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text(drawlist.read().name.c_str());
+                ImGui::Text("%s", drawlist.read().name.c_str());
                 ImGui::TableNextColumn();
                 if(ImGui::ArrowButton(("##u" + dl_string).c_str(), ImGuiDir_Up))
                     drawlist_infos.write();

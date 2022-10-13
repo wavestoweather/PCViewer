@@ -83,6 +83,7 @@ inline structures::buffer_info create_buffer(const VkBufferCreateInfo& buffer_in
     structures::buffer_info info{};
     auto res = vmaCreateBuffer(globals::vk_context.allocator, &buffer_info, &alloc_info, &info.buffer, &info.allocation, out_alloc_info);
     check_vk_result(res);
+    info.size = buffer_info.size;
     globals::vk_context.registered_buffers.insert(info);
     return info;
 }
