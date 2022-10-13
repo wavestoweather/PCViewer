@@ -8,6 +8,14 @@
 namespace workbenches{
 
 class parallel_coordinates_workbench: public structures::workbench, public structures::drawlist_dataset_dependency{
+public:
+    struct attribute_order_info{
+        uint32_t    attribut_index{};
+        bool        active{true};
+
+        bool operator==(const attribute_order_info& o) const {return attribut_index == o.attribut_index && active == o.active;}
+    };
+private:
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;
 
@@ -17,6 +25,7 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
 
     void _update_plot_image();
     void _draw_setting_list();
+    void _swap_attributes(const attribute_order_info& from, const attribute_order_info& to);
 public:
     enum histogram_type: uint32_t{
         none,
@@ -62,10 +71,6 @@ public:
         VkSampleCountFlagBits   image_samples{VK_SAMPLE_COUNT_8_BIT};
         VkFormat                image_format{VK_FORMAT_R16G16B16A16_UNORM};
         ImTextureID             image_descriptor{}; // called descriptor as internally it is a descriptor
-    };
-    struct attribute_order_info{
-        uint32_t    attribut_index{};
-        bool        active{true};
     };
     enum class render_strategy{
         all,

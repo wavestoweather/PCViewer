@@ -44,6 +44,24 @@ void parallel_coordinates_workbench::_draw_setting_list(){
     ImGui::InputInt("Axis tick count", &setting.axis_tick_count);
 }
 
+void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info& from, const attribute_order_info& to){
+    auto from_it = std::find(attributes_order_info().begin(), attributes_order_info().end(), from);
+    auto to_it = std::find(attributes_order_info().begin(), attributes_order_info().end(), to);
+    if(ImGui::IsKeyDown(ImGuiKey_ModCtrl)){
+        int from_ind = std::distance(attributes_order_info().begin(), from_it);
+        int to_ind = std::distance(attributes_order_info().begin(), to_it);
+        int lower = std::min(from_ind, to_ind);
+        int higher = std::max(from_ind, to_ind);
+        int direction = from_ind < to_ind ? -1 : 1; // direction is the shuffle direction of all elements except from
+        int start_ind = from_ind - direction;
+        for(;start_ind >= lower && start_ind <= higher; start_ind -= direction)
+            attributes_order_info()[start_ind + direction] = attributes_order_info()[start_ind];
+        attributes_order_info()[to_ind] = from;
+    }
+    else
+        std::swap(*from_it, *to_it);
+}
+
 void parallel_coordinates_workbench::show(){
     if(!active)
         return;
@@ -132,7 +150,7 @@ void parallel_coordinates_workbench::show(){
                 too_long = text_size > button_size.x;
                 cur_substr = cur_substr.substr(0, cur_substr.size() - 4) + "...";
             }
-            name = cur_substr;
+            name = cur_substr + "##" + name;
         }
         ImGui::Button(name.c_str(), button_size);
         if (name != attributes.read()[att_ref.attribut_index].id && ImGui::IsItemHovered()) {
@@ -151,16 +169,16 @@ void parallel_coordinates_workbench::show(){
         }
 
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-            const attribute_order_info* p[] = {&att_ref};        //holding the index in the pcAttriOrd array and the value of it
-            ImGui::SetDragDropPayload("ATTRIBUTE", p, sizeof(p));
+            const attribute_order_info p = att_ref;        //holding the attribute reference which should be switched
+            ImGui::SetDragDropPayload("ATTRIBUTE", &p, sizeof(p));
             ImGui::Text("Swap %s", name.c_str());
             ImGui::EndDragDropSource();
         }
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
-                const attribute_order_info* other = (const attribute_order_info*)payload->Data;
+                const attribute_order_info other = *(const attribute_order_info*)payload->Data;
 
-                //reorder_attributes(c, other[0], io.KeyCtrl);
+                _swap_attributes(other, att_ref);
             }
         }
         cur_offset += button_gap;
@@ -489,6 +507,18 @@ void parallel_coordinates_workbench::show(){
         // general settings
         ImGui::BeginVertical("GeneralSettings");
         ImGui::BeginChild("testwarpp",{200, 0});
+        // activating the attributes
+        struct attr_ref_t{
+            std::string_view name; bool* active;
+            bool operator<(const attr_ref_t& o) const {return name < o.name;}
+        };
+        std::set<attr_ref_t> attribute_set;
+        for(auto& att_ref: attributes_order_info.ref_no_track())
+            attribute_set.insert(attr_ref_t{attributes.read()[att_ref.attribut_index].id, &att_ref.active});
+        for(auto& a: attribute_set){
+            if(ImGui::Checkbox((std::string(a.name) + "##activation").c_str(), a.active))
+                attributes_order_info();
+        }
         if(ImGui::TreeNode("General settings")){
             _draw_setting_list();
             ImGui::TreePop();
