@@ -46,9 +46,10 @@ void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer comman
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
     if(!_pipelines.contains(output_specs)){
-        std::cout << util::memory_view<const uint32_t>(util::memory_view(output_specs)) << std::endl;
-        if(logger.logging_level >= logging::level::l_4)
-            logger << "[info] parallel_coordinates_renderer::get_or_create_pipeline() creating new pipeline for output_specs " << util::memory_view<const uint32_t>(util::memory_view(output_specs)) << logging::endl;
+        if(logger.logging_level >= logging::level::l_4){
+            std::stringstream ss; ss << util::memory_view<const uint32_t>(util::memory_view(output_specs));
+            logger << "[info] parallel_coordinates_renderer::get_or_create_pipeline() creating new pipeline for output_specs " << ss.str() << logging::endl;
+        }
 
         if(_pipelines.size() > max_pipeline_count){
             auto [pipeline, time] = *std::min_element(_pipeline_last_use.begin(), _pipeline_last_use.end(), [](const auto& l, const auto& r){return l.second < r.second;});
@@ -234,13 +235,14 @@ void parallel_coordinates_renderer::render(const render_info& info){
     auto first_dl = info.workbench.drawlist_infos.read()[0].drawlist_id;
     auto data_type = globals::drawlists.read().at(first_dl).read().dataset_read().data_flags.half ? structures::parallel_coordinates_renderer::data_type::half_t: structures::parallel_coordinates_renderer::data_type::float_t;
     output_specs out_specs{
+        info.workbench.plot_data.read().image_view,
+        info.workbench.plot_data.read().image_format, 
+        info.workbench.plot_data.read().image_samples, 
         info.workbench.plot_data.read().width, 
         info.workbench.plot_data.read().height, 
-        info.workbench.plot_data.read().image_samples, 
-        info.workbench.plot_data.read().image_format, 
         info.workbench.render_type.read(), 
         data_type, 
-        info.workbench.plot_data.read().image_view};
+        };
     auto pipeline_info = get_or_create_pipeline(out_specs);
 
     structures::dynamic_struct<attribute_infos, ImVec4> attribute_infos(active_attribute_indices.size());

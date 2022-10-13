@@ -45,13 +45,13 @@ namespace parallel_coordinates_renderer{
     };
 
     struct output_specs{
+        VkImageView             plot_image_view{};
+        VkFormat                format{};
+        VkSampleCountFlagBits   sample_count{};
         uint32_t                width{};
         uint32_t                height{};
-        VkSampleCountFlagBits   sample_count{};
-        VkFormat                format{};
         render_type             render_typ{};
         data_type               data_typ{};
-        VkImageView             plot_image_view{};
 
         bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equalData(util::memory_view<const uint32_t>(util::memory_view(o)));};
     };
