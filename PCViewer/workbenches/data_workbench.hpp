@@ -17,13 +17,13 @@ public:
 
     void show() override;
 
-    void add_datasets(const util::memory_view<std::string_view>& datasetId) override {};
-    void signal_dataset_update(const util::memory_view<std::string_view>& datasetIds, update_flags flags) override {};
-    void remove_datasets(const util::memory_view<std::string_view>& datasetId) override {};
+    void add_datasets(const util::memory_view<std::string_view>& datasetId, const structures::gpu_sync_info& sync_info = {}) override {};
+    void signal_dataset_update(const util::memory_view<std::string_view>& datasetIds, update_flags flags, const structures::gpu_sync_info& sync_info = {}) override {};
+    void remove_datasets(const util::memory_view<std::string_view>& datasetId, const structures::gpu_sync_info& sync_info = {}) override {};
 
-    void add_drawlists(const util::memory_view<std::string_view>& drawlistId) override {};
-    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlistIds) override {};
-    void remove_drawlists(const util::memory_view<std::string_view>& drawlistId) override {};
+    void add_drawlists(const util::memory_view<std::string_view>& drawlistId, const structures::gpu_sync_info& sync_info = {}) override {};
+    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlistIds, const structures::gpu_sync_info& sync_info = {}) override {};
+    void remove_drawlists(const util::memory_view<std::string_view>& drawlistId, const structures::gpu_sync_info& sync_info = {}) override {};
 };
 
 }

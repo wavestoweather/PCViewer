@@ -10,10 +10,10 @@
 #extension GL_KHR_shader_subgroup_ballot: enable
 
 layout(buffer_reference, scalar) buffer ActivationBitset{
-	uint i[];
+    uint i[];
 };
 layout(buffer_reference, scalar) buffer IndexBuffer{
-	uint i[];
+    uint i[];
 };
 layout(buffer_reference, scalar) buffer Brushes{
     uint range_brush_count;
@@ -27,10 +27,10 @@ layout(push_constant) uniform PCs{
     uint64_t    local_brushes_address;
     uint64_t    global_brushes_address;
     uint64_t    activation_bitset_address;
-	uint64_t 	data_header_address;
-	uint64_t	index_buffer_address;
+    uint64_t     data_header_address;
+    uint64_t    index_buffer_address;
     uint        brush_combination;
-	uint		data_size;
+    uint        data_size;
 };
 
 const uint combine_and = 0;

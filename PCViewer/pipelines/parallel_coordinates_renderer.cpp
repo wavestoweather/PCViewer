@@ -46,6 +46,7 @@ void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer comman
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){
     if(!_pipelines.contains(output_specs)){
+        std::cout << util::memory_view<const uint32_t>(util::memory_view(output_specs)) << std::endl;
         if(logger.logging_level >= logging::level::l_4)
             logger << "[info] parallel_coordinates_renderer::get_or_create_pipeline() creating new pipeline for output_specs " << util::memory_view<const uint32_t>(util::memory_view(output_specs)) << logging::endl;
 
@@ -219,9 +220,9 @@ parallel_coordinates_renderer& parallel_coordinates_renderer::instance(){
 
 void parallel_coordinates_renderer::render(const render_info& info){
     struct attribute_infos{
-	    uint 	attribute_count;				// amount of active attributes
-	    uint 	_, __;
-	    uint 	data_flags;
+        uint     attribute_count;                // amount of active attributes
+        uint     _, __;
+        uint     data_flags;
     };
 
     std::vector<uint32_t> active_attribute_indices;     // these inlcude the order
@@ -264,7 +265,10 @@ void parallel_coordinates_renderer::render(const render_info& info){
     _pre_render_commands(_render_commands[0], out_specs);
     VkClearAttachment clear_value{};
     clear_value.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    clear_value.clearValue.color.float32[3] = 1;
+    clear_value.clearValue.color.float32[0] = info.workbench.setting.pc_background.x;
+    clear_value.clearValue.color.float32[1] = info.workbench.setting.pc_background.y;
+    clear_value.clearValue.color.float32[2] = info.workbench.setting.pc_background.z;
+    clear_value.clearValue.color.float32[3] = info.workbench.setting.pc_background.w;
     VkClearRect clear_rect{};
     clear_rect.layerCount = 1;
     clear_rect.rect.extent = {out_specs.width, out_specs.height};

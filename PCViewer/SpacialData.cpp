@@ -8,28 +8,28 @@ int SpacialData::rlonSize = sizeof(rlon) / sizeof(rlon[0]);
 int SpacialData::rlatSize = sizeof(rlat) / sizeof(rlat[0]);
 
 int SpacialData::getR(float a, float* arr, int start, int end) {
-	int h = (start + end) >> 1;
+    int h = (start + end) >> 1;
 
-	if (start == end)
-		return -1;
+    if (start == end)
+        return -1;
 
-	if (fabs(arr[h] - a) < .0000001f)
-		return h;
+    if (fabs(arr[h] - a) < .0000001f)
+        return h;
 
-	if (a < arr[h])
-		return getR(a, arr, start, h);
+    if (a < arr[h])
+        return getR(a, arr, start, h);
 
-	return getR(a, arr, h + 1, end);
+    return getR(a, arr, h + 1, end);
 }
 
 int SpacialData::getAltitudeIndex(float a) {
-	return getR(a, altitude, 0, altitudeSize);
+    return getR(a, altitude, 0, altitudeSize);
 };
 
 int SpacialData::getRlonIndex(float a) {
-	return getR(a, rlon, 0, rlonSize);
+    return getR(a, rlon, 0, rlonSize);
 };
 
 int SpacialData::getRlatIndex(float a) {
-	return getR(a, rlat, 0, rlatSize);
+    return getR(a, rlat, 0, rlatSize);
 };

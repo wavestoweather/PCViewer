@@ -110,14 +110,14 @@ public:
         if(res)
             throw std::runtime_error("netcdf_file::read_variable() Failed to get variable type");
         switch(type){
-			case NC_FLOAT:{
+            case NC_FLOAT:{
                 std::vector<float> vals(data_size);
                 res = nc_get_var_float(_file_handle, variable, vals.data());
                 if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable values");
                 float f;
                 res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
-			    if(res)
+                if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
                 
                 if constexpr (std::is_same_v<T, float>)
@@ -126,17 +126,17 @@ public:
                     ret = std::vector<T>(vals.begin(), vals.end());
                 if(has_fill != 1)
                     fill = {static_cast<T>(f)};
-			    break;
+                break;
             }
-			case NC_DOUBLE:
-			{
+            case NC_DOUBLE:
+            {
                 std::vector<double> vals(data_size);
                 res = nc_get_var_double(_file_handle, variable, vals.data());
                 if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable values");
                 double f;
                 res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
-			    if(res)
+                if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
                 
                 if constexpr (std::is_same_v<T, double>)
@@ -145,17 +145,17 @@ public:
                     ret = std::vector<T>(vals.begin(), vals.end());
                 if(has_fill != 1)
                     fill = {static_cast<T>(f)};
-			    break;
-			}
-			case NC_INT:
-			{
+                break;
+            }
+            case NC_INT:
+            {
                 std::vector<int> vals(data_size);
                 res = nc_get_var_int(_file_handle, variable, vals.data());
                 if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable values");
                 int f;
                 res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
-			    if(res)
+                if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
                 
                 if constexpr (std::is_same_v<T, int>)
@@ -164,17 +164,17 @@ public:
                     ret = std::vector<T>(vals.begin(), vals.end());
                 if(has_fill != 1)
                     fill = {static_cast<T>(f)};
-			    break;
-			}
-			case NC_UINT:
-			{
+                break;
+            }
+            case NC_UINT:
+            {
                 std::vector<uint32_t> vals(data_size);
                 res = nc_get_var_uint(_file_handle, variable, vals.data());
                 if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable values");
                 uint32_t f;
                 res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
-			    if(res)
+                if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
                 
                 if constexpr (std::is_same_v<T, uint32_t>)
@@ -183,16 +183,16 @@ public:
                     ret = std::vector<T>(vals.begin(), vals.end());
                 if(has_fill != 1)
                     fill = {static_cast<T>(f)};
-			    break;
-			}
-			case NC_UINT64:{
-				std::vector<unsigned long long> vals(data_size);
+                break;
+            }
+            case NC_UINT64:{
+                std::vector<unsigned long long> vals(data_size);
                 res = nc_get_var_ulonglong(_file_handle, variable, vals.data());
                 if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable values");
                 unsigned long long f;
                 res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
-			    if(res)
+                if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
                 
                 if constexpr (std::is_same_v<T, unsigned long long>)
@@ -201,16 +201,16 @@ public:
                     ret = std::vector<T>(vals.begin(), vals.end());
                 if(has_fill != 1)
                     fill = {static_cast<T>(f)};
-			    break;
-			}
-			case NC_INT64:{
-				std::vector<long long> vals(data_size);
+                break;
+            }
+            case NC_INT64:{
+                std::vector<long long> vals(data_size);
                 res = nc_get_var_longlong(_file_handle, variable, vals.data());
                 if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable values");
                 long long f;
                 res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
-			    if(res)
+                if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
                 
                 if constexpr (std::is_same_v<T, long long>)
@@ -219,17 +219,17 @@ public:
                     ret = std::vector<T>(vals.begin(), vals.end());
                 if(has_fill != 1)
                     fill = {static_cast<T>(f)};
-			    break;
-			}
-			case NC_UBYTE:
-			case NC_BYTE:{
-				std::vector<uint8_t> vals(data_size);
+                break;
+            }
+            case NC_UBYTE:
+            case NC_BYTE:{
+                std::vector<uint8_t> vals(data_size);
                 res = nc_get_var_ubyte(_file_handle, variable, vals.data());
                 if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable values");
                 uint8_t f;
                 res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
-			    if(res)
+                if(res)
                     throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
                 
                 if constexpr (std::is_same_v<T, uint8_t>)
@@ -238,17 +238,17 @@ public:
                     ret = std::vector<T>(vals.begin(), vals.end());
                 if(has_fill != 1)
                     fill = {static_cast<T>(f)};
-			    break;
-			}
-			case NC_CHAR:
-			//categorical data
-			{
-				throw std::runtime_error("netcdf_file::read_variable() categorical data currently can not be read.");
-			}
-			break;
-			default:
-				throw std::runtime_error("netcdf_file::read_variable() Unknown variable type");
-		}
+                break;
+            }
+            case NC_CHAR:
+            //categorical data
+            {
+                throw std::runtime_error("netcdf_file::read_variable() categorical data currently can not be read.");
+            }
+            break;
+            default:
+                throw std::runtime_error("netcdf_file::read_variable() Unknown variable type");
+        }
 
         return {ret, fill};
     }

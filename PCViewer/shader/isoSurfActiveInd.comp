@@ -8,40 +8,40 @@
 #define DIMZBIT 4
 
 layout(std430, binding = 0) buffer Informations{
-	uint amtOfAttributes;
-	uint amtOfBrushAttributes;
-	uint amtOfIndices;
-	uint dimX;
+    uint amtOfAttributes;
+    uint amtOfBrushAttributes;
+    uint amtOfIndices;
+    uint dimX;
 
-	uint dimY;
-	uint dimZ;
-	uint xInd;
-	uint yInd;
+    uint dimY;
+    uint dimZ;
+    uint xInd;
+    uint yInd;
 
-	uint zInd;
-	float xMin;
-	float xMax;
-	float yMin;
+    uint zInd;
+    float xMin;
+    float xMax;
+    float yMin;
 
-	float yMax;
-	float zMin;
-	float zMax;
-	uint linearDims;
+    float yMax;
+    float zMin;
+    float zMax;
+    uint linearDims;
 } info;
 
 layout(binding = 1, r8 ) uniform imageBuffer act;
 
 layout(std430, binding = 2) buffer IndexBuffer{
-	uint ind[];
+    uint ind[];
 };
 
 layout(std430, binding = 3) buffer DataBuffer{
-	float d[];
+    float d[];
 }data;
 
 layout(std430, binding = 4) buffer dimVals{
-	vec4 dimSizes;
-	float values[];
+    vec4 dimSizes;
+    float values[];
 }dims;
 
 layout(binding = 5, r8) uniform writeonly image3D binary;
@@ -52,48 +52,48 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 int getVectorIndex(int dim, float v)
 {
-	//binary search
-	int a = 0, b = int(dims.dimSizes[dim]), baseIndex = 0;
-	if(dim == 1){
-		baseIndex = int(dims.dimSizes.x);
-	}
-	if(dim == 2){
-		baseIndex = int(dims.dimSizes.x + dims.dimSizes.y);
-	}
-	while (b - a > 1) {
-		int h = (b + a) / 2;
-		float val = dims.values[baseIndex + h];
-		if (v < val)
-			b = h;
-		else
-			a = h;
-		if(val == v)
-			break;
-	}
-	//a now at begin index, b at endindex
-	return a;
+    //binary search
+    int a = 0, b = int(dims.dimSizes[dim]), baseIndex = 0;
+    if(dim == 1){
+        baseIndex = int(dims.dimSizes.x);
+    }
+    if(dim == 2){
+        baseIndex = int(dims.dimSizes.x + dims.dimSizes.y);
+    }
+    while (b - a > 1) {
+        int h = (b + a) / 2;
+        float val = dims.values[baseIndex + h];
+        if (v < val)
+            b = h;
+        else
+            a = h;
+        if(val == v)
+            break;
+    }
+    //a now at begin index, b at endindex
+    return a;
 }
 
 void main(){
-	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
-	uint i = ind[gl_GlobalInvocationID.x];
-	if(!bool(imageLoad(act,int(i)))) return;
+    if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
+    uint i = ind[gl_GlobalInvocationID.x];
+    if(!bool(imageLoad(act,int(i)))) return;
 
-	ivec3 pos;
-	if(bool(info.linearDims & DIMXBIT))
-		pos.x = int(((getPackedData(i, info.xInd) - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX - 1) + .5f);
-	else		pos.x = getVectorIndex(0, getPackedData(i, info.xInd));
-	if(bool(info.linearDims & DIMYBIT))
-		pos.y = int(((getPackedData(i, info.yInd) - info.yMin) / (info.yMax - info.yMin)) * float(info.dimY - 1) + .5f);
-	else
-		pos.y = getVectorIndex(1, getPackedData(i, info.yInd));
-	if(bool(info.linearDims & DIMZBIT))
-		pos.z = int(((getPackedData(i, info.zInd) - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ - 1) + .5f);
-	else
-		pos.z = getVectorIndex(2, getPackedData(i, info.zInd));
-	pos = clamp(pos, ivec3(0), ivec3(info.dimX, info.dimY, info.dimZ));
-	//if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
+    ivec3 pos;
+    if(bool(info.linearDims & DIMXBIT))
+        pos.x = int(((getPackedData(i, info.xInd) - info.xMin) / (info.xMax - info.xMin)) * float(info.dimX - 1) + .5f);
+    else        pos.x = getVectorIndex(0, getPackedData(i, info.xInd));
+    if(bool(info.linearDims & DIMYBIT))
+        pos.y = int(((getPackedData(i, info.yInd) - info.yMin) / (info.yMax - info.yMin)) * float(info.dimY - 1) + .5f);
+    else
+        pos.y = getVectorIndex(1, getPackedData(i, info.yInd));
+    if(bool(info.linearDims & DIMZBIT))
+        pos.z = int(((getPackedData(i, info.zInd) - info.zMin) / (info.zMax - info.zMin)) * float(info.dimZ - 1) + .5f);
+    else
+        pos.z = getVectorIndex(2, getPackedData(i, info.zInd));
+    pos = clamp(pos, ivec3(0), ivec3(info.dimX, info.dimY, info.dimZ));
+    //if(pos.x<0||pos.y<0||pos.z<0||pos.x>=info.dimX||pos.y>=info.dimY||pos.z>=info.dimZ) return;
 
-	//storing 1 if element is in the brush
-	imageStore(binary, pos, vec4(1));
+    //storing 1 if element is in the brush
+    imageStore(binary, pos, vec4(1));
 }

@@ -5,8 +5,8 @@ ComputeBrusher::ComputeBrusher(const CreateInfo& info):
     _vkContext(info.context)
 {
     //----------------------------------------------------------------------------------------------
-	// creating the pipeline for line brushing
-	//----------------------------------------------------------------------------------------------
+    // creating the pipeline for line brushing
+    //----------------------------------------------------------------------------------------------
     auto compBytes = PCUtil::readByteFile(_computeShader);
     auto shaderModule = VkUtil::createShaderModule(info.context.device, compBytes);
 

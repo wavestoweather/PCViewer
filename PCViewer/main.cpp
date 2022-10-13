@@ -59,7 +59,7 @@ int main(int argc,const char* argv[]){
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_MAXIMIZED);
     window = SDL_CreateWindow("PCViewer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
     // Setup Drag and drop callback
-	SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+    SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
     uint32_t instance_extension_count = 0;
     SDL_Vulkan_GetInstanceExtensions(window, &instance_extension_count, NULL);
     std::vector<const char*> instance_extensions(instance_extension_count);
@@ -114,12 +114,12 @@ int main(int argc,const char* argv[]){
         return -1;
     }
     const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM };
-	const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-	imgui_window_data.SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(globals::vk_context.physical_device, imgui_window_data.Surface, requestSurfaceImageFormat, (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat), requestSurfaceColorSpace);
+    const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+    imgui_window_data.SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(globals::vk_context.physical_device, imgui_window_data.Surface, requestSurfaceImageFormat, (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat), requestSurfaceColorSpace);
 
     VkPresentModeKHR present_modes[] = { VK_PRESENT_MODE_IMMEDIATE_KHR };   // current workaround, otherwise on linux lagging
     imgui_window_data.PresentMode = ImGui_ImplVulkanH_SelectPresentMode(globals::vk_context.physical_device, imgui_window_data.Surface, &present_modes[0], IM_ARRAYSIZE(present_modes));
-	ImGui_ImplVulkanH_CreateOrResizeWindow(globals::vk_context.instance, globals::vk_context.physical_device, globals::vk_context.device, &imgui_window_data, globals::vk_context.graphics_queue_family_index, globals::vk_context.allocation_callbacks, w, h, min_image_count);
+    ImGui_ImplVulkanH_CreateOrResizeWindow(globals::vk_context.instance, globals::vk_context.physical_device, globals::vk_context.device, &imgui_window_data, globals::vk_context.graphics_queue_family_index, globals::vk_context.allocation_callbacks, w, h, min_image_count);
     
     //TODO: recreate export window (not yet setup for export)
 
@@ -137,17 +137,17 @@ int main(int argc,const char* argv[]){
 
     ImGui_ImplVulkan_InitInfo& init_info = globals::imgui.init_info;
     init_info.Instance = globals::vk_context.instance;
-	init_info.PhysicalDevice = globals::vk_context.physical_device;
-	init_info.Device = globals::vk_context.device;
-	init_info.QueueFamily = globals::vk_context.graphics_queue_family_index;
-	init_info.Queue = globals::vk_context.graphics_queue;
-	init_info.PipelineCache = {};
-	init_info.DescriptorPool = util::imgui::create_desriptor_pool();;
-	init_info.Allocator = globals::vk_context.allocation_callbacks;
-	init_info.MinImageCount = min_image_count;
-	init_info.ImageCount = imgui_window_data.ImageCount;
-	init_info.CheckVkResultFn = util::check_vk_result;
-	ImGui_ImplVulkan_Init(&init_info, imgui_window_data.RenderPass);
+    init_info.PhysicalDevice = globals::vk_context.physical_device;
+    init_info.Device = globals::vk_context.device;
+    init_info.QueueFamily = globals::vk_context.graphics_queue_family_index;
+    init_info.Queue = globals::vk_context.graphics_queue;
+    init_info.PipelineCache = {};
+    init_info.DescriptorPool = util::imgui::create_desriptor_pool();;
+    init_info.Allocator = globals::vk_context.allocation_callbacks;
+    init_info.MinImageCount = min_image_count;
+    init_info.ImageCount = imgui_window_data.ImageCount;
+    init_info.CheckVkResultFn = util::check_vk_result;
+    ImGui_ImplVulkan_Init(&init_info, imgui_window_data.RenderPass);
 
     // uploading fonts
     auto setup_command_pool = util::vk::create_command_pool(util::vk::initializers::commandPoolCreateInfo(globals::vk_context.graphics_queue_family_index));
@@ -192,9 +192,9 @@ int main(int argc,const char* argv[]){
 
         // disable keyboard navigation if brushes are active
         if(globals::brush_edit_data.selected_ranges.size() && (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard))
-        	ImGui::GetIO().ConfigFlags ^= ImGuiConfigFlags_NavEnableKeyboard; //deactivate keyboard navigation
-		if (globals::brush_edit_data.selected_ranges.empty() && !(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard)) 
-			ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; //enable keyboard navigation
+            ImGui::GetIO().ConfigFlags ^= ImGuiConfigFlags_NavEnableKeyboard; //deactivate keyboard navigation
+        if (globals::brush_edit_data.selected_ranges.empty() && !(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard)) 
+            ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; //enable keyboard navigation
 
         if(rebuild_swapchain && swapchain_width > 0 && swapchain_height > 0){
             ImGui_ImplVulkan_SetMinImageCount(min_image_count);

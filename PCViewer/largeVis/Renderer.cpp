@@ -33,8 +33,8 @@ void Renderer::updatePipeline(const CreateInfo& info){
     _infoDescSets.clear();
 
     //----------------------------------------------------------------------------------------------
-	//creating the pipeline for polyline rendering
-	//----------------------------------------------------------------------------------------------
+    //creating the pipeline for polyline rendering
+    //----------------------------------------------------------------------------------------------
     VkShaderModule shaderModules[5]{};
     auto vertexBytes = PCUtil::readByteFile(_vertexShader);
     shaderModules[0] = VkUtil::createShaderModule(info.context.device, vertexBytes);
@@ -62,47 +62,47 @@ void Renderer::updatePipeline(const CreateInfo& info){
     vertexInfo.pVertexBindingDescriptions = &bindingDescription;
 
     VkPipelineRasterizationStateCreateInfo rasterizer{};
-	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterizer.depthClampEnable = VK_FALSE;
-	rasterizer.rasterizerDiscardEnable = VK_FALSE;
-	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizer.lineWidth = 1.0f;
-	rasterizer.cullMode = VK_CULL_MODE_NONE;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-	rasterizer.depthBiasEnable = VK_FALSE;
-	rasterizer.depthBiasClamp = 0.0f;
-	rasterizer.depthBiasConstantFactor = 0.0f;
-	rasterizer.depthBiasSlopeFactor = 0.0f;
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+    rasterizer.depthBiasClamp = 0.0f;
+    rasterizer.depthBiasConstantFactor = 0.0f;
+    rasterizer.depthBiasSlopeFactor = 0.0f;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
-	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = info.sampleCount;
-	multisampling.minSampleShading = 1.0f;
-	multisampling.pSampleMask = nullptr;
-	multisampling.alphaToCoverageEnable = VK_FALSE;
-	multisampling.alphaToOneEnable = VK_FALSE;
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = info.sampleCount;
+    multisampling.minSampleShading = 1.0f;
+    multisampling.pSampleMask = nullptr;
+    multisampling.alphaToCoverageEnable = VK_FALSE;
+    multisampling.alphaToOneEnable = VK_FALSE;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_TRUE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_TRUE;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 
-	VkPipelineColorBlendStateCreateInfo colorBlending = {};
-	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlending.logicOpEnable = VK_FALSE;
-	colorBlending.logicOp = VK_LOGIC_OP_COPY;
-	colorBlending.attachmentCount = 1;
-	colorBlending.pAttachments = &colorBlendAttachment;
-	colorBlending.blendConstants[0] = 0.0f;
-	colorBlending.blendConstants[1] = 0.0f;
-	colorBlending.blendConstants[2] = 0.0f;
-	colorBlending.blendConstants[3] = 0.0f;
+    VkPipelineColorBlendStateCreateInfo colorBlending = {};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.logicOp = VK_LOGIC_OP_COPY;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.blendConstants[0] = 0.0f;
+    colorBlending.blendConstants[1] = 0.0f;
+    colorBlending.blendConstants[2] = 0.0f;
+    colorBlending.blendConstants[3] = 0.0f;
     VkUtil::BlendInfo blendInfo;
     blendInfo.blendAttachment = colorBlendAttachment;
     blendInfo.createInfo = colorBlending;
@@ -131,8 +131,8 @@ void Renderer::updatePipeline(const CreateInfo& info){
     VkUtil::createPipeline(info.context.device, &vertexInfo, info.context.screenSize[0], info.context.screenSize[1], dynamicStateVec, shaderModules, VK_PRIMITIVE_TOPOLOGY_POINT_LIST, &rasterizer, &multisampling, nullptr, &blendInfo, descriptorSetLayouts, &_renderPass, &_polyPipeInfo.pipelineLayout, &_polyPipeInfo.pipeline, pushConstants);
 
     //----------------------------------------------------------------------------------------------
-	//creating the pipeline for spline rendering
-	//----------------------------------------------------------------------------------------------
+    //creating the pipeline for spline rendering
+    //----------------------------------------------------------------------------------------------
     vertexBytes = PCUtil::readByteFile(_vertexShader);
     shaderModules[0] = VkUtil::createShaderModule(info.context.device, vertexBytes);
     geometryBytes = PCUtil::readByteFile(_geometryShader);
@@ -146,8 +146,8 @@ void Renderer::updatePipeline(const CreateInfo& info){
     VkUtil::updateImageDescriptorSet(info.context.device, info.heatmapSampler, info.heatmapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, _heatmapSet);
 
     //----------------------------------------------------------------------------------------------
-	//creating the pipeline for spline rendering
-	//----------------------------------------------------------------------------------------------
+    //creating the pipeline for spline rendering
+    //----------------------------------------------------------------------------------------------
     vertexBytes = PCUtil::readByteFile(_histogrammVertexShader);
     shaderModules[0] = VkUtil::createShaderModule(info.context.device, vertexBytes);
     shaderModules[3] = {};
@@ -155,9 +155,9 @@ void Renderer::updatePipeline(const CreateInfo& info){
     shaderModules[4] = VkUtil::createShaderModule(info.context.device, fragmentBytes);
 
     colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 
     vertexInfo.vertexAttributeDescriptionCount = 0;
     vertexInfo.vertexBindingDescriptionCount = 0;
@@ -170,7 +170,7 @@ void Renderer::updatePipeline(const CreateInfo& info){
 
 void Renderer::render(const RenderInfo& renderInfo) 
 {
-	//creating the descriptor set for rendering if not available
+    //creating the descriptor set for rendering if not available
     if(_infoDescSets.count(renderInfo.drawListId) == 0){
         VkUtil::createDescriptorSets(_vkContext.device, {_polyPipeInfo.descriptorSetLayout}, _vkContext.descriptorPool, &_infoDescSets[renderInfo.drawListId]);
         VkUtil::updateDescriptorSet(_vkContext.device, renderInfo.attributeInformation, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _infoDescSets[renderInfo.drawListId]);

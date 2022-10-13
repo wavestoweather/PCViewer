@@ -9,6 +9,7 @@
 #include <brusher.hpp>
 #include <vk_mem_alloc.h>
 #include <stager.hpp>
+#include <robin_hood.h>
 
 namespace util{
 namespace brushes{
@@ -194,6 +195,7 @@ inline const structures::range_brush& get_selected_range_brush_const(){
         assert(false && "Not yet implementd");
     }
 }
+
 inline structures::range_brush& get_selected_range_brush(){
     switch(globals::brush_edit_data.brush_type){
     case structures::brush_edit_data::brush_type::global:
@@ -203,6 +205,14 @@ inline structures::range_brush& get_selected_range_brush(){
     default:
         assert(false && "Not yet implementd");
     }
+}
+
+inline void delete_brushes(const robin_hood::unordered_set<structures::range_id>& brush_delete){
+    auto& ranges = util::brushes::get_selected_range_brush();
+    for(structures::range_id range: brush_delete){
+        ranges.erase(std::find_if(ranges.begin(), ranges.end(), [&](const structures::axis_range& r){return r.id == range;}));
+    }
+    globals::brush_edit_data.selected_ranges.clear();
 }
 }   
 }

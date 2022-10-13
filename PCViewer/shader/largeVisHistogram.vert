@@ -7,7 +7,7 @@
 layout(buffer_reference, scalar) buffer UVec {uint i[];};
 
 layout(push_constant) uniform constants{
-	uint64_t        histValues;
+    uint64_t        histValues;
     float           yLow;
     float           yHigh;
     float           xStart;
@@ -16,7 +16,7 @@ layout(push_constant) uniform constants{
     float           alpha;
 };
 
-layout(location = 0) out vec4 color;	//color contains the count value in its alpha channel
+layout(location = 0) out vec4 color;    //color contains the count value in its alpha channel
 
 void main() {
     uint count = UVec(histValues).i[gl_VertexIndex >> 1];

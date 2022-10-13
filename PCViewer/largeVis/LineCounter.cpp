@@ -8,8 +8,8 @@ LineCounter::LineCounter(const CreateInfo& info):
     _vkContext(info.context)
 {
     //----------------------------------------------------------------------------------------------
-	// creating the pipeline for line counting
-	//----------------------------------------------------------------------------------------------
+    // creating the pipeline for line counting
+    //----------------------------------------------------------------------------------------------
     
     // Pair counting pipelines---------------------------------------------------------
     
@@ -201,7 +201,7 @@ void LineCounter::countLines(VkCommandBuffer commands, const CountLinesInfo& inf
 
 void LineCounter::countLinesPair(size_t dataSize, VkBuffer aData, VkBuffer bData, uint32_t aIndices, uint32_t bIndices, VkBuffer counts, VkBuffer indexActivation, bool clearCounts, ReductionTypes reductionType) {
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
-	std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
+    std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);    // locking the queue submission
     VkUtil::updateDescriptorSet(_vkContext.device, aData, VK_WHOLE_SIZE, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, bData, VK_WHOLE_SIZE, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
     VkUtil::updateDescriptorSet(_vkContext.device, counts, VK_WHOLE_SIZE, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _pairSet);
@@ -242,10 +242,10 @@ VkSemaphore LineCounter::countLinesAll(size_t dataSize, const std::vector<VkBuff
     }
     
     assert(_vkContext.queueMutex);  // debug check that the optional value is set
-	check_vk_result(vkWaitForFences(_vkContext.device, 1, &_allFence, true, 10e9)); // wait for 10 secs, should throw error before...
+    check_vk_result(vkWaitForFences(_vkContext.device, 1, &_allFence, true, 10e9)); // wait for 10 secs, should throw error before...
     vkResetFences(_vkContext.device, 1, &_allFence);
     assert(data.size() < maxAttributes);
-    std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);	// locking the queue submission
+    std::scoped_lock<std::mutex> queueGuard(*_vkContext.queueMutex);    // locking the queue submission
     
     assert(data.size() - 1 == counts.size());
     for(auto a: irange(data))

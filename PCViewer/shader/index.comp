@@ -3,43 +3,43 @@
 #extension GL_EXT_scalar_block_layout : enable
 
 layout(std430, binding = 0) buffer Informations{
-	uint orderSize;
-	uint attributeSize;
-	uint indexSize;
-	uint padding;
-	uint order[];
+    uint orderSize;
+    uint attributeSize;
+    uint indexSize;
+    uint padding;
+    uint order[];
 } info;
 
 //ordering of the indices
 layout(std430, binding = 1) buffer Ordering{
-	uint o[];
+    uint o[];
 }order;
 
 layout( set = 0, binding = 2, r8 ) uniform imageBuffer act;
 
 layout(std430, binding = 3) buffer IndexBuffer{
-	uint i[];
+    uint i[];
 }buf;
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 
 void main(){
-	if(gl_GlobalInvocationID.x >= info.indexSize) return;
-	uint i = order.o[gl_GlobalInvocationID.x];			//index of the current line
-	uint startOffset = gl_GlobalInvocationID.x * (info.orderSize + 3);
+    if(gl_GlobalInvocationID.x >= info.indexSize) return;
+    uint i = order.o[gl_GlobalInvocationID.x];            //index of the current line
+    uint startOffset = gl_GlobalInvocationID.x * (info.orderSize + 3);
 
-	bool a = bool(imageLoad( act, int(i)));
-	if(!a){										//current index is not active, so only linebreaks are being inserted
-		for(int j = 0;j<info.orderSize + 3;++j){
-			buf.i[startOffset + j] = 0xFFFFFFFF;
-		}
-		return;
-	}
+    bool a = bool(imageLoad( act, int(i)));
+    if(!a){                                        //current index is not active, so only linebreaks are being inserted
+        for(int j = 0;j<info.orderSize + 3;++j){
+            buf.i[startOffset + j] = 0xFFFFFFFF;
+        }
+        return;
+    }
 
-	buf.i[startOffset] = info.order[0] + i * info.attributeSize;
-	for(int j = 0;j < info.orderSize;++j){
-		buf.i[startOffset+j+1] = info.order[j] + i * info.attributeSize;
-	}
-	buf.i[startOffset + info.orderSize + 1] = info.order[info.orderSize - 1] + i * info.attributeSize;
-	buf.i[startOffset + info.orderSize + 2] = 0xFFFFFFFF;
+    buf.i[startOffset] = info.order[0] + i * info.attributeSize;
+    for(int j = 0;j < info.orderSize;++j){
+        buf.i[startOffset+j+1] = info.order[j] + i * info.attributeSize;
+    }
+    buf.i[startOffset + info.orderSize + 1] = info.order[info.orderSize - 1] + i * info.attributeSize;
+    buf.i[startOffset + info.orderSize + 2] = 0xFFFFFFFF;
 }

@@ -4,6 +4,6 @@
 layout(location = 0) in vec4 col;
 layout(location = 0) out vec4 outColor;
 
-void main() {
+void main(){
     outColor = col;
 }

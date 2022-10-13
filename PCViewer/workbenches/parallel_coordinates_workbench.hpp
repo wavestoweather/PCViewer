@@ -18,6 +18,19 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     void _update_plot_image();
     void _draw_setting_list();
 public:
+    enum histogram_type: uint32_t{
+        none,
+        line_histogram,
+        grey_scale_histogram,
+        heatmap_histogram,
+        COUNT
+    };
+    const structures::enum_names<histogram_type> histogram_type_names{
+        "none",
+        "line histogram",
+        "grey scale histogram",
+        "heatmap histogram"
+    };
     struct settings{
         bool        enable_axis_lines{true};
         bool        min_max_labes{false};
@@ -34,9 +47,15 @@ public:
         ImVec4      brush_box_selected_color{.8f, .8f, 0, 1};
         float       brush_arrow_button_move{.01f};
         float       brush_drag_threshold{.5f};
+        int         live_brush_threshold{500000};
+
+        // when these are changed the whole data plot has to be rendered
+        histogram_type hist_type{};
+        ImVec4      pc_background{0,0,0,1};
+        bool        render_splines{};
     };
     struct plot_data{
-        uint32_t                width{1024};
+        uint32_t                width{2000};
         uint32_t                height{480};
         structures::image_info  image{};
         VkImageView             image_view{};
@@ -74,12 +93,12 @@ public:
     // overriden methods
     void show() override;
 
-    void add_datasets(const util::memory_view<std::string_view>& dataset_ids) override{};
-    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, structures::dataset_dependency::update_flags flags) override{};
-    void remove_datasets(const util::memory_view<std::string_view>& dataset_ids) override{};
-    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids) override;
-    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids) override;
-    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids) override{};
+    void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override{};
+    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, structures::dataset_dependency::update_flags flags, const structures::gpu_sync_info& sync_info = {}) override{};
+    void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override{};
+    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
+    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
+    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
 };
 
 }

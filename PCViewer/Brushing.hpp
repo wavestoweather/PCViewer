@@ -53,8 +53,8 @@ namespace brushing{
                 const ImVec2& b = lasso.borderPoints[(i + 1) % lasso.borderPoints.size()];
                 // calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
                 if( ((a.y > d.y) != (b.y > d.y)) &&
-				    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
-				    inLasso = !inLasso;
+                    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
+                    inLasso = !inLasso;
             }
             a = a && inLasso;
             if(!a)
@@ -121,8 +121,8 @@ namespace brushing{
                         const ImVec2& b = lasso.borderPoints[(j + 1) % lasso.borderPoints.size()];
                         // calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
                         if( ((a.y > d.y) != (b.y > d.y)) &&
-		        		    (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
-		        		    inLasso = !inLasso;
+                            (d.x < (b.x - a.x) * (d.y - a.y) / (b.y - a.y) + a.x) )
+                            inLasso = !inLasso;
                     }
                     a = a && inLasso;
                     if(!a)

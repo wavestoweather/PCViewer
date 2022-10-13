@@ -45,7 +45,7 @@ static void compressVector(std::vector<float>& src, float quantizationStep, /*ou
     cudaCompress::util::dwtFloatForwardCPU(src.data(), tmp.data(), tmp.size() / 2, tmp.size() / 2, tmp.size() / 2);
     std::vector<cudaCompress::Symbol16> symbols(src.size());
     cudaCompress::util::quantizeToSymbols(symbols.data(), src.data(), src.size(), quantizationStep);
-	cudaCompress::BitStream* arr[]{&bitStream};
+    cudaCompress::BitStream* arr[]{&bitStream};
     std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
     cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size()); NOTE: 128 needed for correct decompression via gpu
     symbolsSize = symbols.size();
@@ -74,14 +74,14 @@ static std::tuple<std::vector<uint32_t>, uint32_t, std::vector<uint32_t>, uint32
     // compressing the lowpass with qLowpass
     std::vector<cudaCompress::Symbol16> symbols(alignedSize / 2);
     cudaCompress::util::quantizeToSymbols(symbols.data(), src.data(), symbols.size(), qLowpass);
-	cudaCompress::BitStream* arr[]{&bitStream};
+    cudaCompress::BitStream* arr[]{&bitStream};
     std::vector<cudaCompress::Symbol16>* sArr[]{&symbols};
     cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size()); NOTE: 128 needed for correct decompression via gpu
     countLow = symbols.size();
 
     // compressing the highpass with qHighpass
     cudaCompress::util::quantizeToSymbols(symbols.data(), src.data() + symbols.size(), symbols.size(), qHighpass);
-	arr[0] = &bitStreamHigh;
+    arr[0] = &bitStreamHigh;
     cudaCompress::encodeRLHuffCPU(arr, sArr, 1, 128);//symbols.size()); NOTE: 128 needed for correct decompression via gpu
     countHigh = symbols.size();
 
@@ -90,17 +90,17 @@ static std::tuple<std::vector<uint32_t>, uint32_t, std::vector<uint32_t>, uint32
 
 static void decompressVector(const std::vector<uint32_t>& src, float quantizationStep, uint32_t symbolsSize, /*out*/ std::vector<float>& data){
     cudaCompress::BitStreamReadOnly bs(src.data(), src.size() * sizeof(src[0]) * 8);
-	cudaCompress::BitStreamReadOnly* dec[]{&bs};
-	std::vector<cudaCompress::Symbol16> nS(symbolsSize);
-	std::vector<cudaCompress::Symbol16>* ss[]{&nS};
-	cudaCompress::decodeRLHuffCPU(dec, ss, symbolsSize, 1, 128);//symbolsSize);
-	std::vector<float> result2(symbolsSize);
+    cudaCompress::BitStreamReadOnly* dec[]{&bs};
+    std::vector<cudaCompress::Symbol16> nS(symbolsSize);
+    std::vector<cudaCompress::Symbol16>* ss[]{&nS};
+    cudaCompress::decodeRLHuffCPU(dec, ss, symbolsSize, 1, 128);//symbolsSize);
+    std::vector<float> result2(symbolsSize);
     data.resize(symbolsSize);
-	cudaCompress::util::unquantizeFromSymbols(data.data(), nS.data(), nS.size(), quantizationStep);
-	//result2 = data;
+    cudaCompress::util::unquantizeFromSymbols(data.data(), nS.data(), nS.size(), quantizationStep);
+    //result2 = data;
     std::copy_n(data.begin(), data.size() / 2, result2.data());
-	cudaCompress::util::dwtFloatInverseCPU(result2.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
-	cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
+    cudaCompress::util::dwtFloatInverseCPU(result2.data(), data.data(), data.size() / 2, data.size() / 2, data.size() / 2);
+    cudaCompress::util::dwtFloatInverseCPU(data.data(), result2.data(), data.size());
 }
 
 static std::vector<float> decompressSeparate(const std::vector<uint32_t>& bytesLow, uint32_t countLow, const std::vector<uint32_t>& bytesHigh, uint32_t countHigh, float qLowpass, float qHighpass){
@@ -123,8 +123,8 @@ static std::vector<float> decompressSeparate(const std::vector<uint32_t>& bytesL
 
     // inverse dwt passes as normal
     std::copy_n(result.begin(), result.size() / 2, result2.data());
-	cudaCompress::util::dwtFloatInverseCPU(result2.data(), result.data(), result.size() / 2, result.size() / 2, result.size() / 2);
-	cudaCompress::util::dwtFloatInverseCPU(result.data(), result2.data(), result.size());
+    cudaCompress::util::dwtFloatInverseCPU(result2.data(), result.data(), result.size() / 2, result.size() / 2, result.size() / 2);
+    cudaCompress::util::dwtFloatInverseCPU(result.data(), result2.data(), result.size());
 
     return result;
 }
@@ -374,9 +374,9 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
     // line counting tests -------------------------------------
     //RenderLineCounter::tests(RenderLineCounter::CreateInfo{VkUtil::Context{{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}});
-	//LineCounter::tests(LineCounter::CreateInfo{context});
-	//compression::testCounting();
-	//compression::testRoaringCounting();
+    //LineCounter::tests(LineCounter::CreateInfo{context});
+    //compression::testCounting();
+    //compression::testRoaringCounting();
     //compression::testRoaringRealWorld();
 
     // testing the rendering pipeline creation ----------------------------
@@ -832,7 +832,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         uint32_t byteBlock = mapSize / amtOfThreads;
         std::vector<void*> mapped(threads.size());
         void *d;
-	    //vkMapMemory(context.device, mem, 0, byteSize, 0, &d);
+        //vkMapMemory(context.device, mem, 0, byteSize, 0, &d);
         //for(int i: irange(mappings)){
         //    vkMapMemory(context.device, mem, i * mapSize, mapSize, 0, &mapped[i]);
         //}
@@ -850,7 +850,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         }
         for(int i: irange(threads))
             threads[i].join();
-	    //memcpy(d, data.data(), byteSize);
+        //memcpy(d, data.data(), byteSize);
     }
     if constexpr(testUPloadSpeedSingleMap){
         uint32_t byteSize = 1<<30; // 2 gigabytes

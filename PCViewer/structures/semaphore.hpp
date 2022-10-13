@@ -4,22 +4,22 @@
 
 namespace structures{
 class semaphore{
-	std::mutex _mutex;
-	std::condition_variable _cv;
-	unsigned long _count = 0;
+    std::mutex _mutex;
+    std::condition_variable _cv;
+    unsigned long _count = 0;
 public:
-	void release(int n = 1){
+    void release(int n = 1){
         std::lock_guard<decltype(_mutex)> lock(_mutex);
-	    _count += n;
+        _count += n;
         for(int i = 0; i < n; ++i)
-	        _cv.notify_one();
+            _cv.notify_one();
     }
-	void acquire(){
+    void acquire(){
         std::unique_lock<decltype(_mutex)> lock(_mutex);
-	    while(!_count)
-	    	_cv.wait(lock);
-	    --_count;
+        while(!_count)
+            _cv.wait(lock);
+        --_count;
     }
-	unsigned long peekCount(){return _count;};
+    unsigned long peekCount(){return _count;};
 };
 }

@@ -50,20 +50,20 @@ void data_workbench::show()
         ImGui::TableNextColumn();
 
         bool open = ImGui::InputText("Directory Path", &_open_filename, ImGuiInputTextFlags_EnterReturnsTrue);
-		if (ImGui::IsItemHovered()) {
-			ImGui::BeginTooltip();
-			ImGui::Text("Enter either a file including filepath,\nOr a folder (division with /) and all datasets in the folder will be loaded\nOr drag and drop files to load onto application.");
-			ImGui::EndTooltip();
-		}
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Enter either a file including filepath,\nOr a folder (division with /) and all datasets in the folder will be loaded\nOr drag and drop files to load onto application.");
+            ImGui::EndTooltip();
+        }
 
-		ImGui::SameLine();
+        ImGui::SameLine();
 
-		//Opening a new Dataset into the Viewer
-		if (ImGui::Button("Open") || open) {
-			if(_open_filename.empty()){
-				// opening the file dialogue
-				ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey", "Choose File", ".*,.nc,.csv", ".", 0);
-			}
+        //Opening a new Dataset into the Viewer
+        if (ImGui::Button("Open") || open) {
+            if(_open_filename.empty()){
+                // opening the file dialogue
+                ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey", "Choose File", ".*,.nc,.csv", ".", 0);
+            }
             else{
                 globals::paths_to_open.push_back(_open_filename);
             }
@@ -207,27 +207,27 @@ void data_workbench::show()
         ImGui::OpenPopup(popup_tl_to_dltl.data());
     if(ImGui::BeginPopupModal(popup_tl_to_dltl.data())){
         const auto& tl = *globals::datasets.read().at(_popup_ds_id).read().templatelist_index.at(_popup_tl_id);
-		if(ImGui::BeginTabBar("Destination")){
-			if(ImGui::BeginTabItem("Drawlist")){
-				_tl_convert_data.dst = structures::templatelist_convert_data::destination::drawlist;
-				ImGui::Text("%s", (std::string("Creating a DRAWLIST list from ") + tl.name).c_str());
-				ImGui::EndTabItem();
-			}
-			if(ImGui::BeginTabItem("TemplateList")){
-				_tl_convert_data.dst = structures::templatelist_convert_data::destination::templatelist;
-				ImGui::Text("%s", (std::string("Creating a TEMPLATELIST from ") + tl.name).c_str());
-				ImGui::EndTabItem();
-			}
-			ImGui::EndTabBar();
-		}
+        if(ImGui::BeginTabBar("Destination")){
+            if(ImGui::BeginTabItem("Drawlist")){
+                _tl_convert_data.dst = structures::templatelist_convert_data::destination::drawlist;
+                ImGui::Text("%s", (std::string("Creating a DRAWLIST list from ") + tl.name).c_str());
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem("TemplateList")){
+                _tl_convert_data.dst = structures::templatelist_convert_data::destination::templatelist;
+                ImGui::Text("%s", (std::string("Creating a TEMPLATELIST from ") + tl.name).c_str());
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
         ImGui::InputText("Output name", &_tl_convert_data.dst_name);
         if(ImGui::CollapsingHeader("Subsample/Trim")){
             ImGui::Checkbox("Random subsampling (If enabled subsampling rate is transformed into probaility)", &_tl_convert_data.random_subsampling);
             if(ImGui::InputInt("Subsampling Rate", &_tl_convert_data.subsampling)) _tl_convert_data.subsampling = std::max(_tl_convert_data.subsampling, 1);
             if(ImGui::InputScalarN("Trim indcies", ImGuiDataType_U64, _tl_convert_data.trim.data(), 2)){
-				_tl_convert_data.trim.min = std::clamp<size_t>(_tl_convert_data.trim.min, 0u, _tl_convert_data.trim.max - 1);
-				_tl_convert_data.trim.max = std::clamp<size_t>(_tl_convert_data.trim.max, _tl_convert_data.trim.min + 1, size_t(tl.data_size));
-			}
+                _tl_convert_data.trim.min = std::clamp<size_t>(_tl_convert_data.trim.min, 0u, _tl_convert_data.trim.max - 1);
+                _tl_convert_data.trim.max = std::clamp<size_t>(_tl_convert_data.trim.max, _tl_convert_data.trim.min + 1, size_t(tl.data_size));
+            }
         }
 
         if(ImGui::Button("Create") || ImGui::IsKeyPressed(ImGuiKey_Enter)){

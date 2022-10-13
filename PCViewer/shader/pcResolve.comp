@@ -6,11 +6,11 @@ layout(binding = 1, rgba8) uniform image2D finalImage;
 
 layout(set = 1, binding = 2) buffer UBO{
     float alpha;
-	uint amtOfVerts;
-	uint amtOfAttributes;
-	float padding;
-	vec4 color;
-	vec4 vertexTransformations[];		//x holds the x position, y and z hold the lower and the upper bound respectivley
+    uint amtOfVerts;
+    uint amtOfAttributes;
+    float padding;
+    vec4 color;
+    vec4 vertexTransformations[];        //x holds the x position, y and z hold the lower and the upper bound respectivley
 };
 
 layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;

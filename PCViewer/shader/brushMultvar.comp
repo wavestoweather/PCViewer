@@ -4,28 +4,28 @@
 #extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Informations{
-	uint amtOfAttributes;
-	uint amtOfMultvarAxes;
-	uint amtOfMultvar;
-	uint amtOfIndices;
-	uint lineCount;
-	int globalLineCount;
-	uint first;
-	uint and;
-	float stdDev;
-	float attributeInd[];		//indices of the fracture attributes
+    uint amtOfAttributes;
+    uint amtOfMultvarAxes;
+    uint amtOfMultvar;
+    uint amtOfIndices;
+    uint lineCount;
+    int globalLineCount;
+    uint first;
+    uint and;
+    float stdDev;
+    float attributeInd[];        //indices of the fracture attributes
 } info;
 
 layout(std430, binding = 1) buffer Multivariats{
-	float m[];					//mean vectors and inverse covariance matrices: mean1[amtOfMultvarAxes], singularValues1[amtOfMultvarAxes], pcBounds1[2*amtOfMultvarAxes], transposedPCA[amtOfMultvarAxes^2], mean1[amtOfMultvarAxes], ...
+    float m[];                    //mean vectors and inverse covariance matrices: mean1[amtOfMultvarAxes], singularValues1[amtOfMultvarAxes], pcBounds1[2*amtOfMultvarAxes], transposedPCA[amtOfMultvarAxes^2], mean1[amtOfMultvarAxes], ...
 }multvar;
 
 layout(std430, binding = 2) buffer Data{
-	float d[];
+    float d[];
 }data;
 
 layout(std430, binding = 3) buffer Ind{
-	uint ind[];
+    uint ind[];
 }indices;
 
 layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
@@ -35,71 +35,71 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 #include "dataAccess.glsl"
 
 void main(){
-	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
-	//float gaussMin = pow(.38774,info.amtOfMultvarAxes) * 0.00598;
-	//maximum amount of fracture axis is 30
-	float x[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
-	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
-	//fill x
-	for (int j = 0; j < info.amtOfMultvarAxes; ++j) {
-		float datum = getPackedData(lineIndex, uint(info.attributeInd[j * 3]));
-		x[j] = datum;
-		x[j] = (x[j] - info.attributeInd[j * 3 + 1]) / (info.attributeInd[j * 3 + 2] - info.attributeInd[j * 3 + 1]);	//normalizing the datum
-	}
+    if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
+    //float gaussMin = pow(.38774,info.amtOfMultvarAxes) * 0.00598;
+    //maximum amount of fracture axis is 30
+    float x[30] = float[30](0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+    uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
+    //fill x
+    for (int j = 0; j < info.amtOfMultvarAxes; ++j) {
+        float datum = getPackedData(lineIndex, uint(info.attributeInd[j * 3]));
+        x[j] = datum;
+        x[j] = (x[j] - info.attributeInd[j * 3 + 1]) / (info.attributeInd[j * 3 + 2] - info.attributeInd[j * 3 + 1]);    //normalizing the datum
+    }
 
-	bool lineKeep = false;
-	for(int mulvar = 0; mulvar<info.amtOfMultvar;++mulvar){
-		uint meanBase =  mulvar * (4 * info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
-		uint svBase = meanBase + info.amtOfMultvarAxes;
-		uint pcBoundsBase = svBase + info.amtOfMultvarAxes;
-		uint pcBase = pcBoundsBase + 2 * info.amtOfMultvarAxes;
+    bool lineKeep = false;
+    for(int mulvar = 0; mulvar<info.amtOfMultvar;++mulvar){
+        uint meanBase =  mulvar * (4 * info.amtOfMultvarAxes + info.amtOfMultvarAxes * info.amtOfMultvarAxes);
+        uint svBase = meanBase + info.amtOfMultvarAxes;
+        uint pcBoundsBase = svBase + info.amtOfMultvarAxes;
+        uint pcBase = pcBoundsBase + 2 * info.amtOfMultvarAxes;
 
-		//doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
-		float s = 0;
-		bool nope = false;
-		uint count = 0;
-		for(int c = 0;c<info.amtOfMultvarAxes;++c){
-			float m = 0;
-			uint rowBase = c * info.amtOfMultvarAxes + pcBase;
-			for(int c1 = 0;c1<info.amtOfMultvarAxes;++c1){
-				m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
-			}
-			if (multvar.m[svBase + c] > 1e-20) {									//standard gaussian check
-				++count;
-				s += pow(m, 2) / pow(multvar.m[svBase + c], 2);			//x^2 / sigma^2
-			}
-			else {
-				if (m<multvar.m[pcBoundsBase + 2 * c] || m > multvar.m[pcBoundsBase + 2 * c + 1]) {
-					nope = true;
-					break;
-				}
-			}
-		}
-		//s = multvar.m[preFactorBase] * exp(-.5f * s);
-		float gaussMin = pow(info.stdDev,2) * count;	//vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
-		//checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
-		if (s <= gaussMin && !nope){			//we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
-			lineKeep = true;
-			break;
-		}
-	}
-	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
-	if(bool(info.first)){
-		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
-		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
-	}
-	else{
-		if(bool(info.and)){
-			a = a && lineKeep;
-		}
-		else{
-			a = a || lineKeep;
-		}
-		if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
-		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
-	}
-	
-	if(lineKeep){
-		atomicAdd(info.lineCount,1);
-	}
+        //doing calculation of: (x - mu)' * COV^(-1) * (x - mu)
+        float s = 0;
+        bool nope = false;
+        uint count = 0;
+        for(int c = 0;c<info.amtOfMultvarAxes;++c){
+            float m = 0;
+            uint rowBase = c * info.amtOfMultvarAxes + pcBase;
+            for(int c1 = 0;c1<info.amtOfMultvarAxes;++c1){
+                m += (x[c1] - multvar.m[meanBase + c1]) * multvar.m[rowBase + c1];
+            }
+            if (multvar.m[svBase + c] > 1e-20) {                                    //standard gaussian check
+                ++count;
+                s += pow(m, 2) / pow(multvar.m[svBase + c], 2);            //x^2 / sigma^2
+            }
+            else {
+                if (m<multvar.m[pcBoundsBase + 2 * c] || m > multvar.m[pcBoundsBase + 2 * c + 1]) {
+                    nope = true;
+                    break;
+                }
+            }
+        }
+        //s = multvar.m[preFactorBase] * exp(-.5f * s);
+        float gaussMin = pow(info.stdDev,2) * count;    //vector of 3's squared (amtOfMultvarAxes 3's are in the vector)
+        //checking if the gauss value is in range of 3 sigma(over 99% of the points are then accounted for)
+        if (s <= gaussMin && !nope){            //we are only comparing the exponents, as the prefactors of the mulivariate normal distributions are the same
+            lineKeep = true;
+            break;
+        }
+    }
+    bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
+    if(bool(info.first)){
+        if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
+        imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
+    }
+    else{
+        if(bool(info.and)){
+            a = a && lineKeep;
+        }
+        else{
+            a = a || lineKeep;
+        }
+        if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
+        imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
+    }
+    
+    if(lineKeep){
+        atomicAdd(info.lineCount,1);
+    }
 }

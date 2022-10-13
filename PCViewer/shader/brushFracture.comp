@@ -4,27 +4,27 @@
 #extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Informations{
-	uint amtOfAttributes;
-	uint amtOfFractureAxes;
-	uint amtOfFractures;
-	uint amtOfIndices;
-	uint lineCount;
-	int globalLineCount;
-	uint first;
-	uint and;
-	uint attributeInd[];		//indices of the fracture attributes
+    uint amtOfAttributes;
+    uint amtOfFractureAxes;
+    uint amtOfFractures;
+    uint amtOfIndices;
+    uint lineCount;
+    int globalLineCount;
+    uint first;
+    uint and;
+    uint attributeInd[];        //indices of the fracture attributes
 } info;
 
 layout(std430, binding = 1) buffer Fractures{
-	float minMax[];
+    float minMax[];
 }fractures;
 
 layout(std430, binding = 2) buffer Data{
-	float d[];
+    float d[];
 }data;
 
 layout(std430, binding = 3) buffer Ind{
-	uint ind[];
+    uint ind[];
 }indices;
 
 layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
@@ -34,41 +34,41 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 #include "dataAccess.glsl"
 
 void main(){
-	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
-	uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
-	bool lineKeep = false;
-	for(int fracture = 0; fracture<info.amtOfFractures;++fracture){
-		bool good = true;
-		for (int j = 0; j < info.amtOfFractureAxes; ++j) {
-			uint fractureBase = 2*(fracture * info.amtOfFractureAxes + j);					//getting the start index for min and max values of the fracture. Multiplication with 2 required as we got min and max values after each other
-			float datum = getPackedData(lineIndex, info.attributeInd[j]);
-			if (datum < fractures.minMax[fractureBase] || datum > fractures.minMax[fractureBase + 1]) {
-				good = false;
-				break;
-			}
-		}
-		if (good){
-			lineKeep = true;
-			break;
-		}
-	}
-	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
-	if(bool(info.first)){
-		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
-		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
-	}
-	else{
-		if(bool(info.and)){
-			a = a && lineKeep;
-		}
-		else{
-			a = a || lineKeep;
-		}
-		if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
-		imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
-	}
-	
-	if(lineKeep){
-		atomicAdd(info.lineCount,1);
-	}
+    if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
+    uint lineIndex = indices.ind[gl_GlobalInvocationID.x];
+    bool lineKeep = false;
+    for(int fracture = 0; fracture<info.amtOfFractures;++fracture){
+        bool good = true;
+        for (int j = 0; j < info.amtOfFractureAxes; ++j) {
+            uint fractureBase = 2*(fracture * info.amtOfFractureAxes + j);                    //getting the start index for min and max values of the fracture. Multiplication with 2 required as we got min and max values after each other
+            float datum = getPackedData(lineIndex, info.attributeInd[j]);
+            if (datum < fractures.minMax[fractureBase] || datum > fractures.minMax[fractureBase + 1]) {
+                good = false;
+                break;
+            }
+        }
+        if (good){
+            lineKeep = true;
+            break;
+        }
+    }
+    bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
+    if(bool(info.first)){
+        if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
+        imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
+    }
+    else{
+        if(bool(info.and)){
+            a = a && lineKeep;
+        }
+        else{
+            a = a || lineKeep;
+        }
+        if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
+        imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
+    }
+    
+    if(lineKeep){
+        atomicAdd(info.lineCount,1);
+    }
 }

@@ -18,6 +18,8 @@ parallel_coordinates_workbench::parallel_coordinates_workbench(const std::string
 }
 
 void parallel_coordinates_workbench::_update_plot_image(){
+    // waiting for the device to avoid destruction errors
+    auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
     if(plot_data.ref_no_track().image)
         util::vk::destroy_image(plot_data.ref_no_track().image);
     if(plot_data.ref_no_track().image_view)
@@ -43,10 +45,55 @@ void parallel_coordinates_workbench::_draw_setting_list(){
 }
 
 void parallel_coordinates_workbench::show(){
-    const static std::string_view brush_menu_id{"brush menu"};
-
     if(!active)
         return;
+    const static std::string_view brush_menu_id{"brush menu"};
+    const static std::string_view pc_menu_id{"parallel coordinates menu"};
+
+    bool brush_menu_open{false};
+    bool pc_menu_open{false};
+
+    bool setting_changed{false};
+
+    // checking for drawlist change (if drawlist has changed, render_plot() will be called later in the frame by update_drawlists)
+    // checking for local change
+    bool any_drawlist_change{false};
+    bool local_change{false};
+    bool request_render{false};
+    for(const auto& dl_info: drawlist_infos.read()){
+        const auto& dl = globals::drawlists.read().at(dl_info.drawlist_id);
+        if(!dl.changed && !dl_info.linked_with_drawlist)
+            continue;
+
+        bool any_change = dl.read().any_change();       // propagating change to drawlist top
+        if(any_change)
+            globals::drawlists()[dl_info.drawlist_id]();
+        any_drawlist_change |= dl.read().any_change();
+
+        if(!drawlist_infos.changed)
+            continue;
+        local_change |= dl_info.any_change();
+    }
+    request_render |= local_change;
+
+    // checking for attributes change
+    request_render |= attributes.changed;
+    request_render |= attributes_order_info.changed;
+    request_render |= setting_changed;
+
+    // checking for changed image
+    if(plot_data.changed){
+        _update_plot_image();
+        plot_data.changed = false;
+
+        request_render |= true;
+    }
+
+    request_render &= !any_drawlist_change;
+
+    if(request_render)
+        render_plot();
+
     ImGui::Begin(id.c_str(), &active);
 
     // -------------------------------------------------------------------------------
@@ -78,44 +125,44 @@ void parallel_coordinates_workbench::show(){
         int text_size = ImGui::CalcTextSize(name.c_str()).x;
         if(text_size > button_size.x){
             //add ellipsis at the end of the text
-			bool too_long = true;
-			std::string cur_substr = name.substr(0, name.size() - 4) + "...";
-			while (too_long) {
-				text_size = ImGui::CalcTextSize(cur_substr.c_str()).x;
-				too_long = text_size > button_size.x;
-				cur_substr = cur_substr.substr(0, cur_substr.size() - 4) + "...";
-			}
-			name = cur_substr;
+            bool too_long = true;
+            std::string cur_substr = name.substr(0, name.size() - 4) + "...";
+            while (too_long) {
+                text_size = ImGui::CalcTextSize(cur_substr.c_str()).x;
+                too_long = text_size > button_size.x;
+                cur_substr = cur_substr.substr(0, cur_substr.size() - 4) + "...";
+            }
+            name = cur_substr;
         }
         ImGui::Button(name.c_str(), button_size);
         if (name != attributes.read()[att_ref.attribut_index].id && ImGui::IsItemHovered()) {
-			ImGui::BeginTooltip();
-			ImGui::Text("%s", attributes.read()[att_ref.attribut_index].id.c_str());
-			ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
-			ImGui::EndTooltip();
-		}
-		if (name == attributes.read()[att_ref.attribut_index].id && ImGui::IsItemHovered()) {
-			ImGui::BeginTooltip();
-			ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
-			ImGui::EndTooltip();
-		}
-		if (ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered()) {// TODO implement			//editAttributeName = i;
-			//strcpy(newAttributeName, pcAttributes[i].originalName.c_str());
-		}
+            ImGui::BeginTooltip();
+            ImGui::Text("%s", attributes.read()[att_ref.attribut_index].id.c_str());
+            ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
+            ImGui::EndTooltip();
+        }
+        if (name == attributes.read()[att_ref.attribut_index].id && ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
+            ImGui::EndTooltip();
+        }
+        if (ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered()) {// TODO implement            //editAttributeName = i;
+            //strcpy(newAttributeName, pcAttributes[i].originalName.c_str());
+        }
 
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-			const attribute_order_info* p[] = {&att_ref};		//holding the index in the pcAttriOrd array and the value of it
-			ImGui::SetDragDropPayload("ATTRIBUTE", p, sizeof(p));
-			ImGui::Text("Swap %s", name.c_str());
-			ImGui::EndDragDropSource();
-		}
-		if (ImGui::BeginDragDropTarget()) {
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
-				const attribute_order_info* other = (const attribute_order_info*)payload->Data;
+            const attribute_order_info* p[] = {&att_ref};        //holding the index in the pcAttriOrd array and the value of it
+            ImGui::SetDragDropPayload("ATTRIBUTE", p, sizeof(p));
+            ImGui::Text("Swap %s", name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
+                const attribute_order_info* other = (const attribute_order_info*)payload->Data;
 
-				//reorder_attributes(c, other[0], io.KeyCtrl);
-			}
-		}
+                //reorder_attributes(c, other[0], io.KeyCtrl);
+            }
+        }
         cur_offset += button_gap;
     }
     // attribute max values
@@ -199,8 +246,6 @@ void parallel_coordinates_workbench::show(){
     }
 
     // brush windows
-    //if(util::point_in_box(ImGui::GetIO().MousePos, pic_pos, util::vec2_add_vec2(pic_pos, pic_size)) && ImGui::IsMouseDown(ImGuiMouseButton_Left))
-    //    globals::brush_edit_data.clear();
     if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none){
         std::map<uint32_t, uint32_t> place_of_ind;
         uint32_t place = 0;
@@ -298,7 +343,7 @@ void parallel_coordinates_workbench::show(){
             }
             // brush right click menu
             if(ImGui::IsMouseClicked(ImGuiMouseButton_Right) && brush_hovered)
-                ImGui::OpenPopup(brush_menu_id.data());
+                brush_menu_open = true;
             
             if(ImGui::IsKeyPressed(ImGuiKey_Delete)){
                 brush_delete = globals::brush_edit_data.selected_ranges;
@@ -312,23 +357,23 @@ void parallel_coordinates_workbench::show(){
 
             // Tooltip for hovered brush or selected brush
             if (brush_hovered || globals::brush_edit_data.selected_ranges.contains(brush.id)) {
-				float x_anchor = .5f;
-				if (place_of_ind[brush.axis] == 0) x_anchor = 0;
-				if (place_of_ind[brush.axis] == labels_count - 1) x_anchor = 1;
+                float x_anchor = .5f;
+                if (place_of_ind[brush.axis] == 0) x_anchor = 0;
+                if (place_of_ind[brush.axis] == labels_count - 1) x_anchor = 1;
 
-				ImGui::SetNextWindowPos({ x + setting.brush_box_width / 2,y }, 0, { x_anchor,1 });
-				ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
-				ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
-				ImGui::Begin(("Tooltip brush max##" + std::to_string(brush.id)).c_str(), NULL, flags);
-				ImGui::Text("%f", brush.max);
-				ImGui::End();
+                ImGui::SetNextWindowPos({ x + setting.brush_box_width / 2,y }, 0, { x_anchor,1 });
+                ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
+                ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
+                ImGui::Begin(("Tooltip brush max##" + std::to_string(brush.id)).c_str(), NULL, flags);
+                ImGui::Text("%f", brush.max);
+                ImGui::End();
 
-				ImGui::SetNextWindowPos({ x + setting.brush_box_width / 2, y + height }, 0, { x_anchor,0 });
-				ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
-				ImGui::Begin(("Tooltip brush min##" + std::to_string(brush.id)).c_str(), NULL, flags);
-				ImGui::Text("%f", brush.min);
-				ImGui::End();
-			}
+                ImGui::SetNextWindowPos({ x + setting.brush_box_width / 2, y + height }, 0, { x_anchor,0 });
+                ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
+                ImGui::Begin(("Tooltip brush min##" + std::to_string(brush.id)).c_str(), NULL, flags);
+                ImGui::Text("%f", brush.min);
+                ImGui::End();
+            }
 
             any_hover |= brush_hovered;
         }
@@ -359,18 +404,81 @@ void parallel_coordinates_workbench::show(){
 
         // brush deletion
         if(brush_delete.size()){
-            auto& ranges = util::brushes::get_selected_range_brush();
-            for(structures::range_id range: brush_delete){
-                ranges.erase(std::find_if(ranges.begin(), ranges.end(), [&](const structures::axis_range& r){return r.id == range;}));
-            }
+            util::brushes::delete_brushes(brush_delete);
             brush_delete.clear();
-            globals::brush_edit_data.selected_ranges.clear();
         }
 
         // releasing edge
         if(!any_hover && globals::brush_edit_data.selected_ranges.size() &&  (ImGui::IsMouseReleased(ImGuiMouseButton_Left) || (!new_brush && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) && !ImGui::GetIO().KeyCtrl)
             globals::brush_edit_data.selected_ranges.clear();
     }
+
+    pc_menu_open = !brush_menu_open && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ImGui::IsWindowHovered() && util::point_in_box(ImGui::GetMousePos(), pic_pos, {pic_pos.x + pic_size.x, pic_pos.y + pic_size.y});
+
+    if(brush_menu_open)
+        ImGui::OpenPopup(brush_menu_id.data());
+    if(ImGui::BeginPopup(brush_menu_id.data())){
+        if(ImGui::MenuItem("Delete", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
+            util::brushes::delete_brushes(globals::brush_edit_data.selected_ranges);
+        }
+        if(ImGui::MenuItem("Fit axis to boudns", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
+            const auto& selected_ranges = util::brushes::get_selected_range_brush_const();
+            // getting the extremum values for each axis if existent
+            std::vector<std::optional<structures::min_max<float>>> axis_values(attributes.read().size());
+            for(const auto& range: selected_ranges){
+                if(axis_values[range.axis])
+                    axis_values[range.axis] = std::min_max(*axis_values[range.axis], {range.min, range.max});
+                else
+                    axis_values[range.axis] = structures::min_max<float>{range.min, range.max};
+            }
+            for(int i: util::size_range(attributes.read())){
+                if(axis_values[i])
+                    attributes()[i].bounds = *axis_values[i];
+            }
+        }
+        ImGui::DragInt("Live brush treshold", &setting.live_brush_threshold);
+        ImGui::EndPopup();
+    }
+    if(pc_menu_open)
+        ImGui::OpenPopup(pc_menu_id.data());
+    if(ImGui::BeginPopup(pc_menu_id.data())){
+        if(ImGui::BeginCombo("Histogram", histogram_type_names[setting.hist_type].data())){
+            for(auto type: structures::enum_iteration<histogram_type>()){
+                if(ImGui::MenuItem(histogram_type_names[type].data())){
+                    setting.hist_type = type;
+                    setting_changed = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if(ImGui::ColorEdit4("Plot background", &setting.pc_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+            setting_changed = true;
+        //ImGui::MenuItem("Render splines", {}, &setting.render_splines);
+        if(ImGui::BeginMenu("Plot Size")){
+            if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))
+                plot_data();
+            
+            static std::map<VkSampleCountFlagBits, std::string_view> flag_names{{VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_2_BIT, "2Spp"}, {VK_SAMPLE_COUNT_4_BIT, "4Spp"}, {VK_SAMPLE_COUNT_8_BIT, "8Spp"}, {VK_SAMPLE_COUNT_16_BIT, "16Spp"}};
+            if(ImGui::BeginCombo("Sample per pixel", flag_names[plot_data.read().image_samples].data())){
+                for(const auto& [bit, name]: flag_names)
+                    if(ImGui::MenuItem(name.data()))
+                        plot_data().image_samples = bit;
+                ImGui::EndCombo();
+            }
+
+            static std::map<VkFormat, std::string_view> format_names{{VK_FORMAT_R8G8B8A8_UNORM, "8 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_UNORM, "16 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_SFLOAT, "16 Bit Float"}, {VK_FORMAT_R32G32B32A32_SFLOAT, "32 Bit Float"}};
+            if(ImGui::BeginCombo("PCP Format", format_names[plot_data.read().image_format].data())){
+                for(const auto& [bit, name]: format_names)
+                    if(ImGui::MenuItem(name.data()))
+                        plot_data().image_format = bit;
+                ImGui::EndCombo();
+            }
+
+            ImGui::EndMenu();
+        }
+        ImGui::EndPopup();
+    }
+    
 
     // -------------------------------------------------------------------------------
     // settings region
@@ -456,52 +564,6 @@ void parallel_coordinates_workbench::show(){
     ImGui::EndHorizontal();
 
     ImGui::End();
-
-    // checking for drawlist change (if drawlist has changed, render_plot() will be called later in the frame by update_drawlists)
-    // checking for local change
-    bool any_drawlist_change{false};
-    bool local_change{false};
-    bool request_render{false};
-    for(const auto& dl_info: drawlist_infos.read()){
-        const auto& dl = globals::drawlists.read().at(dl_info.drawlist_id);
-        if(!dl.changed && !dl_info.linked_with_drawlist)
-            continue;
-
-        bool any_change = dl.read().any_change();       // propagating change to drawlist top
-        if(any_change)
-            globals::drawlists()[dl_info.drawlist_id]();
-        any_drawlist_change |= dl.read().any_change();
-
-        if(!drawlist_infos.changed)
-            continue;
-        local_change |= dl_info.any_change();
-    }
-    request_render |= local_change;
-
-    // checking for attributes change
-    request_render |= attributes.changed;
-    request_render |= attributes_order_info.changed;
-
-    // checking for changed image
-    if(plot_data.changed){
-        std::cout << "plot_data changed, recreating..." << std::endl;
-        if(plot_data.read().image)
-            util::vk::destroy_image(plot_data().image);
-        if(plot_data.read().image_view)
-            util::vk::destroy_image_view(plot_data().image_view);
-
-        auto image_info = util::vk::initializers::imageCreateInfo(plot_data.read().image_format, {plot_data.read().width, plot_data.read().height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TYPE_2D, 1, 1, plot_data.read().image_samples);
-        auto alloc_info = util::vma::initializers::allocationCreateInfo();
-        std::tie(plot_data.ref_no_track().image, plot_data.ref_no_track().image_view) = util::vk::create_image_with_view(image_info, alloc_info);
-        plot_data.changed = false;
-
-        request_render |= true;
-    }
-
-    request_render &= !any_drawlist_change;
-
-    if(request_render)
-        render_plot();
 }
 
 void parallel_coordinates_workbench::render_plot()
@@ -527,7 +589,7 @@ void parallel_coordinates_workbench::render_plot()
     attributes_order_info.changed = false;
 }
 
-void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids){
+void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
     for(auto drawlist_id: drawlist_ids){
         auto& dl = globals::drawlists.write().at(drawlist_id).write();
         auto& ds = dl.dataset_read();
@@ -547,7 +609,7 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
     }
 }
 
-void parallel_coordinates_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids) {
+void parallel_coordinates_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info) {
     bool request_render{false};
     for(auto drawlist_id: drawlist_ids){
         if(globals::drawlists.read().at(drawlist_id).changed){

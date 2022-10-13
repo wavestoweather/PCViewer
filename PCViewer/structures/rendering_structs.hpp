@@ -8,17 +8,17 @@
 namespace structures{
 
 enum class alpha_mapping_type: uint32_t{
-	multiplicative,
-	bound01,
-	const_alpha,
-	alpha_adoption,
+    multiplicative,
+    bound01,
+    const_alpha,
+    alpha_adoption,
     COUNT
 };
 static enum_names<alpha_mapping_type> alpha_mapping_type_names{
-	"multiplicative",
-	"bound01",
-	"const_alpha",
-	"alpha_adoption"
+    "multiplicative",
+    "bound01",
+    "const_alpha",
+    "alpha_adoption"
 };
 
 namespace parallel_coordinates_renderer{
@@ -53,10 +53,10 @@ namespace parallel_coordinates_renderer{
         data_type               data_typ{};
         VkImageView             plot_image_view{};
 
-		bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equalData(util::memory_view<const uint32_t>(util::memory_view(o)));};
+        bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equalData(util::memory_view<const uint32_t>(util::memory_view(o)));};
     };
 
-	struct pipeline_data{
+    struct pipeline_data{
         VkPipeline              pipeline{};
         VkPipelineLayout        pipeline_layout{};
         VkRenderPass            render_pass{};
@@ -65,9 +65,9 @@ namespace parallel_coordinates_renderer{
         VkImageView             multi_sample_view{};
     };
 
-	using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
+    using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using median_tracker = structures::change_tracker<structures::median_type>;
-	struct drawlist_info{
+    struct drawlist_info{
         std::string_view                        drawlist_id;
         bool                                    linked_with_drawlist;
         util::memory_view<appearance_tracker>   appearance;

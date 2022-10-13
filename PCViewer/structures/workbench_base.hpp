@@ -4,7 +4,17 @@
 #include <atomic>
 #include <memory>
 
+typedef struct VkSemaphore_T *VkSemaphore;
+typedef uint32_t VkFlags;
+typedef VkFlags VkSemaphoreWaitFlags;
+
 namespace structures{
+struct gpu_sync_info{
+    util::memory_view<VkSemaphore>          wait_semaphores{};
+    util::memory_view<VkSemaphoreWaitFlags> wait_flags{};
+    util::memory_view<VkSemaphore>          signale_semaphores{};
+};
+
 struct workbench{
     // attribute to indicate if the workbench should be shown
     bool                active{false};
@@ -21,15 +31,15 @@ struct dataset_dependency{
         bool fragmented_first: 1;
         bool fragmented_last: 1;
     };
-    virtual void add_datasets(const util::memory_view<std::string_view>& dataset_ids) = 0;
-    virtual void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags) = 0;
-    virtual void remove_datasets(const util::memory_view<std::string_view>& dataset_ids) = 0;
+    virtual void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const gpu_sync_info& sync_info = {}) = 0;
+    virtual void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const gpu_sync_info& sync_info = {}) = 0;
+    virtual void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const gpu_sync_info& sync_info = {}) = 0;
 };
 
 struct drawlist_dataset_dependency: public dataset_dependency{
-    virtual void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids) = 0;
-    virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids) = 0;
-    virtual void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids) = 0;
+    virtual void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
+    virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
+    virtual void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
 };
 }
 

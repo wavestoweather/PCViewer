@@ -329,7 +329,7 @@ void vk_context::cleanup(){
     if(debug_report_callback){
         auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
         assert(vkDestroyDebugUtilsMessengerEXT != NULL);
-	    vkDestroyDebugUtilsMessengerEXT(instance, debug_report_callback, allocation_callbacks);
+        vkDestroyDebugUtilsMessengerEXT(instance, debug_report_callback, allocation_callbacks);
         debug_report_callback = {};
     }
 
@@ -359,126 +359,126 @@ void vk_context::upload_to_staging_buffer(const util::memory_view<uint8_t> data)
 
 settings_manager::settings_manager()
 {
-	load_settings(settings_file);
+    load_settings(settings_file);
 }
 
 settings_manager::~settings_manager()
 {
-	store_settings(settings_file);
+    store_settings(settings_file);
 }
 
 bool settings_manager::add_setting(const setting& s, bool autostore)
 {
-	if (s.id.empty() || s.type.empty()) return false;
+    if (s.id.empty() || s.type.empty()) return false;
 
-	settings[s.id] = s;
+    settings[s.id] = s;
 
     
-	if(settings_type.count(s.id) > 0)
-		settings_type[s.type].push_back(&settings[s.id]);
+    if(settings_type.count(s.id) > 0)
+        settings_type[s.type].push_back(&settings[s.id]);
 
-	if(autostore)
-		store_settings(settings_file);
+    if(autostore)
+        store_settings(settings_file);
 
-	return true;
+    return true;
 }
 
 bool settings_manager::delete_setting(std::string_view id)
 {
     std::string sid(id);
-	if (settings.find(sid) == settings.end()) return false;
+    if (settings.find(sid) == settings.end()) return false;
 
     auto& s = settings[sid];
-	int i = 0;
-	for (; i < settings_type[s.type].size(); i++) {
-		if (settings_type[s.type][i]->id == id)
-			break;
-	}
+    int i = 0;
+    for (; i < settings_type[s.type].size(); i++) {
+        if (settings_type[s.type][i]->id == id)
+            break;
+    }
 
-	settings_type[s.type][i] = settings_type[s.type][settings_type[s.type].size()-1];
-	settings_type[s.type].pop_back();
+    settings_type[s.type][i] = settings_type[s.type][settings_type[s.type].size()-1];
+    settings_type[s.type].pop_back();
 
-	settings.erase(sid);
-	return true;
+    settings.erase(sid);
+    return true;
 }
 
 settings_manager::setting& settings_manager::get_setting(std::string_view id)
 {
     std::string sid;
-	if (settings.find(sid) == settings.end()) return notFound;
-	return settings[sid];
+    if (settings.find(sid) == settings.end()) return notFound;
+    return settings[sid];
 }
 
 std::vector<settings_manager::setting*>* settings_manager::get_settings_type(std::string type)
 {
-	return &settings_type[type];
+    return &settings_type[type];
 }
 
 void settings_manager::store_settings(std::string_view filename)
 {
-	std::ofstream file(std::string(filename), std::ifstream::binary);
-	for (auto& s : settings) {
-		file << "\"" << s.second.id << "\"" << ' ' << "\"" << s.second.type << "\"" << ' ' << s.second.storage.size() << ' ';
-		file.write(reinterpret_cast<char*>(s.second.storage.data()), s.second.storage.size());
-		file << "\n";
-	}
-	file.close();
+    std::ofstream file(std::string(filename), std::ifstream::binary);
+    for (auto& s : settings) {
+        file << "\"" << s.second.id << "\"" << ' ' << "\"" << s.second.type << "\"" << ' ' << s.second.storage.size() << ' ';
+        file.write(reinterpret_cast<char*>(s.second.storage.data()), s.second.storage.size());
+        file << "\n";
+    }
+    file.close();
 }
 
 void settings_manager::load_settings(std::string_view filename)
 {
-	std::ifstream file(std::string(filename), std::ifstream::binary);
+    std::ifstream file(std::string(filename), std::ifstream::binary);
 
-	if (!file.is_open()) {
-		::logger << "[warning] Settingsfile was not found or no settings exist. Creating empty settings" << logging::endl;
-		return;
-	}
+    if (!file.is_open()) {
+        ::logger << "[warning] Settingsfile was not found or no settings exist. Creating empty settings" << logging::endl;
+        return;
+    }
 
-	setting s = {};
-	while (file >> s.id) {
-		if (s.id[0] == '\"') {
-			if (!(s.id[s.id.size() - 1] == '\"')) {
-				s.id = s.id.substr(1);
-				std::string nextWord;
-				file >> nextWord;
-				while (nextWord[nextWord.size() - 1] != '\"') {
-					s.id += " " + nextWord;
-					file >> nextWord;
-				}
-				s.id += " " + nextWord.substr(0, nextWord.size() - 1);
-			}
-			else {
-				s.id = s.id.substr(1, s.id.size() - 2);
-			}
-		}
-		
-		file >> s.type;
-		if (s.type[0] == '\"') {
-			if (!(s.type[s.type.length() - 1] == '\"')) {
-				s.type = s.type.substr(1);
-				std::string nextWord;
-				file >> nextWord;
-				while (nextWord[nextWord.size() - 1] != '\"') {
-					s.type += " " + nextWord;
-					file >> nextWord;
-				}
-				s.type += " " + nextWord.substr(0, nextWord.size() - 1);
-			}
-			else {
-				s.type = s.type.substr(1, s.type.size() - 2);
-			}
-		}
+    setting s = {};
+    while (file >> s.id) {
+        if (s.id[0] == '\"') {
+            if (!(s.id[s.id.size() - 1] == '\"')) {
+                s.id = s.id.substr(1);
+                std::string nextWord;
+                file >> nextWord;
+                while (nextWord[nextWord.size() - 1] != '\"') {
+                    s.id += " " + nextWord;
+                    file >> nextWord;
+                }
+                s.id += " " + nextWord.substr(0, nextWord.size() - 1);
+            }
+            else {
+                s.id = s.id.substr(1, s.id.size() - 2);
+            }
+        }
+        
+        file >> s.type;
+        if (s.type[0] == '\"') {
+            if (!(s.type[s.type.length() - 1] == '\"')) {
+                s.type = s.type.substr(1);
+                std::string nextWord;
+                file >> nextWord;
+                while (nextWord[nextWord.size() - 1] != '\"') {
+                    s.type += " " + nextWord;
+                    file >> nextWord;
+                }
+                s.type += " " + nextWord.substr(0, nextWord.size() - 1);
+            }
+            else {
+                s.type = s.type.substr(1, s.type.size() - 2);
+            }
+        }
         uint32_t byte_length;
-		file >> byte_length;
-		s.storage = std::vector<uint8_t>(byte_length);
-		file.get();
-		file.read((char*)s.storage.data(), byte_length);
-		file.get();
-		if (s.id.size() != 0)
-			add_setting(s, false);
-	}
+        file >> byte_length;
+        s.storage = std::vector<uint8_t>(byte_length);
+        file.get();
+        file.read((char*)s.storage.data(), byte_length);
+        file.get();
+        if (s.id.size() != 0)
+            add_setting(s, false);
+    }
 
-	file.close();
+    file.close();
 }
 
 VkSampler persistent_samplers::get(const VkSamplerCreateInfo& sampler_info){

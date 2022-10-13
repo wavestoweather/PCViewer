@@ -9,7 +9,7 @@
 
 ColorPalette::ColorPalette(ColorPaletteManager* parentColorPaletteManager)
 {
-	this->parentColorPaletteManager = parentColorPaletteManager;
+    this->parentColorPaletteManager = parentColorPaletteManager;
 
 
     // Diverging colormaps
@@ -26,12 +26,12 @@ ColorPalette::ColorPalette(ColorPaletteManager* parentColorPaletteManager)
     // qualitative colormaps
     palettes.push_back(CPalette{std::string("Accent"), 8, std::string("qual"), false});
     palettes.push_back(CPalette{std::string("Dark2"), 8, std::string("qual"), true});
-	palettes.push_back(CPalette{ std::string("Dark2Extended"), 12, std::string("qual"), false });
-	palettes.push_back(CPalette{ std::string("Dark2ExtendedReorder"), 12, std::string("qual"), false });
-	palettes.push_back(CPalette{ std::string("Dark2ReorderSplitYellowExtended"), 12, std::string("qual"), false });
-	palettes.push_back(CPalette{ std::string("Dark2ReorderSplitYellowExtendedSaturated"), 12, std::string("qual"), false });
-	
-	
+    palettes.push_back(CPalette{ std::string("Dark2Extended"), 12, std::string("qual"), false });
+    palettes.push_back(CPalette{ std::string("Dark2ExtendedReorder"), 12, std::string("qual"), false });
+    palettes.push_back(CPalette{ std::string("Dark2ReorderSplitYellowExtended"), 12, std::string("qual"), false });
+    palettes.push_back(CPalette{ std::string("Dark2ReorderSplitYellowExtendedSaturated"), 12, std::string("qual"), false });
+    
+    
     palettes.push_back(CPalette{std::string("Paired"), 12, std::string("qual"), true});
     palettes.push_back(CPalette{std::string("Pastel1"), 9, std::string("qual"), false});
     palettes.push_back(CPalette{std::string("Pastel2"), 8, std::string("qual"), false});
@@ -59,7 +59,7 @@ ColorPalette::ColorPalette(ColorPaletteManager* parentColorPaletteManager)
     palettes.push_back(CPalette{std::string("YlGnBu"), 9, std::string("seq"), true});
     palettes.push_back(CPalette{std::string("YlOrBr"), 9, std::string("seq"), true});
     palettes.push_back(CPalette{std::string("YlOrRd"), 9, std::string("seq"), true});
-	palettes.push_back(CPalette{ std::string("Black"), 20, std::string("seq"), false });
+    palettes.push_back(CPalette{ std::string("Black"), 20, std::string("seq"), false });
 
 //    palettes.push_back(CPalette{std::string("Accent"), 9, std::string("seq"), true});
     std::vector<ImVec4> defaultColorVec;
@@ -147,13 +147,13 @@ CPalette* ColorPalette::getPalletteWithName(std::string str)
             return &(this->palettes[i]);
         }
     }
-	return nullptr;
+    return nullptr;
 }
 
 
 std::vector<std::string>* ColorPalette::getQualPaletteNames()
 {
-	return &qualNameList;
+    return &qualNameList;
 }
 
 CPalette *ColorPalette::getPalletteWithNrs(unsigned int cat, unsigned int ipal)
@@ -187,10 +187,10 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
         // retrieve the palette
         CPalette *currPalette = &palettesCust[paletteNr];
         for (unsigned int i = 0; i < nrColors; ++i){
-			if (currPalette->custColors.size() <= i)
-			{
-				break;
-			}
+            if (currPalette->custColors.size() <= i)
+            {
+                break;
+            }
             choosenColorsImVec.push_back(currPalette->custColors[i]);
         }
     }
@@ -198,24 +198,24 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
     {
         unsigned int minVal = 3;
 
-		std::vector<std::string> choosenColors;
-		int numberOfColors = 0;
+        std::vector<std::string> choosenColors;
+        int numberOfColors = 0;
 
-		if (paletteName != "")
-		{
-			numberOfColors = 12;
+        if (paletteName != "")
+        {
+            numberOfColors = 12;
 
-			auto it = std::find_if(palettes.begin(), palettes.end(), [&paletteName](const CPalette& obj) {return obj.cName == paletteName;});
-			numberOfColors = std::min((*it).maxcolors, (unsigned int) numberOfColors);
+            auto it = std::find_if(palettes.begin(), palettes.end(), [&paletteName](const CPalette& obj) {return obj.cName == paletteName;});
+            numberOfColors = std::min((*it).maxcolors, (unsigned int) numberOfColors);
 
 
-			choosenColors = (brew<std::string>(paletteName, numberOfColors));
-		}
-		else
-		{
-			numberOfColors = std::min(std::max(minVal, nrColors), getPalletteWithNrs(categoryNr, paletteNr)->maxcolors);
-			choosenColors = (brew<std::string>(paletteStr, numberOfColors));
-		}
+            choosenColors = (brew<std::string>(paletteName, numberOfColors));
+        }
+        else
+        {
+            numberOfColors = std::min(std::max(minVal, nrColors), getPalletteWithNrs(categoryNr, paletteNr)->maxcolors);
+            choosenColors = (brew<std::string>(paletteStr, numberOfColors));
+        }
 
 
 
@@ -229,13 +229,13 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
         }
     }
 
-	if (this->parentColorPaletteManager != nullptr)
-	{
-		if (this->parentColorPaletteManager->bReverseColorOrder)
-		{
-			std::reverse(std::begin(choosenColorsImVec), std::end(choosenColorsImVec));
-		}
-	}
+    if (this->parentColorPaletteManager != nullptr)
+    {
+        if (this->parentColorPaletteManager->bReverseColorOrder)
+        {
+            std::reverse(std::begin(choosenColorsImVec), std::end(choosenColorsImVec));
+        }
+    }
 
     return choosenColorsImVec;
 }
@@ -243,13 +243,13 @@ std::vector<ImVec4> ColorPalette::getPallettAsImVec4(unsigned int categoryNr ,un
 // ##############################
 
 ColorPaletteManager::ColorPaletteManager():
-	colorPalette(new ColorPalette(this)),
+    colorPalette(new ColorPalette(this)),
     useColorPalette(true),
     chosenCategoryNr(0),
     chosenPaletteNr(0),
     chosenNrColorNr(1),
-	chosenAutoColorPaletteLine(std::string("Dark2ReorderSplitYellowExtended")),
-	chosenAutoColorPaletteFill(std::string("Dark2ReorderSplitYellowExtended")),
+    chosenAutoColorPaletteLine(std::string("Dark2ReorderSplitYellowExtended")),
+    chosenAutoColorPaletteFill(std::string("Dark2ReorderSplitYellowExtended")),
     skipFirstAttributes(0),
     alphaLines(255),
     alphaFill(102),
@@ -258,20 +258,20 @@ ColorPaletteManager::ColorPaletteManager():
     backupLineColor(false),
     backupFillColor(false),
     bvaluesChanged(false),
-	bReverseColorOrder(false)
+    bReverseColorOrder(false)
 {
 
 }
 
 ColorPaletteManager::~ColorPaletteManager()
 {
-	delete colorPalette;
+    delete colorPalette;
 }
 
 
 ColorPaletteManager::ColorPaletteManager(const ColorPaletteManager &obj)
 {
-	auto currColorPalette = new ColorPalette(this);
+    auto currColorPalette = new ColorPalette(this);
 
     this->useColorPalette = obj.useColorPalette;
     this->chosenCategoryNr = obj.chosenCategoryNr;
@@ -338,8 +338,8 @@ void ColorPaletteManager::setApplyToLineColor(bool b)
 
 void ColorPaletteManager::setReverseColorOrder(bool b)
 {
-	bReverseColorOrder = b;
-	bvaluesChanged = true;
+    bReverseColorOrder = b;
+    bvaluesChanged = true;
 }
 
 
@@ -354,10 +354,10 @@ bool ColorPaletteManager::getBValuesChanged()
 
 void ColorPaletteManager::checkPallette()
 {
-	if (this->colorPalette == nullptr)
-	{
-		this->colorPalette = new ColorPalette();
-	}
+    if (this->colorPalette == nullptr)
+    {
+        this->colorPalette = new ColorPalette();
+    }
 }
 
 void ColorPaletteManager::backupColors(std::vector<ImVec4> lineColors, std::vector<ImVec4> fillColors)

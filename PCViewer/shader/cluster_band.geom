@@ -111,15 +111,15 @@ void addBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 prev
     vec2 a = leftTop, b = rightTop, prev_vtx = prevLeftTop, next_vtx = nextRightTop;
     float t0 = t0a, t1 = t1a, t2 = t2a, t3 = t3a;
     float t = mix(t1, t2, i / float(maxCount));
-	  vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
-	  vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
-	  vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
+      vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
+      vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
+      vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
   
-	  vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
-	  vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
+      vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
+      vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
   
-	  gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
-	  color = col[1];
+      gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
+      color = col[1];
     color.a *= colorAlpha;
     side = vec4(1,0,mix(distLeft, distRight, float(i) / (count - 1)), haloWidth); //indicates top vertex
     haloColor.x = data.d[5];
@@ -127,19 +127,19 @@ void addBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 prev
     haloColor.z = data.d[7];
     haloColor.w = data.d[8];
 
-	  EmitVertex();
+      EmitVertex();
     a = leftBot, b = rightBot, prev_vtx = prevLeftBot, next_vtx = nextRightBot;
     t0 = t0b, t1 = t1b, t2 = t2b, t3 = t3b;
     t = mix(t1, t2, i / float(maxCount));
-	  A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
-	  A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
-	  A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
+      A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
+      A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
+      A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
   
-	  B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
-	  B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
+      B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
+      B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
   
-	  gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
-	  color = col[1];
+      gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
+      color = col[1];
     color.a *= colorAlpha;
     side = vec4(0, 1, mix(distLeft, distRight, float(i) / (count - 1)), haloWidth); //indicates bot vertex
     haloColor.x = data.d[5];
@@ -147,7 +147,7 @@ void addBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 prev
     haloColor.z = data.d[7];
     haloColor.w = data.d[8];
 
-	  EmitVertex();
+      EmitVertex();
 
   }
 }
@@ -169,12 +169,12 @@ void addMainBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 
   for(int i = 0; i < count; ++i){
     vec2 a = mix(leftBot, leftTop, .5), b = mix(rightTop, rightBot, .5), prev_vtx = mix(prevLeftTop, prevLeftBot, .5), next_vtx = mix(nextRightTop, nextRightBot, .5);
     float t = mix(t1, t2, i / float(maxCount));
-	  vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
-	  vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
-	  vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
+      vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
+      vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
+      vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
   
-	  vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
-	  vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
+      vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
+      vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
 
     center = (t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2;
     t -= t1;
@@ -184,7 +184,7 @@ void addMainBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 
     perp = normalize(perp);
     perp = vec2(0,1);
     //perp = vec2(0,1);
-	  color = col[1];
+      color = col[1];
     color.a *= colorAlpha;
     side = vec4(1,0,mix(distLeft, distRight, float(i) / (count - 1)), haloWidth); //indicates top vertex
     haloColor.x = data.d[5];
@@ -193,7 +193,7 @@ void addMainBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 
     haloColor.w = data.d[8];
     gl_Position.xy = center + .5 * side.z * perp;
 
-	  EmitVertex();
+      EmitVertex();
 
     color = col[1];
     color.a *= colorAlpha;
@@ -204,6 +204,6 @@ void addMainBand(vec2 leftTop, vec2 leftBot, vec2 rightTop, vec2 rightBot, vec2 
     haloColor.w = data.d[8];
     gl_Position.xy = center - .5 * side.z * perp;
 
-	  EmitVertex();
+      EmitVertex();
   }
 }

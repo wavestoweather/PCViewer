@@ -22,14 +22,14 @@ class parallel_coordinates_renderer{
     using time_point = std::chrono::time_point<std::chrono::system_clock>;
 
     struct push_constants{
-        VkDeviceAddress 	attribute_info_address;
-	    VkDeviceAddress 	data_header_address;
-	    VkDeviceAddress	    priorities_address;
+        VkDeviceAddress     attribute_info_address;
+        VkDeviceAddress     data_header_address;
+        VkDeviceAddress        priorities_address;
         VkDeviceAddress     index_buffer_address;
         VkDeviceAddress     activation_bitset_address;
-	    uint		        vertex_count_per_line;		// is at least as high as attribute_count (when equal, polyline rendering)
-	    float               padding;
-	    ImVec4 		        color;
+        uint                vertex_count_per_line;        // is at least as high as attribute_count (when equal, polyline rendering)
+        float               padding;
+        ImVec4                 color;
     };
 
     const std::string_view vertex_shader_path{"shader/parallel_coordinates_renderer.vert.spv"};

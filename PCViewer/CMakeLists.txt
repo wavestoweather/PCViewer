@@ -48,7 +48,7 @@ list(REMOVE_ITEM pcviewer_SRC ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 file(GLOB imgui_SRC
     "imgui/*.h"
     "imgui/*.cpp"
-	"imgui/*.hpp"
+    "imgui/*.hpp"
 )
     
 file(GLOB cimg_SRC

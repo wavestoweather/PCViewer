@@ -18,10 +18,10 @@ void main() {
 //#extension GL_ARB_separate_shader_objects : enable
 //
 //layout(binding = 0) uniform UniformBufferObject{
-//	vec3 camPos;
-//	vec4 color;
-//	mat4 mvp;
-//	mat4 worldNormals;
+//    vec3 camPos;
+//    vec4 color;
+//    mat4 mvp;
+//    mat4 worldNormals;
 //} ubo;
 //
 //layout(location = 0) in vec3 worldPos;
@@ -36,9 +36,9 @@ void main() {
 //int specExp = 20;
 //
 //void main() {
-//	//using phong lighting to light the surface.
-//	vec3 specular = ks * pow(clamp(dot(-reflect(normalize(worldNormal),l),normalize(ubo.camPos-worldPos)),0,1),specExp) * lightCol;
-//	vec3 diffuse = kd * clamp(dot(normalize(worldNormal),l),0,1) * ubo.color.xyz * lightCol;
-//	vec3 ambient = ka * ubo.color.xyz;
-//	outColor = vec4(specular + diffuse + ambient,ubo.color.a);
+//    //using phong lighting to light the surface.
+//    vec3 specular = ks * pow(clamp(dot(-reflect(normalize(worldNormal),l),normalize(ubo.camPos-worldPos)),0,1),specExp) * lightCol;
+//    vec3 diffuse = kd * clamp(dot(normalize(worldNormal),l),0,1) * ubo.color.xyz * lightCol;
+//    vec3 ambient = ka * ubo.color.xyz;
+//    outColor = vec4(specular + diffuse + ambient,ubo.color.a);
 //}

@@ -120,8 +120,8 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
             //loading the file header and getting the data point sizes
             std::ifstream f(s, std::ios_base::binary);
             uint32_t colCount, byteSize, symbolsSize, dataSize;
-	        float quantizationStep, eps;
-	        f >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
+            float quantizationStep, eps;
+            f >> colCount >> byteSize >> symbolsSize >> dataSize >> quantizationStep >> eps;
             f.close();
             levelLineCount[hierarchyDepth] += dataSize / colCount;
             _levelFiles.resize(maxDepth);

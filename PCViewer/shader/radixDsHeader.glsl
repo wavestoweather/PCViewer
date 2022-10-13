@@ -57,7 +57,7 @@ layout(binding = 4) buffer LI
 }localSortInfo;
 
 layout (binding = 0, set = 1) buffer Data{
-	float d[];
+    float d[];
 }data;
 
 layout (constant_id = 0) const int SUBGROUP_SIZE = 32;
