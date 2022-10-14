@@ -135,6 +135,6 @@ void main(){
     barrier();
 
     // writeout of activation
-    if(gl_GlobalInvocationID.x / 32 < data_size)
+    if(gl_GlobalInvocationID.x * 32 < data_size)
         activation_bitset.i[gl_GlobalInvocationID.x] = act[gl_LocalInvocationID.x];
 }
