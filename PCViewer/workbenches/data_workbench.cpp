@@ -212,16 +212,45 @@ void data_workbench::show()
             ImGui::TableHeader("Delete");
             ImGui::TableNextColumn();
 
+            int brush_delete = -1;
             for(int i: util::size_range(globals::global_brushes.read())){
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 const auto& gb = globals::global_brushes.read()[i].read();
-                ImGui::InputText(("##gbid_" + std::to_string(gb.id)).c_str(), &gb.name);
+                bool selected = globals::brush_edit_data.global_brush_id == gb.id;
+                if(ImGui::Selectable((gb.name + "##gbs" + std::to_string(gb.id)).c_str(), selected)){
+                    if(selected)
+                        globals::brush_edit_data.clear();
+                    else{
+                        globals::selected_drawlists.clear();
+                        globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::global;
+                        globals::brush_edit_data.global_brush_id = gb.id;
+                    }
+                }
                 ImGui::TableNextColumn();
-                
+                if(ImGui::Checkbox(("##gba_" + std::to_string(gb.id)).c_str(), &globals::global_brushes.ref_no_track()[i].ref_no_track().active))
+                    globals::global_brushes()[i]();
+                ImGui::TableNextColumn();
+                if(ImGui::Button(("X##gbd" + std::to_string(gb.id)).c_str()))
+                    brush_delete = i;
+            }
+            if(brush_delete >= 0){
+                globals::global_brushes().erase(globals::global_brushes().begin() + brush_delete);
+                globals::brush_edit_data.clear();
             }
 
             ImGui::EndTable();
+        }
+        if(ImGui::Button("+ Add global brush")){
+            structures::tracked_brush new_brush{};
+            auto cur_id = globals::cur_global_brush_id++;
+            new_brush.ref_no_track().id = cur_id;
+            new_brush.ref_no_track().name = "Global brush " + std::to_string(cur_id);
+            globals::global_brushes.ref_no_track().push_back(std::move(new_brush));
+            // selecting the last brush
+            globals::selected_drawlists.clear();
+            globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::global;
+            globals::brush_edit_data.global_brush_id =  cur_id;
         }
 
         ImGui::EndTable();

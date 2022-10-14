@@ -34,6 +34,7 @@ struct brush{
     lasso_brush lassos{};
     brush_id    id{};
     mutable std::string name{};   // mutable as it should not be tracked
+    bool        active{true};
 
     bool empty() const {return ranges.empty() && lassos.empty();}
 };
@@ -66,6 +67,7 @@ struct brush_edit_data{
     void clear(){
         brush_type = brush_type::none;
         hovered_region_on_click = brush_region::COUNT;
+        global_brush_id = {};
         selected_ranges.clear();
     }
 };
