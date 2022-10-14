@@ -11,6 +11,7 @@ layout(buffer_reference, scalar) buffer Data{
 };
 
 const uint maxAmtOfColumns = 50;
+const float inf = 1./0.;
 #define nan uintBitsToFloat(0x7ff80000);
 
 float get_packed_data(uint index, uint column){

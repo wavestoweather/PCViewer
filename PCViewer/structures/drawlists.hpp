@@ -41,7 +41,7 @@ struct drawlist{
     change_tracker<bool>    immune_to_global_brushes{};
     change_tracker<appearance> appearance_median{};
     change_tracker<median_type> median_typ{};  
-    dynamic_bitset<uint32_t> active_indices_bitset{};                
+    dynamic_bitset<>        active_indices_bitset{};                
 
     buffer_info             median_buffer{};                // linear array buffer containing the median values for all attributes
     buffer_info             active_indices_bitset_gpu{};

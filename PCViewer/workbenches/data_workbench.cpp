@@ -212,6 +212,15 @@ void data_workbench::show()
             ImGui::TableHeader("Delete");
             ImGui::TableNextColumn();
 
+            for(int i: util::size_range(globals::global_brushes.read())){
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                const auto& gb = globals::global_brushes.read()[i].read();
+                ImGui::InputText(("##gbid_" + std::to_string(gb.id)).c_str(), &gb.name);
+                ImGui::TableNextColumn();
+                
+            }
+
             ImGui::EndTable();
         }
 

@@ -111,6 +111,7 @@ inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const 
 inline void upload_changed_brushes(){
     // global brushes
     structures::dynamic_struct<gpu_brush, float> global_brush_data;
+    bool wait_stager = false;
     if(globals::global_brushes.changed){
         range_brush_refs range_brushes;
         lasso_brush_refs lasso_brushes;
@@ -129,6 +130,7 @@ inline void upload_changed_brushes(){
         staging_info.dst_buffer = globals::global_brushes.brushes_gpu.buffer;
         staging_info.common.data_upload = global_brush_data.data();
         globals::stager.add_staging_task(staging_info);
+        wait_stager = true;
     }
 
     // local brushes
@@ -153,10 +155,12 @@ inline void upload_changed_brushes(){
             staging_info.dst_buffer = dl.read().local_brushes_gpu.buffer;
             staging_info.common.data_upload = brush_data.data();
             globals::stager.add_staging_task(staging_info);
+            wait_stager = true;
         }
     }
 
-    globals::stager.wait_for_completion();
+    if(wait_stager)
+        globals::stager.wait_for_completion();
 }
 
 inline void update_drawlist_active_indices(){

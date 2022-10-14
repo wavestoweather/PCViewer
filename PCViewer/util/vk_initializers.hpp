@@ -721,6 +721,14 @@ inline VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features(){
     return physicalDeviceVulkan13Features;
 }
 
+inline VkDebugUtilsObjectNameInfoEXT debugUtilsObjectNameInfoEXT(VkObjectType objectType, uint64_t objectHandle, std::string_view objectName){
+    VkDebugUtilsObjectNameInfoEXT debugUtilsObjectNameInfoEXT{};
+    debugUtilsObjectNameInfoEXT.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+    debugUtilsObjectNameInfoEXT.objectType = objectType;
+    debugUtilsObjectNameInfoEXT.objectHandle = objectHandle;
+    debugUtilsObjectNameInfoEXT.pObjectName = objectName.data();
+    return debugUtilsObjectNameInfoEXT;
+}
 }
 }
 }

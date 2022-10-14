@@ -63,7 +63,5 @@ void brusher::brush(const brush_info& info)
     else
         vkCmdDispatch(_command_buffer, dispatch_x, 1, 1);
     util::vk::end_commit_command_buffer(_command_buffer, globals::vk_context.compute_queue, info.wait_semaphores, info.wait_flags, info.signal_semaphores, _brush_fence);
-    res = vkWaitForFences(globals::vk_context.device, 1, &_brush_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
-
 }
 }
