@@ -29,14 +29,20 @@ using lasso_brush = std::vector<polygon>;
 using lasso_brushes = std::vector<lasso_brush>;
 using lasso_brushes_map = robin_hood::unordered_map<brush_id, lasso_brush>;
 
-struct brushes{
-    range_brushes_map   ranges;
-    lasso_brushes_map   lassos;
-    buffer_info         brushes_gpu;
+struct brush{
+    range_brush ranges{};
+    lasso_brush lassos{};
+    brush_id    id{};
+    mutable std::string name{};   // mutable as it should not be tracked
 
-    bool empty() const {for(const auto& [id, range]: ranges) if(range.size()) return false; for(const auto& [id, lasso]: lassos) if(lasso.size()) return false ;return true;}
+    bool empty() const {return ranges.empty() && lassos.empty();}
 };
-using tracked_brushes = change_tracker<brushes>;
+using tracked_brush = change_tracker<brush>;
+using tracked_brushes = change_tracker<std::vector<tracked_brush>>;
+
+struct global_brushes: public tracked_brushes{
+    buffer_info brushes_gpu{};
+};
 
 struct brush_edit_data{
     enum class brush_type{
@@ -66,7 +72,7 @@ struct brush_edit_data{
 }
 
 namespace globals{
-extern structures::tracked_brushes global_brushes;
+extern structures::global_brushes global_brushes;
 extern structures::brush_edit_data brush_edit_data;
 extern std::atomic<structures::brush_id> cur_global_brush_id;
 extern std::atomic<structures::range_id> cur_brush_range_id;

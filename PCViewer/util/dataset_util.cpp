@@ -585,7 +585,6 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         vkFreeCommandBuffers(globals::vk_context.device, globals::vk_context.general_graphics_command_pool, 1, &wait_commands);
         util::vk::destroy_fence(fence);
         util::vk::destroy_semaphore(upload_semaphore);
-        drawlist.ref_no_track().local_brushes.ref_no_track().ranges[globals::cur_global_brush_id++] = {};
         globals::drawlists.write().insert({drawlist.read().id, std::move(drawlist)});
         break;
     }

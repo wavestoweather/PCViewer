@@ -114,19 +114,19 @@ inline void upload_changed_brushes(){
     if(globals::global_brushes.changed){
         range_brush_refs range_brushes;
         lasso_brush_refs lasso_brushes;
-        for(const auto& [id, range_brush]: globals::global_brushes.read().ranges)
-            range_brushes.push_back(&range_brush);
-        for(const auto& [id, lasso_brush]: globals::global_brushes.read().lassos)
-            lasso_brushes.push_back(&lasso_brush);
+        for(const auto& brush: globals::global_brushes.read()){
+            range_brushes.push_back(&brush.read().ranges);
+            lasso_brushes.push_back(&brush.read().lassos);
+        }
         global_brush_data = create_gpu_brush_data(range_brushes, lasso_brushes);
-        if(global_brush_data.byte_size() > globals::global_brushes.read().brushes_gpu.size){
-            util::vk::destroy_buffer(globals::global_brushes().brushes_gpu);
+        if(global_brush_data.byte_size() > globals::global_brushes.brushes_gpu.size){
+            util::vk::destroy_buffer(globals::global_brushes.brushes_gpu);
             auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, global_brush_data.byte_size());
             auto alloc_info = util::vma::initializers::allocationCreateInfo();
-            globals::global_brushes().brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);
+            globals::global_brushes.brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);
         }
         structures::stager::staging_buffer_info staging_info{};
-        staging_info.dst_buffer = globals::global_brushes.read().brushes_gpu.buffer;
+        staging_info.dst_buffer = globals::global_brushes.brushes_gpu.buffer;
         staging_info.common.data_upload = global_brush_data.data();
         globals::stager.add_staging_task(staging_info);
     }
@@ -137,24 +137,20 @@ inline void upload_changed_brushes(){
         for(const auto& [id, dl]: globals::drawlists.read()){
             if(!dl.changed || !dl.read().local_brushes.changed)
                 continue;
-            range_brush_refs range_brushes;
-            lasso_brush_refs lasso_brushes;
-            for(const auto& [id, range_brush]: dl.read().local_brushes.read().ranges)
-                range_brushes.push_back(&range_brush);
-            for(const auto& [id, lasso_brush]: dl.read().local_brushes.read().lassos)
-                lasso_brushes.push_back(&lasso_brush);
+            range_brush_refs range_brushes{&dl.read().local_brushes.read().ranges};
+            lasso_brush_refs lasso_brushes{&dl.read().local_brushes.read().lassos};
             local_brush_data.push_back(create_gpu_brush_data(range_brushes, lasso_brushes));
             auto& brush_data = local_brush_data.back();
 
-            if(brush_data.byte_size() > dl.read().local_brushes.read().brushes_gpu.size){
-                util::vk::destroy_buffer(dl.read().local_brushes.read().brushes_gpu);
+            if(brush_data.byte_size() > dl.read().local_brushes_gpu.size){
+                util::vk::destroy_buffer(dl.read().local_brushes_gpu);
                 auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, brush_data.byte_size());
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
-                globals::drawlists()[id]().local_brushes().brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);
+                globals::drawlists()[id]().local_brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);
             }
 
             structures::stager::staging_buffer_info staging_info{};
-            staging_info.dst_buffer = dl.read().local_brushes.read().brushes_gpu.buffer;
+            staging_info.dst_buffer = dl.read().local_brushes_gpu.buffer;
             staging_info.common.data_upload = brush_data.data();
             globals::stager.add_staging_task(staging_info);
         }
@@ -188,9 +184,10 @@ inline void update_drawlist_active_indices(){
 inline const structures::range_brush& get_selected_range_brush_const(){
     switch(globals::brush_edit_data.brush_type){
     case structures::brush_edit_data::brush_type::global:
-        return globals::global_brushes.read().ranges.at(globals::brush_edit_data.global_brush_id);
+        assert(std::count_if(globals::global_brushes.read().begin(), globals::global_brushes.read().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;}) != 0);
+        return std::find_if(globals::global_brushes.read().begin(), globals::global_brushes.read().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;})->read().ranges;
     case structures::brush_edit_data::brush_type::local:
-        return globals::drawlists.read().at(globals::brush_edit_data.local_brush_id).read().local_brushes.read().ranges.begin()->second;
+        return globals::drawlists.read().at(globals::brush_edit_data.local_brush_id).read().local_brushes.read().ranges;
     default:
         assert(false && "Not yet implementd");
     }
@@ -199,9 +196,10 @@ inline const structures::range_brush& get_selected_range_brush_const(){
 inline structures::range_brush& get_selected_range_brush(){
     switch(globals::brush_edit_data.brush_type){
     case structures::brush_edit_data::brush_type::global:
-        return globals::global_brushes().ranges.at(globals::brush_edit_data.global_brush_id);
+        assert(std::count_if(globals::global_brushes.read().begin(), globals::global_brushes.read().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;}) != 0);
+        return std::find_if(globals::global_brushes().begin(), globals::global_brushes().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;})->write().ranges;
     case structures::brush_edit_data::brush_type::local:
-        return globals::drawlists().at(globals::brush_edit_data.local_brush_id)().local_brushes().ranges.begin()->second;
+        return globals::drawlists().at(globals::brush_edit_data.local_brush_id)().local_brushes().ranges;
     default:
         assert(false && "Not yet implementd");
     }

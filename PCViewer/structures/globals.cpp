@@ -33,7 +33,7 @@ datasets_t datasets{};
 structures::drawlists_t drawlists{};
 std::vector<std::string_view> selected_drawlists{};
 
-structures::tracked_brushes global_brushes{};
+structures::global_brushes global_brushes{};
 structures::brush_edit_data brush_edit_data{};
 std::atomic<structures::brush_id> cur_global_brush_id{1};
 std::atomic<structures::range_id> cur_brush_range_id{1};

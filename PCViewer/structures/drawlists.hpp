@@ -47,7 +47,8 @@ struct drawlist{
     buffer_info             active_indices_bitset_gpu{};
     buffer_info             priority_colors_gpu{};
     std::vector<buffer_info> derived_data_infos{};          // vulkan buffer need e.g. for large vis counting
-    tracked_brushes         local_brushes{};
+    tracked_brush           local_brushes{};
+    buffer_info             local_brushes_gpu{};
 
     //TODO: add cluster and line bundles
 
