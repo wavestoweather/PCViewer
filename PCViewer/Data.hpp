@@ -103,7 +103,7 @@ class Data{
         for(int c = 0; c < columns.size(); ++c){
             bool trimmedSubsampled = false; 
             for(auto dim: columnDimensions[c]){
-                if(samplingRates[dim] != 1 || trimIndices[c] != std::pair<uint32_t, uint32_t>(0, dimensionSizes[c])){
+                if(samplingRates[dim] != 1 || trimIndices[dim] != std::pair<uint32_t, uint32_t>(0, dimensionSizes[dim])){
                     trimmedSubsampled = true;
                     break;
                 }
@@ -124,7 +124,7 @@ class Data{
             for(auto d: columnDimensions[c]) redColumnSize *= reducedDimensions[d];
             std::vector<float> redData(redColumnSize);
             uint32_t redDataCur = 0;
-            while(redDimIndices[0] < redDimStops[columnDimensions[c][0]]){
+            while(redDimIndices[0] < redDimStops[0]){
                 //copy value
                 redData[redDataCur++] = columns[c][indexReducedDimIndices(redDimIndices, c)];
                 //increase dimension itertor
