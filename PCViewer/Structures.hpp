@@ -113,14 +113,22 @@ enum class AlphaMappingTypes: uint32_t{
     MappingMultiplicative,
     MappingBound01,
     MappingConstAlpha,
-    MappingAlphaAdoption
+    MappingAlphaAdoption,
+    MappingExp,
+    MappingSqrt,
+    MappingLog,
+    MappingComp
 };
 
 static std::vector<std::string_view> alphaMappingNames{
     "MappingMultiplicative",
     "MappingBound01",
     "MappingConstAlpha",
-    "MappingAlphaAdoption"
+    "MappingAlphaAdoption",
+    "MappingExp",
+    "MappingSqrt",
+    "MappingLog",
+    "MappingComp"
 };
 
 // struct holding the information for a drawable instance of a TemplateList

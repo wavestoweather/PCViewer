@@ -30,6 +30,10 @@ const uint MappingMultiplicative = 0;    // standard
 const uint MappingBound01 = 1;            // all resulting alpha values have at least  alpha = .01
 const uint MappingConstAlpha = 2;        // when count > 0 alpha value from color is taken
 const uint MappingAlphaAdoption = 3;
+const uint MappingExp = 4;
+const uint MappingSqrt = 5;
+const uint MappingLog = 6;
+const uint MappingComp = 7;
 
 void main() {
     float gap = 2.0f/(ubo.amtOfVerts - 1.0f); //gap is tested, and is correct
@@ -92,6 +96,27 @@ void main() {
             float widthS = subWidth * subWidth;
             color.a *= mix(widthS / (widthS + yDiff * yDiff), 1, color.a);//1 / (1 + yDiff * yDiff / (subWidth * subWidth));//;ubWidth / sqrt(subWidth * subWidth + yDiff * yDiff)
         }
+        break;
+    case MappingExp:
+        color.a = 1.-pow(1.-color.a, count);
+        color.a = pow(color.a, 2);
+        break;
+    case MappingSqrt:
+        color.a = 1.-pow(1.-color.a, count);
+        color.a = sqrt(color.a);
+        break;
+    case MappingLog:
+        color.a = 1.-pow(1.-color.a, count);
+        color.a = log(color.a);
+        break;
+    case MappingComp:
+        //color.a = 1.-pow(1.-color.a, count);
+        //color.a = .4 * sin(color.a / 3.14 * 30) + .6;
+        color.a = exp(float(-int(count) + 1)) * color.a;
+        //color.a = clamp(color.a, 0, 1);
+        //color.a =  1.-pow(1.-color.a, -count);
+        if(count == 0)
+            color.a = 0;
         break;
     }
     
