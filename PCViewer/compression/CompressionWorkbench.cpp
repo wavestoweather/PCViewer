@@ -58,11 +58,20 @@ void CompressionWorkbench::draw()
         //        std::cout << e.what() << std::endl;
         //    }
         //}
-        if(ImGui::Button("Create Column loader")){
+        static bool use_netcdf{true};
+        //if(ImGui::RadioButton("NetCDF", use_netcdf))
+        //    use_netcdf = true;
+        //ImGui::SameLine();
+        //if(ImGui::RadioButton("Csv", !use_netcdf))
+        //    use_netcdf = false;
+        if(ImGui::Button("Create loader")){
             std::vector<std::string_view> includeView(_includedFiles.begin(), _includedFiles.end());
             std::vector<std::string_view> excludeView(_excludedFiles.begin(), _excludedFiles.end());
             try{
-                _columnLoader = std::make_shared<NetCdfColumnLoader>(_inputFiles, includeView, excludeView);
+                if(use_netcdf)
+                    _columnLoader = std::make_shared<NetCdfColumnLoader>(_inputFiles, includeView, excludeView);
+                //else
+                //    _columnLoader = std::make_shared<CsvLoader>(_inputFiles, includeView, excludeView);
             }
             catch(std::runtime_error e){
                 std::cout << e.what() << std::endl;
@@ -80,27 +89,27 @@ void CompressionWorkbench::draw()
 
         if(_columnLoader){
             ImGui::Text("Column loader contains %i files", static_cast<int>(_columnLoader->getFileAmt()));
-            if(ImGui::CollapsingHeader("Data dimension settings")){
-                for(auto& a: _columnLoader->queryAttributes){
-                    if (a.dimensionSize > 0) {
-                        ImGui::Text("%s", a.name.c_str());
-						ImGui::PushItemWidth(100);
-						if (a.active) {
-							ImGui::SameLine();
-							ImGui::InputInt(("sampleFrequency##" + a.name).c_str(), &a.dimensionSubsample);
-							if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
-							ImGui::SameLine();
-							ImGui::InputInt2(("Trim Indices##" + a.name).c_str(), a.trimIndices);
-						}
-						else {
-							ImGui::SameLine();
-							ImGui::InputInt(("slice Index##" + a.name).c_str(), &a.dimensionSlice);
-							a.dimensionSlice = std::clamp(a.dimensionSlice, 0, a.dimensionSize - 1);
-						}
-						ImGui::PopItemWidth();
-					}
-                }
-            }
+            //if(ImGui::CollapsingHeader("Data dimension settings")){
+            //    for(auto& a: _columnLoader->queryAttributes){
+            //        if (a.dimensionSize > 0) {
+            //            ImGui::Text("%s", a.name.c_str());
+			//			ImGui::PushItemWidth(100);
+			//			if (a.active) {
+			//				ImGui::SameLine();
+			//				ImGui::InputInt(("sampleFrequency##" + a.name).c_str(), &a.dimensionSubsample);
+			//				if (a.dimensionSubsample < 1) a.dimensionSubsample = 1;
+			//				ImGui::SameLine();
+			//				ImGui::InputInt2(("Trim Indices##" + a.name).c_str(), a.trimIndices);
+			//			}
+			//			else {
+			//				ImGui::SameLine();
+			//				ImGui::InputInt(("slice Index##" + a.name).c_str(), &a.dimensionSlice);
+			//				a.dimensionSlice = std::clamp(a.dimensionSlice, 0, a.dimensionSize - 1);
+			//			}
+			//			ImGui::PopItemWidth();
+			//		}
+            //    }
+            //}
         }
         if(_loader || _columnLoader && ImGui::Button("Analyze")){
             if(_loader)
@@ -152,19 +161,19 @@ void CompressionWorkbench::draw()
         //    _buildHierarchyFuture = std::async(compression::createNDHierarchy, _outputFolder, _loader.get(), compression::CachingMethod::Bundled, _startCluster, _clusterMultiplicator, _dimensionality, _levels, _maxWorkingMemory, _amtOfThreads);
         //}
         //ImGui::Separator();
-        if(ImGui::InputInt("1d cluster bin amount", reinterpret_cast<int*>(&_binsAmt))) _binsAmt = std::clamp<uint32_t>(_startCluster, 1, 1e6);
-        if(ImGui::InputScalar("Compression block size(powerOf2)->", ImGuiDataType_U32, &_compressionBlockSize)) _compressionBlockSize = std::clamp(_compressionBlockSize, 1u, 31u);
-        ImGui::SameLine(); ImGui::Text("%u", 1u << _compressionBlockSize);
-        if(ImGui::InputFloat("Quantizatio step", &_quantizationStep, .0f,.0f, "%.4f")) _quantizationStep = std::clamp(_quantizationStep, .0001f, 1.f);
-        ImGui::Checkbox("Float column data", &_floatColumnData);
-        ImGui::Checkbox("Half column data", &_halfClolumnData);
-        ImGui::Checkbox("Compressed column data", &_compressedColumnData);
-        ImGui::Checkbox("Roaring column bin indices", &_roaringBinIndices);
+        //if(ImGui::InputInt("1d cluster bin amount", reinterpret_cast<int*>(&_binsAmt))) _binsAmt = std::clamp<uint32_t>(_startCluster, 1, 1e6);
+        //if(ImGui::InputScalar("Compression block size(powerOf2)->", ImGuiDataType_U32, &_compressionBlockSize)) _compressionBlockSize = std::clamp(_compressionBlockSize, 1u, 31u);
+        //ImGui::SameLine(); ImGui::Text("%u", 1u << _compressionBlockSize);
+        //if(ImGui::InputFloat("Quantizatio step", &_quantizationStep, .0f,.0f, "%.4f")) _quantizationStep = std::clamp(_quantizationStep, .0001f, 1.f);
+        //ImGui::Checkbox("Float column data", &_floatColumnData);
+        //ImGui::Checkbox("Half column data", &_halfClolumnData);
+        //ImGui::Checkbox("Compressed column data", &_compressedColumnData);
+        //ImGui::Checkbox("Roaring column bin indices", &_roaringBinIndices);
         //if(ImGui::Button("Cluster 1d indices")){
         //    _buildHierarchyFuture = std::async(compression::create1DBinIndex, _outputFolder, _columnLoader.get(), _binsAmt, _maxWorkingMemory, _amtOfThreads);
         //}
         using namespace compression;
-        if(ImGui::Button("Cluster 1d with compressed columns")){
+        if(ImGui::Button("Compress")){
             DataStorageBits storageBits{};
             if(_floatColumnData) storageBits |= DataStorageBits::RawColumnData;
             if(_halfClolumnData) storageBits |= DataStorageBits::HalfColumnData;

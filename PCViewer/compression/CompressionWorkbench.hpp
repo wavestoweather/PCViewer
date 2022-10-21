@@ -38,7 +38,7 @@ private:
     float _quantizationStep{.01f};
     bool _floatColumnData{false};
     bool _halfClolumnData{true};
-    bool _compressedColumnData{true};
+    bool _compressedColumnData{false};
     bool _roaringBinIndices{false};
 
     uint32_t _startCluster{10};
