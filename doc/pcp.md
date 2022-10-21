@@ -65,6 +65,7 @@ To load a saved attribute settings go to the [parallel coordinates settings](#pa
 
 #### PCP right click menu
 Most parallel coordinates settings can be accessed by right clicking on the pcp. The following menu opens up:
+
 ![pcprightclickmenu](images/rightclick_pcp.png)
 
 The settings do the following:
@@ -189,8 +190,8 @@ After datasets have been loaded they are shown in the data set list:
 For each Dataset a collapsable header in the list, which can be opened to access dataset actions:
 - Create a drawlist from an ``IndexList``: All available indexlists are shown in the top of the collapsable header and can be clicked to be converted to a ``DrawList`` by clicking on the button. The ``Default Drawlist`` indexlist creates a drawlist showing all datapoints in the dataset.
 - ``ADDINDEXLIST`` opens a popup where special indexlists for a drawlist can be added. These indexlists can be used for loading clusters in datasets without having to load each cluster as a new dataset. For more information go over to the [data documentation](data.md).
-- ``Split members`` opens a popup to split a dataset on one attribute into severla members. ![split members dialogue](images/split_members.png)
-Here one can spcifiy the axis on which the split should be done and the amount of groups that should result in the split. The dataset is then split linearly into ``n`` groups and for each group a drawlist is created.
+- ``Split members`` opens a popup to split a dataset on one attribute into severla members.
+![split members dialogue](images/split_members.png)Here one can spcifiy the axis on which the split should be done and the amount of groups that should result in the split. The dataset is then split linearly into ``n`` groups and for each group a drawlist is created.
 - With ``DELETE`` the dataset can be deleted.
 
 ## Drawlists

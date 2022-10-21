@@ -1,5 +1,5 @@
 # Iso Surface Renderer Documentation
-Side ot side iamge of the iso surface renderers.
+Image of the iso surface renderers.
 
 In the following both iso surface renderers are explained in detail.
 

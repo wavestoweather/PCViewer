@@ -164,7 +164,7 @@ static int debugLevel = 3;
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-#define _DEBUG
+//#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -620,7 +620,7 @@ struct PCSettings {
 	int fractionBoxLineWidth = 3;
 	float multivariateStdDivThresh = 1.0f;
 
-	bool renderSplines = true;
+	bool renderSplines = false;
 
 	//variables for animation
 	float animationDuration = 2.0f;		//time for every active brush to show in seconds
@@ -10493,26 +10493,26 @@ int main(int, char**)
 				ImGui::PushItemWidth(100);
 				if (ImGui::MenuItem("DrawHistogram", "", &pcSettings.drawHistogramm))
 					pcPlotRender = true;
-				if (ImGui::MenuItem("Show Pc Plot Density", "", &pcSettings.pcPlotDensity))
-					pcPlotRender = true;
-				if (ImGui::MenuItem("Density Mapping", "", &pcSettings.enableDensityMapping))
-					pcPlotRender = true;
-				if (ImGui::MenuItem("Greyscale denisty", "", &pcSettings.enableDensityGreyscale)) {
-					if (pcAttributes.size()) {
-						uploadDensityUiformBuffer();
-						pcPlotRender = true;
-					}
-				}
-				ImGui::MenuItem("Enable Medina Calc", "", &pcSettings.calculateMedians);
-				if (ImGui::MenuItem("Enable brushing", "", &pcSettings.enableBrushing)) {
-					updateAllActiveIndices();
-					pcPlotRender = true;
-				}
-				if (ImGui::SliderFloat("Median line width", &pcSettings.medianLineWidth, 1, 20))
-					pcPlotRender = true;
+				//if (ImGui::MenuItem("Show Pc Plot Density", "", &pcSettings.pcPlotDensity))
+				//	pcPlotRender = true;
+				//if (ImGui::MenuItem("Density Mapping", "", &pcSettings.enableDensityMapping))
+				//	pcPlotRender = true;
+				//if (ImGui::MenuItem("Greyscale denisty", "", &pcSettings.enableDensityGreyscale)) {
+				//	if (pcAttributes.size()) {
+				//		uploadDensityUiformBuffer();
+				//		pcPlotRender = true;
+				//	}
+				//}
+				//ImGui::MenuItem("Enable Medina Calc", "", &pcSettings.calculateMedians);
+				//if (ImGui::MenuItem("Enable brushing", "", &pcSettings.enableBrushing)) {
+				//	updateAllActiveIndices();
+				//	pcPlotRender = true;
+				//}
+				//if (ImGui::SliderFloat("Median line width", &pcSettings.medianLineWidth, 1, 20))
+				//	pcPlotRender = true;
 				if (ImGui::ColorEdit4("Plot background", &pcSettings.PcPlotBackCol.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
 					pcPlotRender = true;
-				if (ImGui::MenuItem("Render splines", "", &pcSettings.renderSplines))
+				if (ImGui::MenuItem("Render splines (not available for largeVis)", "", &pcSettings.renderSplines))
 					pcPlotRender = true;
 				ImGui::MenuItem("Enable axis lines", "", &pcSettings.enableAxisLines);
 				ImGui::MenuItem("Always show 0 tick", "", &pcSettings.enableZeroTick);
@@ -10570,77 +10570,77 @@ int main(int, char**)
 
 				auto histComp = g_PcPlotDrawLists.begin();
 				if (pcSettings.histogrammDrawListComparison != -1) std::advance(histComp, pcSettings.histogrammDrawListComparison);
-				if (ImGui::BeginCombo("Histogramm Comparison", (pcSettings.histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
-					if (ImGui::MenuItem("Off")) {
-						pcSettings.histogrammDrawListComparison = -1;
-						uploadDensityUiformBuffer();
-						if (pcSettings.drawHistogramm) {
-							pcPlotRender = true;
-						}
-					}
-					auto it = g_PcPlotDrawLists.begin();
-					for (int i = 0; i < g_PcPlotDrawLists.size(); i++, ++it) {
-						if (ImGui::MenuItem(it->name.c_str())) {
-							pcSettings.histogrammDrawListComparison = i;
-							uploadDensityUiformBuffer();
-							if (pcSettings.drawHistogramm) {
-								pcPlotRender = true;
-							}
-						}
-					}
-
-					ImGui::EndCombo();
-				}
-				static const char* loadNames[] = {"None", "All", "Random subsampled"};
-				if(ImGui::BeginCombo("Create drawlist on load", loadNames[int(pcSettings.createDefaultOnLoad)])){
-					for(int i: irange(3)){
-						if(ImGui::MenuItem(loadNames[i])){
-							pcSettings.createDefaultOnLoad = static_cast<DefaultLoad>(i);
-						}
-					}
-					ImGui::EndCombo();
-				}
-				if(pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling)
-					ImGui::InputFloat("Random subsampling val", &pcSettings.defaultLoadRandomProbability);
-				ImGui::SliderInt("Line batch size", &pcSettings.lineBatchSize, 1e5, 1e7);
-				ImGui::Checkbox("enableClearOnRerender", &pcSettings.enableClearOnRerender);
-				if(ImGui::BeginMenu("Export Plot (no labels/ticks)")){
-					static std::string exportPath{};
-					ImGui::InputText("##pcExportPath", &exportPath);
-					ImGui::SameLine();
-					if(ImGui::Button("Export")){
-						if(exportPath.empty()){
-							std::cout << "No export name given, nothing happening" << std::endl;
-						}
-						else{
-							//creating the image and copying the frame data to the image
-							cimg_library::CImg<unsigned char> res(g_PcPlotWidth, g_PcPlotHeight, 1, 4);
-							//check_vk_result(vkQueueWaitIdle(g_Queue));
-							std::vector<half> img(g_PcPlotWidth * g_PcPlotHeight * 4);
-							VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_PcPlot, g_pcPlotFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_PcPlotWidth, g_PcPlotHeight, 1, img.data(), g_PcPlotWidth* g_PcPlotHeight * 4 * sizeof(img[0]));
-							//transforming the downloaded image to the correct image coordinates
-							for (int x = 0; x < g_PcPlotWidth; ++x) {
-								for (int y = 0; y < g_PcPlotHeight; ++y) {
-									for (int c = 0; c < 4; ++c) {
-										int cc = c;
-										//if (c != 3) cc = std::abs(c - 2);
-										int oldIndex = x * g_PcPlotHeight * 4 + y * 4 + c;
-										int newIndex = (cc) * g_PcPlotHeight * g_PcPlotWidth + x * g_PcPlotHeight + y;
-										assert(oldIndex < g_PcPlotWidth* g_PcPlotHeight * 4);
-										assert(newIndex < g_PcPlotWidth* g_PcPlotHeight * 4);
-	
-										if(c == 3) res.data()[newIndex] = 255;
-										else res.data()[newIndex] = float(img[oldIndex]) * 255;
-									}
-								}
-							}
-	
-							res.save_png(exportPath.c_str());
-							std::cout << "[export] Done" << std::endl;
-						}
-					}
-					ImGui::EndMenu();
-				}
+				//if (ImGui::BeginCombo("Histogramm Comparison", (pcSettings.histogrammDrawListComparison == -1) ? "Off" : histComp->name.c_str())) {
+				//	if (ImGui::MenuItem("Off")) {
+				//		pcSettings.histogrammDrawListComparison = -1;
+				//		uploadDensityUiformBuffer();
+				//		if (pcSettings.drawHistogramm) {
+				//			pcPlotRender = true;
+				//		}
+				//	}
+				//	auto it = g_PcPlotDrawLists.begin();
+				//	for (int i = 0; i < g_PcPlotDrawLists.size(); i++, ++it) {
+				//		if (ImGui::MenuItem(it->name.c_str())) {
+				//			pcSettings.histogrammDrawListComparison = i;
+				//			uploadDensityUiformBuffer();
+				//			if (pcSettings.drawHistogramm) {
+				//				pcPlotRender = true;
+				//			}
+				//		}
+				//	}
+//
+				//	ImGui::EndCombo();
+				//}
+				//static const char* loadNames[] = {"None", "All", "Random subsampled"};
+				//if(ImGui::BeginCombo("Create drawlist on load", loadNames[int(pcSettings.createDefaultOnLoad)])){
+				//	for(int i: irange(3)){
+				//		if(ImGui::MenuItem(loadNames[i])){
+				//			pcSettings.createDefaultOnLoad = static_cast<DefaultLoad>(i);
+				//		}
+				//	}
+				//	ImGui::EndCombo();
+				//}
+				//if(pcSettings.createDefaultOnLoad == DefaultLoad::RandomSubsampling)
+				//	ImGui::InputFloat("Random subsampling val", &pcSettings.defaultLoadRandomProbability);
+				//ImGui::SliderInt("Line batch size", &pcSettings.lineBatchSize, 1e5, 1e7);
+				//ImGui::Checkbox("enableClearOnRerender", &pcSettings.enableClearOnRerender);
+				//if(ImGui::BeginMenu("Export Plot (no labels/ticks)")){
+				//	static std::string exportPath{};
+				//	ImGui::InputText("##pcExportPath", &exportPath);
+				//	ImGui::SameLine();
+				//	if(ImGui::Button("Export")){
+				//		if(exportPath.empty()){
+				//			std::cout << "No export name given, nothing happening" << std::endl;
+				//		}
+				//		else{
+				//			//creating the image and copying the frame data to the image
+				//			cimg_library::CImg<unsigned char> res(g_PcPlotWidth, g_PcPlotHeight, 1, 4);
+				//			//check_vk_result(vkQueueWaitIdle(g_Queue));
+				//			std::vector<half> img(g_PcPlotWidth * g_PcPlotHeight * 4);
+				//			VkUtil::downloadImageData(g_Device, g_PhysicalDevice, g_ExportWindowFrame.CommandPool, g_Queue, g_PcPlot, g_pcPlotFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_PcPlotWidth, g_PcPlotHeight, 1, img.data(), g_PcPlotWidth* g_PcPlotHeight * 4 * sizeof(img[0]));
+				//			//transforming the downloaded image to the correct image coordinates
+				//			for (int x = 0; x < g_PcPlotWidth; ++x) {
+				//				for (int y = 0; y < g_PcPlotHeight; ++y) {
+				//					for (int c = 0; c < 4; ++c) {
+				//						int cc = c;
+				//						//if (c != 3) cc = std::abs(c - 2);
+				//						int oldIndex = x * g_PcPlotHeight * 4 + y * 4 + c;
+				//						int newIndex = (cc) * g_PcPlotHeight * g_PcPlotWidth + x * g_PcPlotHeight + y;
+				//						assert(oldIndex < g_PcPlotWidth* g_PcPlotHeight * 4);
+				//						assert(newIndex < g_PcPlotWidth* g_PcPlotHeight * 4);
+	//
+				//						if(c == 3) res.data()[newIndex] = 255;
+				//						else res.data()[newIndex] = float(img[oldIndex]) * 255;
+				//					}
+				//				}
+				//			}
+	//
+				//			res.save_png(exportPath.c_str());
+				//			std::cout << "[export] Done" << std::endl;
+				//		}
+				//	}
+				//	ImGui::EndMenu();
+				//}
 				if(ImGui::BeginMenu("Plot Size")){
 					static int wh[2]{static_cast<int>(g_PcPlotWidth), static_cast<int>(g_PcPlotHeight)};
 					bool change = ImGui::InputInt2("width/hight", wh, ImGuiInputTextFlags_EnterReturnsTrue);

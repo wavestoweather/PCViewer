@@ -6,6 +6,8 @@ PCViewer is a program to efficiently visualize large datasets and interactiveley
 
 For a walk through beginners explanation for an example workthrough can be seen in the [example pdf](PCViewer_example.pdf).
 
+For a tutorial fo rusing the PCViewer for very large datasets see [the large vis doc](large_vis.md).
+
 ## Visualization Overview
 In the following all visualizations which can be done with the PCViewer are shown.
 ### Prallel coordinate Plot

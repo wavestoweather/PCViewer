@@ -7,10 +7,10 @@ https://arxiv.org/abs/2007.15446
 GPU Accelerated Scalable Parallel Coordinates Plots (Link will be added shortly)
 
 This tool imports .csv files and displays them via Parallel Coordinates, Violin Plots and Isocontours.
-To cope with very large data, please follow the guide on (Guide will be added shortly).
-For a test dataset with large amount of data see (Wiell be addded shortly).
+To cope with very large data, please follow the guide in the [large vis docs](/doc/large_vis.md).
+In the guide a test dataset is linked for verification of the method.
 
-The current UI and backend is currently under rework (see branch backend_rework) and the final program will also be released on this branch.
+The UI and backend are currently under rework (see branch backend_rework) and the final program will also be released on this branch. Expect some bugs!
 
 # Compilation notes
 The program uses the Vulkan API as render back end, the SDL2 API as platform independent window back end and NetCDF API to open .nc files.

@@ -52,7 +52,7 @@ VkFence UploadManager::uploadTask(const void* data, size_t byteSize, VkBuffer ds
         std::scoped_lock cacheLock(_cacheMutex);
         if(useCachedData){
             if(cachedData[dstBuffer] == data){
-                std::cout << "Skipping upload task" << std::endl;
+                //std::cout << "Skipping upload task" << std::endl;
                 return VK_NULL_HANDLE;
             }
         }

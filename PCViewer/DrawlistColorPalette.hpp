@@ -131,5 +131,7 @@ public:
             float hue = h * 10;
             colors.push_back(Color(hsv2rgb({hue, saturation, value})));
         }
+        curColor = colors.size() - 1;
+        colors.push_back(Color({1,1,1}));
     }
 };
