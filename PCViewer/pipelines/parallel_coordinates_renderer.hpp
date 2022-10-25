@@ -24,7 +24,7 @@ class parallel_coordinates_renderer{
     struct push_constants{
         VkDeviceAddress     attribute_info_address;
         VkDeviceAddress     data_header_address;
-        VkDeviceAddress        priorities_address;
+        VkDeviceAddress     priorities_address;
         VkDeviceAddress     index_buffer_address;
         VkDeviceAddress     activation_bitset_address;
         uint                vertex_count_per_line;        // is at least as high as attribute_count (when equal, polyline rendering)

@@ -6,8 +6,23 @@ layout(buffer_reference, scalar) buffer DataHeader{
     uint data[];
 };
 
+const uint float_type = 0;
+const uint half_type = 1;
+const uint uint_type = 2;
+const uint ushort_type = 3;
+
+layout(constant_id = 0) const uint data_type = float_type;
 layout(buffer_reference, scalar) buffer Data{
     float d[];
+};
+layout(buffer_reference, scalar) buffer Half{
+    float16_t d[];
+};
+layout(buffer_reference, scalar) buffer UInt{
+    uint d[];
+};
+layout(buffer_reference, scalar) buffer UShort{
+    uint16_t d[];
 };
 
 const uint maxAmtOfColumns = 50;
@@ -42,6 +57,12 @@ float get_packed_data(uint index, uint column){
         }
         uint dim = data_header.data[baseColumnDimensionsOffset + d];
         columnIndex += factor * dimensionIndices[dim];
+    }
+    switch(data_type){
+    case float_type:
+    case half_type:
+    case uint_type:
+    case ushort_type:
     }
     Data data = Data(uvec2(data_header.data[data_header.data_address_offset + 2 * column], data_header.data[data_header.data_address_offset + 2 * column + 1]));
     return data.d[columnIndex];

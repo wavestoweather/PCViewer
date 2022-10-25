@@ -298,6 +298,7 @@ inline void setup_debug_report_callback(PFN_vkDebugUtilsMessengerCallbackEXT cal
 // ----------------------------------------------------------------------------------------------------------------
 // Create helper functions with bundled functionality. No registering in the context going on
 // ----------------------------------------------------------------------------------------------------------------
+
 inline VkShaderModule create_shader_module(std::string_view filename){
     VkShaderModule module;
     auto bytes = util::read_file(filename);

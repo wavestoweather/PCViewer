@@ -21,6 +21,7 @@
 #include <workbench_base.hpp>
 #include <logger.hpp>
 #include <data_util.hpp>
+#include <large_vis.hpp>
 
 namespace util{
 namespace dataset{
@@ -345,28 +346,28 @@ std::vector<structures::query_attribute> get_csv_query_attributes(std::string_vi
     std::vector<structures::query_attribute> query{};
     for(std::string_view variable; getline(first_line_view, variable, ',');){
         query.push_back(structures::query_attribute{
-            false,    // dim
-            false,     // string dim
-            true,    // active
-            false,    // linearize
+            false,      // dim
+            false,      // string dim
+            true,       // active
+            false,      // linearize
             std::string(variable), //id
-            0,         // dimensions size
-            {0},     // dependant dimensions
-            1,        // dimension subsampling
-            0,        // dimension slice
+            0,          // dimensions size
+            {0},        // dependant dimensions
+            1,          // dimension subsampling
+            0,          // dimension slice
             {0, size_t(-1)}// trim bounds
         });
     }
     query.push_back(structures::query_attribute{
-        true,    // dim
-        false,     // string dim
-        true,    // active
-        false,    // linearize
-        "index", //id
-        size_t(-1), // dimensions size
-        {},     // dependant dimensions
-        1,        // dimension subsampling
-        0,        // dimension slice
+        true,           // dim
+        false,          // string dim
+        true,           // active
+        false,          // linearize
+        "index",        // id
+        size_t(-1),     // dimensions size
+        {},             // dependant dimensions
+        1,              // dimension subsampling
+        0,              // dimension slice
         {0, size_t(-1)} // trim bounds
     });
 
@@ -374,7 +375,47 @@ std::vector<structures::query_attribute> get_csv_query_attributes(std::string_vi
 }
 std::vector<structures::query_attribute> get_combined_query_attributes(std::string_view folder){
     if(!std::filesystem::exists(folder))
-        throw std::runtime_error{"get_combined_query_attributes() file " + std::string(folder) + " does not exist"};
+        throw std::runtime_error{"get_combined_query_attributes() folder " + std::string(folder) + " does not exist"};
+    std::string attribute_info = std::string(folder) + "/attr.info";
+    std::string data_info = std::string(folder) + "/data.info";
+    if(!std::filesystem::exists(attribute_info))
+        throw std::runtime_error{"get_combined_query_attributes() file " + attribute_info + " does not exist"};
+    if(!std::filesystem::exists(data_info))
+        throw std::runtime_error{"get_combined_query_attributes() file " + data_info + " does not exist"};
+
+    std::vector<structures::query_attribute> query;
+    std::string variable; float min, max;
+    std::ifstream attribute_info_file(attribute_info, std::ios::binary);
+    while(attribute_info_file >> variable >> min >> max){
+        query.push_back(structures::query_attribute{
+            false,      // dim
+            false,      // string dim
+            true,       // active
+            false,      // linearize
+            variable,   //id
+            0,          // dimensions size
+            {0},        // dependant dimensions
+            1,          // dimension subsampling
+            0,          // dimension slice
+            {0, size_t(-1)}// trim bounds
+        });
+    }
+    std::ifstream data_info_file(data_info, std::ios::binary);
+    size_t data_size;
+    structures::large_vis::data_flags data_flags;
+    data_info_file >> data_size >> reinterpret_cast<uint32_t&>(data_flags);
+    query.push_back(structures::query_attribute{
+        true,           // dim
+        false,          // string dim
+        true,           // active
+        false,          // linearize
+        "index",        // id
+        data_size,      // dimensions size
+        {},             // dependant dimensions
+        1,              // dimension subsampling
+        0,              // dimension slice
+        {0, data_size}  // trim bounds
+    });
     return {};
 }
 }
