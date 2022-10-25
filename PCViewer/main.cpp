@@ -23,6 +23,7 @@
 #include <global_descriptor_set_util.hpp>
 #include <brusher.hpp>
 #include <brush_util.hpp>
+#include <sys_info.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -97,7 +98,8 @@ int main(int argc,const char* argv[]){
     if(globals::commandline_parser.isSet("vulkanvalidation"))
         util::vk::setup_debug_report_callback(debug_report);
 
-
+    // load system information
+    globals::sys_info.init();
     // global stager init
     globals::stager.init();
 

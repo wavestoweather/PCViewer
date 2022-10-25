@@ -109,9 +109,6 @@ struct vk_context{
     // no copy construction
     vk_context(const vk_context&) = delete;
     vk_context& operator=(const vk_context&) = delete;
-    // no move construction
-    vk_context(vk_context&&) = delete;
-    vk_context& operator=(vk_context&&) = delete;
     ~vk_context(){assert(!physical_device && "Missing call to vk_context.cleanup()");}
 private:
     size_t                                      _staging_buffer_size{};

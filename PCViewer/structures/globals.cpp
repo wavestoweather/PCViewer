@@ -21,6 +21,7 @@
 #include <workbench_base.hpp>
 #include <imgui_globals.hpp>
 #include <logger.hpp>
+#include <sys_info.hpp>
 
 // globals definition
 structures::logger<20> logger{};
@@ -62,6 +63,8 @@ dataset_dependencies_t dataset_dependencies{};
 drawlist_dataset_dependencies_t drawlist_dataset_dependencies{}; 
 
 structures::imgui_globals imgui{};
+
+structures::sys_info sys_info{};
 }
 
 namespace structures{

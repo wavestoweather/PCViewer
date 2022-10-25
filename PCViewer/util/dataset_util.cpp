@@ -127,9 +127,8 @@ void erase_if(std::vector<T>& c, predicate pred){
     c.erase(it, c.end());
 }
 
-load_result<float> open_csv_float(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
-    using T = float;
-    
+template<typename T>
+load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
     std::string input;
     {
         size_t file_size = std::filesystem::file_size(filename);
@@ -146,6 +145,16 @@ load_result<float> open_csv_float(std::string_view filename, memory_view<structu
     {
         std::string_view line; getline(input_view, line);
         for(std::string_view variable; getline(line, variable, ',');){
+            if(variable[0] == '\"'){
+                if(variable.back() != '\"'){
+                    auto start = variable.begin();
+                    getline(line, variable, '\"');
+                    std::string_view tmp; getline(line, tmp, ',');      // skipping things until komma
+                    variable = std::string_view(start + 1, variable.end() - start);
+                }
+                else
+                    variable = std::string_view(variable.begin() + 1, variable.size() - 2);
+            }
             variable_names.push_back(std::string(variable));
         }
         if(query_attributes.size()){
@@ -165,13 +174,26 @@ load_result<float> open_csv_float(std::string_view filename, memory_view<structu
         int var = 0;
         for(std::string_view element; getline(line, element, ','); ++var){
             trim_inplace(element);
-            // TODO quotation marks
+
+            if(element[0] == '\"'){
+                if(element.back() != '\"'){
+                    auto start = element.begin();
+                    getline(line, element, '\"');
+                    std::string_view tmp; getline(line, tmp, ',');      // skipping things until komma
+                    element = std::string_view(start + 1, element.end() - start);
+                }
+                else
+                    element = std::string_view(element.begin() + 1, element.size() - 2);
+
+                trim_inplace(element);
+            }
+            
             if(query_attributes.size() && !query_attributes[var].is_active)
                 continue;
             if(var >= variable_names.size())
                 throw std::runtime_error{"open_csv() Too much values for data row"};
             
-            T val{};
+            float val{};
             if(element.size()){
                 auto parse_res = fast_float::from_chars(element.begin(), element.end(), val);
                 if(parse_res.ec != std::errc{}){    // parsing error -> exchnage for category
@@ -230,112 +252,16 @@ load_result<float> open_csv_float(std::string_view filename, memory_view<structu
     ret.data.compress();
     
     return std::move(ret);
+};
+
+load_result<float> open_csv_float(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
+    return open_csv_impl<float>(filename, query_attributes, partial_info);
 }
 
 load_result<half> open_csv_half(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
-    using T = half;
-    
-    std::string input;
-    {
-        size_t file_size = std::filesystem::file_size(filename);
-        input.resize(file_size);
-        structures::c_file csv(filename, "rb");
-        assert(csv);
-        csv.read(util::memory_view<char>{input.data(), input.size()});
-    }
-    std::string_view input_view(input);
-
-    const char delimiter = ',';
-    std::vector<std::string> variable_names;
-    // reading header(including attribute checks)
-    {
-        std::string_view line; getline(input_view, line);
-        for(std::string_view variable; getline(line, variable, ',');){
-            variable_names.push_back(std::string(variable));
-        }
-        if(query_attributes.size()){
-            for(int var: util::size_range(variable_names)){
-                if(query_attributes.size() > var || variable_names[var] != query_attributes[var].id)
-                    throw std::runtime_error{"open_csv() Attributes of the attribute query are not consistent with the csv file"};
-            }
-        }
-    }
-
-    // parsing the data
-    load_result<T> ret{};
-    std::map<uint32_t, T> category_values;
-    ret.data.columns.resize(variable_names.size());
-    ret.attributes.resize(variable_names.size());
-    for(std::string_view line; getline(input_view, line);){
-        int var = 0;
-        for(std::string_view element; getline(line, element); ++var){
-            trim_inplace(element);
-            // TODO quotation marks
-            if(query_attributes.size() && !query_attributes[var].is_active)
-                continue;
-            if(var >= variable_names.size())
-                throw std::runtime_error{"open_csv() Too much values for data row"};
-            
-            T val{};
-            if(element.size()){
-                float v;
-                auto parse_res = fast_float::from_chars(element.begin(), element.end(), v);
-                val = v;
-                if(parse_res.ec != std::errc{}){    // parsing error -> exchnage for category
-                    std::string el(element);
-                    if(ret.attributes[var].categories.count(el) > 0)
-                        val = ret.attributes[var].categories[el];
-                    else{
-                        val = category_values[var];
-                        category_values[var] += 1;
-                        ret.attributes[var].categories[el] = val;
-                    }
-                }
-            }
-
-            if(val > ret.attributes[var].bounds.read().max)
-                ret.attributes[var].bounds().max = val;
-            if(val < ret.attributes[var].bounds.read().min)
-                ret.attributes[var].bounds().min = val;
-            ret.data.columns[var].push_back(val);
-        }
-    }
-    // lexicographically ordering categorical data (using the automatical sorting provided by map)
-    for(int var: util::size_range(ret.attributes)){
-        auto& categories = ret.attributes[var].categories;
-        if(categories.empty())
-            continue;
-        std::map<T, T> category_conversion;
-        uint32_t counter{};
-        for(auto& [category, value]: categories){
-            T val = counter++;
-            category_conversion[value] = val;
-            value = val;
-        }
-        for(T& f: ret.data.columns[var])
-            f = category_conversion[f];
-    }
-
-    for(int var: util::size_range(ret.attributes)){
-        ret.attributes[var].id = variable_names[var];
-        ret.attributes[var].display_name = variable_names[var];
-        ret.attributes[var].data_bounds = ret.attributes[var].bounds.read();
-    }
-    if(query_attributes.size()){
-        std::set<std::string_view> active_attributes;
-        for(const auto& a: query_attributes)
-            if(a.is_active)
-                active_attributes.insert(a.id);
-        erase_if(ret.attributes, [&](const structures::attribute& att){return active_attributes.count(att.id) == 0;});
-    }
-    erase_if(ret.data.columns, [](const std::vector<T>& v){return v.empty();});
-    ret.data.dimension_sizes = {static_cast<uint32_t>(ret.data.columns[0].size())};
-    if(query_attributes.size())
-        ret.data.subsampleTrim({static_cast<uint32_t>(query_attributes.back().dimension_subsample)}, {{0, ret.data.dimension_sizes[0]}});
-    ret.data.compress();
-    
-    return std::move(ret);
+    return open_csv_impl<half>(filename, query_attributes, partial_info);
 }
+
 load_result<half> open_combined(std::string_view folder, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
     return {};
 }
