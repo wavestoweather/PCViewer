@@ -21,7 +21,6 @@
 #include <workbench_base.hpp>
 #include <logger.hpp>
 #include <data_util.hpp>
-#include <large_vis.hpp>
 
 namespace util{
 namespace dataset{
@@ -402,7 +401,7 @@ std::vector<structures::query_attribute> get_combined_query_attributes(std::stri
     }
     std::ifstream data_info_file(data_info, std::ios::binary);
     size_t data_size;
-    structures::large_vis::data_flags data_flags;
+    uint32_t data_flags;
     data_info_file >> data_size >> reinterpret_cast<uint32_t&>(data_flags);
     query.push_back(structures::query_attribute{
         true,           // dim

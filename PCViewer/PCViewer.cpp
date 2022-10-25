@@ -5145,6 +5145,23 @@ static bool openNetCDF(const char* filename){
                 fillValue = f;
                 break;
             }
+            case NC_SHORT:{
+                auto d = std::vector<short>(ds.data.columns[i].size());
+                if((retval = nc_get_var_short(fileId, var, d.data()))){
+                    std::cout << "Error at reading fill value" << std::endl;
+                    nc_close(fileId);
+                    return false;
+                }
+                ds.data.columns[i] = std::vector<float>(d.begin(), d.end());
+                uint8_t f = 0;
+                if ((retval = nc_inq_var_fill(fileId, var, &hasFill, &f))) {
+                    std::cout << "Error at reading fill value" << std::endl;
+                    nc_close(fileId);
+                    return false;
+                }
+                fillValue = f;
+                break;
+            }
             case NC_CHAR:
             //categorical data
             {
