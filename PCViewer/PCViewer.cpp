@@ -7537,8 +7537,8 @@ void violinAttributePlotAddDrawList(ViolinPlot& plot, DrawList& dl, uint32_t i) 
         violinAttributePlots[i].drawLists.push_back({ dl.name, true });
         violinAttributePlots[i].violinPlacements.push_back(ViolinLeft);
         violinAttributePlots[i].violinScalesX.push_back(ViolinScaleGlobalAttribute);
-        violinAttributePlots[i].drawListLineColors.push_back({ 0,0,0,1 });
-        violinAttributePlots[i].drawListFillColors.push_back({ 0,0,0,0 });
+        violinAttributePlots[i].drawListLineColors.push_back({ dl.color.x, dl.color.y, dl.color.z,1 });
+        violinAttributePlots[i].drawListFillColors.push_back({ dl.color.x, dl.color.y, dl.color.z,.1 });
     }
     HistogramManager::Histogram& h = histogramManager->getHistogram(dl.name);
     for (int l = 0; l < h.maxCount.size(); ++l) {
@@ -7989,7 +7989,7 @@ int main(int, char**)
     }
 
     {// scatterplot workbench
-        scatterplotWorkbench = new ScatterplotWorkbench({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, pcAttributes);
+        scatterplotWorkbench = new ScatterplotWorkbench({{0,0}, g_PhysicalDevice, g_Device, g_DescriptorPool, g_PcPlotCommandPool, g_Queue}, pcAttributes, pcPlotSelectedDrawList, g_PcPlotDrawLists);
     }
 
     {// correlation matrix workbench
@@ -13830,6 +13830,7 @@ int main(int, char**)
                 //}
 
                 int amtOfAttributes = 0;
+                if(ImGui::CollapsingHeader("Attribute settings")){
                 for (int j = 0; j < violinAttributePlots[i].maxValues.size(); ++j) {
                     ImGui::Checkbox(pcAttributes[j].name.c_str(), violinAttributePlots[i].activeAttributes + j);
                     ImGui::SameLine(200);
@@ -13840,9 +13841,15 @@ int main(int, char**)
 
                     if (violinAttributePlots[i].activeAttributes[j]) ++amtOfAttributes;
                 }
+                }
+                else{
+                    for (int j = 0; j < violinAttributePlots[i].maxValues.size(); ++j) {
+                        if (violinAttributePlots[i].activeAttributes[j]) ++amtOfAttributes;
+                    }
+                }
 
 
-
+                if(ImGui::CollapsingHeader("Auto color section")){
                 int previousNrOfColumns = ImGui::GetColumnsCount();
                 ImGui::Separator();
                 ImGui::Columns(5);
@@ -13946,6 +13953,7 @@ int main(int, char**)
 
 
                 ImGui::Columns(previousNrOfColumns);
+                }
 
                 const char* plotCombinations[2] = { "stacked", "sum" };
                 if(ImGui::BeginCombo("Violin plot combination", plotCombinations[violinPlotAttributeSettings.violinPlotAttrStacking])) {

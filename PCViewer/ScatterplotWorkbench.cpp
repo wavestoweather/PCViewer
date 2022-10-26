@@ -145,8 +145,10 @@ void ScatterplotWorkbench::ScatterPlot::DrawListInstance::updateUniformBufferDat
     VkUtil::uploadData(context.device, uboMemory, 0, uboSize, uniformBytes.data());
 }
 
-ScatterplotWorkbench::ScatterPlot::ScatterPlot(VkUtil::Context context, int width, int height, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout, VkPipeline pipeline, VkPipelineLayout pipelineLayout, std::vector<Attribute>& attributes): 
-context(context), 
+ScatterplotWorkbench::ScatterPlot::ScatterPlot(VkUtil::Context context, int width, int height, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout, VkPipeline pipeline, VkPipelineLayout pipelineLayout, std::vector<Attribute>& attributes, const std::vector<int>& selected_dls, const std::list<DrawList>& dls): 
+selected_drawlists(selected_dls),
+drawlists(dls),
+context(context),
 renderPass(renderPass),
 activeAttributesCount(attributes.size()),
 activeAttributes( attributes.size(), true), 
@@ -300,7 +302,11 @@ void ScatterplotWorkbench::ScatterPlot::draw(int index){
     if(ImGui::BeginDragDropTarget()){
         if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")){
             DrawList* dl = *((DrawList**)payload->Data);
-            addDrawList(*dl, attributes);
+            for(int i: selected_drawlists){
+                auto it = drawlists.begin();
+                std::advance(it, i);
+                addDrawList(*it, attributes);
+            }
             updatePlot();
         }
     }
@@ -493,7 +499,7 @@ void ScatterplotWorkbench::ScatterPlot::updateRender(VkCommandBuffer commandBuff
     VkUtil::transitionImageLayout(commandBuffer, resultImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
-void ScatterplotWorkbench::ScatterPlot::addDrawList(DrawList& dl, std::vector<Attribute>& attr){
+void ScatterplotWorkbench::ScatterPlot::addDrawList(const DrawList& dl, std::vector<Attribute>& attr){
     dls.emplace_back(context, dl, dl.buffer, dl.activeIndicesBufferView, dl.indicesBuffer, dl.indices.size(), descriptorSetLayout, attributes);
     activeAttributes.resize(attributes.size(), 1);
     activeAttributesCount = 0;
