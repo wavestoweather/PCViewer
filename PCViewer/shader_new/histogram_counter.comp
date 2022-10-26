@@ -5,3 +5,6 @@
 #extension GL_KHR_shader_subgroup_vote : enable
 #extension GL_KHR_shader_subgroup_ballot: enable
 
+void main(){
+    
+}

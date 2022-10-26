@@ -58,12 +58,12 @@ float get_packed_data(uint index, uint column){
         uint dim = data_header.data[baseColumnDimensionsOffset + d];
         columnIndex += factor * dimensionIndices[dim];
     }
-    switch(data_type){
-    case float_type:
-    case half_type:
-    case uint_type:
-    case ushort_type:
-    }
+    //switch(data_type){
+    //case float_type:
+    //case half_type:
+    //case uint_type:
+    //case ushort_type:
+    //}
     Data data = Data(uvec2(data_header.data[data_header.data_address_offset + 2 * column], data_header.data[data_header.data_address_offset + 2 * column + 1]));
     return data.d[columnIndex];
 }

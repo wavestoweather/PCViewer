@@ -2414,9 +2414,13 @@ static void createPcPlotDrawList(TemplateList& tl, const DataSet& ds, const char
     //binding the active indices buffer, creating the buffer view and uploading the correct indices to the graphicscard
     if(dl.activeIndicesBuffer)
         vkBindBufferMemory(g_Device, dl.activeIndicesBuffer, dl.dlMem, dl.activeIndicesBufferOffset);
-    std::vector<uint8_t> actives(ds.data.size(), 1);            //vector with 0 initialized everywhere
+    std::vector<uint8_t> actives(ds.data.size(), 0);            //vector with 0 initialized everywhere
     if(ds.dataType == DataType::Hierarchichal){
         actives.resize(pcSettings.maxHierarchyLines, 1);
+    }
+    else{
+        for(size_t i: irange(tl.indices.size()))
+            actives[i] = 1;
     }
     if(dl.activeIndicesBuffer)
         VkUtil::createBufferView(g_Device, dl.activeIndicesBuffer, VK_FORMAT_R8_SNORM, 0, actives.size() * sizeof(bool), &dl.activeIndicesBufferView);
@@ -6828,6 +6832,20 @@ static void exportBrushAsIdxf(DrawList& dl, const char* filepath) {
     delete[] act;
 }
 
+static void brushToTemplatelist(const DrawList& dl, std::string_view tl_name){
+    std::vector<uint8_t> act(dl.indices.size());
+    VkUtil::downloadData(g_Device, dl.dlMem, dl.activeIndicesBufferOffset, dl.indices.size() * sizeof(bool), act.data());
+    DataSet& ds = getDataset(g_PcPlotDataSets, dl.parentDataSet);
+    TemplateList tl{};
+    tl.buffer = ds.buffer.buffer;
+    for(uint32_t i: irange(act))
+        if(act[i])
+            tl.indices.push_back(i);
+    tl.minMax = ds.drawLists.front().minMax;
+    tl.name = std::string(tl_name);
+    tl.parentDataSetName = ds.name;
+    ds.drawLists.push_back(std::move(tl));
+}
 
 static void exportTemplateListAsCsv(TemplateList& tl, const char* filepath){
     std::string path(filepath);
@@ -11387,6 +11405,62 @@ int main(int, char**)
                                     trim[1] = std::clamp(trim[1], trim[0] + 1, int(tl.indices.size()));
                                 }
                             }
+                            if(ImGui::CollapsingHeader("QuantileSplit")){
+                                static int selectedAtt = 0;
+                                static std::vector<float> quantiles{0, 1.0f};
+                                int addItem = -1;
+                                int deleteItem = -1;
+                                if(ImGui::BeginCombo("Split axis", pcAttributes[selectedAtt].name.c_str())){
+                                    for(int att = 0; att < pcAttributes.size(); ++att){
+                                        if(ImGui::MenuItem(pcAttributes[att].name.c_str())) selectedAtt = att;
+                                    }
+                                    ImGui::EndCombo();
+                                }
+                                ImGui::Text("Split quantiles:");
+                                for(int i = 0; i < quantiles.size(); ++i){
+                                    float min = 0, max = 1, speed = .01f;
+                                    if(i == 0) speed = 0.0000000001;
+                                    else if(i == quantiles.size() - 1) speed = 0.000000001;
+                                    else {min = quantiles[i - 1], max = quantiles[i + 1];}
+                                    ImGui::DragFloat(("##quantile" + std::to_string(i)).c_str(), quantiles.data() + i, speed, min, max);
+                                    if(i != 0 && i != quantiles.size()-1){
+                                        ImGui::SameLine();
+                                        if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) deleteItem = i;
+                                    }
+                                    if(i < quantiles.size() - 1){
+                                        static float buttonHeight = 10;
+                                        static float space = 5;
+                                        float prevCursorPosY = ImGui::GetCursorPosY();
+                                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() / 2.0f + space);
+                                        if(ImGui::Button(("##addButton" + std::to_string(i)).c_str(), ImVec2(250,buttonHeight))){
+                                            addItem = i;
+                                        }
+                                        ImGui::SetCursorPosY(prevCursorPosY + space);
+                                    }
+                                }
+                                if(ImGui::Button("Uniform quantiles")){
+                                    for(int i: irange(quantiles))
+                                        quantiles[i] = float(i) / (quantiles.size() - 1);
+                                }
+                                if(addItem >= 0) quantiles.insert(quantiles.begin() + addItem + 1, (quantiles[addItem] + quantiles[addItem + 1]) / 2.0f);
+                                if(deleteItem >= 0) quantiles.erase(quantiles.begin() + deleteItem);
+                                if(ImGui::Button("Split (always creates drawlists)")){
+                                    auto ordered = tl.indices;
+                                    auto cpy = ds.drawLists.front().indices;
+                                    std::sort(ordered.begin(), ordered.end(), [&](uint32_t left, uint32_t right){return ds.data(left, selectedAtt) < ds.data(right, selectedAtt);});
+                                    quantiles.front() = 0; quantiles.back() = 1;
+                                    for(int i = 0; i < quantiles.size() - 1; ++i){
+                                        std::vector<uint32_t> quant(ordered.begin() + ordered.size() * quantiles[i], ordered.begin() + ordered.size() * quantiles[i + 1]);
+                                        if(quant.emplace_back()) continue; //ignore empty quantiles
+                                        ds.drawLists.front().indices = quant;
+                                        std::string t_name = std::string(pcDrawListName) + "_" + std::to_string(i);
+                                        createPcPlotDrawList(ds.drawLists.front(), ds, t_name.c_str());
+                                        updateActiveIndices(g_PcPlotDrawLists.back());
+                                    }
+                                    ds.drawLists.front().indices = cpy;
+                                    ImGui::CloseCurrentPopup();
+                                }
+                            }
 
                             if ((ImGui::Button("Create", ImVec2(120, 0))) || ImGui::IsKeyPressed(KEYENTER))
                             {
@@ -11576,7 +11650,32 @@ int main(int, char**)
                         ImGui::OpenPopup("ADDINDEXLIST");
                         addIndeces = true;
                     }
+                    static DrawList* droppedDl{};
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Drawlist")) {
+                            droppedDl = *((DrawList**)payload->Data);
+                            const DataSet* parent = &getDataset(g_PcPlotDataSets, droppedDl->parentDataSet);
+                            if(parent->name == ds.name){
+                                ImGui::OpenPopup("DL to TL");
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
                     ImGui::PopStyleColor();
+                    if(ImGui::BeginPopupModal("DL to TL", NULL, ImGuiWindowFlags_AlwaysAutoResize)){
+                        static std::string tl_name;
+                        ImGui::InputText("Templatelist name", &tl_name);
+                        if(ImGui::Button("Convert") && tl_name.size()){
+                            brushToTemplatelist(*droppedDl, tl_name);
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if(ImGui::Button("Cancle")){
+                            ImGui::CloseCurrentPopup();
+                        }
+
+                        ImGui::EndPopup();
+                    }
 
                     if (ImGui::BeginPopupModal("ADDINDEXLIST", NULL, ImGuiWindowFlags_AlwaysAutoResize))
                     {
