@@ -254,7 +254,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         attribute_infos[active_attribute_index].y = info.workbench.attributes.read()[cur_attribute_index].bounds.read().min;
         attribute_infos[active_attribute_index].z = info.workbench.attributes.read()[cur_attribute_index].bounds.read().max;
     }
-    auto attribute_infos_gpu = get_or_resize_info_buffer(attribute_infos.data().byteSize());
+    auto attribute_infos_gpu = get_or_resize_info_buffer(attribute_infos.data().byte_size());
 
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);  // wait indefenitely for prev rendering
     vkResetFences(globals::vk_context.device, 1, &_render_fence);

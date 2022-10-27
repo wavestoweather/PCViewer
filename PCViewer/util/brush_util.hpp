@@ -194,6 +194,7 @@ inline const structures::range_brush& get_selected_range_brush_const(){
         return globals::drawlists.read().at(globals::brush_edit_data.local_brush_id).read().local_brushes.read().ranges;
     default:
         assert(false && "Not yet implementd");
+        return {};
     }
 }
 

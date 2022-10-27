@@ -642,7 +642,7 @@ inline VkWriteDescriptorSetAccelerationStructureKHR writeDescriptorSetAccelerati
 inline VkShaderModuleCreateInfo shaderModuleCreateInfo(const util::memory_view<uint32_t> shader_bytes, VkShaderModuleCreateFlags create_flags = {}){
     VkShaderModuleCreateInfo shaderModuleCreateInfo{};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderModuleCreateInfo.codeSize = shader_bytes.byteSize();
+    shaderModuleCreateInfo.codeSize = shader_bytes.byte_size();
     shaderModuleCreateInfo.pCode = shader_bytes.data();
     shaderModuleCreateInfo.flags = create_flags;
     return shaderModuleCreateInfo;

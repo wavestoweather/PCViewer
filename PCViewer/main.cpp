@@ -24,6 +24,7 @@
 #include <brusher.hpp>
 #include <brush_util.hpp>
 #include <sys_info.hpp>
+#include <file_loader.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {

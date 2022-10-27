@@ -499,7 +499,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
             upload_data = util::memory_view<const half>(dataset.read().half_data.read().columns[i]);
         else
             upload_data = util::memory_view<const float>(dataset.read().float_data.read().columns[i]);
-        column_info = util::vk::initializers::bufferCreateInfo(buffer_usage, upload_data.byteSize());
+        column_info = util::vk::initializers::bufferCreateInfo(buffer_usage, upload_data.byte_size());
         dataset().gpu_data.columns[i] = util::vk::create_buffer(column_info, column_alloc_info);
         // uploading the data as soon as buffer is available via the staging buffer
         staging_info.dst_buffer = dataset().gpu_data.columns[i].buffer;

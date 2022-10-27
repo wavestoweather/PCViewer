@@ -27,7 +27,7 @@ struct pipeline_data{
 
 template<> struct std::hash<structures::histogram_counter::pipeline_specs>{
     size_t operator()(const structures::histogram_counter::pipeline_specs& x) const{
-        return util::memory_view<const uint32_t>(util::memory_view(x)).dataHash();
+        return util::memory_view<const uint32_t>(util::memory_view(x)).data_hash();
     }
 };
 

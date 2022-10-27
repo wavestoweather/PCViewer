@@ -53,7 +53,7 @@ namespace parallel_coordinates_renderer{
         render_type             render_typ{};
         data_type               data_typ{};
 
-        bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equalData(util::memory_view<const uint32_t>(util::memory_view(o)));};
+        bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));};
     };
 
     struct pipeline_data{

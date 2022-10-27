@@ -22,6 +22,7 @@
 #include <imgui_globals.hpp>
 #include <logger.hpp>
 #include <sys_info.hpp>
+#include <file_loader.hpp>
 
 // globals definition
 structures::logger<20> logger{};
@@ -65,6 +66,8 @@ drawlist_dataset_dependencies_t drawlist_dataset_dependencies{};
 structures::imgui_globals imgui{};
 
 structures::sys_info sys_info{};
+
+structures::file_loader file_loader{};
 }
 
 namespace structures{
@@ -346,18 +349,18 @@ void vk_context::cleanup(){
 }
 
 void vk_context::upload_to_staging_buffer(const util::memory_view<uint8_t> data){
-    if(data.byteSize() > _staging_buffer_size){
+    if(data.byte_size() > _staging_buffer_size){
         if(staging_buffer)
             util::vk::destroy_buffer(staging_buffer);
         
-        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data.byteSize());
+        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data.byte_size());
         auto alloc_create_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
         VmaAllocationInfo alloc_info{};
         staging_buffer = util::vk::create_buffer(buffer_info, alloc_create_info), &alloc_info;
         _staging_buffer_mappped = alloc_info.pMappedData;
     }
 
-    memcpy(_staging_buffer_mappped, data.data(), data.byteSize());
+    memcpy(_staging_buffer_mappped, data.data(), data.byte_size());
 }
 
 settings_manager::settings_manager()
@@ -676,6 +679,59 @@ void stager::_task_thread_function(){
             transfer_buffer(*buffer);
         else
             transfer_image(*dynamic_cast<staging_image_info*>(cur.get()));
+    }
+}
+
+file_loader::file_loader(){
+    _task_thread = std::thread(&file_loader::_task_thread_function, this);
+}
+file_loader::~file_loader(){
+    _thread_finish = true;
+    _task_semaphore.release();
+    _task_thread.join();
+    _task_thread = {};
+}
+void file_loader::add_load_task(const load_info& info){
+    std::scoped_lock lock(_task_add_mutex);
+    _loading_tasks.push_back(std::make_unique<load_info>(info));
+    _task_semaphore.release();
+}
+void file_loader::wait_for_completion(){
+    ++_wait_completion;
+    _task_semaphore.release();
+    _completion_semaphore.acquire();        // waiting for task thread finish
+}
+void file_loader::_task_thread_function(){
+    while(!_thread_finish){
+        _task_semaphore.acquire();          // waiting for work/shutdown/completion_check
+        if(_thread_finish)
+            return;
+
+        // notify wait_completion threads
+        if(_loading_tasks.empty() && _wait_completion > 0){
+            auto release_count = _wait_completion.exchange(0);
+            for(int i: util::i_range(release_count - 1))
+                _task_semaphore.acquire();
+            _completion_semaphore.release(release_count);
+            continue;
+        }
+
+        unique_task cur;
+        {
+            std::scoped_lock lock(_task_add_mutex);
+            cur = std::move(_loading_tasks.front());
+            _loading_tasks.erase(_loading_tasks.begin());
+        }
+        if(_thread_finish)
+            return;
+        
+        // loading the data
+        c_file file(cur->src, "rb");
+        if(cur->src_offset)
+            file.seek(cur->src_offset);
+        auto read_bytes = file.read(cur->dst);
+        if(read_bytes != cur->dst.byte_size())
+            ::logger << logging::warning_prefix << " file_loader::_task_thread_function() Not all bytes for loading task were loaded. Loaded " << float(read_bytes) / (1<<20) << "MBytes from " << float(cur->dst.byte_size()) / (1<<20) << "MBytes requested." << logging::endl;
     }
 }
 }

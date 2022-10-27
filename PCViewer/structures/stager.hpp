@@ -48,7 +48,7 @@ public:
 
     // needed for task_thread dispatch
     void init();
-    // needed for join with task_thread
+    // interrupts current transfers and joins with the task_thread
     void cleanup();
     // add an upload task
     void add_staging_task(const staging_buffer_info& stage_info);

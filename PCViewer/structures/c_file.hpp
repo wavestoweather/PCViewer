@@ -18,7 +18,7 @@ struct c_file{
     size_t read(util::memory_view<T> data) {return fread(data.data(), sizeof(T), data.size(), handle);}
     template<class T>
     size_t write(const util::memory_view<T> data) {return fwrite(data.data(), sizeof(T), data.size(), handle);}
-    int seek(long offset, origin origin) {return fseek(handle, offset, static_cast<int>(origin));}
+    int seek(long offset, origin origin = origin::set) {return fseek(handle, offset, static_cast<int>(origin));}
     long tell() {return ftell(handle);}
     operator bool() const {return bool(handle);}
     FILE* handle;

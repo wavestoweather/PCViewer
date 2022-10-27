@@ -35,7 +35,7 @@ public:
     T* data()               {return _data;};
     const T* data() const   {return _data;};
     size_t size() const     {return _size;};
-    size_t byteSize() const {return _size * sizeof(T);};
+    size_t byte_size() const {return _size * sizeof(T);};
     bool empty() const      {return _size == 0;};
     T& operator[](size_t i){
         assert(i < _size);   // debug assert for in bounds check
@@ -62,7 +62,7 @@ public:
     }
     operator bool() const {return _data && _size;};
 
-    bool equalData(const memory_view& o) const{
+    bool equal_data(const memory_view& o) const{
         if(_size != o._size)
             return false;
         for(auto i: util::i_range(_size)){
@@ -79,7 +79,7 @@ public:
         return false;
     }
 
-    size_t dataHash() const{
+    size_t data_hash() const{
         size_t seed{};
         std::hash<typename std::remove_const<T>::type> hasher;
         for(T* b = begin(); b != end(); ++b)
@@ -166,7 +166,7 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
         for(auto s: util::size_range(dimensionSizes)) ret *= dimensionSizes[s];
         return ret;
     }
-    uint64_t columnSize() const{
+    uint64_t column_size() const{
         uint64_t ret{1};
         for(auto s: util::size_range(columnDimensionIndices)) ret *= dimensionSizes[columnDimensionIndices[s]];
         return ret;
@@ -179,30 +179,30 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
     bool operator==(const column_memory_view& o) const{
         return dimensionSizes == o.dimensionSizes && columnDimensionIndices == o.columnDimensionIndices && cols == o.cols;
     }
-    bool equalData(const column_memory_view& o) const{
+    bool equal_data(const column_memory_view& o) const{
         if(cols.size() != o.cols.size())
             return false;
-        if(!dimensionSizes.equalData(o.dimensionSizes))
+        if(!dimensionSizes.equal_data(o.dimensionSizes))
             return false;
-        if(!columnDimensionIndices.equalData(o.columnDimensionIndices))
+        if(!columnDimensionIndices.equal_data(o.columnDimensionIndices))
             return false;
         for(auto c: util::size_range(cols)){
-            if(!cols[c].equalData(o.cols[c]))
+            if(!cols[c].equal_data(o.cols[c]))
                 return false;
         }
         return true;
     }
     // only checks dimension Sizes
-    bool equalDimensions(const column_memory_view& o) const{
-        if(!dimensionSizes.equalData(o.dimensionSizes))
+    bool equal_dimensions(const column_memory_view& o) const{
+        if(!dimensionSizes.equal_data(o.dimensionSizes))
             return false;
         return true;
     }
     // only checks dimensionSizes and columnDimensionIndices for equality
-    bool equalDataLayout(const column_memory_view& o) const{
-        if(!dimensionSizes.equalData(o.dimensionSizes))
+    bool equal_data_layout(const column_memory_view& o) const{
+        if(!dimensionSizes.equal_data(o.dimensionSizes))
             return false;
-        if(!columnDimensionIndices.equalData(o.columnDimensionIndices))
+        if(!columnDimensionIndices.equal_data(o.columnDimensionIndices))
             return false;
         return true;
     }
