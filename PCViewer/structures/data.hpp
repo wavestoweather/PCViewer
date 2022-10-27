@@ -55,18 +55,6 @@ class data{
         columns.clear();
     }
 
-    uint64_t header_size() const{
-        uint64_t size = 4;                  // header fields
-        size += dimension_sizes.size();     // dimension sizes
-        size += column_dimensions.size();   // column dimension counts
-        size += column_dimensions.size();   // colummn dimension offsets
-        for(const auto& a: column_dimensions)
-            size += a.size();               // column dimension
-        size *= sizeof(uint32_t);
-        size += columns.size() * sizeof(uint64_t); // column data addresses
-        return size;
-    }
-
     uint64_t size() const{
         if(dimension_sizes.empty()) return 0;
         uint64_t ret = 1;

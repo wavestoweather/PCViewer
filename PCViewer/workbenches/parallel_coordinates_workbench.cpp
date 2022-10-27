@@ -37,11 +37,11 @@ void parallel_coordinates_workbench::_update_plot_image(){
 }
 
 void parallel_coordinates_workbench::_draw_setting_list(){
-    ImGui::Checkbox("Enable axis lines", &setting.enable_axis_lines);
-    ImGui::Checkbox("Enable min max labels", &setting.min_max_labes);
-    ImGui::Checkbox("Enable axis tick lables", &setting.axis_tick_label);
-    ImGui::InputText("Tick format", &setting.axis_tick_fmt);
-    ImGui::InputInt("Axis tick count", &setting.axis_tick_count);
+    ImGui::Checkbox("Enable axis lines", &setting.read().enable_axis_lines);
+    ImGui::Checkbox("Enable min max labels", &setting.read().min_max_labes);
+    ImGui::Checkbox("Enable axis tick lables", &setting.read().axis_tick_label);
+    ImGui::InputText("Tick format", &setting.read().axis_tick_fmt);
+    ImGui::InputInt("Axis tick count", &setting.read().axis_tick_count);
 }
 
 void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info& from, const attribute_order_info& to){
@@ -71,8 +71,6 @@ void parallel_coordinates_workbench::show(){
     bool brush_menu_open{false};
     bool pc_menu_open{false};
 
-    bool setting_changed{false};
-
     // checking for drawlist change (if drawlist has changed, render_plot() will be called later in the frame by update_drawlists)
     // checking for local change
     bool any_drawlist_change{false};
@@ -97,7 +95,7 @@ void parallel_coordinates_workbench::show(){
     // checking for attributes change
     request_render |= attributes.changed;
     request_render |= attributes_order_info.changed;
-    request_render |= setting_changed;
+    request_render |= setting.changed;
 
     // checking for changed image
     if(plot_data.changed){
@@ -190,7 +188,7 @@ void parallel_coordinates_workbench::show(){
         if(!att_ref.active)
             continue;
         
-        std::string name = setting.min_max_labes ? "max##" + attributes.read()[att_ref.attribut_index].id : "##max" + attributes.read()[att_ref.attribut_index].id;
+        std::string name = setting.read().min_max_labes ? "max##" + attributes.read()[att_ref.attribut_index].id : "##max" + attributes.read()[att_ref.attribut_index].id;
         ImGui::SetNextItemWidth(button_size.x);
         ImGui::SameLine(cur_offset);
         float diff = attributes.read()[att_ref.attribut_index].bounds.read().max - attributes.read()[att_ref.attribut_index].bounds.read().min;
@@ -206,10 +204,10 @@ void parallel_coordinates_workbench::show(){
     auto pic_size = ImVec2{content_size.x - 10, content_size.y * .7f};
     ImGui::Image(plot_data.read().image_descriptor, pic_size);
 
-    if(setting.enable_axis_lines){
+    if(setting.read().enable_axis_lines){
         float y1 = pic_pos.y;
         float y2 = y1 + pic_size.y - 1;
-        auto line_col = IM_COL32((1 - setting.plot_background.x) * 255, (1 - setting.plot_background.y) * 255, (1 - setting.plot_background.z) * 255, 255);
+        auto line_col = IM_COL32((1 - setting.read().plot_background.x) * 255, (1 - setting.read().plot_background.y) * 255, (1 - setting.read().plot_background.z) * 255, 255);
         for(int i: util::i_range(labels_count)){
             float x = pic_pos.x + (pic_size.x - 1) * i / (labels_count - 1);
             ImGui::GetWindowDrawList()->AddLine({x, y1}, {x, y2}, line_col);
@@ -221,7 +219,7 @@ void parallel_coordinates_workbench::show(){
 
             float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
             const auto& attribute = attributes.read()[att_ref.attribut_index];
-            float min_tick = attribute.bounds.read().min + (attribute.bounds.read().max - attribute.bounds.read().min) / setting.axis_tick_count;
+            float min_tick = attribute.bounds.read().min + (attribute.bounds.read().max - attribute.bounds.read().min) / setting.read().axis_tick_count;
             float max_tick = attribute.bounds.read().max;
             float diff = max_tick - min_tick;
             int exp;
@@ -231,8 +229,8 @@ void parallel_coordinates_workbench::show(){
             double t = pow(2, exp);
             int e = int(log10(t));
             double dec = pow(10, e);
-            for(int i: util::i_range(setting.axis_tick_count)){
-                double tick_val = min_tick + diff * i / (setting.axis_tick_count - 1);
+            for(int i: util::i_range(setting.read().axis_tick_count)){
+                double tick_val = min_tick + diff * i / (setting.read().axis_tick_count - 1);
                 // rounding down to multiple of 10
                 tick_val /= dec;
                 tick_val = double(int(tick_val));
@@ -251,7 +249,7 @@ void parallel_coordinates_workbench::show(){
         if(!att_ref.active)
             continue;
         
-        std::string name = setting.min_max_labes ? "min##" + attributes.read()[att_ref.attribut_index].id : "##min" + attributes.read()[att_ref.attribut_index].id;
+        std::string name = setting.read().min_max_labes ? "min##" + attributes.read()[att_ref.attribut_index].id : "##min" + attributes.read()[att_ref.attribut_index].id;
         ImGui::SetNextItemWidth(button_size.x);
         ImGui::SameLine(cur_offset);
         float diff = attributes.read()[att_ref.attribut_index].bounds.read().max - attributes.read()[att_ref.attribut_index].bounds.read().min;
@@ -273,7 +271,7 @@ void parallel_coordinates_workbench::show(){
             
         bool any_hover = false;
         robin_hood::unordered_set<structures::brush_id> brush_delete;
-        ImVec2 mouse_pos = {ImGui::GetIO().MousePos.x - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.brush_drag_threshold).x, ImGui::GetIO().MousePos.y - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0).y};
+        ImVec2 mouse_pos = {ImGui::GetIO().MousePos.x - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).x, ImGui::GetIO().MousePos.y - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0).y};
 
         const structures::range_brush& selected_brush = util::brushes::get_selected_range_brush_const();
         float brush_gap = pic_size.x / (labels_count - 1);
@@ -282,17 +280,17 @@ void parallel_coordinates_workbench::show(){
             if(place_of_ind.count(brush.axis) == 0)
                 continue;   // attribute not active
             
-            float x = brush_gap * place_of_ind[brush.axis] + pic_pos.x - setting.brush_box_width / 2;
+            float x = brush_gap * place_of_ind[brush.axis] + pic_pos.x - setting.read().brush_box_width / 2;
 
             float y = util::normalize_val_for_range(brush.max, attributes.read()[brush.axis].bounds.read().max, attributes.read()[brush.axis].bounds.read().min) * pic_size.y + pic_pos.y;
             float height = (brush.max - brush.min) / (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min) * pic_size.y;
             
             structures::brush_edit_data::brush_region hovered_region{structures::brush_edit_data::brush_region::COUNT};
-            if(util::point_in_box(mouse_pos, {x, y}, {x + setting.brush_box_width, y + height}))
+            if(util::point_in_box(mouse_pos, {x, y}, {x + setting.read().brush_box_width, y + height}))
                 hovered_region = structures::brush_edit_data::brush_region::body;
-            else if(util::point_in_box(mouse_pos, {x, y - setting.brush_box_border_hover_width}, {x + setting.brush_box_width, y}))
+            else if(util::point_in_box(mouse_pos, {x, y - setting.read().brush_box_border_hover_width}, {x + setting.read().brush_box_width, y}))
                 hovered_region = structures::brush_edit_data::brush_region::top;
-            else if(util::point_in_box(mouse_pos, {x, y + height}, {x + setting.brush_box_width, y + height + setting.brush_box_border_hover_width}))
+            else if(util::point_in_box(mouse_pos, {x, y + height}, {x + setting.read().brush_box_width, y + height + setting.read().brush_box_border_hover_width}))
                 hovered_region = structures::brush_edit_data::brush_region::bottom;
             if(!ImGui::IsWindowHovered())
                 hovered_region = structures::brush_edit_data::brush_region::COUNT;  // resetting hover to avoid dragging when window is not focues
@@ -300,13 +298,13 @@ void parallel_coordinates_workbench::show(){
             
             ImU32 border_color;
             if(globals::brush_edit_data.selected_ranges.contains(brush.id))
-                border_color = util::vec4_to_imu32(setting.brush_box_selected_color);
+                border_color = util::vec4_to_imu32(setting.read().brush_box_selected_color);
             else if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::global)
-                border_color = util::vec4_to_imu32(setting.brush_box_global_color);
+                border_color = util::vec4_to_imu32(setting.read().brush_box_global_color);
             else if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::local)
-                border_color = util::vec4_to_imu32(setting.brush_box_local_color);
+                border_color = util::vec4_to_imu32(setting.read().brush_box_local_color);
 
-            ImGui::GetWindowDrawList()->AddRect({x, y}, {x + setting.brush_box_width, y + height}, border_color, 1, ImDrawCornerFlags_All, setting.brush_box_border_width);
+            ImGui::GetWindowDrawList()->AddRect({x, y}, {x + setting.read().brush_box_width, y + height}, border_color, 1, ImDrawCornerFlags_All, setting.read().brush_box_border_width);
 
             // set mouse cursor
             switch(hovered_region){
@@ -327,14 +325,14 @@ void parallel_coordinates_workbench::show(){
                 globals::brush_edit_data.hovered_region_on_click = hovered_region;
             }
             // dragging
-            if(globals::brush_edit_data.selected_ranges.contains(brush.id) && ((ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.brush_drag_threshold).y) || ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))){
+            if(globals::brush_edit_data.selected_ranges.contains(brush.id) && ((ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).y) || ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))){
                 float delta;
                 if(ImGui::IsMouseDown(ImGuiMouseButton_Left))
-                    delta = -ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.brush_drag_threshold).y / pic_size.y;
+                    delta = -ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).y / pic_size.y;
                 else if(ImGui::IsKeyPressed(ImGuiKey_UpArrow))
-                    delta = setting.brush_arrow_button_move;
+                    delta = setting.read().brush_arrow_button_move;
                 else if(ImGui::IsKeyPressed(ImGuiKey_DownArrow))
-                    delta = -setting.brush_arrow_button_move;
+                    delta = -setting.read().brush_arrow_button_move;
                 
                 structures::range_brush& range_brush = util::brushes::get_selected_range_brush();
                 structures::axis_range& range       = *std::find(range_brush.begin(), range_brush.end(), brush);
@@ -379,14 +377,14 @@ void parallel_coordinates_workbench::show(){
                 if (place_of_ind[brush.axis] == 0) x_anchor = 0;
                 if (place_of_ind[brush.axis] == labels_count - 1) x_anchor = 1;
 
-                ImGui::SetNextWindowPos({ x + setting.brush_box_width / 2,y }, 0, { x_anchor,1 });
+                ImGui::SetNextWindowPos({ x + setting.read().brush_box_width / 2,y }, 0, { x_anchor,1 });
                 ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
                 ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
                 ImGui::Begin(("Tooltip brush max##" + std::to_string(brush.id)).c_str(), NULL, flags);
                 ImGui::Text("%f", brush.max);
                 ImGui::End();
 
-                ImGui::SetNextWindowPos({ x + setting.brush_box_width / 2, y + height }, 0, { x_anchor,0 });
+                ImGui::SetNextWindowPos({ x + setting.read().brush_box_width / 2, y + height }, 0, { x_anchor,0 });
                 ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
                 ImGui::Begin(("Tooltip brush min##" + std::to_string(brush.id)).c_str(), NULL, flags);
                 ImGui::Text("%f", brush.min);
@@ -402,8 +400,8 @@ void parallel_coordinates_workbench::show(){
         for(const auto& attr_ref: attributes_order_info.read()){
             if(!attr_ref.active)
                 continue;
-            float x = brush_gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.brush_box_width / 2;
-            bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + setting.brush_box_width, pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
+            float x = brush_gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2;
+            bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + setting.read().brush_box_width, pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
             if(!any_hover && axis_hover && globals::brush_edit_data.selected_ranges.empty()){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
@@ -454,23 +452,21 @@ void parallel_coordinates_workbench::show(){
                     attributes()[i].bounds = *axis_values[i];
             }
         }
-        ImGui::DragInt("Live brush treshold", &setting.live_brush_threshold);
+        ImGui::DragInt("Live brush treshold", &setting.read().live_brush_threshold);
         ImGui::EndPopup();
     }
     if(pc_menu_open)
         ImGui::OpenPopup(pc_menu_id.data());
     if(ImGui::BeginPopup(pc_menu_id.data())){
-        if(ImGui::BeginCombo("Histogram", histogram_type_names[setting.hist_type].data())){
+        if(ImGui::BeginCombo("Histogram", histogram_type_names[setting.read().hist_type].data())){
             for(auto type: structures::enum_iteration<histogram_type>()){
-                if(ImGui::MenuItem(histogram_type_names[type].data())){
-                    setting.hist_type = type;
-                    setting_changed = true;
-                }
+                if(ImGui::MenuItem(histogram_type_names[type].data()))
+                    setting().hist_type = type;
             }
             ImGui::EndCombo();
         }
-        if(ImGui::ColorEdit4("Plot background", &setting.pc_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
-            setting_changed = true;
+        if(ImGui::ColorEdit4("Plot background", &setting.ref_no_track().pc_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+            setting();
         //ImGui::MenuItem("Render splines", {}, &setting.render_splines);
         if(ImGui::BeginMenu("Plot Size")){
             if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))

@@ -19,6 +19,19 @@ struct gpu_header{
 };
 
 template<typename T = float>
+inline uint64_t header_size (const structures::data<T>& data) {
+    uint64_t size = 4;                  // header fields
+    size += data.dimension_sizes.size();     // dimension sizes
+    size += data.column_dimensions.size();   // column dimension counts
+    size += data.column_dimensions.size();   // colummn dimension offsets
+    for(const auto& a: data.column_dimensions)
+        size += a.size();               // column dimension
+    size *= sizeof(uint32_t);
+    size += data.columns.size() * sizeof(uint64_t); // column data addresses
+    return size;
+}
+
+template<typename T>
 inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(const structures::data<T>& data, util::memory_view<const structures::buffer_info> buffers){
     assert(buffers.size() == data.columns.size());
     
@@ -26,7 +39,7 @@ inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(con
     for(int i: util::size_range(buffers))
         device_addresses[i] = util::vk::get_buffer_address(buffers[i]);
     
-    uint32_t header_size = data.header_size();
+    uint32_t header_size = ::util::data::header_size(data);
     structures::dynamic_struct<gpu_header, uint32_t> packed_header((header_size - sizeof(gpu_header)) / sizeof(uint));
     packed_header->dimension_count = data.dimension_sizes.size();
     packed_header->column_count = data.columns.size();

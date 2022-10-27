@@ -41,22 +41,23 @@ public:
         "heatmap histogram"
     };
     struct settings{
-        bool        enable_axis_lines{true};
-        bool        min_max_labes{false};
-        bool        axis_tick_label{};
-        std::string axis_tick_fmt{"%6.4g"};
-        int         axis_tick_count{0};
-        ImVec4      plot_background{0,0,0,1};
-        size_t      render_batch_size{};
-        float       brush_box_width{20};
-        float       brush_box_border_width{2};
-        float       brush_box_border_hover_width{5};
-        ImVec4      brush_box_global_color{.2f, 0, .8f, 1};
-        ImVec4      brush_box_local_color{1, 0, .1f, 1};
-        ImVec4      brush_box_selected_color{.8f, .8f, 0, 1};
-        float       brush_arrow_button_move{.01f};
-        float       brush_drag_threshold{.5f};
-        int         live_brush_threshold{500000};
+        // mutable to be accessed and change even when const (can not be tracked)
+        mutable bool        enable_axis_lines{true};
+        mutable bool        min_max_labes{false};
+        mutable bool        axis_tick_label{};
+        mutable std::string axis_tick_fmt{"%6.4g"};
+        mutable int         axis_tick_count{0};
+        mutable ImVec4      plot_background{0,0,0,1};
+        mutable size_t      render_batch_size{};
+        mutable float       brush_box_width{20};
+        mutable float       brush_box_border_width{2};
+        mutable float       brush_box_border_hover_width{5};
+        mutable ImVec4      brush_box_global_color{.2f, 0, .8f, 1};
+        mutable ImVec4      brush_box_local_color{1, 0, .1f, 1};
+        mutable ImVec4      brush_box_selected_color{.8f, .8f, 0, 1};
+        mutable float       brush_arrow_button_move{.01f};
+        mutable float       brush_drag_threshold{.5f};
+        mutable int         live_brush_threshold{500000};
 
         // when these are changed the whole data plot has to be rendered
         histogram_type hist_type{};
@@ -83,7 +84,7 @@ public:
     };
     const std::array<VkFormat, 4>                           available_formats{VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
 
-    settings                                                setting{};
+    structures::change_tracker<settings>                    setting{};
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};     // the order here is the render order of the drawlists
     structures::alpha_mapping_type                          alpha_mapping_typ{};
     structures::change_tracker<structures::parallel_coordinates_renderer::render_type> render_type{};

@@ -437,16 +437,16 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         else if(file_extension == ".nc"){
             auto data = open_internals::open_netcdf_float(filename, query_attributes);
             dataset().attributes = data.attributes;
-            dataset().float_data = std::move(data.data);
+            dataset().cpu_data() = std::move(data.data);
         }
         else if(file_extension == ".csv"){
             auto data = open_internals::open_csv_float(filename, query_attributes);
             dataset().attributes = data.attributes;
-            dataset().float_data = std::move(data.data);
+            dataset().cpu_data() = std::move(data.data);
         }
         else
             throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
-        dataset().data_size = dataset.read().float_data.read().size();
+        dataset().data_size = std::get<structures::data<float>>(dataset.read().cpu_data.read()).size();
         break;
     case data_type_preference::half_precision:
         if(file_extension.empty()){
@@ -455,16 +455,16 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         else if(file_extension == ".nc"){
             auto data = open_internals::open_netcdf_half(filename, query_attributes);
             dataset().attributes = data.attributes;
-            dataset().half_data = std::move(data.data);
+            dataset().cpu_data() = std::move(data.data);
         }
         else if(file_extension == ".csv"){
             auto data = open_internals::open_csv_half(filename, query_attributes);
             dataset().attributes = data.attributes;
-            dataset().half_data = std::move(data.data);
+            dataset().cpu_data() = std::move(data.data);
         }
         else
             throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
-        dataset().data_size = dataset.read().half_data.read().size();
+        dataset().data_size = std::get<structures::data<half>>(dataset.read().cpu_data.read()).size();
         dataset().data_flags.half = true;
         break;
     default:
@@ -483,8 +483,8 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     dataset().templatelist_index[structures::templatelist_name_all_indices] = dataset().templatelists.back().get();
     
     // gpu_data setup
-    const size_t header_size = dataset.read().data_flags.half ? dataset.read().half_data.read().header_size() : dataset.read().float_data.read().header_size();
-    const uint32_t column_count = dataset.read().data_flags.half ? dataset.read().half_data.read().columns.size() : dataset.read().float_data.read().columns.size();
+    const size_t header_size = std::visit([](auto&& data) {return util::data::header_size(data);}, dataset.read().cpu_data.read());
+    const uint32_t column_count = std::visit([](auto&& data) {return data.columns.size();}, dataset.read().cpu_data.read());
     VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     auto header_info = util::vk::initializers::bufferCreateInfo(buffer_usage, header_size);
     auto header_alloc_info = util::vma::initializers::allocationCreateInfo();
@@ -494,11 +494,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     for(int i: util::i_range(column_count)){
         auto column_alloc_info = util::vma::initializers::allocationCreateInfo();
         VkBufferCreateInfo column_info{};
-        util::memory_view<const uint8_t> upload_data;
-        if(dataset.read().data_flags.half)
-            upload_data = util::memory_view<const half>(dataset.read().half_data.read().columns[i]);
-        else
-            upload_data = util::memory_view<const float>(dataset.read().float_data.read().columns[i]);
+        util::memory_view<const uint8_t> upload_data = std::visit([&i](auto&& data) {return util::memory_view<const uint8_t>(util::memory_view(data.columns[i].data(), data.columns[i].size()));}, dataset.read().cpu_data.read());
         column_info = util::vk::initializers::bufferCreateInfo(buffer_usage, upload_data.byte_size());
         dataset().gpu_data.columns[i] = util::vk::create_buffer(column_info, column_alloc_info);
         // uploading the data as soon as buffer is available via the staging buffer
@@ -506,7 +502,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         staging_info.common.data_upload = upload_data;
         globals::stager.add_staging_task(staging_info);
     }
-    auto header_bytes = dataset.read().data_flags.half ? util::data::create_packed_header(dataset.read().half_data.read(), dataset.read().gpu_data.columns) : util::data::create_packed_header(dataset.read().float_data.read(), dataset.read().gpu_data.columns);
+    structures::dynamic_struct<util::data::gpu_header, uint32_t> header_bytes = std::visit([&dataset](auto&& data){return util::data::create_packed_header(data, dataset.read().gpu_data.columns);}, dataset.read().cpu_data.read());
     staging_info.dst_buffer = dataset().gpu_data.header.buffer;
     staging_info.common.data_upload = header_bytes.data();
     globals::stager.add_staging_task(staging_info);
@@ -580,28 +576,18 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
             staging_info.common.data_upload = util::memory_view(templatelist.indices);
             globals::stager.add_staging_task(staging_info);
         
-            if(ds.read().data_flags.half){
-                for(int var: util::size_range(ds.read().attributes)){
+            std::visit([&templatelist](auto&& data){
+                for(int var: util::size_range(templatelist.min_maxs)){
                     for(uint32_t i: templatelist.indices){
-                        auto val = ds.read().half_data.read()(i, var);
+                        auto val = data(i, var);
                         if(val < templatelist.min_maxs[var].min)
                             templatelist.min_maxs[var].min = val;
                         if(val > templatelist.min_maxs[var].max)
                             templatelist.min_maxs[var].max = val;
                     }
                 }
-            }
-            else{
-                for(int var: util::size_range(ds.read().attributes)){
-                    for(uint32_t i: templatelist.indices){
-                        auto val = ds.read().float_data.read()(i, var);
-                        if(val < templatelist.min_maxs[var].min)
-                            templatelist.min_maxs[var].min = val;
-                        if(val > templatelist.min_maxs[var].max)
-                            templatelist.min_maxs[var].max = val;
-                    }
-                }
-            }
+            }, ds.read().cpu_data.read());
+
             templatelist.data_size = templatelist.indices.size();
             globals::stager.wait_for_completion();    // waiting before moving to make sure the memory view for the data upload stays valid
         }

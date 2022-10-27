@@ -29,7 +29,7 @@ class parallel_coordinates_renderer{
         VkDeviceAddress     activation_bitset_address;
         uint                vertex_count_per_line;        // is at least as high as attribute_count (when equal, polyline rendering)
         float               padding;
-        ImVec4                 color;
+        ImVec4              color;
     };
 
     const std::string_view vertex_shader_path{"shader/parallel_coordinates_renderer.vert.spv"};

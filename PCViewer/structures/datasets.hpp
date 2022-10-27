@@ -6,6 +6,7 @@
 #include <vk_mem_alloc.h>
 #include <vk_context.hpp>
 #include <optional>
+#include <variant>
 
 namespace structures{
 template<typename T>
@@ -30,6 +31,8 @@ struct gpu_data_t{
     std::vector<buffer_info>    columns{};
 };
 
+using cpu_data_t = std::variant<data<float>, data<half>, data<uint32_t>>;
+
 struct dataset{
     std::string                         id{};
     std::string                         display_name{};
@@ -40,9 +43,7 @@ struct dataset{
     change_tracker<std::set<uint32_t>>  visible_attributes{};
     std::vector<const_unique<templatelist>> templatelists{};
     robin_hood::unordered_map<std::string_view, const templatelist*> templatelist_index;
-    change_tracker<data<float>>         float_data{};
-    change_tracker<data<half>>          half_data{};
-    change_tracker<data<uint32_t>>      compressed_data{};
+    change_tracker<cpu_data_t>          cpu_data{};
     gpu_data_t                          gpu_data{};
     struct data_flags{
         bool gpuStream: 1;          // data has to be streamed from ram to gpu as not enough space available
@@ -60,12 +61,14 @@ struct dataset{
         bool                    forward_upload{};
     };
     std::optional<data_stream_infos>    gpu_stream_infos{};
+    std::optional<gpu_data_t>           gpu_stream_data{};      // backing gpu buffer for async data loading
     std::optional<data_stream_infos>    cpu_stream_infos{};
+    std::optional<cpu_data_t>           cpu_stream_data;        // backing buffer for async data loading
 
     bool operator==(const dataset& o) const {return id == o.id;}
 
-    bool any_change() const {return visible_attributes.changed  || float_data.changed || half_data.changed || compressed_data.changed;}
-    void clear_change()     {visible_attributes.changed = false; float_data.changed = false; half_data.changed = false; compressed_data.changed = false;}
+    bool any_change() const {return visible_attributes.changed  || cpu_data.changed;}
+    void clear_change()     {visible_attributes.changed = false; cpu_data.changed = false;}
 };
 
 }

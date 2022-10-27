@@ -15,7 +15,6 @@ void data_workbench::show()
     const static std::string_view popup_tl_to_brush{"Templatelist to brush"};
     const static std::string_view popup_tl_to_dltl{"Templatelist to drawlist/templatelist"};
     const static std::string_view popup_add_tl{"Add templatelist"};
-    const static std::string_view popup_split_ds{"Split dataset"};
     const static std::string_view popup_delete_ds{"Delete dataset"};
     const static std::string_view popup_add_empty_ds{"Add empty dataset"};
     const static std::string_view popup_delete_dl{"Delete drawlist"};
@@ -81,10 +80,6 @@ void data_workbench::show()
                     if(ImGui::Button("Add templatelist")){
                         _popup_ds_id = id;
                         popup_open_add_tl = true;
-                    }
-                    if(ImGui::Button("Split dataset")){
-                        _popup_ds_id = id;
-                        ImGui::OpenPopup(popup_split_ds.data());
                     }
                     ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 230));
                     if(ImGui::Button("Delete")){
@@ -305,11 +300,6 @@ void data_workbench::show()
     if(popup_open_add_tl)
         ImGui::OpenPopup(popup_add_tl.data());
     if(ImGui::BeginPopupModal(popup_add_tl.data())){
-        // TODO: implemnet
-        ImGui::EndPopup();
-    }
-
-    if(ImGui::BeginPopupModal(popup_split_ds.data())){
         // TODO: implemnet
         ImGui::EndPopup();
     }

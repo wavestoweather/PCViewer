@@ -22,7 +22,7 @@ struct sys_info{
         size_t pages = sysconf(_SC_PHYS_PAGES);
         size_t page_size = sysconf(_SC_PAGE_SIZE);
         ram_size = pages * page_size;
-        ::logger << logging::info_prefix << "Found " << (ram_size >> 30) << "GByte of Ram" << logging::endl;
+        ::logger << logging::info_prefix << " Found " << (ram_size >> 30) << "GByte of Ram" << logging::endl;
 #elif _WIN32
         MEMORYSTATUSEX status;
         status.dwLength = sizeof(status);
