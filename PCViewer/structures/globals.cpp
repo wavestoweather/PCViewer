@@ -24,6 +24,14 @@
 #include <sys_info.hpp>
 #include <file_loader.hpp>
 
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
 // globals definition
 structures::logger<20> logger{};
 
@@ -94,7 +102,6 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     util::check_vk_result(res);
 
     // go through all physical devices, check for available physical device features
-    int bestFit{-1};
     uint32_t gpu_count;
     res = vkEnumeratePhysicalDevices(instance, &gpu_count, NULL);
     util::check_vk_result(res);
@@ -104,7 +111,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     res = vkEnumeratePhysicalDevices(instance, &gpu_count, physical_devices.data());
     util::check_vk_result(res);
 
-    struct score_index{long score; int index;};
+    struct score_index{int64_t score; int index;};
     std::vector<score_index> scores(gpu_count);
     for(int i: util::i_range(gpu_count)){
         scores[i].index = i;
@@ -517,7 +524,7 @@ void stager::add_staging_task(const staging_image_info& stage_info){
     _task_semaphore.release();
 }
 void stager::set_staging_buffer_size(size_t size){
-    _staging_buffer_size = util::align(size, 512ul);
+    _staging_buffer_size = util::align<size_t>(size, 512ul);
 }
 void stager::wait_for_completion(){
     ++_wait_completion;
@@ -533,7 +540,7 @@ void stager::_task_thread_function(){
             auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
             vkResetFences(globals::vk_context.device, 1, &_task_fences[_fence_index]);
 
-            size_t copy_size = std::min(cur_span.max - cur_span.min, data_size - cur_span.min);
+            size_t copy_size = std::min<size_t>(cur_span.max - cur_span.min, data_size - cur_span.min);
             if(cur.transfer_dir == transfer_direction::upload)
                 std::memcpy(_staging_buffer_mapped + _fence_index * buffer_size / 2, cur.common.data_upload.data() + cur_span.min, copy_size);
 

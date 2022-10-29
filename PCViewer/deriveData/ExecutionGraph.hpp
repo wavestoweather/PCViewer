@@ -97,7 +97,7 @@ struct ExecutionGraph{
         long linkId = curId++;
         if(pinToLinks.count(pinBId) && pinToLinks[pinBId].size())
             removeLink(pinToLinks[pinBId][0]);
-        links[c] = {linkId, pinAId, pinBId, color};
+        links[c] = {static_cast<ax::NodeEditor::LinkId>(linkId), static_cast<ax::NodeEditor::PinId>(pinAId), static_cast<ax::NodeEditor::PinId>(pinBId), color};
         linkToConnection[linkId] = c;
         pinToLinks[pinAId].push_back(linkId);
         pinToLinks[pinBId] = {linkId};

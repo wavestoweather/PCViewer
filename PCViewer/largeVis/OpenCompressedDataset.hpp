@@ -36,7 +36,7 @@ namespace util{
         // --------------------------------------------------------------------------------
         std::vector<Attribute> attributes;
         std::ifstream attributeInfos(hierarchyFolder + "/attr.info", std::ios_base::binary);
-        uint binsMaxCenterAmt;
+        uint32_t binsMaxCenterAmt;
         attributeInfos >> binsMaxCenterAmt; // first line contains the maximum amt of centers/bins
         std::string a; float aMin, aMax;
         while(attributeInfos >> a >> aMin >> aMax){

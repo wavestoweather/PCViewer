@@ -53,7 +53,8 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         if(_pipelines.size() > max_pipeline_count){
             auto [pipeline, time] = *std::min_element(_pipeline_last_use.begin(), _pipeline_last_use.end(), [](const auto& l, const auto& r){return l.second < r.second;});
-            auto [key, val] = *std::find_if(_pipelines.begin(), _pipelines.end(), [&](const auto& e){return e.second.pipeline == pipeline;});
+            VkPipeline pipe = pipeline; // needed for msvc and clang on windows...
+            auto [key, val] = *std::find_if(_pipelines.begin(), _pipelines.end(), [&](const auto& e){return e.second.pipeline == pipe;});
             util::vk::destroy_pipeline(val.pipeline);
             util::vk::destroy_pipeline_layout(val.pipeline_layout);
             util::vk::destroy_framebuffer(val.framebuffer);
@@ -221,9 +222,9 @@ parallel_coordinates_renderer& parallel_coordinates_renderer::instance(){
 
 void parallel_coordinates_renderer::render(const render_info& info){
     struct attribute_infos{
-        uint     attribute_count;                // amount of active attributes
-        uint     _, __;
-        uint     data_flags;
+        uint32_t     attribute_count;                // amount of active attributes
+        uint32_t     _t, __t;
+        uint32_t     data_flags;
     };
 
     std::vector<uint32_t> active_attribute_indices;     // these inlcude the order

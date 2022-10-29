@@ -33,8 +33,13 @@ struct brush{
     range_brush ranges{};
     lasso_brush lassos{};
     brush_id    id{};
-    mutable std::string name{};   // mutable as it should not be tracked
+    mutable     std::string name{};   // mutable as it should not be tracked
     bool        active{true};
+
+#ifdef _WIN32
+    brush() = default;
+    brush(const change_tracker<brush>& o) : ranges(o.read().ranges), lassos(o.read().lassos), id(o.read().id), name(o.read().name), active(o.read().active) {}
+#endif
 
     bool empty() const {return ranges.empty() && lassos.empty();}
 };

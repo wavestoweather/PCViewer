@@ -241,7 +241,8 @@ void data_workbench::show()
             auto cur_id = globals::cur_global_brush_id++;
             new_brush.ref_no_track().id = cur_id;
             new_brush.ref_no_track().name = "Global brush " + std::to_string(cur_id);
-            globals::global_brushes.ref_no_track().push_back(std::move(new_brush));
+            //globals::global_brushes.ref_no_track().emplace_back(structures::range_brush{}, structures::lasso_brush{}, structures::brush_id(cur_id), std::to_string(cur_id), true);
+            globals::global_brushes.ref_no_track().push_back(new_brush);
             // selecting the last brush
             globals::selected_drawlists.clear();
             globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::global;

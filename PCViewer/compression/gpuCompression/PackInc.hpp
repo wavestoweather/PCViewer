@@ -6,7 +6,7 @@
 
 namespace vkCompress {
 
-class GpuInstance;
+struct GpuInstance;
 
 size_t packIncGetRequiredMemory(const GpuInstance* pInstance);
 bool packIncInit(GpuInstance* pInstance);

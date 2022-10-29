@@ -24,7 +24,7 @@ enum class level{
 
 namespace structures{
 template<uint32_t buffered_lines = 20>
-class logger: public std::ostream{
+class logger{
     std::array<std::stringstream, buffered_lines>   _last_lines{};
     uint32_t                                        _write_head{};
     std::string                                     _buffered_lines{};

@@ -4,6 +4,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <array>
 #include "../imgui_nodes/imgui_node_editor.h"
 #include "../imgui_nodes/utilities/widgets.h"
 #include "MemoryView.hpp"

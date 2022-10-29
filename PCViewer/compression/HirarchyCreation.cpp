@@ -94,7 +94,7 @@ static CachingElementsInfo getCachingElements(const std::string_view& tempPath){
                 std::string id;
                 file >> id;
                 CacheInfo info;
-                info.file = entry.path();
+                info.file = entry.path().string();
                 file >> info.offset >> info.size;
                 cacheElements[id].push_back(std::move(info));
                 levelCount = std::max(levelCount, static_cast<uint32_t>(std::count(id.begin(), id.end(), '_')));
@@ -169,7 +169,7 @@ namespace compression
 
             const int checkInterval = 1000;
             std::atomic<int> sizeCheck = checkInterval;
-            auto threadFunc = [](int threadId, DataLoader* loader, HierarchyCreateNode* root, std::shared_mutex* cacheMutex, uint32_t maxMemoryMB, std::string tempPath, std::atomic<int>* sizeCheckk, CacheManagerInterface* cacheManager){
+            auto threadFunc = [checkInterval](int threadId, DataLoader* loader, HierarchyCreateNode* root, std::shared_mutex* cacheMutex, int maxMemoryMB, std::string tempPath, std::atomic_int* sizeCheckk, CacheManagerInterface* cacheManager){
                 auto& sizeCheck = *sizeCheckk;
                 std::vector<float> threadData;
                 while(loader->getNextNormalized(threadData)){
@@ -435,7 +435,7 @@ namespace compression
                     std::string id;
                     file >> id;
                     CacheInfo info;
-                    info.file = entry.path();
+                    info.file = entry.path().string();
                     file >> info.offset >> info.size;
                     cacheElements[id].push_back(std::move(info));
                     levelCount = std::max(levelCount, static_cast<uint32_t>(std::count(id.begin(), id.end(), '_')));

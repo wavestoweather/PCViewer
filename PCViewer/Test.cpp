@@ -24,7 +24,7 @@
 #include "compression/cpuCompression/HuffmanCPU.h"
 #include <algorithm>
 #include <execution>
-#include <sys/mman.h>
+//#include <sys/mman.h>
 #include <cmath>
 #include <change_tracker.hpp>
 #include <attributes.hpp>
@@ -154,10 +154,10 @@ static std::vector<float> decompressQHuffman(const std::vector<uint32_t>& bytes,
 
 static std::vector<float> vkDecompress(const VkUtil::Context& context, vkCompress::GpuInstance& gpu, const RLHuffDecodeDataCpu& cpuData, const RLHuffDecodeDataGpu& gpuData, float quantizationStep, uint32_t symbolsSize){
     // creating buffer for the symbol table
-    uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
-    uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
+    uint32_t pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
+    uint32_t paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
     // symbolBuffer holds enough memory to store all intermediate data as well: this means that we need 2 * float vector containing all data
-    uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    uint32_t flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     VkCommandBuffer commands;
@@ -201,16 +201,16 @@ static std::vector<float> vkDecompress(const VkUtil::Context& context, std::vect
 
 static std::vector<float> vkDecompressSeparate(const VkUtil::Context& context, const std::vector<uint32_t>& lowBits, uint32_t lowSize, const std::vector<uint32_t>& highBits, uint32_t highSize, float qLow, float qHigh){
     assert(lowSize == highSize);
-    uint symbolsSize = lowSize + highSize;
+    uint32_t symbolsSize = lowSize + highSize;
     vkCompress::GpuInstance gpu(context, 1, lowSize + highSize + 1, 0, 0);
     auto cpuDataLow = vkCompress::parseCpuRLHuffData(&gpu, lowBits, gpu.m_codingBlockSize);
     auto cpuDataHigh = vkCompress::parseCpuRLHuffData(&gpu, highBits, gpu.m_codingBlockSize);
     RLHuffDecodeDataGpu gpuDataLow(&gpu, cpuDataLow);
     RLHuffDecodeDataGpu gpuDataHigh(&gpu, cpuDataHigh);
 
-    uint alignment = gpu.m_subgroupSize * gpu.m_codingBlockSize;
-    uint alignedSymmbols = PCUtil::alignedSize(lowSize + highSize, alignment);
-    uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    uint32_t alignment = gpu.m_subgroupSize * gpu.m_codingBlockSize;
+    uint32_t alignedSymmbols = PCUtil::alignedSize(lowSize + highSize, alignment);
+    uint32_t flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {alignedSymmbols * sizeof(float), alignedSymmbols * sizeof(float)}, {flags, flags}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     VkCommandBuffer commands;
@@ -266,10 +266,10 @@ static std::vector<float> vkDecompressBenchmark(const VkUtil::Context& context, 
     vkCreateQueryPool(context.device, &info, nullptr, &timings);
 
     // creating buffer for the symbol table
-    uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
-    uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
+    uint32_t pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
+    uint32_t paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
     // symbolBuffer holds enough memory to store all intermediate data as well: this means that we need 2 * float vector containing all data
-    uint flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    uint32_t flags  = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {paddedSymbols * 2, paddedSymbols * 2}, {flags, flags}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     VkCommandBuffer commands;
@@ -406,7 +406,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
     constexpr bool testGlobalVkContext = false;
     if(testDecomp){
         vkCompress::GpuInstance gpu(context, 1, 1 << 20, 0, 0);
-        const uint symbolsSize = 1 << 20;
+        const uint32_t symbolsSize = 1 << 20;
         std::vector<uint16_t> symbols(symbolsSize), symbolsCpu(symbolsSize);
         srand(10);  //seeding
         for(auto& s: symbols)
@@ -424,8 +424,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         sArr[0] = &symbolsCpu;
         cudaCompress::decodeRLHuffCPU(bArr, sArr, symbolsSize, 1, gpu.m_codingBlockSize);
         //cudaCompress::decodeHuffCPU(bArr, sArr, symbolsSize, 1, gpu.m_codingBlockSize);
-        uint bitStreamSize = bitStream.getRawSizeBytes();
-        uint originalSize = symbols.size() * sizeof(symbols[0]);
+        uint32_t bitStreamSize = bitStream.getRawSizeBytes();
+        uint32_t originalSize = symbols.size() * sizeof(symbols[0]);
         auto cpuData = vkCompress::parseCpuRLHuffData(&gpu, bitStream.getVector(), gpu.m_codingBlockSize);
         std::cout << cpuData.symbolOffsets.size() << std::endl;
         //cpuData.symbolOffsets[1] -= 32;
@@ -433,8 +433,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         //vkCompress::decodeHuff()
 
         // creating buffer for the symbol table
-        uint pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
-        uint paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
+        uint32_t pad = gpu.m_subgroupSize * gpu.m_codingBlockSize * sizeof(uint16_t);
+        uint32_t paddedSymbols = (symbolsSize * sizeof(uint16_t) + pad - 1) / pad * pad;
         auto [symbolBuffer, offs, mem] = VkUtil::createMultiBufferBound(context, {2 * paddedSymbols}, {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT}, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
         //std::vector<uint16_t> sorted(symbolsSize); uint16_t count{};
         //for(auto& i: sorted) i = count++;
@@ -508,7 +508,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         bool test = true;
     }
     if(testExclusiveScan){
-        const uint scanSize = 1 << 11;
+        const uint32_t scanSize = 1 << 11;
         vkCompress::GpuInstance gpu(context, 1, scanSize, 0, 0);
         VkCommandBuffer commands;
         VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
@@ -529,7 +529,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         std::vector<uint32_t> final(init.size());
         VkUtil::downloadData(context.device, mem, offsets[1], final.size() * sizeof(final[0]), final.data());
         std::vector<uint32_t> upper(final.begin() + 1000, final.end());
-        VkUtil::downloadData(context.device, gpu.m_pScanPlan->m_blockSumsMemory, 0, sizeof(uint) * 3, final.data());
+        VkUtil::downloadData(context.device, gpu.m_pScanPlan->m_blockSumsMemory, 0, sizeof(uint32_t) * 3, final.data());
         for(int i = final.size() - 1; i > 0; --i){
             final[i] -= final[i - 1];
         }
@@ -539,7 +539,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         bool letssee = true;
     }
     if(testUnquanzite){
-        const uint quantSize = 1 << 20;
+        const uint32_t quantSize = 1 << 20;
         const float quantStep = .001f;
         vkCompress::GpuInstance gpu(context, 1, quantSize, 0, 0);
         VkCommandBuffer commands;
@@ -547,8 +547,8 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
 
         std::vector<float> orig(quantSize);
         srand(10);
-        for(auto& f: orig)
-            f = random() / float(1u << 31);
+        //for(auto& f: orig)
+        //    f = random() / float(1u << 31);
         
         std::vector<uint16_t> symbols(quantSize);
         cudaCompress::util::quantizeToSymbols(symbols.data(), orig.data(), quantSize, quantStep);
@@ -575,15 +575,15 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         bool heyho = true;
     }
     if(testDWTInverse){
-        const uint size = 1 << 20;
+        const uint32_t size = 1 << 20;
         vkCompress::GpuInstance gpu(context, 1, size, 0, 0);
         VkCommandBuffer commands;
         VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
 
         std::vector<float> orig(size);
         srand(10);
-        for(auto& f: orig)
-            f = random() / float(1u << 31);
+        //for(auto& f: orig)
+        //    f = random() / float(1u << 31);
         std::vector<float> dst(size);
         cudaCompress::util::dwtFloatForwardCPU(dst.data(), orig.data(), size);
 
@@ -610,15 +610,15 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         bool heyho = true;
     }
     if(testDWTInverseToHalf){
-        const uint size = 1 << 20;
+        const uint32_t size = 1 << 20;
         vkCompress::GpuInstance gpu(context, 1, size, 0, 0);
         VkCommandBuffer commands;
         VkUtil::createCommandBuffer(context.device, context.commandPool, &commands);
 
         std::vector<float> orig(size);
         srand(10);
-        for(auto& f: orig)
-            f = random() / float(1u << 31);
+        //for(auto& f: orig)
+        //    f = random() / float(1u << 31);
         std::vector<float> dst(size);
         cudaCompress::util::dwtFloatForwardCPU(dst.data(), orig.data(), size / 2, size / 2, size / 2);
 
@@ -644,12 +644,12 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         bool heyho = true;
     }
     if(testFullDecomp){
-        const uint size = 1 << 20;
+        const uint32_t size = 1 << 20;
         const float quantStep = .0001;
         std::vector<float> orig(size);
         srand(10);
-        for(auto& f: orig)
-            f = random() / float(1u << 31);
+        //for(auto& f: orig)
+        //    f = random() / float(1u << 31);
 
         auto copy = orig;
         auto [bitstream, s] = compressVector(orig, quantStep);
@@ -680,10 +680,10 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         const float quantStep = .02f;
         std::vector<std::vector<float>> original(cols, std::vector<float>(colSize));
         srand(20);
-        for(int i: irange(cols)){
-            for(int j: irange(colSize))
-                original[i][j] = random() / float(1u << 31);
-        }
+        //for(int i: irange(cols)){
+        //    for(int j: irange(colSize))
+        //        original[i][j] = random() / float(1u << 31);
+        //}
         std::vector<cudaCompress::BitStream> compressedStreams(cols);
         for(int i: irange(cols)){
             uint32_t symbolSize;
@@ -836,9 +836,10 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         //for(int i: irange(mappings)){
         //    vkMapMemory(context.device, mem, i * mapSize, mapSize, 0, &mapped[i]);
         //}
+        VkDeviceMemory memory = mem;
         auto ex = [&](int i, int j){
             int cur = i * amtOfThreads + j;
-            vkMapMemory(context.device, mem, cur * byteBlock, byteBlock, 0, &mapped[cur]);
+            vkMapMemory(context.device, memory, cur * byteBlock, byteBlock, 0, &mapped[cur]);
             memcpy(mapped[cur], data.data() + byteBlock * (cur), byteBlock);
         };
         PCUtil::Stopwatch upload(std::cout, "Upload Speed");
@@ -870,7 +871,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         {
         PCUtil::Stopwatch upload(std::cout, "Upload Speed single map");
         PCUtil::AverageWatch uploadTime(time, dummy);
-        std::for_each(std::execution::par, iter.begin(), iter.end(),[&](int i){memcpy(d + i * blockSize, data.data() + i * blockSize, blockSize);});
+        std::for_each(std::execution::par, iter.begin(), iter.end(),[&](int i){memcpy(reinterpret_cast<uint8_t*>(d) + i * blockSize, data.data() + i * blockSize, blockSize);});
         }
         std::cout << byteSize / double(1 << 30) / time / 1e-3 << "GB/s" << std::endl;
         vkUnmapMemory(context.device, mem);
@@ -1053,7 +1054,7 @@ void TEST(const VkUtil::Context& context, const TestInfo& testInfo){
         bool lessee = false;
     }
     if constexpr(testSeparateGpuDecomp){
-        const uint size = 1 << 20;
+        const uint32_t size = 1 << 20;
         const float quantStep = .01;
         std::vector<float> orig(size, 1);
         //orig[0] = 5;

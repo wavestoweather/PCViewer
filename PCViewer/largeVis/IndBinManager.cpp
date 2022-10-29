@@ -628,7 +628,7 @@ void IndBinManager::execCountUpdate(IndBinManager* t, std::vector<uint32_t> acti
     // printing single pipeline timings
     if(timingPool){
         uint32_t timingIndex{};
-        const uint printWidth = 30;
+        const uint32_t printWidth = 30;
         if(gpuDecompression)
             std::cout << "[timing]" << std::setw(printWidth) << "Decompression: " << timings[timingIndex++] << " ms" << std::endl;
         if(uploadTimingCount)

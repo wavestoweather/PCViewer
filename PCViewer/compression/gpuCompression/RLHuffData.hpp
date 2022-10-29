@@ -6,8 +6,8 @@
 struct RLHuffDecodeDataCpu{
     size_t symbolCount{};
 
-    std::vector<uint> symbolOffsets{};
-    std::vector<uint> zeroCountOffsets{};
+    std::vector<uint32_t> symbolOffsets{};
+    std::vector<uint32_t> zeroCountOffsets{};
     vkCompress::HuffmanDecodeTable symbolTable;
     vkCompress::HuffmanDecodeTable zeroCountTable;
     std::vector<uint32_t> codewordStream;        // holds the compressed bits of the main codewords
@@ -33,7 +33,7 @@ struct RLHuffDecodeDataGpu{
     RLHuffDecodeDataGpu(vkCompress::GpuInstance* pInstance, const RLHuffDecodeDataCpu& cpuData):
         gpuContext(pInstance->vkContext)
     {
-        const uint offsetAlignment = 16;
+        const uint32_t offsetAlignment = 16;
 
         size_t wholeSize{};
         symbolTableOffset = wholeSize;

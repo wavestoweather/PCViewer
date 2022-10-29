@@ -142,7 +142,7 @@ bool PCUtil::compareStringFormat(const std::string_view& s, const std::string_vi
     //return true;
     
     // doing things instead with standard regex
-    std::regex r(form.begin());
+    std::regex r(form.data());
     return std::regex_search(s.begin(), s.end(), r);
 }
 

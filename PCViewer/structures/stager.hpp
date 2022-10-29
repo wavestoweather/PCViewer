@@ -46,6 +46,8 @@ public:
         task_common                         common{};
     };
 
+    stager() {};
+
     // needed for task_thread dispatch
     void init();
     // interrupts current transfers and joins with the task_thread

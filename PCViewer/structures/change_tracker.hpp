@@ -6,10 +6,10 @@ namespace structures{
 template<class T>
 class change_tracker{
 public:
-    change_tracker(const change_tracker<T>& o): changed(o.changed.load()), _obj(o._obj) {}
-    change_tracker(change_tracker<T>&& o): changed(o.changed.load()), _obj(std::move(o._obj)) {}
-    change_tracker& operator=(const change_tracker<T>& o) {_obj = o._obj; changed = o.changed.load(); return *this;}
-    change_tracker& operator=(change_tracker<T>&& o) {_obj = std::move(o._obj); changed = o.changed.load(); return *this;}
+    change_tracker(const change_tracker& o): changed(o.changed.load()), _obj(o._obj) {}
+    change_tracker(change_tracker&& o): changed(o.changed.load()), _obj(std::move(o._obj)) {}
+    change_tracker& operator=(const change_tracker& o) {_obj = o._obj; changed = o.changed.load(); return *this;}
+    change_tracker& operator=(change_tracker&& o) {_obj = std::move(o._obj); changed = o.changed.load(); return *this;}
 
     template<typename... Args>
     change_tracker(Args&&... args): _obj(args...){}

@@ -312,7 +312,8 @@ public:
             max += 1;
             max *= 1.1;
         }
-        applyUnaryFunction(input, output, 0, [&](float in){return (in - min) / (max - min);});
+        float mi = min, ma = max;
+        applyUnaryFunction(input, output, 0, [mi, ma](float in){return (in - mi) / (ma - mi);});
             //output[0].cols[0][i] = (input[0].cols[0][i] - min) / (max - min);
     }
 };

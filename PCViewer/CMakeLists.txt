@@ -21,6 +21,11 @@ IF (CMAKE_BUILD_TYPE MATCHES "Debug")
     add_compile_definitions(USEVKVALIDATIONLAYER)
 ENDIF()
 
+IF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mavx512f -mavx512dq -mavx512bw -mavx512vbmi -mavx512vbmi2 -mavx512vl")
+ENDIF()
+message("${CMAKE_CXX_FLAGS}")
+
 # enable jpeg and png support for CImg library
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_png")
 
@@ -36,7 +41,6 @@ find_package(Threads REQUIRED)
 find_package(X11 REQUIRED)
 find_package(TBB REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-message("include dirs: ${netCDF_INCLUDE_DIR}")
 
 #include_directories(${Eigen3_DIR})
 
@@ -132,6 +136,7 @@ file(GLOB util_SRC
 file(GLOB addditional_vulkan_SRC
     "vulkan/*.cpp"
 )
+message("${compress_SRC}")
 
 include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR}; ${structures_INCLUDE_DIR})
 add_executable (PCViewer ${pcviewer_SRC} ${util_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC} ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC} ${addditional_vulkan_SRC})

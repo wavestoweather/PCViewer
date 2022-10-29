@@ -62,6 +62,10 @@ extern "C" {  // portability definitions are in global scope, not a namespace
 #undef CROARING_IS_X64
 #endif
 
+#ifndef __AVX2__
+#undef CROARING_IS_X64
+#endif
+
 #ifdef ROARING_DISABLE_X64
 #undef CROARING_IS_X64
 #endif

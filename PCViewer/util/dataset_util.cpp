@@ -147,13 +147,13 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
         for(std::string_view variable; getline(line, variable, ',');){
             if(variable[0] == '\"'){
                 if(variable.back() != '\"'){
-                    auto start = variable.begin();
+                    auto start = variable.data();
                     getline(line, variable, '\"');
-                    std::string_view tmp; getline(line, tmp, ',');      // skipping things until komma
-                    variable = std::string_view(start + 1, variable.end() - start);
+                    std::string_view tmp{}; getline(line, tmp, ',');      // skipping things until komma
+                    variable = std::string_view(start + 1, variable.data() + variable.size() - start);
                 }
                 else
-                    variable = std::string_view(variable.begin() + 1, variable.size() - 2);
+                    variable = std::string_view(variable.data() + 1, variable.size() - 2);
             }
             variable_names.push_back(std::string(variable));
         }
@@ -177,13 +177,13 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
 
             if(element[0] == '\"'){
                 if(element.back() != '\"'){
-                    auto start = element.begin();
+                    auto start = element.data();
                     getline(line, element, '\"');
                     std::string_view tmp; getline(line, tmp, ',');      // skipping things until komma
-                    element = std::string_view(start + 1, element.end() - start);
+                    element = std::string_view(start + 1, element.data() + element.size() - start);
                 }
                 else
-                    element = std::string_view(element.begin() + 1, element.size() - 2);
+                    element = std::string_view(element.data() + 1, element.size() - 2);
 
                 trim_inplace(element);
             }
@@ -195,7 +195,7 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
             
             float val{};
             if(element.size()){
-                auto parse_res = fast_float::from_chars(element.begin(), element.end(), val);
+                auto parse_res = fast_float::from_chars(element.data(), element.data() + element.size(), val);
                 if(parse_res.ec != std::errc{}){    // parsing error -> exchnage for category
                     std::string el(element);
                     if(ret.attributes[var].categories.count(el) > 0)

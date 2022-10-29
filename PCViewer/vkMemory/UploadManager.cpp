@@ -2,6 +2,7 @@
 #include "../range.hpp"
 #include <algorithm>
 #include <execution>
+#include <array>
 
 UploadManager::UploadManager(const VkUtil::Context& context, uint32_t transferQueueIndex, uint32_t amtStagingBuffer, uint32_t stagingBufferSize):
     stagingBufferSize(stagingBufferSize),
@@ -107,7 +108,7 @@ void UploadManager::threadExec(UploadManager* m){
         std::iota(iter.begin(), iter.end(), 0);
         const uint32_t threadSize = (m->_transfers[transferIndex].byteSize + threadAmt - 1) / threadAmt;
         std::for_each(std::execution::par ,iter.begin(), iter.end(), [&](int i){
-            std::memcpy(finalPointer + i * threadSize, m->_transfers[transferIndex].data + i * threadSize, threadSize);
+            std::memcpy(finalPointer + i * threadSize, reinterpret_cast<const uint8_t*>(m->_transfers[transferIndex].data) + i * threadSize, threadSize);
         });
         
         VkCommandBuffer& commands = m->_transferCommands[transferIndex];

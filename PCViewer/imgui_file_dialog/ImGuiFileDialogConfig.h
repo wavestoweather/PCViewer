@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include "CustomFont.h"
 
 // uncomment and modify defines under for customize ImGuiFileDialog

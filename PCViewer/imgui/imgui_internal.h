@@ -55,7 +55,7 @@ Index of this file:
 #include <limits.h>     // INT_MIN, INT_MAX
 
 // Enable SSE intrinsics if available
-#if (defined __SSE__ || defined __x86_64__ || defined _M_X64) && !defined(IMGUI_DISABLE_SSE)
+#if (defined __SSE__ || defined __x86_64__ || defined _M_X64) && !defined(IMGUI_DISABLE_SSE) && (defined _MSC_VER && _MSC_VER >= 1922)
 #define IMGUI_ENABLE_SSE
 #include <immintrin.h>
 #endif

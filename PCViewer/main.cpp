@@ -32,7 +32,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFl
     return VK_FALSE;
 }
 
-int main(int argc,const char* argv[]){
+int main(int argc, char* argv[]){
     // variables for all of the execution
     SDL_Window*                 window{};
     ImGui_ImplVulkanH_Window    imgui_window_data;
@@ -174,7 +174,7 @@ int main(int argc,const char* argv[]){
     bool                        done = false;
     bool                        rebuild_swapchain = false;
     bool                        first_frame = true;
-    id_t                        swapchain_width = 0, swapchain_height = 0;
+    int                         swapchain_width = 0, swapchain_height = 0;
     while(!done){
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.

@@ -40,7 +40,7 @@ inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(con
         device_addresses[i] = util::vk::get_buffer_address(buffers[i]);
     
     uint32_t header_size = ::util::data::header_size(data);
-    structures::dynamic_struct<gpu_header, uint32_t> packed_header((header_size - sizeof(gpu_header)) / sizeof(uint));
+    structures::dynamic_struct<gpu_header, uint32_t> packed_header((header_size - sizeof(gpu_header)) / sizeof(uint32_t));
     packed_header->dimension_count = data.dimension_sizes.size();
     packed_header->column_count = data.columns.size();
 

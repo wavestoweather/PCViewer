@@ -1,6 +1,5 @@
 #pragma once
 #include <robin_hood.h>
-#include <vulkan/hash_util.h>
 #include <string>
 #include <image_info.hpp>
 

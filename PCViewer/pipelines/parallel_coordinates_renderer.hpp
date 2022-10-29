@@ -27,7 +27,7 @@ class parallel_coordinates_renderer{
         VkDeviceAddress     priorities_address;
         VkDeviceAddress     index_buffer_address;
         VkDeviceAddress     activation_bitset_address;
-        uint                vertex_count_per_line;        // is at least as high as attribute_count (when equal, polyline rendering)
+        uint32_t            vertex_count_per_line;        // is at least as high as attribute_count (when equal, polyline rendering)
         float               padding;
         ImVec4              color;
     };

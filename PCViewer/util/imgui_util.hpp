@@ -26,7 +26,7 @@ inline void load_fonts(std::string_view font_folder, util::memory_view<float> fo
         if(entry.is_regular_file() && entry.path().has_extension() && entry.path().extension().string() == ".ttf"){
             // found regular file
             for(float size: font_sizes){
-                io.Fonts->AddFontFromFileTTF(entry.path().c_str(), size, &font_conf, io.Fonts->GetGlyphRangesDefault());
+                io.Fonts->AddFontFromFileTTF(entry.path().string().c_str(), size, &font_conf, io.Fonts->GetGlyphRangesDefault());
                 io.Fonts->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_IGFD, size, &icons_config, icons_ranges);
             }
         }

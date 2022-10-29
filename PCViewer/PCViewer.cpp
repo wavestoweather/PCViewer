@@ -164,7 +164,7 @@ static int debugLevel = 3;
 #endif
 
 //#define IMGUI_UNLIMITED_FRAME_RATE
-#define _DEBUG
+//#define _DEBUG
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
@@ -602,7 +602,7 @@ struct PCSettings {
     bool updateBrushTemplates = false;
     bool drawListForTemplateBrush = false;
     int liveBrushThreshold = 5e5;
-    int lineBatchSize = 2e6;
+    int lineBatchSize = 1e5;
     bool enableClearOnRerender = true;
 
     //variables for global brushes
@@ -7827,7 +7827,10 @@ int main(int, char**)
 
     // Setup Vulkan
     uint32_t extensions_count = 0;
-    SDL_Vulkan_GetInstanceExtensions(window, &extensions_count, NULL);
+    if (!SDL_Vulkan_GetInstanceExtensions(window, &extensions_count, NULL)) {
+        std::cout << "Error at getting the instance extensions" << std::endl;
+        return -1;
+    }
     const char** extensions = new const char*[extensions_count + 1];
     SDL_Vulkan_GetInstanceExtensions(window, &extensions_count, extensions);
     extensions[extensions_count] = "VK_KHR_get_physical_device_properties2";
