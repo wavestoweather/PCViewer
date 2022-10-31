@@ -51,7 +51,7 @@ struct commandline_parser{
         }
         //std::cout << "Press any key to close...";
     }
-    void parse(util::memory_view<char*> arguments){
+    void parse(util::memory_view<const char*> arguments){
         bool printHelp = false;
         // Known arguments
         for (auto& option : options) {

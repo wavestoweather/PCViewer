@@ -42,7 +42,7 @@ int main(int argc, char* argv[]){
     // init global states (including imgui) ---------------------------------------------------------------------
 
     // command line parsing
-    globals::commandline_parser.parse(util::memory_view(argv, static_cast<size_t>(argc)));
+    globals::commandline_parser.parse(util::memory_view(const_cast<const char**>(argv), static_cast<size_t>(argc)));
     if(globals::commandline_parser.isSet("help")){
         globals::commandline_parser.printHelp();
         return 0;

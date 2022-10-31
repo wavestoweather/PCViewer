@@ -111,8 +111,10 @@ public:
 	inline HalfFloat(uint32_t other);
 	inline HalfFloat(int64_t other);
 	inline HalfFloat(uint64_t other);
-	//inline HalfFloat(long long unsigned int other);
-	//inline HalfFloat(long long int other);
+#ifndef WIN32
+	inline HalfFloat(long long unsigned int other);
+	inline HalfFloat(long long int other);
+#endif
 
 	/** Conversion operator to convert from half to float
 	 */

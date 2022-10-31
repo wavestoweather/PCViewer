@@ -194,7 +194,8 @@ inline const structures::range_brush& get_selected_range_brush_const(){
         return globals::drawlists.read().at(globals::brush_edit_data.local_brush_id).read().local_brushes.read().ranges;
     default:
         assert(false && "Not yet implementd");
-        return {};
+        static structures::range_brush none{};
+        return none;
     }
 }
 
@@ -207,6 +208,8 @@ inline structures::range_brush& get_selected_range_brush(){
         return globals::drawlists().at(globals::brush_edit_data.local_brush_id)().local_brushes().ranges;
     default:
         assert(false && "Not yet implementd");
+        static structures::range_brush none{};
+        return none;
     }
 }
 
