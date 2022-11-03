@@ -280,8 +280,6 @@ int main(int argc, char* argv[]){
         ImGui::End();   // main dock
 
         // check for updates --------------------------------------------------------------------------------
-        util::brushes::upload_changed_brushes();
-        util::brushes::update_drawlist_active_indices();
 
         // check for dataset updates
         if(globals::datasets.changed){
@@ -299,6 +297,26 @@ int main(int argc, char* argv[]){
                 globals::datasets.ref_no_track()[id].changed = false;
             }
             globals::datasets.changed = false;
+            // setting the changed flags on drawlists created from this dataset
+            for(auto dl: changed_datasets){
+                if(globals::drawlists.read().at(dl).read().histogram_registry.const_access()->name_to_registry_key.empty())
+                    continue;
+                globals::drawlists()[dl]().histogram_registry.access()->request_change_all();
+            }
+        }
+
+        // updating activations for brushes
+        util::brushes::upload_changed_brushes();
+        util::brushes::update_drawlist_active_indices();
+        // updating histograms for 
+        if(globals::drawlists.changed){
+            for(const auto& [dl_id, dl]: globals::drawlists.read()){
+                if(!dl.changed)
+                    continue;
+                auto registry_access = globals::drawlists()[dl_id]().histogram_registry.access();   // automatically locks the registry to avoid multi threading problems
+                if(registry_access->change_request.size())
+                    bool TODO = true; // update histograms
+            }
         }
         // check for drwawlist updates
         if(globals::drawlists.changed){
@@ -316,7 +334,7 @@ int main(int argc, char* argv[]){
             globals::drawlists.changed = false;
         }
 
-        // final drawlist rendering ---------------------------------------------------------------------------
+        // final app rendering ---------------------------------------------------------------------------
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
         const bool minimized = draw_data->DisplaySize.x <= 0 || draw_data->DisplaySize.y <= 0;

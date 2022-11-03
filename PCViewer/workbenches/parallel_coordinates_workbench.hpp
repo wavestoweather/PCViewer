@@ -18,10 +18,12 @@ public:
 private:
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;
+    using registered_histogram = structures::histogram_registry::scoped_registrator_t;
 
     // both are unique_ptrs to avoid issues with the memory_views when data elements are deleted in the vector
     std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;
     std::vector<std::unique_ptr<structures::median_type>>    _storage_median_type;
+    robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
 
     void _update_plot_image();
     void _draw_setting_list();
@@ -62,6 +64,7 @@ public:
         // when these are changed the whole data plot has to be rendered
         histogram_type hist_type{};
         ImVec4      pc_background{0,0,0,1};
+        int         histogram_rendering_threshold{500000};
         bool        render_splines{};
     };
     struct plot_data{
@@ -87,7 +90,6 @@ public:
     structures::change_tracker<settings>                    setting{};
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};     // the order here is the render order of the drawlists
     structures::alpha_mapping_type                          alpha_mapping_typ{};
-    structures::change_tracker<structures::parallel_coordinates_renderer::render_type> render_type{};
     structures::change_tracker<plot_data>                   plot_data{};
     structures::change_tracker<std::vector<structures::attribute>> attributes{};
     structures::change_tracker<std::vector<attribute_order_info>> attributes_order_info{};

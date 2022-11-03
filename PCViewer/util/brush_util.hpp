@@ -145,7 +145,7 @@ inline void upload_changed_brushes(){
             auto& brush_data = local_brush_data.back();
 
             if(brush_data.byte_size() > dl.read().local_brushes_gpu.size){
-                util::vk::destroy_buffer(dl.read().local_brushes_gpu);
+                util::vk::destroy_buffer(globals::drawlists.ref_no_track()[id].ref_no_track().local_brushes_gpu);
                 auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, brush_data.byte_size());
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
                 globals::drawlists()[id]().local_brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);

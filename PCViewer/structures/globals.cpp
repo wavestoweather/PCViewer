@@ -23,6 +23,8 @@
 #include <logger.hpp>
 #include <sys_info.hpp>
 #include <file_loader.hpp>
+#include <histogram_counter.hpp>
+#include <histogram_counter_executor.hpp>
 
 #ifdef min
 #undef min
@@ -739,6 +741,119 @@ void file_loader::_task_thread_function(){
         auto read_bytes = file.read(cur->dst);
         if(read_bytes != cur->dst.byte_size())
             ::logger << logging::warning_prefix << " file_loader::_task_thread_function() Not all bytes for loading task were loaded. Loaded " << float(read_bytes) / (1<<20) << "MBytes from " << float(cur->dst.byte_size()) / (1<<20) << "MBytes requested." << logging::endl;
+    }
+}
+
+void histogram_counter::init(){
+    auto semaphore_info = util::vk::initializers::semaphoreCreateInfo();
+    _last_count_semaphore = util::vk::create_semaphore(semaphore_info);
+    auto pool_info = util::vk::initializers::commandPoolCreateInfo(globals::vk_context.compute_queue_family_index);
+    _wait_semaphore_pool = util::vk::create_command_pool(pool_info);
+    _wait_semaphore_command = util::vk::create_begin_command_buffer(_wait_semaphore_pool);
+    auto res = vkEndCommandBuffer(_wait_semaphore_command); util::check_vk_result(res);
+    _wait_semaphore_fence = util::vk::create_fence(util::vk::initializers::fenceCreateInfo());
+    _task_thread = std::thread(&histogram_counter::_task_thread_function, this);
+}
+void histogram_counter::cleanup(){
+    _thread_finish = true;
+    _task_semaphore.release();
+    _task_thread.join();
+    _task_thread = {};
+}
+void histogram_counter::add_count_task(const histogram_count_info& count_info){
+    std::scoped_lock lock(_task_add_mutex);
+    _count_tasks.push_back(std::make_unique<histogram_count_info>(count_info));
+    _task_semaphore.release();
+}
+void histogram_counter::wait_for_completion(){
+    ++_wait_completion;
+    _task_semaphore.release();
+    _completion_semaphore.acquire();
+}
+void histogram_counter::_task_thread_function(){
+    while(!_thread_finish){
+        _task_semaphore.acquire();          // waiting for work/shutdown/completion_check
+        if(_thread_finish)
+            return;
+
+        // notify wait_completion threads
+        if(_count_tasks.empty() && _wait_completion > 0){
+            auto release_count = _wait_completion.exchange(0);
+            for(int i: util::i_range(release_count - 1))
+                _task_semaphore.acquire();
+            _completion_semaphore.release(release_count);
+            continue;
+        }
+
+        unique_task cur;
+        if(::logger.logging_level >= logging::level::l_4)
+            ::logger << logging::info_prefix << " histogram_counter::_task_thread_function() starting histogram count" << logging::endl;
+        {
+            std::scoped_lock lock(_task_add_mutex);
+            cur = std::move(_count_tasks.front());
+            _count_tasks.erase(_count_tasks.begin());
+        }
+        if(_thread_finish)
+            return;
+        
+        // counting the histogram
+        // avoid rendering of histogram buffers and retrieving the list of histograms
+        std::set<std::string_view> histograms;
+        {
+            auto histogram_access = globals::drawlists()[cur->dl_id]().histogram_registry.access();
+            histogram_access->gpu_buffers_edited = true;
+            histograms = std::move(histogram_access->change_request);
+            histogram_access->change_request.clear();
+        }
+        // counting
+        int count{};
+        for(auto hist: histograms){
+            auto& dl = globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track();
+            auto key = dl.histogram_registry.access()->name_to_registry_key[hist];
+            if(key.attribute_indices.size() != 2)
+                continue;
+
+            if(!dl.histogram_registry.const_access()->gpu_buffers.contains(hist)){
+                size_t hist_count{1};
+                for(int i: key.bin_sizes) hist_count *= std::abs(i);
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, hist_count * sizeof(uint32_t));
+                auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                dl.histogram_registry.access()->gpu_buffers[hist] = util::vk::create_buffer(buffer_info, alloc_info);
+            }
+
+            std::vector<structures::min_max<float>> column_min_max(key.attribute_indices.size());
+            for(int i: util::size_range(column_min_max))
+                column_min_max[i] = dl.dataset_read().attributes[key.attribute_indices[i]].bounds.read();
+
+            pipelines::histogram_counter::count_info count_info{};
+            count_info.data_size = dl.const_templatelist().data_size;
+            count_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
+            count_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
+            count_info.gpu_data_activations = util::vk::get_buffer_address(dl.active_indices_bitset_gpu);
+            count_info.histogram_buffer_address = util::vk::get_buffer_address(dl.histogram_registry.const_access()->gpu_buffers.at(hist));
+            count_info.column_indices = key.attribute_indices;
+            count_info.bin_sizes = key.bin_sizes;
+            count_info.column_min_max = column_min_max;
+            if(cur->histograms_timing_info)
+                count_info.gpu_timing_info = cur->histograms_timing_info;
+            if(cur->count_timing_info && count == 0)
+                count_info.gpu_timing_info = cur->count_timing_info;
+            if(++count == histograms.size() - 1)
+                count_info.gpu_sync_info.signal_semaphores = cur->signal_semaphores;
+            pipelines::histogram_counter::instance().count(count_info);
+        }
+        // signaling that editing is done (at least all commands are being executed)
+        if(cur->cpu_semaphore)
+            cur->cpu_semaphore->release();
+
+        // waiting for counting completion before signaling render
+        pipelines::histogram_counter::instance().wait_for_fence();
+            
+        {
+            auto histogram_access = globals::drawlists()[cur->dl_id]().histogram_registry.access();
+            histogram_access->gpu_buffers_edited = false;
+            histogram_access->gpu_buffers_updated = true;
+        }
     }
 }
 }

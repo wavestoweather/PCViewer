@@ -42,19 +42,40 @@ void histogram_counter::count(const count_info& info){
     const auto& pipeline_data = _get_or_create_pipeline(pipeline_specs{info.data_type});
     push_constants pc{};
     pc.data_header_address = info.data_header_address;
+    pc.index_buffer_address = info.index_buffer_address;
     pc.gpu_data_activations = info.gpu_data_activations;
-    pc.a1 = info.column_indices[0];
-    pc.a2 = info.column_indices[1];
-    if(info.column_indices.size() > 2)
+    if(info.column_indices.size() >= 1)
+        pc.a1 = info.column_indices[0];
+    if(info.column_indices.size() >= 2)
+        pc.a2 = info.column_indices[1];
+    if(info.column_indices.size() >= 3)
         pc.a3 = info.column_indices[2];
-    if(info.column_indices.size() > 3)
+    if(info.column_indices.size() >= 4)
         pc.a4 = info.column_indices[3];
-    pc.s1 = info.bin_sizes[0];
-    pc.s2 = info.bin_sizes[1];
-    if(info.bin_sizes.size() > 2)
+    if(info.bin_sizes.size() >= 1)
+        pc.s1 = info.bin_sizes[0];
+    if(info.bin_sizes.size() >= 2)
+        pc.s2 = info.bin_sizes[1];
+    if(info.bin_sizes.size() >= 3)
         pc.s3 = info.bin_sizes[2];
-    if(info.bin_sizes.size() > 3)
+    if(info.bin_sizes.size() >= 4)
         pc.s4 = info.bin_sizes[3];
+    if(info.column_min_max.size() >= 1){
+        pc.a1_min = info.column_min_max[0].min;
+        pc.a1_max = info.column_min_max[0].max;
+    }
+    if(info.column_min_max.size() >= 2){
+        pc.a2_min = info.column_min_max[1].min;
+        pc.a2_max = info.column_min_max[1].max;
+    }
+    if(info.column_min_max.size() >= 3){
+        pc.a3_min = info.column_min_max[2].min;
+        pc.a3_max = info.column_min_max[2].max;
+    }
+    if(info.column_min_max.size() >= 4){
+        pc.a4_min = info.column_min_max[3].min;
+        pc.a4_max = info.column_min_max[3].max;
+    }
     pc.data_size = info.data_size;
 
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_count_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
@@ -69,6 +90,11 @@ void histogram_counter::count(const count_info& info){
 
     std::scoped_lock lock(*globals::vk_context.compute_mutex);
     util::vk::end_commit_command_buffer(_command_buffer, globals::vk_context.compute_queue, info.gpu_sync_info.wait_semaphores, info.gpu_sync_info.wait_masks, info.gpu_sync_info.signal_semaphores, _count_fence);
+}
+
+void histogram_counter::wait_for_fence(uint64_t timeout){
+    auto res = vkWaitForFences(globals::vk_context.device, 1, &_count_fence, VK_TRUE, timeout); 
+    util::check_vk_result(res);
 }
 
 }

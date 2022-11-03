@@ -3,17 +3,13 @@
 #include <memory_view.hpp>
 #include <atomic>
 #include <memory>
+#include <gpu_sync.hpp>
 
 typedef struct VkSemaphore_T *VkSemaphore;
 typedef uint32_t VkFlags;
 typedef VkFlags VkSemaphoreWaitFlags;
 
 namespace structures{
-struct gpu_sync_info{
-    util::memory_view<VkSemaphore>          wait_semaphores{};
-    util::memory_view<VkSemaphoreWaitFlags> wait_flags{};
-    util::memory_view<VkSemaphore>          signale_semaphores{};
-};
 
 struct workbench{
     // attribute to indicate if the workbench should be shown

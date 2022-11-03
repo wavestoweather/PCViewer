@@ -103,6 +103,19 @@ void parallel_coordinates_workbench::show(){
         plot_data.changed = false;
 
         request_render |= true;
+
+        // updating requested histograms
+        if(_registered_histograms.size()){
+            std::vector<uint32_t> indices;
+            for(const auto& i: attributes_order_info.read()){
+                if(i.active)
+                    indices.push_back(i.attribut_index);
+            }
+            for(auto& [dl, registered_histograms]: _registered_histograms){
+                for(int reg_hist: util::size_range(registered_histograms))
+                    registered_histograms[reg_hist] = registered_histogram(registered_histograms[reg_hist].registry, util::memory_view<const uint32_t>(indices.data() + reg_hist, 2), util::memory_view<const int>({int(plot_data.read().height), int(plot_data.read().height)}));
+            }
+        }
     }
 
     request_render &= !any_drawlist_change;
@@ -637,6 +650,17 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
                 throw std::runtime_error{"parallel_coordinates_workbench::addDrawlist() Inconsistent attributes for the new drawlist"};
 
         drawlist_infos.write().push_back(drawlist_info{drawlist_id, true, dl.appearance_drawlist, dl.median_typ});
+
+        // checking histogram (large vis) rendering or standard rendering
+        if(dl.const_templatelist().data_size > setting.read().histogram_rendering_threshold){
+            std::vector<uint32_t> indices;
+            for(const auto& i: attributes_order_info.read()){
+                if(i.active)
+                    indices.push_back(i.attribut_index);
+            }
+            for(int i: util::i_range(indices.size() - 1))
+                _registered_histograms[drawlist_id].push_back(registered_histogram(*dl.histogram_registry.access(), util::memory_view<const uint32_t>(indices.data() + i, 2), util::memory_view<const int>({int(plot_data.read().height), int(plot_data.read().height)})));
+        }
     }
 }
 

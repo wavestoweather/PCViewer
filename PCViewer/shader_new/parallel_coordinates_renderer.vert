@@ -9,10 +9,10 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
 
 layout(buffer_reference, scalar) buffer AttributeInfos{
-    uint     attribute_count;                // amount of active attributes
-    uint     _, __;
-    uint     data_flags;                        // can contain additional data flags
-    vec4     vertex_transformations[];        // x holds the attribute index, y and z hold the lower and the upper bound respectivley for the first amtOfAttributes positions (in x axis position to variable is stored)
+    uint     attribute_count;               // amount of active attributes
+    uint     _t, __t;
+    uint     data_flags;                    // can contain additional data flags
+    vec4     vertex_transformations[];      // x holds the attribute index, y and z hold the lower and the upper bound respectivley for the first amtOfAttributes positions (in x axis position to variable is stored)
 };
 
 layout(buffer_reference, scalar) buffer IndexBuffer{
@@ -30,14 +30,14 @@ layout(buffer_reference, scalar) buffer PriorityValues{
 layout(set = 0, binding = 0) uniform sampler2D color_transfer_texture;
 
 layout(push_constant) uniform PCs{
-    uint64_t     attribute_info_address;
-    uint64_t     data_header_address;
+    uint64_t    attribute_info_address;
+    uint64_t    data_header_address;
     uint64_t    priorities_address;
     uint64_t    index_buffer_address;
     uint64_t    activation_bitset_address;
     uint        vertex_count_per_line;        // is at least as high as attribute_count (when equal, polyline rendering)
-    float         padding;
-    vec4         color;
+    float       padding;
+    vec4        color;
 };
 
 layout(location = 0) out vec4 out_color;

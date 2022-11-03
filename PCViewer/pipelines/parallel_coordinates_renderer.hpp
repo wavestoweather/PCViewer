@@ -31,9 +31,25 @@ class parallel_coordinates_renderer{
         float               padding;
         ImVec4              color;
     };
+    
+    struct push_constants_large_vis{
+        VkDeviceAddress attribute_info_address;
+        VkDeviceAddress histogram_address;
+        VkDeviceAddress ordering_address;           // needed for order dependant rendering (eg. priority rendering)
+        uint32_t        _t, __t;
+        uint32_t        a_axis;                     // holds the final axis position index (after activation, reordering) for the primary histogram axis
+        uint32_t        b_axis;                     // holds the final axis position index (after activation, reordering) for the secondary histogram axis
+        uint32_t        a_size;
+        uint32_t        b_size;
+        uint32_t        vertex_count_per_line;      // is at least as high as attribute_count (when equal, polyline rendering)
+        float           padding;
+        uint32_t        priority_rendering;         // 1 indicates priority rendering should be used
+        uint32_t        ___t;
+        ImVec4          color;
+    };
 
     const std::string_view vertex_shader_path{"shader/parallel_coordinates_renderer.vert.spv"};
-    const std::string_view large_vis_vertex_shader_path{""};
+    const std::string_view large_vis_vertex_shader_path{"shader/parallel_coordinates_renderer_large.vert.spv"};
     const std::string_view fragment_shader_path{"shader/parallel_coordinates_renderer.frag.spv"};
 
     // vulkan resources that are the same for all drawlists/parallel_coordinates_windows
@@ -51,7 +67,7 @@ class parallel_coordinates_renderer{
     parallel_coordinates_renderer();
 
     void _pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
-    void _post_render_commands(VkCommandBuffer commands, const output_specs& output_specs, VkFence fence = {}, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkSemaphore> signal_semaphores = {});
+    void _post_render_commands(VkCommandBuffer commands, VkFence fence = {}, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkSemaphore> signal_semaphores = {});
 
 public:
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;

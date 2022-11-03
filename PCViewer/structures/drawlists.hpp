@@ -8,9 +8,9 @@
 #include <datasets.hpp>
 #include <enum_names.hpp>
 #include <dynamic_bitset.hpp>
+#include <histogram_registry.hpp>
 
 namespace structures{
-
 enum class median_type: uint32_t{
     none,
     arithmetic,
@@ -41,12 +41,12 @@ struct drawlist{
     change_tracker<bool>    immune_to_global_brushes{};
     change_tracker<appearance> appearance_median{};
     change_tracker<median_type> median_typ{};  
-    dynamic_bitset<>        active_indices_bitset{};                
+    dynamic_bitset<uint32_t> active_indices_bitset{};                
 
     buffer_info             median_buffer{};                // linear array buffer containing the median values for all attributes
     buffer_info             active_indices_bitset_gpu{};
     buffer_info             priority_colors_gpu{};
-    std::vector<buffer_info> derived_data_infos{};          // vulkan buffer need e.g. for large vis counting
+    thread_safe_hist_reg    histogram_registry{};           // thread safety is guaranteed by thread_safe structure
     tracked_brush           local_brushes{};
     buffer_info             local_brushes_gpu{};
 

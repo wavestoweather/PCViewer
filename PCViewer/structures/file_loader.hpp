@@ -1,5 +1,4 @@
 #pragma once
-#include <vk_context.hpp>
 #include <memory_view.hpp>
 #include <thread>
 #include <semaphore.hpp>
