@@ -447,39 +447,39 @@ struct ViolinDrawlistPlot {
 //        = ColorPaletteManager();
 };
 
-static VkDeviceMemory            g_PcPlotMem = VK_NULL_HANDLE;
-static VkImage                    g_PcPlot = VK_NULL_HANDLE;
-static VkImageView                g_PcPlotView = VK_NULL_HANDLE;
-static VkImage                    g_PcPlotMulti = VK_NULL_HANDLE;
-static VkImageView                g_PcPlotMultiView = VK_NULL_HANDLE;
-static VkSampler                g_PcPlotSampler = VK_NULL_HANDLE;
-static VkDescriptorSet            g_PcPlotImageDescriptorSet = VK_NULL_HANDLE;
-static VkRenderPass                g_PcPlotRenderPass = VK_NULL_HANDLE;        //contains the render pass for the pc
-static VkRenderPass                g_PcPlotRenderPass_noClear = VK_NULL_HANDLE;
-static VkDescriptorSetLayout    g_PcPlotDescriptorLayout = VK_NULL_HANDLE;
-static VkDescriptorSetLayout    g_PcPlotDataSetLayout = VK_NULL_HANDLE;
-static VkDescriptorPool            g_PcPlotDescriptorPool = VK_NULL_HANDLE;
-static VkDescriptorSet            g_PcPlotDescriptorSet = VK_NULL_HANDLE;
-static VkBuffer                    g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
-static VkDeviceMemory            g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
-static VkPipelineLayout            g_PcPlotPipelineLayout = VK_NULL_HANDLE;    //contains the pipeline which is used to assign global shader variables
-static VkPipeline                g_PcPlotPipeline = VK_NULL_HANDLE;            //contains the graphics pipeline for the pc
-static VkPipelineLayout            g_PcPlotPipelineLayout_noClear = VK_NULL_HANDLE;
-static VkPipeline                g_PcPlotPipeline_noClear = VK_NULL_HANDLE;
+static VkDeviceMemory               g_PcPlotMem = VK_NULL_HANDLE;
+static VkImage                      g_PcPlot = VK_NULL_HANDLE;
+static VkImageView                  g_PcPlotView = VK_NULL_HANDLE;
+static VkImage                      g_PcPlotMulti = VK_NULL_HANDLE;
+static VkImageView                  g_PcPlotMultiView = VK_NULL_HANDLE;
+static VkSampler                    g_PcPlotSampler = VK_NULL_HANDLE;
+static VkDescriptorSet              g_PcPlotImageDescriptorSet = VK_NULL_HANDLE;
+static VkRenderPass                 g_PcPlotRenderPass = VK_NULL_HANDLE;        //contains the render pass for the pc
+static VkRenderPass                 g_PcPlotRenderPass_noClear = VK_NULL_HANDLE;
+static VkDescriptorSetLayout        g_PcPlotDescriptorLayout = VK_NULL_HANDLE;
+static VkDescriptorSetLayout        g_PcPlotDataSetLayout = VK_NULL_HANDLE;
+static VkDescriptorPool             g_PcPlotDescriptorPool = VK_NULL_HANDLE;
+static VkDescriptorSet              g_PcPlotDescriptorSet = VK_NULL_HANDLE;
+static VkBuffer                     g_PcPlotDescriptorBuffer = VK_NULL_HANDLE;
+static VkDeviceMemory               g_PcPlotDescriptorBufferMemory = VK_NULL_HANDLE;
+static VkPipelineLayout             g_PcPlotPipelineLayout = VK_NULL_HANDLE;    //contains the pipeline which is used to assign global shader variables
+static VkPipeline                   g_PcPlotPipeline = VK_NULL_HANDLE;            //contains the graphics pipeline for the pc
+static VkPipelineLayout             g_PcPlotPipelineLayout_noClear = VK_NULL_HANDLE;
+static VkPipeline                   g_PcPlotPipeline_noClear = VK_NULL_HANDLE;
 //variables for spline pipeline
-static VkPipelineLayout            g_PcPlotSplinePipelineLayout = VK_NULL_HANDLE;
-static VkPipeline                g_PcPlotSplinePipeline = VK_NULL_HANDLE;
-static VkPipelineLayout            g_PcPlotSplinePipelineLayout_noClear = VK_NULL_HANDLE;
-static VkPipeline                g_PcPlotSplinePipeline_noClear = VK_NULL_HANDLE;
+static VkPipelineLayout             g_PcPlotSplinePipelineLayout = VK_NULL_HANDLE;
+static VkPipeline                   g_PcPlotSplinePipeline = VK_NULL_HANDLE;
+static VkPipelineLayout             g_PcPlotSplinePipelineLayout_noClear = VK_NULL_HANDLE;
+static VkPipeline                   g_PcPlotSplinePipeline_noClear = VK_NULL_HANDLE;
 //variables for the histogramm pipeline
-static VkPipelineLayout            g_PcPlotHistoPipelineLayout = VK_NULL_HANDLE;
-static VkPipelineLayout            g_PcPlotHistoPipelineAdditiveLayout = VK_NULL_HANDLE;
-static VkPipeline                g_PcPlotHistoPipeline = VK_NULL_HANDLE;
-static VkPipeline                g_PcPlotHistoAdditivePipeline = VK_NULL_HANDLE;
-static VkRenderPass                g_PcPlotHistoRenderPass = VK_NULL_HANDLE;
-static VkDescriptorSetLayout    g_PcPlotHistoDescriptorSetLayout = VK_NULL_HANDLE;
-static VkPipelineLayout            g_PcPlotRectPipelineLayout = VK_NULL_HANDLE;
-static VkPipeline                g_PcPlotRectPipeline = VK_NULL_HANDLE;
+static VkPipelineLayout             g_PcPlotHistoPipelineLayout = VK_NULL_HANDLE;
+static VkPipelineLayout             g_PcPlotHistoPipelineAdditiveLayout = VK_NULL_HANDLE;
+static VkPipeline                   g_PcPlotHistoPipeline = VK_NULL_HANDLE;
+static VkPipeline                   g_PcPlotHistoAdditivePipeline = VK_NULL_HANDLE;
+static VkRenderPass                 g_PcPlotHistoRenderPass = VK_NULL_HANDLE;
+static VkDescriptorSetLayout        g_PcPlotHistoDescriptorSetLayout = VK_NULL_HANDLE;
+static VkPipelineLayout             g_PcPlotRectPipelineLayout = VK_NULL_HANDLE;
+static VkPipeline                   g_PcPlotRectPipeline = VK_NULL_HANDLE;
 
 //variables for the density pipeline
 static VkPipelineLayout            g_PcPlotDensityPipelineLayout = VK_NULL_HANDLE;
@@ -518,16 +518,16 @@ static VkBuffer                    g_PcPlotIndexBuffer = VK_NULL_HANDLE;
 static VkDeviceMemory            g_PcPlotIndexBufferMemory = VK_NULL_HANDLE;
 
 //variables for the compute pipeline filling the indexbuffers
-static VkPipeline                c_IndexPipeline;
-static VkPipelineLayout            c_IndexPipelineLayout;
-static VkDescriptorSetLayout    c_IndexPipelineDescSetLayout;
+static VkPipeline                 c_IndexPipeline;
+static VkPipelineLayout           c_IndexPipelineLayout;
+static VkDescriptorSetLayout      c_IndexPipelineDescSetLayout;
 static VkDescriptorSet            c_IndexPipelineDescSet;
 
 static uint32_t                    windowWidth = 1920;
 static uint32_t                    windowHeight = 1080;
 static uint32_t                    g_PcPlotWidth = 2060;
 static uint32_t                    g_PcPlotHeight = 450;
-static VkSampleCountFlagBits    g_pcPlotSampleCount = VK_SAMPLE_COUNT_8_BIT;
+static VkSampleCountFlagBits       g_pcPlotSampleCount = VK_SAMPLE_COUNT_8_BIT;
 static VkFormat                    g_pcPlotFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 static char                        g_fragShaderPath[] = "shader/frag.spv";
 static char                        g_geomShaderPath[] = "shader/geom.spv";
