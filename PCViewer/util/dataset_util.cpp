@@ -513,6 +513,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 }
 
 void convert_templatelist(const structures::templatelist_convert_data& convert_data){
+    assert(convert_data.ds_id.size() && convert_data.tl_id.size());
     auto& ds = globals::datasets.ref_no_track()[convert_data.ds_id];
     switch(convert_data.dst){
     case structures::templatelist_convert_data::destination::drawlist:{

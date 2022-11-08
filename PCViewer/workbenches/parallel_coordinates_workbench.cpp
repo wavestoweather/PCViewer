@@ -547,6 +547,7 @@ void parallel_coordinates_workbench::show(){
     // -------------------------------------------------------------------------------
     // settings region
     // -------------------------------------------------------------------------------
+    std::string_view delete_drawlist{};
 
     ImGui::BeginHorizontal("Settings");
 
@@ -620,7 +621,7 @@ void parallel_coordinates_workbench::show(){
                     drawlist_infos.write();
                 ImGui::TableNextColumn();
                 if(ImGui::Button(("X##x" + dl_string).c_str()))
-                    drawlist_infos.write();
+                    delete_drawlist = dl.drawlist_id;
                 ImGui::TableNextColumn();
                 if(ImGui::Checkbox(("##act" + dl_string).c_str(), &dl.appearance->ref_no_track().show))
                     dl.appearance->write();
@@ -645,13 +646,21 @@ void parallel_coordinates_workbench::show(){
     ImGui::EndHorizontal();
 
     ImGui::End();
+
+    // deleting local drawlist
+    if(delete_drawlist.size()){
+        auto del = drawlist_infos().begin();
+        while(del->drawlist_id != delete_drawlist)
+            ++del;
+        drawlist_infos().erase(del);
+    }
 }
 
 void parallel_coordinates_workbench::render_plot()
 {
     // if histogram rendering requested and not yet finished delay rendering
     for(const auto& dl: drawlist_infos.read()){
-        if(_registered_histograms[dl.drawlist_id].size() && globals::drawlists.read().at(dl.drawlist_id).read().histogram_registry.const_access()->gpu_buffers_edited)
+        if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms[dl.drawlist_id].size() && globals::drawlists.read().at(dl.drawlist_id).read().histogram_registry.const_access()->gpu_buffers_edited)
             return;     // a registered histogram is being currently updated, no rendering possible
     }
 

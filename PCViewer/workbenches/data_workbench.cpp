@@ -72,6 +72,8 @@ void data_workbench::show()
                     if(ImGui::MenuItem(tl->name.c_str())){
                         _popup_tl_id = tl->name;
                         _popup_ds_id = id;
+                        _tl_convert_data.ds_id = id;
+                        _tl_convert_data.tl_id = tl->name;
                         _tl_convert_data.trim = {0, tl->data_size};
                         popup_open_tl_to_dltl = true;
                     }
