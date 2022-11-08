@@ -25,6 +25,7 @@
 #include <brush_util.hpp>
 #include <sys_info.hpp>
 #include <file_loader.hpp>
+#include <histogram_counter_executor.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -99,10 +100,10 @@ int main(int argc, char* argv[]){
     if(globals::commandline_parser.isSet("vulkanvalidation"))
         util::vk::setup_debug_report_callback(debug_report);
 
-    // load system information
+    // other globals init
     globals::sys_info.init();
-    // global stager init
     globals::stager.init();
+    globals::histogram_counter.init();
 
     // imgui init
     if(SDL_Vulkan_CreateSurface(window, globals::vk_context.instance, &imgui_window_data.Surface) == SDL_FALSE){
@@ -243,9 +244,6 @@ int main(int argc, char* argv[]){
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
         ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
 
-        // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
-        util::dataset::check_datasets_to_open();
-
         for(const auto& wb: globals::workbenches)
             wb->show();
 
@@ -279,7 +277,10 @@ int main(int argc, char* argv[]){
 
         ImGui::End();   // main dock
 
-        // check for updates --------------------------------------------------------------------------------
+        // check for dataset/drawlist/brush updates --------------------------------------------------------------------------------
+
+        // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
+        util::dataset::check_datasets_to_open();
 
         // check for dataset deletions
         if(globals::datasets_to_delete.size()){
@@ -348,8 +349,11 @@ int main(int argc, char* argv[]){
                 if(!dl.changed)
                     continue;
                 auto registry_access = globals::drawlists()[dl_id]().histogram_registry.access();   // automatically locks the registry to avoid multi threading problems
-                if(registry_access->change_request.size())
-                    bool TODO = true; // update histograms
+                if(registry_access->change_request.size()){
+                    // updating the histograms
+                    for(auto hist: registry_access->change_request)
+                        globals::histogram_counter.add_count_task({dl_id});
+                }
             }
         }
         // check for drwawlist updates
@@ -396,6 +400,7 @@ int main(int argc, char* argv[]){
     ImGui::DestroyContext();
 
     ImGui_ImplVulkanH_DestroyWindow(globals::vk_context.instance, globals::vk_context.device, &imgui_window_data, globals::vk_context.allocation_callbacks);
+    globals::histogram_counter.cleanup();
     globals::stager.cleanup();
     globals::vk_context.cleanup();
 

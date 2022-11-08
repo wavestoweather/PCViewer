@@ -161,7 +161,7 @@ inline void destroy_pipeline_layout(VkPipelineLayout& layout){
     layout = {};
 }
 
-inline VkPipeline create_compute_pipline(const VkComputePipelineCreateInfo& info, VkPipelineCache cache = {}){
+inline VkPipeline create_compute_pipeline(const VkComputePipelineCreateInfo& info, VkPipelineCache cache = {}){
     VkPipeline pipeline;
     auto res = vkCreateComputePipelines(globals::vk_context.device, cache, 1, &info, globals::vk_context.allocation_callbacks, &pipeline);
     util::check_vk_result(res);
@@ -169,7 +169,7 @@ inline VkPipeline create_compute_pipline(const VkComputePipelineCreateInfo& info
     return pipeline;
 }
 
-inline VkPipeline create_graphics_pipline(const VkGraphicsPipelineCreateInfo& info, VkPipelineCache cache = {}){
+inline VkPipeline create_graphics_pipeline(const VkGraphicsPipelineCreateInfo& info, VkPipelineCache cache = {}){
     VkPipeline pipeline;
     auto res = vkCreateGraphicsPipelines(globals::vk_context.device, cache, 1, &info, globals::vk_context.allocation_callbacks, &pipeline);
     util::check_vk_result(res);

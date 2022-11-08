@@ -25,6 +25,7 @@
 #include <file_loader.hpp>
 #include <histogram_counter.hpp>
 #include <histogram_counter_executor.hpp>
+#include <stopwatch.hpp>
 
 #ifdef min
 #undef min
@@ -80,6 +81,8 @@ structures::imgui_globals imgui{};
 structures::sys_info sys_info{};
 
 structures::file_loader file_loader{};
+
+structures::histogram_counter histogram_counter{};
 }
 
 namespace structures{
@@ -800,12 +803,14 @@ void histogram_counter::_task_thread_function(){
         
         // counting the histogram
         // avoid rendering of histogram buffers and retrieving the list of histograms
+        stopwatch stop_watch;
         std::set<std::string_view> histograms;
         {
             auto histogram_access = globals::drawlists()[cur->dl_id]().histogram_registry.access();
             histogram_access->gpu_buffers_edited = true;
             histograms = std::move(histogram_access->change_request);
             histogram_access->change_request.clear();
+            stop_watch.start();
         }
         // counting
         int count{};
@@ -856,6 +861,9 @@ void histogram_counter::_task_thread_function(){
             histogram_access->gpu_buffers_edited = false;
             histogram_access->gpu_buffers_updated = true;
         }
+
+        if(::logger.logging_level >= logging::level::l_4)
+            ::logger << logging::info_prefix << " histogram_counter::_task_thread_function() hsitogram counts done, needed " << stop_watch.lap() << " ms" << logging::endl;
     }
 }
 }

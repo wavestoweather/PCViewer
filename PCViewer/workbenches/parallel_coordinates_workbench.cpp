@@ -69,7 +69,7 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
         for(int i: util::i_range(active_indices.size() - 1)){
             util::memory_view<const uint32_t> indices(active_indices.data() + i, 2);
-            util::memory_view<const int> bucket_sizes(reinterpret_cast<const int*>(&plot_data.read().width), 2);
+            std::vector<int> bucket_sizes(2, plot_data.read().height);
             auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes);
             int registrator_index{-1};
             for(int j: util::size_range(_registered_histograms[dl.drawlist_id])){
@@ -147,9 +147,10 @@ void parallel_coordinates_workbench::show(){
         // updating requested histograms
         if(_registered_histograms.size()){
             std::vector<uint32_t> indices = _get_active_ordered_indices();
+            std::vector<int> bin_sizes(2, static_cast<int>(plot_data.read().height));
             for(auto& [dl, registered_histograms]: _registered_histograms){
                 for(int reg_hist: util::size_range(registered_histograms))
-                    registered_histograms[reg_hist] = registered_histogram(registered_histograms[reg_hist].registry, util::memory_view<const uint32_t>(indices.data() + reg_hist, 2), util::memory_view<const int>(reinterpret_cast<const int*>(&plot_data.read().width), 2));
+                    registered_histograms[reg_hist] = registered_histogram(registered_histograms[reg_hist].registry, util::memory_view<const uint32_t>(indices.data() + reg_hist, 2), util::memory_view<const int>(bin_sizes));
             }
             bool look_for_registered_histograms = false;
         }
@@ -660,8 +661,11 @@ void parallel_coordinates_workbench::render_plot()
 {
     // if histogram rendering requested and not yet finished delay rendering
     for(const auto& dl: drawlist_infos.read()){
-        if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms[dl.drawlist_id].size() && globals::drawlists.read().at(dl.drawlist_id).read().histogram_registry.const_access()->gpu_buffers_edited)
-            return;     // a registered histogram is being currently updated, no rendering possible
+        if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms[dl.drawlist_id].size()){
+            const auto access = globals::drawlists.read().at(dl.drawlist_id).read().histogram_registry.const_access();
+            if(access->gpu_buffers_edited || !access->gpu_buffers_updated)
+                return;     // a registered histogram is being currently updated, no rendering possible
+        }
     }
 
     if(logger.logging_level >= logging::level::l_5)
@@ -715,13 +719,11 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
 
         // checking histogram (large vis) rendering or standard rendering
         if(dl.const_templatelist().data_size > setting.read().histogram_rendering_threshold){
-            std::vector<uint32_t> indices;
-            for(const auto& i: attributes_order_info.read()){
-                if(i.active)
-                    indices.push_back(i.attribut_index);
+            std::vector<uint32_t> indices = _get_active_ordered_indices();
+            std::vector<int> bin_sizes(2, static_cast<int>(plot_data.read().height));
+            for(int i: util::i_range(indices.size() - 1)){
+                _registered_histograms[drawlist_id].emplace_back(*dl.histogram_registry.access(), util::memory_view<const uint32_t>(indices.data() + i, 2), util::memory_view<const int>(bin_sizes));
             }
-            for(int i: util::i_range(indices.size() - 1))
-                _registered_histograms[drawlist_id].emplace_back(*dl.histogram_registry.access(), util::memory_view<const uint32_t>(indices.data() + i, 2), util::memory_view<const int>(reinterpret_cast<const int*>(&plot_data.read().width), 2));
         }
     }
 }

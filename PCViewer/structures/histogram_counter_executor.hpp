@@ -13,7 +13,7 @@ public:
         std::string_view dl_id{};
 
         util::memory_view<VkSemaphore>      signal_semaphores{};
-        semaphore*                          cpu_semaphore{};    // used to signal to the cpu that the gpu signal_semaphore has been used in a queue commit
+        semaphore*                          cpu_semaphore{};        // used to signal to the cpu that the gpu signal_semaphore has been used in a queue commit
 
         gpu_timing_info*                    count_timing_info{};
         gpu_timing_info*                    histograms_timing_info{};

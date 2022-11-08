@@ -60,12 +60,12 @@ public:
         mutable ImVec4      brush_box_selected_color{.8f, .8f, 0, 1};
         mutable float       brush_arrow_button_move{.01f};
         mutable float       brush_drag_threshold{.5f};
-        mutable int         live_brush_threshold{500000};
+        mutable int         live_brush_threshold{5000000};
 
         // when these are changed the whole data plot has to be rendered
         histogram_type hist_type{};
         ImVec4      pc_background{0,0,0,1};
-        int         histogram_rendering_threshold{500000};
+        int         histogram_rendering_threshold{5000};
         bool        render_splines{};
     };
     struct plot_data{

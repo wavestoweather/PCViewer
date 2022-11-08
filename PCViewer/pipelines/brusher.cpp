@@ -24,7 +24,7 @@ brusher::brusher()
     _brushing_pipeline_layout = util::vk::create_pipeline_layout(layout_info);
 
     auto pipeline_info = util::vk::initializers::computePipelineCreateInfo(_brushing_pipeline_layout, stage_create_info);
-    _brushing_pipeline = util::vk::create_compute_pipline(pipeline_info);
+    _brushing_pipeline = util::vk::create_compute_pipeline(pipeline_info);
 
     vkDestroyShaderModule(globals::vk_context.device, shader_module, globals::vk_context.allocation_callbacks);
 }

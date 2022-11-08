@@ -16,8 +16,8 @@ const histogram_counter::pipeline_data& histogram_counter::_get_or_create_pipeli
 
         pipeline_data& pipe_data = _pipelines[pipeline_specs];
 
-        VkPushConstantRange push_constants{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push_constants};
-        auto layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, push_constants);
+        VkPushConstantRange push_constant_ranges{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constants)};
+        auto layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, push_constant_ranges);
         pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_info);
 
         auto shader_module = util::vk::create_shader_module(_compute_shader_path);
@@ -26,6 +26,7 @@ const histogram_counter::pipeline_data& histogram_counter::_get_or_create_pipeli
         auto specialization_info = util::vk::initializers::specializationInfo(specialization_entries, util::memory_view(data_type_specialization));
         auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, shader_module, &specialization_info);
         auto compute_info = util::vk::initializers::computePipelineCreateInfo(pipe_data.pipeline_layout, shader_stage_info);
+        pipe_data.pipeline = util::vk::create_compute_pipeline(compute_info);
 
         vkDestroyShaderModule(globals::vk_context.device, shader_module, globals::vk_context.allocation_callbacks);
     }
@@ -44,6 +45,7 @@ void histogram_counter::count(const count_info& info){
     pc.data_header_address = info.data_header_address;
     pc.index_buffer_address = info.index_buffer_address;
     pc.gpu_data_activations = info.gpu_data_activations;
+    pc.histogram_buffer_address = info.histogram_buffer_address;
     if(info.column_indices.size() >= 1)
         pc.a1 = info.column_indices[0];
     if(info.column_indices.size() >= 2)
@@ -86,6 +88,7 @@ void histogram_counter::count(const count_info& info){
     _command_buffer = util::vk::create_begin_command_buffer(_command_pool);
 
     vkCmdPushConstants(_command_buffer, pipeline_data.pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+    vkCmdBindPipeline(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_data.pipeline);
     vkCmdDispatch(_command_buffer, (info.data_size + 255) / 256, 1, 1);
 
     std::scoped_lock lock(*globals::vk_context.compute_mutex);

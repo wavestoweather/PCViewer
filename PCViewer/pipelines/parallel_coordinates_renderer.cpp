@@ -177,7 +177,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             pipeline_create_info.pDepthStencilState = &pipeline_depth_stencil;
             pipeline_create_info.pDynamicState = &pipeline_dynamic_states;
 
-            pipe_data.pipeline = util::vk::create_graphics_pipline(pipeline_create_info);
+            pipe_data.pipeline = util::vk::create_graphics_pipeline(pipeline_create_info);
 
             vkDestroyShaderModule(globals::vk_context.device, vertex_module, globals::vk_context.allocation_callbacks);
             vkDestroyShaderModule(globals::vk_context.device, fragment_module, globals::vk_context.allocation_callbacks);
@@ -209,7 +209,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             pipeline_create_info.pDepthStencilState = &pipeline_depth_stencil;
             pipeline_create_info.pDynamicState = &pipeline_dynamic_states;
 
-            pipe_data.pipeline = util::vk::create_graphics_pipline(pipeline_create_info);
+            pipe_data.pipeline = util::vk::create_graphics_pipeline(pipeline_create_info);
 
             vkDestroyShaderModule(globals::vk_context.device, vertex_module, globals::vk_context.allocation_callbacks);
             vkDestroyShaderModule(globals::vk_context.device, fragment_module, globals::vk_context.allocation_callbacks);
