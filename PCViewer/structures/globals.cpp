@@ -41,9 +41,11 @@ namespace globals{
 structures::vk_context vk_context{};
 
 datasets_t datasets{};
+std::set<std::string_view> datasets_to_delete{};
 
 structures::drawlists_t drawlists{};
 std::vector<std::string_view> selected_drawlists{};
+std::set<std::string_view> drawlists_to_delete{};
 
 structures::global_brushes global_brushes{};
 structures::brush_edit_data brush_edit_data{};

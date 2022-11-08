@@ -66,4 +66,5 @@ using drawlists_t = change_tracker<std::map<std::string_view, tracked_drawlist>>
 namespace globals{
 extern structures::drawlists_t drawlists;
 extern std::vector<std::string_view> selected_drawlists;
+extern std::set<std::string_view> drawlists_to_delete;
 }

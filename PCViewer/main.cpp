@@ -281,6 +281,42 @@ int main(int argc, char* argv[]){
 
         // check for updates --------------------------------------------------------------------------------
 
+        // check for dataset deletions
+        if(globals::datasets_to_delete.size()){
+            // signaling all dependant workbenches
+            std::vector<std::string_view> datasets(globals::datasets_to_delete.begin(), globals::datasets_to_delete.end());
+            for(auto& workbench: globals::dataset_dependencies)
+                workbench->remove_datasets(datasets);
+            
+            // adding all drawlists created from the datasets to the drawlist deletion list
+            for(const auto& [dl_id, dl]: globals::drawlists.read()){
+                if(globals::datasets_to_delete.count(dl.read().parent_dataset))
+                    globals::drawlists_to_delete.insert(dl_id);
+            }
+
+            // deleting the datasets
+            bool prev_dataset_state = globals::datasets.changed;
+            for(auto& ds: globals::datasets_to_delete)
+                globals::datasets().erase(ds);
+            globals::datasets.changed = prev_dataset_state;
+            globals::datasets_to_delete.clear();
+        }
+
+        // check for drawlist deletions
+        if(globals::drawlists_to_delete.size()){
+            // signaling all dependant workbenches
+            std::vector<std::string_view> drawlists(globals::drawlists_to_delete.begin(), globals::drawlists_to_delete.end());
+            for(auto& workbench: globals::drawlist_dataset_dependencies)
+                workbench->remove_drawlists(drawlists);
+            
+            // deleting drawlists
+            bool prev_drawlists_state = globals::drawlists.changed;
+            for(auto& dl: globals::drawlists_to_delete)
+                globals::drawlists().erase(dl);
+            globals::drawlists.changed = prev_drawlists_state;
+            globals::drawlists_to_delete.clear();
+        }
+
         // check for dataset updates
         if(globals::datasets.changed){
             std::vector<std::string_view> changed_datasets;
@@ -288,8 +324,6 @@ int main(int argc, char* argv[]){
                 if(ds.changed)
                     changed_datasets.push_back(ds_id);
             }
-            for(auto& workbench: globals::dataset_dependencies)
-                workbench->signal_dataset_update(changed_datasets, {});
             for(auto& workbench: globals::drawlist_dataset_dependencies)
                 workbench->signal_dataset_update(changed_datasets, {});
             for(auto id: changed_datasets){

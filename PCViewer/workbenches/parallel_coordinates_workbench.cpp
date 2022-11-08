@@ -60,6 +60,49 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
     }
     else
         std::swap(*from_it, *to_it);
+
+    // updating registered histograms (iterating through indices pairs and checking for registered histogram)
+    auto active_indices = _get_active_ordered_indices();
+    for(const auto& dl: drawlist_infos.read()){
+        if(!_registered_histograms.contains(dl.drawlist_id))
+            continue;
+        std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
+        for(int i: util::i_range(active_indices.size() - 1)){
+            util::memory_view<const uint32_t> indices(active_indices.data() + i, 2);
+            util::memory_view<const int> bucket_sizes(reinterpret_cast<const int*>(&plot_data.read().width), 2);
+            auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes);
+            int registrator_index{-1};
+            for(int j: util::size_range(_registered_histograms[dl.drawlist_id])){
+                if(_registered_histograms[dl.drawlist_id][j].registry_id == registrator_id){
+                    registrator_index = j;
+                    break;
+                }
+            }
+            if(registrator_index >= 0)
+                registrator_needed[registrator_index] = true;
+            else{
+                // adding the new histogram
+                auto& drawlist = globals::drawlists()[dl.drawlist_id]();
+                _registered_histograms[dl.drawlist_id].emplace_back(*drawlist.histogram_registry.access(), indices, bucket_sizes);
+                registrator_needed.push_back(true);
+            }
+        }
+        // removing unused registrators
+        for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
+            if(!registrator_needed[i])
+                _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
+        }
+    }
+    bool chekc_registerd_histogram = true;
+}
+
+std::vector<uint32_t> parallel_coordinates_workbench::_get_active_ordered_indices(){
+    std::vector<uint32_t> indices;
+    for(const auto& i: attributes_order_info.read()){
+        if(i.active)
+            indices.push_back(i.attribut_index);
+    }
+    return indices;
 }
 
 void parallel_coordinates_workbench::show(){
@@ -85,11 +128,8 @@ void parallel_coordinates_workbench::show(){
         if(any_change)
             globals::drawlists()[dl_info.drawlist_id]();
         any_drawlist_change |= dl.read().any_change();
-
-        if(!drawlist_infos.changed)
-            continue;
-        local_change |= dl_info.any_change();
     }
+    local_change |= drawlist_infos.changed;
     request_render |= local_change;
 
     // checking for attributes change
@@ -106,15 +146,12 @@ void parallel_coordinates_workbench::show(){
 
         // updating requested histograms
         if(_registered_histograms.size()){
-            std::vector<uint32_t> indices;
-            for(const auto& i: attributes_order_info.read()){
-                if(i.active)
-                    indices.push_back(i.attribut_index);
-            }
+            std::vector<uint32_t> indices = _get_active_ordered_indices();
             for(auto& [dl, registered_histograms]: _registered_histograms){
                 for(int reg_hist: util::size_range(registered_histograms))
-                    registered_histograms[reg_hist] = registered_histogram(registered_histograms[reg_hist].registry, util::memory_view<const uint32_t>(indices.data() + reg_hist, 2), util::memory_view<const int>({int(plot_data.read().height), int(plot_data.read().height)}));
+                    registered_histograms[reg_hist] = registered_histogram(registered_histograms[reg_hist].registry, util::memory_view<const uint32_t>(indices.data() + reg_hist, 2), util::memory_view<const int>(reinterpret_cast<const int*>(&plot_data.read().width), 2));
             }
+            bool look_for_registered_histograms = false;
         }
     }
 
@@ -612,6 +649,12 @@ void parallel_coordinates_workbench::show(){
 
 void parallel_coordinates_workbench::render_plot()
 {
+    // if histogram rendering requested and not yet finished delay rendering
+    for(const auto& dl: drawlist_infos.read()){
+        if(_registered_histograms[dl.drawlist_id].size() && globals::drawlists.read().at(dl.drawlist_id).read().histogram_registry.const_access()->gpu_buffers_edited)
+            return;     // a registered histogram is being currently updated, no rendering possible
+    }
+
     if(logger.logging_level >= logging::level::l_5)
         logger << logging::info_prefix << " parallel_coordinates_workbench::render_plot()" << logging::endl;
     pipelines::parallel_coordinates_renderer::render_info render_info{
@@ -631,6 +674,16 @@ void parallel_coordinates_workbench::render_plot()
     }
     attributes.changed = false;
     attributes_order_info.changed = false;
+}
+
+void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){
+    // going through the drawlists and check if they have to be removed
+    std::vector<std::string_view> drawlists_to_remove;
+    for(int i: util::size_range(drawlist_infos.read())){
+        if(dataset_ids.contains(drawlist_infos.read()[i].drawlist_read().parent_dataset))
+            drawlists_to_remove.push_back(drawlist_infos.read()[i].drawlist_id);
+    }
+    remove_drawlists(drawlists_to_remove);
 }
 
 void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -659,7 +712,7 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
                     indices.push_back(i.attribut_index);
             }
             for(int i: util::i_range(indices.size() - 1))
-                _registered_histograms[drawlist_id].push_back(registered_histogram(*dl.histogram_registry.access(), util::memory_view<const uint32_t>(indices.data() + i, 2), util::memory_view<const int>({int(plot_data.read().height), int(plot_data.read().height)})));
+                _registered_histograms[drawlist_id].emplace_back(*dl.histogram_registry.access(), util::memory_view<const uint32_t>(indices.data() + i, 2), util::memory_view<const int>(reinterpret_cast<const int*>(&plot_data.read().width), 2));
         }
     }
 }
@@ -674,6 +727,16 @@ void parallel_coordinates_workbench::signal_drawlist_update(const util::memory_v
     }
     if(request_render)
         render_plot();
+}
+
+void parallel_coordinates_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
+    for(int i: util::rev_size_range(drawlist_infos.read())){
+        if(drawlist_ids.contains(drawlist_infos.read()[i].drawlist_id)){
+            std::string_view dl = drawlist_infos.read()[i].drawlist_id;
+            _registered_histograms.erase(dl);
+            drawlist_infos().erase(drawlist_infos().begin() + i);
+        }
+    }
 }
 
 }

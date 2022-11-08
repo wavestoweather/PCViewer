@@ -7,6 +7,7 @@
 #include<cassert>
 #include<limits>
 #include<array_struct.hpp>
+#include<min_max.hpp>
 
 /*  This class holds the data in optimized format
 *
@@ -41,8 +42,9 @@ class data{
     public:
     
     std::vector<uint32_t> dimension_sizes;
-    std::vector<std::vector<uint32_t>> column_dimensions;        // for constant columns their corresponding vector here is empty
+    std::vector<std::vector<uint32_t>> column_dimensions;   // for constant columns their corresponding vector here is empty
     std::vector<std::vector<T>> columns;
+    std::vector<min_max<T>> column_bounds;                  // useful for not normalized data
 
     data(){};
     // suggested way is to use default constructor and directly fill the vectors. Thus no copy constructor for the vectors is invoked

@@ -66,7 +66,7 @@ class parallel_coordinates_renderer{
 
     parallel_coordinates_renderer();
 
-    void _pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs);
+    void _pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs, bool clear_framebuffer = false, const ImVec4& clear_color = {});
     void _post_render_commands(VkCommandBuffer commands, VkFence fence = {}, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkSemaphore> signal_semaphores = {});
 
 public:

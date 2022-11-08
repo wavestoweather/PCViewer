@@ -7,6 +7,7 @@
 #include <buffer_info.hpp>
 #include <memory_view.hpp>
 #include <vk_util.hpp>
+#include <histogram_registry_util.hpp>
 
 namespace structures{
 struct histogram_registry_key{
@@ -47,17 +48,7 @@ struct histogram_registry{
         auto& entry = registry[key];
         entry.registered_count++;
         if(entry.hist_id.empty()){
-            for(int i: util::size_range(attribute_indices)){
-                entry.hist_id += std::to_string(attribute_indices[i]);
-                if(i < attribute_indices.size() - 1)
-                    entry.hist_id += '_';
-            }
-            entry.hist_id += '|';
-            for(int i: util::size_range(bin_sizes)){
-                entry.hist_id += std::to_string(bin_sizes[i]);
-                if(i < bin_sizes.size() - 1)
-                    entry.hist_id += '_';
-            }
+            entry.hist_id = util::histogram_registry::get_id_string(attribute_indices, bin_sizes);
             name_to_registry_key[entry.hist_id] = key;
             change_request.insert(entry.hist_id);
         }
@@ -91,6 +82,18 @@ struct histogram_registry{
             histogram_registry_key key{std::vector<uint32_t>(attribute_indices.begin(), attribute_indices.end()), std::vector<int>(bin_sizes.begin(), bin_sizes.end())};
             registry_id = std::string_view(registry.registry[key].hist_id);
         }
+        scoped_registrator_t(const scoped_registrator_t& o):
+            registry(o.registry), 
+            registry_id(o.registry_id)
+        {
+            registry.register_histogram(registry.name_to_registry_key[registry_id].attribute_indices, registry.name_to_registry_key[registry_id].bin_sizes);
+        }
+        scoped_registrator_t(scoped_registrator_t&& o):
+            registry(o.registry),
+            registry_id(o.registry_id)
+        {
+            o.registry_id = {};
+        }
         scoped_registrator_t& operator=(const scoped_registrator_t& o) {
             registry.unregister_histogram(registry_id); 
             registry = o.registry; 
@@ -98,8 +101,16 @@ struct histogram_registry{
             registry.register_histogram(registry.name_to_registry_key[registry_id].attribute_indices, registry.name_to_registry_key[registry_id].bin_sizes);
             return *this;
         }
-        ~scoped_registrator_t(){
+        scoped_registrator_t& operator=(scoped_registrator_t&& o){
             registry.unregister_histogram(registry_id);
+            registry = o.registry;
+            registry_id = o.registry_id;
+            o.registry_id = {};
+            return *this;
+        }
+        ~scoped_registrator_t(){
+            if(registry_id.size())
+                registry.unregister_histogram(registry_id);
         }
     };
     scoped_registrator_t scoped_registrator(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes){

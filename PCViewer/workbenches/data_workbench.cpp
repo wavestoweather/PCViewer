@@ -17,7 +17,6 @@ void data_workbench::show()
     const static std::string_view popup_add_tl{"Add templatelist"};
     const static std::string_view popup_delete_ds{"Delete dataset"};
     const static std::string_view popup_add_empty_ds{"Add empty dataset"};
-    const static std::string_view popup_delete_dl{"Delete drawlist"};
 
     bool popup_open_tl_to_brush{false};
     bool popup_open_tl_to_dltl{false};
@@ -25,7 +24,6 @@ void data_workbench::show()
     bool popup_open_split_ds{false};
     bool popup_open_delete_ds{false};
     bool popup_open_add_empty_ds{false};
-    bool popup_open_delete_dl{false};
 
     ImGui::Begin(id.c_str());
     // 3 column layout with the following layout
@@ -84,7 +82,7 @@ void data_workbench::show()
                     ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 230));
                     if(ImGui::Button("Delete")){
                         _popup_ds_id = id;
-                        ImGui::OpenPopup(popup_delete_ds.data());
+                        popup_open_delete_ds = true;
                     }
                     ImGui::PopStyleColor();
                 }
@@ -159,8 +157,7 @@ void data_workbench::show()
                 }
                 ImGui::TableNextColumn();
                 if(ImGui::Button(("X##" + std::string(id)).c_str())){
-                    _popup_ds_id = id;
-                    ImGui::OpenPopup(popup_delete_dl.data());
+                    globals::drawlists_to_delete.insert(id);
                 }
                 auto& appearance_no_track = globals::drawlists.ref_no_track()[id].ref_no_track().appearance_drawlist.ref_no_track();
                 ImGui::TableNextColumn();
@@ -302,20 +299,25 @@ void data_workbench::show()
         ImGui::OpenPopup(popup_add_tl.data());
     if(ImGui::BeginPopupModal(popup_add_tl.data())){
         // TODO: implemnet
+        ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 
+    if(popup_open_delete_ds)
+        ImGui::OpenPopup(popup_delete_ds.data());
     if(ImGui::BeginPopupModal(popup_delete_ds.data())){
-        // TODO: implemnet
+        ImGui::Text("Do you really want to delete dataset %s?", _popup_ds_id.data());
+        if(ImGui::Button("Cancel"))
+            ImGui::CloseCurrentPopup();
+        ImGui::SameLine();
+        if(ImGui::Button("Confirm")){
+            globals::datasets_to_delete.insert(_popup_ds_id);
+            ImGui::CloseCurrentPopup();
+        }
         ImGui::EndPopup();
     }
 
     if(ImGui::BeginPopupModal(popup_add_empty_ds.data())){
-        // TODO: implemnet
-        ImGui::EndPopup();
-    }
-
-    if(ImGui::BeginPopupModal(popup_delete_dl.data())){
         // TODO: implemnet
         ImGui::EndPopup();
     }

@@ -10,7 +10,7 @@
 
 layout(buffer_reference, scalar) buffer AttributeInfos{
     uint     attribute_count;               // amount of active attributes
-    uint     _t, __t;
+    uint     _, __;
     uint     data_flags;                    // can contain additional data flags
     vec4     vertex_transformations[];      // x holds the attribute index, y and z hold the lower and the upper bound respectivley for the first amtOfAttributes positions (in x axis position to variable is stored)
 };

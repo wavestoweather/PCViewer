@@ -1169,6 +1169,7 @@ static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags proper
     std::cerr << "The memory type which is needed is not available!" << std::endl;
     exit(-1);
 #endif
+    return uint32_t(-1);
 }
 
 static void cleanupPcPlotImageView();

@@ -1,5 +1,6 @@
 #pragma once
 #include <cassert>
+#include <cinttypes>
 
 namespace util{
 // ranges with integer values
@@ -56,5 +57,30 @@ public:
     iterator end() const { return iterator(_end); }
 private:
     unsigned long _end;
+};
+
+class rev_size_range{
+public:
+    template<class T>
+    rev_size_range(const T& sizeable): _begin(sizeable.size() - 1){};
+
+    class iterator{
+        friend class rev_size_range;
+    public:
+        int64_t operator*() const { return _i;}
+        const iterator& operator++() { --_i; return *this; }
+        iterator operator++(int) { iterator copy(*this); --_i; return copy; }
+        bool operator==(const iterator& o) const {return _i == o._i;}
+        bool operator!=(const iterator& o) const {return _i != o._i;}
+    protected:
+        iterator(unsigned long start): _i(start){}
+    private:
+        int64_t _i;
+    };
+
+    iterator begin() const { return iterator(_begin); }
+    iterator end() const { return iterator(-1); }
+private:
+    unsigned long _begin;
 };
 }

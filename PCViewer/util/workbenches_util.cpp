@@ -16,6 +16,7 @@ void setup_default_workbenches(){
 
     auto parallel_coordinates_wb = std::make_unique<workbenches::parallel_coordinates_workbench>("Parallel coordinates workbench");
     parallel_coordinates_wb->active = true;
+    globals::dataset_dependencies.push_back(parallel_coordinates_wb.get());
     globals::drawlist_dataset_dependencies.push_back(parallel_coordinates_wb.get());
     globals::secondary_workbench = parallel_coordinates_wb.get();
     globals::workbenches.emplace_back(std::move(parallel_coordinates_wb));
