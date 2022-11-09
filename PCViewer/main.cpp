@@ -351,8 +351,7 @@ int main(int argc, char* argv[]){
                 auto registry_access = globals::drawlists()[dl_id]().histogram_registry.access();   // automatically locks the registry to avoid multi threading problems
                 if(registry_access->change_request.size()){
                     // updating the histograms
-                    for(auto hist: registry_access->change_request)
-                        globals::histogram_counter.add_count_task({dl_id});
+                    globals::histogram_counter.add_count_task({dl_id});
                 }
             }
         }
