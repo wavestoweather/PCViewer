@@ -816,7 +816,7 @@ void histogram_counter::_task_thread_function(){
         int count{};
         for(auto hist: histograms){
             auto& dl = globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track();
-            auto key = dl.histogram_registry.access()->name_to_registry_key[hist];
+            auto key = dl.histogram_registry.const_access()->name_to_registry_key.at(hist);
             if(key.attribute_indices.size() != 2)
                 continue;
 
