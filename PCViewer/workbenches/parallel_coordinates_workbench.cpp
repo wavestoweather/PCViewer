@@ -93,10 +93,6 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
     }
-    for(const auto& hist: _registered_histograms.begin()->second)
-        logger << hist.registry_id << " | ";
-    logger << logging::endl;
-    bool chekc_registerd_histogram = true;
 }
 
 void parallel_coordinates_workbench::show(){

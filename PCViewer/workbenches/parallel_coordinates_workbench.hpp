@@ -64,7 +64,7 @@ public:
         // when these are changed the whole data plot has to be rendered
         histogram_type hist_type{};
         ImVec4      pc_background{0,0,0,1};
-        int         histogram_rendering_threshold{5000};
+        int         histogram_rendering_threshold{500000};
         bool        render_splines{};
     };
     struct plot_data{

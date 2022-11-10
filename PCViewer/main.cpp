@@ -315,6 +315,10 @@ int main(int argc, char* argv[]){
             for(auto& dl: globals::drawlists_to_delete)
                 globals::drawlists().erase(dl);
             globals::drawlists.changed = prev_drawlists_state;
+
+            // removing locally selected drawlist
+            if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::local && util::memory_view(drawlists).contains(globals::brush_edit_data.local_brush_id))
+                globals::brush_edit_data.clear();
             globals::drawlists_to_delete.clear();
         }
 
