@@ -8,6 +8,7 @@
 #include<limits>
 #include<array_struct.hpp>
 #include<min_max.hpp>
+#include<scale_offset.hpp>
 
 /*  This class holds the data in optimized format
 *
@@ -41,10 +42,10 @@ template<class T = float>
 class data{
     public:
     
-    std::vector<uint32_t> dimension_sizes;
-    std::vector<std::vector<uint32_t>> column_dimensions;   // for constant columns their corresponding vector here is empty
-    std::vector<std::vector<T>> columns;
-    std::vector<min_max<T>> column_bounds;                  // useful for not normalized data
+    std::vector<uint32_t>               dimension_sizes;
+    std::vector<std::vector<uint32_t>>  column_dimensions;   // for constant columns their corresponding vector here is empty
+    std::vector<std::vector<T>>         columns;
+    std::vector<scale_offset<float>>    column_transforms;       // useful for not normalized data
 
     data(){};
     // suggested way is to use default constructor and directly fill the vectors. Thus no copy constructor for the vectors is invoked
@@ -81,6 +82,13 @@ class data{
     // const access data by dimension indices
     const T& operator()(const std::vector<uint32_t>& dimensionIndices, uint32_t column) const {
         return columns[column][this->index(dimensionIndices, column)];
+    }
+    float get_transformed(uint32_t index, uint32_t column){
+        uint64_t colIndex = columnIndex(index, column);
+        if(column_transforms.size() > column)
+            return float(columns[column][colIndex]) * column_transforms[column].scale + column_transforms[column].offset;
+        else
+            return float(columns[column][colIndex]);
     }
     // converts data index to column index (needed for non full dimensional columns)
     uint64_t columnIndex(uint32_t index, uint32_t column) const{

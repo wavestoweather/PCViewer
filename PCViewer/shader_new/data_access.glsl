@@ -2,7 +2,7 @@ layout(buffer_reference, scalar) buffer DataHeader{
     uint dimension_count;
     uint column_count;
     uint data_address_offset;
-    uint _;
+    uint data_transform_offset;
     uint data[];
 };
 
@@ -65,5 +65,13 @@ float get_packed_data(uint index, uint column){
     //case ushort_type:
     //}
     Data data = Data(uvec2(data_header.data[data_header.data_address_offset + 2 * column], data_header.data[data_header.data_address_offset + 2 * column + 1]));
-    return data.d[columnIndex];
+    float d = data.d[columnIndex];
+    if(data_header.data_transform_offset != 0){
+        // data has to be transformed for the final value
+        uint offset_base = data_header.data_transform_offset + 2 * column;
+        float scale = uintBitsToFloat(data_header.data[offset_base]);
+        float offset = uintBitsToFloat(data_header.data[offset_base + 1]);
+        d = d * scale + offset;
+    }
+    return d;
 }
