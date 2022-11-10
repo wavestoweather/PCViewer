@@ -19,8 +19,8 @@ struct histogram_registry_key{
 };
 
 struct histogram_registry_entry{
-    std::string             hist_id{};
-    uint32_t                registered_count{};
+    std::string hist_id{};
+    uint32_t    registered_count{};
     
     bool operator==(const histogram_registry_entry& o) const {return hist_id == o.hist_id;}
 };
@@ -53,6 +53,8 @@ struct histogram_registry{
             entry.hist_id = util::histogram_registry::get_id_string(attribute_indices, bin_sizes);
             name_to_registry_key[entry.hist_id] = key;
             change_request.insert(entry.hist_id);
+            gpu_buffers_edited = true;  // marking working on the gpu buffers to avoid too early rendering
+            gpu_buffers_updated = false;
         }
     }
 
@@ -65,12 +67,15 @@ struct histogram_registry{
             util::vk::destroy_buffer(gpu_buffers[id]);
             gpu_buffers.erase(id);
             name_to_registry_key.erase(id);
+            registry.erase(key);
         }
     }
 
     void request_change_all(){
         for(const auto& [id, reg]: name_to_registry_key)
             change_request.insert(id);
+        gpu_buffers_edited = true;  // marking working on the gpu buffers to avoid too early rendering
+        gpu_buffers_updated = false;
     }
 
     struct scoped_registrator_t{

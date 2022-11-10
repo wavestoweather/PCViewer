@@ -33,19 +33,16 @@ class parallel_coordinates_renderer{
     };
     
     struct push_constants_large_vis{
-        VkDeviceAddress attribute_info_address;
-        VkDeviceAddress histogram_address;
-        VkDeviceAddress ordering_address;           // needed for order dependant rendering (eg. priority rendering)
-        uint32_t        _t, __t;
-        uint32_t        a_axis;                     // holds the final axis position index (after activation, reordering) for the primary histogram axis
-        uint32_t        b_axis;                     // holds the final axis position index (after activation, reordering) for the secondary histogram axis
-        uint32_t        a_size;
-        uint32_t        b_size;
-        uint32_t        vertex_count_per_line;      // is at least as high as attribute_count (when equal, polyline rendering)
-        float           padding;
-        uint32_t        priority_rendering;         // 1 indicates priority rendering should be used
-        uint32_t        ___t;
-        ImVec4          color;
+        uint64_t    attribute_info_address;
+        uint64_t    histogram_address;
+        uint64_t    ordering_address;           // needed for order dependant rendering (eg. priority rendering)
+        uint        a_axis;                     // holds the final axis position index (after activation, reordering) for the primary histogram axis
+        uint        b_axis;                     // holds the final axis position index (after activation, reordering) for the secondary histogram axis
+        uint        a_size;
+        uint        b_size;
+        float       padding;
+        uint        priority_rendering;         // 1 indicates priority rendering should be used
+        ImVec4      color;
     };
 
     const std::string_view vertex_shader_path{"shader/parallel_coordinates_renderer.vert.spv"};

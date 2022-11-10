@@ -55,5 +55,6 @@ public:
     static brusher& instance();
 
     void brush(const brush_info& info);
+    void wait_for_fence(uint64_t timeout = std::numeric_limits<uint64_t>::max()); 
 };
 }

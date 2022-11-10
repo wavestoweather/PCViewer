@@ -8,6 +8,7 @@
 #include <parallel_coordinates_workbench.hpp>
 #include <array_struct.hpp>
 #include <global_descriptor_set_util.hpp>
+#include <histogram_registry_util.hpp>
 
 namespace pipelines
 {
@@ -311,19 +312,56 @@ void parallel_coordinates_renderer::render(const render_info& info){
         clear_framebuffer = false;
 
         size_t data_size = drawlist.const_templatelist().data_size;
+        if(out_specs.render_typ == structures::parallel_coordinates_renderer::render_type::large_vis_lines)
+            data_size = out_specs.height;
         size_t cur_batch_size = std::min(data_size, batch_size);
         size_t cur_offset = 0;
         do{
-            push_constants pc{};
-            pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
-            pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
-            pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
-            pc.index_buffer_address = util::vk::get_buffer_address(drawlist.const_templatelist().gpu_indices);
-            pc.activation_bitset_address = util::vk::get_buffer_address(drawlist.active_indices_bitset_gpu);
-            pc.vertex_count_per_line = active_attribute_indices.size();
-            pc.color = dl.appearance->read().color;
-            vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-            vkCmdDraw(_render_commands.back(), pc.vertex_count_per_line, cur_batch_size, 0, cur_offset);
+            switch(out_specs.render_typ){
+            case structures::parallel_coordinates_renderer::render_type::polyline_spline:{
+                push_constants pc{};
+                pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
+                pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
+                pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
+                pc.index_buffer_address = util::vk::get_buffer_address(drawlist.const_templatelist().gpu_indices);
+                pc.activation_bitset_address = util::vk::get_buffer_address(drawlist.active_indices_bitset_gpu);
+                pc.vertex_count_per_line = active_attribute_indices.size();
+                pc.color = dl.appearance->read().color;
+                vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+                vkCmdDraw(_render_commands.back(), pc.vertex_count_per_line, cur_batch_size, 0, cur_offset);
+                break;
+            }
+            case structures::parallel_coordinates_renderer::render_type::large_vis_lines:{
+                auto indices = info.workbench.get_active_ordered_indices();
+                std::vector<int> bin_sizes(2, out_specs.height);
+                for(int i: util::i_range(indices.size() - 1)){
+                    push_constants_large_vis pc{};
+                    pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
+                    pc.a_axis = indices[i] < indices[i + 1] ? i + 1 : i;
+                    pc.b_axis = indices[i] < indices[i + 1] ? i : i + 1;
+                    pc.a_size = bin_sizes[0];
+                    pc.b_size = bin_sizes[1];
+                    // getting the correct hist information
+                    std::string id = util::histogram_registry::get_id_string(util::memory_view<const uint32_t>(indices.data() + i, 2), bin_sizes);
+                    {
+                        auto hist_access = drawlist.histogram_registry.const_access();
+                        if(!hist_access->name_to_registry_key.contains(id) || !hist_access->gpu_buffers.contains(id)){
+                            if(logger.logging_level >= logging::level::l_4)
+                                logger << logging::warning_prefix << " Missing histogram (" << id << "). Nothing rendered for subplot " << indices[i] << "|" << indices[i + 1] << logging::endl;
+                            continue;
+                        }
+                        pc.histogram_address = util::vk::get_buffer_address(hist_access->gpu_buffers.at(id));
+                    }
+                    pc.color = dl.appearance->read().color;
+                    vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+                    vkCmdDraw(_render_commands.back(), pc.a_size * pc.b_size * 2, 1, 0, 0);
+                }
+                break;
+            }
+            default:
+                throw std::runtime_error{"pipelines::parallel_coordinates_renderer::render(...) Rendering for rendering " + std::string(structures::parallel_coordinates_renderer::render_type_names[out_specs.render_typ]) + " not implemented"};
+            }
+            
 
             cur_offset += cur_batch_size;
             cur_batch_lines += cur_batch_size;

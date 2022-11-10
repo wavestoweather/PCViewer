@@ -73,7 +73,8 @@ public:
         VkDeviceAddress                     data_header_address{};
         VkDeviceAddress                     index_buffer_address{};
         VkDeviceAddress                     gpu_data_activations{};
-        VkDeviceAddress                     histogram_buffer_address{};
+        structures::buffer_info             histogram_buffer{};
+        bool                                clear_counts{};
         util::memory_view<uint32_t>         column_indices{};
         util::memory_view<int>              bin_sizes{};
         util::memory_view<structures::min_max<float>> column_min_max{};

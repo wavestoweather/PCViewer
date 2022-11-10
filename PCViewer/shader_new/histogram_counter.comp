@@ -63,7 +63,7 @@ void main(){
     if(dim_count >= 1)
         pos += uint(clamp((get_packed_data(data_index, a1) - a1_min) / (a1_max - a1_min) * s1, 0, s1 - 1));
     if(dim_count >= 2)
-        pos += uint(clamp((get_packed_data(data_index, a2) - a2_min) / (a2_max - a2_min) * s2, 0, s2 - 1) * s1);
+        pos += uint(clamp((get_packed_data(data_index, a2) - a2_min) / (a2_max - a2_min) * s2, 0, s2 - 1)) * s1;
     if(dim_count >= 3)
         pos += uint(clamp((get_packed_data(data_index, a3) - a3_min) / (a3_max - a3_min) * s3, 0, s3 - 1) * s1 * s2);
     if(dim_count >= 4)

@@ -62,6 +62,12 @@ void brusher::brush(const brush_info& info)
         vkCmdFillBuffer(_command_buffer, dl.read().active_indices_bitset_gpu.buffer, 0, VK_WHOLE_SIZE, uint32_t(-1));
     else
         vkCmdDispatch(_command_buffer, dispatch_x, 1, 1);
+    std::scoped_lock lock(*globals::vk_context.compute_mutex);
     util::vk::end_commit_command_buffer(_command_buffer, globals::vk_context.compute_queue, info.wait_semaphores, info.wait_flags, info.signal_semaphores, _brush_fence);
+}
+
+void brusher::wait_for_fence(uint64_t timeout){
+    auto res = vkWaitForFences(globals::vk_context.device, 1, &_brush_fence, VK_TRUE, timeout);
+    util::check_vk_result(res);
 }
 }

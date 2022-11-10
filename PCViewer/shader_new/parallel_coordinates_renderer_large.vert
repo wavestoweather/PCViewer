@@ -25,15 +25,12 @@ layout(push_constant) uniform PCs{
     uint64_t    attribute_info_address;
     uint64_t    histogram_address;
     uint64_t    ordering_address;           // needed for order dependant rendering (eg. priority rendering)
-    uint        _, __;
     uint        a_axis;                     // holds the final axis position index (after activation, reordering) for the primary histogram axis
     uint        b_axis;                     // holds the final axis position index (after activation, reordering) for the secondary histogram axis
     uint        a_size;
     uint        b_size;
-    uint        vertex_count_per_line;      // is at least as high as attribute_count (when equal, polyline rendering)
     float       padding;
     uint        priority_rendering;         // 1 indicates priority rendering should be used
-    uint        ___;
     vec4        color;
 };
 
@@ -51,7 +48,7 @@ void main(){
 
     AttributeInfos attr_infos = AttributeInfos(attribute_info_address);
 
-    float gap = 2.f / (vertex_count_per_line - 1.f);
+    float gap = 2.f / (attr_infos.attribute_count - 1.f);
     float x = -1. + axis_index * gap;
 
     float y;
@@ -61,7 +58,7 @@ void main(){
         y = (float(hist_index / b_size) + .5f) / a_size;
 
     // TODO activate axis transformation
-    //y = (y * attr_infos.vertex_transformations[axis_index].y) / (attr_infos.vertex_transformations[vertex_index].z - attr_infos.vertex_transformations[vertex_index].y);
+    y = y * 2 - 1;
     gl_Position = vec4(x, y * -1.f, 0, 1);
 
     out_color = color;

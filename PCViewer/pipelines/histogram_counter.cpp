@@ -45,7 +45,7 @@ void histogram_counter::count(const count_info& info){
     pc.data_header_address = info.data_header_address;
     pc.index_buffer_address = info.index_buffer_address;
     pc.gpu_data_activations = info.gpu_data_activations;
-    pc.histogram_buffer_address = info.histogram_buffer_address;
+    pc.histogram_buffer_address = util::vk::get_buffer_address(info.histogram_buffer);
     if(info.column_indices.size() >= 1)
         pc.a1 = info.column_indices[0];
     if(info.column_indices.size() >= 2)
@@ -86,6 +86,9 @@ void histogram_counter::count(const count_info& info){
     if(_command_buffer)
         vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_command_buffer);
     _command_buffer = util::vk::create_begin_command_buffer(_command_pool);
+
+    if(info.clear_counts)
+        vkCmdFillBuffer(_command_buffer, info.histogram_buffer.buffer, 0, info.histogram_buffer.size, 0);
 
     vkCmdPushConstants(_command_buffer, pipeline_data.pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
     vkCmdBindPipeline(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_data.pipeline);

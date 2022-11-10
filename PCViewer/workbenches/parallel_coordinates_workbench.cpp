@@ -62,7 +62,7 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
         std::swap(*from_it, *to_it);
 
     // updating registered histograms (iterating through indices pairs and checking for registered histogram)
-    auto active_indices = _get_active_ordered_indices();
+    auto active_indices = get_active_ordered_indices();
     for(const auto& dl: drawlist_infos.read()){
         if(!_registered_histograms.contains(dl.drawlist_id))
             continue;
@@ -93,16 +93,10 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
     }
+    for(const auto& hist: _registered_histograms.begin()->second)
+        logger << hist.registry_id << " | ";
+    logger << logging::endl;
     bool chekc_registerd_histogram = true;
-}
-
-std::vector<uint32_t> parallel_coordinates_workbench::_get_active_ordered_indices(){
-    std::vector<uint32_t> indices;
-    for(const auto& i: attributes_order_info.read()){
-        if(i.active)
-            indices.push_back(i.attribut_index);
-    }
-    return indices;
 }
 
 void parallel_coordinates_workbench::show(){
@@ -146,7 +140,7 @@ void parallel_coordinates_workbench::show(){
 
         // updating requested histograms
         if(_registered_histograms.size()){
-            std::vector<uint32_t> indices = _get_active_ordered_indices();
+            std::vector<uint32_t> indices = get_active_ordered_indices();
             std::vector<int> bin_sizes(2, static_cast<int>(plot_data.read().height));
             for(auto& [dl, registered_histograms]: _registered_histograms){
                 for(int reg_hist: util::size_range(registered_histograms))
@@ -689,6 +683,15 @@ void parallel_coordinates_workbench::render_plot()
     attributes_order_info.changed = false;
 }
 
+std::vector<uint32_t> parallel_coordinates_workbench::get_active_ordered_indices() const{
+    std::vector<uint32_t> indices;
+    for(const auto& i: attributes_order_info.read()){
+        if(i.active)
+            indices.push_back(i.attribut_index);
+    }
+    return indices;
+}
+
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){
     // going through the drawlists and check if they have to be removed
     std::vector<std::string_view> drawlists_to_remove;
@@ -719,7 +722,7 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
 
         // checking histogram (large vis) rendering or standard rendering
         if(dl.const_templatelist().data_size > setting.read().histogram_rendering_threshold){
-            std::vector<uint32_t> indices = _get_active_ordered_indices();
+            std::vector<uint32_t> indices = get_active_ordered_indices();
             std::vector<int> bin_sizes(2, static_cast<int>(plot_data.read().height));
             for(int i: util::i_range(indices.size() - 1)){
                 _registered_histograms[drawlist_id].emplace_back(*dl.histogram_registry.access(), util::memory_view<const uint32_t>(indices.data() + i, 2), util::memory_view<const int>(bin_sizes));

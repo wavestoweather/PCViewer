@@ -28,7 +28,6 @@ private:
     void _update_plot_image();
     void _draw_setting_list();
     void _swap_attributes(const attribute_order_info& from, const attribute_order_info& to);
-    std::vector<uint32_t> _get_active_ordered_indices();
 public:
     enum histogram_type: uint32_t{
         none,
@@ -99,6 +98,8 @@ public:
     parallel_coordinates_workbench(const std::string_view id);
 
     void render_plot();
+    std::vector<uint32_t> get_active_ordered_indices() const;
+
     // overriden methods
     void show() override;
 

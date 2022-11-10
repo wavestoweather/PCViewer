@@ -178,11 +178,17 @@ inline void update_drawlist_active_indices(){
         brush_info.drawlist_id = id;
         pipelines::brusher::instance().brush(brush_info);
 
-        globals::drawlists()[id]().local_brushes.changed = false;
-        globals::drawlists()[id]().immune_to_global_brushes.changed = false;
+        auto& drawlist = globals::drawlists()[id]();
+
+        // notifying update of the histograms
+        drawlist.histogram_registry.access()->request_change_all();
+
+        drawlist.local_brushes.changed = false;
+        drawlist.immune_to_global_brushes.changed = false;
     }
 
     globals::global_brushes.changed = false;
+    //pipelines::brusher::instance().wait_for_fence();
 }
 
 inline const structures::range_brush& get_selected_range_brush_const(){

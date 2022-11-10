@@ -823,7 +823,7 @@ void histogram_counter::_task_thread_function(){
             if(!dl.histogram_registry.const_access()->gpu_buffers.contains(hist)){
                 size_t hist_count{1};
                 for(int i: key.bin_sizes) hist_count *= std::abs(i);
-                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, hist_count * sizeof(uint32_t));
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, hist_count * sizeof(uint32_t));
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
                 dl.histogram_registry.access()->gpu_buffers[hist] = util::vk::create_buffer(buffer_info, alloc_info);
             }
@@ -837,7 +837,8 @@ void histogram_counter::_task_thread_function(){
             count_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
             count_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
             count_info.gpu_data_activations = util::vk::get_buffer_address(dl.active_indices_bitset_gpu);
-            count_info.histogram_buffer_address = util::vk::get_buffer_address(dl.histogram_registry.const_access()->gpu_buffers.at(hist));
+            count_info.histogram_buffer = dl.histogram_registry.const_access()->gpu_buffers.at(hist);
+            count_info.clear_counts = cur->clear_counts;
             count_info.column_indices = key.attribute_indices;
             count_info.bin_sizes = key.bin_sizes;
             count_info.column_min_max = column_min_max;
