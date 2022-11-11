@@ -21,7 +21,7 @@ public:
     DrawList* updateDl{};
     int projectionDimension = 2;
     int projectPlotWidth = 500;
-    DataProjector::ProjectionSettings projectionSettings{20.0, 1.0, -1, 500, 0, 700, false};
+    DataProjector::ProjectionSettings projectionSettings{30.0, .5, -1, 500, 0, 700, false};
     DataProjector::Method projectorMethod = DataProjector::Method::PCA;
     std::shared_ptr<DataProjector> projector{};
     DataClusterer::ClusterSettings clusterSettings;
