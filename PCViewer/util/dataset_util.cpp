@@ -22,6 +22,7 @@
 #include <logger.hpp>
 #include <data_util.hpp>
 #include <string_view_util.hpp>
+#include <sys_info.hpp>
 
 namespace util{
 namespace dataset{
@@ -91,6 +92,13 @@ load_result<half> open_netcdf_half(std::string_view filename, memory_view<struct
     }
 
     return std::move(ret);
+}
+
+template<> load_result<float> open_netcdf<float>(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
+    return open_netcdf_float(filename, query_attributes, partial_info);
+}
+template<> load_result<half> open_netcdf<half>(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
+    return open_netcdf_half(filename, query_attributes, partial_info);
 }
 
 template<typename T, typename predicate>
@@ -226,11 +234,11 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
     return std::move(ret);
 };
 
-load_result<float> open_csv_float(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
+template<> load_result<float> open_csv(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
     return open_csv_impl<float>(filename, query_attributes, partial_info);
 }
 
-load_result<half> open_csv_half(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
+template<> load_result<half> open_csv<half>(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
     return open_csv_impl<half>(filename, query_attributes, partial_info);
 }
 
@@ -402,42 +410,74 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     auto [file, file_extension] = util::get_file_extension(filename);
     dataset().id = file;
     switch(data_type_pref){
+    case data_type_preference::none:
+        if(file_extension.empty() && std::filesystem::exists(std::string(file) + "/attr.info")){
+            assert(query_attributes.size()); // checking if the queried attributes are filled
+            dataset().data_size = std::filesystem::file_size(std::string(file) + "/0.col") / sizeof(half);
+            // checking if partial data is needed
+            if(dataset().data_size * sizeof(half) * query_attributes.size() >= globals::sys_info.ram_size)
+                throw std::runtime_error{"open_dataset() File size too big"};
+            auto data = open_internals::open_combined(filename, query_attributes);
+            dataset().data_flags.data_typ = structures::data_type::half_t;
+            if(data.scale_offsets.size()){
+                for(const auto& so: data.scale_offsets)
+                    std::get<structures::data<half>>(dataset().cpu_data()).column_transforms.push_back(so.value_or(structures::scale_offset<float>{}));
+            }
+        }
+        else if(file_extension == ".nc"){
+            auto data = open_internals::open_netcdf<float>(filename, query_attributes);
+            dataset().attributes = data.attributes;
+            dataset().cpu_data() = std::move(data.data);
+            dataset().data_size = std::get<structures::data<float>>(dataset.read().cpu_data.read()).size();
+            dataset().data_flags.data_typ = structures::data_type::float_t;
+        }
+        else if(file_extension == ".csv"){
+            auto data = open_internals::open_csv<float>(filename, query_attributes);
+            dataset().attributes = data.attributes;
+            dataset().cpu_data() = std::move(data.data);
+            dataset().data_size = std::get<structures::data<float>>(dataset.read().cpu_data.read()).size();
+            dataset().data_flags.data_typ = structures::data_type::float_t;
+        }
+        else
+            throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
+        break;
     case data_type_preference::float_precision:
         if(file_extension.empty()){
             throw std::runtime_error{"open_dataset() opening folder data not yet supported"};
         }
         else if(file_extension == ".nc"){
-            auto data = open_internals::open_netcdf_float(filename, query_attributes);
+            auto data = open_internals::open_netcdf<float>(filename, query_attributes);
             dataset().attributes = data.attributes;
             dataset().cpu_data() = std::move(data.data);
         }
         else if(file_extension == ".csv"){
-            auto data = open_internals::open_csv_float(filename, query_attributes);
+            auto data = open_internals::open_csv<float>(filename, query_attributes);
             dataset().attributes = data.attributes;
             dataset().cpu_data() = std::move(data.data);
         }
         else
             throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
         dataset().data_size = std::get<structures::data<float>>(dataset.read().cpu_data.read()).size();
+        dataset().data_flags.data_typ = structures::data_type::float_t;
         break;
     case data_type_preference::half_precision:
         if(file_extension.empty()){
             throw std::runtime_error{"open_dataset() opening folder data not yet supported"};
         }
         else if(file_extension == ".nc"){
-            auto data = open_internals::open_netcdf_half(filename, query_attributes);
+            auto data = open_internals::open_netcdf<half>(filename, query_attributes);
             dataset().attributes = data.attributes;
             dataset().cpu_data() = std::move(data.data);
         }
         else if(file_extension == ".csv"){
-            auto data = open_internals::open_csv_half(filename, query_attributes);
+            auto data = open_internals::open_csv<half>(filename, query_attributes);
             dataset().attributes = data.attributes;
             dataset().cpu_data() = std::move(data.data);
         }
         else
             throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
         dataset().data_size = std::get<structures::data<half>>(dataset.read().cpu_data.read()).size();
-        dataset().data_flags.half = true;
+        dataset().data_flags.data_typ = structures::data_type::half_t;
         break;
     default:
         throw std::runtime_error{"open_dataset() unrecognized data_type_preference"};

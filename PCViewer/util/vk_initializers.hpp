@@ -586,7 +586,7 @@ inline VkSpecializationMapEntry specializationMapEntry(uint32_t constantID, uint
 }
 
 /** @brief Initialize a specialization constant info structure to pass to a shader stage */
-inline VkSpecializationInfo specializationInfo(util::memory_view<VkSpecializationMapEntry> mapEntries, util::memory_view<uint8_t> data)
+inline VkSpecializationInfo specializationInfo(util::memory_view<VkSpecializationMapEntry> mapEntries, util::memory_view<const uint8_t> data)
 {
     VkSpecializationInfo specializationInfo{};
     specializationInfo.mapEntryCount = static_cast<uint32_t>(mapEntries.size());
@@ -702,6 +702,12 @@ inline VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features(){
     VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features{};
     physicalDeviceVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     return physicalDeviceVulkan12Features;
+}
+
+inline VkPhysicalDevice16BitStorageFeatures physicalDevice16BitStorageFeatures(){
+    VkPhysicalDevice16BitStorageFeatures physicalDevice16BitStorageFeatures{};
+    physicalDevice16BitStorageFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
+    return physicalDevice16BitStorageFeatures;
 }
 
 inline VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features(){

@@ -80,8 +80,11 @@ int main(int argc, char* argv[]){
     std::vector<const char*> device_extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE3_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
     VkPhysicalDeviceVulkan12Features vk_12_features = util::vk::initializers::physicalDeviceVulkan12Features();
     vk_12_features.bufferDeviceAddress = VK_TRUE;
+    VkPhysicalDevice16BitStorageFeatures vk_16bit_features = util::vk::initializers::physicalDevice16BitStorageFeatures();
+    vk_16bit_features.storageBuffer16BitAccess = VK_TRUE;
     VkPhysicalDeviceFeatures2 device_features = util::vk::initializers::physicalDeviceFeatures2();
     device_features.pNext = &vk_12_features;
+    vk_12_features.pNext = &vk_16bit_features;
     int physical_device_index = globals::commandline_parser.getValueAsInt("gpuselection", -1);
     structures::VkContextInitInfo vk_init{
         physical_device_index,

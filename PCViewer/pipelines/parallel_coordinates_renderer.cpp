@@ -151,6 +151,9 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         auto pipeline_vertex_state = util::vk::initializers::pipelineVertexInputStateCreateInfo();//(vertex_input_binding, vertex_input_attribute);
 
+        auto specialization_map_entry = util::vk::initializers::specializationMapEntry(0, 0, sizeof(output_specs.data_typ));
+        auto specialization_info = util::vk::initializers::specializationInfo(specialization_map_entry, util::memory_view(output_specs.data_typ));
+
         switch(output_specs.render_typ){
         case structures::parallel_coordinates_renderer::render_type::polyline_spline:{
             // pipeline layout creation
@@ -163,7 +166,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             VkShaderModule fragment_module = util::vk::create_shader_module(fragment_shader_path);  
 
             std::array<VkPipelineShaderStageCreateInfo, 2> shader_infos{};
-            shader_infos[0] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module);
+            shader_infos[0] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module, &specialization_info);
             shader_infos[1] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module);
 
             auto pipeline_input_assembly = util::vk::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_LINE_STRIP, 0, VK_FALSE);
@@ -195,7 +198,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             VkShaderModule fragment_module = util::vk::create_shader_module(fragment_shader_path); 
 
             std::array<VkPipelineShaderStageCreateInfo, 2> shader_infos{};
-            shader_infos[0] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module);
+            shader_infos[0] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module, &specialization_info);
             shader_infos[1] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module);
 
             auto pipeline_input_assembly = util::vk::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, 0, VK_FALSE);
@@ -295,7 +298,6 @@ void parallel_coordinates_renderer::render(const render_info& info){
             continue;
         const auto& drawlist = dl.drawlist_read();
         const auto& ds = drawlist.dataset_read();
-        auto data_type = ds.data_flags.half ? structures::parallel_coordinates_renderer::data_type::half_t: structures::parallel_coordinates_renderer::data_type::float_t;
 
         output_specs out_specs{
             info.workbench.plot_data.read().image_view,
@@ -304,7 +306,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
             info.workbench.plot_data.read().width, 
             info.workbench.plot_data.read().height, 
             drawlist.const_templatelist().data_size < info.workbench.setting.read().histogram_rendering_threshold ? structures::parallel_coordinates_renderer::render_type::polyline_spline: structures::parallel_coordinates_renderer::render_type::large_vis_lines, 
-            data_type, 
+            ds.data_flags.data_typ
         };
         auto pipeline_info = get_or_create_pipeline(out_specs);
 
@@ -382,7 +384,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
             info.workbench.plot_data.read().width, 
             info.workbench.plot_data.read().height, 
             structures::parallel_coordinates_renderer::render_type::polyline_spline,
-            structures::parallel_coordinates_renderer::data_type::float_t
+            structures::data_type::float_t
         };
         auto pipeline_info = get_or_create_pipeline(out_specs);
 

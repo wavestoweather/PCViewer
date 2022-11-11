@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <optional>
 #include <drawlists.hpp>
+#include <data_type.hpp>
 
 namespace structures{
 
@@ -34,16 +35,6 @@ namespace parallel_coordinates_renderer{
         "large_vis_density"
     };
 
-    enum class data_type: uint32_t{
-        float_t,
-        half_t,
-        COUNT
-    };
-    const structures::enum_names<data_type> data_type_names{
-        "float",
-        "half"
-    };
-
     struct output_specs{
         VkImageView             plot_image_view{};
         VkFormat                format{};
@@ -53,7 +44,7 @@ namespace parallel_coordinates_renderer{
         render_type             render_typ{};
         data_type               data_typ{};
 
-        bool operator==(const output_specs& o) const{return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));};
+        bool operator==(const output_specs& o) const {return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));};
     };
 
     struct pipeline_data{
@@ -79,12 +70,35 @@ namespace parallel_coordinates_renderer{
         structures::drawlist drawlist_write() const         {return globals::drawlists()[drawlist_id]();}
     };
 }
+
+namespace brusher{
+    struct pipeline_specs{
+        data_type data_typ;
+
+        bool operator==(const pipeline_specs& o) const {return data_typ == o.data_typ;}
+    };
+    struct pipeline_data{
+        VkPipeline          pipeline{};
+        VkPipelineLayout    pipeline_layout{};
+    };
+}
 }
 
 template<> struct std::hash<structures::parallel_coordinates_renderer::output_specs>{
     size_t operator()(const structures::parallel_coordinates_renderer::output_specs & x) const
     {
         util::memory_view<const uint32_t> as_uint = util::memory_view<const uint32_t>(util::memory_view<const structures::parallel_coordinates_renderer::output_specs>(x));
+        size_t seed = 0;
+        for(uint32_t i: as_uint)
+            seed = std::hash_combine(seed, i);
+        return seed;
+    }
+};
+
+template<> struct std::hash<structures::brusher::pipeline_specs>{
+    size_t operator()(const structures::brusher::pipeline_specs & x) const
+    {
+        util::memory_view<const uint32_t> as_uint = util::memory_view<const uint32_t>(util::memory_view<const structures::brusher::pipeline_specs>(x));
         size_t seed = 0;
         for(uint32_t i: as_uint)
             seed = std::hash_combine(seed, i);

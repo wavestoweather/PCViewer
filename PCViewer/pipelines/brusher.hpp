@@ -5,9 +5,13 @@
 #include <buffer_info.hpp>
 #include <enum_names.hpp>
 #include <memory_view.hpp>
+#include <rendering_structs.hpp>
 
 namespace pipelines{
 class brusher{
+    using pipeline_specs = structures::brusher::pipeline_specs;
+    using pipeline_data = structures::brusher::pipeline_data;
+
     struct push_constants{
         VkDeviceAddress local_brush_address;
         VkDeviceAddress global_brush_address;
@@ -21,14 +25,13 @@ class brusher{
     const std::string_view  compute_shader_path{"shader/brusher.comp.spv"};
     const uint32_t          shader_local_size{256};
 
-    VkPipeline          _brushing_pipeline{};
-    VkPipelineLayout    _brushing_pipeline_layout{};
+    robin_hood::unordered_map<pipeline_specs, pipeline_data> _pipelines;
     VkFence             _brush_fence{};
     VkCommandPool       _command_pool{};
     VkCommandBuffer     _command_buffer{};
 
     brusher();
-
+    const pipeline_data& _get_or_create_pipeline(const pipeline_specs& specs);
 public:
     enum struct brush_combination: uint32_t{
         and_c,

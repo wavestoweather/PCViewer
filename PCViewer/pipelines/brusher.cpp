@@ -14,19 +14,28 @@ brusher::brusher()
     _command_pool = util::vk::create_command_pool(pool_info);
     auto fence_info = util::vk::initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
     _brush_fence = util::vk::create_fence(fence_info);
+}
 
-    // pipeline creation
-    auto shader_module = util::vk::create_shader_module(compute_shader_path);
-    auto stage_create_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, shader_module);
+const brusher::pipeline_data& brusher::_get_or_create_pipeline(const pipeline_specs& specs){
+    if(!_pipelines.contains(specs)){
+        // pipeline creation
+        auto& pipe_data = _pipelines[specs];
 
-    VkPushConstantRange push_constant{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constants)};
-    auto layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, push_constant);
-    _brushing_pipeline_layout = util::vk::create_pipeline_layout(layout_info);
+        auto specialization_map_entry = util::vk::initializers::specializationMapEntry(0, 0, sizeof(specs.data_typ));
+        auto specialization_info = util::vk::initializers::specializationInfo(specialization_map_entry, util::memory_view(specs.data_typ));
+        auto shader_module = util::vk::create_shader_module(compute_shader_path);
+        auto stage_create_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, shader_module, &specialization_info);
 
-    auto pipeline_info = util::vk::initializers::computePipelineCreateInfo(_brushing_pipeline_layout, stage_create_info);
-    _brushing_pipeline = util::vk::create_compute_pipeline(pipeline_info);
+        VkPushConstantRange push_constant{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constants)};
+        auto layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, push_constant);
+        pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_info);
 
-    vkDestroyShaderModule(globals::vk_context.device, shader_module, globals::vk_context.allocation_callbacks);
+        auto pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipe_data.pipeline_layout, stage_create_info);
+        pipe_data.pipeline = util::vk::create_compute_pipeline(pipeline_info);
+
+        vkDestroyShaderModule(globals::vk_context.device, shader_module, globals::vk_context.allocation_callbacks);
+    }
+    return _pipelines[specs];
 }
 
 brusher& brusher::instance() 
@@ -50,13 +59,15 @@ void brusher::brush(const brush_info& info)
     pc.local_global_brush_combine = static_cast<uint32_t>(info.brush_comb);
     pc.data_size = tl.data_size;
 
+    const auto& pipe_data = _get_or_create_pipeline({ds.data_flags.data_typ});
+
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_brush_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
     res = vkResetFences(globals::vk_context.device, 1, &_brush_fence); util::check_vk_result(res);
     if(_command_buffer)
         vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_command_buffer);
     _command_buffer = util::vk::create_begin_command_buffer(_command_pool);
-    vkCmdBindPipeline(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _brushing_pipeline);
-    vkCmdPushConstants(_command_buffer, _brushing_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+    vkCmdBindPipeline(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_data.pipeline);
+    vkCmdPushConstants(_command_buffer, pipe_data.pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
     uint32_t dispatch_x = ((pc.data_size + 31) / 32 + shader_local_size - 1) / shader_local_size;
     if(no_brushes)
         vkCmdFillBuffer(_command_buffer, dl.read().active_indices_bitset_gpu.buffer, 0, VK_WHOLE_SIZE, uint32_t(-1));

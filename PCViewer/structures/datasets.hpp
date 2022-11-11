@@ -7,6 +7,7 @@
 #include <vk_context.hpp>
 #include <optional>
 #include <variant>
+#include <data_type.hpp>
 
 namespace structures{
 template<typename T>
@@ -48,8 +49,8 @@ struct dataset{
     struct data_flags{
         bool gpuStream: 1;          // data has to be streamed from ram to gpu as not enough space available
         bool cpuStream: 1;          // data has to be streamed from hdd to cpu as not enough space available
-        bool half: 1;               // data is in half format
         bool cudaCompressed: 1;     // data is compressed
+        data_type data_typ{data_type::float_t};
     }                                   data_flags{};
 
     // optional data for certain data types

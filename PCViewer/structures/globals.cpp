@@ -155,6 +155,12 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
                 all_features_avail &= util::vk::all_features_available<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>(*static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available), *static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required));
                 cur_available = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required)->pNext;
+            break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
+                all_features_avail &= util::vk::all_features_available<VkPhysicalDevice16BitStorageFeatures>(*static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_available), *static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_required));
+                cur_available = static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_available)->pNext;
+                cur_required = static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_required)->pNext;
+            break;
             default:
                 throw std::runtime_error(std::string("structures::vk_context::init(...) Unhandled feature type in pNext chain: ") + string_VkStructureType(*static_cast<VkStructureType*>(cur_available)));
             }

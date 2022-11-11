@@ -54,6 +54,9 @@ inline feature_wrapper<VkPhysicalDeviceFeatures2> copy_features(const VkPhysical
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT:
                 internal::fill_next<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>(curNext, curStorage);
                 break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
+                internal::fill_next<VkPhysicalDevice16BitStorageFeatures>(curNext, curStorage);
+                break;
             default:
             throw std::runtime_error(std::string("util::copy_features() Unhandled feature type in pNext chain: ") + string_VkStructureType(nextType));
         }
