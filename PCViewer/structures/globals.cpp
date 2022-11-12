@@ -813,9 +813,15 @@ void histogram_counter::_task_thread_function(){
         std::set<std::string_view> histograms;
         {
             auto histogram_access = globals::drawlists()[cur->dl_id]().histogram_registry.access();
-            histogram_access->gpu_buffers_edited = true;
             histograms = std::move(histogram_access->change_request);
             histogram_access->change_request.clear();
+            histogram_access->registrators_done = false;    // signaling that no registrator has done its changes
+            for(auto hist: histograms){
+                if(!histogram_access->name_to_registry_key.contains(hist))
+                    continue;
+                const auto& key = histogram_access->name_to_registry_key[hist];
+                histogram_access->registry[key].registrator_signals.clear();
+            }
             stop_watch.start();
         }
         // counting
@@ -865,12 +871,15 @@ void histogram_counter::_task_thread_function(){
             
         {
             auto histogram_access = globals::drawlists()[cur->dl_id]().histogram_registry.access();
-            histogram_access->gpu_buffers_edited = false;
-            histogram_access->gpu_buffers_updated = true;
+            histogram_access->block_update_done = true;
+            if(cur->last_count_of_dataset)
+                histogram_access->dataset_update_done = true;
         }
 
         if(::logger.logging_level >= logging::level::l_5)
             ::logger << logging::info_prefix << " histogram_counter::_task_thread_function() hsitogram counts done, needed " << stop_watch.lap() << " ms" << logging::endl;
     }
 }
+
+std::atomic<registrator_id_t> histogram_registry::scoped_registrator_t::registrator_id_counter{};
 }

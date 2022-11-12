@@ -12,6 +12,7 @@ public:
     struct histogram_count_info{
         std::string_view                    dl_id{};
         bool                                clear_counts{true};
+        bool                                last_count_of_dataset{true};    // if true the dataset_done bool of the histogram is set to true after running the coutning
 
         util::memory_view<VkSemaphore>      signal_semaphores{};
         semaphore*                          cpu_semaphore{};        // used to signal to the cpu that the gpu signal_semaphore has been used in a queue commit

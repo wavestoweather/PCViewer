@@ -8,7 +8,7 @@
 namespace util{
 namespace histogram_registry{
 
-inline std::string get_id_string(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes){
+inline std::string get_id_string(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, bool is_min_hist, bool is_max_hist){
     std::vector<uint32_t> sorted(attribute_indices.size()); std::iota(sorted.begin(), sorted.end(), 0);
     std::sort(sorted.begin(), sorted.end(), [&](uint32_t l, uint32_t r){return attribute_indices[l] < attribute_indices[r];});
     std::string id;
@@ -23,10 +23,14 @@ inline std::string get_id_string(util::memory_view<const uint32_t> attribute_ind
         if(i < bin_sizes.size() - 1)
             id += '_';
     }
+    if(is_min_hist)
+        id += "|min";
+    if(is_max_hist)
+        id += "|max";
     return id;
 }
 
-inline std::pair<std::vector<uint32_t>, std::vector<int>> get_indices_bins(std::string_view in){
+inline std::tuple<std::vector<uint32_t>, std::vector<int>, bool, bool> get_indices_bins(std::string_view in){
     std::string_view indices;
     std::string_view bins;
     getline(in, indices, '|');
@@ -41,7 +45,15 @@ inline std::pair<std::vector<uint32_t>, std::vector<int>> get_indices_bins(std::
         parsed_bins.push_back({});
         std::from_chars(cur.data(), cur.data() + cur.size(), parsed_bins.back());
     }
-    return {parsed_indices, parsed_bins};
+    bool min_hist{};
+    bool max_hist{};
+    for(std::string_view cur; getline(in, cur, '|');){
+        if(cur == "min")
+            min_hist = true;
+        if(cur == "max")
+            max_hist = true;
+    }
+    return {parsed_indices, parsed_bins, min_hist, max_hist};
 }
 
 }

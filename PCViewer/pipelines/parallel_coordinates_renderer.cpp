@@ -344,7 +344,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     pc.a_size = bin_sizes[0];
                     pc.b_size = bin_sizes[1];
                     // getting the correct hist information
-                    std::string id = util::histogram_registry::get_id_string(util::memory_view<const uint32_t>(indices.data() + i, 2), bin_sizes);
+                    std::string id = util::histogram_registry::get_id_string(util::memory_view<const uint32_t>(indices.data() + i, 2), bin_sizes, false, false);
                     {
                         auto hist_access = drawlist.histogram_registry.const_access();
                         if(!hist_access->name_to_registry_key.contains(id) || !hist_access->gpu_buffers.contains(id)){

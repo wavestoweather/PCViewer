@@ -356,6 +356,8 @@ int main(int argc, char* argv[]){
                 if(!dl.changed)
                     continue;
                 auto registry_access = dl.read().histogram_registry.const_access();   // automatically locks the registry to avoid multi threading problems
+                if(!registry_access->registrators_done)
+                    continue;   // changes were not yet applied by the registrators
                 if(registry_access->change_request.size()){
                     // updating the histograms
                     globals::histogram_counter.add_count_task({dl_id, true});

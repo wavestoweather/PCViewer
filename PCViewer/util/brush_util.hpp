@@ -166,6 +166,14 @@ inline void upload_changed_brushes(){
 inline void update_drawlist_active_indices(){
     if(!globals::global_brushes.changed && !globals::drawlists.changed)
         return;
+
+    // delay brush update when histogram update not yet ready
+    for(const auto& [id, dl]: globals::drawlists.read()){
+        if(globals::global_brushes.changed && !dl.read().immune_to_global_brushes.read() && !dl.read().histogram_registry.const_access()->registrators_done)
+            return;
+        if(dl.changed  && dl.read().local_brushes.changed && !dl.read().histogram_registry.const_access()->registrators_done)
+            return;
+    }
     
     for(const auto& [id, dl]: globals::drawlists.read()){
         if(!globals::global_brushes.changed && !dl.read().immune_to_global_brushes.changed && !dl.read().local_brushes.changed)
