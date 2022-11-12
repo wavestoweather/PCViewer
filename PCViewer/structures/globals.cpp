@@ -845,6 +845,7 @@ void histogram_counter::_task_thread_function(){
                 column_min_max[i] = dl.dataset_read().attributes[key.attribute_indices[i]].bounds.read();
 
             pipelines::histogram_counter::count_info count_info{};
+            count_info.data_type = dl.dataset_read().data_flags.data_typ;
             count_info.data_size = dl.const_templatelist().data_size;
             count_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
             count_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);

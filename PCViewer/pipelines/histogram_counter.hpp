@@ -5,15 +5,10 @@
 #include <gpu_sync.hpp>
 #include <gpu_timing.hpp>
 #include <min_max.hpp>
+#include <data_type.hpp>
 
 namespace structures{
 namespace histogram_counter_structs{
-enum class data_type: uint32_t{
-    float_type,
-    half_type,
-    uint_type,
-    ushort_type
-};
 struct pipeline_specs{
     data_type d_type;
 
@@ -68,7 +63,7 @@ class histogram_counter{
 
 public:
     struct count_info{
-        structures::histogram_counter_structs::data_type data_type{};
+        structures::data_type               data_type{};
         size_t                              data_size{};
         VkDeviceAddress                     data_header_address{};
         VkDeviceAddress                     index_buffer_address{};

@@ -719,6 +719,13 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
         if(drawlist_infos.read().empty()){
             // setting up the internal states
             attributes = ds.attributes;
+            for(auto& attribute: attributes()){
+                if(attribute.bounds.read().min == attribute.bounds.read().max){
+                    float diff = attribute.bounds.read().max * .01f;
+                    attribute.bounds().min -= diff;
+                    attribute.bounds().max += diff;
+                }
+            }
             attributes_order_info().resize(attributes.read().size());
             for(int i: util::size_range(attributes_order_info.read()))
                 attributes_order_info.write()[i].attribut_index = i;

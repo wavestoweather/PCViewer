@@ -22,7 +22,6 @@ struct load_result{
     structures::data<T>                             data{};
     std::vector<structures::attribute>              attributes{};
     std::vector<std::optional<T>>                   fill_values{};
-    std::vector<std::optional<structures::scale_offset<float>>> scale_offsets{};
 };
 
 template<class T>

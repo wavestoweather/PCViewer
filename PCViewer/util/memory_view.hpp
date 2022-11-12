@@ -119,6 +119,12 @@ public:
         return _size;
     }
 
+    T& front(){
+        return *_data;
+    }
+    const T& front() const{
+        return *_data;
+    }
     T& back(){
         return *(_data + _size - 1);
     }

@@ -55,10 +55,9 @@ load_result<float> open_netcdf_float(std::string_view filename, memory_view<stru
             if(ret.attributes.back().bounds.read().max < f)
                 ret.attributes.back().bounds().max = f;
         }
-        ret.attributes.back().data_bounds = ret.attributes.back().bounds.read();
     }
 
-    return std::move(ret);
+    return ret;
 }
 
 load_result<half> open_netcdf_half(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
@@ -88,10 +87,9 @@ load_result<half> open_netcdf_half(std::string_view filename, memory_view<struct
             if(ret.attributes.back().bounds.read().max < f)
                 ret.attributes.back().bounds().max = f;
         }
-        ret.attributes.back().data_bounds = ret.attributes.back().bounds.read();
     }
 
-    return std::move(ret);
+    return ret;
 }
 
 template<> load_result<float> open_netcdf<float>(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
@@ -215,7 +213,6 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
     for(int var: util::size_range(ret.attributes)){
         ret.attributes[var].id = variable_names[var];
         ret.attributes[var].display_name = variable_names[var];
-        ret.attributes[var].data_bounds = ret.attributes[var].bounds.read();
     }
     if(query_attributes.size()){
         std::set<std::string_view> active_attributes;
@@ -231,7 +228,7 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
         ret.data.subsampleTrim({static_cast<uint32_t>(query_attributes.back().dimension_subsample)}, {{0, ret.data.dimension_sizes[0]}});
     ret.data.compress();
     
-    return std::move(ret);
+    return ret;
 };
 
 template<> load_result<float> open_csv(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
@@ -243,7 +240,38 @@ template<> load_result<half> open_csv<half>(std::string_view filename, memory_vi
 }
 
 load_result<half> open_combined(std::string_view folder, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
-    return {};
+    load_result<half> ret;
+    // getting the needed attribute bounds to have the scale and translate parameter
+    std::string attribute_info = std::string(folder) + "/attr.info";
+    if(!std::filesystem::exists(attribute_info))
+        throw std::runtime_error{"open_combined() file " + attribute_info + " does not exist"};
+    std::ifstream attribute_info_file(attribute_info, std::ios::binary);
+    std::string variable; float min, max;
+    int c{};
+    while(attribute_info_file >> variable >> min >> max){
+        if(!query_attributes[c++].is_active)
+            continue;
+        ret.data.column_transforms.push_back(structures::scale_offset<float>{max - min, min});
+        ret.attributes.push_back(structures::attribute{variable, variable, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
+    }
+
+    // loading the data
+    for(int i: util::i_range(query_attributes.size() - 1)){    // last element is dimension
+        if(!query_attributes[i].is_active)
+            continue;
+        std::string column_file_name = std::string(folder) + "/" + std::to_string(i) + ".col";
+        ret.data.columns.emplace_back(query_attributes.back().dimension_size);
+        structures::c_file column_file(column_file_name, "rb");
+        column_file.read<half>(ret.data.columns.back());
+        if(logger.logging_level >= logging::level::l_4)
+            logger << logging::info_prefix << " open_combined() Loaded " << query_attributes[i].id << logging::endl;
+    }
+
+    // setting up the data header
+    ret.data.dimension_sizes.push_back(query_attributes.back().dimension_size);
+    ret.data.column_dimensions = std::vector<std::vector<uint32_t>>(ret.data.columns.size(), {0});
+    assert(ret.data.columns.size() == ret.data.column_transforms.size());
+    return ret;
 }
 load_result<uint32_t> open_combined_compressed(std::string_view folder, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
     return {};
@@ -395,7 +423,7 @@ std::vector<structures::query_attribute> get_combined_query_attributes(std::stri
         0,              // dimension slice
         {0, data_size}  // trim bounds
     });
-    return {};
+    return query;
 }
 }
 
@@ -411,18 +439,16 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     dataset().id = file;
     switch(data_type_pref){
     case data_type_preference::none:
-        if(file_extension.empty() && std::filesystem::exists(std::string(file) + "/attr.info")){
+        if(file_extension.empty() && std::filesystem::exists(std::string(filename) + "/attr.info")){
             assert(query_attributes.size()); // checking if the queried attributes are filled
-            dataset().data_size = std::filesystem::file_size(std::string(file) + "/0.col") / sizeof(half);
+            dataset().data_size = query_attributes.back().dimension_size;
             // checking if partial data is needed
             if(dataset().data_size * sizeof(half) * query_attributes.size() >= globals::sys_info.ram_size)
                 throw std::runtime_error{"open_dataset() File size too big"};
             auto data = open_internals::open_combined(filename, query_attributes);
+            dataset().attributes = std::move(data.attributes);
+            dataset().cpu_data() = std::move(data.data);
             dataset().data_flags.data_typ = structures::data_type::half_t;
-            if(data.scale_offsets.size()){
-                for(const auto& so: data.scale_offsets)
-                    std::get<structures::data<half>>(dataset().cpu_data()).column_transforms.push_back(so.value_or(structures::scale_offset<float>{}));
-            }
         }
         else if(file_extension == ".nc"){
             auto data = open_internals::open_netcdf<float>(filename, query_attributes);
@@ -489,7 +515,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     templatelist.flags.identity_indices = true;
     templatelist.min_maxs.resize(dataset.read().attributes.size());
     for(int i: util::size_range(dataset.read().attributes))
-        templatelist.min_maxs[i] = dataset.read().attributes[i].data_bounds;
+        templatelist.min_maxs[i] = dataset.read().attributes[i].bounds.read();
     templatelist.data_size = dataset.read().data_size;
     dataset().templatelists.push_back(std::make_unique<const structures::templatelist>(std::move(templatelist)));
     dataset().templatelist_index[structures::templatelist_name_all_indices] = dataset().templatelists.back().get();
