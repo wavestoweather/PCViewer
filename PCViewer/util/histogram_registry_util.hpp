@@ -56,5 +56,6 @@ inline std::tuple<std::vector<uint32_t>, std::vector<int>, bool, bool> get_indic
     return {parsed_indices, parsed_bins, min_hist, max_hist};
 }
 
+void check_histogram_update();
 }
 }

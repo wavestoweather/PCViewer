@@ -10,7 +10,7 @@ namespace structures{
 typedef uint32_t range_id;
 typedef uint32_t brush_id;
 struct axis_range{
-    uint32_t axis;
+    uint32_t axis;      // TODO: change to attribute id
     range_id id;
     float min;
     float max;
@@ -22,7 +22,7 @@ using range_brushes = std::vector<range_brush>;
 using range_brushes_map = robin_hood::unordered_map<brush_id, range_brush>;
 
 struct polygon{
-    int                 attr1, attr2;
+    int                 attr1, attr2;   // TODO: change to attribute id
     std::vector<ImVec2> borderPoints;
 };
 using lasso_brush = std::vector<polygon>;

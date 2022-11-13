@@ -296,6 +296,14 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     auto descriptor_pool_info = util::vk::initializers::descriptorPoolCreateInfo(pool_sizes, 1000);
     general_descriptor_pool = util::vk::create_descriptor_pool(descriptor_pool_info);
 
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+    for(int i: util::i_range(memory_properties.memoryHeapCount)){
+        if(memory_properties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT){
+            gpu_mem_size = memory_properties.memoryHeaps[i].size;
+            break;
+        }
+    }
+
     return ret;
 }
 

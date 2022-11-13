@@ -94,6 +94,9 @@ struct vk_context{
 
     VkDebugUtilsMessengerEXT                    debug_report_callback{};
 
+    VkPhysicalDeviceMemoryProperties            memory_properties{};
+    size_t                                      gpu_mem_size{};
+
     // initializes this vulkan context. Init function as global object has no well defined lifetime
     VkContextInitReturnInfo init(const VkContextInitInfo& info);
 

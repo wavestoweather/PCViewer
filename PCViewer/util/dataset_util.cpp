@@ -443,9 +443,10 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
             assert(query_attributes.size()); // checking if the queried attributes are filled
             dataset().data_size = query_attributes.back().dimension_size;
             // checking if partial data is needed
+            std::unique_ptr<open_internals::load_information> load_information{};
             if(dataset().data_size * sizeof(half) * query_attributes.size() >= globals::sys_info.ram_size)
                 throw std::runtime_error{"open_dataset() File size too big"};
-            auto data = open_internals::open_combined(filename, query_attributes);
+            auto data = open_internals::open_combined(filename, query_attributes, load_information.get());
             dataset().attributes = std::move(data.attributes);
             dataset().cpu_data() = std::move(data.data);
             dataset().data_flags.data_typ = structures::data_type::half_t;
@@ -528,11 +529,33 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     auto header_alloc_info = util::vma::initializers::allocationCreateInfo();
     dataset().gpu_data.header = util::vk::create_buffer(header_info, header_alloc_info);
     dataset().gpu_data.columns.resize(column_count);
+    // calculating the max data size (if data does not fit into gpu memory make things smaller)
+    size_t full_byte_size = std::visit([](auto&& data) {size_t size{}; for(const auto& c: data.columns) size += c.size() * sizeof(c[0]); return size;}, dataset.read().cpu_data.read());
+    size_t max_size_per_col(-1);
+    if(full_byte_size > globals::vk_context.gpu_mem_size * .9){
+        if(file_extension.size())   // somethings else than a tabelized data does not work
+            throw std::runtime_error{"open_dataset() Data too large for gpu(" + std::to_string(double(full_byte_size) / (1 << 30)) + " GByte but only " + std::to_string(double(globals::vk_context.gpu_mem_size) / (1 << 30)) + " GByte available). Only data which was converted before with the compression workbench that is larger than gpu memory can be used"};
+        
+        if(logger.logging_level >= logging::level::l_3)
+            logger << logging::info_prefix << " open_dataset() Data too large for gpu (" << double(full_byte_size) / (1 << 30) << " GByte but only " << double(globals::vk_context.gpu_mem_size) / (1 << 30) << " GByte available)" << logging::endl;
+        max_size_per_col = globals::vk_context.gpu_mem_size * .8 / column_count;
+        // creating the streaiming infos
+        const uint32_t element_size = std::visit([](auto&& data){return sizeof(data.columns[0]);}, dataset.read().cpu_data.read());
+        const uint32_t block_size = max_size_per_col / element_size;
+        dataset().gpu_stream_infos->block_size = block_size;
+        dataset().gpu_stream_infos->block_count = (dataset().data_size + block_size - 1) / block_size;
+        dataset().gpu_stream_infos->cur_block_index = 0;
+        dataset().gpu_stream_infos->cur_block_size = block_size;
+        dataset().gpu_stream_infos->forward_upload = true;
+        dataset().gpu_stream_infos->last_block = false;
+        dataset().gpu_stream_infos->signal_block_upload_done = true;
+    }
     structures::stager::staging_buffer_info staging_info{};
     for(int i: util::i_range(column_count)){
         auto column_alloc_info = util::vma::initializers::allocationCreateInfo();
         VkBufferCreateInfo column_info{};
         util::memory_view<const uint8_t> upload_data = std::visit([&i](auto&& data) {return util::memory_view<const uint8_t>(util::memory_view(data.columns[i].data(), data.columns[i].size()));}, dataset.read().cpu_data.read());
+        upload_data = util::memory_view(upload_data.data(), std::min(upload_data.size(), max_size_per_col));
         column_info = util::vk::initializers::bufferCreateInfo(buffer_usage, upload_data.byte_size());
         dataset().gpu_data.columns[i] = util::vk::create_buffer(column_info, column_alloc_info);
         // uploading the data as soon as buffer is available via the staging buffer
@@ -815,6 +838,51 @@ void check_datasets_to_open(){
         ImGui::EndPopup();
     }
 }
+}
+
+void check_dataset_deletion(){
+    if(globals::datasets_to_delete.size()){
+        // signaling all dependant workbenches
+        std::vector<std::string_view> datasets(globals::datasets_to_delete.begin(), globals::datasets_to_delete.end());
+        for(auto& workbench: globals::dataset_dependencies)
+            workbench->remove_datasets(datasets);
+        
+        // adding all drawlists created from the datasets to the drawlist deletion list
+        for(const auto& [dl_id, dl]: globals::drawlists.read()){
+            if(globals::datasets_to_delete.count(dl.read().parent_dataset))
+                globals::drawlists_to_delete.insert(dl_id);
+        }
+
+        // deleting the datasets
+        bool prev_dataset_state = globals::datasets.changed;
+        for(auto& ds: globals::datasets_to_delete)
+            globals::datasets().erase(ds);
+        globals::datasets.changed = prev_dataset_state;
+        globals::datasets_to_delete.clear();
+    }
+}
+
+void check_dataset_update(){
+    if(globals::datasets.changed){
+        std::vector<std::string_view> changed_datasets;
+        for(const auto& [ds_id, ds]: globals::datasets.read()){
+            if(ds.changed)
+                changed_datasets.push_back(ds_id);
+        }
+        for(auto& workbench: globals::drawlist_dataset_dependencies)
+            workbench->signal_dataset_update(changed_datasets, {});
+        for(auto id: changed_datasets){
+            globals::datasets.ref_no_track()[id].ref_no_track().clear_change();
+            globals::datasets.ref_no_track()[id].changed = false;
+        }
+        globals::datasets.changed = false;
+        // setting the changed flags on drawlists created from this dataset
+        for(auto dl: changed_datasets){
+            if(globals::drawlists.read().at(dl).read().histogram_registry.const_access()->name_to_registry_key.empty())
+                continue;
+            globals::drawlists()[dl]().histogram_registry.access()->request_change_all();
+        }
+    }
 }
 }
 }

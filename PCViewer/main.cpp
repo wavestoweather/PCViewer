@@ -26,6 +26,7 @@
 #include <sys_info.hpp>
 #include <file_loader.hpp>
 #include <histogram_counter_executor.hpp>
+#include <drawlist_util.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -284,101 +285,18 @@ int main(int argc, char* argv[]){
 
         // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
         util::dataset::check_datasets_to_open();
+        util::dataset::check_dataset_deletion();
+        util::dataset::check_dataset_update();
 
-        // check for dataset deletions
-        if(globals::datasets_to_delete.size()){
-            // signaling all dependant workbenches
-            std::vector<std::string_view> datasets(globals::datasets_to_delete.begin(), globals::datasets_to_delete.end());
-            for(auto& workbench: globals::dataset_dependencies)
-                workbench->remove_datasets(datasets);
-            
-            // adding all drawlists created from the datasets to the drawlist deletion list
-            for(const auto& [dl_id, dl]: globals::drawlists.read()){
-                if(globals::datasets_to_delete.count(dl.read().parent_dataset))
-                    globals::drawlists_to_delete.insert(dl_id);
-            }
-
-            // deleting the datasets
-            bool prev_dataset_state = globals::datasets.changed;
-            for(auto& ds: globals::datasets_to_delete)
-                globals::datasets().erase(ds);
-            globals::datasets.changed = prev_dataset_state;
-            globals::datasets_to_delete.clear();
-        }
-
-        // check for drawlist deletions
-        if(globals::drawlists_to_delete.size()){
-            // signaling all dependant workbenches
-            std::vector<std::string_view> drawlists(globals::drawlists_to_delete.begin(), globals::drawlists_to_delete.end());
-            for(auto& workbench: globals::drawlist_dataset_dependencies)
-                workbench->remove_drawlists(drawlists);
-            
-            // deleting drawlists
-            bool prev_drawlists_state = globals::drawlists.changed;
-            for(auto& dl: globals::drawlists_to_delete)
-                globals::drawlists().erase(dl);
-            globals::drawlists.changed = prev_drawlists_state;
-
-            // removing locally selected drawlist
-            if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::local && util::memory_view(drawlists).contains(globals::brush_edit_data.local_brush_id))
-                globals::brush_edit_data.clear();
-            globals::drawlists_to_delete.clear();
-        }
-
-        // check for dataset updates
-        if(globals::datasets.changed){
-            std::vector<std::string_view> changed_datasets;
-            for(const auto& [ds_id, ds]: globals::datasets.read()){
-                if(ds.changed)
-                    changed_datasets.push_back(ds_id);
-            }
-            for(auto& workbench: globals::drawlist_dataset_dependencies)
-                workbench->signal_dataset_update(changed_datasets, {});
-            for(auto id: changed_datasets){
-                globals::datasets.ref_no_track()[id].ref_no_track().clear_change();
-                globals::datasets.ref_no_track()[id].changed = false;
-            }
-            globals::datasets.changed = false;
-            // setting the changed flags on drawlists created from this dataset
-            for(auto dl: changed_datasets){
-                if(globals::drawlists.read().at(dl).read().histogram_registry.const_access()->name_to_registry_key.empty())
-                    continue;
-                globals::drawlists()[dl]().histogram_registry.access()->request_change_all();
-            }
-        }
+        util::drawlist::check_drawlist_deletion();
 
         // updating activations for brushes
         util::brushes::upload_changed_brushes();
         util::brushes::update_drawlist_active_indices();
-        // updating histograms for 
-        if(globals::drawlists.changed){
-            for(const auto& [dl_id, dl]: globals::drawlists.read()){
-                if(!dl.changed)
-                    continue;
-                auto registry_access = dl.read().histogram_registry.const_access();   // automatically locks the registry to avoid multi threading problems
-                if(!registry_access->registrators_done)
-                    continue;   // changes were not yet applied by the registrators
-                if(registry_access->change_request.size()){
-                    // updating the histograms
-                    globals::histogram_counter.add_count_task({dl_id, true});
-                }
-            }
-        }
-        // check for drwawlist updates
-        if(globals::drawlists.changed){
-            std::vector<std::string_view> changed_drawlists;
-            for(const auto& [dl_id, dl]: globals::drawlists.read()){
-                if(dl.changed)
-                    changed_drawlists.push_back(dl_id);
-            }
-            for(auto& workbench: globals::drawlist_dataset_dependencies)
-                workbench->signal_drawlist_update(changed_drawlists);
-            for(auto id: changed_drawlists){
-                globals::drawlists.ref_no_track()[id].ref_no_track().clear_change();
-                globals::drawlists.ref_no_track()[id].changed = false;
-            }
-            globals::drawlists.changed = false;
-        }
+        
+        util::histogram_registry::check_histogram_update();
+        
+        util::drawlist::check_drawlist_update();
 
         // final app rendering ---------------------------------------------------------------------------
         ImGui::Render();
