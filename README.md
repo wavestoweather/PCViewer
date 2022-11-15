@@ -62,3 +62,28 @@ As this tool relies on the Vulkan API, make sure to have hardware capabale of ru
 # License
 Upon publication of the paper, our part of the code is avaiable under a permissive license (to be determined).
 Please be aware of the licenses of included 3rd party code!
+
+# Replicatability instructions
+
+For the replicatability stamp please follow these commands to install the correct version of the program on an Ubuntu 22.04 LTS OS.
+
+To install all needed libraries run the following commands
+```
+wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.231-jammy.list https://packages.lunarg.com/vulkan/1.3.231/lunarg-vulkan-1.3.231-jammy.list
+sudo apt update
+sudo apt upgrade
+sudo apt install build-essentials cmake libsdl2-dev vulkan-sdk libnetcdf-dev libpng-dev libtbb-dev
+```
+To get the correct version of the program and building it execute the following commands in the folder where the application should be located:
+
+```
+wget https://github.com/wavestoweather/PCViewer/archive/refs/tags/v0.2-alpha.zip
+unzip v0.2-alpha.zip
+cd PCViewer-0.2.alpha
+mkdir build
+cd build
+cmake ..
+make -j4
+```
+The final application now is located in build/PCViewer/PCViewer.
