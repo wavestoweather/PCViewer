@@ -63,6 +63,7 @@ struct dataset{
         bool                    forward_upload{};
         bool                    last_block{};
         std::atomic<bool>       signal_block_upload_done{};
+        std::atomic<bool>       signal_block_update_request{};
     };
     std::optional<data_stream_infos>    gpu_stream_infos{};
     std::optional<gpu_data_t>           gpu_stream_data{};      // backing gpu buffer for async data loading

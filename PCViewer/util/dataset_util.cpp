@@ -540,15 +540,16 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
             logger << logging::info_prefix << " open_dataset() Data too large for gpu (" << double(full_byte_size) / (1 << 30) << " GByte but only " << double(globals::vk_context.gpu_mem_size) / (1 << 30) << " GByte available)" << logging::endl;
         max_size_per_col = globals::vk_context.gpu_mem_size * .8 / column_count;
         // creating the streaiming infos
-        const uint32_t element_size = std::visit([](auto&& data){return sizeof(data.columns[0]);}, dataset.read().cpu_data.read());
+        const uint32_t element_size = std::visit([](auto&& data){return sizeof(data.columns[0][0]);}, dataset.read().cpu_data.read());
         const uint32_t block_size = max_size_per_col / element_size;
+        dataset().gpu_stream_infos.emplace();
         dataset().gpu_stream_infos->block_size = block_size;
         dataset().gpu_stream_infos->block_count = (dataset().data_size + block_size - 1) / block_size;
         dataset().gpu_stream_infos->cur_block_index = 0;
         dataset().gpu_stream_infos->cur_block_size = block_size;
         dataset().gpu_stream_infos->forward_upload = true;
         dataset().gpu_stream_infos->last_block = false;
-        dataset().gpu_stream_infos->signal_block_upload_done = true;
+        dataset().gpu_stream_infos->signal_block_upload_done = true;    // we wait for the first block at the end of this function
         dataset().registry.emplace();   // creating the registry
     }
     structures::stager::staging_buffer_info staging_info{};
@@ -579,9 +580,6 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
     auto& ds = globals::datasets.ref_no_track()[convert_data.ds_id];
     switch(convert_data.dst){
     case structures::templatelist_convert_data::destination::drawlist:{
-        auto semaphore_info = util::vk::initializers::semaphoreCreateInfo();
-        VkSemaphore upload_semaphore{util::vk::create_semaphore(semaphore_info)};
-        std::unique_ptr<structures::semaphore> cpu_semaphore{std::make_unique<structures::semaphore>()};
         structures::tracked_drawlist drawlist{};
         drawlist().id = convert_data.dst_name;
         drawlist().name = convert_data.dst_name;
@@ -600,19 +598,11 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         // uploading bitset_vector
         // TODO: might be unnecesary, as this bitvector will be filled by brushing pipeline
         util::memory_view<const uint8_t> data = util::memory_view(drawlist.read().active_indices_bitset.data(), (drawlist.read().active_indices_bitset.size() + drawlist.read().active_indices_bitset.bits_per_block - 1) / drawlist.read().active_indices_bitset.bits_per_block);
-        structures::stager::staging_buffer_info staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, structures::stager::task_common{data, {}, {}, {}, util::memory_view(upload_semaphore), cpu_semaphore.get()}};
+        structures::stager::staging_buffer_info staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, structures::stager::task_common{data, {}, {}, {}, {}, {}}};
         globals::stager.add_staging_task(staging_info);
 
         // waiting uploads
-        auto fence = util::vk::create_fence(util::vk::initializers::fenceCreateInfo());
-        cpu_semaphore->acquire();
-        std::array<VkPipelineStageFlags, 1> wait_flag{VK_PIPELINE_STAGE_TRANSFER_BIT};
-        auto wait_commands = util::vk::create_begin_command_buffer(globals::vk_context.general_graphics_command_pool);
-        util::vk::end_commit_command_buffer(wait_commands, globals::vk_context.graphics_queue, upload_semaphore, wait_flag, {}, fence);
-        auto res = vkWaitForFences(globals::vk_context.device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
-        vkFreeCommandBuffers(globals::vk_context.device, globals::vk_context.general_graphics_command_pool, 1, &wait_commands);
-        util::vk::destroy_fence(fence);
-        util::vk::destroy_semaphore(upload_semaphore);
+        globals::stager.wait_for_completion();
         globals::drawlists.write().insert({drawlist.read().id, std::move(drawlist)});
         break;
     }
@@ -874,23 +864,44 @@ void check_dataset_gpu_stream(){
             ds_update_from_dl.insert(dl.read().parent_dataset);
     }
     for(const auto& ds: ds_update_from_dl){
-        if(globals::datasets.read().at(ds).read().registry->const_access()->all_registrators_done){
-            auto& dataset = globals::datasets()[ds]();
-            assert(dataset.gpu_stream_infos);
-            dataset.registry->access()->reset_registrators();
-            dataset.gpu_stream_infos->signal_block_upload_done = false;
-            // appending upload task
-            const structures::data<half>& data = std::get<structures::data<half>>(dataset.cpu_data.read());
-            structures::stager::staging_buffer_info staging_info{};
-            for(int i: util::size_range(data.columns)){
-                staging_info.dst_buffer = dataset.gpu_data.columns[i].buffer;
-                size_t offset = dataset.gpu_stream_infos->block_count * dataset.gpu_stream_infos->block_size;
-                size_t upload_size = std::min(dataset.gpu_stream_infos->block_size, data.columns[i].size() - offset);
-                staging_info.common.data_upload = util::memory_view(data.columns[i].data() + offset, upload_size);
-                if(i == data.columns.size() - 1)
-                    staging_info.common.signal_flags = util::memory_view(dataset.gpu_stream_infos->signal_block_upload_done);
-            }
+        if(!globals::datasets.read().at(ds).read().registry->const_access()->all_registrators_done || !globals::datasets.read().at(ds).read().gpu_stream_infos->signal_block_update_request)
+            continue;
+        
+        auto& dataset = globals::datasets()[ds]();
+        assert(dataset.gpu_stream_infos);
+        if(dataset.gpu_stream_infos->last_block && (dataset.gpu_stream_infos->cur_block_index == 0 && !dataset.gpu_stream_infos->forward_upload || dataset.gpu_stream_infos->forward_upload)){
+            dataset.gpu_stream_infos->forward_upload ^= 1;
+            dataset.gpu_stream_infos->signal_block_upload_done = true;      // last block is already in memory for next round of update
+            dataset.gpu_stream_infos->signal_block_update_request = false;  // block update done
+            continue;
         }
+        if(dataset.gpu_stream_infos->forward_upload)
+            ++dataset.gpu_stream_infos->cur_block_index;
+        else
+            --dataset.gpu_stream_infos->cur_block_index;
+        if(dataset.gpu_stream_infos->cur_block_index == 0 || dataset.gpu_stream_infos->cur_block_index == dataset.gpu_stream_infos->block_count - 1)
+            dataset.gpu_stream_infos->last_block = true;
+        else
+            dataset.gpu_stream_infos->last_block = false;
+        if(logger.logging_level >= logging::level::l_4)
+            logger << logging::info_prefix << " Uploading data block " << dataset.gpu_stream_infos->cur_block_index + 1 << " of " << dataset.gpu_stream_infos->block_count << " blocks" << logging::endl;
+        dataset.registry->access()->reset_registrators();
+        dataset.gpu_stream_infos->signal_block_upload_done = false;
+        // appending upload task
+        const structures::data<half>& data = std::get<structures::data<half>>(dataset.cpu_data.read());
+        structures::stager::staging_buffer_info staging_info{};
+        for(int i: util::size_range(data.columns)){
+            staging_info.dst_buffer = dataset.gpu_data.columns[i].buffer;
+            size_t offset = dataset.gpu_stream_infos->cur_block_index * dataset.gpu_stream_infos->block_size;
+            size_t upload_size = std::min(dataset.gpu_stream_infos->block_size, data.columns[i].size() - offset);
+            dataset.gpu_stream_infos->block_size = upload_size;
+            staging_info.common.data_upload = util::memory_view(data.columns[i].data() + offset, upload_size);
+            if(i == data.columns.size() - 1)
+                staging_info.common.signal_flags = {&dataset.gpu_stream_infos->signal_block_upload_done, &globals::datasets()[ds].changed, &globals::datasets.changed};
+            globals::stager.add_staging_task(staging_info);
+        }
+        if(logger.logging_level >= logging::level::l_5)
+            logger << logging::info_prefix << " Uploading data block done" << logging::endl;
     }
 }
 

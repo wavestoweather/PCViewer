@@ -286,6 +286,7 @@ int main(int argc, char* argv[]){
         // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
         util::dataset::check_datasets_to_open();
         util::dataset::check_dataset_deletion();
+        util::dataset::check_dataset_gpu_stream();
         util::dataset::check_dataset_update();
 
         util::drawlist::check_drawlist_deletion();
@@ -320,6 +321,9 @@ int main(int argc, char* argv[]){
         first_frame = false;
     }
     auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
+
+    // making shure to first clear the drawlists to avoid nullptr issues
+    globals::drawlists().clear();
    
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL2_Shutdown();
