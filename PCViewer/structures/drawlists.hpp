@@ -9,6 +9,7 @@
 #include <enum_names.hpp>
 #include <dynamic_bitset.hpp>
 #include <histogram_registry.hpp>
+#include <dataset_registry.hpp>
 
 namespace structures{
 enum class median_type: uint32_t{
@@ -47,6 +48,7 @@ struct drawlist{
     buffer_info             active_indices_bitset_gpu{};
     buffer_info             priority_colors_gpu{};
     thread_safe_hist_reg    histogram_registry{};           // thread safety is guaranteed by thread_safe structure
+    std::optional<dataset_registry::scoped_registrator_t> dataset_registrator{}; // only used when dataset uses gpu streaming
     tracked_brush           local_brushes{};
     buffer_info             local_brushes_gpu{};
 

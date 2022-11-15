@@ -74,6 +74,8 @@ void check_datasets_to_open();
 
 void check_dataset_deletion();
 
+void check_dataset_gpu_stream();
+
 void check_dataset_update();
 
 };

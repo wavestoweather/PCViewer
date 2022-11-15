@@ -8,6 +8,7 @@
 #include <optional>
 #include <variant>
 #include <data_type.hpp>
+#include <dataset_registry.hpp>
 
 namespace structures{
 template<typename T>
@@ -65,6 +66,7 @@ struct dataset{
     };
     std::optional<data_stream_infos>    gpu_stream_infos{};
     std::optional<gpu_data_t>           gpu_stream_data{};      // backing gpu buffer for async data loading
+    std::optional<thread_safe_dataset_reg> registry{};          // registry for gpu streaming regsitration
     std::optional<data_stream_infos>    cpu_stream_infos{};
     std::optional<cpu_data_t>           cpu_stream_data;        // backing buffer for async data loading
 

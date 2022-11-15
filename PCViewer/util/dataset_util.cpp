@@ -549,6 +549,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         dataset().gpu_stream_infos->forward_upload = true;
         dataset().gpu_stream_infos->last_block = false;
         dataset().gpu_stream_infos->signal_block_upload_done = true;
+        dataset().registry.emplace();   // creating the registry
     }
     structures::stager::staging_buffer_info staging_info{};
     for(int i: util::i_range(column_count)){
@@ -593,6 +594,8 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         drawlist().median_buffer = util::vk::create_buffer(median_buffer_info, alloc_info);
         auto bitmap_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, drawlist.read().active_indices_bitset.num_blocks() * sizeof(*drawlist.read().active_indices_bitset.data()));
         drawlist().active_indices_bitset_gpu = util::vk::create_buffer(bitmap_buffer_info, alloc_info);
+        if(ds.read().registry)
+            drawlist().dataset_registrator = ds.ref_no_track().registry->access()->scoped_registrator();
         
         // uploading bitset_vector
         // TODO: might be unnecesary, as this bitvector will be filled by brushing pipeline
@@ -859,6 +862,35 @@ void check_dataset_deletion(){
             globals::datasets().erase(ds);
         globals::datasets.changed = prev_dataset_state;
         globals::datasets_to_delete.clear();
+    }
+}
+
+void check_dataset_gpu_stream(){
+    // going through all datasets and checking if there is one where the end of the stream is not reached
+    // or if there has been an update requested to either the ds or a drawlist derived from the ds
+    std::set<std::string_view> ds_update_from_dl;
+    for(const auto& [dl_id, dl]: globals::drawlists.read()){
+        if(dl.read().dataset_registrator)
+            ds_update_from_dl.insert(dl.read().parent_dataset);
+    }
+    for(const auto& ds: ds_update_from_dl){
+        if(globals::datasets.read().at(ds).read().registry->const_access()->all_registrators_done){
+            auto& dataset = globals::datasets()[ds]();
+            assert(dataset.gpu_stream_infos);
+            dataset.registry->access()->reset_registrators();
+            dataset.gpu_stream_infos->signal_block_upload_done = false;
+            // appending upload task
+            const structures::data<half>& data = std::get<structures::data<half>>(dataset.cpu_data.read());
+            structures::stager::staging_buffer_info staging_info{};
+            for(int i: util::size_range(data.columns)){
+                staging_info.dst_buffer = dataset.gpu_data.columns[i].buffer;
+                size_t offset = dataset.gpu_stream_infos->block_count * dataset.gpu_stream_infos->block_size;
+                size_t upload_size = std::min(dataset.gpu_stream_infos->block_size, data.columns[i].size() - offset);
+                staging_info.common.data_upload = util::memory_view(data.columns[i].data() + offset, upload_size);
+                if(i == data.columns.size() - 1)
+                    staging_info.common.signal_flags = util::memory_view(dataset.gpu_stream_infos->signal_block_upload_done);
+            }
+        }
     }
 }
 

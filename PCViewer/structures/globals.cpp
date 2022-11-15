@@ -596,6 +596,12 @@ void stager::_task_thread_function(){
 
         if(cur.common.cpu_semaphore)
             cur.common.cpu_semaphore->release();
+
+        if(cur.common.signal_flags){
+            auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+            for(auto& b: cur.common.signal_flags)
+                b = true;
+        }
     };
     auto transfer_image = [&](staging_image_info& cur){
         size_t buffer_size = _staging_buffer_size;
@@ -883,6 +889,9 @@ void histogram_counter::_task_thread_function(){
             histogram_access->block_update_done = true;
             if(cur->last_count_of_dataset)
                 histogram_access->dataset_update_done = true;
+            auto& dl = globals::drawlists()[cur->dl_id]();
+            assert(dl.dataset_write().registry);
+            dl.dataset_write().registry->access()->signal_registrator_used(*dl.dataset_registrator); 
         }
 
         if(::logger.logging_level >= logging::level::l_5)

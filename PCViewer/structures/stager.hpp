@@ -24,6 +24,7 @@ public:
         util::memory_view<uint32_t>         wait_flags{};
         util::memory_view<VkSemaphore>      signal_semaphores{};
         semaphore*                          cpu_semaphore{};
+        util::memory_view<std::atomic<bool>>signal_flags{};        
     };   
     struct staging_buffer_info: task_base{
         transfer_direction                  transfer_dir{transfer_direction::upload};
