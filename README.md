@@ -63,9 +63,9 @@ As this tool relies on the Vulkan API, make sure to have hardware capabale of ru
 Upon publication of the paper, our part of the code is avaiable under a permissive license (to be determined).
 Please be aware of the licenses of included 3rd party code!
 
-# Replicatability instructions
+# Replicability instructions
 
-For the replicatability stamp please follow these commands to install the correct version of the program on an Ubuntu 22.04 LTS OS.
+For the replicability stamp please follow these commands to install the correct version of the program on an Ubuntu 22.04 LTS OS.
 
 To install all needed libraries run the following commands
 ```
