@@ -260,7 +260,7 @@ int main(int argc, char* argv[]){
                 continue;
 
             if(std::string_view(last_line).substr(0, logging::warning_prefix.size()) == logging::warning_prefix)
-                ImGui::TextColored({.3f, .3f, 0, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({.75f, .4f, 0, 1}, "%s", last_line.c_str());
             else if(std::string_view(last_line).substr(0, logging::error_prefix.size()) == logging::error_prefix)
                 ImGui::TextColored({.8f, 0, .2f, 1}, "%s", last_line.c_str());
             else if(std::string_view(last_line).substr(0, logging::vulkan_validation_prefix.size()) == logging::vulkan_validation_prefix)

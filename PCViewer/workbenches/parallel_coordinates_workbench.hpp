@@ -28,6 +28,7 @@ private:
     void _update_plot_image();
     void _draw_setting_list();
     void _swap_attributes(const attribute_order_info& from, const attribute_order_info& to);
+    void _update_registered_histograms();
 public:
     enum histogram_type: uint32_t{
         none,
