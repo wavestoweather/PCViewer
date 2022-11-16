@@ -514,7 +514,8 @@ void parallel_coordinates_workbench::show(){
         }
         if(ImGui::ColorEdit4("Plot background", &setting.ref_no_track().pc_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
             setting();
-        //ImGui::MenuItem("Render splines", {}, &setting.render_splines);
+        if(ImGui::MenuItem("Render splines", {}, &setting.ref_no_track().render_splines))
+            setting();
         if(ImGui::BeginMenu("Plot Size")){
             if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))
                 plot_data();
