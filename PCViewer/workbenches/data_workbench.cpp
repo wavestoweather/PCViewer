@@ -157,6 +157,12 @@ void data_workbench::show()
                         globals::brush_edit_data.local_brush_id = id;
                     }
                 }
+                if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)){
+                    const std::string_view id_view = dl.read().id;
+                    ImGui::SetDragDropPayload("drawlists", &id_view, sizeof(id_view));
+                    ImGui::Text("Drop datasets on workbench to add");
+                    ImGui::EndDragDropSource();
+                }
                 ImGui::TableNextColumn();
                 if(ImGui::Button(("X##" + std::string(id)).c_str())){
                     globals::drawlists_to_delete.insert(id);
@@ -190,7 +196,7 @@ void data_workbench::show()
         // c3
         ImGui::TableNextColumn();
 
-        if(ImGui::BeginTable("glboal_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit)){
+        if(ImGui::BeginTable("global_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");

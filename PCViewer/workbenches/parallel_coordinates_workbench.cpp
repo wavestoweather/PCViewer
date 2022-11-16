@@ -718,6 +718,17 @@ void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std
 
 void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
     for(auto drawlist_id: drawlist_ids){
+        // checking if the drawlist is already added
+        bool exists = false;
+        for(const auto& dl: drawlist_infos.read()){
+            if(dl.drawlist_id == drawlist_id){
+                exists = true;
+                break;
+            }
+        }
+        if(exists)
+            continue;
+
         auto& dl = globals::drawlists.write().at(drawlist_id).write();
         auto& ds = dl.dataset_read();
         if(drawlist_infos.read().empty()){

@@ -3,6 +3,7 @@
 #include <commandline_parser.hpp>
 #include <imgui_impl_sdl.h>
 #include <imgui_impl_vulkan.h>
+#include <imgui_internal.h>
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <vk_initializers.hpp>
@@ -248,8 +249,34 @@ int main(int argc, char* argv[]){
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
         ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
 
-        for(const auto& wb: globals::workbenches)
+        for(const auto& wb: globals::workbenches){
             wb->show();
+            // adding drawlist and dataset drop targets to the workbenches
+            if(wb.get() == globals::primary_workbench || !wb->active)
+                continue;
+            structures::dataset_dependency* dataset_wb = dynamic_cast<structures::dataset_dependency*>(wb.get());
+            structures::drawlist_dataset_dependency* drawlist_dataset_wb = dynamic_cast<structures::drawlist_dataset_dependency*>(wb.get());
+            if(dataset_wb || drawlist_dataset_wb){
+                ImGuiWindow* wb_window = ImGui::FindWindowByName(wb->id.c_str());
+                ImRect bb = wb_window->Rect();
+                bb.Expand(-10);
+                ImGuiID dataset_id = ImGui::GetID((wb->id + "da").c_str());
+                if(dataset_wb && ImGui::BeginDragDropTargetCustom(bb, dataset_id)){
+                    ImGui::GetForegroundDrawList()->AddRect(bb.Min, bb.Max, ImGui::GetColorU32(ImGuiCol_DragDropTarget), 0, 0, 3);
+                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("datasets")){
+                        // TODO
+                    }
+                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("drawlists")){
+                        std::string_view dl_id = *(const std::string_view*)payload->Data;
+                        if(globals::selected_drawlists.size())
+                            drawlist_dataset_wb->add_drawlists(globals::selected_drawlists);
+                        else
+                            drawlist_dataset_wb->add_drawlists(dl_id);
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+            }
+        }
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, {.8,.8,.8,1});
         ImGui::Begin(log_window_name.data());
