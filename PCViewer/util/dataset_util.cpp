@@ -548,7 +548,6 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         dataset().gpu_stream_infos->cur_block_index = 0;
         dataset().gpu_stream_infos->cur_block_size = block_size;
         dataset().gpu_stream_infos->forward_upload = true;
-        dataset().gpu_stream_infos->last_block = false;
         dataset().gpu_stream_infos->signal_block_upload_done = true;    // we wait for the first block at the end of this function
         dataset().registry.emplace();   // creating the registry
     }
@@ -856,33 +855,25 @@ void check_dataset_deletion(){
 }
 
 void check_dataset_gpu_stream(){
-    // going through all datasets and checking if there is one where the end of the stream is not reached
     // or if there has been an update requested to either the ds or a drawlist derived from the ds
-    std::set<std::string_view> ds_update_from_dl;
-    for(const auto& [dl_id, dl]: globals::drawlists.read()){
-        if(dl.read().dataset_registrator)
-            ds_update_from_dl.insert(dl.read().parent_dataset);
-    }
-    for(const auto& ds: ds_update_from_dl){
-        if(!globals::datasets.read().at(ds).read().registry->const_access()->all_registrators_done || !globals::datasets.read().at(ds).read().gpu_stream_infos->signal_block_update_request)
+    for(const auto& [ds_id, ds]: globals::datasets.read()){
+        if(!ds.read().gpu_stream_infos || !ds.read().registry->const_access()->all_registrators_done || !ds.read().gpu_stream_infos->signal_block_update_request)
             continue;
         
-        auto& dataset = globals::datasets()[ds]();
+        const auto& dataset = ds.read();
         assert(dataset.gpu_stream_infos);
-        if(dataset.gpu_stream_infos->last_block && (dataset.gpu_stream_infos->cur_block_index == 0 && !dataset.gpu_stream_infos->forward_upload || dataset.gpu_stream_infos->forward_upload)){
+        if(dataset.gpu_stream_infos->last_block()){
             dataset.gpu_stream_infos->forward_upload ^= 1;
             dataset.gpu_stream_infos->signal_block_upload_done = true;      // last block is already in memory for next round of update
             dataset.gpu_stream_infos->signal_block_update_request = false;  // block update done
+            dataset.registry->access()->reset_registrators();
             continue;
         }
         if(dataset.gpu_stream_infos->forward_upload)
             ++dataset.gpu_stream_infos->cur_block_index;
         else
             --dataset.gpu_stream_infos->cur_block_index;
-        if(dataset.gpu_stream_infos->cur_block_index == 0 || dataset.gpu_stream_infos->cur_block_index == dataset.gpu_stream_infos->block_count - 1)
-            dataset.gpu_stream_infos->last_block = true;
-        else
-            dataset.gpu_stream_infos->last_block = false;
+
         if(logger.logging_level >= logging::level::l_4)
             logger << logging::info_prefix << " Uploading data block " << dataset.gpu_stream_infos->cur_block_index + 1 << " of " << dataset.gpu_stream_infos->block_count << " blocks" << logging::endl;
         dataset.registry->access()->reset_registrators();
@@ -893,15 +884,14 @@ void check_dataset_gpu_stream(){
         for(int i: util::size_range(data.columns)){
             staging_info.dst_buffer = dataset.gpu_data.columns[i].buffer;
             size_t offset = dataset.gpu_stream_infos->cur_block_index * dataset.gpu_stream_infos->block_size;
+            size_t rest_size = data.columns[i].size() - offset;
             size_t upload_size = std::min(dataset.gpu_stream_infos->block_size, data.columns[i].size() - offset);
-            dataset.gpu_stream_infos->block_size = upload_size;
+            dataset.gpu_stream_infos->cur_block_size = upload_size;
             staging_info.common.data_upload = util::memory_view(data.columns[i].data() + offset, upload_size);
             if(i == data.columns.size() - 1)
-                staging_info.common.signal_flags = {&dataset.gpu_stream_infos->signal_block_upload_done, &globals::datasets()[ds].changed, &globals::datasets.changed};
+                staging_info.common.signal_flags = {&dataset.gpu_stream_infos->signal_block_upload_done, &globals::datasets.ref_no_track()[ds_id].changed, &globals::datasets.changed};
             globals::stager.add_staging_task(staging_info);
         }
-        if(logger.logging_level >= logging::level::l_5)
-            logger << logging::info_prefix << " Uploading data block done" << logging::endl;
     }
 }
 
@@ -923,6 +913,8 @@ void check_dataset_update(){
         for(auto dl: changed_datasets){
             if(globals::drawlists.read().at(dl).read().histogram_registry.const_access()->name_to_registry_key.empty())
                 continue;
+            if(!globals::drawlists()[dl]().local_brushes.read().empty())    // if local brushes exist notify that these should be reapplied
+                globals::drawlists()[dl]().local_brushes();
             globals::drawlists()[dl]().histogram_registry.access()->request_change_all();
         }
     }

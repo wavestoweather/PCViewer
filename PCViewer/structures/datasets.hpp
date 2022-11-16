@@ -61,15 +61,17 @@ struct dataset{
         uint32_t                block_count{};
         size_t                  block_size{};
         bool                    forward_upload{};
-        bool                    last_block{};
         std::atomic<bool>       signal_block_upload_done{};
         std::atomic<bool>       signal_block_update_request{};
+
+        bool                    first_block() const {return !forward_upload && cur_block_index == block_count - 1 || forward_upload && cur_block_index == 0;}
+        bool                    last_block() const {return forward_upload && cur_block_index == block_count - 1 || !forward_upload && cur_block_index == 0;}
     };
-    std::optional<data_stream_infos>    gpu_stream_infos{};
-    std::optional<gpu_data_t>           gpu_stream_data{};      // backing gpu buffer for async data loading
-    std::optional<thread_safe_dataset_reg> registry{};          // registry for gpu streaming regsitration
-    std::optional<data_stream_infos>    cpu_stream_infos{};
-    std::optional<cpu_data_t>           cpu_stream_data;        // backing buffer for async data loading
+    mutable std::optional<data_stream_infos> gpu_stream_infos{};
+    std::optional<gpu_data_t>               gpu_stream_data{};      // backing gpu buffer for async data loading
+    mutable std::optional<thread_safe_dataset_reg> registry{};          // registry for gpu streaming regsitration
+    std::optional<data_stream_infos>        cpu_stream_infos{};
+    std::optional<cpu_data_t>               cpu_stream_data;        // backing buffer for async data loading
 
     bool operator==(const dataset& o) const {return id == o.id;}
 

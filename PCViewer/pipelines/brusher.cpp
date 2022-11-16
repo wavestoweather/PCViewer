@@ -57,7 +57,7 @@ void brusher::brush(const brush_info& info)
     pc.data_address = util::vk::get_buffer_address(ds.gpu_data.header);
     pc.index_buffer_address = util::vk::get_buffer_address(tl.gpu_indices);
     pc.local_global_brush_combine = static_cast<uint32_t>(info.brush_comb);
-    pc.data_size = tl.data_size;
+    pc.data_size = ds.gpu_stream_infos ? ds.gpu_stream_infos->cur_block_size: tl.data_size;
 
     const auto& pipe_data = _get_or_create_pipeline({ds.data_flags.data_typ});
 

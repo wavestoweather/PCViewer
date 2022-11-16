@@ -171,7 +171,8 @@ inline void update_drawlist_active_indices(){
     for(const auto& [id, dl]: globals::drawlists.read()){
         if(globals::global_brushes.changed && !dl.read().immune_to_global_brushes.read() && !dl.read().histogram_registry.const_access()->registrators_done)
             return;
-        if(dl.changed  && dl.read().local_brushes.changed && !dl.read().histogram_registry.const_access()->registrators_done)
+        auto registry_access = dl.read().histogram_registry.const_access();
+        if(dl.changed && dl.read().local_brushes.changed && !registry_access->registrators_done && registry_access->dataset_update_done)
             return;
     }
     

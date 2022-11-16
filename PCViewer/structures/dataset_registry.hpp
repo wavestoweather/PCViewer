@@ -3,6 +3,7 @@
 #include <robin_hood.h>
 #include <atomic>
 #include <thread_safe_struct.hpp>
+#include <logger.hpp>
 
 namespace structures{
 struct dataset_registry{
@@ -24,6 +25,8 @@ struct dataset_registry{
     }
 
     void unregister_histogram(registrator_id_t id){
+        if(!this)
+            return;
         assert(registry.contains(id));
         registry.erase(id);
     }

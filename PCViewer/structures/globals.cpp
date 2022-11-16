@@ -892,7 +892,7 @@ void histogram_counter::_task_thread_function(){
                 histogram_access->dataset_update_done = true;
             auto& dl = globals::drawlists()[cur->dl_id]();
             if(dl.dataset_read().registry){
-                dl.dataset_write().registry->access()->signal_registrator_used(*dl.dataset_registrator); 
+                dl.dataset_read().registry->access()->signal_registrator_used(*dl.dataset_registrator); 
             }
         }
 

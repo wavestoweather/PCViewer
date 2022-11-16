@@ -251,6 +251,7 @@ int main(int argc, char* argv[]){
         for(const auto& wb: globals::workbenches)
             wb->show();
 
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, {.8,.8,.8,1});
         ImGui::Begin(log_window_name.data());
         ImGui::SetWindowFontScale(.8f);
         for(int i: util::i_range(logger.buffer_size)){
@@ -259,16 +260,17 @@ int main(int argc, char* argv[]){
                 continue;
 
             if(std::string_view(last_line).substr(0, logging::warning_prefix.size()) == logging::warning_prefix)
-                ImGui::TextColored({.8f, .8f, 0, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({.3f, .3f, 0, 1}, "%s", last_line.c_str());
             else if(std::string_view(last_line).substr(0, logging::error_prefix.size()) == logging::error_prefix)
                 ImGui::TextColored({.8f, 0, .2f, 1}, "%s", last_line.c_str());
             else if(std::string_view(last_line).substr(0, logging::vulkan_validation_prefix.size()) == logging::vulkan_validation_prefix)
-                ImGui::TextColored({.8f, .8f, .8f, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({.2f, .2f, .2f, 1}, "%s", last_line.c_str());
             else
-                ImGui::Text("%s", last_line.c_str());
+                ImGui::TextColored({0, 0, 0, 1}, "%s", last_line.c_str());
         }
         ImGui::SetScrollHereY(1);
         ImGui::End();   // log window
+        ImGui::PopStyleColor();
 
         if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")){
             if(ImGuiFileDialog::Instance()->IsOk()){
