@@ -49,6 +49,8 @@ class parallel_coordinates_renderer{
     const std::string_view large_vis_vertex_shader_path{"shader/parallel_coordinates_renderer_large.vert.spv"};
     const std::string_view fragment_shader_path{"shader/parallel_coordinates_renderer.frag.spv"};
 
+    const uint32_t         _spline_resolution = 20;
+
     // vulkan resources that are the same for all drawlists/parallel_coordinates_windows
     structures::buffer_info                                 _attribute_info_buffer{};
     VkCommandPool                                           _command_pool{};

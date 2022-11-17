@@ -327,7 +327,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
                 pc.index_buffer_address = util::vk::get_buffer_address(drawlist.const_templatelist().gpu_indices);
                 pc.activation_bitset_address = util::vk::get_buffer_address(drawlist.active_indices_bitset_gpu);
-                pc.vertex_count_per_line = (active_attribute_indices.size() - 1) * (info.workbench.setting.read().render_splines ? 10: 1) + 1;
+                pc.vertex_count_per_line = (active_attribute_indices.size() - 1) * (info.workbench.setting.read().render_splines ? _spline_resolution: 1) + 1;
                 pc.color = dl.appearance->read().color;
                 vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
                 vkCmdDraw(_render_commands.back(), pc.vertex_count_per_line, cur_batch_size, 0, cur_offset);

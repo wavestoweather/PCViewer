@@ -686,6 +686,7 @@ void parallel_coordinates_workbench::render_plot()
     }
     attributes.changed = false;
     attributes_order_info.changed = false;
+    setting.changed = false;
     // signaling all registrators
     if(_registered_histograms.size()){
         for(auto& [dl, registrators]: _registered_histograms){
@@ -736,7 +737,7 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
             attributes = ds.attributes;
             for(auto& attribute: attributes()){
                 if(attribute.bounds.read().min == attribute.bounds.read().max){
-                    float diff = attribute.bounds.read().max * .01f;
+                    float diff = (std::abs(attribute.bounds.read().max) + .1f) * .01f;
                     attribute.bounds().min -= diff;
                     attribute.bounds().max += diff;
                 }
@@ -749,6 +750,14 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
         for(int var: util::size_range(attributes.read()))
             if(attributes.read()[var].id != ds.attributes[var].id)
                 throw std::runtime_error{"parallel_coordinates_workbench::addDrawlist() Inconsistent attributes for the new drawlist"};
+
+        // combining min max with new attributes
+        for(int var: util::size_range(attributes.read())){
+            if(attributes.read()[var].bounds.read().min > ds.attributes[var].bounds.read().min)
+                attributes()[var].bounds().min = ds.attributes[var].bounds.read().min;
+            if(attributes.read()[var].bounds.read().max < ds.attributes[var].bounds.read().max)
+                attributes()[var].bounds().max = ds.attributes[var].bounds.read().max;
+        }
 
         drawlist_infos.write().push_back(drawlist_info{drawlist_id, true, dl.appearance_drawlist, dl.median_typ});
 
