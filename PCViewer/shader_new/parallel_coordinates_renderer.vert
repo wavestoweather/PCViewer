@@ -44,6 +44,14 @@ layout(location = 0) out vec4 out_color;
 
 #include "data_access.glsl"
 
+const float alpha = .5;
+float get_t(float t, in vec2 p0, in vec2 p1){
+    float a = pow((p1.x-p0.x), 2.0f) + pow((p1.y-p0.y), 2.0f);
+    float b = pow(a, .5f);
+    float c = pow(b,alpha);
+    return c+t;
+}
+
 void main() {
     int data_index = gl_InstanceIndex;
     int vertex_index = gl_VertexIndex;
@@ -64,19 +72,65 @@ void main() {
         vertex_index = int(index_buffer.i[vertex_index]);
     }
 
+    uint in_between = vertex_count_per_line - 1 / (attr_infos.attribute_count - 1);
     float gap = 2.0f/(vertex_count_per_line - 1.0f);
-    float x = -1.0f + vertex_index * gap;
+    float x_base = -1.0f + vertex_index / in_between * gap;
+    float in_between_ratio = float(vertex_count_per_line % in_between) / in_between;
+    float x = x_base + in_between_ratio * gap;
     //addding the padding to x
     x *= 1.f - padding;
     float y;
-    if(vertex_count_per_line == attr_infos.attribute_count){    // polyline rendering
-        uint attribute_index = uint(attr_infos.vertex_transformations[vertex_index]);
+    if(vertex_index % in_between == 0){    // vertex exactly at an axis
+        uint attribute_index = uint(attr_infos.vertex_transformations[vertex_index / in_between]);
         float val = get_packed_data(data_index, attribute_index);
-        y = (val - attr_infos.vertex_transformations[vertex_index].y) / (attr_infos.vertex_transformations[vertex_index].z - attr_infos.vertex_transformations[vertex_index].y);
+        y = (val - attr_infos.vertex_transformations[vertex_index / in_between].y) / (attr_infos.vertex_transformations[vertex_index / in_between].z - attr_infos.vertex_transformations[vertex_index / in_between].y);
         y = y * 2 - 1;
     }
-    else{
-        //uint left_attribute;
+    else{       // reading out neighbouring data for spline calculation
+        uint left = vertex_index / in_between;
+        uint left_left = max(left - 1, 0);
+        uint right = left + 1;
+        uint right_right = min(right + 1, attr_infos.attribute_count - 1);
+        float left_val, left_left_val, right_val, right_right_val;
+        uint attribute_index = uint(attr_infos.vertex_transformations[left]);
+        left_val = get_packed_data(data_index, attribute_index);
+        attribute_index = uint(attr_infos.vertex_transformations[right]);
+        right_val = get_packed_data(data_index, attribute_index);
+        if(left == left_left)
+            left_left_val = left_val;
+        else{
+            attribute_index = uint(attr_infos.vertex_transformations[left_left]);
+            left_left_val = get_packed_data(data_index, attribute_index);
+        }
+        if(right == right_right)
+            right_right_val = right_val;
+        else{
+            attribute_index = uint(attr_infos.vertex_transformations[right_right]);
+            right_right_val = get_packed_data(data_index, attribute_index);
+        }
+        left_left_val = (left_left_val - attr_infos.vertex_transformations[left_left].y) / (attr_infos.vertex_transformations[left_left].z - attr_infos.vertex_transformations[left_left].y);
+        left_val = (left_val - attr_infos.vertex_transformations[left].y) / (attr_infos.vertex_transformations[left].z - attr_infos.vertex_transformations[left].y);
+        right_val = (right_val - attr_infos.vertex_transformations[right].y) / (attr_infos.vertex_transformations[right].z - attr_infos.vertex_transformations[right].y);
+        right_right_val = (right_right_val - attr_infos.vertex_transformations[right_right].y) / (attr_infos.vertex_transformations[right_right].z - attr_infos.vertex_transformations[right_right].y);
+        // calculating interpolated value
+        vec2 p0 = vec2(x_base - gap, left_left_val);
+        vec2 p1 = vec2(x_base, left_val);
+        vec2 p2 = vec2(x_base + gap, right_val);
+        vec2 p3 = vec2(x_base +  2 * gap, right_right_val);
+        float t0 = 0;
+        float t1 = get_t(t0, p0, p1);
+        float t2 = get_t(t1, p1, p2);
+        float t3 = get_t(t2, p2, p3);
+
+        float t = mix(t1, t2, in_between_ratio);
+        vec2 a1 = ( t1-t )/( t1-t0 )*p0 + ( t-t0 )/( t1-t0 )*p1;
+        vec2 a2 = ( t2-t )/( t2-t1 )*p1 + ( t-t1 )/( t2-t1 )*p2;
+        vec2 a3 = ( t3-t )/( t3-t2 )*p2 + ( t-t2 )/( t3-t2 )*p3;
+        vec2 b1 = ( t2-t )/( t2-t0 )*a1 + ( t-t0 )/( t2-t0 )*a2;
+        vec2 b2 = ( t3-t )/( t3-t1 )*a2 + ( t-t1 )/( t3-t1 )*a3;
+        vec2 c = ( t2-t )/( t2-t1 )*b1 + ( t-t1 )/( t2-t1 )*b2;
+        x = c.x;
+        y = c.y;
     }
 
     gl_Position = vec4( x, y * -1.0f, 0.0, 1.0);
