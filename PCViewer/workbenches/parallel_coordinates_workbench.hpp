@@ -50,7 +50,6 @@ public:
         mutable bool        axis_tick_label{};
         mutable std::string axis_tick_fmt{"%6.4g"};
         mutable int         axis_tick_count{0};
-        mutable ImVec4      plot_background{0,0,0,1};
         mutable size_t      render_batch_size{};
         mutable float       brush_box_width{20};
         mutable float       brush_box_border_width{2};
@@ -64,7 +63,7 @@ public:
 
         // when these are changed the whole data plot has to be rendered
         histogram_type hist_type{};
-        ImVec4      pc_background{0,0,0,1};
+        ImVec4      plot_background{0,0,0,1};
         int         histogram_rendering_threshold{500000};
         bool        render_splines{};
     };

@@ -259,14 +259,13 @@ int main(int argc, char* argv[]){
             if(dataset_wb || drawlist_dataset_wb){
                 ImGuiWindow* wb_window = ImGui::FindWindowByName(wb->id.c_str());
                 ImRect bb = wb_window->Rect();
-                bb.Expand(-10);
+                bb.Expand(-5);
                 ImGuiID dataset_id = ImGui::GetID((wb->id + "da").c_str());
-                if(dataset_wb && ImGui::BeginDragDropTargetCustom(bb, dataset_id)){
-                    ImGui::GetForegroundDrawList()->AddRect(bb.Min, bb.Max, ImGui::GetColorU32(ImGuiCol_DragDropTarget), 0, 0, 3);
-                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("datasets")){
+                if(dataset_wb && !ImGui::GetCurrentContext()->DragDropWithinTarget && ImGui::BeginDragDropTargetCustom(bb, dataset_id)){
+                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("datasets", ImGuiDragDropFlags_PreviewInForeground)){
                         // TODO
                     }
-                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("drawlists")){
+                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("drawlists", ImGuiDragDropFlags_PreviewInForeground)){
                         std::string_view dl_id = *(const std::string_view*)payload->Data;
                         if(globals::selected_drawlists.size())
                             drawlist_dataset_wb->add_drawlists(globals::selected_drawlists);

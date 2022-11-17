@@ -15,6 +15,7 @@
 #include <persistent_samplers.hpp>
 #include <descriptor_set_storage.hpp>
 #include <laod_behaviour.hpp>
+#include <drawlist_creation_behaviour.hpp>
 #include <open_filepaths.hpp>
 #include <stager.hpp>
 #include <util.hpp>
@@ -64,6 +65,7 @@ structures::persistent_samplers persistent_samplers{};
 robin_hood::unordered_map<std::string_view, structures::uniqe_descriptor_info> descriptor_sets{};
 
 structures::load_behaviour load_behaviour{};
+structures::drawlist_creation_behaviour drawlist_creation_behaviour{};
 
 std::vector<std::string> paths_to_open{};
 std::vector<structures::query_attribute> attribute_query{};

@@ -11,6 +11,7 @@
 #include <numeric>
 #include <fstream>
 #include <laod_behaviour.hpp>
+#include <drawlist_creation_behaviour.hpp>
 #include <drawlists.hpp>
 #include <random>
 #include <vk_util.hpp>
@@ -603,6 +604,20 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         // waiting uploads
         globals::stager.wait_for_completion();
         globals::drawlists.write().insert({drawlist.read().id, std::move(drawlist)});
+
+        // executing drawlist_creation_behaviour
+        for(std::string_view wb_id: globals::drawlist_creation_behaviour.coupled_workbenches){
+            auto wb = util::memory_view(globals::workbenches).find([&](const globals::unique_workbench& work){return work->id == wb_id;}).get();
+            if(structures::drawlist_dataset_dependency* ddd = dynamic_cast<structures::drawlist_dataset_dependency*>(wb)){
+                try{
+                    std::vector<std::string_view> dl{globals::drawlists.read().at(std::string_view(convert_data.dst_name)).read().id};
+                    ddd->add_drawlists(dl);
+                }
+                catch(const std::runtime_error& e){
+                    logger << "[error] " << e.what() << logging::endl;
+                }
+            }
+        }
         break;
     }
     case structures::templatelist_convert_data::destination::templatelist:{
@@ -683,16 +698,6 @@ void execute_laod_behaviour(globals::dataset_t& ds){
         convert_info.trim = {0, ds.read().templatelist_index.at(convert_info.tl_id)->indices.size()};
         convert_info.dst = structures::templatelist_convert_data::destination::drawlist;
         convert_templatelist(convert_info);
-        for(std::string_view wb_id: load_behaviour.coupled_workbenches){
-            auto wb = util::memory_view(globals::workbenches).find([&](const globals::unique_workbench& work){return work->id == wb_id;}).get();
-            if(structures::drawlist_dataset_dependency* ddd = dynamic_cast<structures::drawlist_dataset_dependency*>(wb)){
-                try{
-                    std::vector<std::string_view> dl{globals::drawlists.read().at(ds.read().id).read().id};
-                    ddd->add_drawlists(dl);}
-                catch(const std::runtime_error& e){
-                    logger << "[error] " << e.what() << logging::endl;}
-            }
-        }
     }
 }
 

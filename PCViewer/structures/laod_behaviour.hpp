@@ -10,7 +10,7 @@ struct load_behaviour{
         int                             subsampling{};
         min_max<size_t>                 trim{};
 
-        std::vector<std::string_view>   coupled_workbenches{};
+        //std::vector<std::string_view>   coupled_workbenches{};    // moved to drawlist_creation_behaviour
     };
     std::vector<dl_from_loaded_ds>  on_load;
 };
