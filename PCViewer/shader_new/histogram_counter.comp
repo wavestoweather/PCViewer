@@ -65,9 +65,9 @@ void main(){
     if(dim_count >= 2)
         pos += uint(clamp((get_packed_data(data_index, a2) - a2_min) / (a2_max - a2_min) * s2, 0, s2 - 1)) * s1;
     if(dim_count >= 3)
-        pos += uint(clamp((get_packed_data(data_index, a3) - a3_min) / (a3_max - a3_min) * s3, 0, s3 - 1) * s1 * s2);
+        pos += uint(clamp((get_packed_data(data_index, a3) - a3_min) / (a3_max - a3_min) * s3, 0, s3 - 1)) * s1 * s2;
     if(dim_count >= 4)
-        pos += uint(clamp((get_packed_data(data_index, a4) - a4_min) / (a4_max - a4_min) * s4, 0, s4 - 1) * s1 * s2 * s3);
+        pos += uint(clamp((get_packed_data(data_index, a4) - a4_min) / (a4_max - a4_min) * s4, 0, s4 - 1)) * s1 * s2 * s3;
 
     atomicAdd(hist.bins[pos], 1);
 }

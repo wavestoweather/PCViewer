@@ -43,16 +43,7 @@ layout(push_constant) uniform PCs{
 layout(location = 0) out vec4 out_color;
 
 #include "data_access.glsl"
-
-const float alpha = .5;
-float get_t(float t, in vec2 p0, in vec2 p1){
-    if(alpha == 0)
-        return 1 + t;
-    float a = pow((p1.x-p0.x), 2.0f) + pow((p1.y-p0.y), 2.0f);
-    float b = pow(a, .5f);
-    float c = pow(b,alpha);
-    return c+t;
-}
+#include "splines.glsl"
 
 void main() {
     int data_index = gl_InstanceIndex;
@@ -121,18 +112,7 @@ void main() {
         vec2 p1 = vec2(x_base, left_val);
         vec2 p2 = vec2(x_base + full_gap, right_val);
         vec2 p3 = vec2(x_base +  2 * full_gap, right_right_val);
-        float t0 = 0;
-        float t1 = get_t(t0, p0, p1);
-        float t2 = get_t(t1, p1, p2);
-        float t3 = get_t(t2, p2, p3);
-
-        float t = mix(t1, t2, float(in_between_index) / float(in_between));
-        vec2 a1 = ( t1-t )/( t1-t0 )*p0 + ( t-t0 )/( t1-t0 )*p1;
-        vec2 a2 = ( t2-t )/( t2-t1 )*p1 + ( t-t1 )/( t2-t1 )*p2;
-        vec2 a3 = ( t3-t )/( t3-t2 )*p2 + ( t-t2 )/( t3-t2 )*p3;
-        vec2 b1 = ( t2-t )/( t2-t0 )*a1 + ( t-t0 )/( t2-t0 )*a2;
-        vec2 b2 = ( t3-t )/( t3-t1 )*a2 + ( t-t1 )/( t3-t1 )*a3;
-        vec2 c = ( t2-t )/( t2-t1 )*b1 + ( t-t1 )/( t2-t1 )*b2;
+        vec2 c = get_spline_pos(p0, p1, p2, p3, float(in_between_index) / float(in_between));
         x = c.x;
         y = c.y * 2 - 1;
     }

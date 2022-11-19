@@ -55,6 +55,8 @@ struct dataset{
     }                                   data_flags{};
 
     // optional data for certain data types
+    std::optional<buffer_info>          gpu_sorted_indices{};   // contains sorted indices. Can be used as direct indexbuffer for indexpermutation or inside compute shader with index=sorted_indices[invocation_id]
+    std::optional<buffer_info>          gpu_histogram_sorted_indices{};
     struct data_stream_infos{
         uint32_t                cur_block_index{};
         size_t                  cur_block_size{};
@@ -68,7 +70,6 @@ struct dataset{
         bool                    last_block() const {return forward_upload && cur_block_index == block_count - 1 || !forward_upload && cur_block_index == 0;}
     };
     mutable std::optional<data_stream_infos> gpu_stream_infos{};
-    std::optional<gpu_data_t>               gpu_stream_data{};      // backing gpu buffer for async data loading
     mutable std::optional<thread_safe_dataset_reg> registry{};          // registry for gpu streaming regsitration
     std::optional<data_stream_infos>        cpu_stream_infos{};
     std::optional<cpu_data_t>               cpu_stream_data;        // backing buffer for async data loading

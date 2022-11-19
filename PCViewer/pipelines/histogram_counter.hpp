@@ -10,7 +10,8 @@
 namespace structures{
 namespace histogram_counter_structs{
 struct pipeline_specs{
-    data_type d_type;
+    data_type   d_type{};
+    uint32_t    dim_count{2};
 
     bool operator==(const pipeline_specs& o) const {return d_type == o.d_type;}
 };

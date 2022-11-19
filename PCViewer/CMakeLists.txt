@@ -115,6 +115,7 @@ set(structures_INCLUDE_DIR
     "pipelines"
     "workbenches"
     "fast_float"
+    "config"
 )
 
 file(GLOB structures_SRC

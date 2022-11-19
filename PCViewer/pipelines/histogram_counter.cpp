@@ -21,8 +21,8 @@ const histogram_counter::pipeline_data& histogram_counter::_get_or_create_pipeli
         pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_info);
 
         auto shader_module = util::vk::create_shader_module(_compute_shader_path);
-        std::vector<VkSpecializationMapEntry> specialization_entries{util::vk::initializers::specializationMapEntry(0, 0, sizeof(uint32_t))};
-        uint32_t data_type_specialization{static_cast<uint32_t>(pipeline_specs.d_type)};
+        std::vector<VkSpecializationMapEntry> specialization_entries{util::vk::initializers::specializationMapEntry(0, 0, sizeof(uint32_t)), util::vk::initializers::specializationMapEntry(1, sizeof(uint32_t), sizeof(uint32_t))};
+        std::vector<uint32_t> data_type_specialization{static_cast<uint32_t>(pipeline_specs.d_type), pipeline_specs.dim_count};
         auto specialization_info = util::vk::initializers::specializationInfo(specialization_entries, util::memory_view(data_type_specialization));
         auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, shader_module, &specialization_info);
         auto compute_info = util::vk::initializers::computePipelineCreateInfo(pipe_data.pipeline_layout, shader_stage_info);
@@ -40,7 +40,7 @@ histogram_counter& histogram_counter::instance(){
 }
 
 void histogram_counter::count(const count_info& info){
-    const auto& pipeline_data = _get_or_create_pipeline(pipeline_specs{info.data_type});
+    const auto& pipeline_data = _get_or_create_pipeline(pipeline_specs{info.data_type, static_cast<uint32_t>(info.column_indices.size())});
     push_constants pc{};
     pc.data_header_address = info.data_header_address;
     pc.index_buffer_address = info.index_buffer_address;

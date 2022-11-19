@@ -9,6 +9,7 @@
 #include <array_struct.hpp>
 #include <global_descriptor_set_util.hpp>
 #include <histogram_registry_util.hpp>
+#include <splines.hpp>
 
 namespace pipelines
 {
@@ -335,16 +336,42 @@ void parallel_coordinates_renderer::render(const render_info& info){
             }
             case structures::parallel_coordinates_renderer::render_type::large_vis_lines:{
                 auto indices = info.workbench.get_active_ordered_indices();
-                std::vector<int> bin_sizes(2, out_specs.height);
+                int height = info.workbench.plot_data.read().height;
+                std::vector<int> bin_sizes = info.workbench.setting.read().render_splines ? std::vector<int>{config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res}: std::vector<int>{height, height};
+                size_t lines_amt = 1;
+                for(uint32_t s: bin_sizes)
+                    lines_amt *= s;
+
                 for(int i: util::i_range(indices.size() - 1)){
+                    std::vector<uint32_t> hist_indices;
+
                     push_constants_large_vis pc{};
                     pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
-                    pc.a_axis = indices[i] < indices[i + 1] ? i + 1 : i;
-                    pc.b_axis = indices[i] < indices[i + 1] ? i : i + 1;
-                    pc.a_size = bin_sizes[0];
-                    pc.b_size = bin_sizes[1];
+                    if(info.workbench.setting.read().render_splines){
+                        hist_indices = {indices[std::max<int>(int(i - 1), 0)], indices[i], indices[i + 1], indices[std::min<uint32_t>(i + 2, indices.size() - 1)]};
+                        std::vector<uint32_t> ordering(hist_indices.size());
+                        std::iota(ordering.begin(), ordering.end(), 0);
+                        std::sort(ordering.begin(), ordering.end(), [&](uint32_t a, uint32_t b){return hist_indices[a] < hist_indices[b];});
+                        pc.a_axis = i - 1 + ordering[0];
+                        pc.b_axis = i - 1 + ordering[1];
+                        pc.c_axis = i - 1 + ordering[2];
+                        pc.d_axis = i - 1 + ordering[3];
+                        pc.a_size = bin_sizes[ordering[0]];
+                        pc.b_size = bin_sizes[ordering[1]];
+                        pc.c_size = bin_sizes[ordering[2]];
+                        pc.d_size = bin_sizes[ordering[3]];
+                        pc.line_verts = _spline_resolution;
+                    }
+                    else{
+                        hist_indices = {indices[i], indices[i + 1]};
+                        pc.a_axis = indices[i] < indices[i + 1] ? i + 1 : i;
+                        pc.b_axis = indices[i] < indices[i + 1] ? i : i + 1;
+                        pc.a_size = bin_sizes[0];
+                        pc.b_size = bin_sizes[1];
+                        pc.line_verts = 2;
+                    }
                     // getting the correct hist information
-                    std::string id = util::histogram_registry::get_id_string(util::memory_view<const uint32_t>(indices.data() + i, 2), bin_sizes, false, false);
+                    std::string id = util::histogram_registry::get_id_string(hist_indices, bin_sizes, false, false);
                     {
                         auto hist_access = drawlist.histogram_registry.const_access();
                         if(!hist_access->name_to_registry_key.contains(id) || !hist_access->gpu_buffers.contains(id)){
@@ -356,7 +383,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     }
                     pc.color = dl.appearance->read().color;
                     vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-                    vkCmdDraw(_render_commands.back(), pc.a_size * pc.b_size * 2, 1, 0, 0);
+                    vkCmdDraw(_render_commands.back(), lines_amt * (pc.line_verts - 1) * 2, 1, 0, 0);
                 }
                 break;
             }

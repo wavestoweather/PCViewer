@@ -8,6 +8,7 @@
 #include <util.hpp>
 #include <brush_util.hpp>
 #include <algorithm>
+#include <splines.hpp>
 
 namespace workbenches{
 
@@ -73,8 +74,17 @@ void parallel_coordinates_workbench::_update_registered_histograms(){
 
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
         for(int i: util::i_range(active_indices.size() - 1)){
-            util::memory_view<const uint32_t> indices(active_indices.data() + i, 2);
-            std::vector<int> bucket_sizes(2, plot_data.read().height);
+            std::vector<uint32_t> indices;
+            std::vector<int> bucket_sizes;
+            int height = plot_data.read().height;
+            if(setting.read().render_splines){
+                indices = {active_indices[std::max(i - 1, 0)], active_indices[i], active_indices[i + 1], active_indices[std::min<uint32_t>(i + 2, active_indices.size() - 1)]};
+                bucket_sizes = {config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res};
+            }
+            else{
+                indices = {active_indices[i], active_indices[i + 1]};
+                bucket_sizes = {height, height};
+            }
             auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, false, false);
             int registrator_index{-1};
             for(int j: util::size_range(_registered_histograms[dl.drawlist_id])){
@@ -514,8 +524,10 @@ void parallel_coordinates_workbench::show(){
         }
         if(ImGui::ColorEdit4("Plot background", &setting.ref_no_track().plot_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
             setting();
-        if(ImGui::MenuItem("Render splines", {}, &setting.ref_no_track().render_splines))
+        if(ImGui::MenuItem("Render splines", {}, &setting.ref_no_track().render_splines)){
+            _update_registered_histograms();
             setting();
+        }
         if(ImGui::BeginMenu("Plot Size")){
             if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))
                 plot_data();
