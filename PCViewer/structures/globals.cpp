@@ -87,6 +87,11 @@ structures::sys_info sys_info{};
 structures::file_loader file_loader{};
 
 structures::histogram_counter histogram_counter{};
+
+structures::priority_sorter priority_sorter{};
+
+std::atomic<float> priority_center_vealue{};
+std::atomic<uint32_t> priority_center_attribute_id{};
 }
 
 namespace structures{
@@ -975,7 +980,7 @@ void priority_sorter::_task_thread_function(){
                     std::iota(ordered.begin(), ordered.end(), 0);
                     std::sort(ordered.begin(), ordered.end(), [&](uint32_t a, uint32_t b) {return data[a] < data[b];});
                     if(!dl.priority_indices.contains(entry.hist_id)){
-                        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ordered.size() * sizeof(ordered[0]);
+                        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ordered.size() * sizeof(ordered[0]));
                         auto alloc_info = util::vma::initializers::allocationCreateInfo();
                         globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_indices[entry.hist_id] = util::vk::create_buffer(buffer_info, alloc_info);
                     }
@@ -993,9 +998,9 @@ void priority_sorter::_task_thread_function(){
             std::iota(order.begin(), order.end(), 0);
             const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
             if(tl.flags.identity_indices)
-                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){data(a, globals::priority_center_attribute_id) < data(b, globals::priority_center_attribute_id);});
+                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return data(a, globals::priority_center_attribute_id) < data(b, globals::priority_center_attribute_id);});
             else
-                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){data(tl.indices[a], globals::priority_center_attribute_id) < data(tl.indices[b], globals::priority_center_attribute_id);});
+                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return data(tl.indices[a], globals::priority_center_attribute_id) < data(tl.indices[b], globals::priority_center_attribute_id);});
 
             // TODO: finish...
         }

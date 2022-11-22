@@ -5,6 +5,7 @@
 #include <half.hpp>
 #include <vk_mem_alloc.h>
 #include <vk_context.hpp>
+#include <vk_util.hpp>
 #include <optional>
 #include <variant>
 #include <data_type.hpp>
