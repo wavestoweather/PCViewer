@@ -14,7 +14,7 @@
 #include <texture_storage.hpp>
 #include <persistent_samplers.hpp>
 #include <descriptor_set_storage.hpp>
-#include <laod_behaviour.hpp>
+#include <load_behaviour.hpp>
 #include <drawlist_creation_behaviour.hpp>
 #include <open_filepaths.hpp>
 #include <stager.hpp>
@@ -27,6 +27,8 @@
 #include <histogram_counter.hpp>
 #include <histogram_counter_executor.hpp>
 #include <stopwatch.hpp>
+#include <priority_sorter.hpp>
+#include <priority_globals.hpp>
 
 #ifdef min
 #undef min
@@ -898,6 +900,107 @@ void histogram_counter::_task_thread_function(){
 
         if(::logger.logging_level >= logging::level::l_5)
             ::logger << logging::info_prefix << " histogram_counter::_task_thread_function() hsitogram counts done, needed " << stop_watch.lap() << " ms" << logging::endl;
+    }
+}
+
+priority_sorter::priority_sorter(){
+    _task_thread = std::thread(&priority_sorter::_task_thread_function, this);
+}
+priority_sorter::~priority_sorter(){
+    _thread_finish = true;
+    _task_semaphore.release();
+    _task_thread.join();
+    _task_thread = {};
+}
+void priority_sorter::add_sort_task(const sorting_info& sorting_inf){
+    std::scoped_lock lock(_task_add_mutex);
+    _sort_tasks.push_back(std::make_unique<sorting_info>(sorting_inf));
+    _task_semaphore.release();
+}
+void priority_sorter::wait_for_completion(){
+    ++_wait_completion;
+    _task_semaphore.release();
+    _completion_semaphore.acquire();
+}
+void priority_sorter::_task_thread_function(){
+    while(!_thread_finish){
+        _task_semaphore.acquire();      // waiting for a task
+        if(_thread_finish)
+            return;
+
+        // notify wait_completion thread
+        if(_sort_tasks.empty() && _wait_completion > 0){
+            auto release_count = _wait_completion.exchange(0);
+            for(int i: util::i_range(release_count - 1))
+                _task_semaphore.acquire();
+            _completion_semaphore.release(release_count);
+            continue;
+        }
+
+        unique_task cur;
+        if(::logger.logging_level >= logging::level::l_4)
+            ::logger << logging::info_prefix << "priority_sorter::_task_thread_function() starting priority sorting (including color calc)" << logging::endl;
+        {
+            std::scoped_lock lock(_task_add_mutex);
+            cur = std::move(_sort_tasks.front());
+            _sort_tasks.erase(_sort_tasks.begin());
+        }
+        if(_thread_finish)
+            return;
+        
+        // starting to sort/count according to priority rendering
+        const auto& dl = globals::drawlists.read().at(cur->dl_id).read();
+        assert(dl.delayed_ops.priority_rendering_requested == true);
+        bool histograms_used = false;
+        {
+            const auto access = dl.histogram_registry.const_access();
+            if(access->registry.size()){
+                assert(access->dataset_update_done);
+                histograms_used = true;
+                for(const auto& [key, entry]: access->registry){
+                    // downloading histograms (2d or 4d) and ordering each of them
+                    if(!key.is_max_histogram && !key.is_min_histogram && key.attribute_indices.size() != 2 && key.attribute_indices.size() != 4)
+                        continue;
+                    size_t bins_amt{1};
+                    for(int s: key.bin_sizes) bins_amt *= s;
+                    std::vector<uint32_t> data(bins_amt);
+                    stager::staging_buffer_info buffer_info{};
+                    buffer_info.transfer_dir = stager::transfer_direction::download;
+                    buffer_info.dst_buffer = access->gpu_buffers.at(std::string_view(entry.hist_id)).buffer;
+                    buffer_info.common.data_download = util::memory_view(data);
+                    globals::stager.add_staging_task(buffer_info);
+                    globals::stager.wait_for_completion();
+                    // sorting and uploading
+                    std::vector<uint32_t> ordered(data.size());
+                    std::iota(ordered.begin(), ordered.end(), 0);
+                    std::sort(ordered.begin(), ordered.end(), [&](uint32_t a, uint32_t b) {return data[a] < data[b];});
+                    if(!dl.priority_indices.contains(entry.hist_id)){
+                        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ordered.size() * sizeof(ordered[0]);
+                        auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                        globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_indices[entry.hist_id] = util::vk::create_buffer(buffer_info, alloc_info);
+                    }
+                    buffer_info.transfer_dir = stager::transfer_direction::upload;
+                    buffer_info.dst_buffer = dl.priority_indices.at(entry.hist_id).buffer;
+                    buffer_info.common.data_upload = util::memory_view(ordered);
+                    globals::stager.add_staging_task(buffer_info);
+                }
+            }
+        }
+        if(!histograms_used){
+            // calculating priority colors
+            const auto& tl = dl.const_templatelist();
+            std::vector<uint32_t> order(tl.data_size);
+            std::iota(order.begin(), order.end(), 0);
+            const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
+            if(tl.flags.identity_indices)
+                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){data(a, globals::priority_center_attribute_id) < data(b, globals::priority_center_attribute_id);});
+            else
+                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){data(tl.indices[a], globals::priority_center_attribute_id) < data(tl.indices[b], globals::priority_center_attribute_id);});
+
+            // TODO: finish...
+        }
+        if(::logger.logging_level >= logging::level::l_4)
+            ::logger << logging::info_prefix << "priority_sorter::_task_thread_function() priority ordering done" << logging::endl;
     }
 }
 

@@ -2,7 +2,7 @@
 
 #include <data_workbench.hpp>
 #include <parallel_coordinates_workbench.hpp>
-#include <laod_behaviour.hpp>
+#include <load_behaviour.hpp>
 #include <drawlist_creation_behaviour.hpp>
 
 namespace util{

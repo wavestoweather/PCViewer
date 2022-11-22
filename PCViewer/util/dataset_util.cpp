@@ -10,7 +10,7 @@
 #include <set>
 #include <numeric>
 #include <fstream>
-#include <laod_behaviour.hpp>
+#include <load_behaviour.hpp>
 #include <drawlist_creation_behaviour.hpp>
 #include <drawlists.hpp>
 #include <random>
@@ -852,8 +852,10 @@ void check_dataset_deletion(){
 
         // deleting the datasets
         bool prev_dataset_state = globals::datasets.changed;
-        for(auto& ds: globals::datasets_to_delete)
+        for(auto& ds: globals::datasets_to_delete){
+            globals::datasets()[ds]().destroy_local_gpu_buffer();
             globals::datasets().erase(ds);
+        }
         globals::datasets.changed = prev_dataset_state;
         globals::datasets_to_delete.clear();
     }

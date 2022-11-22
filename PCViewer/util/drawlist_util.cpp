@@ -12,8 +12,10 @@ void check_drawlist_deletion(){
         
         // deleting drawlists
         bool prev_drawlists_state = globals::drawlists.changed;
-        for(auto& dl: globals::drawlists_to_delete)
+        for(auto& dl: globals::drawlists_to_delete){
+            globals::drawlists()[dl]().destroy_local_gpu_buffer();
             globals::drawlists().erase(dl);
+        }
         globals::drawlists.changed = prev_drawlists_state;
 
         // removing locally selected drawlist
@@ -37,6 +39,16 @@ void check_drawlist_update(){
             globals::drawlists.ref_no_track()[id].changed = false;
         }
         globals::drawlists.changed = false;
+    }
+}
+
+void check_drawlist_delayed_op_done(){
+    // checking for priority rendering
+    for(const auto& [dl_id, dl]:globals::drawlists.read()){
+        if(!dl.changed || !dl.read().delayed_ops.priority_rendering_requested || !dl.read().delayed_ops.priority_sorting_done)
+            continue;
+        
+        
     }
 }
 }

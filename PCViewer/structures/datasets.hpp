@@ -54,9 +54,6 @@ struct dataset{
         data_type data_typ{data_type::float_t};
     }                                   data_flags{};
 
-    // optional data for certain data types
-    std::optional<buffer_info>          gpu_sorted_indices{};   // contains sorted indices. Can be used as direct indexbuffer for indexpermutation or inside compute shader with index=sorted_indices[invocation_id]
-    std::optional<buffer_info>          gpu_histogram_sorted_indices{};
     struct data_stream_infos{
         uint32_t                cur_block_index{};
         size_t                  cur_block_size{};
@@ -78,6 +75,15 @@ struct dataset{
 
     bool any_change() const {return visible_attributes.changed  || cpu_data.changed;}
     void clear_change()     {visible_attributes.changed = false; cpu_data.changed = false;}
+    void destroy_local_gpu_buffer() {
+        for(const auto& tl: templatelists){
+            auto buffer = tl->gpu_indices;
+            util::vk::destroy_buffer(buffer);
+        }
+        util::vk::destroy_buffer(gpu_data.header);
+        for(auto& col: gpu_data.columns)
+            util::vk::destroy_buffer(col);
+    }
 };
 
 }

@@ -9,7 +9,7 @@
 #include <vk_initializers.hpp>
 #include <vk_util.hpp>
 #include <data_workbench.hpp>
-#include <laod_behaviour.hpp>
+#include <load_behaviour.hpp>
 #include <imgui_util.hpp>
 #include <imgui_internal.h>
 #include <data_workbench.hpp>

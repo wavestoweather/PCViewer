@@ -17,5 +17,7 @@ inline size_t drawlist_index(const std::string_view& dl_id){
 void check_drawlist_deletion();
 
 void check_drawlist_update();
+
+void check_drawlist_delayed_op_done();
 }
 }

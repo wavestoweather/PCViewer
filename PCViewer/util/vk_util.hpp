@@ -94,6 +94,8 @@ inline structures::buffer_info create_buffer(const VkBufferCreateInfo& buffer_in
 }
 
 inline void destroy_buffer(structures::buffer_info& info){
+    if(!info)
+        return;
     vmaDestroyBuffer(globals::vk_context.allocator, info.buffer, info.allocation);
     globals::vk_context.registered_buffers.erase(info);
     info = {};

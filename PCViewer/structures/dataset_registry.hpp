@@ -39,11 +39,12 @@ struct dataset_registry{
 
     struct scoped_registrator_t{
         static std::atomic<registrator_id_t> registrator_id_counter;    // defined in glboals.cpp
-        const registrator_id_t registrator_id_none{static_cast<registrator_id_t>(-1)};
-        dataset_registry& registry;
-        registrator_id_t  registrator_id{};
+        const registrator_id_t  registrator_id_none{static_cast<registrator_id_t>(-1)};
+        dataset_registry&       registry;
+        std::mutex*             mutex{};            // optional mutex which can be used for synchronization
+        registrator_id_t        registrator_id{};
 
-        scoped_registrator_t(dataset_registry& registry):
+        scoped_registrator_t(dataset_registry& registry, std::mutex* mutex = {}):
             registry(registry),
             registrator_id(registrator_id_counter++)
         {
@@ -53,6 +54,7 @@ struct dataset_registry{
         scoped_registrator_t(const scoped_registrator_t&) = delete;     // no copy construction
         scoped_registrator_t(scoped_registrator_t&& o):
             registry(registry),
+            mutex(o.mutex),
             registrator_id(o.registrator_id)
         {
             o.registrator_id = registrator_id_none;
@@ -61,6 +63,7 @@ struct dataset_registry{
         scoped_registrator_t& operator=(scoped_registrator_t&& o){
             registry = o.registry;
             registrator_id = o.registrator_id;
+            mutex = o.mutex;
             o.registrator_id = registrator_id_none;
             return *this;
         }
@@ -68,9 +71,14 @@ struct dataset_registry{
             if(registrator_id != registrator_id_none)
                 registry.unregister_histogram(registrator_id);
         }
+        
+        std::scoped_lock<std::mutex> lock_scoped(){
+            assert(mutex);
+            return std::scoped_lock(*mutex);
+        }
     };
-    scoped_registrator_t scoped_registrator(){
-        return scoped_registrator_t(*this);
+    scoped_registrator_t scoped_registrator(std::mutex* mutex = {}){
+        return scoped_registrator_t(*this, mutex);
     }
     void signal_registrator_used(const scoped_registrator_t& registrator){
         assert(registry.contains(registrator.registrator_id));
