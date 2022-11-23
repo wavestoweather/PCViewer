@@ -28,6 +28,7 @@
 #include <file_loader.hpp>
 #include <histogram_counter_executor.hpp>
 #include <drawlist_util.hpp>
+#include <main_window_util.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -248,6 +249,8 @@ int main(int argc, char* argv[]){
         }
         auto id = ImGui::DockBuilderGetNode(main_dock_id)->SelectedTabId;
         ImGui::DockSpace(main_dock_id, {}, ImGuiDockNodeFlags_None);
+
+        util::main_window::menu_bar();
 
         for(const auto& wb: globals::workbenches){
             wb->show();

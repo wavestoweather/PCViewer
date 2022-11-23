@@ -112,6 +112,7 @@ set(structures_INCLUDE_DIR
     "vulkanMemoryAllocator/include/"
     "robin_hood_map"
     "imgui"
+    "deriveData"
     "pipelines"
     "workbenches"
     "fast_float"
