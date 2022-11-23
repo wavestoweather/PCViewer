@@ -73,14 +73,14 @@ wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc
 sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.231-jammy.list https://packages.lunarg.com/vulkan/1.3.231/lunarg-vulkan-1.3.231-jammy.list
 sudo apt update
 sudo apt upgrade
-sudo apt install build-essentials cmake libsdl2-dev vulkan-sdk libnetcdf-dev libpng-dev libtbb-dev
+sudo apt install build-essential cmake libsdl2-dev vulkan-sdk libnetcdf-dev libpng-dev libtbb-dev
 ```
 To get the correct version of the program and building it execute the following commands in the folder where the application should be located:
 
 ```
 wget https://github.com/wavestoweather/PCViewer/archive/refs/tags/v0.2-alpha.zip
 unzip v0.2-alpha.zip
-cd PCViewer-0.2.alpha
+cd PCViewer-0.2-alpha
 mkdir build
 cd build
 cmake ..
