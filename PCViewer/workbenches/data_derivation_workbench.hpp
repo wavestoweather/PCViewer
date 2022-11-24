@@ -41,6 +41,8 @@ private:
     int                             _context_pin_id{};
     int                             _conetxt_link_id{};
 
+    bool                            _create_new_node{false};
+
     bool is_input_pin(int64_t pin_id){return {};};
     std::set<int64_t> get_active_links_recursive(int64_t node){return {};};
     void execute_graph(std::string_view id){};
