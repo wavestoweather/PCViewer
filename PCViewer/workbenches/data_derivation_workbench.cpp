@@ -24,9 +24,11 @@ void show_label(std::string_view label, ImColor color){
 }
 
 data_derivation_workbench::data_derivation_workbench(std::string_view id):
-    workbench(id)
+    workbench(id),
+    _editor_context(ax::NodeEditor::CreateEditor())
 {
     _execution_graphs.emplace("main", std::make_unique<ExecutionGraph>());
+    nodes::SetCurrentEditor(_editor_context);
 }
 
 void data_derivation_workbench::show(){
@@ -88,7 +90,7 @@ void data_derivation_workbench::show(){
                     }
                 }
                 else
-                ImGui::TextUnformatted(node->inputNames[i].c_str());
+                    ImGui::TextUnformatted(node->inputNames[i].c_str());
                 ImGui::PopItemWidth();
                 ImGui::Spring(0);
                 if(i > variable_input->minNodes && ImGui::Button(("X##p" + std::to_string(node_pins.inputIds[i])).c_str())){
@@ -278,7 +280,12 @@ void data_derivation_workbench::show(){
                 }
             }
         }
+        nodes::EndCreate();
     }
+
+    // handle deletion action
+
+    nodes::End();
 
     ImGui::End();
 }
