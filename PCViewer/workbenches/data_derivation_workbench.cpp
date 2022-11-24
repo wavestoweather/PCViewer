@@ -11,7 +11,7 @@ namespace nodes = ax::NodeEditor;
 data_derivation_workbench::data_derivation_workbench(std::string_view id):
     workbench(id)
 {
-
+    _execution_graphs.emplace("main", std::make_unique<ExecutionGraph>());
 }
 
 void data_derivation_workbench::show(){

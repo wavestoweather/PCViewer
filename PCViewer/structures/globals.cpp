@@ -91,7 +91,9 @@ structures::histogram_counter histogram_counter{};
 structures::priority_sorter priority_sorter{};
 
 std::atomic<float> priority_center_vealue{};
+std::atomic<float> priority_center_distance{};
 std::atomic<uint32_t> priority_center_attribute_id{};
+const std::string_view priority_drawlist_standard_order{"standard"};
 }
 
 namespace structures{
@@ -962,6 +964,8 @@ void priority_sorter::_task_thread_function(){
             if(access->registry.size()){
                 assert(access->dataset_update_done);
                 histograms_used = true;
+                const structures::histogram_registry_key* last_key;
+                for(const auto& [key, entry]: access->registry) if((key.is_max_histogram || key.is_min_histogram) && (key.attribute_indices.size() == 2 || key.attribute_indices.size() == 4)) last_key = &key;
                 for(const auto& [key, entry]: access->registry){
                     // downloading histograms (2d or 4d) and ordering each of them
                     if(!key.is_max_histogram && !key.is_min_histogram && key.attribute_indices.size() != 2 && key.attribute_indices.size() != 4)
@@ -987,23 +991,53 @@ void priority_sorter::_task_thread_function(){
                     buffer_info.transfer_dir = stager::transfer_direction::upload;
                     buffer_info.dst_buffer = dl.priority_indices.at(entry.hist_id).buffer;
                     buffer_info.common.data_upload = util::memory_view(ordered);
+                    if(key == *last_key)
+                        buffer_info.common.signal_flags = std::move(cur->cpu_signal_flags);
                     globals::stager.add_staging_task(buffer_info);
                 }
             }
         }
         if(!histograms_used){
-            // calculating priority colors
+            std::string standard_string(globals::priority_drawlist_standard_order);
+            // calculating priority colors and ordering the indices
             const auto& tl = dl.const_templatelist();
+            const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
+            const auto& dl_read = globals::drawlists.read().at(cur->dl_id).read();
+            std::vector<uint8_t> color_index(tl.data_size);
+            if(tl.flags.identity_indices){
+                for(size_t i: util::size_range(color_index))
+                    color_index[i] = std::abs(data(i, globals::priority_center_attribute_id) - globals::priority_center_vealue) / globals::priority_center_distance * 255 + .5;
+            }
+            else{
+                for(size_t i: util::size_range(color_index))
+                    color_index[i] = std::abs(data(tl.indices[i], globals::priority_center_attribute_id) - globals::priority_center_vealue) / globals::priority_center_distance * 255 + .5;
+            }
+            // uploading the colors
+            if(!dl_read.priority_colors_gpu){
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, color_index.size() * sizeof(color_index[0]));
+                auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_colors_gpu = util::vk::create_buffer(buffer_info, alloc_info);
+            }
+            structures::stager::staging_buffer_info staging_info{};
+            staging_info.dst_buffer = dl_read.priority_colors_gpu.buffer;
+            staging_info.common.data_upload = util::memory_view(color_index);
+            globals::stager.add_staging_task(staging_info);
+
             std::vector<uint32_t> order(tl.data_size);
             std::iota(order.begin(), order.end(), 0);
-            const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
-            if(tl.flags.identity_indices)
-                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return data(a, globals::priority_center_attribute_id) < data(b, globals::priority_center_attribute_id);});
-            else
-                std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return data(tl.indices[a], globals::priority_center_attribute_id) < data(tl.indices[b], globals::priority_center_attribute_id);});
-
-            // TODO: finish...
+            std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return color_index[a] < color_index[b];});
+            
+            if(!dl_read.priority_indices.contains(standard_string)){
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, order.size() * sizeof(order[0]));
+                auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_indices[standard_string] = util::vk::create_buffer(buffer_info, alloc_info);
+            }
+            staging_info.dst_buffer = dl_read.priority_indices.at(standard_string).buffer;
+            staging_info.common.data_upload = util::memory_view(order);
+            staging_info.common.signal_flags = std::move(cur->cpu_signal_flags);
+            globals::stager.add_staging_task(staging_info);
         }
+        // the signal flags are set by the last uploadstaging task
         if(::logger.logging_level >= logging::level::l_4)
             ::logger << logging::info_prefix << "priority_sorter::_task_thread_function() priority ordering done" << logging::endl;
     }

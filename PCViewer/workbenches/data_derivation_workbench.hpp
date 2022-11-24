@@ -33,7 +33,7 @@ public:
 private:
     using unique_execution_graph_map = std::map<std::string, std::unique_ptr<ExecutionGraph>>;
     ax::NodeEditor::EditorContext*  _editor_context{};
-    unique_execution_graph_map      _execution_graphs{{"main", std::make_unique<ExecutionGraph>()}};    // each execution graph describes a function and can be called, main graph is called "main"
+    unique_execution_graph_map      _execution_graphs{};    // each execution graph describes a function and can be called, main graph is called "main"
 
     int64_t                         _cur_id{};
     int                             _new_link_pin_id{};
@@ -41,9 +41,9 @@ private:
     int                             _context_pin_id{};
     int                             _conetxt_link_id{};
 
-    bool is_input_pin(int64_t pin_id);
-    std::set<int64_t> get_active_links_recursive(int64_t node);
-    void execute_graph(std::string_view id);
+    bool is_input_pin(int64_t pin_id){return {};};
+    std::set<int64_t> get_active_links_recursive(int64_t node){return {};};
+    void execute_graph(std::string_view id){};
 
     struct recursion_data{
         struct node_info{
