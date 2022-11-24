@@ -87,3 +87,4 @@ cmake ..
 make -j4
 ```
 The final application now is located in build/PCViewer/PCViewer.
+For a video with instructions for checking the replicability follow [this link](https://drive.google.com/file/d/1z2bmqoyFM5wo3hU4uH_Pnp9wxHxg5jy3/view?usp=sharing), with the synthetic data used in the video being located [here](https://mediatum.ub.tum.de/1690342).
