@@ -23,6 +23,7 @@ public:
     const std::string_view main_execution_graph_id{"main"};
 
     data_derivation_workbench(std::string_view id);
+    ~data_derivation_workbench();
 
     void show() override;
 
@@ -36,20 +37,21 @@ private:
     unique_execution_graph_map      _execution_graphs{};    // each execution graph describes a function and can be called, main graph is called "main"
 
     int64_t                         _cur_id{};
-    int                             _new_link_pin_id{};
-    int                             _context_node_id{};
-    int                             _context_pin_id{};
-    int                             _conetxt_link_id{};
+    int64_t                         _new_link_pin_id{};
+    int64_t                         _context_node_id{};
+    int64_t                         _context_pin_id{};
+    int64_t                         _context_link_id{};
+    ImVec2                          _popup_pos{};
 
     bool                            _create_new_node{false};
 
-    bool is_input_pin(int64_t pin_id){return {};};
-    std::set<int64_t> get_active_links_recursive(int64_t node){return {};};
-    void execute_graph(std::string_view id){};
+    bool _is_input_pin(int64_t pin_id);
+    std::set<int64_t> _get_active_links_recursive(int64_t node);
+    void _execute_graph(std::string_view id);
 
     struct recursion_data{
         struct node_info{
-            deriveData::float_column_views  output_view;
+            deriveData::float_column_views  output_views;
             std::vector<int>                output_counts;
         };
         std::set<int64_t> active_links{};
@@ -57,6 +59,6 @@ private:
         std::map<int64_t, node_info> node_infos{};
         std::vector<std::unique_ptr<uint32_t>> create_vector_sizes; 
     };
-    void build_cache_recursive(int64_t node, recursion_data& data);
+    void _build_cache_recursive(int64_t node, recursion_data& data);
 };
 }
