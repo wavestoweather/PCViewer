@@ -34,9 +34,11 @@ layout(push_constant) uniform PCs{
     uint64_t    data_header_address;
     uint64_t    priorities_address;
     uint64_t    index_buffer_address;
+    uint64_t    index_order_address;
     uint64_t    activation_bitset_address;
     uint        vertex_count_per_line;        // is at least as high as attribute_count (when equal, polyline rendering)
     float       padding;
+    uint        spa,ce;
     vec4        color;
 };
 
@@ -49,6 +51,10 @@ void main() {
     int data_index = gl_InstanceIndex;
     int vertex_index = gl_VertexIndex;
 
+    if(index_order_address != 0){
+        IndexBuffer order = IndexBuffer(index_order_address);
+        data_index = int(order.i[data_index]);
+    }
 
     ActivationBitset activation_bitset = ActivationBitset(activation_bitset_address);
     bool act = (activation_bitset.i[data_index / 32] & (1 << (data_index % 32))) > 0;
@@ -120,7 +126,7 @@ void main() {
     gl_Position = vec4( x, y * -1.0f, 0.0, 1.0);
 
     out_color = color;
-    if(int(attr_infos.vertex_transformations[0].a) == 1){
+    if(priorities_address != 0){
         PriorityValues priorities = PriorityValues(priorities_address);
         uint i = gl_VertexIndex / attr_infos.attribute_count;
         out_color.xyz = texture(color_transfer_texture, vec2(float(priorities.vals[data_index]) / 255.f,.5f)).xyz;

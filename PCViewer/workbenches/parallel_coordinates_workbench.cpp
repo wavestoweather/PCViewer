@@ -319,13 +319,15 @@ void parallel_coordinates_workbench::show(){
     }
 
     // brush windows
-    if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none){
-        std::map<uint32_t, uint32_t> place_of_ind;
+    std::map<uint32_t, uint32_t> place_of_ind;
+    if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none || _select_priority_center_single || _select_priority_center_all){
         uint32_t place = 0;
         for(const auto& attr_ref: attributes_order_info.read())
             if(attr_ref.active)
                 place_of_ind[attr_ref.attribut_index] = place++;
-            
+    }
+
+    if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none){ 
         bool any_hover = false;
         robin_hood::unordered_set<structures::brush_id> brush_delete;
         ImVec2 mouse_pos = {ImGui::GetIO().MousePos.x - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).x, ImGui::GetIO().MousePos.y - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0).y};
@@ -485,74 +487,46 @@ void parallel_coordinates_workbench::show(){
         if(!any_hover && globals::brush_edit_data.selected_ranges.size() &&  (ImGui::IsMouseReleased(ImGuiMouseButton_Left) || (!new_brush && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) && !ImGui::GetIO().KeyCtrl)
             globals::brush_edit_data.selected_ranges.clear();
     }
-
-    pc_menu_open = !brush_menu_open && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ImGui::IsWindowHovered() && util::point_in_box(ImGui::GetMousePos(), pic_pos, {pic_pos.x + pic_size.x, pic_pos.y + pic_size.y});
-
-    if(brush_menu_open)
-        ImGui::OpenPopup(brush_menu_id.data());
-    if(ImGui::BeginPopup(brush_menu_id.data())){
-        if(ImGui::MenuItem("Delete", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
-            util::brushes::delete_brushes(globals::brush_edit_data.selected_ranges);
-        }
-        if(ImGui::MenuItem("Fit axis to boudns", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
-            const auto& selected_ranges = util::brushes::get_selected_range_brush_const();
-            // getting the extremum values for each axis if existent
-            std::vector<std::optional<structures::min_max<float>>> axis_values(attributes.read().size());
-            for(const auto& range: selected_ranges){
-                if(axis_values[range.axis])
-                    axis_values[range.axis] = std::min_max(*axis_values[range.axis], {range.min, range.max});
-                else
-                    axis_values[range.axis] = structures::min_max<float>{range.min, range.max};
-            }
-            for(int i: util::size_range(attributes.read())){
-                if(axis_values[i])
-                    attributes()[i].bounds = *axis_values[i];
-            }
-        }
-        ImGui::DragInt("Live brush treshold", &setting.read().live_brush_threshold);
-        ImGui::EndPopup();
-    }
-    if(pc_menu_open)
-        ImGui::OpenPopup(pc_menu_id.data());
-    if(ImGui::BeginPopup(pc_menu_id.data())){
-        if(ImGui::BeginCombo("Histogram", histogram_type_names[setting.read().hist_type].data())){
-            for(auto type: structures::enum_iteration<histogram_type>()){
-                if(ImGui::MenuItem(histogram_type_names[type].data()))
-                    setting().hist_type = type;
-            }
-            ImGui::EndCombo();
-        }
-        if(ImGui::ColorEdit4("Plot background", &setting.ref_no_track().plot_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
-            setting();
-        if(ImGui::MenuItem("Render splines", {}, &setting.ref_no_track().render_splines)){
-            _update_registered_histograms();
-            setting();
-        }
-        if(ImGui::BeginMenu("Plot Size")){
-            if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))
-                plot_data();
-            
-            static std::map<VkSampleCountFlagBits, std::string_view> flag_names{{VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_2_BIT, "2Spp"}, {VK_SAMPLE_COUNT_4_BIT, "4Spp"}, {VK_SAMPLE_COUNT_8_BIT, "8Spp"}, {VK_SAMPLE_COUNT_16_BIT, "16Spp"}};
-            if(ImGui::BeginCombo("Sample per pixel", flag_names[plot_data.read().image_samples].data())){
-                for(const auto& [bit, name]: flag_names)
-                    if(ImGui::MenuItem(name.data()))
-                        plot_data().image_samples = bit;
-                ImGui::EndCombo();
-            }
-
-            static std::map<VkFormat, std::string_view> format_names{{VK_FORMAT_R8G8B8A8_UNORM, "8 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_UNORM, "16 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_SFLOAT, "16 Bit Float"}, {VK_FORMAT_R32G32B32A32_SFLOAT, "32 Bit Float"}};
-            if(ImGui::BeginCombo("PCP Format", format_names[plot_data.read().image_format].data())){
-                for(const auto& [bit, name]: format_names)
-                    if(ImGui::MenuItem(name.data()))
-                        plot_data().image_format = bit;
-                ImGui::EndCombo();
-            }
-
-            ImGui::EndMenu();
-        }
-        ImGui::EndPopup();
-    }
     
+    // priority selection
+    if(_select_priority_center_single || _select_priority_center_all){
+        globals::brush_edit_data.clear();
+        ImVec2 b{pic_pos.x + pic_size.x, pic_pos.y + pic_pos.y};
+        ImGui::GetWindowDrawList()->AddRect(pic_pos, b, IM_COL32(255, 255, 0, 255), 0, 15, 5);
+        if(!util::point_in_box(ImGui::GetIO().MousePos, pic_pos, b) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            _select_priority_center_all = _select_priority_center_single = false;
+
+        for(const auto& attr_ref: attributes_order_info.read()){
+            if(!attr_ref.active)
+                continue;
+            float x = gap * place_of_ind[attr_ref.attribut_index] / (labels_count - 1) + pic_pos.x - setting.read().brush_box_width / 2;
+            bool axis_hover = util::point_in_box(ImGui::GetMousePos(), {x, pic_pos.y}, {x + setting.read().brush_box_width, b.y});
+            if(axis_hover){
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
+                    if(_select_priority_center_all){
+                        for(auto& dl: drawlist_infos.ref_no_track()){
+                            dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
+                            dl.drawlist_write().delayed_ops.priority_sorting_done = false;
+                            dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+                        }
+                    }
+                    if(_select_priority_center_single){
+                        for(auto& dl: drawlist_infos.ref_no_track()){
+                            if(!util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id))
+                                continue;
+                            dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
+                            dl.drawlist_write().delayed_ops.priority_sorting_done = false;
+                            dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+                            break;
+                        }
+                    }
+                    _select_priority_center_all = _select_priority_center_single = false;
+                }
+            }
+        }
+        
+    }
 
     // -------------------------------------------------------------------------------
     // settings region
@@ -659,6 +633,94 @@ void parallel_coordinates_workbench::show(){
 
     ImGui::End();
 
+    // popups ----------------------------------------------------------------
+    pc_menu_open = !brush_menu_open && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ImGui::IsWindowHovered() && util::point_in_box(ImGui::GetMousePos(), pic_pos, {pic_pos.x + pic_size.x, pic_pos.y + pic_size.y});
+
+    if(brush_menu_open)
+        ImGui::OpenPopup(brush_menu_id.data());
+    if(ImGui::BeginPopup(brush_menu_id.data())){
+        if(ImGui::MenuItem("Delete", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
+            util::brushes::delete_brushes(globals::brush_edit_data.selected_ranges);
+        }
+        if(ImGui::MenuItem("Fit axis to boudns", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
+            const auto& selected_ranges = util::brushes::get_selected_range_brush_const();
+            // getting the extremum values for each axis if existent
+            std::vector<std::optional<structures::min_max<float>>> axis_values(attributes.read().size());
+            for(const auto& range: selected_ranges){
+                if(axis_values[range.axis])
+                    axis_values[range.axis] = std::min_max(*axis_values[range.axis], {range.min, range.max});
+                else
+                    axis_values[range.axis] = structures::min_max<float>{range.min, range.max};
+            }
+            for(int i: util::size_range(attributes.read())){
+                if(axis_values[i])
+                    attributes()[i].bounds = *axis_values[i];
+            }
+        }
+        ImGui::DragInt("Live brush treshold", &setting.read().live_brush_threshold);
+        ImGui::EndPopup();
+    }
+    if(pc_menu_open)
+        ImGui::OpenPopup(pc_menu_id.data());
+    if(ImGui::BeginPopup(pc_menu_id.data())){
+        if(ImGui::BeginCombo("Histogram", histogram_type_names[setting.read().hist_type].data())){
+            for(auto type: structures::enum_iteration<histogram_type>()){
+                if(ImGui::MenuItem(histogram_type_names[type].data()))
+                    setting().hist_type = type;
+            }
+            ImGui::EndCombo();
+        }
+        if(ImGui::ColorEdit4("Plot background", &setting.ref_no_track().plot_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+            setting();
+        if(ImGui::MenuItem("Render splines", {}, &setting.ref_no_track().render_splines)){
+            _update_registered_histograms();
+            setting();
+        }
+        if(ImGui::BeginMenu("Priority rendering")){
+            if(ImGui::MenuItem("Priority rendering off")){
+                for(auto& dl: drawlist_infos()){
+                    if(!dl.priority_render)
+                        continue;
+                    dl.priority_render = false;
+                    dl.drawlist_write().delayed_ops.priority_rendering_requested = false;
+                    dl.drawlist_write().delayed_ops.priority_sorting_done = true;
+                }
+            }
+            if(ImGui::MenuItem("Set priority center"))
+                _select_priority_center_single = true;
+            if(ImGui::IsItemHovered())
+                ImGui::SetTooltip("Set priority center for the selected drawlist/top most drawlist");
+            
+            if(ImGui::MenuItem("Set priority center all"))
+                _select_priority_center_all = true;
+            if(ImGui::IsItemHovered())
+                ImGui::SetTooltip("Set priority center for all drawlists");
+        }
+        if(ImGui::BeginMenu("Plot Size")){
+            if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))
+                plot_data();
+            
+            static std::map<VkSampleCountFlagBits, std::string_view> flag_names{{VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_2_BIT, "2Spp"}, {VK_SAMPLE_COUNT_4_BIT, "4Spp"}, {VK_SAMPLE_COUNT_8_BIT, "8Spp"}, {VK_SAMPLE_COUNT_16_BIT, "16Spp"}};
+            if(ImGui::BeginCombo("Sample per pixel", flag_names[plot_data.read().image_samples].data())){
+                for(const auto& [bit, name]: flag_names)
+                    if(ImGui::MenuItem(name.data()))
+                        plot_data().image_samples = bit;
+                ImGui::EndCombo();
+            }
+
+            static std::map<VkFormat, std::string_view> format_names{{VK_FORMAT_R8G8B8A8_UNORM, "8 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_UNORM, "16 Bit Unorm"}, {VK_FORMAT_R16G16B16A16_SFLOAT, "16 Bit Float"}, {VK_FORMAT_R32G32B32A32_SFLOAT, "32 Bit Float"}};
+            if(ImGui::BeginCombo("PCP Format", format_names[plot_data.read().image_format].data())){
+                for(const auto& [bit, name]: format_names)
+                    if(ImGui::MenuItem(name.data()))
+                        plot_data().image_format = bit;
+                ImGui::EndCombo();
+            }
+
+            ImGui::EndMenu();
+        }
+        ImGui::EndPopup();
+    }
+
     // deleting local drawlist
     if(delete_drawlist.size()){
         auto del = drawlist_infos().begin();
@@ -673,10 +735,12 @@ void parallel_coordinates_workbench::render_plot()
     // if histogram rendering requested and not yet finished delay rendering
     for(const auto& dl: drawlist_infos.read()){
         if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms[dl.drawlist_id].size()){
-            const auto access = globals::drawlists.read().at(dl.drawlist_id).read().histogram_registry.const_access();
+            const auto access = dl.drawlist_read().histogram_registry.const_access();
             if(!access->dataset_update_done)
                 return;     // a registered histogram is being currently updated, no rendering possible
         }
+        if(!dl.drawlist_read().delayed_ops.delayed_ops_done)
+            continue;
     }
 
     if(logger.logging_level >= logging::level::l_5)

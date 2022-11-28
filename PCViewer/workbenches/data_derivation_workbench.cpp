@@ -53,7 +53,7 @@ void data_derivation_workbench::show(){
             _execute_graph(main_execution_graph_id);
         }
         catch(const std::runtime_error& e){
-            logger << logging::error_prefix << e.what() << logging::endl;
+            logger << logging::error_prefix << " " << e.what() << logging::endl;
         }
     }
     nodes::SetCurrentEditor(_editor_context);

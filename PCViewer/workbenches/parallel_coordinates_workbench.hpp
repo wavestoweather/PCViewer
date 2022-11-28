@@ -24,6 +24,8 @@ private:
     std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;
     std::vector<std::unique_ptr<structures::median_type>>    _storage_median_type;
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
+    bool                                                     _select_priority_center_single{false};
+    bool                                                     _select_priority_center_all{false};
 
     void _update_plot_image();
     void _draw_setting_list();

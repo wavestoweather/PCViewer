@@ -18,6 +18,6 @@ void check_drawlist_deletion();
 
 void check_drawlist_update();
 
-void check_drawlist_delayed_op_done();
+void check_drawlist_delayed_ops();
 }
 }

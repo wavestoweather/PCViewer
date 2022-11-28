@@ -1,5 +1,6 @@
 #include <drawlist_util.hpp>
 #include <workbench_base.hpp>
+#include <priority_sorter.hpp>
 
 namespace util{
 namespace drawlist{
@@ -42,13 +43,23 @@ void check_drawlist_update(){
     }
 }
 
-void check_drawlist_delayed_op_done(){
+void check_drawlist_delayed_ops(){
     // checking for priority rendering
     for(const auto& [dl_id, dl]:globals::drawlists.read()){
         if(!dl.changed || !dl.read().delayed_ops.priority_rendering_requested || !dl.read().delayed_ops.priority_sorting_done)
             continue;
         
+        if(!dl.read().delayed_ops.priority_rendering_requested || dl.read().delayed_ops.delayed_ops_done)
+            continue;
         
+        // starting priority render counting, waiting if histogram counting not yet done
+        if(dl.read().histogram_registry.const_access()->registry.size() && !dl.read().histogram_registry.const_access()->dataset_update_done)
+            continue;
+        auto& drawlist = globals::drawlists.ref_no_track()[dl_id].ref_no_track();
+        structures::priority_sorter::sorting_info sort_info{};
+        sort_info.dl_id = dl_id;
+        sort_info.cpu_signal_flags = {&drawlist.delayed_ops.priority_sorting_done, &drawlist.delayed_ops.delayed_ops_done, &globals::drawlists.ref_no_track()[dl_id].changed, &globals::drawlists.changed};    // order is important, dl update flag has to be last
+        globals::priority_sorter.add_sort_task(sort_info);
     }
 }
 }

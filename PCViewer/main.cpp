@@ -328,6 +328,7 @@ int main(int argc, char* argv[]){
         
         util::histogram_registry::check_histogram_update();
         
+        util::drawlist::check_drawlist_delayed_ops();
         util::drawlist::check_drawlist_update();
 
         // final app rendering ---------------------------------------------------------------------------
