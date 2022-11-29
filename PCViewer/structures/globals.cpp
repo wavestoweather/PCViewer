@@ -720,14 +720,14 @@ void stager::_task_thread_function(){
             auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
             for(auto& b: cur->cpu_signal_flags)
                 *b = true;
-            ::logger << logging::info_prefix << " Data upload done, signaled " << cur->cpu_signal_flags.size() << " flags." << logging::endl;
+            ::logger << logging::info_prefix << " stager::_task_thrad_function() signaled " << cur->cpu_signal_flags.size() << " flags." << logging::endl;
         }
         
         if(cur->cpu_unsignal_flags.size()){
             auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
             for(auto& b: cur->cpu_unsignal_flags)
-                *b = true;
-            ::logger << logging::info_prefix << " Data upload done, signaled " << cur->cpu_unsignal_flags.size() << " flags." << logging::endl;
+                *b = false;
+            ::logger << logging::info_prefix << " stager::_task_thrad_function() unsignaled " << cur->cpu_unsignal_flags.size() << " flags." << logging::endl;
         }
     }
 }
@@ -950,7 +950,7 @@ void priority_sorter::_task_thread_function(){
 
         unique_task cur;
         if(::logger.logging_level >= logging::level::l_4)
-            ::logger << logging::info_prefix << "priority_sorter::_task_thread_function() starting priority sorting (including color calc)" << logging::endl;
+            ::logger << logging::info_prefix << " priority_sorter::_task_thread_function() starting priority sorting (including color calc)" << logging::endl;
         {
             std::scoped_lock lock(_task_add_mutex);
             cur = std::move(_sort_tasks.front());
@@ -1031,7 +1031,7 @@ void priority_sorter::_task_thread_function(){
 
             std::vector<uint32_t> order(tl.data_size);
             std::iota(order.begin(), order.end(), 0);
-            std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return color_index[a] < color_index[b];});
+            std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return color_index[a] > color_index[b];});
             
             if(!dl_read.priority_indices.contains(standard_string)){
                 auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, order.size() * sizeof(order[0]));
@@ -1046,7 +1046,7 @@ void priority_sorter::_task_thread_function(){
         }
         // the signal flags are set by the last uploadstaging task
         if(::logger.logging_level >= logging::level::l_4)
-            ::logger << logging::info_prefix << "priority_sorter::_task_thread_function() priority ordering done" << logging::endl;
+            ::logger << logging::info_prefix << " priority_sorter::_task_thread_function() priority ordering done" << logging::endl;
     }
 }
 

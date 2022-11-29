@@ -326,7 +326,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 push_constants pc{};
                 pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
                 pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
-                pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
+                if(dl.priority_render)
+                    pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
                 pc.index_buffer_address = util::vk::get_buffer_address(drawlist.const_templatelist().gpu_indices);
                 if(dl.priority_render)
                     pc.index_order_address = util::vk::get_buffer_address(drawlist.priority_indices.at(std::string(globals::priority_drawlist_standard_order)));

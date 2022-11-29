@@ -515,15 +515,17 @@ void parallel_coordinates_workbench::show(){
                             dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
                             dl.drawlist_write().delayed_ops.priority_sorting_done = false;
                             dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+                            dl.priority_render = true;
                         }
                     }
                     if(_select_priority_center_single){
                         for(auto& dl: drawlist_infos.ref_no_track()){
-                            if(!util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id))
+                            if(!util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id) && !globals::selected_drawlists.empty())
                                 continue;
                             dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
                             dl.drawlist_write().delayed_ops.priority_sorting_done = false;
                             dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+                            dl.priority_render = true;
                             break;
                         }
                     }
@@ -748,7 +750,7 @@ void parallel_coordinates_workbench::render_plot()
                 return;     // a registered histogram is being currently updated, no rendering possible
         }
         if(!dl.drawlist_read().delayed_ops.delayed_ops_done)
-            continue;
+            return;
     }
 
     if(logger.logging_level >= logging::level::l_5)

@@ -138,13 +138,17 @@ inline VkImageCreateInfo imageCreateInfo(VkFormat format, VkExtent3D extent, VkI
     return imageCreateInfo;
 }
 
-inline VkSamplerCreateInfo samplerCreateInfo(VkFilter filter = VK_FILTER_NEAREST)
+inline VkSamplerCreateInfo samplerCreateInfo(VkFilter filter = VK_FILTER_NEAREST, VkSamplerAddressMode address_mode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
 {
     VkSamplerCreateInfo samplerCreateInfo {};
     samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerCreateInfo.magFilter = filter;
     samplerCreateInfo.minFilter = filter;
+    samplerCreateInfo.addressModeU = address_mode;
+    samplerCreateInfo.addressModeV = address_mode;
+    samplerCreateInfo.addressModeW = address_mode;
     samplerCreateInfo.maxAnisotropy = 1.0f;
+
     return samplerCreateInfo;
 }
 

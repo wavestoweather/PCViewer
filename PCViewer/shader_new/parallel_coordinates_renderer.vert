@@ -129,6 +129,6 @@ void main() {
     if(priorities_address != 0){
         PriorityValues priorities = PriorityValues(priorities_address);
         uint i = gl_VertexIndex / attr_infos.attribute_count;
-        out_color.xyz = texture(color_transfer_texture, vec2(float(priorities.vals[data_index]) / 255.f,.5f)).xyz;
+        out_color.xyz = texture(color_transfer_texture, vec2(1. - (float(priorities.vals[data_index]) / 255.f),.5f)).xyz;
     }
 }
