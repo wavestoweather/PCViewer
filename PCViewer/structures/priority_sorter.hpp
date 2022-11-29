@@ -5,15 +5,17 @@
 #include <semaphore.hpp>
 #include <atomic>
 #include <string_view>
+#include <functional>
 
 namespace structures{
 class priority_sorter{
 public:
     // currently cpu only, so no gpu snychronization needed
     struct sorting_info{
-        std::string_view    dl_id{};
+        std::string_view                dl_id{};
 
-        std::vector<std::atomic<bool>*> cpu_signal_flags;
+        std::vector<std::atomic<bool>*> cpu_signal_flags{};
+        std::vector<std::atomic<bool>*> cpu_unsignal_flags{};
     };
 
     priority_sorter();

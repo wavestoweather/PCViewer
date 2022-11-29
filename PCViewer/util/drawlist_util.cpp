@@ -46,7 +46,7 @@ void check_drawlist_update(){
 void check_drawlist_delayed_ops(){
     // checking for priority rendering
     for(const auto& [dl_id, dl]:globals::drawlists.read()){
-        if(!dl.changed || !dl.read().delayed_ops.priority_rendering_requested || !dl.read().delayed_ops.priority_sorting_done)
+        if(!dl.changed || !dl.read().delayed_ops.priority_rendering_requested || dl.read().delayed_ops.priority_rendering_sorting_started)
             continue;
         
         if(!dl.read().delayed_ops.priority_rendering_requested || dl.read().delayed_ops.delayed_ops_done)
@@ -59,7 +59,9 @@ void check_drawlist_delayed_ops(){
         structures::priority_sorter::sorting_info sort_info{};
         sort_info.dl_id = dl_id;
         sort_info.cpu_signal_flags = {&drawlist.delayed_ops.priority_sorting_done, &drawlist.delayed_ops.delayed_ops_done, &globals::drawlists.ref_no_track()[dl_id].changed, &globals::drawlists.changed};    // order is important, dl update flag has to be last
+        sort_info.cpu_unsignal_flags = {&drawlist.delayed_ops.priority_rendering_sorting_started};
         globals::priority_sorter.add_sort_task(sort_info);
+        globals::drawlists()[dl_id]().delayed_ops.priority_rendering_sorting_started = true;
     }
 }
 }

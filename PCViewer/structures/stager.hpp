@@ -5,6 +5,7 @@
 #include <array>
 #include <semaphore.hpp>
 #include <atomic>
+#include <functional>
 
 namespace structures{
 
@@ -16,26 +17,34 @@ public:
         download,
         COUNT
     };
-    struct task_base{virtual ~task_base(){}};
-    struct task_common{     // common attributes in separate to be able to order the attributes in the structs
+    struct task_base{
         util::memory_view<const uint8_t>    data_upload{};
         util::memory_view<uint8_t>          data_download{};
         util::memory_view<VkSemaphore>      wait_semaphores{};
         util::memory_view<uint32_t>         wait_flags{};
         util::memory_view<VkSemaphore>      signal_semaphores{};
         semaphore*                          cpu_semaphore{};
-        std::vector<std::atomic<bool>*>     signal_flags{};  
-    };   
-    struct staging_buffer_info: task_base{
+        std::vector<std::atomic<bool>*>     cpu_signal_flags{};
+        std::vector<std::atomic<bool>*>     cpu_unsignal_flags{};
+
+        task_base() = default;
+        task_base(util::memory_view<const uint8_t> data_upload): data_upload(data_upload){}
+        task_base(util::memory_view<uint8_t> data_download): data_download(data_download){}
+        virtual ~task_base(){}
+    };
+    struct staging_buffer_info: public task_base{
         transfer_direction                  transfer_dir{transfer_direction::upload};
         VkBuffer                            dst_buffer{};
         size_t                              dst_buffer_offset{};
-        task_common                         common{};
 
-        staging_buffer_info() {}
-        staging_buffer_info(transfer_direction transfer_dir, VkBuffer buffer, size_t dst_buffer_offset, const task_common& common): transfer_dir(transfer_dir), dst_buffer(buffer), dst_buffer_offset(dst_buffer_offset), common(common) {}
+        staging_buffer_info() = default;
+        staging_buffer_info(transfer_direction transfer_dir, VkBuffer dst_buffer, size_t dst_buffer_offset, const task_base& task_b):
+            transfer_dir{transfer_dir},
+            dst_buffer{dst_buffer},
+            dst_buffer_offset{dst_buffer_offset},
+            task_base{task_b}{}
     };
-    struct staging_image_info: task_base{
+    struct staging_image_info: public task_base{
         transfer_direction                  transfer_dir{transfer_direction::upload};
         VkImage                             dst_image{};
         VkImageLayout                       start_layout{};
@@ -44,7 +53,6 @@ public:
         uint32_t                            bytes_per_pixel{4};
         VkOffset3D                          image_offset{};
         VkExtent3D                          image_extent{1, 1, 1};
-        task_common                         common{};
     };
 
     stager() {};

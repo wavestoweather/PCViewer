@@ -27,7 +27,7 @@ void setup_default_descriptors(){
     image_staging.subresource_layers.aspectMask = image_aspect;
     image_staging.bytes_per_pixel = texel_size;
     image_staging.image_extent.width = sizeof(heat_map) / sizeof(*heat_map) / 4;
-    image_staging.common.data_upload = util::memory_view<const uint8_t>(heat_map, sizeof(heat_map));
+    image_staging.data_upload = util::memory_view<const uint8_t>(heat_map, sizeof(heat_map));
     globals::stager.add_staging_task(image_staging);
 
     // creating descriptor set + layout for heat_map

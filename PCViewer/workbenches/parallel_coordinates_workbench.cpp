@@ -9,6 +9,7 @@
 #include <brush_util.hpp>
 #include <algorithm>
 #include <splines.hpp>
+#include <priority_globals.hpp>
 
 namespace workbenches{
 
@@ -491,7 +492,7 @@ void parallel_coordinates_workbench::show(){
     // priority selection
     if(_select_priority_center_single || _select_priority_center_all){
         globals::brush_edit_data.clear();
-        ImVec2 b{pic_pos.x + pic_size.x, pic_pos.y + pic_pos.y};
+        ImVec2 b{pic_pos.x + pic_size.x, pic_pos.y + pic_size.y};
         ImGui::GetWindowDrawList()->AddRect(pic_pos, b, IM_COL32(255, 255, 0, 255), 0, 15, 5);
         if(!util::point_in_box(ImGui::GetIO().MousePos, pic_pos, b) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             _select_priority_center_all = _select_priority_center_single = false;
@@ -499,11 +500,16 @@ void parallel_coordinates_workbench::show(){
         for(const auto& attr_ref: attributes_order_info.read()){
             if(!attr_ref.active)
                 continue;
-            float x = gap * place_of_ind[attr_ref.attribut_index] / (labels_count - 1) + pic_pos.x - setting.read().brush_box_width / 2;
+            float x = gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2;
             bool axis_hover = util::point_in_box(ImGui::GetMousePos(), {x, pic_pos.y}, {x + setting.read().brush_box_width, b.y});
             if(axis_hover){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                 if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
+                    const auto& bounds = attributes.read()[attr_ref.attribut_index].bounds.read();
+                    globals::priority_center_attribute_id = attr_ref.attribut_index;
+                    globals::priority_center_vealue = util::unnormalize_val_for_range(util::normalize_val_for_range(ImGui::GetMousePos().y, b.y, pic_pos.y), bounds.min, bounds.max);
+                    globals::priority_center_distance = std::max(globals::priority_center_vealue - bounds.min, bounds.max - globals::priority_center_vealue);
+                    logger << logging::info_prefix << " priority attribute: " << attributes.read()[attr_ref.attribut_index].display_name << ", priority center: " << globals::priority_center_vealue << ", priority distance " << globals::priority_center_distance << logging::endl;
                     if(_select_priority_center_all){
                         for(auto& dl: drawlist_infos.ref_no_track()){
                             dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
@@ -631,8 +637,6 @@ void parallel_coordinates_workbench::show(){
 
     ImGui::EndHorizontal();
 
-    ImGui::End();
-
     // popups ----------------------------------------------------------------
     pc_menu_open = !brush_menu_open && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ImGui::IsWindowHovered() && util::point_in_box(ImGui::GetMousePos(), pic_pos, {pic_pos.x + pic_size.x, pic_pos.y + pic_size.y});
 
@@ -695,6 +699,8 @@ void parallel_coordinates_workbench::show(){
                 _select_priority_center_all = true;
             if(ImGui::IsItemHovered())
                 ImGui::SetTooltip("Set priority center for all drawlists");
+
+            ImGui::EndMenu();
         }
         if(ImGui::BeginMenu("Plot Size")){
             if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))
@@ -720,6 +726,8 @@ void parallel_coordinates_workbench::show(){
         }
         ImGui::EndPopup();
     }
+
+    ImGui::End();
 
     // deleting local drawlist
     if(delete_drawlist.size()){

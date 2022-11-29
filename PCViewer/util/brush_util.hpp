@@ -128,7 +128,7 @@ inline void upload_changed_brushes(){
         }
         structures::stager::staging_buffer_info staging_info{};
         staging_info.dst_buffer = globals::global_brushes.brushes_gpu.buffer;
-        staging_info.common.data_upload = global_brush_data.data();
+        staging_info.data_upload = global_brush_data.data();
         globals::stager.add_staging_task(staging_info);
         wait_stager = true;
     }
@@ -153,7 +153,7 @@ inline void upload_changed_brushes(){
 
             structures::stager::staging_buffer_info staging_info{};
             staging_info.dst_buffer = dl.read().local_brushes_gpu.buffer;
-            staging_info.common.data_upload = brush_data.data();
+            staging_info.data_upload = brush_data.data();
             globals::stager.add_staging_task(staging_info);
             wait_stager = true;
         }

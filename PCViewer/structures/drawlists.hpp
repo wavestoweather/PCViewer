@@ -56,6 +56,7 @@ struct drawlist{
     // optional data for certain rendering types
     struct delayed_ops_info_t{
         std::atomic<bool>   priority_rendering_requested{};
+        std::atomic<bool>   priority_rendering_sorting_started{false};
         std::atomic<bool>   priority_sorting_done{true};
         std::atomic<bool>   delayed_ops_done{true};
     }                       delayed_ops;

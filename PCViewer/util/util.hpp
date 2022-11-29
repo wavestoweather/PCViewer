@@ -12,6 +12,11 @@ inline T normalize_val_for_range(const T& val, const T& min, const T& max){
     return (val - min) / (max - min);
 }
 
+template<typename T>
+inline T unnormalize_val_for_range(const T& normalized, const T& min, const T& max){
+    return min + normalized * (max - min);
+}
+
 inline bool point_in_box(const ImVec2& point, const ImVec2& a, const ImVec2& b){
     return point.x > a.x && point.x < b.x && point.y > a.y && point.y < b.y;
 }

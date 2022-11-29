@@ -562,12 +562,12 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         dataset().gpu_data.columns[i] = util::vk::create_buffer(column_info, column_alloc_info);
         // uploading the data as soon as buffer is available via the staging buffer
         staging_info.dst_buffer = dataset().gpu_data.columns[i].buffer;
-        staging_info.common.data_upload = upload_data;
+        staging_info.data_upload = upload_data;
         globals::stager.add_staging_task(staging_info);
     }
     structures::dynamic_struct<util::data::gpu_header, uint32_t> header_bytes = std::visit([&dataset](auto&& data){return util::data::create_packed_header(data, dataset.read().gpu_data.columns);}, dataset.read().cpu_data.read());
     staging_info.dst_buffer = dataset().gpu_data.header.buffer;
-    staging_info.common.data_upload = header_bytes.data();
+    staging_info.data_upload = header_bytes.data();
     globals::stager.add_staging_task(staging_info);
 
     globals::stager.wait_for_completion();    // wait for uploadsd, then continue
@@ -598,7 +598,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         // uploading bitset_vector
         // TODO: might be unnecesary, as this bitvector will be filled by brushing pipeline
         util::memory_view<const uint8_t> data = util::memory_view(drawlist.read().active_indices_bitset.data(), (drawlist.read().active_indices_bitset.size() + drawlist.read().active_indices_bitset.bits_per_block - 1) / drawlist.read().active_indices_bitset.bits_per_block);
-        structures::stager::staging_buffer_info staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, structures::stager::task_common{data, {}, {}, {}, {}, {}}};
+        structures::stager::staging_buffer_info staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, structures::stager::task_base(data)};
         globals::stager.add_staging_task(staging_info);
 
         // waiting uploads
@@ -642,7 +642,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
             templatelist.gpu_indices = util::vk::create_buffer(indices_info, indices_alloc_info);
             structures::stager::staging_buffer_info staging_info{};
             staging_info.dst_buffer = templatelist.gpu_indices.buffer;
-            staging_info.common.data_upload = util::memory_view(templatelist.indices);
+            staging_info.data_upload = util::memory_view(templatelist.indices);
             globals::stager.add_staging_task(staging_info);
         
             std::visit([&templatelist](auto&& data){
@@ -894,9 +894,9 @@ void check_dataset_gpu_stream(){
             size_t rest_size = data.columns[i].size() - offset;
             size_t upload_size = std::min(dataset.gpu_stream_infos->block_size, data.columns[i].size() - offset);
             dataset.gpu_stream_infos->cur_block_size = upload_size;
-            staging_info.common.data_upload = util::memory_view(data.columns[i].data() + offset, upload_size);
+            staging_info.data_upload = util::memory_view(data.columns[i].data() + offset, upload_size);
             if(i == data.columns.size() - 1)
-                staging_info.common.signal_flags = {&dataset.gpu_stream_infos->signal_block_upload_done, &globals::datasets.ref_no_track()[ds_id].changed, &globals::datasets.changed};
+                staging_info.cpu_signal_flags = {&dataset.gpu_stream_infos->signal_block_upload_done, &globals::datasets.ref_no_track()[ds_id].changed, &globals::datasets.changed};
             globals::stager.add_staging_task(staging_info);
         }
     }

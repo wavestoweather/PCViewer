@@ -566,7 +566,7 @@ void stager::wait_for_completion(){
 void stager::_task_thread_function(){
     auto transfer_buffer = [&](staging_buffer_info& cur){
         size_t buffer_size = _staging_buffer_size;
-        size_t data_size = cur.transfer_dir == transfer_direction::upload ? cur.common.data_upload.size() : cur.common.data_download.size();
+        size_t data_size = cur.transfer_dir == transfer_direction::upload ? cur.data_upload.size() : cur.data_download.size();
         for(structures::min_max<size_t> cur_span{0, buffer_size / 2}; cur_span.min < data_size && !_thread_finish; cur_span.min = cur_span.max, cur_span.max += buffer_size / 2, _fence_index = (++_fence_index) % _task_fences.size()){
             // wait for completion of previous transfer operation (otherwise we write to not yet copied data in the staging bufffer)
             auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
@@ -574,7 +574,7 @@ void stager::_task_thread_function(){
 
             size_t copy_size = std::min<size_t>(cur_span.max - cur_span.min, data_size - cur_span.min);
             if(cur.transfer_dir == transfer_direction::upload)
-                std::memcpy(_staging_buffer_mapped + _fence_index * buffer_size / 2, cur.common.data_upload.data() + cur_span.min, copy_size);
+                std::memcpy(_staging_buffer_mapped + _fence_index * buffer_size / 2, cur.data_upload.data() + cur_span.min, copy_size);
 
 
             if(_command_buffers[_fence_index])
@@ -593,31 +593,21 @@ void stager::_task_thread_function(){
                 buffer_copy.dstOffset = _fence_index * (buffer_size / 2);
                 vkCmdCopyBuffer(_command_buffers[_fence_index], cur.dst_buffer, _staging_buffer.buffer, 1, &buffer_copy);
             }
-            auto wait_semaphores = cur_span.min < buffer_size ? cur.common.wait_semaphores: util::memory_view<VkSemaphore>{};
-            auto wait_flags = cur_span.min < buffer_size ? cur.common.wait_flags : util::memory_view<uint32_t>{};
-            auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.common.signal_semaphores : util::memory_view<VkSemaphore>{};
+            auto wait_semaphores = cur_span.min < buffer_size ? cur.wait_semaphores: util::memory_view<VkSemaphore>{};
+            auto wait_flags = cur_span.min < buffer_size ? cur.wait_flags : util::memory_view<uint32_t>{};
+            auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
             std::scoped_lock lock(*globals::vk_context.transfer_mutex);
             util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
 
             if(cur.transfer_dir == transfer_direction::download){
                 res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
-                std::memcpy(cur.common.data_download.data() + cur_span.min, _staging_buffer_mapped + _fence_index * buffer_size / 2, copy_size);
+                std::memcpy(cur.data_download.data() + cur_span.min, _staging_buffer_mapped + _fence_index * buffer_size / 2, copy_size);
             }
-        }
-
-        if(cur.common.cpu_semaphore)
-            cur.common.cpu_semaphore->release();
-
-        if(cur.common.signal_flags.size()){
-            auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
-            for(auto& b: cur.common.signal_flags)
-                *b = true;
-            ::logger << logging::info_prefix << " Data upload done, signaled " << cur.common.signal_flags.size() << " flags." << logging::endl;
         }
     };
     auto transfer_image = [&](staging_image_info& cur){
         size_t buffer_size = _staging_buffer_size;
-        size_t data_size = cur.transfer_dir == transfer_direction::upload ? cur.common.data_upload.size() : cur.common.data_download.size();
+        size_t data_size = cur.transfer_dir == transfer_direction::upload ? cur.data_upload.size() : cur.data_download.size();
         if(cur.image_extent.width * cur.bytes_per_pixel > buffer_size / 2){
             ::logger << "[error] stager::_task_thread_function()::transfer_image() image pixel row is larger than the staging buffer. Aborting upload" << logging::endl;
         }
@@ -635,7 +625,7 @@ void stager::_task_thread_function(){
 
             size_t copy_size = std::min(cur_span.max - cur_span.min, data_size - cur_span.min);
             if(cur.transfer_dir == transfer_direction::upload)
-                std::memcpy(_staging_buffer_mapped + _fence_index * buffer_size / 2, cur.common.data_upload.data() + cur_span.min, copy_size);
+                std::memcpy(_staging_buffer_mapped + _fence_index * buffer_size / 2, cur.data_upload.data() + cur_span.min, copy_size);
 
             if(_command_buffers[_fence_index])
                 vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_command_buffers[_fence_index]);
@@ -668,20 +658,17 @@ void stager::_task_thread_function(){
             }
             vkCmdPipelineBarrier(_command_buffers[_fence_index], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, {}, 0, {}, 0, {}, 1, &memory_barrier);
 
-            auto wait_semaphores = cur_span.min < buffer_size ? cur.common.wait_semaphores: util::memory_view<VkSemaphore>{};
-            auto wait_flags = cur_span.min < buffer_size ? cur.common.wait_flags : util::memory_view<uint32_t>{};
-            auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.common.signal_semaphores : util::memory_view<VkSemaphore>{};
+            auto wait_semaphores = cur_span.min < buffer_size ? cur.wait_semaphores: util::memory_view<VkSemaphore>{};
+            auto wait_flags = cur_span.min < buffer_size ? cur.wait_flags : util::memory_view<uint32_t>{};
+            auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
             std::scoped_lock lock(*globals::vk_context.transfer_mutex);
             util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
 
             if(cur.transfer_dir == transfer_direction::download){
                 res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
-                std::memcpy(cur.common.data_download.data() + cur_span.min, _staging_buffer_mapped + _fence_index * buffer_size / 2, copy_size);
+                std::memcpy(cur.data_download.data() + cur_span.min, _staging_buffer_mapped + _fence_index * buffer_size / 2, copy_size);
             }
         }
-
-        if(cur.common.cpu_semaphore)
-            cur.common.cpu_semaphore->release();
     };
 
     while(!_thread_finish){
@@ -725,6 +712,23 @@ void stager::_task_thread_function(){
             transfer_buffer(*buffer);
         else
             transfer_image(*dynamic_cast<staging_image_info*>(cur.get()));
+
+        if(cur->cpu_semaphore)
+            cur->cpu_semaphore->release();
+
+        if(cur->cpu_signal_flags.size()){
+            auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+            for(auto& b: cur->cpu_signal_flags)
+                *b = true;
+            ::logger << logging::info_prefix << " Data upload done, signaled " << cur->cpu_signal_flags.size() << " flags." << logging::endl;
+        }
+        
+        if(cur->cpu_unsignal_flags.size()){
+            auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+            for(auto& b: cur->cpu_unsignal_flags)
+                *b = true;
+            ::logger << logging::info_prefix << " Data upload done, signaled " << cur->cpu_unsignal_flags.size() << " flags." << logging::endl;
+        }
     }
 }
 
@@ -976,7 +980,7 @@ void priority_sorter::_task_thread_function(){
                     stager::staging_buffer_info buffer_info{};
                     buffer_info.transfer_dir = stager::transfer_direction::download;
                     buffer_info.dst_buffer = access->gpu_buffers.at(std::string_view(entry.hist_id)).buffer;
-                    buffer_info.common.data_download = util::memory_view(data);
+                    buffer_info.data_download = util::memory_view(data);
                     globals::stager.add_staging_task(buffer_info);
                     globals::stager.wait_for_completion();
                     // sorting and uploading
@@ -990,9 +994,11 @@ void priority_sorter::_task_thread_function(){
                     }
                     buffer_info.transfer_dir = stager::transfer_direction::upload;
                     buffer_info.dst_buffer = dl.priority_indices.at(entry.hist_id).buffer;
-                    buffer_info.common.data_upload = util::memory_view(ordered);
-                    if(key == *last_key)
-                        buffer_info.common.signal_flags = std::move(cur->cpu_signal_flags);
+                    buffer_info.data_upload = util::memory_view(ordered);
+                    if(key == *last_key){
+                        buffer_info.cpu_signal_flags = std::move(cur->cpu_signal_flags);
+                        buffer_info.cpu_unsignal_flags = std::move(cur->cpu_unsignal_flags);
+                    }
                     globals::stager.add_staging_task(buffer_info);
                 }
             }
@@ -1020,7 +1026,7 @@ void priority_sorter::_task_thread_function(){
             }
             structures::stager::staging_buffer_info staging_info{};
             staging_info.dst_buffer = dl_read.priority_colors_gpu.buffer;
-            staging_info.common.data_upload = util::memory_view(color_index);
+            staging_info.data_upload = util::memory_view(color_index);
             globals::stager.add_staging_task(staging_info);
 
             std::vector<uint32_t> order(tl.data_size);
@@ -1033,8 +1039,9 @@ void priority_sorter::_task_thread_function(){
                 globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_indices[standard_string] = util::vk::create_buffer(buffer_info, alloc_info);
             }
             staging_info.dst_buffer = dl_read.priority_indices.at(standard_string).buffer;
-            staging_info.common.data_upload = util::memory_view(order);
-            staging_info.common.signal_flags = std::move(cur->cpu_signal_flags);
+            staging_info.data_upload = util::memory_view(order);
+            staging_info.cpu_signal_flags = std::move(cur->cpu_signal_flags);
+            staging_info.cpu_unsignal_flags = std::move(cur->cpu_unsignal_flags);
             globals::stager.add_staging_task(staging_info);
         }
         // the signal flags are set by the last uploadstaging task
