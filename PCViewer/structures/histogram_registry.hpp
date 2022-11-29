@@ -112,7 +112,6 @@ struct histogram_registry{
         histogram_registry& registry;
         registrator_id_t    registrator_id{};
         std::string_view    registry_id{};
-
         
         scoped_registrator_t(histogram_registry& registry, util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, bool is_min_hist, bool is_max_hist, bool cpu_hist_needed):
             registry(registry),

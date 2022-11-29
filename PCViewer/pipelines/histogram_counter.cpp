@@ -13,7 +13,6 @@ histogram_counter::histogram_counter(){
 
 const histogram_counter::pipeline_data& histogram_counter::_get_or_create_pipeline(const pipeline_specs& pipeline_specs){
     if(!_pipelines.contains(pipeline_specs)){
-
         pipeline_data& pipe_data = _pipelines[pipeline_specs];
 
         VkPushConstantRange push_constant_ranges{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constants)};

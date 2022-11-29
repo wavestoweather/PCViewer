@@ -9,11 +9,18 @@
 
 namespace structures{
 namespace histogram_counter_structs{
+enum class reduction_type_t: uint32_t{
+    sum,
+    min,
+    max,
+    COUNT
+};
 struct pipeline_specs{
-    data_type   d_type{};
-    uint32_t    dim_count{2};
+    data_type       d_type{};
+    uint32_t        dim_count{2};
+    reduction_type_t reduction_type{reduction_type_t::sum};
 
-    bool operator==(const pipeline_specs& o) const {return d_type == o.d_type;}
+    bool operator==(const pipeline_specs& o) const {return d_type == o.d_type && dim_count == o.dim_count && reduction_type == o.reduction_type;}
 };
 struct pipeline_data{
     VkPipeline          pipeline;
@@ -54,7 +61,7 @@ class histogram_counter{
     VkCommandPool                                           _command_pool{};
     VkCommandBuffer                                         _command_buffer{};
     VkFence                                                 _count_fence{};
-    robin_hood::unordered_map<pipeline_specs, pipeline_data> _pipelines;
+    robin_hood::unordered_map<pipeline_specs, pipeline_data> _pipelines{};
 
     // private constructor
     histogram_counter();

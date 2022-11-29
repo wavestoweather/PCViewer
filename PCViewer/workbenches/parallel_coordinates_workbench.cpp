@@ -97,9 +97,10 @@ void parallel_coordinates_workbench::_update_registered_histograms(){
             if(registrator_index >= 0)
                 registrator_needed[registrator_index] = true;
             else{
+                bool max_needed = dl.priority_render;
                 // adding the new histogram
-                auto& drawlist = globals::drawlists()[dl.drawlist_id]();
-                _registered_histograms[dl.drawlist_id].emplace_back(*drawlist.histogram_registry.access(), indices, bucket_sizes, false, false, false);
+                auto& drawlist = dl.drawlist_write();
+                _registered_histograms[dl.drawlist_id].emplace_back(*drawlist.histogram_registry.access(), indices, bucket_sizes, false, max_needed, false);
                 registrator_needed.push_back(true);
             }
         }

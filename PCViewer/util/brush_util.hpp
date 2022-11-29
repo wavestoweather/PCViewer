@@ -167,12 +167,15 @@ inline void update_drawlist_active_indices(){
     if(!globals::global_brushes.changed && !globals::drawlists.changed)
         return;
 
-    // delay brush update when histogram update not yet ready
+    // delay brush update when histogram update or delayed ops not yet ready
     for(const auto& [id, dl]: globals::drawlists.read()){
         if(globals::global_brushes.changed && !dl.read().immune_to_global_brushes.read() && !dl.read().histogram_registry.const_access()->registrators_done)
             return;
         auto registry_access = dl.read().histogram_registry.const_access();
         if(dl.changed && dl.read().local_brushes.changed && !registry_access->registrators_done && registry_access->dataset_update_done)
+            return;
+
+        if(!dl.read().delayed_ops.delayed_ops_done)
             return;
     }
     
@@ -191,6 +194,12 @@ inline void update_drawlist_active_indices(){
 
         // notifying update of the histograms
         drawlist.histogram_registry.access()->request_change_all();
+        // check priority updates
+        if(drawlist.delayed_ops.priority_rendering_requested){
+            drawlist.delayed_ops.priority_sorting_done = false;
+            drawlist.delayed_ops.priority_rendering_sorting_started = false;
+            drawlist.delayed_ops.delayed_ops_done = false;
+        }
 
         drawlist.local_brushes.changed = false;
         drawlist.immune_to_global_brushes.changed = false;
