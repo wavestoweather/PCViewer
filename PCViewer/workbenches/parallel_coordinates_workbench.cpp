@@ -86,7 +86,8 @@ void parallel_coordinates_workbench::_update_registered_histograms(){
                 indices = {active_indices[i], active_indices[i + 1]};
                 bucket_sizes = {height, height};
             }
-            auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, false, false);
+            bool max_needed = dl.priority_render;
+            auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, false, max_needed);
             int registrator_index{-1};
             for(int j: util::size_range(_registered_histograms[dl.drawlist_id])){
                 if(_registered_histograms[dl.drawlist_id][j].registry_id == registrator_id){
@@ -97,7 +98,6 @@ void parallel_coordinates_workbench::_update_registered_histograms(){
             if(registrator_index >= 0)
                 registrator_needed[registrator_index] = true;
             else{
-                bool max_needed = dl.priority_render;
                 // adding the new histogram
                 auto& drawlist = dl.drawlist_write();
                 _registered_histograms[dl.drawlist_id].emplace_back(*drawlist.histogram_registry.access(), indices, bucket_sizes, false, max_needed, false);
@@ -531,6 +531,7 @@ void parallel_coordinates_workbench::show(){
                         }
                     }
                     _select_priority_center_all = _select_priority_center_single = false;
+                    _update_registered_histograms();
                 }
             }
         }

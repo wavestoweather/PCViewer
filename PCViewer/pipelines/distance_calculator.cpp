@@ -43,6 +43,8 @@ void distance_calculator::calculate(const distance_info& info){
     push_constants pc{};
     pc.data_header_address = info.data_header_address;
     pc.priority_distance_address = info.distances_address;
+    pc.index_buffer_address = info.index_buffer_address;
+    pc.data_size = info.data_size;
     pc.priority_attribute = info.priority_attribute;
     pc.priority_center = info.priority_center;
     pc.priority_distance = info.priority_distance;

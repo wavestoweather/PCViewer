@@ -47,6 +47,7 @@ class histogram_counter{
         VkDeviceAddress index_buffer_address{};
         VkDeviceAddress gpu_data_activations{};
         VkDeviceAddress histogram_buffer_address{};
+        VkDeviceAddress priority_values_address{};
         uint32_t        a1{}, a2{}, a3{}, a4{};
         uint32_t        s1{}, s2{}, s3{}, s4{};
         float           a1_min{}, a2_min{}, a3_min{}, a4_min{};
@@ -77,6 +78,7 @@ public:
         VkDeviceAddress                     index_buffer_address{};
         VkDeviceAddress                     gpu_data_activations{};
         structures::buffer_info             histogram_buffer{};
+        VkDeviceAddress                     priority_values_address{};
         bool                                clear_counts{};
         util::memory_view<uint32_t>         column_indices{};
         util::memory_view<int>              bin_sizes{};

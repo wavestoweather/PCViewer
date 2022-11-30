@@ -29,7 +29,9 @@ class distance_calculator{
     using pipeline_data = structures::distance_calculator_structs::pipeline_data;
     struct push_constants{
         VkDeviceAddress data_header_address{};
+        VkDeviceAddress index_buffer_address{};
         VkDeviceAddress priority_distance_address{};
+        uint32_t        data_size{};
         uint32_t        priority_attribute{};
         float           priority_center{};
         float           priority_distance{};
@@ -52,6 +54,7 @@ public:
         structures::data_type   data_type{};
         size_t                  data_size{};
         VkDeviceAddress         data_header_address{};
+        VkDeviceAddress         index_buffer_address{};
         VkDeviceAddress         distances_address{};
         uint32_t                priority_attribute{};
         float                   priority_center{};

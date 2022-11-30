@@ -29,6 +29,7 @@
 #include <stopwatch.hpp>
 #include <priority_sorter.hpp>
 #include <priority_globals.hpp>
+#include <distance_calculator.hpp>
 
 #ifdef min
 #undef min
@@ -681,7 +682,7 @@ void stager::_task_thread_function(){
         if(!_staging_buffer || _staging_buffer.allocation->GetSize() != buffer_size){
             if(_staging_buffer)
                 util::vk::destroy_buffer(_staging_buffer);
-            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer_size);
+            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, buffer_size);
             auto alloc_create_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
             VmaAllocationInfo alloc_info{};
             _staging_buffer = util::vk::create_buffer(buffer_info, alloc_create_info, &alloc_info);
@@ -854,16 +855,41 @@ void histogram_counter::_task_thread_function(){
             }
             stop_watch.start();
         }
+        auto& dl = globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track();
+        size_t dataset_size = dl.dataset_read().gpu_stream_infos ? dl.dataset_read().gpu_stream_infos->cur_block_size: dl.const_templatelist().data_size;
+        
+        // calulate priority distances if requested
+        if(dl.delayed_ops.priority_rendering_requested){
+            if(!dl.priority_colors_gpu || dl.priority_colors_gpu.size < dataset_size){
+                if(dl.priority_colors_gpu)
+                    util::vk::destroy_buffer(dl.priority_colors_gpu);
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, dataset_size);
+                auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                dl.priority_colors_gpu = util::vk::create_buffer(buffer_info, alloc_info);
+            }
+
+            pipelines::distance_calculator::distance_info distance_info{};
+            distance_info.data_type = dl.dataset_read().data_flags.data_typ;
+            distance_info.data_size = dataset_size;
+            distance_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
+            distance_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
+            distance_info.distances_address = util::vk::get_buffer_address(dl.priority_colors_gpu);
+            distance_info.priority_attribute = globals::priority_center_attribute_id;
+            distance_info.priority_center = globals::priority_center_vealue;
+            distance_info.priority_distance = globals::priority_center_distance;
+            pipelines::distance_calculator::instance().calculate(distance_info);
+            pipelines::distance_calculator::instance().wait_for_fence();
+        }
+
         // counting
         int count{};
         for(auto hist: histograms){
-            auto& dl = globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track();
             auto key = dl.histogram_registry.const_access()->name_to_registry_key.at(hist);
 
             if(!dl.histogram_registry.const_access()->gpu_buffers.contains(hist)){
                 size_t hist_count{1};
                 for(int i: key.bin_sizes) hist_count *= std::abs(i);
-                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, hist_count * sizeof(uint32_t));
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hist_count * sizeof(uint32_t));
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
                 dl.histogram_registry.access()->gpu_buffers[hist] = util::vk::create_buffer(buffer_info, alloc_info);
             }
@@ -874,11 +900,12 @@ void histogram_counter::_task_thread_function(){
 
             pipelines::histogram_counter::count_info count_info{};
             count_info.data_type = dl.dataset_read().data_flags.data_typ;
-            count_info.data_size = dl.dataset_read().gpu_stream_infos ? dl.dataset_read().gpu_stream_infos->cur_block_size: dl.const_templatelist().data_size;
+            count_info.data_size = dataset_size;
             count_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
             count_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
             count_info.gpu_data_activations = util::vk::get_buffer_address(dl.active_indices_bitset_gpu);
             count_info.histogram_buffer = dl.histogram_registry.const_access()->gpu_buffers.at(hist);
+            count_info.priority_values_address = util::vk::get_buffer_address(dl.priority_colors_gpu);
             count_info.clear_counts = cur->clear_counts;
             count_info.column_indices = key.attribute_indices;
             count_info.bin_sizes = key.bin_sizes;
@@ -968,8 +995,10 @@ void priority_sorter::_task_thread_function(){
             if(access->registry.size()){
                 assert(access->dataset_update_done);
                 histograms_used = true;
-                const structures::histogram_registry_key* last_key;
-                for(const auto& [key, entry]: access->registry) if((key.is_max_histogram || key.is_min_histogram) && (key.attribute_indices.size() == 2 || key.attribute_indices.size() == 4)) last_key = &key;
+                const structures::histogram_registry_key* last_key{};
+                for(const auto& [key, entry]: access->registry) 
+                    if((key.is_max_histogram || key.is_min_histogram) && (key.attribute_indices.size() == 2 || key.attribute_indices.size() == 4)) last_key = &key;
+                assert(last_key);
                 for(const auto& [key, entry]: access->registry){
                     // downloading histograms (2d or 4d) and ordering each of them
                     if(!key.is_max_histogram && !key.is_min_histogram && key.attribute_indices.size() != 2 && key.attribute_indices.size() != 4)

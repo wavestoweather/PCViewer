@@ -55,6 +55,11 @@ void main(){
     uint hist_index = gl_VertexIndex / divider;
     uint line_index = gl_VertexIndex % divider;
     line_index = (line_index / 2) + (line_index & 1);
+
+    if(ordering_address != 0){
+        Ordering o = Ordering(ordering_address);
+        hist_index = o.i[hist_index];
+    }
     
     Histogram hist = Histogram(histogram_address);
     uint count = hist.v[hist_index];
@@ -69,11 +74,6 @@ void main(){
     if(line_verts == 2){
         bool is_b_axis = line_index == 1;
         uint axis_index = is_b_axis ? b_axis: a_axis;
-
-        if(ordering_address != 0){
-            Ordering o = Ordering(ordering_address);
-            hist_index = o.i[hist_index];
-        }
 
         x = -1. + axis_index * gap;
 
@@ -116,7 +116,7 @@ void main(){
     out_color = color;
 
     if(priority_rendering == 1){
-        float norm = float(count) / 65535.f;
+        float norm = float(count) / 255.f;
         norm = .98 * norm + .02;
         out_color.xyz = texture(color_transfer_texture, vec2(norm, .5f)).xyz;
     }

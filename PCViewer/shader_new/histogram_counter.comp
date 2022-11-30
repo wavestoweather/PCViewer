@@ -82,7 +82,7 @@ void main(){
     PriorityValues priority_values = PriorityValues(priority_values_address);
     switch(reduction_type){
     case reduction_sum: atomicAdd(hist.bins[pos], 1); break;
-    case reduction_min: atomicMin(hist.bins[pos], priority_values.i[data_index]); break;
-    case reduction_max: atomicMax(hist.bins[pos], priority_values.i[data_index]); break;
+    case reduction_min: atomicMin(hist.bins[pos], priority_values.i[gl_GlobalInvocationID.x]); break;   // has to be invocatoin id as the values in the pirority values are stored packed(same as activations....)
+    case reduction_max: atomicMax(hist.bins[pos], priority_values.i[gl_GlobalInvocationID.x]); break;   // has to be invocatoin id as the values in the pirority values are stored packed(same as activations....)
     }
 }

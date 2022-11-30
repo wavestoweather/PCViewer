@@ -385,6 +385,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
                         }
                         pc.histogram_address = util::vk::get_buffer_address(hist_access->gpu_buffers.at(id));
                     }
+                    if(dl.drawlist_read().priority_indices.contains(id))
+                        pc.ordering_address = util::vk::get_buffer_address(dl.drawlist_read().priority_indices.at(id));
                     pc.color = dl.appearance->read().color;
                     vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
                     vkCmdDraw(_render_commands.back(), lines_amt * (pc.line_verts - 1) * 2, 1, 0, 0);

@@ -53,8 +53,11 @@ void check_drawlist_delayed_ops(){
             continue;
         
         // starting priority render counting, waiting if histogram counting not yet done
-        if(dl.read().histogram_registry.const_access()->registry.size() && !dl.read().histogram_registry.const_access()->dataset_update_done)
-            continue;
+        {
+            auto access = dl.read().histogram_registry.const_access();
+            if(access->registry.size() && !access->dataset_update_done)
+                continue;
+        }
         auto& drawlist = globals::drawlists.ref_no_track()[dl_id].ref_no_track();
         structures::priority_sorter::sorting_info sort_info{};
         sort_info.dl_id = dl_id;
