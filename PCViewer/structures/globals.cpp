@@ -30,6 +30,7 @@
 #include <priority_sorter.hpp>
 #include <priority_globals.hpp>
 #include <distance_calculator.hpp>
+#include <radix_sort.hpp>
 
 #ifdef min
 #undef min
@@ -910,6 +911,11 @@ void histogram_counter::_task_thread_function(){
             count_info.column_indices = key.attribute_indices;
             count_info.bin_sizes = key.bin_sizes;
             count_info.column_min_max = column_min_max;
+            if(key.is_max_histogram)
+                count_info.reduction_type = structures::histogram_counter_structs::reduction_type_t::max;
+            if(key.is_min_histogram)
+                count_info.reduction_type = structures::histogram_counter_structs::reduction_type_t::min;
+            
             if(cur->histograms_timing_info)
                 count_info.gpu_timing_info = cur->histograms_timing_info;
             if(cur->count_timing_info && count == 0)
@@ -1015,7 +1021,8 @@ void priority_sorter::_task_thread_function(){
                     // sorting and uploading
                     std::vector<uint32_t> ordered(data.size());
                     std::iota(ordered.begin(), ordered.end(), 0);
-                    std::sort(ordered.begin(), ordered.end(), [&](uint32_t a, uint32_t b) {return data[a] < data[b];});
+                    //std::sort(ordered.begin(), ordered.end(), [&](uint32_t a, uint32_t b) {return data[a] < data[b];});
+                    radix::RadixSortMSDTransform(ordered.data(), ordered.size(), [&](uint32_t i){return data[i];}, 7);
                     if(!dl.priority_indices.contains(entry.hist_id)){
                         auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ordered.size() * sizeof(ordered[0]));
                         auto alloc_info = util::vma::initializers::allocationCreateInfo();
@@ -1060,8 +1067,9 @@ void priority_sorter::_task_thread_function(){
 
             std::vector<uint32_t> order(tl.data_size);
             std::iota(order.begin(), order.end(), 0);
-            std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return color_index[a] > color_index[b];});
-            
+            //std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return color_index[a] > color_index[b];});
+            radix::RadixSortMSDTransform(order.data(), order.size(), [&](uint32_t i){return uint32_t(255 - color_index[i]);}, 7);
+
             if(!dl_read.priority_indices.contains(standard_string)){
                 auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, order.size() * sizeof(order[0]));
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();

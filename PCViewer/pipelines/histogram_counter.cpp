@@ -45,12 +45,13 @@ histogram_counter& histogram_counter::instance(){
 }
 
 void histogram_counter::count(const count_info& info){
-    const auto& pipeline_data = _get_or_create_pipeline(pipeline_specs{info.data_type, static_cast<uint32_t>(info.column_indices.size())});
+    const auto& pipeline_data = _get_or_create_pipeline(pipeline_specs{info.data_type, static_cast<uint32_t>(info.column_indices.size()), info.reduction_type});
     push_constants pc{};
     pc.data_header_address = info.data_header_address;
     pc.index_buffer_address = info.index_buffer_address;
     pc.gpu_data_activations = info.gpu_data_activations;
     pc.histogram_buffer_address = util::vk::get_buffer_address(info.histogram_buffer);
+    pc.priority_values_address = info.priority_values_address;
     if(info.column_indices.size() >= 1)
         pc.a1 = info.column_indices[0];
     if(info.column_indices.size() >= 2)

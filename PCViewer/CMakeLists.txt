@@ -117,6 +117,7 @@ set(structures_INCLUDE_DIR
     "workbenches"
     "fast_float"
     "config"
+    "radix_sort"
 )
 
 file(GLOB structures_SRC

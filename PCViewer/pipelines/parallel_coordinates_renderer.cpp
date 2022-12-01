@@ -375,7 +375,9 @@ void parallel_coordinates_renderer::render(const render_info& info){
                         pc.line_verts = 2;
                     }
                     // getting the correct hist information
-                    std::string id = util::histogram_registry::get_id_string(hist_indices, bin_sizes, false, false);
+                    bool is_max_hist = dl.priority_render;
+                    pc.priority_rendering = dl.priority_render;
+                    std::string id = util::histogram_registry::get_id_string(hist_indices, bin_sizes, false, is_max_hist);
                     {
                         auto hist_access = drawlist.histogram_registry.const_access();
                         if(!hist_access->name_to_registry_key.contains(id) || !hist_access->gpu_buffers.contains(id)){

@@ -47,5 +47,5 @@ void main(){
     
     float priority_value = abs(get_packed_data(index, priority_attribute) - priority_center) / priority_distance;
     PriorityValues priorities = PriorityValues(priority_distance_address);
-    priorities.i[gl_GlobalInvocationID.x] = uint8_t(priority_value * 255 + .5);
+    priorities.i[gl_GlobalInvocationID.x] = ~uint8_t(priority_value * 255 + .5);
 }

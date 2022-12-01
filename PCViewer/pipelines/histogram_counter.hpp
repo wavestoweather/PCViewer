@@ -6,6 +6,7 @@
 #include <gpu_timing.hpp>
 #include <min_max.hpp>
 #include <data_type.hpp>
+#include <default_hash.hpp>
 
 namespace structures{
 namespace histogram_counter_structs{
@@ -29,18 +30,14 @@ struct pipeline_data{
 }
 }
 
-template<> struct std::hash<structures::histogram_counter_structs::pipeline_specs>{
-    size_t operator()(const structures::histogram_counter_structs::pipeline_specs& x) const{
-        return util::memory_view<const uint32_t>(util::memory_view(x)).data_hash();
-    }
-};
+DEFAULT_HASH(structures::histogram_counter_structs::pipeline_specs);
 
 namespace pipelines{
-
 // can count up to 4d histogram
 class histogram_counter{
     using pipeline_specs = structures::histogram_counter_structs::pipeline_specs;
     using pipeline_data = structures::histogram_counter_structs::pipeline_data;
+    using reduction_type_t = structures::histogram_counter_structs::reduction_type_t;
 
     struct push_constants{
         VkDeviceAddress data_header_address{};
@@ -83,6 +80,7 @@ public:
         util::memory_view<uint32_t>         column_indices{};
         util::memory_view<int>              bin_sizes{};
         util::memory_view<structures::min_max<float>> column_min_max{};
+        reduction_type_t                    reduction_type{reduction_type_t::sum};                                
         structures::gpu_sync_info           gpu_sync_info{};
         structures::gpu_timing_info*        gpu_timing_info{};
     };

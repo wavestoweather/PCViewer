@@ -66,7 +66,7 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
     _update_registered_histograms();
 }
 
-void parallel_coordinates_workbench::_update_registered_histograms(){
+void parallel_coordinates_workbench::_update_registered_histograms(bool request_update){
     // updating registered histograms (iterating through indices pairs and checking for registered histogram)
     auto active_indices = get_active_ordered_indices();
     for(const auto& dl: drawlist_infos.read()){
@@ -117,6 +117,12 @@ void parallel_coordinates_workbench::_update_registered_histograms(){
             for(const auto& [key, val]: registry_lock->registry)
                 logger << val.hist_id << " ";
             logger << logging::endl;
+        }
+    }
+    if(request_update){
+        for(const auto& dl: drawlist_infos.read()){
+            auto registry_lock = dl.drawlist_write().histogram_registry.access();
+            registry_lock->request_change_all();
         }
     }
 }
@@ -531,7 +537,7 @@ void parallel_coordinates_workbench::show(){
                         }
                     }
                     _select_priority_center_all = _select_priority_center_single = false;
-                    _update_registered_histograms();
+                    _update_registered_histograms(true);
                 }
             }
         }
@@ -693,6 +699,7 @@ void parallel_coordinates_workbench::show(){
                     dl.drawlist_write().delayed_ops.priority_rendering_requested = false;
                     dl.drawlist_write().delayed_ops.priority_sorting_done = true;
                 }
+                _update_registered_histograms();
             }
             if(ImGui::MenuItem("Set priority center"))
                 _select_priority_center_single = true;

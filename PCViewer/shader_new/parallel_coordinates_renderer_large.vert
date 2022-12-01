@@ -66,6 +66,7 @@ void main(){
     if(count < 1){
         out_color.a = 0;
         gl_Position = vec4(-2);
+        return;
     }
 
     float x, y;
