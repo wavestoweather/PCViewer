@@ -1,0 +1,49 @@
+#pragma once
+#include <workbench_base.hpp>
+#include <attributes.hpp>
+#include <thread>
+#include <atomic>
+#include <sys_info.hpp>
+#include <thread_safe_struct.hpp>
+
+namespace workbenches{
+class compression_workbench: public structures::workbench{
+    std::string                         _input_files{};
+    std::vector<std::string>            _included_files{}, _excluded_files{};
+    std::vector<std::string>            _current_files{};
+    std::vector<uint8_t>                _current_files_active{};
+    std::string                         _output_folder{};
+
+    uint32_t                            _comression_block_size_shift{28};   // power of 2
+    uint32_t                            _amt_of_threads{static_cast<uint32_t>(std::thread::hardware_concurrency() * .8)};
+    uint32_t                            _max_working_memory{static_cast<uint32_t>(globals::sys_info.ram_size * .5)};
+    float                               _quantization_step{.01f};
+    bool                                _float_column_data{false};
+    bool                                _half_column_data{true};
+    bool                                _compressed_column_data{false};
+    bool                                _roaring_bin_indices{false};
+
+    // multithreading stuff for async loading/working
+    std::thread                         _analysis_thread{};
+    std::atomic<bool>                   _analysis_done{};
+    std::atomic<bool>                   _analysis_cancel{};
+    std::thread                         _compression_thread{};
+    std::atomic<bool>                   _compression_done{};
+    std::atomic<bool>                   _compression_cancel{};
+
+    struct analysed_data_t{
+        size_t                              data_size{};
+        std::vector<structures::attribute>  attributes{};
+    };
+    structures::thread_safe<analysed_data_t> _anlysed_data{};
+
+
+    void _analyse(std::vector<std::string> files);                                  // analyses min/max + data size for all files listed in files. Takes a copy of the vector to avoid access problems
+    void _compress(std::vector<std::string> files, analysed_data_t analysed_data);
+public:
+    compression_workbench(std::string_view id);
+    ~compression_workbench();
+
+    void show() override;
+};
+}
