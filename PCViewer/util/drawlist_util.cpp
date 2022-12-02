@@ -41,11 +41,17 @@ void check_drawlist_update(){
         }
         for(auto& workbench: globals::drawlist_dataset_dependencies)
             workbench->signal_drawlist_update(changed_drawlists);
+        bool brush_wait{false};
         for(auto id: changed_drawlists){
+            if(globals::drawlists.read().at(id).read().local_brushes.changed){
+                brush_wait = true;
+                continue;
+            }
             globals::drawlists.ref_no_track()[id].ref_no_track().clear_change();
             globals::drawlists.ref_no_track()[id].changed = false;
         }
-        globals::drawlists.changed = false;
+        if(!brush_wait)
+            globals::drawlists.changed = false;
     }
 }
 

@@ -118,6 +118,12 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
                 logger << val.hist_id << " ";
             logger << logging::endl;
         }
+        // setting the flag for resorting priority rendering
+        if(dl.priority_render){
+            dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+            dl.drawlist_write().delayed_ops.priority_sorting_done = false;
+            dl.drawlist_write().delayed_ops.priority_rendering_sorting_started = false;
+        }
     }
     if(request_update){
         for(const auto& dl: drawlist_infos.read()){
@@ -492,13 +498,14 @@ void parallel_coordinates_workbench::show(){
         }
 
         // releasing edge
-        if(!ImGui::IsPopupOpen() && !any_hover && globals::brush_edit_data.selected_ranges.size() &&  (ImGui::IsMouseReleased(ImGuiMouseButton_Left) || (!new_brush && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) && !ImGui::GetIO().KeyCtrl)
+        if(!ImGui::IsPopupOpen(brush_menu_id.data()) && !any_hover && globals::brush_edit_data.selected_ranges.size() &&  (ImGui::IsMouseReleased(ImGuiMouseButton_Left) || (!new_brush && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) && !ImGui::GetIO().KeyCtrl)
             globals::brush_edit_data.selected_ranges.clear();
     }
     
     // priority selection
     if(_select_priority_center_single || _select_priority_center_all){
         globals::brush_edit_data.clear();
+        globals::selected_drawlists.clear();
         ImVec2 b{pic_pos.x + pic_size.x, pic_pos.y + pic_size.y};
         ImGui::GetWindowDrawList()->AddRect(pic_pos, b, IM_COL32(255, 255, 0, 255), 0, 15, 5);
         if(!util::point_in_box(ImGui::GetIO().MousePos, pic_pos, b) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))

@@ -157,6 +157,8 @@ inline void upload_changed_brushes(){
             globals::stager.add_staging_task(staging_info);
             wait_stager = true;
         }
+        //if(local_brush_data.size())
+        //    logger << logging::info_prefix << " uploaded local brushes: " << util::memory_view<const float>(local_brush_data.back().data()) << logging::endl;
     }
 
     if(wait_stager)
@@ -203,6 +205,8 @@ inline void update_drawlist_active_indices(){
 
         drawlist.local_brushes.changed = false;
         drawlist.immune_to_global_brushes.changed = false;
+
+        //logger << logging::info_prefix << " updated activations" << logging::endl;
     }
 
     globals::global_brushes.changed = false;
