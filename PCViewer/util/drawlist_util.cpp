@@ -22,6 +22,12 @@ void check_drawlist_deletion(){
         // removing locally selected drawlist
         if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::local && util::memory_view(drawlists).contains(globals::brush_edit_data.local_brush_id))
             globals::brush_edit_data.clear();
+
+        // removing the drawlists from the selected drawlists
+        globals::selected_drawlists.erase(std::remove_if(globals::selected_drawlists.begin(), globals::selected_drawlists.end(), 
+                    [](std::string_view dl){return globals::drawlists_to_delete.count(dl) > 0;}),
+                    globals::selected_drawlists.end());
+        
         globals::drawlists_to_delete.clear();
     }
 }

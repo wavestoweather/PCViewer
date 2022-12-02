@@ -492,7 +492,7 @@ void parallel_coordinates_workbench::show(){
         }
 
         // releasing edge
-        if(!any_hover && globals::brush_edit_data.selected_ranges.size() &&  (ImGui::IsMouseReleased(ImGuiMouseButton_Left) || (!new_brush && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) && !ImGui::GetIO().KeyCtrl)
+        if(!ImGui::IsPopupOpen() && !any_hover && globals::brush_edit_data.selected_ranges.size() &&  (ImGui::IsMouseReleased(ImGuiMouseButton_Left) || (!new_brush && ImGui::IsMouseClicked(ImGuiMouseButton_Left))) && !ImGui::GetIO().KeyCtrl)
             globals::brush_edit_data.selected_ranges.clear();
     }
     
@@ -612,8 +612,12 @@ void parallel_coordinates_workbench::show(){
                 bool selected = util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id);
                 if(ImGui::Selectable((drawlist.read().name + "##pc_wb").c_str(), selected)){
                     globals::selected_drawlists.clear();
-                    if(!selected)
+                    globals::brush_edit_data.clear();
+                    if(!selected){
                         globals::selected_drawlists.push_back(drawlist.read().name);
+                        globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::local;
+                        globals::brush_edit_data.local_brush_id = dl.drawlist_id;
+                    }
                 }
                 ImGui::TableNextColumn();
                 if(ImGui::ArrowButton(("##u" + dl_string).c_str(), ImGuiDir_Up))
@@ -653,10 +657,10 @@ void parallel_coordinates_workbench::show(){
     if(brush_menu_open)
         ImGui::OpenPopup(brush_menu_id.data());
     if(ImGui::BeginPopup(brush_menu_id.data())){
-        if(ImGui::MenuItem("Delete", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
+        if(ImGui::MenuItem("Delete##b", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
             util::brushes::delete_brushes(globals::brush_edit_data.selected_ranges);
         }
-        if(ImGui::MenuItem("Fit axis to boudns", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
+        if(ImGui::MenuItem("Fit axis to bounds", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
             const auto& selected_ranges = util::brushes::get_selected_range_brush_const();
             // getting the extremum values for each axis if existent
             std::vector<std::optional<structures::min_max<float>>> axis_values(attributes.read().size());

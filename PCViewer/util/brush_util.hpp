@@ -195,7 +195,7 @@ inline void update_drawlist_active_indices(){
         // notifying update of the histograms
         drawlist.histogram_registry.access()->request_change_all();
         // check priority updates
-        if(drawlist.delayed_ops.priority_rendering_requested){
+        if(drawlist.delayed_ops.priority_rendering_requested && drawlist.histogram_registry.const_access()->is_used()){
             drawlist.delayed_ops.priority_sorting_done = false;
             drawlist.delayed_ops.priority_rendering_sorting_started = false;
             drawlist.delayed_ops.delayed_ops_done = false;

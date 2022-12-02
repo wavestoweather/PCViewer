@@ -995,51 +995,51 @@ void priority_sorter::_task_thread_function(){
         // starting to sort/count according to priority rendering
         const auto& dl = globals::drawlists.read().at(cur->dl_id).read();
         assert(dl.delayed_ops.priority_rendering_requested == true);
-        bool histograms_used = false;
-        {
-            const auto access = dl.histogram_registry.const_access();
-            if(access->registry.size()){
-                assert(access->dataset_update_done);
-                histograms_used = true;
-                const structures::histogram_registry_key* last_key{};
-                for(const auto& [key, entry]: access->registry) 
-                    if((key.is_max_histogram || key.is_min_histogram) && (key.attribute_indices.size() == 2 || key.attribute_indices.size() == 4)) last_key = &key;
-                assert(last_key);
-                for(const auto& [key, entry]: access->registry){
-                    // downloading histograms (2d or 4d) and ordering each of them
-                    if(!key.is_max_histogram && !key.is_min_histogram && key.attribute_indices.size() != 2 && key.attribute_indices.size() != 4)
-                        continue;
-                    size_t bins_amt{1};
-                    for(int s: key.bin_sizes) bins_amt *= s;
-                    std::vector<uint32_t> data(bins_amt);
-                    stager::staging_buffer_info buffer_info{};
-                    buffer_info.transfer_dir = stager::transfer_direction::download;
-                    buffer_info.dst_buffer = access->gpu_buffers.at(std::string_view(entry.hist_id)).buffer;
-                    buffer_info.data_download = util::memory_view(data);
-                    globals::stager.add_staging_task(buffer_info);
-                    globals::stager.wait_for_completion();
-                    // sorting and uploading
-                    std::vector<uint32_t> ordered(data.size());
-                    std::iota(ordered.begin(), ordered.end(), 0);
-                    //std::sort(ordered.begin(), ordered.end(), [&](uint32_t a, uint32_t b) {return data[a] < data[b];});
-                    radix::RadixSortMSDTransform(ordered.data(), ordered.size(), [&](uint32_t i){return data[i];}, 7);
-                    if(!dl.priority_indices.contains(entry.hist_id)){
-                        auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ordered.size() * sizeof(ordered[0]));
-                        auto alloc_info = util::vma::initializers::allocationCreateInfo();
-                        globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_indices[entry.hist_id] = util::vk::create_buffer(buffer_info, alloc_info);
-                    }
-                    buffer_info.transfer_dir = stager::transfer_direction::upload;
-                    buffer_info.dst_buffer = dl.priority_indices.at(entry.hist_id).buffer;
-                    buffer_info.data_upload = util::memory_view(ordered);
-                    if(key == *last_key){
-                        buffer_info.cpu_signal_flags = std::move(cur->cpu_signal_flags);
-                        buffer_info.cpu_unsignal_flags = std::move(cur->cpu_unsignal_flags);
-                    }
-                    globals::stager.add_staging_task(buffer_info);
+        if(dl.histogram_registry.const_access()->is_used()){
+            assert(dl.histogram_registry.const_access()->dataset_update_done);
+            const structures::histogram_registry_key* last_key{};
+            for(const auto& [key, entry]: dl.histogram_registry.const_access()->registry) 
+                if((key.is_max_histogram || key.is_min_histogram) && (key.attribute_indices.size() == 2 || key.attribute_indices.size() == 4)) last_key = &key;
+            assert(last_key);
+            std::vector<std::vector<uint32_t>> order_storage;
+            const auto& registry = dl.histogram_registry.const_access()->registry;
+            for(const auto& [key, entry]: registry){
+                // downloading histograms (2d or 4d) and ordering each of them
+                if(!key.is_max_histogram && !key.is_min_histogram && key.attribute_indices.size() != 2 && key.attribute_indices.size() != 4)
+                    continue;
+                size_t bins_amt{1};
+                for(int s: key.bin_sizes) bins_amt *= s;
+                std::vector<uint32_t> data(bins_amt);
+                stager::staging_buffer_info buffer_info{};
+                buffer_info.transfer_dir = stager::transfer_direction::download;
+                buffer_info.dst_buffer = dl.histogram_registry.const_access()->gpu_buffers.at(std::string_view(entry.hist_id)).buffer;
+                buffer_info.data_download = util::memory_view(data);
+                globals::stager.add_staging_task(buffer_info);
+                globals::stager.wait_for_completion();
+                // sorting and uploading
+                order_storage.emplace_back(data.size());
+                std::vector<uint32_t>& ordered = order_storage.back();
+                std::iota(ordered.begin(), ordered.end(), 0);
+                //std::sort(ordered.begin(), ordered.end(), [&](uint32_t a, uint32_t b) {return data[a] < data[b];});
+                radix::RadixSortMSDTransform(ordered.data(), ordered.size(), [&](uint32_t i){return data[i];}, 7);
+                if(!dl.priority_indices.contains(entry.hist_id)){
+                    auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ordered.size() * sizeof(ordered[0]));
+                    auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                    globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_indices[entry.hist_id] = util::vk::create_buffer(buffer_info, alloc_info);
                 }
+                buffer_info.transfer_dir = stager::transfer_direction::upload;
+                buffer_info.dst_buffer = dl.priority_indices.at(entry.hist_id).buffer;
+                buffer_info.data_upload = util::memory_view(ordered);
+                if(key == *last_key){
+                    buffer_info.cpu_signal_flags = std::move(cur->cpu_signal_flags);
+                    buffer_info.cpu_unsignal_flags = std::move(cur->cpu_unsignal_flags);
+                }
+                globals::stager.add_staging_task(buffer_info);
             }
+            // waiting as order_storage has to be kept alive until everything was copied
+            globals::stager.wait_for_completion();
         }
-        if(!histograms_used){
+        else{
             std::string standard_string(globals::priority_drawlist_standard_order);
             // calculating priority colors and ordering the indices
             const auto& tl = dl.const_templatelist();

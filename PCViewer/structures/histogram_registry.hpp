@@ -106,6 +106,10 @@ struct histogram_registry{
         dataset_update_done = false;
     }
 
+    bool is_used() const {
+        return registry.size();
+    }
+
     struct scoped_registrator_t{
         static std::atomic<registrator_id_t> registrator_id_counter; // defined in globals.cpp
 

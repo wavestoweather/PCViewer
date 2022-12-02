@@ -55,7 +55,6 @@ void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer command
 
 void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer commands, VkFence fence, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores)
 {
-    vkCmdEndRenderPass(commands);
     std::vector<VkPipelineStageFlags> stage_flags(wait_semaphores.size(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
     std::scoped_lock lock(*globals::vk_context.graphics_mutex);
     util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags, signal_semaphores, fence);
@@ -402,11 +401,11 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
             cur_offset += cur_batch_size;
             cur_batch_lines += cur_batch_size;
+            vkCmdEndRenderPass(_render_commands.back());
             if(cur_batch_lines >= batch_size){
                 // dispatching command buffer
                 _post_render_commands(_render_commands.back());
                 _render_commands.push_back(util::vk::create_begin_command_buffer(_command_pool));
-                _pre_render_commands(_render_commands.back(), out_specs);
                 cur_batch_lines = 0;
             }
         } while(cur_offset < data_size);
@@ -424,6 +423,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         auto pipeline_info = get_or_create_pipeline(out_specs);
 
         _pre_render_commands(_render_commands[0], out_specs, clear_framebuffer, info.workbench.setting.read().plot_background);
+        vkCmdEndRenderPass(_render_commands[0]);
     }
 
     // committing last command buffer
