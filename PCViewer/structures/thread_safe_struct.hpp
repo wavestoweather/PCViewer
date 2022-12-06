@@ -17,6 +17,8 @@ public:
         access_t(T& _struct, std::mutex& m): _struct(_struct), _lock(m) {}
         T* operator->() {return &_struct;}
         T& operator*() {return _struct;}
+        access_t& operator=(const T& o) {_struct = o; return *this;}
+        access_t& operator=(T&& o) {_struct = std::move(o); return *this;}
     };
 
     class const_access_t{
