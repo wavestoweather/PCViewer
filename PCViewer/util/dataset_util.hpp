@@ -44,6 +44,8 @@ enum class data_type_preference{
     COUNT
 };
 
+template<typename T>
+structures::data<T> open_data(std::string_view filename);
 globals::dataset_t open_dataset(std::string_view filename, memory_view<structures::query_attribute> query_attributes = {}, data_type_preference data_type_pref = data_type_preference::none);
 
 

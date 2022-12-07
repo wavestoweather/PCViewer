@@ -9,6 +9,16 @@
 namespace workbenches{
 class compression_workbench: public structures::workbench{
     typedef uint64_t file_version;
+    struct compress_info{
+        uint32_t comression_block_size_shift{28};   // power of 2
+        uint32_t amt_of_threads{static_cast<uint32_t>(std::thread::hardware_concurrency() * .8)};
+        uint32_t max_working_memory{static_cast<uint32_t>(globals::sys_info.ram_size * .5)};
+        float    quantization_step{.01f};
+        bool     float_column_data{false};
+        bool     half_column_data{true};
+        bool     compressed_column_data{false};
+        bool     roaring_bin_indices{false};
+    };
 
     std::string                         _input_files{};
     file_version                        _input_files_version{};
@@ -17,14 +27,7 @@ class compression_workbench: public structures::workbench{
     std::vector<uint8_t>                _current_files_active{};
     std::string                         _output_folder{};
 
-    uint32_t                            _comression_block_size_shift{28};   // power of 2
-    uint32_t                            _amt_of_threads{static_cast<uint32_t>(std::thread::hardware_concurrency() * .8)};
-    uint32_t                            _max_working_memory{static_cast<uint32_t>(globals::sys_info.ram_size * .5)};
-    float                               _quantization_step{.01f};
-    bool                                _float_column_data{false};
-    bool                                _half_column_data{true};
-    bool                                _compressed_column_data{false};
-    bool                                _roaring_bin_indices{false};
+    compress_info                       _compress_info{};
 
     // multithreading stuff for async loading/working
     std::thread                         _analysis_thread{};
@@ -43,8 +46,8 @@ class compression_workbench: public structures::workbench{
     };
     structures::thread_safe<analysed_data_t> _analysed_data{};
 
-    void _analyse(std::vector<std::string> files, file_version version); // analyses min/max + data size for all files listed in files. Takes a copy of the vector to avoid access problems
-    void _compress(std::vector<std::string> files, analysed_data_t analysed_data);
+    void _analyse(std::vector<std::string> files, file_version version);            // analyses min/max + data size for all files listed in files. Takes a copy of the vector to avoid access problems
+    void _compress(std::vector<std::string> files, std::string output_folder, analysed_data_t analysed_data, compress_info compress_info);
 public:
     compression_workbench(std::string_view id);
     ~compression_workbench();

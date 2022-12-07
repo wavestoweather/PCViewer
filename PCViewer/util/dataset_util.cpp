@@ -428,6 +428,21 @@ std::vector<structures::query_attribute> get_combined_query_attributes(std::stri
 }
 }
 
+template<typename T>
+structures::data<T> open_data_impl(std::string_view filename){
+    auto [file, extension] = get_file_extension(filename);
+    if(extension == ".nc")
+        return open_internals::open_netcdf<T>(filename).data;
+    if(extension == ".csv")
+        return open_internals::open_netcdf<T>(filename).data;
+
+    return {};
+}
+
+template<> structures::data<float> open_data(std::string_view filename){
+    return open_data_impl<float>(filename);
+}
+
 globals::dataset_t open_dataset(std::string_view filename, memory_view<structures::query_attribute> query_attributes, data_type_preference data_type_pref){    
     // this method will open only a single dataset. If all datasets from a folder should be opened, handle the readout of all datasets outside this function
     // compressed data will be read nevertheless

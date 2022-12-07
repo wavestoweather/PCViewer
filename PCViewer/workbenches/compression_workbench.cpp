@@ -6,6 +6,8 @@
 #include <regex>
 #include <imgui_internal.h>
 #include <dataset_util.hpp>
+#include <fstream>
+#include "../imgui_nodes/crude_json.h"
 
 static std::vector<std::string> get_data_filenames(const std::string_view& path, util::memory_view<const std::string> includes, util::memory_view<const std::string> ignores){
     // searching all files in the given directory (also in the subdirectories) and append all found netCdf files to the _files variable
@@ -123,8 +125,93 @@ void compression_workbench::_analyse(std::vector<std::string> files, file_versio
     _analysis_running = false;
 }
 
-void compression_workbench::_compress(std::vector<std::string> files, analysed_data_t analysed_data){
+void compression_workbench::_compress(std::vector<std::string> files, std::string output_folder, analysed_data_t analysed_data, compress_info compress_info){
+    if(output_folder.empty()){
+        logger << logging::error_prefix << " compression_workbench::_compress() output folder empty" << logging::endl;
+        return;
+    }
 
+    if(_compression_cancel){
+        _compression_cancel = false;
+        return;
+    }
+
+    _compression_running = true;
+
+    std::vector<std::vector<float>> column_data(analysed_data.attributes.size());
+
+    auto append_to_column_file = [&](int col){
+        if(logger.logging_level >= logging::level::l_5)
+            logger << logging::info_prefix << " compression_workbench::_compress() Append converted data block" << logging::endl;
+        if(compress_info.half_column_data){
+            std::string output_file = std::string(output_folder) + "/" + std::to_string(col) + ".col";
+            structures::c_file column_file(std::string_view(output_file), "ab");
+            assert(column_file);
+            std::vector<half> write(column_data[col].begin(), column_data[col].end());
+            column_file.write<half>(util::memory_view(write));
+        }
+        if(compress_info.compressed_column_data){
+            // TODO compression reimplement
+        }
+        column_data[col].clear();
+    };
+
+    size_t offset{};
+    for(const auto& file: files){
+        // loading file
+        auto data = util::dataset::open_data<float>(file);
+
+        for(int a: util::size_range(data.columns)){
+            for(int64_t i: util::i_range(data.size())){
+                if(_compression_cancel){
+                    _compression_cancel = false;
+                    _compression_running = false;
+                    return;
+                }
+
+                float axis_val = data(i, a);
+
+                if(compress_info.half_column_data || compress_info.compressed_column_data){
+                    column_data[a].push_back(axis_val);
+                    if(column_data[a].size() >= compress_info.comression_block_size_shift)
+                        append_to_column_file(a);
+                }
+                // TODO other compression stuff
+            }
+        }
+
+        offset += data.size();
+        _compression_progress = double(offset) / analysed_data.data_size;
+
+        if(logger.logging_level >= logging::level::l_5)
+            logger << logging::info_prefix << " compression_workbench::_compress() File " << file << " progressed" << logging::endl;
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // writeout of the data info (json info)
+    // ----------------------------------------------------------------------------------------------
+    crude_json::value info;
+    info["data_size"] = double(analysed_data.data_size);
+    info["half_data"] = compress_info.half_column_data;
+    info["compressed_data"] = compress_info.compressed_column_data;
+    // adding the copmression infos
+    if(compress_info.compressed_column_data){
+        std::string c{"compression_infos"};
+        info[c]["quant_step"] = compress_info.quantization_step;
+        info[c]["block_size"] = double(compress_info.comression_block_size_shift);
+    }
+
+    for(int a: util::size_range(analysed_data.attributes)){
+        info["attributes"][a]["name"] = analysed_data.attributes[a].id;
+        info["attributes"][a]["min"] = analysed_data.attributes[a].bounds.read().min;
+        info["attributes"][a]["max"] = analysed_data.attributes[a].bounds.read().max;
+    }
+
+    std::ofstream json_file(std::string(output_folder) + "/info.json", std::ios::binary);
+    json_file << info.dump();
+
+    _compression_progress = 1;
+    _compression_running = false;
 }
 
 compression_workbench::compression_workbench(std::string_view id):
@@ -239,9 +326,38 @@ void compression_workbench::show()
 
     ImGui::Separator();
 
-    bool disable_compression_button = _analysis_progress != 1 || _compression_thread.joinable();
-    ImGui::BeginDisabled(disable_compression_button);
+    ImGui::InputText("Output folder", &_output_folder);
+    ImGui::Checkbox("Float column data", &_compress_info.float_column_data);
+    ImGui::Checkbox("Half column data", &_compress_info.half_column_data);
+    ImGui::Checkbox("Compressed column data", &_compress_info.compressed_column_data);
 
+    if(!_analysed_data.const_access()->files_version != _input_files_version)
+        ImGui::TextColored({1, .1, .1, 1}, "Filelist changed, first run analysis.");
+    bool disable_compression_button = _analysis_progress != 1 || _analysed_data.const_access()->files_version != _input_files_version;
+    ImGui::BeginDisabled(disable_compression_button);
+    if(ImGui::Button("Compress")){
+        std::vector<std::string> files;
+        for(int i: util::size_range(_current_files)){
+            if(_current_files_active[i])
+                files.push_back(_current_files[i]);
+        }
+        _compression_cancel = false;
+        _compression_progress = 0;
+        if(_compression_thread.joinable())
+            _compression_thread.join();
+        _compression_thread = std::thread(&compression_workbench::_compress, this, files, _output_folder, *_analysed_data.const_access(), _compress_info);
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    bool disable_cancel_compression_button = !_compression_running;
+    ImGui::BeginDisabled(disable_cancel_compression_button);
+    if(ImGui::Button("Cancel Compress")){
+        _compression_cancel = true;
+        _compression_progress = 0;
+        _compression_thread.join();
+        _compression_thread = {};
+    }
     ImGui::EndDisabled();
 
     ImGui::End();

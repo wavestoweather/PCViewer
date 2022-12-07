@@ -27,7 +27,7 @@ public:
     public:
         const_access_t(const T& _struct, std::mutex& m): _struct(_struct), _lock(m) {}
         const T* operator->() const {return &_struct;}
-        T* operator*() const {return _struct;}
+        const T& operator*() const {return _struct;}
     };
 
     thread_safe(const thread_safe& o): _struct(o._struct) {}
