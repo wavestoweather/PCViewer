@@ -416,13 +416,15 @@ settings_manager::~settings_manager()
 
 bool settings_manager::add_setting(const setting& s, bool autostore)
 {
-    if (s.id.empty() || s.type.empty()) return false;
+    const std::string& id = s["id"].get<std::string>();
+    const std::string& type = s["type"].get<std::string>();
+    if (id.empty() || type.empty()) return false;
 
-    settings[s.id] = s;
+    settings[id] = s;
 
     
-    if(settings_type.count(s.id) > 0)
-        settings_type[s.type].push_back(&settings[s.id]);
+    //if(settings_type.count(s.id) > 0)
+    settings_type[type].insert(id);
 
     if(autostore)
         store_settings(settings_file);
@@ -433,17 +435,17 @@ bool settings_manager::add_setting(const setting& s, bool autostore)
 bool settings_manager::delete_setting(std::string_view id)
 {
     std::string sid(id);
-    if (settings.find(sid) == settings.end()) return false;
+    if (!settings.contains(sid)) return false;
 
     auto& s = settings[sid];
-    int i = 0;
-    for (; i < settings_type[s.type].size(); i++) {
-        if (settings_type[s.type][i]->id == id)
-            break;
+    const auto& type = s["type"].get<std::string>();
+    
+    if(settings_type.contains(type)){
+        if(settings_type[type].count(sid) > 0)
+            settings_type[type].erase(sid);
+        if(settings_type[type].empty())
+            settings_type.erase(type);
     }
-
-    settings_type[s.type][i] = settings_type[s.type][settings_type[s.type].size()-1];
-    settings_type[s.type].pop_back();
 
     settings.erase(sid);
     return true;
@@ -452,80 +454,37 @@ bool settings_manager::delete_setting(std::string_view id)
 settings_manager::setting& settings_manager::get_setting(std::string_view id)
 {
     std::string sid;
-    if (settings.find(sid) == settings.end()) return notFound;
     return settings[sid];
 }
 
-std::vector<settings_manager::setting*>* settings_manager::get_settings_type(std::string type)
+const std::set<std::string>& settings_manager::get_settings_type(const std::string& type) const
 {
-    return &settings_type[type];
+    return settings_type.at(type);
 }
 
 void settings_manager::store_settings(std::string_view filename)
 {
-    std::ofstream file(std::string(filename), std::ifstream::binary);
-    for (auto& s : settings) {
-        file << "\"" << s.second.id << "\"" << ' ' << "\"" << s.second.type << "\"" << ' ' << s.second.storage.size() << ' ';
-        file.write(reinterpret_cast<char*>(s.second.storage.data()), s.second.storage.size());
-        file << "\n";
+    setting json;
+    for(const auto& [id, s]: settings){
+        if(!s.is_null())
+            json[id] = s;
     }
-    file.close();
+    util::json::save_json(filename, json, 4);
 }
 
 void settings_manager::load_settings(std::string_view filename)
 {
-    std::ifstream file(std::string(filename), std::ifstream::binary);
-
-    if (!file.is_open()) {
+    try{
+        auto json = util::json::open_json(filename);
+        for(const auto& [id, s]: json.get<crude_json::object>()){
+            settings[id] = s;
+            const auto& type = s["type"].get<std::string>();
+            settings_type[type].insert(id);
+        }
+    }
+    catch(std::exception e){
         ::logger << "[warning] Settingsfile was not found or no settings exist. Creating empty settings" << logging::endl;
-        return;
     }
-
-    setting s = {};
-    while (file >> s.id) {
-        if (s.id[0] == '\"') {
-            if (!(s.id[s.id.size() - 1] == '\"')) {
-                s.id = s.id.substr(1);
-                std::string nextWord;
-                file >> nextWord;
-                while (nextWord[nextWord.size() - 1] != '\"') {
-                    s.id += " " + nextWord;
-                    file >> nextWord;
-                }
-                s.id += " " + nextWord.substr(0, nextWord.size() - 1);
-            }
-            else {
-                s.id = s.id.substr(1, s.id.size() - 2);
-            }
-        }
-        
-        file >> s.type;
-        if (s.type[0] == '\"') {
-            if (!(s.type[s.type.length() - 1] == '\"')) {
-                s.type = s.type.substr(1);
-                std::string nextWord;
-                file >> nextWord;
-                while (nextWord[nextWord.size() - 1] != '\"') {
-                    s.type += " " + nextWord;
-                    file >> nextWord;
-                }
-                s.type += " " + nextWord.substr(0, nextWord.size() - 1);
-            }
-            else {
-                s.type = s.type.substr(1, s.type.size() - 2);
-            }
-        }
-        uint32_t byte_length;
-        file >> byte_length;
-        s.storage = std::vector<uint8_t>(byte_length);
-        file.get();
-        file.read((char*)s.storage.data(), byte_length);
-        file.get();
-        if (s.id.size() != 0)
-            add_setting(s, false);
-    }
-
-    file.close();
 }
 
 VkSampler persistent_samplers::get(const VkSamplerCreateInfo& sampler_info){

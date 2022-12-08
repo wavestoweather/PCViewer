@@ -11,7 +11,7 @@ struct c_file{
     };
 
     c_file(std::string_view filename, std::string_view open_mode): handle(fopen(filename.data(), open_mode.data())){}
-    ~c_file() {fclose(handle);}
+    ~c_file() {if(handle) fclose(handle);}
     c_file(const c_file&) = delete;
     c_file& operator=(const c_file&) = delete;
     template<class T>

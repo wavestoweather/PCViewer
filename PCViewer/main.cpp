@@ -29,6 +29,7 @@
 #include <histogram_counter_executor.hpp>
 #include <drawlist_util.hpp>
 #include <main_window_util.hpp>
+#include <settings_manager.hpp>
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
