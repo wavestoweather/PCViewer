@@ -9,6 +9,8 @@ class data_workbench: public structures::workbench, public structures::drawlist_
     std::string_view                _popup_ds_id{};
     std::string_view                _popup_tl_id{};
     std::string                     _open_filename{};
+    std::string                     _table_filter{};
+    bool                            _regex_error{};
     
     structures::templatelist_convert_data _tl_convert_data{};
 

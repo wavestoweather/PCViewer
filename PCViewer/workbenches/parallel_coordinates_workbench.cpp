@@ -584,7 +584,7 @@ void parallel_coordinates_workbench::show(){
 
         // drawlist settings
         ImGui::BeginVertical("DrawlistSettings");
-        if(ImGui::BeginTable("Drawlist settings", 7, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit)){
+        if(ImGui::BeginTable("Drawlist settings", 7, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Drawlist", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Up");

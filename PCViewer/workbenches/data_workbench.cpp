@@ -7,6 +7,7 @@
 #include <open_filepaths.hpp>
 #include <../imgui_file_dialog/ImGuiFileDialog.h>
 #include <drawlist_util.hpp>
+#include <regex>
 
 namespace workbenches
 {
@@ -97,7 +98,7 @@ void data_workbench::show()
 
         // c2
         ImGui::TableNextColumn();
-        if(ImGui::BeginTable("Drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit)){
+        if(ImGui::BeginTable("Drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
@@ -106,6 +107,37 @@ void data_workbench::show()
             ImGui::TableSetupColumn("Median color");
             ImGui::TableSetupColumn("Delete");
             
+            // filter row
+            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+            ImGui::TableNextColumn();
+            if(_regex_error)
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, {1, 0, 0, .5});
+            bool reselect_all = ImGui::InputText("Filter", &_table_filter);
+            if(_regex_error)
+                ImGui::PopStyleColor();
+            std::regex table_regex;
+            try{
+                table_regex = std::regex(_table_filter);
+                _regex_error = false;
+            }
+            catch(std::exception e){
+                _regex_error = true;
+                reselect_all = false;
+            };
+            ImGui::TableNextColumn();
+            if(ImGui::Button("Deselect all")){
+                globals::brush_edit_data.clear();
+                globals::selected_drawlists.clear();
+            }
+            ImGui::TableNextColumn();
+            if(ImGui::Button("Select all") || reselect_all){
+                globals::brush_edit_data.clear();
+                globals::selected_drawlists.clear();
+                for(const auto& [id, dl]: globals::drawlists.read())
+                    if(std::regex_search(id.begin(), id.end(), table_regex))
+                        globals::selected_drawlists.push_back(id);
+            }
+
             // top row
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
             ImGui::TableNextColumn();
@@ -122,6 +154,8 @@ void data_workbench::show()
             ImGui::TableHeader("Delete");
             
             for(const auto& [id, dl]: globals::drawlists.read()){
+                if(!std::regex_search(id.begin(), id.end(), table_regex))
+                    continue;
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 bool selected = util::memory_view(globals::selected_drawlists).contains(id);
@@ -196,7 +230,7 @@ void data_workbench::show()
         // c3
         ImGui::TableNextColumn();
 
-        if(ImGui::BeginTable("global_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit)){
+        if(ImGui::BeginTable("global_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
