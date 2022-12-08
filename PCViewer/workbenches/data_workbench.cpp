@@ -99,19 +99,17 @@ void data_workbench::show()
         ImGui::TableNextColumn();
         if(ImGui::BeginTable("Drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
-            ImGui::TableSetupColumn("Drawlist", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Delete");
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
             ImGui::TableSetupColumn("Color");
             ImGui::TableSetupColumn("Median");
             ImGui::TableSetupColumn("Median color");
+            ImGui::TableSetupColumn("Delete");
             
             // top row
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
             ImGui::TableNextColumn();
-            ImGui::TableHeader("Drawlist");
-            ImGui::TableNextColumn();
-            ImGui::TableHeader("Delete");
+            ImGui::TableHeader("Name");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Active");
             ImGui::TableNextColumn();
@@ -120,6 +118,8 @@ void data_workbench::show()
             ImGui::TableHeader("Median");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Median color");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Delete");
             
             for(const auto& [id, dl]: globals::drawlists.read()){
                 ImGui::TableNextRow();
@@ -163,10 +163,6 @@ void data_workbench::show()
                     ImGui::Text("Drop datasets on workbench to add");
                     ImGui::EndDragDropSource();
                 }
-                ImGui::TableNextColumn();
-                if(ImGui::Button(("X##" + std::string(id)).c_str())){
-                    globals::drawlists_to_delete.insert(id);
-                }
                 auto& appearance_no_track = globals::drawlists.ref_no_track()[id].ref_no_track().appearance_drawlist.ref_no_track();
                 ImGui::TableNextColumn();
                 if(ImGui::Checkbox(("##dlactive" + std::string(id)).c_str(), &appearance_no_track.show))
@@ -188,6 +184,10 @@ void data_workbench::show()
                 ImGui::TableNextColumn();
                 if(ImGui::ColorEdit4(("##dlmedc" + std::string(id)).c_str(), &median_no_track.color.x, color_edit_flags))
                     globals::drawlists()[id]().appearance_median().color;
+                ImGui::TableNextColumn();
+                if(ImGui::Button(("X##" + std::string(id)).c_str())){
+                    globals::drawlists_to_delete.insert(id);
+                }
             }
 
             ImGui::EndTable();

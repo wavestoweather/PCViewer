@@ -681,14 +681,16 @@ void stager::_task_thread_function(){
             auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
             for(auto& b: cur->cpu_signal_flags)
                 *b = true;
-            ::logger << logging::info_prefix << " stager::_task_thrad_function() signaled " << cur->cpu_signal_flags.size() << " flags." << logging::endl;
+            if(::logger.logging_level >= logging::level::l_5)
+                ::logger << logging::info_prefix << " stager::_task_thrad_function() signaled " << cur->cpu_signal_flags.size() << " flags." << logging::endl;
         }
         
         if(cur->cpu_unsignal_flags.size()){
             auto res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
             for(auto& b: cur->cpu_unsignal_flags)
                 *b = false;
-            ::logger << logging::info_prefix << " stager::_task_thrad_function() unsignaled " << cur->cpu_unsignal_flags.size() << " flags." << logging::endl;
+            if(::logger.logging_level >= logging::level::l_5)
+                ::logger << logging::info_prefix << " stager::_task_thrad_function() unsignaled " << cur->cpu_unsignal_flags.size() << " flags." << logging::endl;
         }
     }
 }
@@ -941,7 +943,7 @@ void priority_sorter::_task_thread_function(){
         }
 
         unique_task cur;
-        if(::logger.logging_level >= logging::level::l_4)
+        if(::logger.logging_level >= logging::level::l_5)
             ::logger << logging::info_prefix << " priority_sorter::_task_thread_function() starting priority sorting (including color calc)" << logging::endl;
         {
             std::scoped_lock lock(_task_add_mutex);
@@ -1041,8 +1043,8 @@ void priority_sorter::_task_thread_function(){
             globals::stager.add_staging_task(staging_info);
         }
         // the signal flags are set by the last uploadstaging task
-        if(::logger.logging_level >= logging::level::l_4)
-            ::logger << logging::info_prefix << " priority_sorter::_task_thread_function() priority ordering done" << logging::endl;
+        if(::logger.logging_level >= logging::level::l_5)
+            ::logger << logging::info_prefix << " priority_sorter::_task_thread_function() priority sorting done" << logging::endl;
     }
 }
 
