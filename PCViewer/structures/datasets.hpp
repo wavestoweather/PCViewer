@@ -47,6 +47,7 @@ struct dataset{
     std::vector<const_unique<templatelist>> templatelists{};
     robin_hood::unordered_map<std::string_view, const templatelist*> templatelist_index;
     change_tracker<cpu_data_t>          cpu_data{};
+    std::set<int>                       cpu_data_edited_cols{}; // if a column was removed -1 should be inserted
     gpu_data_t                          gpu_data{};
     struct data_flags{
         bool gpuStream: 1;          // data has to be streamed from ram to gpu as not enough space available
