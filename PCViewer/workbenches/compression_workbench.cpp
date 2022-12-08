@@ -7,7 +7,8 @@
 #include <imgui_internal.h>
 #include <dataset_util.hpp>
 #include <fstream>
-#include "../imgui_nodes/crude_json.h"
+#include <json_util.hpp>
+#include <util.hpp>
 
 static std::vector<std::string> get_data_filenames(const std::string_view& path, util::memory_view<const std::string> includes, util::memory_view<const std::string> ignores){
     // searching all files in the given directory (also in the subdirectories) and append all found netCdf files to the _files variable
@@ -170,6 +171,7 @@ void compression_workbench::_compress(std::vector<std::string> files, std::strin
                 }
 
                 float axis_val = data(i, a);
+                axis_val = util::normalize_val_for_range(axis_val, analysed_data.attributes[a].bounds.read().min, analysed_data.attributes[a].bounds.read().max);
 
                 if(compress_info.half_column_data || compress_info.compressed_column_data){
                     column_data[a].push_back(axis_val);
@@ -207,8 +209,7 @@ void compression_workbench::_compress(std::vector<std::string> files, std::strin
         info["attributes"][a]["max"] = analysed_data.attributes[a].bounds.read().max;
     }
 
-    std::ofstream json_file(std::string(output_folder) + "/info.json", std::ios::binary);
-    json_file << info.dump();
+    util::json::save_json(std::string(output_folder) + "/info.json", info);
 
     _compression_progress = 1;
     _compression_running = false;
@@ -298,7 +299,8 @@ void compression_workbench::show()
 
     // start/end analysis
     ImGui::Separator();
-    ImGui::Text("Analysis progress: %.1f", _analysis_progress * 100);
+    ImGui::Text("Data analysis");
+    ImGui::ProgressBar(_analysis_progress);
     bool disable_analysis_button = _analysis_running;
     ImGui::BeginDisabled(disable_analysis_button);
     if(ImGui::Button("Analyse")){
@@ -326,14 +328,17 @@ void compression_workbench::show()
 
     ImGui::Separator();
 
+    ImGui::Text("Compression");
     ImGui::InputText("Output folder", &_output_folder);
     ImGui::Checkbox("Float column data", &_compress_info.float_column_data);
     ImGui::Checkbox("Half column data", &_compress_info.half_column_data);
     ImGui::Checkbox("Compressed column data", &_compress_info.compressed_column_data);
 
-    if(!_analysed_data.const_access()->files_version != _input_files_version)
+    if(_analysed_data.const_access()->files_version != _input_files_version)
         ImGui::TextColored({1, .1, .1, 1}, "Filelist changed, first run analysis.");
-    bool disable_compression_button = _analysis_progress != 1 || _analysed_data.const_access()->files_version != _input_files_version;
+    ImGui::ProgressBar(_compression_progress);
+    ImGui::SameLine(); ImGui::Text("progress");
+    bool disable_compression_button = _compression_running || _analysis_progress != 1 || _analysed_data.const_access()->files_version != _input_files_version;
     ImGui::BeginDisabled(disable_compression_button);
     if(ImGui::Button("Compress")){
         std::vector<std::string> files;

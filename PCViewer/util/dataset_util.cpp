@@ -24,6 +24,7 @@
 #include <data_util.hpp>
 #include <string_view_util.hpp>
 #include <sys_info.hpp>
+#include <json_util.hpp>
 
 namespace util{
 namespace dataset{
@@ -244,17 +245,33 @@ load_result<half> open_combined(std::string_view folder, memory_view<structures:
     load_result<half> ret;
     // getting the needed attribute bounds to have the scale and translate parameter
     std::string attribute_info = std::string(folder) + "/attr.info";
-    if(!std::filesystem::exists(attribute_info))
-        throw std::runtime_error{"open_combined() file " + attribute_info + " does not exist"};
-    std::ifstream attribute_info_file(attribute_info, std::ios::binary);
-    std::string variable; float min, max;
-    int c{};
-    while(attribute_info_file >> variable >> min >> max){
-        if(!query_attributes[c++].is_active)
-            continue;
-        ret.data.column_transforms.push_back(structures::scale_offset<float>{max - min, min});
-        ret.attributes.push_back(structures::attribute{variable, variable, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
+    std::string json_info = std::string(folder) + "/info.json";
+    if(std::filesystem::exists(attribute_info)){
+        std::ifstream attribute_info_file(attribute_info, std::ios::binary);
+        int tmp;
+        attribute_info_file >> tmp;
+        std::string variable; float min, max;
+        int c{};
+        while(attribute_info_file >> variable >> min >> max){
+            if(!query_attributes[c++].is_active)
+                continue;
+            ret.data.column_transforms.push_back(structures::scale_offset<float>{max - min, min});
+            ret.attributes.push_back(structures::attribute{variable, variable, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
+        }
     }
+    else if(std::filesystem::exists(json_info)){
+        auto json = util::json::open_json(json_info);
+        for(const auto& a: json["attributes"].get<crude_json::array>()){
+            auto name = a["name"].get<std::string>();
+            float min = a["min"].get<double>();
+            float max = a["max"].get<double>();
+            ret.data.column_transforms.push_back(structures::scale_offset<float>{max - min, min});
+            ret.attributes.push_back(structures::attribute{name, name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
+        }
+    }
+    else
+        throw std::runtime_error{"open_combined() info file is missing (attr.info/info.json)"};
+    
 
     // loading the data
     for(int i: util::i_range(query_attributes.size() - 1)){    // last element is dimension
@@ -386,45 +403,80 @@ std::vector<structures::query_attribute> get_combined_query_attributes(std::stri
         throw std::runtime_error{"get_combined_query_attributes() folder " + std::string(folder) + " does not exist"};
     std::string attribute_info = std::string(folder) + "/attr.info";
     std::string data_info = std::string(folder) + "/data.info";
-    if(!std::filesystem::exists(attribute_info))
-        throw std::runtime_error{"get_combined_query_attributes() file " + attribute_info + " does not exist"};
-    if(!std::filesystem::exists(data_info))
-        throw std::runtime_error{"get_combined_query_attributes() file " + data_info + " does not exist"};
+    std::string json_info = std::string(folder) + "/info.json";
+    const bool attribute_info_exists = std::filesystem::exists(attribute_info) && std::filesystem::exists(data_info);
+    const bool json_info_exists = std::filesystem::exists(json_info);
+    if(!attribute_info_exists && !json_info_exists)
+        throw std::runtime_error{"get_combined_query_attributes() Data/Attribute informations ares missing"};
 
     std::vector<structures::query_attribute> query;
-    std::string variable; float min, max;
-    std::ifstream attribute_info_file(attribute_info, std::ios::binary);
-    while(attribute_info_file >> variable >> min >> max){
+    if(attribute_info_exists){
+        std::string variable; float min, max;
+        std::ifstream attribute_info_file(attribute_info, std::ios::binary);
+        attribute_info_file >> min;
+        while(attribute_info_file >> variable >> min >> max){
+            query.push_back(structures::query_attribute{
+                false,      // dim
+                false,      // string dim
+                true,       // active
+                false,      // linearize
+                variable,   //id
+                0,          // dimensions size
+                {0},        // dependant dimensions
+                1,          // dimension subsampling
+                0,          // dimension slice
+                {0, size_t(-1)}// trim bounds
+            });
+        }
+        std::ifstream data_info_file(data_info, std::ios::binary);
+        size_t data_size;
+        uint32_t data_flags;
+        data_info_file >> data_size >> reinterpret_cast<uint32_t&>(data_flags);
         query.push_back(structures::query_attribute{
-            false,      // dim
-            false,      // string dim
-            true,       // active
-            false,      // linearize
-            variable,   //id
-            0,          // dimensions size
-            {0},        // dependant dimensions
-            1,          // dimension subsampling
-            0,          // dimension slice
-            {0, size_t(-1)}// trim bounds
+            true,           // dim
+            false,          // string dim
+            true,           // active
+            false,          // linearize
+            "index",        // id
+            data_size,      // dimensions size
+            {},             // dependant dimensions
+            1,              // dimension subsampling
+            0,              // dimension slice
+            {0, data_size}  // trim bounds
         });
     }
-    std::ifstream data_info_file(data_info, std::ios::binary);
-    size_t data_size;
-    uint32_t data_flags;
-    data_info_file >> data_size >> reinterpret_cast<uint32_t&>(data_flags);
-    query.push_back(structures::query_attribute{
-        true,           // dim
-        false,          // string dim
-        true,           // active
-        false,          // linearize
-        "index",        // id
-        data_size,      // dimensions size
-        {},             // dependant dimensions
-        1,              // dimension subsampling
-        0,              // dimension slice
-        {0, data_size}  // trim bounds
-    });
+    else if(json_info_exists){
+        auto json = util::json::open_json(json_info);
+        for(const auto& a: json["attributes"].get<crude_json::array>()){
+            query.push_back(structures::query_attribute{
+                false,      // dim
+                false,      // string dim
+                true,       // active
+                false,      // linearize
+                a["name"].get<std::string>(),   //id
+                0,          // dimensions size
+                {0},        // dependant dimensions
+                1,          // dimension subsampling
+                0,          // dimension slice
+                {0, size_t(-1)}// trim bounds
+            });
+        }
+        size_t data_size = json["data_size"].get<double>();
+        query.push_back(structures::query_attribute{
+            true,           // dim
+            false,          // string dim
+            true,           // active
+            false,          // linearize
+            "index",        // id
+            data_size,      // dimensions size
+            {},             // dependant dimensions
+            1,              // dimension subsampling
+            0,              // dimension slice
+            {0, data_size}  // trim bounds
+        });
+    }
     return query;
+    
 }
 }
 
@@ -455,7 +507,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     dataset().id = file;
     switch(data_type_pref){
     case data_type_preference::none:
-        if(file_extension.empty() && std::filesystem::exists(std::string(filename) + "/attr.info")){
+        if(file_extension.empty() && (std::filesystem::exists(std::string(filename) + "/attr.info") || std::filesystem::exists(std::string(filename) + "/info.json"))){
             assert(query_attributes.size()); // checking if the queried attributes are filled
             dataset().data_size = query_attributes.back().dimension_size;
             // checking if partial data is needed
