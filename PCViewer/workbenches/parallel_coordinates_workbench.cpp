@@ -5,6 +5,7 @@
 #include <parallel_coordinates_renderer.hpp>
 #include <imgui_util.hpp>
 #include <imgui_stdlib.h>
+#include <imgui_internal.h>
 #include <util.hpp>
 #include <brush_util.hpp>
 #include <algorithm>
@@ -657,7 +658,7 @@ void parallel_coordinates_workbench::show(){
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 bool selected = util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id);
-                if(ImGui::Selectable((drawlist.read().name + "##pc_wb").c_str(), selected)){
+                if(ImGui::Selectable((drawlist.read().name + "##pc_wb").c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
                     globals::selected_drawlists.clear();
                     globals::brush_edit_data.clear();
                     if(!selected){

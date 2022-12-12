@@ -3,6 +3,7 @@
 #include <datasets.hpp>
 #include <drawlists.hpp>
 #include <imgui_stdlib.h>
+#include <imgui_internal.h>
 #include <dataset_util.hpp>
 #include <open_filepaths.hpp>
 #include <../imgui_file_dialog/ImGuiFileDialog.h>
@@ -159,7 +160,7 @@ void data_workbench::show()
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 bool selected = util::memory_view(globals::selected_drawlists).contains(id);
-                if(ImGui::Selectable(id.data(), selected)){
+                if(ImGui::Selectable(id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
                     // updating drawlist selection
                     if(selected && ImGui::GetIO().KeyCtrl)
                         globals::selected_drawlists.erase(std::find(globals::selected_drawlists.begin(), globals::selected_drawlists.end(), id));
@@ -252,7 +253,7 @@ void data_workbench::show()
                 ImGui::TableNextColumn();
                 const auto& gb = globals::global_brushes.read()[i].read();
                 bool selected = globals::brush_edit_data.global_brush_id == gb.id;
-                if(ImGui::Selectable((gb.name + "##gbs" + std::to_string(gb.id)).c_str(), selected)){
+                if(ImGui::Selectable((gb.name + "##gbs" + std::to_string(gb.id)).c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
                     if(selected)
                         globals::brush_edit_data.clear();
                     else{
