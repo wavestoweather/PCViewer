@@ -11,6 +11,7 @@ class data_workbench: public structures::workbench, public structures::drawlist_
     std::string                     _open_filename{};
     std::string                     _table_filter{};
     bool                            _regex_error{};
+    float                           _uniform_alpha{.01f};
     
     structures::templatelist_convert_data _tl_convert_data{};
 

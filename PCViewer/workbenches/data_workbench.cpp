@@ -138,21 +138,28 @@ void data_workbench::show()
                     if(std::regex_search(id.begin(), id.end(), table_regex))
                         globals::selected_drawlists.push_back(id);
             }
+            ImGui::TableNextColumn();
+            if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 100, 1e-20, 1, "%.1g")){
+                if(globals::selected_drawlists.size()){
+                    for(const auto& dl: globals::selected_drawlists)
+                        globals::drawlists()[dl]().appearance_drawlist().color.w = _uniform_alpha;
+                }
+                else{
+                    for(auto& [dl_id, dl]: globals::drawlists())
+                        dl().appearance_drawlist().color.w = _uniform_alpha;
+                }
+            }
 
             // top row
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
             ImGui::TableNextColumn();
             ImGui::TableHeader("Name");
             ImGui::TableNextColumn();
-            ImGui::TableHeader("Active");
+            ImGui::TableHeader("Active  ");
             ImGui::TableNextColumn();
-            ImGui::TableHeader("Color");
+            ImGui::TableHeader("Color   ");
             ImGui::TableNextColumn();
-            ImGui::TableHeader("Median");
-            ImGui::TableNextColumn();
-            ImGui::TableHeader("Median color");
-            ImGui::TableNextColumn();
-            ImGui::TableHeader("Delete");
+            ImGui::TableHeader("Delete          ");
             
             for(const auto& [id, dl]: globals::drawlists.read()){
                 if(!std::regex_search(id.begin(), id.end(), table_regex))
@@ -200,25 +207,22 @@ void data_workbench::show()
                 }
                 auto& appearance_no_track = globals::drawlists.ref_no_track()[id].ref_no_track().appearance_drawlist.ref_no_track();
                 ImGui::TableNextColumn();
-                if(ImGui::Checkbox(("##dlactive" + std::string(id)).c_str(), &appearance_no_track.show))
-                    globals::drawlists()[id]().appearance_drawlist().show;  // used to mark the changes which have to be propagated
-                ImGui::TableNextColumn();
-                int color_edit_flags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar;
-                if(ImGui::ColorEdit4(("##dlcolor" + std::string(id)).c_str(), &appearance_no_track.color.x, color_edit_flags))
-                    globals::drawlists()[id]().appearance_drawlist().color;
-                ImGui::TableNextColumn();
-                auto& median_no_track = globals::drawlists.ref_no_track()[id].ref_no_track().appearance_median.ref_no_track();
-                ImGui::SetNextItemWidth(100);
-                if(ImGui::BeginCombo(("##medtyp" + std::string(id)).c_str(), structures::median_type_names[dl.read().median_typ.read()].data())){
-                    for(auto median_type: structures::median_iteration{}){
-                        if(ImGui::MenuItem(structures::median_type_names[median_type].data()))
-                            globals::drawlists()[id]().median_typ = median_type;
+                if(ImGui::Checkbox(("##dlactive" + std::string(id)).c_str(), &appearance_no_track.show)){
+                    if(globals::selected_drawlists.size()){
+                        for(const auto& selected_dl: globals::selected_drawlists)
+                            globals::drawlists()[selected_dl]().appearance_drawlist().show = appearance_no_track.show;
                     }
-                    ImGui::EndCombo();
+                    globals::drawlists()[id]().appearance_drawlist().show;  // used to mark the changes which have to be propagated
                 }
                 ImGui::TableNextColumn();
-                if(ImGui::ColorEdit4(("##dlmedc" + std::string(id)).c_str(), &median_no_track.color.x, color_edit_flags))
-                    globals::drawlists()[id]().appearance_median().color;
+                int color_edit_flags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar;
+                if(ImGui::ColorEdit4(("##dlcolor" + std::string(id)).c_str(), &appearance_no_track.color.x, color_edit_flags)){
+                    if(globals::selected_drawlists.size()){
+                        for(const auto& selected_dl: globals::selected_drawlists)
+                            globals::drawlists()[selected_dl]().appearance_drawlist().color = appearance_no_track.color;
+                    }
+                    globals::drawlists()[id]().appearance_drawlist().color;
+                }
                 ImGui::TableNextColumn();
                 if(ImGui::Button(("X##" + std::string(id)).c_str())){
                     globals::drawlists_to_delete.insert(id);
