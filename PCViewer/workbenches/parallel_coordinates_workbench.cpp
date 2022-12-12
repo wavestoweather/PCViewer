@@ -40,9 +40,9 @@ void parallel_coordinates_workbench::_update_plot_image(){
 }
 
 void parallel_coordinates_workbench::_draw_setting_list(){
-    ImGui::Checkbox("Enable axis lines", &setting.read().enable_axis_lines);
-    ImGui::Checkbox("Enable min max labels", &setting.read().min_max_labes);
-    ImGui::Checkbox("Enable axis tick lables", &setting.read().axis_tick_label);
+    ImGui::MenuItem("Enable axis lines", {}, &setting.read().enable_axis_lines);
+    ImGui::MenuItem("Enable min max labels", {}, &setting.read().min_max_labes);
+    ImGui::MenuItem("Enable axis tick lables", {}, &setting.read().axis_tick_label);
     ImGui::InputText("Tick format", &setting.read().axis_tick_fmt);
     ImGui::InputInt("Axis tick count", &setting.read().axis_tick_count);
 }
@@ -318,7 +318,8 @@ void parallel_coordinates_workbench::show(){
     if(setting.read().enable_axis_lines){
         float y1 = pic_pos.y;
         float y2 = y1 + pic_size.y - 1;
-        auto line_col = IM_COL32((1 - setting.read().plot_background.x) * 255, (1 - setting.read().plot_background.y) * 255, (1 - setting.read().plot_background.z) * 255, 255);
+        ImVec4 inv_color{(1 - setting.read().plot_background.x), (1 - setting.read().plot_background.y), (1 - setting.read().plot_background.z), 1.f};
+        auto line_col = IM_COL32(inv_color.x * 255, inv_color.y * 255, inv_color.z * 255, 255);
         for(int i: util::i_range(labels_count)){
             float x = pic_pos.x + (pic_size.x - 1) * i / (labels_count - 1);
             ImGui::GetWindowDrawList()->AddLine({x, y1}, {x, y2}, line_col);
@@ -330,25 +331,37 @@ void parallel_coordinates_workbench::show(){
 
             float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
             const auto& attribute = attributes.read()[att_ref.attribut_index];
-            float min_tick = attribute.bounds.read().min + (attribute.bounds.read().max - attribute.bounds.read().min) / setting.read().axis_tick_count;
+            float min_tick = attribute.bounds.read().min;
             float max_tick = attribute.bounds.read().max;
-            float diff = max_tick - min_tick;
-            int exp;
-            double m = frexp(diff, &exp);
-            m *= 2;
-            exp -= 1;
-            double t = pow(2, exp);
-            int e = int(log10(t));
-            double dec = pow(10, e);
-            for(int i: util::i_range(setting.read().axis_tick_count)){
-                double tick_val = min_tick + diff * i / (setting.read().axis_tick_count - 1);
-                // rounding down to multiple of 10
-                tick_val /= dec;
-                tick_val = double(int(tick_val));
-                tick_val *= dec;
+            double diff = max_tick - min_tick;
+            double cell = diff / setting.read().axis_tick_count;
+            double base = std::pow(10., std::floor(std::log10(cell)));
+            double unit = base, U;
+            constexpr double h = .5, h5 = .5 + 1.5 * h;
+            if((U = 2 * base) - cell < h * (cell - unit)) { 
+                unit = U;
+                if((U = 5 * base) - cell < h5 * (cell - unit)){
+                    unit = U;
+                    if((U = 10 * base) - cell < h * (cell - unit))
+                        unit = U;
+            }}
+            constexpr double rounding_eps = 1e-10;
+            double ns = std::floor(min_tick / unit + rounding_eps) * unit; while(ns < min_tick) ns += unit;
+            double nu = std::ceil(max_tick / unit - rounding_eps) * unit; while(nu > max_tick) nu -= unit;
+            const auto cursor_pos = ImGui::GetCursorScreenPos();
+            for(double tick_val = ns; tick_val <= nu; tick_val += unit){
                 float y = (tick_val - attribute.bounds.read().max) / (attribute.bounds.read().min - attribute.bounds.read().max) * pic_size.y + pic_pos.y;
                 ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y}, {x + tick_width / 2, y}, line_col);
+                if(setting.read().axis_tick_label){
+                    if(x > pic_pos.x + (1. - (1. / labels_count)) * pic_size.x)
+                        ImGui::SetCursorScreenPos({x - ImGui::GetFontSize() * 3, y - .5f * ImGui::GetTextLineHeight()});
+                    else
+                        ImGui::SetCursorScreenPos({x, y - .5f * ImGui::GetTextLineHeight()});
+                    
+                    ImGui::TextColored(inv_color, setting.read().axis_tick_fmt.c_str(), tick_val);
+                }
             }
+            ImGui::SetCursorScreenPos(cursor_pos);
             ++att_pos;
         }  
     }
@@ -777,6 +790,10 @@ void parallel_coordinates_workbench::show(){
             if(ImGui::IsItemHovered())
                 ImGui::SetTooltip("Set priority center for all drawlists");
 
+            ImGui::EndMenu();
+        }
+        if(ImGui::BeginMenu("Plot visuals")){
+            _draw_setting_list();
             ImGui::EndMenu();
         }
         if(ImGui::BeginMenu("Plot Size")){

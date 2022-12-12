@@ -110,6 +110,14 @@ struct histogram_registry{
         return registry.size();
     }
 
+    bool multi_dim_min_max_used() const{
+        for(const auto& [key, val]: registry){
+            if(key.bin_sizes.size() > 1 && (key.is_max_histogram || key.is_min_histogram))
+                return true;
+        }
+        return false;
+    }
+
     struct scoped_registrator_t{
         static std::atomic<registrator_id_t> registrator_id_counter; // defined in globals.cpp
 

@@ -50,9 +50,9 @@ public:
         // mutable to be accessed and change even when const (can not be tracked)
         mutable bool        enable_axis_lines{true};
         mutable bool        min_max_labes{false};
-        mutable bool        axis_tick_label{};
+        mutable bool        axis_tick_label{true};
         mutable std::string axis_tick_fmt{"%6.4g"};
-        mutable int         axis_tick_count{0};
+        mutable int         axis_tick_count{5};
         mutable size_t      render_batch_size{};
         mutable float       brush_box_width{20};
         mutable float       brush_box_border_width{2};

@@ -956,7 +956,7 @@ void priority_sorter::_task_thread_function(){
         // starting to sort/count according to priority rendering
         const auto& dl = globals::drawlists.read().at(cur->dl_id).read();
         assert(dl.delayed_ops.priority_rendering_requested == true);
-        if(dl.histogram_registry.const_access()->is_used()){
+        if(dl.histogram_registry.const_access()->multi_dim_min_max_used()){
             assert(dl.histogram_registry.const_access()->dataset_update_done);
             const structures::histogram_registry_key* last_key{};
             for(const auto& [key, entry]: dl.histogram_registry.const_access()->registry) 
