@@ -329,6 +329,20 @@ inline VkShaderModule create_shader_module(std::string_view filename){
     return module;
 }
 
+struct module_deleter{
+    void operator()(VkShaderModule* module) const{
+        assert(module);
+        vkDestroyShaderModule(globals::vk_context.device, *module, globals::vk_context.allocation_callbacks);
+        delete module;
+    }
+};
+using scoped_shader_module = std::unique_ptr<VkShaderModule, module_deleter>;
+inline scoped_shader_module create_scoped_shader_module(std::string_view filename){
+    scoped_shader_module module(new VkShaderModule, module_deleter());
+    *module = create_shader_module(filename);
+    return module;
+}
+
 inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool, const VkCommandBufferBeginInfo& begin_info = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO}){
     VkCommandBuffer command;
     VkCommandBufferAllocateInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};

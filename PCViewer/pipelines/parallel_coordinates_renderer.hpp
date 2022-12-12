@@ -17,9 +17,11 @@ namespace pipelines{
 
 class parallel_coordinates_renderer{
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
-    using output_specs = structures::parallel_coordinates_renderer::output_specs;
-    using pipeline_data = structures::parallel_coordinates_renderer::pipeline_data;
-    using time_point = std::chrono::time_point<std::chrono::system_clock>;
+    using output_specs      = structures::parallel_coordinates_renderer::output_specs;
+    using pipeline_data     = structures::parallel_coordinates_renderer::pipeline_data;
+    using multisample_key   = structures::parallel_coordinates_renderer::multisample_key;
+    using multisample_val   = structures::parallel_coordinates_renderer::multisample_val;
+    using time_point        = std::chrono::time_point<std::chrono::system_clock>;
 
     struct push_constants{
         VkDeviceAddress     attribute_info_address;
@@ -33,7 +35,6 @@ class parallel_coordinates_renderer{
         uint32_t            sp,ace;
         ImVec4              color;
     };
-    
     struct push_constants_large_vis{
         uint64_t    attribute_info_address{};
         uint64_t    histogram_address{};
@@ -53,9 +54,22 @@ class parallel_coordinates_renderer{
         uint        line_verts{2};
     };
 
+    struct push_constants_hist_vert{
+        ImVec4 bounds{};
+    };
+    struct push_constants_hist_frag{
+        uint64_t histogram_address{};
+        uint     bin_count{};
+        uint     mapping_type{};
+        ImVec4   color{};
+        float    blur_radius{};
+    };
+
     const std::string_view vertex_shader_path{"shader/parallel_coordinates_renderer.vert.spv"};
     const std::string_view large_vis_vertex_shader_path{"shader/parallel_coordinates_renderer_large.vert.spv"};
     const std::string_view fragment_shader_path{"shader/parallel_coordinates_renderer.frag.spv"};
+    const std::string_view histogram_vertex_shader_path{"shader/quad_forward.vert.spv"};
+    const std::string_view histogram_fragment_shader_path{"shader/parallel_coordinates_histogram.frag.spv"};
 
     const uint32_t         _spline_resolution = 20;
 
@@ -67,6 +81,7 @@ class parallel_coordinates_renderer{
 
     robin_hood::unordered_map<output_specs, pipeline_data>  _pipelines{};
     robin_hood::unordered_map<VkPipeline, time_point>       _pipeline_last_use{};
+    robin_hood::unordered_map<multisample_key, multisample_val> _multisample_images{};
 
     const pipeline_data& get_or_create_pipeline(const output_specs& output_specs);
     const structures::buffer_info& get_or_resize_info_buffer(size_t byte_size);

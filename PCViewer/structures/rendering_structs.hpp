@@ -5,6 +5,7 @@
 #include <optional>
 #include <drawlists.hpp>
 #include <data_type.hpp>
+#include <default_hash.hpp>
 
 namespace structures{
 
@@ -27,12 +28,14 @@ namespace parallel_coordinates_renderer{
         polyline_spline,
         large_vis_lines,
         large_vis_density,
+        histogram,
         COUNT
     };
     const structures::enum_names<render_type> render_type_names{
         "polyline_spline",
         "large_vis_lines",
-        "large_vis_density"
+        "large_vis_density",
+        "histogram"
     };
 
     struct output_specs{
@@ -44,7 +47,7 @@ namespace parallel_coordinates_renderer{
         render_type             render_typ{};
         data_type               data_typ{};
 
-        bool operator==(const output_specs& o) const {return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));};
+        bool operator==(const output_specs& o) const {return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));}
     };
 
     struct pipeline_data{
@@ -52,8 +55,20 @@ namespace parallel_coordinates_renderer{
         VkPipelineLayout        pipeline_layout{};
         VkRenderPass            render_pass{};
         VkFramebuffer           framebuffer{};  
-        structures::image_info  multi_sample_image{};
-        VkImageView             multi_sample_view{};
+    };
+
+    struct multisample_key{
+        VkFormat                format{};
+        VkSampleCountFlagBits   sample_count{};
+        uint32_t                width{};
+        uint32_t                height{};
+
+        bool operator==(const multisample_key& o) const {return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));}
+    };
+    struct multisample_val{
+        uint                    count{};
+        structures::image_info  image{};
+        VkImageView             image_view{};
     };
 
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
@@ -85,24 +100,6 @@ namespace brusher{
 }
 }
 
-template<> struct std::hash<structures::parallel_coordinates_renderer::output_specs>{
-    size_t operator()(const structures::parallel_coordinates_renderer::output_specs & x) const
-    {
-        util::memory_view<const uint32_t> as_uint = util::memory_view<const uint32_t>(util::memory_view<const structures::parallel_coordinates_renderer::output_specs>(x));
-        size_t seed = 0;
-        for(uint32_t i: as_uint)
-            seed = std::hash_combine(seed, i);
-        return seed;
-    }
-};
-
-template<> struct std::hash<structures::brusher::pipeline_specs>{
-    size_t operator()(const structures::brusher::pipeline_specs & x) const
-    {
-        util::memory_view<const uint32_t> as_uint = util::memory_view<const uint32_t>(util::memory_view<const structures::brusher::pipeline_specs>(x));
-        size_t seed = 0;
-        for(uint32_t i: as_uint)
-            seed = std::hash_combine(seed, i);
-        return seed;
-    }
-};
+DEFAULT_HASH(structures::parallel_coordinates_renderer::output_specs);
+DEFAULT_HASH(structures::brusher::pipeline_specs);
+DEFAULT_HASH(structures::parallel_coordinates_renderer::multisample_key);

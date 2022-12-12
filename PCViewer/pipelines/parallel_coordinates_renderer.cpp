@@ -25,7 +25,7 @@ parallel_coordinates_renderer::parallel_coordinates_renderer()
 void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer commands, const output_specs& output_specs, bool clear_framebuffer, const ImVec4& clear_color)
 {
     const auto& pipe_data = _pipelines[output_specs];
-    auto begin_info = util::vk::initializers::renderPassBeginInfo(pipe_data.render_pass, pipe_data.framebuffer, {0, 0, output_specs.width, output_specs.height}, VkClearValue{});
+    auto begin_info = util::vk::initializers::renderPassBeginInfo(pipe_data.render_pass, pipe_data.framebuffer, {0, 0, output_specs.width, output_specs.height});
     vkCmdBeginRenderPass(commands, &begin_info, {});
     
     if(clear_framebuffer){
@@ -67,6 +67,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             logger << "[info] parallel_coordinates_renderer::get_or_create_pipeline() creating new pipeline for output_specs " << ss.str() << logging::endl;
         }
 
+        multisample_key ms_key{output_specs.format, output_specs.sample_count, output_specs.width, output_specs.height};
         if(_pipelines.size() > max_pipeline_count){
             auto [pipeline, time] = *std::min_element(_pipeline_last_use.begin(), _pipeline_last_use.end(), [](const auto& l, const auto& r){return l.second < r.second;});
             VkPipeline pipe = pipeline; // needed for msvc and clang on windows...
@@ -75,10 +76,10 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             util::vk::destroy_pipeline_layout(val.pipeline_layout);
             util::vk::destroy_framebuffer(val.framebuffer);
             util::vk::destroy_render_pass(val.render_pass);
-            if(val.multi_sample_image)
-                util::vk::destroy_image(val.multi_sample_image);
-            if(val.multi_sample_view)
-                util::vk::destroy_image_view(val.multi_sample_view);
+            if(--_multisample_images[ms_key].count == 0){
+                util::vk::destroy_image(_multisample_images[ms_key].image);
+                util::vk::destroy_image_view(_multisample_images[ms_key].image_view);
+            }
             _pipeline_last_use.erase(pipeline);
             _pipelines.erase(key);
         }
@@ -89,13 +90,17 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
         // multisample image
         if(output_specs.sample_count != VK_SAMPLE_COUNT_1_BIT){
+            if(!_multisample_images.contains(ms_key)){
+
             auto image_info = util::vk::initializers::imageCreateInfo(output_specs.format, {output_specs.width, output_specs.height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TYPE_2D, 1, 1, output_specs.sample_count);
             auto allocation_info = util::vma::initializers::allocationCreateInfo();
-            std::tie(pipe_data.multi_sample_image, pipe_data.multi_sample_view) = util::vk::create_image_with_view(image_info, allocation_info);
+            std::tie(_multisample_images[ms_key].image, _multisample_images[ms_key].image_view) = util::vk::create_image_with_view(image_info, allocation_info);
 
             // updating the image layout
-            auto image_barrier = util::vk::initializers::imageMemoryBarrier(pipe_data.multi_sample_image.image, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}, {}, {}, {}, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            auto image_barrier = util::vk::initializers::imageMemoryBarrier(_multisample_images[ms_key].image.image, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}, {}, {}, {}, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             util::vk::convert_image_layouts_execute(image_barrier);
+            }
+            _multisample_images[ms_key].count++;
         }
 
         // render pass
@@ -128,7 +133,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         // framebuffer
         std::vector<VkImageView> image_views{output_specs.plot_image_view};
         if(output_specs.sample_count != VK_SAMPLE_COUNT_1_BIT)
-            image_views.push_back(pipe_data.multi_sample_view);
+            image_views.push_back(_multisample_images[ms_key].image_view);
         auto framebuffer_info = util::vk::initializers::framebufferCreateInfo(pipe_data.render_pass, image_views, output_specs.width, output_specs.height, 1);
         pipe_data.framebuffer = util::vk::create_framebuffer(framebuffer_info);
         // creating the rendering pipeline -------------------------------------------------------------------------------
@@ -198,9 +203,10 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
             VkShaderModule vertex_module = util::vk::create_shader_module(large_vis_vertex_shader_path); 
             VkShaderModule fragment_module = util::vk::create_shader_module(fragment_shader_path); 
 
-            std::array<VkPipelineShaderStageCreateInfo, 2> shader_infos{};
-            shader_infos[0] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module, &specialization_info);
-            shader_infos[1] = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module);
+            std::array<VkPipelineShaderStageCreateInfo, 2> shader_infos{
+                util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertex_module, &specialization_info),
+                util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module)
+            };
 
             auto pipeline_input_assembly = util::vk::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, 0, VK_FALSE);
 
@@ -218,6 +224,41 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
 
             vkDestroyShaderModule(globals::vk_context.device, vertex_module, globals::vk_context.allocation_callbacks);
             vkDestroyShaderModule(globals::vk_context.device, fragment_module, globals::vk_context.allocation_callbacks);
+            break;
+        }
+        case structures::parallel_coordinates_renderer::render_type::histogram:{
+            std::array<VkPushConstantRange, 2> push_constant_ranges{
+                util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants_hist_vert), 0),                                 // vertex shader push constants
+                util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(push_constants_hist_frag), sizeof(push_constants_hist_vert)) // fragment shader push constants
+            };
+            assert(globals::descriptor_sets.contains(util::global_descriptors::heatmap_descriptor_id));
+            auto heatmap_layout = globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout;
+            auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(heatmap_layout, push_constant_ranges);
+            pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
+
+            auto vertex_module = util::vk::create_scoped_shader_module(histogram_vertex_shader_path);
+            auto fragment_module = util::vk::create_scoped_shader_module(histogram_fragment_shader_path);
+
+            std::array<VkPipelineShaderStageCreateInfo, 2> shader_infos{
+                util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, *vertex_module, &specialization_info),
+                util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, *fragment_module)
+            };
+
+            auto pipeline_input_assembly = util::vk::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN, 0, VK_FALSE);
+
+            auto pipeline_fill_rasterizer = util::vk::initializers::pipelineRasterizationStateCreateInfo(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+
+            auto pipeline_create_info = util::vk::initializers::graphicsPipelineCreateInfo(shader_infos, pipe_data.pipeline_layout, pipe_data.render_pass);
+            pipeline_create_info.pVertexInputState = &pipeline_vertex_state;
+            pipeline_create_info.pInputAssemblyState = &pipeline_input_assembly;
+            pipeline_create_info.pRasterizationState = &pipeline_fill_rasterizer;
+            pipeline_create_info.pColorBlendState = &pipeline_color_blend;
+            pipeline_create_info.pMultisampleState = &pipeline_multi_sample;
+            pipeline_create_info.pViewportState = &pipeline_viewport;
+            pipeline_create_info.pDepthStencilState = &pipeline_depth_stencil;
+            pipeline_create_info.pDynamicState = &pipeline_dynamic_states;
+
+            pipe_data.pipeline = util::vk::create_graphics_pipeline(pipeline_create_info);
             break;
         }
         default:
@@ -252,12 +293,9 @@ void parallel_coordinates_renderer::render(const render_info& info){
         uint32_t     data_flags;
     };
 
-    std::vector<uint32_t> active_attribute_indices;     // these inlcude the order
-    for(int place_index: util::size_range(info.workbench.attributes_order_info.read()))
-        if(info.workbench.attributes_order_info.read()[place_index].active)
-            active_attribute_indices.push_back(info.workbench.attributes_order_info.read()[place_index].attribut_index);
+    std::vector<uint32_t> active_attribute_indices = info.workbench.get_active_ordered_indices();     // these inlcude the order
 
-    const auto& drawlists = globals::drawlists.read();    
+    const auto& drawlists = globals::drawlists.read();
 
     structures::dynamic_struct<attribute_infos, ImVec4> attribute_infos(active_attribute_indices.size());
     attribute_infos->attribute_count = active_attribute_indices.size();
@@ -311,7 +349,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         };
         auto pipeline_info = get_or_create_pipeline(out_specs);
 
-        _pre_render_commands(_render_commands[0], out_specs, clear_framebuffer, info.workbench.setting.read().plot_background);
+        _pre_render_commands(_render_commands.back(), out_specs, clear_framebuffer, info.workbench.setting.read().plot_background);
         clear_framebuffer = false;
 
         size_t data_size = drawlist.const_templatelist().data_size;
@@ -409,6 +447,67 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 cur_batch_lines = 0;
             }
         } while(cur_offset < data_size);
+    }
+    // histogram rendering
+    using histogram_type = workbenches::parallel_coordinates_workbench::histogram_type;
+    if(info.workbench.setting.read().hist_type != histogram_type::none){
+        // active histogram count for histogram width calculation
+        int active_histogram_count{};
+        for(const auto& dl: info.workbench.drawlist_infos.read()){
+            if(dl.appearance->read().show_histogram)
+                ++active_histogram_count;
+        }
+        float histogram_distance = (2. - info.workbench.setting.read().histogram_width) / (active_attribute_indices.size() - 1);
+        float drawlist_histogram_width = info.workbench.setting.read().histogram_width / active_histogram_count;
+        output_specs out_specs{
+            info.workbench.plot_data.read().image_view,
+            info.workbench.plot_data.read().image_format, 
+            info.workbench.plot_data.read().image_samples, 
+            info.workbench.plot_data.read().width, 
+            info.workbench.plot_data.read().height, 
+            structures::parallel_coordinates_renderer::render_type::histogram, 
+            {}
+        };
+        auto pipeline_info = get_or_create_pipeline(out_specs);
+
+        _pre_render_commands(_render_commands.back(), out_specs, clear_framebuffer, info.workbench.setting.read().plot_background);
+        clear_framebuffer = false;
+
+        float histogram_offset = 0;
+        for(const auto& dl_info: info.workbench.drawlist_infos.read()){
+            if(!dl_info.appearance->read().show_histogram)
+                continue;
+
+            push_constants_hist_frag pc_frag{};
+            pc_frag.bin_count = info.workbench.plot_data.read().height;
+            pc_frag.blur_radius = info.workbench.setting.read().histogram_blur_width;
+            pc_frag.color = dl_info.appearance->read().color;
+            pc_frag.mapping_type = static_cast<uint32_t>(info.workbench.setting.read().hist_type);
+            for(int i: util::size_range(active_attribute_indices)){
+                float x_base = -1. + i * histogram_distance + histogram_offset;
+
+                uint32_t index = active_attribute_indices[i];
+                int bin_size = info.workbench.plot_data.read().height;
+                std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, false, false);
+                {
+                    auto hist_access = dl_info.drawlist_read().histogram_registry.const_access();
+                    if(!hist_access->name_to_registry_key.contains(hist_id) || !hist_access->gpu_buffers.contains(hist_id)){
+                        if(logger.logging_level >= logging::level::l_4)
+                            logger << logging::warning_prefix << " Missing histogram (" << hist_id << "). No histogram for drawlist " << dl_info.drawlist_id << " on " << dl_info.drawlist_read().dataset_read().attributes[index].display_name << logging::endl;
+                        continue;
+                    }
+                    pc_frag.histogram_address = util::vk::get_buffer_address(hist_access->gpu_buffers.at(hist_id));
+                }
+                push_constants_hist_vert pc_vert{};
+                pc_vert.bounds = {x_base, -1, x_base + drawlist_histogram_width, 1};
+                vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc_vert), &pc_vert);
+                vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(pc_vert), sizeof(pc_frag), &pc_frag);
+                vkCmdDraw(_render_commands.back(), 4, 1, 0, 0);
+            }
+
+            histogram_offset += drawlist_histogram_width;
+        }
+        vkCmdEndRenderPass(_render_commands.back());
     }
     if(clear_framebuffer){
         output_specs out_specs{

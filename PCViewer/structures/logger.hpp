@@ -4,6 +4,7 @@
 #include <sstream>
 #include <array>
 #include <ranges.hpp>
+#include <enum_names.hpp>
 
 namespace logging{
 struct endline{}; static endline        endl;
@@ -18,7 +19,17 @@ enum class level{
     l_3,        // + warnings
     l_4,        // + additional info
     l_5,        // + per frame info
-    all
+    all,
+    COUNT
+};
+
+const structures::enum_names<level> level_names{
+    "only error", 
+    "+ vk validation",
+    "+ warnings", 
+    "+ additional info", 
+    "+ per frame info", 
+    "all", 
 };
 }
 

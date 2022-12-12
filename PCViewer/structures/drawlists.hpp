@@ -35,7 +35,7 @@ struct drawlist{
     struct appearance{
         ImVec4      color{1,1,1,1};
         bool        show{true};
-        bool        show_histogram{};
+        bool        show_histogram{true};
     };
     change_tracker<appearance> appearance_drawlist{};
     std::vector<float>      brush_ratios_to_parent{};

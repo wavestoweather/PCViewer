@@ -24,6 +24,7 @@ private:
     std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;
     std::vector<std::unique_ptr<structures::median_type>>    _storage_median_type;
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
+    robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_axis_histograms;
     bool                                                     _select_priority_center_single{false};
     bool                                                     _select_priority_center_all{false};
 
@@ -65,6 +66,8 @@ public:
 
         // when these are changed the whole data plot has to be rendered
         histogram_type hist_type{};
+        float       histogram_blur_width{.01f};
+        float       histogram_width{.01f};
         ImVec4      plot_background{0,0,0,1};
         int         histogram_rendering_threshold{500000};
         bool        render_splines{};
