@@ -664,14 +664,15 @@ void parallel_coordinates_workbench::show(){
             ImGui::TableNextColumn();
             ImGui::TableHeader("Median");
             
-            int up_index{-1}, down_index{-1}, dl_index{};
-            for(auto& dl: drawlist_infos.ref_no_track()){
+            int up_index{-1}, down_index{-1};
+            for(int dl_index: util::rev_size_range(drawlist_infos.read())){
+                auto& dl = drawlist_infos.ref_no_track()[dl_index];
                 std::string dl_string(dl.drawlist_id);
                 const auto& drawlist = globals::drawlists.read().at(dl.drawlist_id);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 bool selected = util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id);
-                if(ImGui::Selectable((drawlist.read().name + "##pc_wb").c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
+                if(ImGui::Selectable((drawlist.read().name + "##pc_wb").c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
                     globals::selected_drawlists.clear();
                     globals::brush_edit_data.clear();
                     if(!selected){
@@ -704,12 +705,11 @@ void parallel_coordinates_workbench::show(){
                     }
                     ImGui::EndCombo();
                 }
-                ++dl_index;
             }
-            if(up_index > 0)
-                std::swap(drawlist_infos()[up_index], drawlist_infos()[up_index - 1]);
-            if(down_index >= 0 && down_index < drawlist_infos.read().size() - 1)
-                std::swap(drawlist_infos()[down_index], drawlist_infos()[down_index + 1]);
+            if(up_index >= 0 && up_index < drawlist_infos.read().size() - 1)
+                std::swap(drawlist_infos()[up_index], drawlist_infos()[up_index + 1]);
+            if(down_index > 0)
+                std::swap(drawlist_infos()[down_index], drawlist_infos()[down_index - 1]);
 
             ImGui::EndTable();
         }

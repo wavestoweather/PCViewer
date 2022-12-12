@@ -4162,7 +4162,7 @@ static bool openHierarchy(const char* filename, const char* attributeInfo){
 }
 
 static bool openCsv(const char* filename) {
-
+    std::unique_ptr<PCUtil::Stopwatch> watch = std::make_unique<PCUtil::Stopwatch>(std::cout, "Csv Parser");
     std::ifstream f(filename, std::ios::in | std::ios::binary);
     std::stringstream input;
     input << f.rdbuf();
@@ -4359,6 +4359,7 @@ static bool openCsv(const char* filename) {
             ds.data.columns[permutation[attr]].push_back(curF);
         }
     }
+    watch = {};
     //setting the dataset index dimension size
     ds.data.dimensionSizes = {(uint32_t) ds.data.columns[0].size()};
     ds.data.subsampleTrim({(uint32_t)queryAttributes.back().dimensionSubsample}, {{0, ds.data.dimensionSizes[0]}});

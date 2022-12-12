@@ -99,6 +99,51 @@ void data_workbench::show()
 
         // c2
         ImGui::TableNextColumn();
+
+        // filter row
+        if(_regex_error)
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, {1, 0, 0, .5});
+        ImGui::PushItemWidth(150);
+        bool reselect_all = ImGui::InputText("Filter", &_table_filter);
+        ImGui::PopItemWidth();
+        if(_regex_error)
+            ImGui::PopStyleColor();
+        std::regex table_regex;
+        try{
+            table_regex = std::regex(_table_filter);
+            _regex_error = false;
+        }
+        catch(std::exception e){
+            _regex_error = true;
+            reselect_all = false;
+        };
+        ImGui::SameLine();
+        if(ImGui::Button("Deselect all")){
+            globals::brush_edit_data.clear();
+            globals::selected_drawlists.clear();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Select all") || reselect_all){
+            globals::brush_edit_data.clear();
+            globals::selected_drawlists.clear();
+            for(const auto& [id, dl]: globals::drawlists.read())
+                if(std::regex_search(id.begin(), id.end(), table_regex))
+                    globals::selected_drawlists.push_back(id);
+        }
+        ImGui::SameLine();
+        ImGui::PushItemWidth(150);
+        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 100, 1e-20, 1, "%.1g")){
+            if(globals::selected_drawlists.size()){
+                for(const auto& dl: globals::selected_drawlists)
+                    globals::drawlists()[dl]().appearance_drawlist().color.w = _uniform_alpha;
+            }
+            else{
+                for(auto& [dl_id, dl]: globals::drawlists())
+                    dl().appearance_drawlist().color.w = _uniform_alpha;
+            }
+        }
+        ImGui::PopItemWidth();
+
         if(ImGui::BeginTable("Drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
@@ -107,59 +152,17 @@ void data_workbench::show()
             ImGui::TableSetupColumn("Median");
             ImGui::TableSetupColumn("Median color");
             ImGui::TableSetupColumn("Delete");
-            
-            // filter row
-            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
-            ImGui::TableNextColumn();
-            if(_regex_error)
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, {1, 0, 0, .5});
-            bool reselect_all = ImGui::InputText("Filter", &_table_filter);
-            if(_regex_error)
-                ImGui::PopStyleColor();
-            std::regex table_regex;
-            try{
-                table_regex = std::regex(_table_filter);
-                _regex_error = false;
-            }
-            catch(std::exception e){
-                _regex_error = true;
-                reselect_all = false;
-            };
-            ImGui::TableNextColumn();
-            if(ImGui::Button("Deselect all")){
-                globals::brush_edit_data.clear();
-                globals::selected_drawlists.clear();
-            }
-            ImGui::TableNextColumn();
-            if(ImGui::Button("Select all") || reselect_all){
-                globals::brush_edit_data.clear();
-                globals::selected_drawlists.clear();
-                for(const auto& [id, dl]: globals::drawlists.read())
-                    if(std::regex_search(id.begin(), id.end(), table_regex))
-                        globals::selected_drawlists.push_back(id);
-            }
-            ImGui::TableNextColumn();
-            if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 100, 1e-20, 1, "%.1g")){
-                if(globals::selected_drawlists.size()){
-                    for(const auto& dl: globals::selected_drawlists)
-                        globals::drawlists()[dl]().appearance_drawlist().color.w = _uniform_alpha;
-                }
-                else{
-                    for(auto& [dl_id, dl]: globals::drawlists())
-                        dl().appearance_drawlist().color.w = _uniform_alpha;
-                }
-            }
 
             // top row
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
             ImGui::TableNextColumn();
             ImGui::TableHeader("Name");
             ImGui::TableNextColumn();
-            ImGui::TableHeader("Active  ");
+            ImGui::TableHeader("Active");
             ImGui::TableNextColumn();
-            ImGui::TableHeader("Color   ");
+            ImGui::TableHeader("Color");
             ImGui::TableNextColumn();
-            ImGui::TableHeader("Delete          ");
+            ImGui::TableHeader("Delete");
             
             for(const auto& [id, dl]: globals::drawlists.read()){
                 if(!std::regex_search(id.begin(), id.end(), table_regex))
@@ -167,7 +170,7 @@ void data_workbench::show()
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 bool selected = util::memory_view(globals::selected_drawlists).contains(id);
-                if(ImGui::Selectable(id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
+                if(ImGui::Selectable(id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
                     // updating drawlist selection
                     if(selected && ImGui::GetIO().KeyCtrl)
                         globals::selected_drawlists.erase(std::find(globals::selected_drawlists.begin(), globals::selected_drawlists.end(), id));
@@ -257,7 +260,7 @@ void data_workbench::show()
                 ImGui::TableNextColumn();
                 const auto& gb = globals::global_brushes.read()[i].read();
                 bool selected = globals::brush_edit_data.global_brush_id == gb.id;
-                if(ImGui::Selectable((gb.name + "##gbs" + std::to_string(gb.id)).c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
+                if(ImGui::Selectable((gb.name + "##gbs" + std::to_string(gb.id)).c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
                     if(selected)
                         globals::brush_edit_data.clear();
                     else{

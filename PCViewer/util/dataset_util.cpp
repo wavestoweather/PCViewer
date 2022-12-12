@@ -25,6 +25,7 @@
 #include <string_view_util.hpp>
 #include <sys_info.hpp>
 #include <json_util.hpp>
+#include <stopwatch.hpp>
 
 namespace util{
 namespace dataset{
@@ -109,6 +110,9 @@ void erase_if(std::vector<T>& c, predicate pred){
 
 template<typename T>
 load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
+    structures::stopwatch stopwatch;
+    stopwatch.start();
+
     std::string input;
     {
         size_t file_size = std::filesystem::file_size(filename);
@@ -195,6 +199,10 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
             ret.data.columns[var].push_back(val);
         }
     }
+    stopwatch.lap();
+    if(logger.logging_level >= logging::level::l_5)
+        logger << logging::info_prefix << " open_csv() Parsing took " << stopwatch.lap_ms() << " ms" << logging::endl;
+
     // lexicographically ordering categorical data (using the automatical sorting provided by map)
     for(int var: util::size_range(ret.attributes)){
         auto& categories = ret.attributes[var].categories;
