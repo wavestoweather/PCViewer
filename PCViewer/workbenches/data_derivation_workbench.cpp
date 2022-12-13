@@ -91,18 +91,21 @@ void data_derivation_workbench::show(){
             ax::Widgets::Icon({pin_icon_size, pin_icon_size}, node->inputTypes[i]->iconType(), is_linked, node->inputTypes[i]->color(), ImColor(32, 32, 32, int(alpha * 255)));
             ImGui::Spring(0);
             if(deriveData::Nodes::VariableInput* variable_input = dynamic_cast<deriveData::Nodes::VariableInput*>(node.get())){
-                ImGui::PushItemWidth(100);
-                if(i > variable_input->minNodes){
-                    if(ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i])){
-                        if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get()))
-                            globals::datasets()[ds_output->datasetId]().attributes[i].display_name = node->inputNames[i]; 
+                if(variable_input->namedInput){
+                    ImGui::PushItemWidth(100);
+                    if(i > variable_input->minNodes){
+                        if(ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i])){
+                            if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get()))
+                                globals::datasets()[ds_output->datasetId]().attributes[i].display_name = node->inputNames[i]; 
+                        }
                     }
+                    else
+                        ImGui::TextUnformatted(node->inputNames[i].c_str());
+                    ImGui::PopItemWidth();
+                    ImGui::Spring(0);
                 }
-                else
-                    ImGui::TextUnformatted(node->inputNames[i].c_str());
-                ImGui::PopItemWidth();
-                ImGui::Spring(0);
                 if(i > variable_input->minNodes && ImGui::Button(("X##p" + std::to_string(node_pins.inputIds[i])).c_str())){
+                    variable_input->pinRemoveAction(i);
                     if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                         auto& ds = globals::datasets()[ds_output->datasetId]();
                         ds.attributes.erase(ds.attributes.begin() + i);
@@ -112,6 +115,9 @@ void data_derivation_workbench::show(){
                             }, ds.cpu_data());
                     }
                     _execution_graphs[std::string(main_execution_graph_id)]->removePin(node_pins.inputIds[i], true);
+                    ImGui::PopStyleVar();
+                    builder.EndInput();
+                    break;
                 }
                 ImGui::Spring(0);
             }
@@ -153,17 +159,19 @@ void data_derivation_workbench::show(){
         }
         if(deriveData::Nodes::VariableInput* variable_input = dynamic_cast<deriveData::Nodes::VariableInput*>(node.get())){
             if(node_pins.inputIds.size() < variable_input->maxNodes && ImGui::Button("Add Pin")){
-                std::string number = std::to_string(node_pins.inputIds.size());
+                variable_input->pinAddAction();
+                std::string pin_name{};
                 if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
+                    pin_name = std::to_string(node_pins.inputIds.size());
                     auto& ds = globals::datasets()[ds_output->datasetId]();
-                    ds.attributes.push_back(structures::attribute{number, number, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}, {}});
+                    ds.attributes.push_back(structures::attribute{pin_name, pin_name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}, {}});
                     ds.attributes.back().bounds.changed = true;
                     std::visit([](auto&& data){
                         data.columns.push_back({0});
                         data.column_dimensions.push_back({});
                     }, ds.cpu_data());
                 }
-                _execution_graphs[std::string(main_execution_graph_id)]->addPin(_cur_id, id, number, deriveData::FloatType::create(), true);
+                _execution_graphs[std::string(main_execution_graph_id)]->addPin(_cur_id, id, pin_name, deriveData::FloatType::create(), true);
             }
         }
 
@@ -212,7 +220,7 @@ void data_derivation_workbench::show(){
             ImGui::PopItemWidth();
         }
         ImGui::Spring(1, 0);
-        ImGui::TextUnformatted(node->middleText.c_str());
+        node->imguiMiddleElements();
         ImGui::Spring(1, 0);
 
         // outputs

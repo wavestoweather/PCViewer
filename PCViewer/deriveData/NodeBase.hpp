@@ -114,6 +114,7 @@ public:
 
     virtual int outputChannels() const { uint32_t count{}; for(const auto& t: outputTypes) count += t->data().cols.size();return count;};
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;
+    virtual void imguiMiddleElements() { if(middleText.size()) ImGui::TextUnformatted(middleText.c_str());}
 };
 
 struct Registry{

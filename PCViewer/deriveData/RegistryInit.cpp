@@ -9,6 +9,8 @@ REGISTER(VectorRandom);
 REGISTER(PrintVector);
 REGISTER(DatasetOutput);
 REGISTER(Derivation);
+REGISTER(Sum);
+REGISTER(Norm);
 // unary nodes
 REGISTER(Inverse);
 REGISTER(Negate);

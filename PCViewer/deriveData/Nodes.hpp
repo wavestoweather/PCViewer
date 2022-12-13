@@ -11,6 +11,7 @@
 #include "NodeBase.hpp"
 #include "MemoryView.hpp"
 #include <set>
+#include "../util/ranges.hpp"
 
 namespace deriveData{
 namespace Nodes{
@@ -38,6 +39,16 @@ inline void applyMultiDimUnaryFunction(const float_column_views& input, float_co
         output[0].cols[0][i] = f(in);
     }
 };
+
+inline void applyNAryFunction(const float_column_views& input, float_column_views& output, std::function<float(const std::vector<float>&)> f){
+    assert(input[0].equalDataLayout(output[0]));
+    std::vector<float> in(input.size());
+    for(int i: irange(output[0].cols[0].size())){
+        for(int j: irange(input))
+            in[j] = input[j].cols[0][i];
+        output[0].cols[0][i] = f(in);
+    }
+}
 
 inline float unaryReductionFunction(const float_column_views& input, uint32_t col, float initVal, std::function<float(float, float)> f){
     for(int i: irange(input[0].cols[col].size()))
@@ -239,8 +250,12 @@ class VariableInput{  // simple class to indicate variable input lengths
 public:
     int minNodes;
     int maxNodes;
+    bool namedInput{true};
     
-    VariableInput(int minInputs = 0, int maxInputs = std::numeric_limits<int>::max()): minNodes(minInputs), maxNodes(maxInputs){}
+    VariableInput(bool namedInput = true, int minInputs = 0, int maxInputs = std::numeric_limits<int>::max()):namedInput(namedInput), minNodes(minInputs), maxNodes(maxInputs){}
+
+    virtual void pinAddAction(){}
+    virtual void pinRemoveAction(int i){}
 };
 
 class DatasetOutput: public Output, public VariableInput, public Creatable<DatasetOutput>{
@@ -265,6 +280,60 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // TODO: implement
     };
+};
+
+class Sum: public Node, public VariableInput, public Creatable<Sum>{
+public:
+    std::vector<float> prefact;
+
+    Sum(): 
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Sum"),
+        VariableInput(false, 1),
+        prefact(2, 1.f)
+    {}
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        assert(prefact.size() == input.size());
+        auto& f = prefact;
+        applyNAryFunction(input, output, 
+            [&f](const std::vector<float>& v) {
+                float res{};
+                for(int i: util::size_range(v))
+                    res += f[i] * v[i];
+                return res;
+            }
+        );
+    }
+
+    void pinAddAction() override {prefact.push_back(1);}
+    void pinRemoveAction(int i) override {prefact.erase(prefact.begin() + i);}
+};
+
+class Norm: public Node, public VariableInput, public Creatable<Norm>{
+public:
+    float norm_exp{2};
+    Norm():
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Norm"),
+        VariableInput(false, 1)
+    {}
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        float exp = norm_exp;
+        applyNAryFunction(input, output, 
+            [&exp](const std::vector<float>& v){
+                float res{};
+                for(float i: v)
+                    res += std::pow(std::abs(i), exp);
+                return std::pow(res, 1./exp);
+            }
+        );
+    }
+
+    void imguiMiddleElements() override{
+        ImGui::PushItemWidth(75);
+        ImGui::DragFloat("Norm", &norm_exp, .5f, 1.f, 100.f);
+        ImGui::PopItemWidth();
+    }
 };
 
 // ------------------------------------------------------------------------------------------
