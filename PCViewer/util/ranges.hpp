@@ -83,4 +83,14 @@ public:
 private:
     unsigned long _begin;
 };
+
+template<typename T>
+class rev_iter {
+private:
+    T& iterable_;
+public:
+    explicit rev_iter(T& iterable) : iterable_{iterable} {}
+    auto begin() const { return std::rbegin(iterable_); }
+    auto end() const { return std::rend(iterable_); }
+};
 }

@@ -71,8 +71,10 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
     // updating registered histograms (iterating through indices pairs and checking for registered histogram)
     auto active_indices = get_active_ordered_indices();
     for(const auto& dl: drawlist_infos.read()){
-        if(!_registered_histograms.contains(dl.drawlist_id))
+        if(dl.drawlist_read().const_templatelist().data_size < setting.read().histogram_rendering_threshold){
+            _registered_histograms.erase(dl.drawlist_id);
             continue;
+        }
 
         // multidimensional histograms for parallel coordinates plotting
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
@@ -952,6 +954,7 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
         uint32_t cur_index = attributes_order_info.read().size();
         attributes_order_info().push_back({cur_index});
     }
+    _update_registered_histograms();
 }
 
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){
@@ -1008,14 +1011,8 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
 
         drawlist_infos.write().push_back(drawlist_info{drawlist_id, true, dl.appearance_drawlist, dl.median_typ});
 
-        // checking histogram (large vis) rendering or standard rendering
-        if(dl.const_templatelist().data_size > setting.read().histogram_rendering_threshold){
-            std::vector<uint32_t> indices = get_active_ordered_indices();
-            std::vector<int> bin_sizes(2, static_cast<int>(plot_data.read().height));
-            for(int i: util::i_range(indices.size() - 1)){
-                _registered_histograms[drawlist_id].emplace_back(*dl.histogram_registry.access(), util::memory_view<const uint32_t>(indices.data() + i, 2), util::memory_view<const int>(bin_sizes), false, false, false);
-            }
-        }
+        // checking histogram (large vis/axis histograms) rendering or standard rendering
+        _update_registered_histograms();
     }
 }
 

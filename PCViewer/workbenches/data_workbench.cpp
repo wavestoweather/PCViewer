@@ -132,7 +132,7 @@ void data_workbench::show()
         }
         ImGui::SameLine();
         ImGui::PushItemWidth(150);
-        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, 1e-20, 1, "%.1g")){
+        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, 1e-20, 1, "%.3g")){
             if(globals::selected_drawlists.size()){
                 for(const auto& dl: globals::selected_drawlists)
                     globals::drawlists()[dl]().appearance_drawlist().color.w = _uniform_alpha;

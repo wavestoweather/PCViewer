@@ -474,7 +474,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         clear_framebuffer = false;
 
         float histogram_offset = 0;
-        for(const auto& dl_info: info.workbench.drawlist_infos.read()){
+        for(const auto& dl_info: util::rev_iter(info.workbench.drawlist_infos.read())){
             if(!dl_info.appearance->read().show_histogram)
                 continue;
 
