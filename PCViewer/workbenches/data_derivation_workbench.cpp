@@ -107,8 +107,8 @@ void data_derivation_workbench::show(){
                         auto& ds = globals::datasets()[ds_output->datasetId]();
                         ds.attributes.erase(ds.attributes.begin() + i);
                         std::visit([i](auto&&  data){
-                            data.columns.erase(data.columns.begin() + 1);
-                            data.column_dimensions.erase(data.column_dimensions.begin() + 1);
+                            data.columns.erase(data.columns.begin() + i);
+                            data.column_dimensions.erase(data.column_dimensions.begin() + i);
                             }, ds.cpu_data());
                     }
                     _execution_graphs[std::string(main_execution_graph_id)]->removePin(node_pins.inputIds[i], true);
@@ -157,6 +157,7 @@ void data_derivation_workbench::show(){
                 if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                     auto& ds = globals::datasets()[ds_output->datasetId]();
                     ds.attributes.push_back(structures::attribute{number, number, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}, {}});
+                    ds.attributes.back().bounds.changed = true;
                     std::visit([](auto&& data){
                         data.columns.push_back({0});
                         data.column_dimensions.push_back({});
@@ -559,10 +560,10 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     // checking for dataset output and moving or copying the data to the output
     if(deriveData::Nodes::DatasetOutput* n = dynamic_cast<deriveData::Nodes::DatasetOutput*>(nodes[node].node.get())){
         // getting the dataset data layout
-        auto& dataset = globals::datasets.ref_no_track().at(n->datasetId).ref_no_track();
-        if(!std::holds_alternative<structures::data<float>>(dataset.cpu_data.ref_no_track()))
+        auto& dataset = globals::datasets().at(n->datasetId)();
+        if(!std::holds_alternative<structures::data<float>>(dataset.cpu_data()))
             throw std::runtime_error{"data_derivation_workbench::_build_cache_recursive() Data derivation only for float datasets possible!"};
-        auto& ds_data = std::get<structures::data<float>>(dataset.cpu_data.ref_no_track());
+        auto& ds_data = std::get<structures::data<float>>(dataset.cpu_data());
         deriveData::column_memory_view<float> dataset_layout;
         dataset_layout.dimensionSizes = deriveData::memory_view<uint32_t>(ds_data.dimension_sizes);
         bool anyChange = false;
@@ -587,15 +588,15 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
             }
 
             // updating min and max of the attributes
-            dataset.attributes[i].bounds.ref_no_track().min = std::numeric_limits<float>::max();
-            dataset.attributes[i].bounds.ref_no_track().max = -std::numeric_limits<float>::max();
+            dataset.attributes[i].bounds().min = std::numeric_limits<float>::max();
+            dataset.attributes[i].bounds().max = -std::numeric_limits<float>::max();
             for(float f: ds_data.columns[i]){
-                dataset.attributes[i].bounds.ref_no_track().min = std::min(f, dataset.attributes[i].bounds.read().min);
-                dataset.attributes[i].bounds.ref_no_track().max = std::max(f, dataset.attributes[i].bounds.read().max);
+                dataset.attributes[i].bounds().min = std::min(f, dataset.attributes[i].bounds.read().min);
+                dataset.attributes[i].bounds().max = std::max(f, dataset.attributes[i].bounds.read().max);
             }
             if(dataset.attributes[i].bounds.read().min == dataset.attributes[i].bounds.read().max){
-                dataset.attributes[i].bounds.ref_no_track().max += .1f;
-                dataset.attributes[i].bounds.ref_no_track().min -= .1f;
+                dataset.attributes[i].bounds().max += .1f;
+                dataset.attributes[i].bounds().min -= .1f;
             }
         }
     }

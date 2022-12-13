@@ -600,8 +600,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     // gpu_data setup
     const size_t header_size = std::visit([](auto&& data) {return util::data::header_size(data);}, dataset.read().cpu_data.read());
     const uint32_t column_count = std::visit([](auto&& data) {return data.columns.size();}, dataset.read().cpu_data.read());
-    VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    auto header_info = util::vk::initializers::bufferCreateInfo(buffer_usage, header_size);
+    auto header_info = util::vk::initializers::bufferCreateInfo(data_buffer_usage, header_size);
     auto header_alloc_info = util::vma::initializers::allocationCreateInfo();
     dataset().gpu_data.header = util::vk::create_buffer(header_info, header_alloc_info);
     dataset().gpu_data.columns.resize(column_count);
@@ -633,7 +632,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         VkBufferCreateInfo column_info{};
         util::memory_view<const uint8_t> upload_data = std::visit([&i](auto&& data) {return util::memory_view<const uint8_t>(util::memory_view(data.columns[i].data(), data.columns[i].size()));}, dataset.read().cpu_data.read());
         upload_data = util::memory_view(upload_data.data(), std::min(upload_data.size(), max_size_per_col));
-        column_info = util::vk::initializers::bufferCreateInfo(buffer_usage, upload_data.byte_size());
+        column_info = util::vk::initializers::bufferCreateInfo(data_buffer_usage, upload_data.byte_size());
         dataset().gpu_data.columns[i] = util::vk::create_buffer(column_info, column_alloc_info);
         // uploading the data as soon as buffer is available via the staging buffer
         staging_info.dst_buffer = dataset().gpu_data.columns[i].buffer;
@@ -644,6 +643,12 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
     staging_info.dst_buffer = dataset().gpu_data.header.buffer;
     staging_info.data_upload = header_bytes.data();
     globals::stager.add_staging_task(staging_info);
+
+    // resetting the changed flags for the attribute bounds as this flag is used to determin not uploaded cpu data
+    for(auto& attribute: dataset().attributes)
+        attribute.bounds.changed = false;
+    dataset().cpu_data.changed = false;
+    dataset().original_attribute_size = dataset.read().attributes.size();
 
     globals::stager.wait_for_completion();    // wait for uploadsd, then continue
 
@@ -977,7 +982,73 @@ void check_dataset_gpu_stream(){
     }
 }
 
+void check_dataset_data_update(){
+    if(globals::datasets.changed){
+        for(const auto& [ds_id, ds]: globals::datasets.read()){
+            if(!ds.read().cpu_data.changed)
+                continue;
+            size_t column_count = std::visit([](auto&& d) {return d.columns.size();}, ds.read().cpu_data.read());
+            // adding new gpu columns
+            if(ds.read().gpu_data.columns.size() < column_count){
+                for(int i: util::i_range(column_count - ds.read().gpu_data.columns.size())){
+                    int cur_col = ds.read().gpu_data.columns.size();
+                    size_t column_size = std::visit([cur_col](auto&& data) {return data.columns[cur_col].size() * sizeof(data.columns[cur_col][0]);}, ds.read().cpu_data.read());
+                    auto buffer_info = util::vk::initializers::bufferCreateInfo(data_buffer_usage, column_size);
+                    auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                    globals::datasets()[ds_id]().gpu_data.columns.push_back(util::vk::create_buffer(buffer_info, alloc_info));
+                }
+            }
+            // removing unused gpu columns
+            if(ds.read().gpu_data.columns.size() > column_count){
+                for(int i: util::i_range(ds.read().gpu_data.columns.size() - 1, column_count - 1, -1)){
+                    util::vk::destroy_buffer(globals::datasets()[ds_id]().gpu_data.columns[i]);
+                    globals::datasets()[ds_id]().gpu_data.columns.pop_back();
+                }
+            }
+            // updating gpu columns
+            for(int i: util::size_range(ds.read().attributes)){
+                if(!ds.read().attributes[i].bounds.changed)
+                    continue;
+
+                size_t column_size = std::visit([i](auto&& d) {return d.columns[i].size() * sizeof(d.columns[i][0]);}, ds.read().cpu_data.read());
+                // reserving enough memory for the new data
+                if(ds.read().gpu_data.columns[i].size != column_size){
+                    util::vk::destroy_buffer(globals::datasets()[ds_id]().gpu_data.columns[i]);
+                    auto buffer_info = util::vk::initializers::bufferCreateInfo(data_buffer_usage, column_size);
+                    auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                    globals::datasets()[ds_id]().gpu_data.columns[i] = util::vk::create_buffer(buffer_info, alloc_info);
+                }
+                structures::stager::staging_buffer_info staging_info{};
+                staging_info.dst_buffer = ds.read().gpu_data.columns[i].buffer;
+                staging_info.data_upload = std::visit([i](auto&& data) {return util::memory_view<const uint8_t>(util::memory_view(data.columns[i].data(), data.columns[i].size()));}, ds.read().cpu_data.read());
+                globals::stager.add_staging_task(staging_info);
+                
+                globals::datasets()[ds_id]().attributes[i].bounds.changed = false;
+            }
+            // updating header
+            const size_t header_size = std::visit([](auto&& data) {return util::data::header_size(data);}, ds.read().cpu_data.read());
+            if(ds.read().gpu_data.header.size != header_size){
+                util::vk::destroy_buffer(globals::datasets()[ds_id]().gpu_data.header);
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(data_buffer_usage, header_size);
+                auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                globals::datasets()[ds_id]().gpu_data.header = util::vk::create_buffer(buffer_info, alloc_info);
+            }
+            auto& column_buffers = ds.read().gpu_data.columns;
+            structures::dynamic_struct<util::data::gpu_header, uint32_t> header_bytes = std::visit([&column_buffers](auto&& data){return util::data::create_packed_header(data, column_buffers);}, ds.read().cpu_data.read());
+            structures::stager::staging_buffer_info staging_info{};
+            staging_info.dst_buffer = ds.read().gpu_data.header.buffer;
+            staging_info.data_upload = header_bytes.data();
+            globals::stager.add_staging_task(staging_info);
+
+            globals::stager.wait_for_completion();    // wait for uploadsd, then continue
+            
+            globals::datasets()[ds_id]().cpu_data.changed = false;
+        }
+    }
+}
+
 void check_dataset_update(){
+    check_dataset_data_update();
     if(globals::datasets.changed){
         std::vector<std::string_view> changed_datasets;
         for(const auto& [ds_id, ds]: globals::datasets.read()){

@@ -12,6 +12,8 @@
 
 namespace util{
 namespace dataset{
+constexpr VkBufferUsageFlags data_buffer_usage{VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT};
+
 namespace open_internals{
 struct load_information{
     uint32_t block_index_to_load{};

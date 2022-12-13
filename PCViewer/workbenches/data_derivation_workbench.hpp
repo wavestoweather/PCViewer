@@ -36,7 +36,7 @@ private:
     ax::NodeEditor::EditorContext*  _editor_context{};
     unique_execution_graph_map      _execution_graphs{};    // each execution graph describes a function and can be called, main graph is called "main"
 
-    int64_t                         _cur_id{};
+    int64_t                         _cur_id{1};
     int64_t                         _new_link_pin_id{};
     int64_t                         _context_node_id{};
     int64_t                         _context_pin_id{};

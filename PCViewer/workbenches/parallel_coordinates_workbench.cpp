@@ -519,7 +519,8 @@ void parallel_coordinates_workbench::show(){
 
             any_hover |= brush_hovered;
         }
-        ImGui::ResetMouseDragDelta();   // has to be reset to avoid draggin open the box too far
+        if(ImGui::IsWindowFocused())
+            ImGui::ResetMouseDragDelta();   // has to be reset to avoid dragging open the box too far
 
         // brush creation
         bool new_brush{false};
@@ -891,6 +892,66 @@ std::vector<uint32_t> parallel_coordinates_workbench::get_active_ordered_indices
             indices.push_back(i.attribut_index);
     }
     return indices;
+}
+
+void parallel_coordinates_workbench::signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, structures::dataset_dependency::update_flags flags, const structures::gpu_sync_info& sync_info){
+    // checking attribute intersection of all drawlists if any is decendent of the datasets
+    bool any_drawlist_affected{};
+    for(const auto& dl: drawlist_infos.read()){
+        if(dataset_ids.contains(dl.drawlist_read().parent_dataset)){
+            any_drawlist_affected = true;
+            break;
+        }
+    }
+    if(!any_drawlist_affected)
+        return;
+    
+    // getting the updated interesction of all dataset attributes
+    std::vector<std::string> new_attributes;
+    bool first_dl{true};
+    for(const auto& dl: drawlist_infos.read()){
+        int intersect_index{-1};
+        for(int i: util::size_range(dl.drawlist_read().dataset_read().attributes)){
+            if(first_dl && i >= new_attributes.size())
+                new_attributes.push_back(dl.drawlist_read().dataset_read().attributes[i].id);
+
+            if(!first_dl && (i < new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
+                intersect_index = i;
+                break;
+            }
+        }
+        // removing attributes which are not supported
+        if(intersect_index >= 0)
+            new_attributes.erase(new_attributes.begin() + intersect_index, new_attributes.end());
+
+        first_dl = false;
+    }
+
+    if(logger.logging_level >= logging::level::l_5)
+        logger << logging::info_prefix << " parallel_coordinates_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
+
+    attributes().clear();
+    for(int i: util::size_range(new_attributes)){
+        attributes().push_back(structures::attribute{new_attributes[i], drawlist_infos.read().front().drawlist_read().dataset_read().attributes[i].display_name});
+        for(const auto& dl: drawlist_infos.read()){
+            const auto& ds_bounds = dl.drawlist_read().dataset_read().attributes[i].bounds.read();
+            const auto& dl_bounds = attributes.read().back().bounds.read();
+            if(ds_bounds.min < dl_bounds.min)
+                attributes().back().bounds().min = ds_bounds.min;
+            if(ds_bounds.max > dl_bounds.max)
+                attributes().back().bounds().max = ds_bounds.max;
+        }
+    }
+    // deleting all removed attributes in sorting order
+    for(int i: util::rev_size_range(attributes_order_info.read())){
+        if(attributes_order_info.read()[i].attribut_index >= attributes.read().size())
+            attributes_order_info().erase(attributes_order_info().begin() + i);
+    }
+    // adding new attribute references
+    for(int i: util::i_range(attributes.read().size() - attributes_order_info.read().size())){
+        uint32_t cur_index = attributes_order_info.read().size();
+        attributes_order_info().push_back({cur_index});
+    }
 }
 
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){
