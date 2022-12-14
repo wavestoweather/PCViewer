@@ -118,6 +118,7 @@ set(structures_INCLUDE_DIR
     "fast_float"
     "config"
     "radix_sort"
+    "radix"
 )
 
 file(GLOB structures_SRC
@@ -139,7 +140,6 @@ file(GLOB util_SRC
 file(GLOB addditional_vulkan_SRC
     "vulkan/*.cpp"
 )
-message("${compress_SRC}")
 
 include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR}; ${structures_INCLUDE_DIR})
 add_executable (PCViewer ${pcviewer_SRC} ${util_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC} ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC} ${addditional_vulkan_SRC})
@@ -153,6 +153,9 @@ target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${ne
 target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
 
 add_subdirectory(shader_new)
+
+include(CTest)
+add_subdirectory(test)
 
 message (" Copying shaders")
 file(GLOB MY_PUBLIC_HEADERS
