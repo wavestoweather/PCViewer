@@ -8,6 +8,7 @@
 #include <stopwatch.hpp>
 #include <ranges.hpp>
 #include <string_view>
+#include <radix_sort.hpp>
 
 #define BENCHMARK_STD_SORT
 #ifdef BENCHMARK_STD_SORT
@@ -154,10 +155,27 @@ int benchmark_std_sort(size_t n, double max, std::string_view test_name, int ite
     return test_result::success;
 }
 
+int benchmark_inplace_radix(size_t n, double max, std::string_view test_name, int iters = 10){
+    std::vector<uint8_t> rand_vals(n);
+    std::vector<uint32_t> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+    structures::stopwatch watch;
+    watch.start();
+    double avg_time{};
+    for(int i: util::i_range(iters)){
+        double diff = watch.lap();
+        if(i > 0)
+            avg_time += diff / iters;
+        rand_vals = get_random<uint8_t>(n, max);
+        watch.lap();
+        radix::RadixSortMSDTransform(indices.data(), indices.size(), [&](uint32_t i){return rand_vals[i];}, 7);
+    }
+    avg_time += watch.lap() / iters;
+    std::cout << "[info] " << std::setw(15) << test_name << ": Radix indirect inplace for " << n << " numbers took on average " << avg_time << "ms" << std::endl;
+    return test_result::success;
+}
+
 int radix_sort_test(int, char**){
-    radix::internal::transformer<double> tr{};
-    auto t = tr(.5);
-    auto r = tr(t);
     // transformer tests
     check_res(test_transformer(.5f));
     check_res(test_transformer(.5));
@@ -221,6 +239,8 @@ int radix_sort_test(int, char**){
     check_res(benchmark_radix_sort_indirect<uint32_t>(1 << p, double(1U << 30), "uint32"));
     check_res(benchmark_radix_sort_indirect<uint64_t>(1 << p, double(1UL << 63), "uint64"));
     check_res(benchmark_radix_sort_indirect<int64_t>(1 << p, double(1UL << 63), "int64"));
+    std::cout << std::endl;
+    check_res(benchmark_inplace_radix(1 << p, 255, "uint8"));
 #endif
 
     std::cout << "[info] radix_sort_test successful" << std::endl;

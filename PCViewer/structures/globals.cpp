@@ -30,7 +30,7 @@
 #include <priority_sorter.hpp>
 #include <priority_globals.hpp>
 #include <distance_calculator.hpp>
-#include <radix_sort.hpp>
+#include <radix.hpp>
 
 #ifdef min
 #undef min
@@ -963,6 +963,7 @@ void priority_sorter::_task_thread_function(){
                 if((key.is_max_histogram || key.is_min_histogram) && (key.attribute_indices.size() == 2 || key.attribute_indices.size() == 4)) last_key = &key;
             assert(last_key);
             std::vector<std::vector<uint32_t>> order_storage;
+            std::vector<uint32_t> tmp_order;
             const auto& registry = dl.histogram_registry.const_access()->registry;
             for(const auto& [key, entry]: registry){
                 // downloading histograms (2d or 4d) and ordering each of them
@@ -980,9 +981,11 @@ void priority_sorter::_task_thread_function(){
                 // sorting and uploading
                 order_storage.emplace_back(data.size());
                 std::vector<uint32_t>& ordered = order_storage.back();
-                std::iota(ordered.begin(), ordered.end(), 0);
+                tmp_order.resize(bins_amt);
+                std::iota(tmp_order.begin(), tmp_order.end(), 0);   // iota is in the tmp buffer as after 1 pass of radix sorting the result is automatically placed inthe correct buffer
                 //std::sort(ordered.begin(), ordered.end(), [&](uint32_t a, uint32_t b) {return data[a] < data[b];});
-                radix::RadixSortMSDTransform(ordered.data(), ordered.size(), [&](uint32_t i){return data[i];}, 7);
+                //radix::RadixSortMSDTransform(ordered.data(), ordered.size(), [&](uint32_t i){return data[i];}, 7);
+                radix::sort_indirect(tmp_order.begin(), tmp_order.end(), ordered.begin(), [&](uint32_t i){return uint8_t(data[i]);});
                 if(!dl.priority_indices.contains(entry.hist_id)){
                     auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, ordered.size() * sizeof(ordered[0]));
                     auto alloc_info = util::vma::initializers::allocationCreateInfo();
@@ -1026,11 +1029,11 @@ void priority_sorter::_task_thread_function(){
             staging_info.data_upload = util::memory_view(color_index);
             globals::stager.add_staging_task(staging_info);
 
-            std::vector<uint32_t> order(tl.data_size);
-            std::iota(order.begin(), order.end(), 0);
+            std::vector<uint32_t> order(tl.data_size), order_tmp(tl.data_size);
+            std::iota(order_tmp.begin(), order_tmp.end(), 0);   // iota in tmp buffer as after 1 pass of radix sorting the sorted order is then in the order vector
             //std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b){return color_index[a] > color_index[b];});
-            radix::RadixSortMSDTransform(order.data(), order.size(), [&](uint32_t i){return uint32_t(255 - color_index[i]);}, 7);
-
+            //radix::RadixSortMSDTransform(order.data(), order.size(), [&](uint32_t i){return uint32_t(255 - color_index[i]);}, 7);
+            radix::sort_indirect(order_tmp.begin(), order_tmp.end(), order.begin(), [&](uint32_t i){return uint8_t(255 - color_index[i]);});
             if(!dl_read.priority_indices.contains(standard_string)){
                 auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, order.size() * sizeof(order[0]));
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
