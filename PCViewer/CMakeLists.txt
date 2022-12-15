@@ -154,7 +154,6 @@ target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm 
 
 add_subdirectory(shader_new)
 
-include(CTest)
 add_subdirectory(test)
 
 message (" Copying shaders")
