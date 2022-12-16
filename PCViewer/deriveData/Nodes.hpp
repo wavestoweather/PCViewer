@@ -12,6 +12,8 @@
 #include "MemoryView.hpp"
 #include <set>
 #include "../util/ranges.hpp"
+#include "../tsne/tsne.h"
+#include <Eigen/Dense>
 
 namespace deriveData{
 namespace Nodes{
@@ -258,6 +260,14 @@ public:
     virtual void pinRemoveAction(int i){}
 };
 
+class VariableOutput{
+public:
+    int minOutputs;
+    int maxOutputs;
+
+    VariableOutput(int minOutputs = 0, int maxOutputs = std::numeric_limits<int>::max()): minOutputs(minOutputs), maxOutputs(maxOutputs) {}
+};
+
 class DatasetOutput: public Output, public VariableInput, public Creatable<DatasetOutput>{
 public:
     std::string_view datasetId;
@@ -284,41 +294,41 @@ public:
 
 class Sum: public Node, public VariableInput, public Creatable<Sum>{
 public:
-    std::vector<float> prefact;
-
     Sum(): 
         Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Sum"),
-        VariableInput(false, 1),
-        prefact(2, 1.f)
-    {}
+        VariableInput(false, 1)
+    {
+        input_elements[middle_input_id] = crude_json::array{1., 1.};
+    }
 
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        assert(prefact.size() == input.size());
-        auto& f = prefact;
+        auto& prefactors = input_elements[middle_input_id].get<crude_json::array>();
+        assert(prefactors.size() == input.size());
         applyNAryFunction(input, output, 
-            [&f](const std::vector<float>& v) {
+            [&prefactors](const std::vector<float>& v) {
                 float res{};
                 for(int i: util::size_range(v))
-                    res += f[i] * v[i];
+                    res += prefactors[i].get<double>() * v[i];
                 return res;
             }
         );
     }
 
-    void pinAddAction() override {prefact.push_back(1);}
-    void pinRemoveAction(int i) override {prefact.erase(prefact.begin() + i);}
+    void pinAddAction() override {input_elements[middle_input_id].get<crude_json::array>().push_back(1.);}
+    void pinRemoveAction(int i) override {input_elements[middle_input_id].get<crude_json::array>().erase(input_elements[middle_input_id].get<crude_json::array>().begin() + i);}
 };
 
 class Norm: public Node, public VariableInput, public Creatable<Norm>{
 public:
-    float norm_exp{2};
     Norm():
-        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Norm"),
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Lp-Norm"),
         VariableInput(false, 1)
-    {}
+    {
+        input_elements[middle_input_id]["Lp-Norm"] = 2.;
+    }
 
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        float exp = norm_exp;
+        float exp = input_elements[middle_input_id]["Lp-Norm"].get<double>();
         applyNAryFunction(input, output, 
             [&exp](const std::vector<float>& v){
                 float res{};
@@ -328,11 +338,76 @@ public:
             }
         );
     }
+};
 
-    void imguiMiddleElements() override{
-        ImGui::PushItemWidth(75);
-        ImGui::DragFloat("Norm", &norm_exp, .5f, 1.f, 100.f);
-        ImGui::PopItemWidth();
+class PCA_Projection: public Node, public VariableInput, public VariableOutput, public Creatable<PCA_Projection>{
+public:
+    PCA_Projection():
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(2), {"", ""}, "PCA-Projection"),
+        VariableInput(false, 1),
+        VariableOutput(1)
+    {}
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        // TODO: check the data layout and adopt readout...
+        // convert data to 
+        Eigen::MatrixXf m(input[0].size(), input.size());
+        for(int i: util::size_range(input)){
+            for(int j: util::size_range(input[i].cols[0]))
+                m(j, i) = input[i].cols[0][j];
+        }
+        auto mean_cols = m.colwise().mean();
+        m = m.rowwise() - mean_cols;
+        float min = m.minCoeff();
+        float max = m.maxCoeff();
+        float diff = std::max(max, std::abs(min));
+        m /= diff;
+        
+        // caclulating the PCA
+        Eigen::BDCSVD<Eigen::MatrixXf> svd(m, Eigen::ComputeThinU);
+        m = svd.matrixU().real() * svd.singularValues().real().asDiagonal();
+        
+        // transferring to teh output
+        for(int i: util::size_range(output)){
+            for(int j: util::size_range(output[i].cols[0]))
+                output[i].cols[0][j] = m(j, i);
+        }
+    }
+};
+
+class TSNE_Projection: public Node, public VariableInput, public VariableOutput, public Creatable<TSNE_Projection>{
+public:
+    TSNE_Projection():
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(2), {"", ""}, "TSNE-Projection"),
+        VariableInput(false, 1),
+        VariableOutput(1)
+    {
+        input_elements[middle_input_id]["perplexity"] = 30.;
+        input_elements[middle_input_id]["theta"] = .5;
+        input_elements[middle_input_id]["random seed (negative for none)"] = -1.;
+        input_elements[middle_input_id]["skip random init"] = false;
+        input_elements[middle_input_id]["iterations"] = 500.;
+        input_elements[middle_input_id]["stop lying iteration"] = 700.;
+        input_elements[middle_input_id]["momentum switch iteration"] = 700.;
+    }
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        std::vector<util::memory_view<const float>> in(input.size());
+        std::vector<util::memory_view<float>> out(output.size());
+        std::atomic<float> progress{};
+
+        for(int i: util::size_range(input))
+            in[i] = util::memory_view{input[i].cols[0].data(), input[i].cols[0].size()};
+        for(int i: util::size_range(output))
+            out[i] = util::memory_view{output[i].cols[0].data(), output[i].cols[0].size()};
+        TSNE::run_cols(in, out, input_elements[middle_input_id]["perplexity"].get<double>(), 
+                                input_elements[middle_input_id]["theta"].get<double>(),
+                                int(input_elements[middle_input_id]["random seed (negative for none)"].get<double>()),
+                                input_elements[middle_input_id]["skip random init"].get<bool>(),
+                                int(input_elements[middle_input_id]["iterations"].get<double>()),
+                                int(input_elements[middle_input_id]["stop lying iteration"].get<double>()),
+                                int(input_elements[middle_input_id]["momentum switch iteration"].get<double>()),
+                                progress);
     }
 };
 

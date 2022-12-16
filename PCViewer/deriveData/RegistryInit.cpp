@@ -11,6 +11,8 @@ REGISTER(DatasetOutput);
 REGISTER(Derivation);
 REGISTER(Sum);
 REGISTER(Norm);
+REGISTER(PCA_Projection);
+REGISTER(TSNE_Projection);
 // unary nodes
 REGISTER(Inverse);
 REGISTER(Negate);

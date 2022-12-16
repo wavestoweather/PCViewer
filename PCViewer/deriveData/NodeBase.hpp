@@ -7,6 +7,8 @@
 #include <array>
 #include "../imgui_nodes/imgui_node_editor.h"
 #include "../imgui_nodes/utilities/widgets.h"
+#include "../imgui_nodes/crude_json.h"
+#include "../imgui/imgui_stdlib.h"
 #include "MemoryView.hpp"
 
 namespace deriveData{
@@ -92,6 +94,9 @@ using float_column_views = std::vector<column_memory_view<float>>;
 namespace Nodes{
 class Node{
 public:
+    const std::string middle_input_id = "middle_inputs";
+    const std::string input_input_id = "input_inputs";  // this should always be an array
+
     std::vector<std::unique_ptr<Type>> inputTypes;
     std::vector<std::string> inputNames;
     std::vector<std::unique_ptr<Type>> outputTypes;
@@ -99,6 +104,8 @@ public:
 
     std::string name;
     std::string middleText;
+
+    crude_json::value input_elements;
 
     Node(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},
@@ -110,11 +117,41 @@ public:
         outputTypes(std::move(outputTypes)),
         outputNames(outputNames),
         name(header),
-        middleText(mt){}
+        middleText(mt),
+        input_elements(crude_json::type_t::object){}
 
     virtual int outputChannels() const { uint32_t count{}; for(const auto& t: outputTypes) count += t->data().cols.size();return count;};
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;
-    virtual void imguiMiddleElements() { if(middleText.size()) ImGui::TextUnformatted(middleText.c_str());}
+    virtual void imguiMiddleElements() { 
+        if(middleText.size()) ImGui::TextUnformatted(middleText.c_str());
+        ImGui::PushItemWidth(70);
+        if(input_elements.contains(middle_input_id)){
+            for(auto& [name, val]: input_elements[middle_input_id].get<crude_json::object>()){
+                if(val.is_string())
+                    ImGui::InputText(name.c_str(), &val.get<std::string>());
+                if(val.is_number())
+                    ImGui::InputDouble(name.c_str(), &val.get<double>());
+                if(val.is_boolean())
+                    ImGui::Checkbox(name.c_str(), &val.get<bool>());
+            }
+        }
+        ImGui::PopItemWidth();
+    }
+    virtual void imguiInputPinElement(int pin){
+        ImGui::PushItemWidth(70);
+        if(input_elements.contains(input_input_id)){
+            assert(input_elements[input_input_id].is_array());
+            ImGui::PushID(input_elements[input_input_id].get<crude_json::array>().data());
+            if(input_elements[input_input_id][pin].is_number())
+                ImGui::InputDouble("##d", &input_elements[input_input_id][pin].get<double>());
+            ImGui::PopID();
+        }
+        if(inputNames[pin].size()){
+            ImGui::SameLine();
+            ImGui::Text(inputNames[pin].data());
+        }
+        ImGui::PopItemWidth();
+    }
 };
 
 struct Registry{

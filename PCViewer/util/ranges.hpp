@@ -1,6 +1,7 @@
 #pragma once
 #include <cassert>
 #include <cinttypes>
+#include <iterator>
 
 namespace util{
 // ranges with integer values

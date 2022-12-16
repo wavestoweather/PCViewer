@@ -501,7 +501,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
 
     // removing inplace which can not be used due to data inflation (different data layouts)
     if(!equalDataLayout){
-        std::cout << "[Warning] Data layouts for node " << node << " with title " << nodes[node].node->name << " and body " << nodes[node].node->middleText << " has to inflate data because the input data has not euqal data layout" << std::endl;
+        logger << logging::warning_prefix << " Data layouts for node " << node << " with title " << nodes[node].node->name << " and body " << nodes[node].node->middleText << " has to inflate data because the input data has not euqal data layout" << logging::endl;
         std::vector<int> keptInplaceIndices;
         for(int i: inplaceIndices){
             if(inputData[i].full())
