@@ -9,6 +9,7 @@
 #include <ranges.hpp>
 #include <string_view>
 #include <radix_sort.hpp>
+#include "test_commons.hpp"
 
 #define BENCHMARK_STD_SORT
 #ifdef BENCHMARK_STD_SORT
@@ -16,8 +17,6 @@
 #endif
 
 //#define BENCHMARKING_ENABLED
-
-#define check_res(x) if((x) != test_result::success){std::cout << "Failed for " << #x << " with error code " << (x) << std::endl; return (x);}
 
 struct test_result{
     static const int success = 0;

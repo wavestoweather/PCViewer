@@ -484,7 +484,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
             else
                 curDataLayout = inputData.back();
             // setting the output dimensions
-            if(outputLayout || inputData.back().dimensionSizes.size() > outputLayout.dimensionSizes.size())
+            if(!outputLayout || inputData.back().dimensionSizes.size() > outputLayout.dimensionSizes.size())
                 outputLayout = inputData.back();
         }
         inputDataSize = std::max<long>(inputDataSize, inputData.back().size());
@@ -552,7 +552,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     // executing the node
     nodes[node].node->applyOperationCpu(inputData, outputData);
 
-    // safing the cache and setting up the counts for the current data
+    // saving the cache and setting up the counts for the current data
     node_infos[node].output_counts.resize(nodes[node].outputIds.size());
     for(int i: irange(nodes[node].outputIds)){
         for(const long link: pin_to_links[nodes[node].outputIds[i]]){

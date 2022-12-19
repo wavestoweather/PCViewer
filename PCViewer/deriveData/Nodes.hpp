@@ -349,13 +349,21 @@ public:
     {}
 
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        // TODO: check the data layout and adopt readout...
         // convert data to 
         Eigen::MatrixXf m(input[0].size(), input.size());
-        for(int i: util::size_range(input)){
-            for(int j: util::size_range(input[i].cols[0]))
-                m(j, i) = input[i].cols[0][j];
+        if(equalDataLayouts<float>(input)){
+            for(int i: util::size_range(input)){
+                for(int j: util::size_range(input[i].cols[0]))
+                    m(j, i) = input[i].cols[0][j];
+            }
         }
+        else{
+            for(int i: util::size_range(input)){
+                for(int j: util::i_range(input[i].size()))
+                    m(j, i) = input[i](j, 0);
+            }
+        }
+        
         auto mean_cols = m.colwise().mean();
         m = m.rowwise() - mean_cols;
         float min = m.minCoeff();
@@ -394,10 +402,23 @@ public:
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         std::vector<util::memory_view<const float>> in(input.size());
         std::vector<util::memory_view<float>> out(output.size());
+        std::vector<std::vector<float>> inflated_in;
         std::atomic<float> progress{};
 
-        for(int i: util::size_range(input))
-            in[i] = util::memory_view{input[i].cols[0].data(), input[i].cols[0].size()};
+        if(equalDataLayouts<float>(input)){
+            for(int i: util::size_range(input))
+                in[i] = util::memory_view{input[i].cols[0].data(), input[i].cols[0].size()};
+        }
+        else{
+            for(int i: util::size_range(input)){
+                inflated_in.emplace_back(output[0].size());
+                for(int j: util::size_range(output[0].cols[0])){
+                    const auto indices = output[0].columnIndexToDimensionIndices(j);
+                    inflated_in.back()[j] = input[i].cols[0][input[i].dimensionIndicesToColumnIndex(indices)];
+                }
+                in[i] = util::memory_view{inflated_in.back().data(), inflated_in.back().size()};
+            }
+        }
         for(int i: util::size_range(output))
             out[i] = util::memory_view{output[i].cols[0].data(), output[i].cols[0].size()};
         TSNE::run_cols(in, out, input_elements[middle_input_id]["perplexity"].get<double>(), 

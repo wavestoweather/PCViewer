@@ -4,6 +4,7 @@
 #include <atomic>
 #include <memory>
 #include <gpu_sync.hpp>
+#include "../imgui_nodes/crude_json.h"
 
 typedef struct VkSemaphore_T *VkSemaphore;
 typedef uint32_t VkFlags;
@@ -17,8 +18,14 @@ struct workbench{
     const std::string   id;
 
     workbench(std::string_view id): id(id) {};
+    // is called when an update to global drawlists or global datasets occured (This includes drawlist and dataset deletions)
+    virtual void notify_drawlist_dataset_update() {};
     // method to show the imgui window
     virtual void show() = 0;
+    
+    // methods required to load/save state of the workbench
+    virtual void                set_settings(const crude_json::value& settings) {};
+    virtual crude_json::value   get_settings() const { return {};};
 };
 
 struct dataset_dependency{

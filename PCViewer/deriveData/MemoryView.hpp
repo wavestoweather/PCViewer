@@ -138,6 +138,20 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
         return cols[column][cI];
     }
 
+    std::vector<uint64_t> columnIndexToDimensionIndices(uint64_t index) const{
+        std::vector<uint64_t> dimensionIndices(dimensionSizes.size());
+        for(int i = columnDimensionIndices.size() - 1; i >= 0; --i){
+            uint32_t dim  = columnDimensionIndices[i];
+            dimensionIndices[dim] = index % dimensionSizes[dim];
+            index /= dimensionSizes[dim];
+        }
+        return dimensionIndices;
+    }
+
+    uint64_t dimensionIndicesToColumnIndex(const std::vector<uint64_t>& dimensionIndices) const{
+        return dimensionIndex(dimensionIndices);
+    }
+
     operator bool() const{ return cols.size();};
 private:
     uint64_t dimensionIndex(const std::vector<uint64_t>& dimensionIndices) const{
@@ -159,5 +173,13 @@ private:
         }
         return dimensionIndex(dimensionIndices);
     }
-};  
+}; 
+
+template<typename T>
+inline bool equalDataLayouts(const std::vector<column_memory_view<float>>& input){
+    for(int i = 0; i < input.size() - 1; ++i)
+        if(!input[i].equalDataLayout(input[i + 1]))
+            return false;
+    return true;
+}
 }

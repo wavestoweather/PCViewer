@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <splines.hpp>
 #include <priority_globals.hpp>
+#include <json_util.hpp>
 
 namespace workbenches{
 
@@ -414,11 +415,11 @@ void parallel_coordinates_workbench::show(){
             float height = (brush.max - brush.min) / (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min) * pic_size.y;
             
             structures::brush_edit_data::brush_region hovered_region{structures::brush_edit_data::brush_region::COUNT};
-            if(util::point_in_box(mouse_pos, {x, y}, {x + setting.read().brush_box_width, y + height}))
+            if(util::point_in_box(mouse_pos, {x, y}, {x + float(setting.read().brush_box_width), y + height}))
                 hovered_region = structures::brush_edit_data::brush_region::body;
-            else if(util::point_in_box(mouse_pos, {x, y - setting.read().brush_box_border_hover_width}, {x + setting.read().brush_box_width, y}))
+            else if(util::point_in_box(mouse_pos, {x, y - float(setting.read().brush_box_border_hover_width)}, {x + float(setting.read().brush_box_width), y}))
                 hovered_region = structures::brush_edit_data::brush_region::top;
-            else if(util::point_in_box(mouse_pos, {x, y + height}, {x + setting.read().brush_box_width, y + height + setting.read().brush_box_border_hover_width}))
+            else if(util::point_in_box(mouse_pos, {x, y + height}, {x + float(setting.read().brush_box_width), y + height + float(setting.read().brush_box_border_hover_width)}))
                 hovered_region = structures::brush_edit_data::brush_region::bottom;
             if(!ImGui::IsWindowHovered())
                 hovered_region = structures::brush_edit_data::brush_region::COUNT;  // resetting hover to avoid dragging when window is not focues
@@ -432,7 +433,7 @@ void parallel_coordinates_workbench::show(){
             else if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::local)
                 border_color = util::vec4_to_imu32(setting.read().brush_box_local_color);
 
-            ImGui::GetWindowDrawList()->AddRect({x, y}, {x + setting.read().brush_box_width, y + height}, border_color, 1, ImDrawCornerFlags_All, setting.read().brush_box_border_width);
+            ImGui::GetWindowDrawList()->AddRect({x, y}, {x + float(setting.read().brush_box_width), y + height}, border_color, 1, ImDrawCornerFlags_All, float(setting.read().brush_box_border_width));
 
             // set mouse cursor
             switch(hovered_region){
@@ -456,11 +457,11 @@ void parallel_coordinates_workbench::show(){
             if(globals::brush_edit_data.selected_ranges.contains(brush.id) && ((ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).y) || ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))){
                 float delta;
                 if(ImGui::IsMouseDown(ImGuiMouseButton_Left))
-                    delta = -ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).y / pic_size.y;
+                    delta = -ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, float(setting.read().brush_drag_threshold)).y / pic_size.y;
                 else if(ImGui::IsKeyPressed(ImGuiKey_UpArrow))
-                    delta = setting.read().brush_arrow_button_move;
+                    delta = float(setting.read().brush_arrow_button_move);
                 else if(ImGui::IsKeyPressed(ImGuiKey_DownArrow))
-                    delta = -setting.read().brush_arrow_button_move;
+                    delta = -float(setting.read().brush_arrow_button_move);
                 
                 structures::range_brush& range_brush = util::brushes::get_selected_range_brush();
                 structures::axis_range& range       = *std::find(range_brush.begin(), range_brush.end(), brush);
@@ -505,14 +506,14 @@ void parallel_coordinates_workbench::show(){
                 if (place_of_ind[brush.axis] == 0) x_anchor = 0;
                 if (place_of_ind[brush.axis] == labels_count - 1) x_anchor = 1;
 
-                ImGui::SetNextWindowPos({ x + setting.read().brush_box_width / 2,y }, 0, { x_anchor,1 });
+                ImGui::SetNextWindowPos({ x + float(setting.read().brush_box_width) / 2,y }, 0, { x_anchor,1 });
                 ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
                 ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
                 ImGui::Begin(("Tooltip brush max##" + std::to_string(brush.id)).c_str(), NULL, flags);
                 ImGui::Text("%f", brush.max);
                 ImGui::End();
 
-                ImGui::SetNextWindowPos({ x + setting.read().brush_box_width / 2, y + height }, 0, { x_anchor,0 });
+                ImGui::SetNextWindowPos({ x + float(setting.read().brush_box_width) / 2, y + height }, 0, { x_anchor,0 });
                 ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
                 ImGui::Begin(("Tooltip brush min##" + std::to_string(brush.id)).c_str(), NULL, flags);
                 ImGui::Text("%f", brush.min);
@@ -530,7 +531,7 @@ void parallel_coordinates_workbench::show(){
             if(!attr_ref.active)
                 continue;
             float x = brush_gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2;
-            bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + setting.read().brush_box_width, pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
+            bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + float(setting.read().brush_box_width), pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
             if(!any_hover && axis_hover && globals::brush_edit_data.selected_ranges.empty()){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
@@ -571,7 +572,7 @@ void parallel_coordinates_workbench::show(){
             if(!attr_ref.active)
                 continue;
             float x = gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2;
-            bool axis_hover = util::point_in_box(ImGui::GetMousePos(), {x, pic_pos.y}, {x + setting.read().brush_box_width, b.y});
+            bool axis_hover = util::point_in_box(ImGui::GetMousePos(), {x, pic_pos.y}, {x + float(setting.read().brush_box_width), b.y});
             if(axis_hover){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                 if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
@@ -766,9 +767,9 @@ void parallel_coordinates_workbench::show(){
                 }
                 ImGui::EndCombo();
             }
-            if(ImGui::SliderFloat("Blur radius", &setting.ref_no_track().histogram_blur_width, .001, .3))
+            if(ImGui::SliderDouble("Blur radius", &setting.ref_no_track().histogram_blur_width, .001, .3))
                 setting();
-            if(ImGui::SliderFloat("Histogram width", &setting.ref_no_track().histogram_width, 0, .1))
+            if(ImGui::SliderDouble("Histogram width", &setting.ref_no_track().histogram_width, .0, .1))
                 setting();
             ImGui::EndMenu();
         }
@@ -1039,6 +1040,85 @@ void parallel_coordinates_workbench::remove_drawlists(const util::memory_view<st
             drawlist_infos().erase(drawlist_infos().begin() + i);
         }
     }
+}
+
+// settings conversions
+parallel_coordinates_workbench::settings::settings(const crude_json::value& json){
+    auto& t = *this;
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, enable_axis_lines);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, min_max_labes);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, axis_tick_label);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, axis_tick_fmt);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, axis_tick_count, double, int);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, render_batch_size, double, size_t);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_box_width);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_box_border_width);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_box_border_hover_width);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, brush_box_global_color);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, brush_box_local_color);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, brush_box_selected_color);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_arrow_button_move);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_drag_threshold);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, live_brush_threshold, double, int);
+
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, hist_type, double, histogram_type);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, histogram_blur_width);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, histogram_width);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, plot_background);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, histogram_rendering_threshold, double, int);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, render_splines);
+}
+parallel_coordinates_workbench::settings::operator crude_json::value() const{
+    auto& t = *this;
+    crude_json::value json(crude_json::type_t::object);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, enable_axis_lines);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, min_max_labes);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, axis_tick_label);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, axis_tick_fmt);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, axis_tick_count, double);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, render_batch_size, double);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, brush_box_width);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, brush_box_border_width);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, brush_box_border_hover_width);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_VEC4(json, t, brush_box_global_color);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_VEC4(json, t, brush_box_local_color);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_VEC4(json, t, brush_box_selected_color);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, brush_arrow_button_move);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, brush_drag_threshold);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, live_brush_threshold, double);
+
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, hist_type, double);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, histogram_blur_width);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, histogram_width);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_VEC4(json, t, plot_background);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, histogram_rendering_threshold, double);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, render_splines);
+    return json;
+}
+bool parallel_coordinates_workbench::settings::operator==(const settings& o) const{
+    COMP_EQ_OTHER(o, enable_axis_lines);
+    COMP_EQ_OTHER(o, min_max_labes);
+    COMP_EQ_OTHER(o, axis_tick_label);
+    COMP_EQ_OTHER(o, axis_tick_fmt);
+    COMP_EQ_OTHER(o, axis_tick_count);
+    COMP_EQ_OTHER(o, render_batch_size);
+    COMP_EQ_OTHER(o, brush_box_width);
+    COMP_EQ_OTHER(o, brush_box_border_width);
+    COMP_EQ_OTHER(o, brush_box_border_hover_width);
+    COMP_EQ_OTHER_VEC4(o, brush_box_global_color);
+    COMP_EQ_OTHER_VEC4(o, brush_box_local_color);
+    COMP_EQ_OTHER_VEC4(o, brush_box_selected_color);
+    COMP_EQ_OTHER(o, brush_arrow_button_move);
+    COMP_EQ_OTHER(o, brush_drag_threshold);
+    COMP_EQ_OTHER(o, live_brush_threshold);
+
+    COMP_EQ_OTHER(o, hist_type);
+    COMP_EQ_OTHER(o, histogram_blur_width);
+    COMP_EQ_OTHER(o, histogram_width);
+    COMP_EQ_OTHER_VEC4(o, plot_background);
+    COMP_EQ_OTHER(o, histogram_rendering_threshold);
+    COMP_EQ_OTHER(o, render_splines);
+    return true;
 }
 
 }

@@ -54,23 +54,28 @@ public:
         mutable std::string axis_tick_fmt{"%6.4g"};
         mutable int         axis_tick_count{5};
         mutable size_t      render_batch_size{};
-        mutable float       brush_box_width{20};
-        mutable float       brush_box_border_width{2};
-        mutable float       brush_box_border_hover_width{5};
+        mutable double      brush_box_width{20};
+        mutable double      brush_box_border_width{2};
+        mutable double      brush_box_border_hover_width{5};
         mutable ImVec4      brush_box_global_color{.2f, 0, .8f, 1};
         mutable ImVec4      brush_box_local_color{1, 0, .1f, 1};
         mutable ImVec4      brush_box_selected_color{.8f, .8f, 0, 1};
-        mutable float       brush_arrow_button_move{.01f};
-        mutable float       brush_drag_threshold{.5f};
+        mutable double      brush_arrow_button_move{.01f};
+        mutable double      brush_drag_threshold{.5f};
         mutable int         live_brush_threshold{5000000};
 
         // when these are changed the whole data plot has to be rendered
         histogram_type hist_type{};
-        float       histogram_blur_width{.01f};
-        float       histogram_width{.01f};
+        double      histogram_blur_width{.01f};
+        double      histogram_width{.01f};
         ImVec4      plot_background{0,0,0,1};
         int         histogram_rendering_threshold{500000};
         bool        render_splines{};
+
+        settings() = default;
+        settings(const crude_json::value& json);
+        operator crude_json::value() const;
+        bool operator==(const settings& o) const;
     };
     struct plot_data{
         uint32_t                width{2000};
