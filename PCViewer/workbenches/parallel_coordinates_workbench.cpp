@@ -804,10 +804,9 @@ void parallel_coordinates_workbench::show(){
             if(ImGui::InputInt2("width/height", reinterpret_cast<int*>(&plot_data.ref_no_track().width), ImGuiInputTextFlags_EnterReturnsTrue))
                 plot_data();
             
-            static std::map<VkSampleCountFlagBits, std::string_view> flag_names{{VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_1_BIT, "1Spp"}, {VK_SAMPLE_COUNT_2_BIT, "2Spp"}, {VK_SAMPLE_COUNT_4_BIT, "4Spp"}, {VK_SAMPLE_COUNT_8_BIT, "8Spp"}, {VK_SAMPLE_COUNT_16_BIT, "16Spp"}};
-            if(ImGui::BeginCombo("Sample per pixel", flag_names[plot_data.read().image_samples].data())){
-                for(const auto& [bit, name]: flag_names)
-                    if(ImGui::MenuItem(name.data()))
+            if(ImGui::BeginCombo("Sample per pixel", util::vk::sample_count_infos.at(plot_data.read().image_samples).name.data())){
+                for(const auto& [bit, count_name]: util::vk::sample_count_infos)
+                    if(ImGui::MenuItem(count_name.name.data()))
                         plot_data().image_samples = bit;
                 ImGui::EndCombo();
             }
@@ -1043,14 +1042,14 @@ void parallel_coordinates_workbench::remove_drawlists(const util::memory_view<st
 }
 
 // settings conversions
-parallel_coordinates_workbench::settings::settings(const crude_json::value& json){
+parallel_coordinates_workbench::settings_t::settings_t(const crude_json::value& json){
     auto& t = *this;
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, enable_axis_lines);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, min_max_labes);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, axis_tick_label);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, axis_tick_fmt);
-    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, axis_tick_count, double, int);
-    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, render_batch_size, double, size_t);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, axis_tick_count, double);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, render_batch_size, double);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_box_width);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_box_border_width);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_box_border_hover_width);
@@ -1059,16 +1058,16 @@ parallel_coordinates_workbench::settings::settings(const crude_json::value& json
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, brush_box_selected_color);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_arrow_button_move);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, brush_drag_threshold);
-    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, live_brush_threshold, double, int);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, live_brush_threshold, double);
 
-    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, hist_type, double, histogram_type);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, hist_type, double);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, histogram_blur_width);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, histogram_width);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, plot_background);
-    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, histogram_rendering_threshold, double, int);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, histogram_rendering_threshold, double);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, render_splines);
 }
-parallel_coordinates_workbench::settings::operator crude_json::value() const{
+parallel_coordinates_workbench::settings_t::operator crude_json::value() const{
     auto& t = *this;
     crude_json::value json(crude_json::type_t::object);
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, enable_axis_lines);
@@ -1095,7 +1094,7 @@ parallel_coordinates_workbench::settings::operator crude_json::value() const{
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, render_splines);
     return json;
 }
-bool parallel_coordinates_workbench::settings::operator==(const settings& o) const{
+bool parallel_coordinates_workbench::settings_t::operator==(const settings_t& o) const{
     COMP_EQ_OTHER(o, enable_axis_lines);
     COMP_EQ_OTHER(o, min_max_labes);
     COMP_EQ_OTHER(o, axis_tick_label);

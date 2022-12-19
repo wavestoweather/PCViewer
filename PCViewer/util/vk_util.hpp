@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <ranges.hpp>
 #include <logger.hpp>
+#include <map>
 
 namespace util{
 inline void check_vk_result(VkResult err){
@@ -403,5 +404,16 @@ inline void convert_image_layouts_execute(util::memory_view<VkImageMemoryBarrier
     destroy_fence(fence);
     vkFreeCommandBuffers(globals::vk_context.device, globals::vk_context.general_graphics_command_pool, 1, &commands);
 }
+
+// other utilities
+struct count_name{uint32_t count; std::string_view name;};
+const std::map<VkSampleCountFlagBits, count_name> sample_count_infos{
+    {VK_SAMPLE_COUNT_1_BIT,  {1, "1spp"}},
+    {VK_SAMPLE_COUNT_2_BIT,  {2, "2spp"}},
+    {VK_SAMPLE_COUNT_4_BIT,  {4, "4spp"}},
+    {VK_SAMPLE_COUNT_8_BIT,  {8, "8spp"}},
+    {VK_SAMPLE_COUNT_16_BIT, {16, "16spp"}},
+    {VK_SAMPLE_COUNT_32_BIT, {32, "32spp"}}
+};
 }
 }

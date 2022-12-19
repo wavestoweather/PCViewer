@@ -98,3 +98,6 @@ using datasets_t = changing<std::map<std::string_view, dataset_t>>;
 extern datasets_t datasets;
 extern std::set<std::string_view> datasets_to_delete;   // is emptied in the main thread, only add delete tasks
 }
+
+#define DECL_DATASET_READ(ds_id)   const structures::dataset& dataset_read() const  {return globals::datasets.read().at(ds_id).read();}
+#define DECL_DATASET_WRITE(ds_id)        structures::dataset& dataset_write() const {return globals::datasets()[ds_id]();}

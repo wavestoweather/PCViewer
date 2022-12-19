@@ -1,6 +1,6 @@
 #include "test_commons.hpp"
 #include <parallel_coordinates_workbench.hpp>
-#include <memory_view.hpp>
+#include <scatterplot_structs.hpp>
 
 struct test_result{
     static const int success = 0;
@@ -22,7 +22,8 @@ bool check_struct(){
 }
 
 int struct_to_json_tests(int argc, char** argv){
-    check_res(check_struct<workbenches::parallel_coordinates_workbench::settings>());
+    check_res(check_struct<workbenches::parallel_coordinates_workbench::settings_t>());
+    check_res(check_struct<structures::scatterplot_wb::settings_t>());
 
     return test_result::success;
 }

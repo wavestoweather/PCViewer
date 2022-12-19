@@ -8,17 +8,10 @@
 namespace workbenches{
 
 class parallel_coordinates_workbench: public structures::workbench, public structures::drawlist_dataset_dependency{
-public:
-    struct attribute_order_info{
-        uint32_t    attribut_index{};
-        bool        active{true};
-
-        bool operator==(const attribute_order_info& o) const {return attribut_index == o.attribut_index && active == o.active;}
-    };
-private:
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
+    using attribute_order_info = structures::workbenches::attribute_order_info;
 
     // both are unique_ptrs to avoid issues with the memory_views when data elements are deleted in the vector
     std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;
@@ -46,7 +39,7 @@ public:
         "grey scale histogram",
         "heatmap histogram"
     };
-    struct settings{
+    struct settings_t{
         // mutable to be accessed and change even when const (can not be tracked)
         mutable bool        enable_axis_lines{true};
         mutable bool        min_max_labes{false};
@@ -72,10 +65,10 @@ public:
         int         histogram_rendering_threshold{500000};
         bool        render_splines{};
 
-        settings() = default;
-        settings(const crude_json::value& json);
+        settings_t() = default;
+        settings_t(const crude_json::value& json);
         operator crude_json::value() const;
-        bool operator==(const settings& o) const;
+        bool operator==(const settings_t& o) const;
     };
     struct plot_data{
         uint32_t                width{2000};
@@ -97,7 +90,7 @@ public:
     };
     const std::array<VkFormat, 4>                           available_formats{VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
 
-    structures::change_tracker<settings>                    setting{};
+    structures::change_tracker<settings_t>                  setting{};
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};     // the order here is the render order of the drawlists
     structures::alpha_mapping_type                          alpha_mapping_typ{};
     structures::change_tracker<plot_data>                   plot_data{};
@@ -112,6 +105,9 @@ public:
 
     // overriden methods
     void show() override;
+
+    void                set_settings(const crude_json::value& settings) override {setting() = settings;}
+    crude_json::value   get_settings() const override { return setting.read();}
 
     void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override{};
     void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, structures::dataset_dependency::update_flags flags, const structures::gpu_sync_info& sync_info = {}) override;

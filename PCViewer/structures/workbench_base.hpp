@@ -24,8 +24,10 @@ struct workbench{
     virtual void show() = 0;
     
     // methods required to load/save state of the workbench
-    virtual void                set_settings(const crude_json::value& settings) {};
-    virtual crude_json::value   get_settings() const { return {};};
+    virtual void                set_settings(const crude_json::value& json) {};
+    virtual crude_json::value   get_settings() const {return {};};
+    virtual void                set_session_data(const crude_json::value& json) {};
+    virtual crude_json::value   get_session_data() const {return {};};
 };
 
 struct dataset_dependency{
@@ -35,15 +37,24 @@ struct dataset_dependency{
         bool fragmented_last: 1;
     };
     virtual void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const gpu_sync_info& sync_info = {}) = 0;
-    virtual void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const gpu_sync_info& sync_info = {}) = 0;
     virtual void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const gpu_sync_info& sync_info = {}) = 0;
+    virtual void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const gpu_sync_info& sync_info = {}) {};
 };
 
 struct drawlist_dataset_dependency: public dataset_dependency{
     virtual void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
-    virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
     virtual void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
+    virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) {};
 };
+
+namespace workbenches{
+    struct attribute_order_info{
+        uint32_t    attribut_index{};
+        bool        active{true};
+
+        bool operator==(const attribute_order_info& o) const {return attribut_index == o.attribut_index && active == o.active;}
+    };
+}
 }
 
 namespace globals{

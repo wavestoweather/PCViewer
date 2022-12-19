@@ -87,3 +87,6 @@ extern structures::drawlists_t drawlists;
 extern std::vector<std::string_view> selected_drawlists;
 extern std::set<std::string_view> drawlists_to_delete;
 }
+
+#define DECL_DRAWLIST_READ(dl_id)   const structures::drawlist& drawlist_read() const  {return globals::drawlists.read().at(dl_id).read();}
+#define DECL_DRAWLIST_WRITE(dl_id)        structures::drawlist& drawlist_write() const {return globals::drawlists()[dl_id]();}

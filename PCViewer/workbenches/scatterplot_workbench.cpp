@@ -15,6 +15,10 @@ void scatterplot_workbench::notify_drawlist_dataset_update()
     
 void scatterplot_workbench::show() 
 {
-    
+    if(!active) 
+        return;
+    ImGui::Begin(id.data());
+
+    ImGui::End();
 }
 }
