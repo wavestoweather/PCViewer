@@ -131,9 +131,26 @@ void scatterplot_workbench::show()
 {
     if(!active) 
         return;
-    ImGui::Begin(id.data());
+    ImGui::Begin(id.data(), &active);
 
+    const auto active_indices = get_active_ordered_indices();
+    // plot views ------------------------------------------------------
+    switch(settings.read().plot_type){
+    case plot_type_t::matrix:
+        // matrix should be displayed as a left lower triangular matrix
+        for(int i: util::i_range(1, active_indices.size())){
+            for(int j: util::i_range(i)){
 
+            }
+        }
+        break;
+    case plot_type_t::list:
+
+        break;
+    }
+
+    // settings ---------------------------------------------------------
+    ImGui::InputDouble("plot padding", &settings().plot_padding);
     
     ImGui::End();
 }

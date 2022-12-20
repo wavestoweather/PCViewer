@@ -6,6 +6,7 @@ namespace structures{
 
 template<class T>
 struct enum_names{
+    using value_type = T;
     //enum_names(std::initializer_list<std::string_view> l): names(l){}
     typename std::array<std::string_view, static_cast<size_t>(T::COUNT)> names;
     std::string_view operator[](T place) const {return names[static_cast<size_t>(place)];}
@@ -31,4 +32,19 @@ struct enum_iteration{
     iterator end() const {return iterator(static_cast<size_t>(T::COUNT));}
 };
 
+// example usage:
+// enum e_t{first, COUNT};
+// enum_names<e_t> e_names{"hello"};
+//
+// std::string name{"hello"};
+// e_t res = enum_name_to_enum(e_names, name);
+// @return returns enum::COUNT if could not find correct enum val
+template<class names_t>
+inline typename names_t::value_type enum_name_to_enum(const names_t names, std::string_view name){
+    using value_type = typename names_t::value_type;
+    for(auto e: enum_iteration<value_type>())
+        if(names[e] == name)
+            return e;
+    return value_type::COUNT;
+}
 }

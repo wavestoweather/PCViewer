@@ -53,7 +53,7 @@ namespace scatterplot_wb{
             JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, plot_padding);
             JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, plot_format, double);
             JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, plot_background_color);
-            JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, plot_type, double);
+            JSON_ASSIGN_JSON_FIELD_TO_STRUCT_ENUM_NAME(json, t, plot_type, plot_type_names);
             JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, large_vis_threshold, double);
         }
         operator crude_json::value() const {
@@ -64,7 +64,7 @@ namespace scatterplot_wb{
             JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, plot_padding);
             JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, plot_format, double);
             JSON_ASSIGN_STRUCT_FIELD_TO_JSON_VEC4(json, t, plot_background_color);
-            JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, plot_type, double);
+            JSON_ASSIGN_STRUCT_FIELD_TO_JSON_ENUM_NAME(json, t, plot_type, plot_type_names);
             JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, large_vis_threshold, double);
             return json;
         }

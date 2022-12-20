@@ -30,6 +30,7 @@ public:
     robin_hood::unordered_map<attribute_pair, plot_data_t>  plot_datas{};
     changing_vector<structures::attribute>                  attributes{};
     changing_vector<attribute_order_info>                   attribute_order_infos{};
+    changing_vector<attribute_pair>                         plot_list{};    // is used when plot_type is switched to list mode
 
     scatterplot_workbench(std::string_view id);
 

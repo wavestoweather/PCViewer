@@ -4,6 +4,7 @@
 #include <parallel_coordinates_workbench.hpp>
 #include <data_derivation_workbench.hpp>
 #include <compression_workbench.hpp>
+#include <scatterplot_workbench.hpp>
 #include <load_behaviour.hpp>
 #include <drawlist_creation_behaviour.hpp>
 
@@ -13,6 +14,7 @@ void setup_default_workbenches(){
     const std::string_view data_wb_id{"Data workbench"};
     const std::string_view parallel_coordinates_wb_id{"Parallel coordinates workbench"};
     const std::string_view data_derivation_wb_id{"Data derivation workbench"};
+    const std::string_view scatterplot_wb_id{"Scatterplot workbench"};
     const std::string_view compression_wb_id{"Compresssion workbench"};
 
     // register all available workbenches -------------------------------------------
@@ -32,6 +34,10 @@ void setup_default_workbenches(){
     auto data_derivation_wb = std::make_unique<workbenches::data_derivation_workbench>(data_derivation_wb_id);
     globals::dataset_dependencies.push_back(data_derivation_wb.get());
     globals::workbenches.emplace_back(std::move(data_derivation_wb));
+
+    auto scatterplot_wb = std::make_unique<workbenches::scatterplot_workbench>(scatterplot_wb_id);
+    globals::drawlist_dataset_dependencies.push_back(scatterplot_wb.get());
+    globals::workbenches.emplace_back(std::move(scatterplot_wb));
 
     auto compression_wb = std::make_unique<workbenches::compression_workbench>(compression_wb_id);
     globals::workbenches.emplace_back(std::move(compression_wb));

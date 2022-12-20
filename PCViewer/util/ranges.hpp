@@ -10,9 +10,10 @@ public:
     i_range(unsigned long end): _begin(0), _end(end), _step(1){}; // single element constructor 
     i_range(unsigned long begin, unsigned long end, long step = 1):
      _begin(begin), _end(end), _step(step){
-        assert(step != 0 && ((begin > end && step < 0) || step > 0) && "Infinit loop detected");
-        assert(((end - begin) % step == 0 || -(end - begin) % -step == 0) && "range results in an infinit loop");
-    }; 
+        assert(step != 0 && "step of 0 is invalid");
+        if((begin > end && step > 0) || (begin < end && step < 0))
+            _begin = _end;
+    };
 
     class iterator {
         friend class i_range;
