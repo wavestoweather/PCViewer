@@ -407,7 +407,7 @@ public:
 
         if(equalDataLayouts<float>(input)){
             for(int i: util::size_range(input))
-                in[i] = util::memory_view{input[i].cols[0].data(), input[i].cols[0].size()};
+                in[i] = util::memory_view<const float>{input[i].cols[0].data(), input[i].cols[0].size()};
         }
         else{
             for(int i: util::size_range(input)){
@@ -416,11 +416,11 @@ public:
                     const auto indices = output[0].columnIndexToDimensionIndices(j);
                     inflated_in.back()[j] = input[i].cols[0][input[i].dimensionIndicesToColumnIndex(indices)];
                 }
-                in[i] = util::memory_view{inflated_in.back().data(), inflated_in.back().size()};
+                in[i] = util::memory_view<const float>{inflated_in.back().data(), inflated_in.back().size()};
             }
         }
         for(int i: util::size_range(output))
-            out[i] = util::memory_view{output[i].cols[0].data(), output[i].cols[0].size()};
+            out[i] = util::memory_view<float>{output[i].cols[0].data(), output[i].cols[0].size()};
         TSNE::run_cols(in, out, input_elements[middle_input_id]["perplexity"].get<double>(), 
                                 input_elements[middle_input_id]["theta"].get<double>(),
                                 int(input_elements[middle_input_id]["random seed (negative for none)"].get<double>()),

@@ -21,7 +21,7 @@ const distance_calculator::pipeline_data& distance_calculator::_get_or_create_pi
 
         auto shader_module = util::vk::create_shader_module(_compute_shader_path);
         std::vector<VkSpecializationMapEntry> specialization_entries{util::vk::initializers::specializationMapEntry(0, 0, sizeof(uint32_t))};
-        std::vector<uint32_t> data_type_specialization{static_cast<uint32_t>(pipeline_specs.d_type)};
+        std::vector<uint32_t> data_type_specialization{static_cast<uint32_t>(pipeline_specs.data_type)};
         auto specialization_info = util::vk::initializers::specializationInfo(specialization_entries, util::memory_view(data_type_specialization));
         auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, shader_module, &specialization_info);
         auto compute_info = util::vk::initializers::computePipelineCreateInfo(pipe_data.pipeline_layout, shader_stage_info);

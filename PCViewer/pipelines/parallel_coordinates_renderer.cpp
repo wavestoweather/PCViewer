@@ -70,7 +70,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         multisample_key ms_key{output_specs.format, output_specs.sample_count, output_specs.width, output_specs.height};
         if(_pipelines.size() > max_pipeline_count){
             auto [pipeline, time] = *std::min_element(_pipeline_last_use.begin(), _pipeline_last_use.end(), [](const auto& l, const auto& r){return l.second < r.second;});
-            VkPipeline pipe = pipeline; // needed for msvc and clang on windows...
+            VkPipeline pipe = pipeline; // needed for msvc and clang on windows as structured bindings can not be inserted to lambda...
             auto [key, val] = *std::find_if(_pipelines.begin(), _pipelines.end(), [&](const auto& e){return e.second.pipeline == pipe;});
             util::vk::destroy_pipeline(val.pipeline);
             util::vk::destroy_pipeline_layout(val.pipeline_layout);
@@ -91,14 +91,13 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         // multisample image
         if(output_specs.sample_count != VK_SAMPLE_COUNT_1_BIT){
             if(!_multisample_images.contains(ms_key)){
+                auto image_info = util::vk::initializers::imageCreateInfo(output_specs.format, {output_specs.width, output_specs.height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TYPE_2D, 1, 1, output_specs.sample_count);
+                auto allocation_info = util::vma::initializers::allocationCreateInfo();
+                std::tie(_multisample_images[ms_key].image, _multisample_images[ms_key].image_view) = util::vk::create_image_with_view(image_info, allocation_info);
 
-            auto image_info = util::vk::initializers::imageCreateInfo(output_specs.format, {output_specs.width, output_specs.height, 1}, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_TYPE_2D, 1, 1, output_specs.sample_count);
-            auto allocation_info = util::vma::initializers::allocationCreateInfo();
-            std::tie(_multisample_images[ms_key].image, _multisample_images[ms_key].image_view) = util::vk::create_image_with_view(image_info, allocation_info);
-
-            // updating the image layout
-            auto image_barrier = util::vk::initializers::imageMemoryBarrier(_multisample_images[ms_key].image.image, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}, {}, {}, {}, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            util::vk::convert_image_layouts_execute(image_barrier);
+                // updating the image layout
+                auto image_barrier = util::vk::initializers::imageMemoryBarrier(_multisample_images[ms_key].image.image, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}, {}, {}, {}, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                util::vk::convert_image_layouts_execute(image_barrier);
             }
             _multisample_images[ms_key].count++;
         }
@@ -345,7 +344,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
             info.workbench.plot_data.read().width, 
             info.workbench.plot_data.read().height, 
             drawlist.const_templatelist().data_size < info.workbench.setting.read().histogram_rendering_threshold ? structures::parallel_coordinates_renderer::render_type::polyline_spline: structures::parallel_coordinates_renderer::render_type::large_vis_lines, 
-            ds.data_flags.data_typ
+            ds.data_flags.data_type
         };
         auto pipeline_info = get_or_create_pipeline(out_specs);
 
@@ -517,7 +516,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
             info.workbench.plot_data.read().width, 
             info.workbench.plot_data.read().height, 
             structures::parallel_coordinates_renderer::render_type::polyline_spline,
-            structures::data_type::float_t
+            structures::data_type_t::float_t
         };
         auto pipeline_info = get_or_create_pipeline(out_specs);
 

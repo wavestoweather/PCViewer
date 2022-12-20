@@ -525,21 +525,21 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
             auto data = open_internals::open_combined(filename, query_attributes, load_information.get());
             dataset().attributes = std::move(data.attributes);
             dataset().cpu_data() = std::move(data.data);
-            dataset().data_flags.data_typ = structures::data_type::half_t;
+            dataset().data_flags.data_type = structures::data_type_t::half_t;
         }
         else if(file_extension == ".nc"){
             auto data = open_internals::open_netcdf<float>(filename, query_attributes);
             dataset().attributes = data.attributes;
             dataset().cpu_data() = std::move(data.data);
             dataset().data_size = std::get<structures::data<float>>(dataset.read().cpu_data.read()).size();
-            dataset().data_flags.data_typ = structures::data_type::float_t;
+            dataset().data_flags.data_type = structures::data_type_t::float_t;
         }
         else if(file_extension == ".csv"){
             auto data = open_internals::open_csv<float>(filename, query_attributes);
             dataset().attributes = data.attributes;
             dataset().cpu_data() = std::move(data.data);
             dataset().data_size = std::get<structures::data<float>>(dataset.read().cpu_data.read()).size();
-            dataset().data_flags.data_typ = structures::data_type::float_t;
+            dataset().data_flags.data_type = structures::data_type_t::float_t;
         }
         else
             throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
@@ -561,7 +561,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         else
             throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
         dataset().data_size = std::get<structures::data<float>>(dataset.read().cpu_data.read()).size();
-        dataset().data_flags.data_typ = structures::data_type::float_t;
+        dataset().data_flags.data_type = structures::data_type_t::float_t;
         break;
     case data_type_preference::half_precision:
         if(file_extension.empty()){
@@ -580,7 +580,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
         else
             throw std::runtime_error{"open_dataset() Unkown file extension " + std::string(file_extension)};
         dataset().data_size = std::get<structures::data<half>>(dataset.read().cpu_data.read()).size();
-        dataset().data_flags.data_typ = structures::data_type::half_t;
+        dataset().data_flags.data_type = structures::data_type_t::half_t;
         break;
     default:
         throw std::runtime_error{"open_dataset() unrecognized data_type_preference"};

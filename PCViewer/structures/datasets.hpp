@@ -52,7 +52,7 @@ struct dataset{
         bool gpuStream: 1;          // data has to be streamed from ram to gpu as not enough space available
         bool cpuStream: 1;          // data has to be streamed from hdd to cpu as not enough space available
         bool cudaCompressed: 1;     // data is compressed
-        data_type data_typ{data_type::float_t};
+        data_type_t data_type{data_type_t::float_t};
     }                                   data_flags{};
 
     struct data_stream_infos{
@@ -99,5 +99,6 @@ extern datasets_t datasets;
 extern std::set<std::string_view> datasets_to_delete;   // is emptied in the main thread, only add delete tasks
 }
 
-#define DECL_DATASET_READ(ds_id)   const structures::dataset& dataset_read() const  {return globals::datasets.read().at(ds_id).read();}
-#define DECL_DATASET_WRITE(ds_id)        structures::dataset& dataset_write() const {return globals::datasets()[ds_id]();}
+#define DECL_DATASET_READ(ds_id)     const structures::dataset&      dataset_read()  const {return globals::datasets.read().at(ds_id).read();}
+#define DECL_DATASET_WRITE(ds_id)          structures::dataset&      dataset_write() const {return globals::datasets()[ds_id]();}
+#define DECL_TEMPLATELIST_READ(tl_id)const structures::templatelist& dataset_read()  const {return globals::datasets.read().at(ds_id).read().templatelist_index.at(tl_id);}

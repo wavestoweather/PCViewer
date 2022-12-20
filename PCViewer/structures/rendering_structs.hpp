@@ -45,7 +45,7 @@ namespace parallel_coordinates_renderer{
         uint32_t                width{};
         uint32_t                height{};
         render_type             render_typ{};
-        data_type               data_typ{};
+        data_type_t             data_typ{};
 
         bool operator==(const output_specs& o) const {return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));}
     };
@@ -91,9 +91,9 @@ namespace parallel_coordinates_renderer{
 
 namespace brusher{
     struct pipeline_specs{
-        data_type data_typ;
+        data_type_t data_type;
 
-        bool operator==(const pipeline_specs& o) const {return data_typ == o.data_typ;}
+        bool operator==(const pipeline_specs& o) const {return data_type == o.data_type;}
     };
     struct pipeline_data{
         VkPipeline          pipeline{};

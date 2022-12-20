@@ -10,9 +10,9 @@
 namespace structures{
 namespace distance_calculator_structs{
 struct pipeline_specs{
-    data_type d_type{};
+    data_type_t data_type{};
     
-    bool operator==(const pipeline_specs& o) const {return d_type == o.d_type;}
+    bool operator==(const pipeline_specs& o) const {return data_type == o.data_type;}
 };
 struct pipeline_data{
     VkPipeline      pipeline;
@@ -51,7 +51,7 @@ class distance_calculator{
 
 public:
     struct distance_info{
-        structures::data_type   data_type{};
+        structures::data_type_t data_type{};
         size_t                  data_size{};
         VkDeviceAddress         data_header_address{};
         VkDeviceAddress         index_buffer_address{};

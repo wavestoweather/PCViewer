@@ -21,8 +21,8 @@ const brusher::pipeline_data& brusher::_get_or_create_pipeline(const pipeline_sp
         // pipeline creation
         auto& pipe_data = _pipelines[specs];
 
-        auto specialization_map_entry = util::vk::initializers::specializationMapEntry(0, 0, sizeof(specs.data_typ));
-        auto specialization_info = util::vk::initializers::specializationInfo(specialization_map_entry, util::memory_view(specs.data_typ));
+        auto specialization_map_entry = util::vk::initializers::specializationMapEntry(0, 0, sizeof(specs.data_type));
+        auto specialization_info = util::vk::initializers::specializationInfo(specialization_map_entry, util::memory_view(specs.data_type));
         auto shader_module = util::vk::create_shader_module(compute_shader_path);
         auto stage_create_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, shader_module, &specialization_info);
 
@@ -59,7 +59,7 @@ void brusher::brush(const brush_info& info)
     pc.local_global_brush_combine = static_cast<uint32_t>(info.brush_comb);
     pc.data_size = ds.gpu_stream_infos ? ds.gpu_stream_infos->cur_block_size: tl.data_size;
 
-    const auto& pipe_data = _get_or_create_pipeline({ds.data_flags.data_typ});
+    const auto& pipe_data = _get_or_create_pipeline({ds.data_flags.data_type});
 
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_brush_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
     res = vkResetFences(globals::vk_context.device, 1, &_brush_fence); util::check_vk_result(res);

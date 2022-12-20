@@ -25,7 +25,7 @@ const histogram_counter::pipeline_data& histogram_counter::_get_or_create_pipeli
             util::vk::initializers::specializationMapEntry(1, sizeof(uint32_t), sizeof(uint32_t)),      // dimension count
             util::vk::initializers::specializationMapEntry(2, 2 * sizeof(uint32_t), sizeof(uint32_t))}; // reduction type
         std::vector<uint32_t> data_type_specialization{
-            static_cast<uint32_t>(pipeline_specs.d_type), 
+            static_cast<uint32_t>(pipeline_specs.data_type), 
             pipeline_specs.dim_count,
             static_cast<uint32_t>(pipeline_specs.reduction_type)};
         auto specialization_info = util::vk::initializers::specializationInfo(specialization_entries, util::memory_view(data_type_specialization));

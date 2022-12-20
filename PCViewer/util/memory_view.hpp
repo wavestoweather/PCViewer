@@ -9,18 +9,21 @@
 
 namespace util{
 // writeable memory view
-template<class T>
+template<class T = uint32_t>
 class memory_view{
     T* _data{};
     size_t _size{};
 public:
+    static constexpr size_t n_pos{size_t(-1)};
+
     memory_view(){};
     memory_view(T& d): _data(&d), _size(1){};
     memory_view(std::vector<T>& v): _data(v.data()), _size(v.size()){};
     memory_view(const std::vector<typename std::remove_const<T>::type>& v): _data(v.data()), _size(v.size()){};
-    //memory_view(const std::vector<std::remove_const<T>::type>& v): _data(v.data()), _size(v.size()){static_assert(std::is_const<T>::value);}
     template<size_t size>
     memory_view(std::array<T, size>& a): _data(a.data()), _size(size){};
+    template<size_t size>
+    memory_view(const std::array<typename std::remove_const<T>::type, size>& a): _data(a.data()), _size(a.size()){};
     memory_view(T* data, size_t size): _data(data), _size(size){};
     template<class U>
     memory_view(memory_view<U> m): _data(reinterpret_cast<T*>(m.data())), _size(m.size() * sizeof(U) / sizeof(T)){
@@ -116,7 +119,14 @@ public:
         for(size_t i: i_range(_size))
             if(_data[i] == t)
                 return i;
-        return _size;
+        return n_pos;
+    }
+    template<typename f>
+    size_t index_of(f functor){
+        for(size_t i: i_range(_size))
+            if(functor(_data[i]))
+                return i;
+        return n_pos;
     }
 
     T& front(){

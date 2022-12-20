@@ -17,11 +17,11 @@ enum class reduction_type_t: uint32_t{
     COUNT
 };
 struct pipeline_specs{
-    data_type       d_type{};
+    data_type_t     data_type{};
     uint32_t        dim_count{2};
     reduction_type_t reduction_type{reduction_type_t::sum};
 
-    bool operator==(const pipeline_specs& o) const {return d_type == o.d_type && dim_count == o.dim_count && reduction_type == o.reduction_type;}
+    bool operator==(const pipeline_specs& o) const {return data_type == o.data_type && dim_count == o.dim_count && reduction_type == o.reduction_type;}
 };
 struct pipeline_data{
     VkPipeline          pipeline;
@@ -69,7 +69,7 @@ class histogram_counter{
 
 public:
     struct count_info{
-        structures::data_type               data_type{};
+        structures::data_type_t             data_type{};
         size_t                              data_size{};
         VkDeviceAddress                     data_header_address{};
         VkDeviceAddress                     index_buffer_address{};
