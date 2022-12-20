@@ -56,8 +56,8 @@ class scatterplot_renderer{
         uint32_t                width;
     }   _multisample_image{};   // currently supports only a single multisample image
 
-    const pipeline_data& get_or_create_pipeline(const output_specs& output_specs);
-    VkFramebuffer        get_or_create_framebuffer(VkImageView dst_image, VkImageView multisample_image = {});
+    const pipeline_data& _get_or_create_pipeline(const output_specs& output_specs);
+    VkFramebuffer        _get_or_create_framebuffer(VkRenderPass render_pass, uint32_t width, VkImageView dst_image, VkImageView multisample_image = {});
 
     scatterplot_renderer();
 public:

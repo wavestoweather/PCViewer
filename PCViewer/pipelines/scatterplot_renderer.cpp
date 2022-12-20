@@ -11,7 +11,7 @@ scatterplot_renderer::scatterplot_renderer()
     _render_fence = util::vk::create_fence(fence_info);
 }
 
-const scatterplot_renderer::pipeline_data& scatterplot_renderer::get_or_create_pipeline(const output_specs& output_specs){
+const scatterplot_renderer::pipeline_data& scatterplot_renderer::_get_or_create_pipeline(const output_specs& output_specs){
     if(!_pipelines.contains(output_specs)){
         if(logger.logging_level >= logging::level::l_4){
             std::stringstream ss; ss << util::memory_view<const uint32_t>(util::memory_view(output_specs));
@@ -172,7 +172,7 @@ const scatterplot_renderer::pipeline_data& scatterplot_renderer::get_or_create_p
     return _pipelines[output_specs];
 }
 
-VkFramebuffer scatterplot_renderer::get_or_create_framebuffer(VkImageView dst_image, VkImageView multisample_image){
+VkFramebuffer scatterplot_renderer::_get_or_create_framebuffer(VkRenderPass render_pass, uint32_t width, VkImageView dst_image, VkImageView multisample_image){
     if(!_framebuffers.contains({dst_image, multisample_image})){
         // free framebuffers if too many are allocated
         if(_framebuffers.size() > max_framebuffer_count){
@@ -185,8 +185,21 @@ VkFramebuffer scatterplot_renderer::get_or_create_framebuffer(VkImageView dst_im
         }
 
         // creating the framebuffer for current image views
+        std::vector<VkImageView> image_views{dst_image};
+        if(multisample_image)
+            image_views.push_back(multisample_image);
+        auto framebuffer_info = util::vk::initializers::framebufferCreateInfo(render_pass, image_views, width, width, 1);
+        _framebuffers[{dst_image, multisample_image}] = util::vk::create_framebuffer(framebuffer_info);
     }
     return _framebuffers[{dst_image, multisample_image}];
 }
 
+scatterplot_renderer& scatterplot_renderer::instance(){
+    static scatterplot_renderer renderer;
+    return renderer;
+}
+
+void scatterplot_renderer::render(const render_info& info){
+    // TODO: implement
+}
 }
