@@ -180,14 +180,20 @@ void scatterplot_workbench::show()
     if(ImGui::TreeNodeEx("Attribute Settings", ImGuiTreeNodeFlags_Framed)){
         switch(settings.read().plot_type){
         case plot_type_t::matrix:
+            ImGui::PushID("s_wb_att_set");
             for(auto& attribute: attribute_order_infos.ref_no_track()){
-                ImGui::PushID(attributes.read()[attribute.attribut_index].id.data());
-                //if(ImGui::Selectable())
-                ImGui::PopID();
+                if(ImGui::Checkbox(attributes.read()[attribute.attribut_index].id.data(), &attribute.active))
+                    attribute_order_infos();
             }
+            ImGui::PopID();
             break;
         case plot_type_t::list:
-
+            for(int i: util::i_range(1, attributes.read().size())){
+                for(int j: util::i_range(0, i)){
+                    //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
+                    if(ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()));
+                }
+            }
             break;
         }
         ImGui::TreePop();
