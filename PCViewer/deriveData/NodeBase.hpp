@@ -148,7 +148,7 @@ public:
         }
         if(inputNames[pin].size()){
             ImGui::SameLine();
-            ImGui::Text(inputNames[pin].data());
+            ImGui::Text("%s", inputNames[pin].data());
         }
         ImGui::PopItemWidth();
     }

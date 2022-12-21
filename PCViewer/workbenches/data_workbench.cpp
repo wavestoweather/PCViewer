@@ -68,24 +68,24 @@ void data_workbench::show()
             }
         }
         ImGui::Separator();
-        for(const auto& [id, dataset]: globals::datasets.read()){
-            if(ImGui::TreeNode(id.data())){
+        for(const auto& [ds_id, dataset]: globals::datasets.read()){
+            if(ImGui::TreeNode(ds_id.data())){
                 for(const auto& tl: dataset.read().templatelists){
                     if(ImGui::MenuItem(tl->name.c_str())){
                         _popup_tl_id = tl->name;
-                        _popup_ds_id = id;
-                        _tl_convert_data.ds_id = id;
+                        _popup_ds_id = ds_id;
+                        _tl_convert_data.ds_id = ds_id;
                         _tl_convert_data.tl_id = tl->name;
                         _tl_convert_data.trim = {0, tl->data_size};
                         popup_open_tl_to_dltl = true;
                     }
                     if(ImGui::Button("Add templatelist")){
-                        _popup_ds_id = id;
+                        _popup_ds_id = ds_id;
                         popup_open_add_tl = true;
                     }
                     ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 230));
                     if(ImGui::Button("Delete")){
-                        _popup_ds_id = id;
+                        _popup_ds_id = ds_id;
                         popup_open_delete_ds = true;
                     }
                     ImGui::PopStyleColor();
@@ -104,7 +104,7 @@ void data_workbench::show()
         if(_regex_error)
             ImGui::PushStyleColor(ImGuiCol_FrameBg, {1, 0, 0, .5});
         ImGui::PushItemWidth(150);
-        bool reselect_all = ImGui::InputText("Filter", &_table_filter);
+        bool reselect_all = ImGui::InputText("Filter", &_table_filter) && _table_filter.size();
         ImGui::PopItemWidth();
         if(_regex_error)
             ImGui::PopStyleColor();
@@ -126,9 +126,9 @@ void data_workbench::show()
         if(ImGui::Button("Select all") || reselect_all){
             globals::brush_edit_data.clear();
             globals::selected_drawlists.clear();
-            for(const auto& [id, dl]: globals::drawlists.read())
-                if(std::regex_search(id.begin(), id.end(), table_regex))
-                    globals::selected_drawlists.push_back(id);
+            for(const auto& [dl_id, dl]: globals::drawlists.read())
+                if(std::regex_search(dl_id.begin(), dl_id.end(), table_regex))
+                    globals::selected_drawlists.push_back(dl_id);
         }
         ImGui::SameLine();
         ImGui::PushItemWidth(150);
@@ -164,13 +164,15 @@ void data_workbench::show()
             ImGui::TableNextColumn();
             ImGui::TableHeader("Delete");
             
-            for(const auto& [id, dl]: globals::drawlists.read()){
-                if(!std::regex_search(id.begin(), id.end(), table_regex))
+            ImGui::PushID(id.data());
+            for(const auto& [dl_id, dl]: globals::drawlists.read()){
+                if(!std::regex_search(dl_id.begin(), dl_id.end(), table_regex))
                     continue;
+                ImGui::PushID(dl_id.data());
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                bool selected = util::memory_view(globals::selected_drawlists).contains(id);
-                if(ImGui::Selectable(id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
+                bool selected = util::memory_view(globals::selected_drawlists).contains(dl_id);
+                if(ImGui::Selectable(dl_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
                     // updating drawlist selection
                     if(selected && ImGui::GetIO().KeyCtrl)
                         globals::selected_drawlists.erase(std::find(globals::selected_drawlists.begin(), globals::selected_drawlists.end(), id));
@@ -191,15 +193,15 @@ void data_workbench::show()
                         }
                     }
                     else if(ImGui::GetIO().KeyCtrl)
-                        globals::selected_drawlists.push_back(id);
+                        globals::selected_drawlists.push_back(dl_id);
                     else
-                        globals::selected_drawlists = {id};
+                        globals::selected_drawlists = {dl_id};
 
                     // updating the brush selection
                     globals::brush_edit_data.clear();
                     if(globals::selected_drawlists.size()){
                         globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::local;
-                        globals::brush_edit_data.local_brush_id = id;
+                        globals::brush_edit_data.local_brush_id = dl_id;
                     }
                 }
                 if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)){
@@ -208,29 +210,31 @@ void data_workbench::show()
                     ImGui::Text("Drop datasets on workbench to add");
                     ImGui::EndDragDropSource();
                 }
-                auto& appearance_no_track = globals::drawlists.ref_no_track()[id].ref_no_track().appearance_drawlist.ref_no_track();
+                auto& appearance_no_track = globals::drawlists.ref_no_track()[dl_id].ref_no_track().appearance_drawlist.ref_no_track();
                 ImGui::TableNextColumn();
-                if(ImGui::Checkbox(("##dlactive" + std::string(id)).c_str(), &appearance_no_track.show)){
+                if(ImGui::Checkbox("##dlactive", &appearance_no_track.show)){
                     if(globals::selected_drawlists.size()){
                         for(const auto& selected_dl: globals::selected_drawlists)
                             globals::drawlists()[selected_dl]().appearance_drawlist().show = appearance_no_track.show;
                     }
-                    globals::drawlists()[id]().appearance_drawlist().show;  // used to mark the changes which have to be propagated
+                    globals::drawlists()[dl_id]().appearance_drawlist().show;  // used to mark the changes which have to be propagated
                 }
                 ImGui::TableNextColumn();
                 int color_edit_flags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar;
-                if(ImGui::ColorEdit4(("##dlcolor" + std::string(id)).c_str(), &appearance_no_track.color.x, color_edit_flags)){
+                if(ImGui::ColorEdit4("##dlcolor", &appearance_no_track.color.x, color_edit_flags)){
                     if(globals::selected_drawlists.size()){
                         for(const auto& selected_dl: globals::selected_drawlists)
                             globals::drawlists()[selected_dl]().appearance_drawlist().color = appearance_no_track.color;
                     }
-                    globals::drawlists()[id]().appearance_drawlist().color;
+                    globals::drawlists()[dl_id]().appearance_drawlist().color;
                 }
                 ImGui::TableNextColumn();
-                if(ImGui::Button(("X##" + std::string(id)).c_str())){
-                    globals::drawlists_to_delete.insert(id);
+                if(ImGui::Button("X##")){
+                    globals::drawlists_to_delete.insert(dl_id);
                 }
+                ImGui::PopID();
             }
+            ImGui::PopID();
 
             ImGui::EndTable();
         }

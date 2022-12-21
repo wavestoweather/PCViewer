@@ -669,47 +669,46 @@ void parallel_coordinates_workbench::show(){
             ImGui::TableHeader("Median");
             
             int up_index{-1}, down_index{-1};
+            ImGui::PushID(id.data());
             for(int dl_index: util::rev_size_range(drawlist_infos.read())){
                 auto& dl = drawlist_infos.ref_no_track()[dl_index];
-                std::string dl_string(dl.drawlist_id);
+                ImGui::PushID(dl.drawlist_id.data());
                 const auto& drawlist = globals::drawlists.read().at(dl.drawlist_id);
+
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                bool selected = util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id);
-                if(ImGui::Selectable((drawlist.read().name + "##pc_wb").c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
-                    globals::selected_drawlists.clear();
-                    globals::brush_edit_data.clear();
-                    if(!selected){
-                        globals::selected_drawlists.push_back(drawlist.read().name);
-                        globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::local;
-                        globals::brush_edit_data.local_brush_id = dl.drawlist_id;
-                    }
-                }
+                DRAWLIST_SELECTABLE(dl.drawlist_id);
                 ImGui::TableNextColumn();
-                if(ImGui::ArrowButton(("##u" + dl_string).c_str(), ImGuiDir_Up))
+                ImGui::BeginDisabled(dl_index == drawlist_infos.read().size() - 1);
+                if(ImGui::ArrowButton("##u", ImGuiDir_Up))
                     up_index = dl_index;
+                ImGui::EndDisabled();
                 ImGui::TableNextColumn();
-                if(ImGui::ArrowButton(("##d" + dl_string).c_str(), ImGuiDir_Down))
+                ImGui::BeginDisabled(dl_index == 0);
+                if(ImGui::ArrowButton("##d", ImGuiDir_Down))
                     down_index = dl_index;
+                ImGui::EndDisabled();
                 ImGui::TableNextColumn();
-                if(ImGui::Button(("X##x" + dl_string).c_str()))
+                if(ImGui::Button("X##x"))
                     delete_drawlist = dl.drawlist_id;
                 ImGui::TableNextColumn();
-                if(ImGui::Checkbox(("##act" + dl_string).c_str(), &dl.appearance->ref_no_track().show))
+                if(ImGui::Checkbox("##act", &dl.appearance->ref_no_track().show))
                     dl.appearance->write();
                 ImGui::TableNextColumn();
-                if(ImGui::ColorEdit4(("##col" + dl_string).c_str(), &dl.appearance->ref_no_track().color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+                if(ImGui::ColorEdit4("##col", &dl.appearance->ref_no_track().color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
                     dl.appearance->write();
                 ImGui::TableNextColumn();
                 ImGui::SetNextItemWidth(100);
-                if(ImGui::BeginCombo(("##med" + dl_string).c_str(), structures::median_type_names[dl.median->read()].data())){
+                if(ImGui::BeginCombo("##med", structures::median_type_names[dl.median->read()].data())){
                     for(auto m: structures::median_iteration{}){
                         if(ImGui::MenuItem(structures::median_type_names[m].data()))
                             dl.median->write() = m;
                     }
                     ImGui::EndCombo();
                 }
+                ImGui::PopID();
             }
+            ImGui::PopID();
             if(up_index >= 0 && up_index < drawlist_infos.read().size() - 1)
                 std::swap(drawlist_infos()[up_index], drawlist_infos()[up_index + 1]);
             if(down_index > 0)

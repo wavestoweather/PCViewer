@@ -91,3 +91,13 @@ extern std::set<std::string_view> drawlists_to_delete;
 #define DECL_DRAWLIST_READ(dl_id)       const structures::drawlist&     drawlist_read()    const {return globals::drawlists.read().at(dl_id).read();}
 #define DECL_DRAWLIST_WRITE(dl_id)            structures::drawlist&     drawlist_write()   const {return globals::drawlists()[dl_id]();}
 #define DECL_DL_TEMPLATELIST_READ(dl_id)const structures::templatelist& templatelist_read()const {return globals::drawlists.read().at(dl_id).read().const_templatelist();}
+#define DRAWLIST_SELECTABLE(drawlist_id) bool selected = util::memory_view(globals::selected_drawlists).contains(drawlist_id);\
+                if(ImGui::Selectable(drawlist_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){\
+                    globals::selected_drawlists.clear();\
+                    globals::brush_edit_data.clear();\
+                    if(!selected){\
+                        globals::selected_drawlists.push_back(drawlist_id);\
+                        globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::local;\
+                        globals::brush_edit_data.local_brush_id = drawlist_id;\
+                    }\
+                }

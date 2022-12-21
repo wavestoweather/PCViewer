@@ -95,4 +95,56 @@ public:
     auto begin() const { return std::rbegin(iterable_); }
     auto end() const { return std::rend(iterable_); }
 };
+
+template<typename T>
+class first_iter {
+    T& iterable_;
+public:
+    class iterator{
+        friend class first_iter;
+    public:
+        using iter_type = decltype(std::begin(iterable_));
+        using deref_iter_type = decltype(*std::begin(iterable_));
+        std::pair<deref_iter_type&, bool> operator*() {return {*_i, _i == std::begin(iter_)};}
+        const iterator& operator++() { ++_i; return *this;}
+        iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
+        bool operator==(const iterator& o) const{return _i == o._i;}
+        bool operator!=(const iterator& o) const{return _i != o._i;}
+    protected:
+        iterator(const T& iterable, iter_type iter): iter_(iterable), _i(iter) {} 
+    private:
+        const T& iter_;
+        iter_type _i;
+    };
+
+    explicit first_iter(T& iterable) : iterable_(iterable) {}
+    iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
+    iterator end() const {return iterator(iterable_, std::end(iterable_));}
+};
+
+template<typename T>
+class last_iter {
+    T& iterable_;
+public:
+    class iterator{
+        friend class last_iter;
+    public:
+        using iter_type = decltype(std::begin(iterable_));
+        using deref_iter_type = decltype(*std::begin(iterable_));
+        std::pair<deref_iter_type&, bool> operator*() {return {*_i, _i == --std::end(iter_)};}
+        const iterator& operator++() { ++_i; return *this;}
+        iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
+        bool operator==(const iterator& o) const{return _i == o._i;}
+        bool operator!=(const iterator& o) const{return _i != o._i;}
+    protected:
+        iterator(const T& iterable, iter_type iter): iter_(iterable), _i(iter) {} 
+    private:
+        const T& iter_;
+        iter_type _i;
+    };
+
+    explicit last_iter(T& iterable) : iterable_(iterable) {}
+    iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
+    iterator end() const {return iterator(iterable_, std::end(iterable_));}
+};
 }
