@@ -23,15 +23,15 @@ namespace scatterplot_wb{
 
     enum class data_source_t{
         array_t,
-        hsitogram_t
+        histogram_t
     };
 
     struct settings_t{
         uint32_t    plot_width{150};   // width of 1 subplot
         uint32_t    sample_count{1};
         VkFormat    plot_format{VK_FORMAT_R16G16B16A16_UNORM};
-        double      plot_padding{5};   // padding inbeteween the scatter plot images
-        ImVec4      plot_background_color{0, 0, 0, 1};
+        mutable double plot_padding{5};   // padding inbeteween the scatter plot images
+        mutable ImVec4 plot_background_color{0, 0, 0, 1};
         plot_type_t plot_type{plot_type_t::matrix};
         size_t      large_vis_threshold{500000};
 
@@ -70,11 +70,27 @@ namespace scatterplot_wb{
         }
     };
 
-    using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
+    enum class splat_form: uint32_t{
+        circle,
+        square,
+        COUNT
+    };
+    const enum_names<splat_form> splat_form_names{
+        "circle",
+        "square"
+    };
+
+    struct scatterplot_dl_appearance{
+        splat_form splat{};
+        float      radius{1.f};
+    };
+    using tracked_dl_appearance = change_tracker<scatterplot_dl_appearance>;
+    using appearance_tracker = change_tracker<drawlist::appearance>;
     struct drawlist_info{
         std::string_view                    drawlist_id;
         bool                                linked_with_drawlist;
         util::memory_view<appearance_tracker> appearance;
+        tracked_dl_appearance               scatter_appearance;
 
         bool any_change() const             {return appearance->changed;}
         void clear_changes()                {appearance->changed = false;}
@@ -82,7 +98,7 @@ namespace scatterplot_wb{
         DECL_DRAWLIST_WRITE(drawlist_id)
         DECL_DATASET_READ(drawlist_read().parent_dataset)
         DECL_DATASET_WRITE(drawlist_read().parent_dataset)
-        DECL_DL_TEMPLATELIST_READ(drawlist_read().parent_templatelist)
+        DECL_DL_TEMPLATELIST_READ(drawlist_id)
     };
 
     struct plot_data_t{
@@ -104,8 +120,6 @@ namespace scatterplot_wb{
     struct pipeline_data{
         VkPipeline          pipeline{};
         VkPipelineLayout    pipeline_layout{};
-        VkRenderPass        render_pass{};
-        // frambuffer for each image is stored independent
     };
 
     struct output_specs{
@@ -114,15 +128,26 @@ namespace scatterplot_wb{
         uint32_t                width{};
         data_type_t             data_type{};
         data_source_t           data_source{};
+        VkRenderPass            render_pass{};
 
         DEFAULT_EQUALS(output_specs);
     };
 
     struct framebuffer_key{
-        VkImageView image{};
-        VkImageView multisample_image{};
+        VkFormat                format;
+        VkSampleCountFlagBits   sample_counts;
+        uint32_t                width;
 
         DEFAULT_EQUALS(framebuffer_key);
+    };
+
+    struct framebuffer_val{
+        image_info  image{};
+        VkImageView image_view{};
+        image_info  multisample_image{};
+        VkImageView multisample_image_view{};
+        VkRenderPass render_pass{};
+        VkFramebuffer framebuffer{};
     };
 }
 }

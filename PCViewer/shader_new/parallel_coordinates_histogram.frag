@@ -32,7 +32,7 @@ void main(){
     float count = 0;
     float divider = 0;
     for(int i = max(fragment_index - pixel_radius, 0); i <= min(fragment_index + pixel_radius, bin_count - 1); ++i){
-        float cur_count = float(bins.e[i]);
+        float cur_count = float(bins.data[i]);
         float gaussian_fac = exp(-(pow(i - fragment_index, 2)/sdev));
         count += gaussian_fac * cur_count;
         divider += gaussian_fac;

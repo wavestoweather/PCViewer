@@ -147,4 +147,35 @@ public:
     iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
+
+enum class iterator_pos{
+    first,
+    last,
+    between
+};
+template<typename T>
+class pos_iter {
+    T& iterable_;
+public:
+    class iterator{
+        friend class pos_iter;
+    public:
+        using iter_type = decltype(std::begin(iterable_));
+        using deref_iter_type = decltype(*std::begin(iterable_));
+        std::pair<deref_iter_type&, iterator_pos> operator*() {return {*_i, _i == std::begin(iter_) ? iterator_pos::first : _i == --std::end(iter_) ? iterator_pos::last : iterator_pos::between};}
+        const iterator& operator++() { ++_i; return *this;}
+        iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
+        bool operator==(const iterator& o) const{return _i == o._i;}
+        bool operator!=(const iterator& o) const{return _i != o._i;}
+    protected:
+        iterator(const T& iterable, iter_type iter): iter_(iterable), _i(iter) {} 
+    private:
+        const T& iter_;
+        iter_type _i;
+    };
+
+    explicit pos_iter(T& iterable) : iterable_(iterable) {}
+    iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
+    iterator end() const {return iterator(iterable_, std::end(iterable_));}
+};
 }

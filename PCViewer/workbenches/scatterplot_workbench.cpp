@@ -2,6 +2,8 @@
 #include <imgui_util.hpp>
 #include <vma_initializers.hpp>
 #include <imgui_internal.h>
+#include <scatterplot_renderer.hpp>
+#include <mutex>
 
 namespace workbenches
 {
@@ -65,10 +67,16 @@ void scatterplot_workbench::_update_registered_histograms(){
 }
 
 void scatterplot_workbench::_update_plot_images(){
-    constexpr VkImageUsageFlags image_usage{VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT};
+    constexpr VkImageUsageFlags image_usage{VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT};
     auto active_indices = get_active_ordered_indices();
     // waiting for the device to finish all command buffers using the image before statring to destroy/create plot images
-    auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
+    {
+        for(auto& m: globals::vk_context.mutex_storage)
+            m->lock();
+        auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
+        for(auto& m: globals::vk_context.mutex_storage)
+            m->unlock();
+    }
     
     robin_hood::unordered_set<attribute_pair> used_attribute_pairs;
     std::vector<VkImageMemoryBarrier> image_barriers;
@@ -97,18 +105,9 @@ void scatterplot_workbench::_update_plot_images(){
         }
         used_attribute_pairs.insert(p);
     };
-    switch(settings.read().plot_type){
-    case plot_type_t::matrix:
-        for(uint32_t i: util::i_range(active_indices.size() - 1)){
-            for(uint32_t j: util::i_range(i, active_indices.size()))
-                register_image({i, j});
-        }
-        break;
-    case plot_type_t::list:
-        for(const auto& p: plot_list.read())
-            register_image(p);
-        break;
-    }
+
+    for(const auto& p: plot_list.read())
+        register_image(p);
     util::vk::convert_image_layouts_execute(image_barriers);
 
     // removing all unused images
@@ -120,10 +119,52 @@ void scatterplot_workbench::_update_plot_images(){
     }
 }
 
+void scatterplot_workbench::_update_plot_list(){
+    auto active_indices = get_active_ordered_indices();
+    plot_list().clear();
+    if(settings.read().plot_type == plot_type_t::matrix){
+        for(uint32_t i: util::i_range(1, active_indices.size())){
+            for(uint32_t j: util::i_range(i))
+                plot_list().emplace_back(attribute_pair{i, j});
+        }
+    }
+}
+
+void scatterplot_workbench::_render_plot(){
+    // check for still active histogram update
+    for(const auto& dl: drawlist_infos.read()){
+        if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms[dl.drawlist_id].size()){
+            auto access = dl.drawlist_read().histogram_registry.const_access();
+            if(!access->dataset_update_done)    
+                return;
+        }
+    }
+
+    _update_plot_images();  // all plot images are recreated before rendering is issued
+
+    if(logger.logging_level >= logging::level::l_5)
+        logger << logging::info_prefix << " scatterplot_workbench::_render_plot()" << logging::endl;
+    pipelines::scatterplot_renderer::render_info render_info{*this};
+    pipelines::scatterplot_renderer::instance().render(render_info);
+
+    for(auto& dl_info: drawlist_infos())
+        if(!dl_info.linked_with_drawlist)
+            dl_info.clear_changes();
+    drawlist_infos.changed = false;
+    attribute_order_infos.changed = false;
+    settings.changed = false;
+    attributes.changed = false;
+    for(auto& [dl, registrators]: _registered_histograms){
+        auto registry_lock = globals::drawlists.read().at(dl).read().histogram_registry.const_access();
+        for(auto& registrator: registrators)
+            registrator.signal_registry_used();
+    }
+}
+
 scatterplot_workbench::scatterplot_workbench(std::string_view id):
     workbench(id)
 {
-
+    
 }
 
 void scatterplot_workbench::notify_drawlist_dataset_update() 
@@ -135,6 +176,23 @@ void scatterplot_workbench::show()
 {
     if(!active) 
         return;
+
+    // checking for setting updates and updating the rendering if necessary
+    bool local_change{false};
+    bool request_render{false};
+    local_change |= drawlist_infos.changed;
+    request_render |= local_change;
+    request_render |= attributes.changed;
+    request_render |= attribute_order_infos.changed;
+    request_render |= settings.changed;
+    if(globals::drawlists.changed){
+        for(const auto& dl: drawlist_infos.read())
+            request_render |= globals::drawlists.read().at(dl.drawlist_id).changed;
+    }
+
+    if(request_render)
+        _render_plot();
+
     ImGui::Begin(id.data(), &active);
 
     const auto active_indices = get_active_ordered_indices();
@@ -142,15 +200,25 @@ void scatterplot_workbench::show()
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
         // matrix should be displayed as a left lower triangular matrix
-        for(int i: util::i_range(1, active_indices.size())){
-            for(int j: util::i_range(i)){
-
+        for(uint32_t i: util::i_range(1, active_indices.size())){
+            for(uint32_t j: util::i_range(i)){
+                if(!plot_datas.contains({i, j}))
+                    continue;
+                if(j != 0)  
+                    ImGui::SameLine();
+                auto c_pos = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddRectFilled(c_pos, {c_pos.x + settings.read().plot_width, c_pos.y + settings.read().plot_width}, ImColor(settings.read().plot_background_color));
+                ImGui::Image(plot_datas[{i, j}].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
             }
         }
         break;
     case plot_type_t::list:
-        for(const auto& p: plot_list.read()){
-            // well you know, draw
+        for(const auto& [p, first]: util::first_iter(plot_list.read())){
+            if(!plot_datas.contains(p))
+                continue;
+            if(!first)
+                ImGui::SameLine();
+            ImGui::Image(plot_datas[p].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
         }
         break;
     }
@@ -172,8 +240,10 @@ void scatterplot_workbench::show()
     ImGui::TableNextColumn();
     if(ImGui::BeginCombo("plot type", plot_type_names[settings.read().plot_type].data())){
         for(auto t: structures::enum_iteration<plot_type_t>()){
-            if(ImGui::MenuItem(plot_type_names[t].data()))
+            if(ImGui::MenuItem(plot_type_names[t].data())){
                 settings().plot_type = t;
+                _update_plot_list();
+            }
         }
         ImGui::EndCombo();
     }
@@ -188,10 +258,11 @@ void scatterplot_workbench::show()
             ImGui::PopID();
             break;
         case plot_type_t::list:
-            for(int i: util::i_range(1, attributes.read().size())){
-                for(int j: util::i_range(0, i)){
+            for(uint32_t i: util::i_range(1, attributes.read().size())){
+                for(uint32_t j: util::i_range(0, i)){
                     //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
-                    if(ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()));
+                    if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{i, j}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
+                        plot_list().emplace_back(attribute_pair{i, j});
                 }
             }
             break;
@@ -199,22 +270,24 @@ void scatterplot_workbench::show()
         ImGui::TreePop();
     }
     if(ImGui::TreeNodeEx("General Settings", ImGuiTreeNodeFlags_Framed)){
-        ImGui::InputDouble("plot padding", &settings().plot_padding);
-
+        ImGui::InputDouble("plot padding", &settings.read().plot_padding);
+        ImGui::ColorEdit4("##cols", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
         ImGui::TreePop();
     }
 
     // drawlists
     std::string_view delete_drawlist{};
     ImGui::TableNextColumn();
-        ImGui::BeginTable("drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg);
+        ImGui::BeginTable("drawlists", 8, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg);
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Up");
         ImGui::TableSetupColumn("Down");
         ImGui::TableSetupColumn("Delete");
-        ImGui::TableSetupColumn("Active");;
+        ImGui::TableSetupColumn("Active");
         ImGui::TableSetupColumn("Color");
+        ImGui::TableSetupColumn("Splat form");
+        ImGui::TableSetupColumn("Radius");
 
         // header labels
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
@@ -230,6 +303,10 @@ void scatterplot_workbench::show()
         ImGui::TableHeader("Active");
         ImGui::TableNextColumn();
         ImGui::TableHeader("Color");
+        ImGui::TableNextColumn();
+        ImGui::TableHeader("Splat form");
+        ImGui::TableNextColumn();
+        ImGui::TableHeader("Radius");
 
         int up_index{-1}, down_index{-1};
         ImGui::PushID(id.data());  // used to distinguish all ui elements in different workbenches
@@ -259,6 +336,17 @@ void scatterplot_workbench::show()
             ImGui::TableNextColumn();
             if(ImGui::ColorEdit4("##cols", &dl.appearance->ref_no_track().color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
                 dl.appearance->write();
+            ImGui::TableNextColumn();
+            if(ImGui::BeginCombo("##form", splat_form_names[dl.scatter_appearance.read().splat].data())){
+                for(auto e: structures::enum_iteration<splat_form_t>()){
+                    if(ImGui::MenuItem(splat_form_names[e].data()))
+                        drawlist_infos()[dl_index].scatter_appearance().splat = e;
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::TableNextColumn();
+            if(ImGui::DragFloat("##rad", &dl.scatter_appearance.ref_no_track().radius, 1, .5f, 100))
+                drawlist_infos()[dl_index].scatter_appearance();
             ImGui::PopID();
         }
         ImGui::PopID();
@@ -272,6 +360,76 @@ void scatterplot_workbench::show()
     ImGui::EndTable();
 
     ImGui::End();
+}
+
+void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
+    if(drawlist_infos.read().empty()){
+        attributes = globals::drawlists.read().at(drawlist_ids.front()).read().dataset_read().attributes;
+        attribute_order_infos().clear();
+        for(uint32_t i: util::size_range(attributes.read()))
+            attribute_order_infos().emplace_back(attribute_order_info{i, true});
+    }
+
+    for(const auto& dl_id: drawlist_ids){
+        // check for already added drawlists
+        bool exists = false;
+        for(const auto& dl: drawlist_infos.read()){
+            if(dl.drawlist_id == dl_id){
+                exists = true;
+                break;
+            }
+        }
+        if(exists)
+            continue;
+
+        auto& dl = globals::drawlists.write().at(dl_id).write();
+        auto& ds = dl.dataset_read();
+        if(drawlist_infos.read().empty()){
+            // setting up the internal states
+            attributes = ds.attributes;
+            for(auto& attribute: attributes()){
+                if(attribute.bounds.read().min == attribute.bounds.read().max){
+                    float diff = (std::abs(attribute.bounds.read().max) + .1f) * .01f;
+                    attribute.bounds().min -= diff;
+                    attribute.bounds().max += diff;
+                }
+            }
+            attribute_order_infos().resize(attributes.read().size());
+            for(int i: util::size_range(attribute_order_infos.read()))
+                attribute_order_infos.write()[i].attribut_index = i;
+        }
+        // check attribute consistency
+        for(int var: util::size_range(attributes.read()))
+            if(attributes.read()[var].id != ds.attributes[var].id)
+                throw std::runtime_error{"parallel_coordinates_workbench::addDrawlist() Inconsistent attributes for the new drawlist"};
+
+        // combining min max with new attributes
+        for(int var: util::size_range(attributes.read())){
+            if(attributes.read()[var].bounds.read().min > ds.attributes[var].bounds.read().min)
+                attributes()[var].bounds().min = ds.attributes[var].bounds.read().min;
+            if(attributes.read()[var].bounds.read().max < ds.attributes[var].bounds.read().max)
+                attributes()[var].bounds().max = ds.attributes[var].bounds.read().max;
+        }
+
+        drawlist_infos.write().push_back(drawlist_info{dl_id, true, dl.appearance_drawlist});
+
+        _update_plot_list();
+
+        // checking histogram (large vis/axis histograms) rendering or standard rendering
+        _update_registered_histograms();
+    }
+}
+
+void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
+    for(int i: util::rev_size_range(drawlist_infos.read())){
+        if(drawlist_ids.contains(drawlist_infos.read()[i].drawlist_id)){
+            std::string_view dl = drawlist_infos.read()[i].drawlist_id;
+            // locking registry
+            auto registry_lock = globals::drawlists.read().at(dl).read().histogram_registry.const_access();
+            _registered_histograms.erase(dl);
+            drawlist_infos().erase(drawlist_infos().begin() + i);
+        }
+    }
 }
 
 std::vector<uint32_t> scatterplot_workbench::get_active_ordered_indices(){

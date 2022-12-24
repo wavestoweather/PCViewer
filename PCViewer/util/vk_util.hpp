@@ -415,5 +415,22 @@ const std::map<VkSampleCountFlagBits, count_name> sample_count_infos{
     {VK_SAMPLE_COUNT_16_BIT, {16, "16spp"}},
     {VK_SAMPLE_COUNT_32_BIT, {32, "32spp"}}
 };
+
+inline VkSampleCountFlagBits sample_count_to_flag_bits(uint32_t count){
+    auto e = std::find_if(sample_count_infos.begin(), sample_count_infos.end(), [count](const auto& p){return p.second.count == count;});
+    if(e == sample_count_infos.end()){
+        logger << logging::error_prefix << " util::vk::sample_count_to_flag_bits(...) Count " << count << " is invalid. Valid counts are: [1, 2, 4, 8, 16, 32]" << logging::endl;
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
+    return e->first;
+}
+inline VkSampleCountFlagBits sample_count_to_flag_bits(std::string_view count){
+    auto e = std::find_if(sample_count_infos.begin(), sample_count_infos.end(), [count](const auto& p){return p.second.name == count;});
+    if(e == sample_count_infos.end()){
+        logger << logging::error_prefix << " util::vk::sample_count_to_flag_bits(...) Spp " << count << " is invalid. Valid spp-strings are: [1spp, 2spp, 4spp, 8spp, 16spp, 32spp]" << logging::endl;
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
+    return e->first;
+}
 }
 }

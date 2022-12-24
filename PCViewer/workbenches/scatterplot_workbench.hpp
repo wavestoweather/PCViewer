@@ -11,12 +11,16 @@ class scatterplot_workbench: public structures::workbench, public structures::dr
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
     using plot_type_t = structures::scatterplot_wb::plot_type_t;
     const structures::enum_names<plot_type_t>& plot_type_names = structures::scatterplot_wb::plot_type_names;
+    using splat_form_t = structures::scatterplot_wb::splat_form;
+    const structures::enum_names<splat_form_t>& splat_form_names = structures::scatterplot_wb::splat_form_names;
 
     std::vector<std::unique_ptr<appearance_tracker>>    _appearance_storage; // used for unlinked drawlists
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
 
     void _update_registered_histograms();
     void _update_plot_images();
+    void _update_plot_list();
+    void _render_plot();
 public:
     using settings_t = structures::scatterplot_wb::settings_t;
     using drawlist_info = structures::scatterplot_wb::drawlist_info;
@@ -30,7 +34,6 @@ public:
     robin_hood::unordered_map<attribute_pair, plot_data_t>  plot_datas{};
     changing_vector<structures::attribute>                  attributes{};
     changing_vector<attribute_order_info>                   attribute_order_infos{};
-    std::vector<uint8_t>                                    active_plots{};
     changing_vector<attribute_pair>                         plot_list{};    // is used when plot_type is switched to list mode
 
     scatterplot_workbench(std::string_view id);
@@ -48,8 +51,8 @@ public:
     void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
     void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
 
-    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override {}
-    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override {}
+    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
+    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
 
     std::vector<uint32_t> get_active_ordered_indices();
 };

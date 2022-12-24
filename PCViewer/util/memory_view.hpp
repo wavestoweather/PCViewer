@@ -74,13 +74,6 @@ public:
         }
         return true;
     }
-    
-    bool contains(const T& el){
-        for(T* b = begin(); b != end(); ++b)
-            if(*b == el)
-                return true;
-        return false;
-    }
 
     size_t data_hash() const{
         size_t seed{};

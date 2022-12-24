@@ -1,11 +1,11 @@
 layout(buffer_reference, scalar) buffer vec{
-    float[] e;
+    float[] data;
 };
 
 layout(buffer_reference, scalar) buffer uvec{
-    uint[] e;
+    uint[] data;
 };
 
 layout(buffer_reference, scalar) buffer ivec{
-    int[] e;
+    int[] data;
 };

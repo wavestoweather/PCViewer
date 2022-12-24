@@ -11,7 +11,7 @@
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, struct, field) struct.field = json[#field].get<decltype(field)>()
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, struct, field, type_json) struct.field = static_cast<decltype(struct.field)>(json[#field].get<type_json>())
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, struct, field) struct.field.x = json[#field][0].get<double>(); struct.field.y = json[#field][1].get<double>(); struct.field.z = json[#field][2].get<double>(); struct.field.w = json[#field][3].get<double>();
-#define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_ENUM_NAME(json, struct, field, enum_names) struct.field = structures::enum_name_to_enum(enum_names, json[#field].get<std::string>());
+#define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_ENUM_NAME(json, struct, field, enum_names) struct.field = enum_names[json[#field].get<std::string>()];
 #define COMP_EQ_OTHER(o, field) if(field != o.field) return false;
 #define COMP_EQ_OTHER_VEC4(o, field) if(field.x != o.field.x || field.y != o.field.y || field.z != o.field.z || field.w != o.field.w) return false;
 

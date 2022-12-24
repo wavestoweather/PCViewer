@@ -47,6 +47,13 @@ struct histogram_registry{
     bool                                                                        registrators_done{true};// is true after all scoped registrators have called signal_registry_done(...) (used to wait with next update round for rendering/processing of all histograms) 
     std::set<std::string_view>                                                  change_request{};
 
+    const histogram_registry_entry* registry_by_name(std::string_view id) const{
+        if(!name_to_registry_key.contains(id))
+            return {};
+        const auto& key = name_to_registry_key.at(id);
+        return &registry.at(key);
+    }
+
     // the preferred way of registering and unregistering is by using a scoped_registrator_t object which can be retrieved via scoped_registrator(...)
     std::string_view register_histogram(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, registrator_id_t registrator_id,  bool is_min_hist, bool is_max_hist, bool cpu_hist_needed){
         histogram_registry_key key{is_min_hist, is_max_hist, std::vector<uint32_t>(attribute_indices.size()), std::vector<int>(bin_sizes.size())};
