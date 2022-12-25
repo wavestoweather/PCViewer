@@ -143,5 +143,36 @@ inline void free_image_descriptor_set(ImTextureID texture){
     vkFreeDescriptorSets(globals::imgui.init_info.Device, globals::imgui.init_info.DescriptorPool, 1, reinterpret_cast<VkDescriptorSet*>(&texture));
 }
 
+/// Draws vertical text. The position is the bottom left of the text rect.
+// code from https://github.com/ocornut/imgui/issues/705
+inline void AddTextVertical(const char *text, ImVec2 pos, float pivot = 0 /* 0 means left aligned, 1 right aligned, .5 centered*/, ImU32 text_color = IM_COL32_WHITE) {
+    ImDrawList* DrawList = ImGui::GetWindowDrawList();
+    pos.x = std::round(pos.x);
+    pos.y = std::round(pos.y);
+    ImFont *font = ImGui::GetFont();
+    const ImFontGlyph *glyph;
+    char c;
+    ImVec2 text_size = ImGui::CalcTextSize(text);
+    pos.y += pivot * text_size.x;
+    while ((c = *text++)) {
+        glyph = font->FindGlyph(c);
+        if (!glyph) continue;
+
+        DrawList->PrimReserve(6, 4);
+        DrawList->PrimQuadUV(
+                ImVec2(glyph->Y0 + pos.x, -glyph->X0 + pos.y),
+                ImVec2(glyph->Y0 + pos.x, -glyph->X1 + pos.y),
+                ImVec2(glyph->Y1 + pos.x, -glyph->X1 + pos.y),
+                ImVec2(glyph->Y1 + pos.x, -glyph->X0 + pos.y),
+
+                ImVec2(glyph->U0, glyph->V0),
+                ImVec2(glyph->U1, glyph->V0),
+                ImVec2(glyph->U1, glyph->V1),
+                ImVec2(glyph->U0, glyph->V1),
+                    text_color);
+        pos.y -= glyph->AdvanceX;
+    }
+}
+
 }
 }

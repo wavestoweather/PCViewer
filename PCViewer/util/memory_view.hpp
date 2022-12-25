@@ -108,6 +108,13 @@ public:
                 return true;
         return false;
     }
+    template<typename F>
+    bool contains(F f) const {
+        for(const auto& e: *this)
+            if(f(e))
+                return true;
+        return false;
+    }
     size_t index_of(const T& t) const{
         for(size_t i: i_range(_size))
             if(_data[i] == t)

@@ -193,7 +193,7 @@ void scatterplot_workbench::show()
     if(request_render)
         _render_plot();
 
-    ImGui::Begin(id.data(), &active);
+    ImGui::Begin(id.data(), &active, ImGuiWindowFlags_HorizontalScrollbar);
 
     const auto active_indices = get_active_ordered_indices();
     // plot views ------------------------------------------------------
@@ -201,6 +201,9 @@ void scatterplot_workbench::show()
     case plot_type_t::matrix:
         // matrix should be displayed as a left lower triangular matrix
         for(uint32_t i: util::i_range(1, active_indices.size())){
+            ImVec2 text_pos = ImGui::GetCursorScreenPos(); text_pos.y += settings.read().plot_width / 2;
+            util::imgui::AddTextVertical(attributes.read()[active_indices[i]].display_name.c_str(), text_pos, .5f);
+            ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x + ImGui::GetTextLineHeightWithSpacing(), ImGui::GetCursorScreenPos().y});
             for(uint32_t j: util::i_range(i)){
                 if(!plot_datas.contains({i, j}))
                     continue;
@@ -210,6 +213,12 @@ void scatterplot_workbench::show()
                 ImGui::GetWindowDrawList()->AddRectFilled(c_pos, {c_pos.x + settings.read().plot_width, c_pos.y + settings.read().plot_width}, ImColor(settings.read().plot_background_color));
                 ImGui::Image(plot_datas[{i, j}].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
             }
+        }
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetTextLineHeight());
+        for(int i: util::i_range(int(active_indices.size()) - 1)){
+            if(i != 0)
+                ImGui::SameLine(i * settings.read().plot_width + ImGui::GetTextLineHeight());
+            ImGui::Text("%s", attributes.read()[active_indices[i]].display_name.c_str());
         }
         break;
     case plot_type_t::list:

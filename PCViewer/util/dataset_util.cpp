@@ -784,13 +784,19 @@ void execute_laod_behaviour(globals::dataset_t& ds){
 void check_datasets_to_open(){
     {
     const std::string_view open_dataset_popup_name{"Open dataset(s)"};
+    const std::string_view open_images_popup_name{"Open image(s)"};
 
     if(globals::paths_to_open.size()){
         if(globals::attribute_query.empty()){
             fill_query_attributes();
         }
 
-        ImGui::OpenPopup(open_dataset_popup_name.data());
+        if(globals::attribute_query.size())
+            ImGui::OpenPopup(open_dataset_popup_name.data());
+    }
+    bool contains_images = util::memory_view(globals::paths_to_open).contains([](const std::string& p){auto ext = util::get_file_extension(p).extension ;return ext == ".png" || ext == ".jpg";});
+    if(contains_images){
+        ImGui::OpenPopup(open_images_popup_name.data());
     }
 
     if(ImGui::BeginPopupModal(open_dataset_popup_name.data(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)){
@@ -911,6 +917,22 @@ void check_datasets_to_open(){
             ImGui::CloseCurrentPopup();
             globals::paths_to_open.clear();
             globals::attribute_query.clear();
+        }
+        ImGui::EndPopup();
+    }
+
+    if(ImGui::BeginPopupModal(open_images_popup_name.data())){
+        for(const auto& f: globals::paths_to_open){
+            auto ext = util::get_file_extension(f).extension;
+            if(ext == ".png" || ext == ".jpg")
+                ImGui::Text("%s", f.c_str());
+        }
+        if(ImGui::Button("Open")){
+            ImGui::CloseCurrentPopup();
+        }
+        if(ImGui::Button("Cancel")){
+            ImGui::CloseCurrentPopup();
+            globals::paths_to_open.clear();
         }
         ImGui::EndPopup();
     }

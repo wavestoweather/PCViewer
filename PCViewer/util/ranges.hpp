@@ -7,7 +7,7 @@ namespace util{
 // ranges with integer values
 class i_range {
 public:
-    i_range(unsigned long end): _begin(0), _end(end), _step(1){}; // single element constructor 
+    i_range(int64_t end): _begin(0), _end(end < 0 ? 0: end), _step(1){}; // single element constructor 
     i_range(unsigned long begin, unsigned long end, long step = 1):
      _begin(begin), _end(end), _step(step){
         assert(step != 0 && "step of 0 is invalid");

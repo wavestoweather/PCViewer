@@ -286,6 +286,7 @@ void scatterplot_renderer::render(const render_info& info){
                 pc.a_max = info.workbench.attributes.read()[axis_pair.a].bounds.read().max;
                 pc.b_min = info.workbench.attributes.read()[axis_pair.b].bounds.read().min;
                 pc.b_max = info.workbench.attributes.read()[axis_pair.b].bounds.read().max;
+                pc.flip_axes = 1;   // always flip, as major axis is y axis
                 pc.form = static_cast<uint32_t>(dl.scatter_appearance.read().splat);
                 pc.radius = dl.scatter_appearance.read().radius;
                 pc.color = dl.appearance->read().color;

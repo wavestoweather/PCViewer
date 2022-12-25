@@ -181,7 +181,6 @@ int main(int argc, char* argv[]){
     ImGuiIO&                    io = ImGui::GetIO();
     bool                        done = false;
     bool                        rebuild_swapchain = false;
-    bool                        first_frame = true;
     int                         swapchain_width = 0, swapchain_height = 0;
     while(!done){
         // Poll and handle events (inputs, window resize, etc.)
@@ -230,7 +229,8 @@ int main(int argc, char* argv[]){
         ImGui::Begin("MainDockWindow", NULL, dockingWindow_flags);
         ImGui::PopStyleVar(3);
         ImGuiID main_dock_id = ImGui::GetID("MainDock");
-        if (first_frame) {
+        bool main_dock_created = ImGui::DockBuilderGetNode(main_dock_id) != nullptr;
+        if (!main_dock_created) {
             ImGui::DockBuilderRemoveNode(main_dock_id);
             ImGuiDockNodeFlags dockSpaceFlags = 0;
             dockSpaceFlags |= ImGuiDockNodeFlags_DockSpace;
@@ -351,7 +351,6 @@ int main(int argc, char* argv[]){
         }
 
         frame_limiter.end_frame();
-        first_frame = false;
     }
     auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
 
