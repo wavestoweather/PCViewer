@@ -31,7 +31,7 @@ void setup_default_descriptors(){
     globals::stager.add_staging_task(image_staging);
 
     // creating descriptor set + layout for heat_map
-    structures::uniqe_descriptor_info heatmap_desc{std::make_unique<structures::descriptor_info>()};
+    structures::unique_descriptor_info heatmap_desc{std::make_unique<structures::descriptor_info>()};
     heatmap_desc->id = std::string(heatmap_descriptor_id);
     auto heat_map_binding = util::vk::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL);
     auto descriptor_info = util::vk::initializers::descriptorSetLayoutCreateInfo(heat_map_binding);

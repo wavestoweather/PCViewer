@@ -5,6 +5,7 @@
 #include <data_derivation_workbench.hpp>
 #include <compression_workbench.hpp>
 #include <scatterplot_workbench.hpp>
+#include <images_workbench.hpp>
 #include <load_behaviour.hpp>
 #include <drawlist_creation_behaviour.hpp>
 
@@ -16,6 +17,7 @@ void setup_default_workbenches(){
     const std::string_view data_derivation_wb_id{"Data derivation workbench"};
     const std::string_view scatterplot_wb_id{"Scatterplot workbench"};
     const std::string_view compression_wb_id{"Compresssion workbench"};
+    const std::string_view images_wb_id{"Images workbench"};
 
     // register all available workbenches -------------------------------------------
     auto data_wb = std::make_unique<workbenches::data_workbench>(data_wb_id);
@@ -41,6 +43,9 @@ void setup_default_workbenches(){
 
     auto compression_wb = std::make_unique<workbenches::compression_workbench>(compression_wb_id);
     globals::workbenches.emplace_back(std::move(compression_wb));
+
+    auto images_wb = std::make_unique<workbenches::images_workbench>(images_wb_id);
+    globals::workbenches.emplace_back(std::move(images_wb));
 
     // load behavoiur setup ----------------------------------------------------------
     globals::load_behaviour.on_load.push_back({false, 1, {0, std::numeric_limits<size_t>::max()}});

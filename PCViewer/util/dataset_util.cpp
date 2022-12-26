@@ -26,6 +26,10 @@
 #include <sys_info.hpp>
 #include <json_util.hpp>
 #include <stopwatch.hpp>
+#include <descriptor_set_storage.hpp>
+#include <imgui_util.hpp>
+#include "../cimg/CImg.h"
+#include "../vulkan/vk_format_util.hpp"
 
 namespace util{
 namespace dataset{
@@ -929,7 +933,48 @@ void check_datasets_to_open(){
         }
         if(ImGui::Button("Open")){
             ImGui::CloseCurrentPopup();
+            std::vector<cimg_library::CImg<uint8_t>> images;
+            for(const auto& f: globals::paths_to_open){
+                auto [filename, ext] = util::get_file_extension(f);
+                if(ext != ".png" && ext != ".jpg")
+                    continue;
+                
+                images.emplace_back(f.c_str());
+                if(images.back().spectrum() < 4){
+                    images.back().channels(0, 3);
+                    images.back().get_shared_channel(3).fill(255);
+                }
+                VkExtent3D extent = {uint32_t(images.back().width()), uint32_t(images.back().height()), 1};
+                images.back().permute_axes("cxyz");
+
+                structures::unique_descriptor_info descriptor{std::make_unique<structures::descriptor_info>()};
+                descriptor->id = filename;
+                auto format = VK_FORMAT_R8G8B8A8_UNORM;
+                auto image_info = util::vk::initializers::imageCreateInfo(format, extent, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+                auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                descriptor->image_data.emplace();
+                std::tie(descriptor->image_data->image, descriptor->image_data->image_view) = util::vk::create_image_with_view(image_info, alloc_info);
+                descriptor->image_data->image_format = format;
+                descriptor->image_data->image_size = image_info.extent;
+                structures::stager::staging_image_info staging_info{};
+                staging_info.dst_image = descriptor->image_data->image.image;
+                staging_info.start_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+                staging_info.end_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                staging_info.subresource_layers.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                staging_info.bytes_per_pixel = FormatSize(format);
+                staging_info.image_extent = image_info.extent;
+                staging_info.data_upload = util::memory_view(images.back().data(), images.back().size());
+                globals::stager.add_staging_task(staging_info);
+
+                descriptor->layout = ImGui_ImplVulkan_GetDescriptorLayout();
+                descriptor->descriptor_set = (VkDescriptorSet)util::imgui::create_image_descriptor_set(descriptor->image_data->image_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                descriptor->flags.drawable_image = true;
+                globals::descriptor_sets[descriptor->id] = std::move(descriptor);
+            }
+            globals::stager.wait_for_completion();
+            globals::paths_to_open.clear();
         }
+        ImGui::SameLine();
         if(ImGui::Button("Cancel")){
             ImGui::CloseCurrentPopup();
             globals::paths_to_open.clear();
