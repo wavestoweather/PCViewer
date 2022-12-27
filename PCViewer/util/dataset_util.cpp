@@ -925,7 +925,7 @@ void check_datasets_to_open(){
         ImGui::EndPopup();
     }
 
-    if(ImGui::BeginPopupModal(open_images_popup_name.data())){
+    if(ImGui::BeginPopupModal(open_images_popup_name.data(), {}, ImGuiWindowFlags_AlwaysAutoResize)){
         for(const auto& f: globals::paths_to_open){
             auto ext = util::get_file_extension(f).extension;
             if(ext == ".png" || ext == ".jpg")
