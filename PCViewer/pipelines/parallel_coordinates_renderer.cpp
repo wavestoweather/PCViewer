@@ -163,7 +163,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         case structures::parallel_coordinates_renderer::render_type::polyline_spline:{
             // pipeline layout creation
             auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants), 0);
-            assert(globals::descriptor_sets.contains(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
+            assert(globals::descriptor_sets.count(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
             auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout, util::memory_view(push_constant_range));
             pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
@@ -195,7 +195,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
         case structures::parallel_coordinates_renderer::render_type::large_vis_lines:{
             // pipeline layout creation
             auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants_large_vis), 0);
-            assert(globals::descriptor_sets.contains(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
+            assert(globals::descriptor_sets.count(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
             auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout, util::memory_view(push_constant_range));
             pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
@@ -230,7 +230,7 @@ const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_rendere
                 util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants_hist_vert), 0),                                 // vertex shader push constants
                 util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(push_constants_hist_frag), sizeof(push_constants_hist_vert)) // fragment shader push constants
             };
-            assert(globals::descriptor_sets.contains(util::global_descriptors::heatmap_descriptor_id));
+            assert(globals::descriptor_sets.count(util::global_descriptors::heatmap_descriptor_id));
             auto heatmap_layout = globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout;
             auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(heatmap_layout, push_constant_ranges);
             pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);

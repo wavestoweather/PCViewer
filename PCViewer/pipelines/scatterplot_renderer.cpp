@@ -59,7 +59,7 @@ const scatterplot_renderer::pipeline_data& scatterplot_renderer::_get_or_create_
         case structures::scatterplot_wb::data_source_t::array_t:{
             // pipeline layout creation
             auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants), 0);
-            assert(globals::descriptor_sets.contains(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
+            assert(globals::descriptor_sets.count(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
             auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout, util::memory_view(push_constant_range));
             pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
@@ -88,7 +88,7 @@ const scatterplot_renderer::pipeline_data& scatterplot_renderer::_get_or_create_
         case structures::scatterplot_wb::data_source_t::histogram_t:{
             // pipeline layout creation
             auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants_large_vis), 0);
-            assert(globals::descriptor_sets.contains(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
+            assert(globals::descriptor_sets.count(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
             auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout, util::memory_view(push_constant_range));
             pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 

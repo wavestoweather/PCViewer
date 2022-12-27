@@ -66,7 +66,7 @@ robin_hood::unordered_map<std::string, structures::texture> textures{};
 
 structures::persistent_samplers persistent_samplers{};
 
-robin_hood::unordered_map<std::string_view, structures::unique_descriptor_info> descriptor_sets{};
+std::map<std::string_view, structures::unique_descriptor_info> descriptor_sets{};
 
 structures::load_behaviour load_behaviour{};
 structures::drawlist_creation_behaviour drawlist_creation_behaviour{};
