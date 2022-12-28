@@ -14,6 +14,9 @@
 #include "../util/ranges.hpp"
 #include "../tsne/tsne.h"
 #include <Eigen/Dense>
+#include <robin_hood.h>
+#include <radix.hpp>
+#include <sstream>
 
 namespace deriveData{
 namespace Nodes{
@@ -209,77 +212,95 @@ public:
         std::string_view header = {}, std::string_view mt = {}): Input(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
 };
 
-class VectorZero: public DataCreation, public Creatable<VectorZero>{
+class Vector_Zero: public DataCreation, public Creatable<Vector_Zero>{
 public:
-    VectorZero(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
+    Vector_Zero(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Zero Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyNonaryFunction(input, output, 0, [](){return 0;});
     };
 };
 
-class VectorOne: public DataCreation, public Creatable<VectorOne>{
+class Vector_One: public DataCreation, public Creatable<Vector_One>{
 public:
-    VectorOne(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
+    Vector_One(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "One Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyNonaryFunction(input, output, 0, [](){return 1;});
     };
 };
 
-class VectorRandom: public DataCreation, public Creatable<VectorRandom>{
+class Vector_Random: public DataCreation, public Creatable<Vector_Random>{
 public:
-    VectorRandom(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
+    Vector_Random(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Random Vector", ""){};
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyNonaryFunction(input, output, 0, [](){return double(rand()) / RAND_MAX;});
     };
 };
 
-class PrintVector: public Output, public Creatable<PrintVector>{
+class Serialization{
 public:
-    PrintVector(): Output(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){};
-
-    void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+    std::string serialize(const float_column_views& input) const{
         // prints at max the first 50 and last 50 items of a vector
-        std::cout << "[ ";
+        std::stringstream out;
+        out << "[ ";
         if(input[0].columnSize() < 100){
             for(int i: irange(input[0].columnSize())){
                 if(input[0].cols.size() > 1)
-                    std::cout << "(";
+                    out << "(";
                 for(int j: irange(input[0].cols))
-                    std::cout << input[0].cols[j][i] << ", ";
+                    out << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
-                    std::cout << "), ";
+                    out << "), ";
                 if((i + 1) % 20 == 0)
-                    std::cout << std::endl;
+                    out << "\n";
             }
         }
         else{
             for(int i: irange(50)){
                  if(input[0].cols.size() > 1)
-                    std::cout << "(";
+                    out << "(";
                 for(int j: irange(input[0].cols))
-                    std::cout << input[0].cols[j][i] << ", ";
+                    out << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
-                    std::cout << "), ";
+                    out << "), ";
                 if((i + 1) % 20 == 0)
-                    std::cout << std::endl;
+                    out << "\n";
             }
-            std::cout << std::endl << "  ...  " << std::endl;
+            out << "\n" << "  ...  " << "\n";
             for(int i: irange(input[0].columnSize() - 50, input[0].columnSize())){
                 if(input[0].cols.size() > 1)
-                    std::cout << "(";
+                    out << "(";
                 for(int j: irange(input[0].cols))
-                    std::cout << input[0].cols[j][i] << ", ";
+                    out << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
-                    std::cout << "), ";
+                    out << "), ";
                 if((i + 1) % 20 == 0)
-                    std::cout << std::endl;
+                    out << "\n";
             }
         }
-        std::cout << "] (size: " << input[0].size() << ", column size: " << input[0].columnSize() << ")" << std::endl;
-    };
+        out << "] (size: " << input[0].size() << ", column size: " << input[0].columnSize() << ")";
+        return out.str();
+    }
+};
+
+class Print_Vector: public Output, public Serialization, public Creatable<Print_Vector>{
+public:
+    Print_Vector(): Output(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){}
+
+    void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        throw std::runtime_error{"Print_Vector::applyOperationCpu() Print nodes do not operate on the data. Only call serialize"};
+    }
+};
+
+class Print_Indices: public Output, public Serialization, public Creatable<Print_Indices>{
+public:
+    Print_Indices(): Output(createFilledVec<IndexType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Indices"){}
+
+    void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        throw std::runtime_error{"Print_Indices::applyOperationCpu() Print nodes do not operate on the data. Only call serialize"};
+    }
 };
 
 class VariableInput{  // simple class to indicate variable input lengths
@@ -470,11 +491,11 @@ public:
 // unary nodes
 // ------------------------------------------------------------------------------------------
 
-template<class T>
+template<class T, class T_out = T>
 class Unary: public Node{
 public:
     Unary(std::string_view header, std::string_view middle):
-        Node(createFilledVec<T, Type>(1), {std::string()}, createFilledVec<T, Type>(1),{std::string()}, header, middle){};
+        Node(createFilledVec<T, Type>(1), {std::string()}, createFilledVec<T_out, Type>(1),{std::string()}, header, middle){};
 };
 
 class Inverse: public Unary<FloatType>, public Creatable<Inverse>{
@@ -559,6 +580,25 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::log(in);});
+    }
+};
+
+class Value_to_Index: public Unary<FloatType, IndexType>, public Creatable<Value_to_Index>{
+public:
+    Value_to_Index(): Unary("", "Value to Index") {}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        // sorting the input array
+        std::vector<float> cpy(input[0].cols[0].begin(), input[0].cols[0].end());
+        auto [b, e] = radix::sort(cpy.data(), cpy.data() + cpy.size(), output[0].cols[0].begin());
+        robin_hood::unordered_map<float, uint32_t> val_to_index;
+        uint32_t cur_index{};
+        for(auto i = b; i != e; ++i){
+            if(!val_to_index.contains(*i))
+                val_to_index[*i] = cur_index++;
+        }
+        for(size_t i: util::size_range(input[0].cols[0]))
+            output[0].cols[0][i] = val_to_index[input[0].cols[0][i]];
     }
 };
 
