@@ -17,6 +17,8 @@ class scatterplot_workbench: public structures::workbench, public structures::dr
     std::vector<std::unique_ptr<appearance_tracker>>    _appearance_storage; // used for unlinked drawlists
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
 
+    bool _drawlists_updated{};
+
     void _update_registered_histograms();
     void _update_plot_images();
     void _update_plot_list();
@@ -50,9 +52,11 @@ public:
     // drawlist_dataset_dependency methods
     void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
     void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
+    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info = {}) override;
 
     void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
     void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
+    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
 
     std::vector<uint32_t> get_active_ordered_indices();
 };

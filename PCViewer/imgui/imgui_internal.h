@@ -3095,7 +3095,7 @@ namespace ImGui
 
     // Drag and Drop
     IMGUI_API bool          IsDragDropActive();
-    IMGUI_API bool          BeginDragDropTargetCustom(const ImRect& bb, ImGuiID id);
+    IMGUI_API bool          BeginDragDropTargetCustom(const ImRect& bb, ImGuiID id, bool ignore_docking = false);
     IMGUI_API void          ClearDragDrop();
     IMGUI_API bool          IsDragDropPayloadBeingAccepted();
 

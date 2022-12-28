@@ -265,7 +265,7 @@ int main(int argc, char* argv[]){
                 ImRect bb = wb_window->Rect();
                 bb.Expand(-5);
                 ImGuiID dataset_id = ImGui::GetID((wb->id + "da").c_str());
-                if(dataset_wb && !ImGui::GetCurrentContext()->DragDropWithinTarget && ImGui::BeginDragDropTargetCustom(bb, dataset_id)){
+                if(!ImGui::GetCurrentContext()->DragDropWithinTarget && ImGui::BeginDragDropTargetCustom(bb, dataset_id,  true)){
                     if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("datasets", ImGuiDragDropFlags_PreviewInForeground)){
                         // TODO
                     }

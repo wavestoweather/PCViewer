@@ -38,7 +38,7 @@ void scatterplot_workbench::_update_registered_histograms(){
                         // adding new histogram
                         auto& drawlist = dl.drawlist_write();
                         _registered_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(indices, bucket_sizes, false, false, false));
-                        registrator_needed.push_back(true);
+                        registrator_needed.emplace_back(true);
                     }
                 }
             }
@@ -185,6 +185,7 @@ void scatterplot_workbench::show()
     request_render |= attributes.changed;
     request_render |= attribute_order_infos.changed;
     request_render |= settings.changed;
+    request_render |= _drawlists_updated;
     if(globals::drawlists.changed){
         for(const auto& dl: drawlist_infos.read())
             request_render |= globals::drawlists.read().at(dl.drawlist_id).changed;
@@ -420,13 +421,72 @@ void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_vi
                 attributes()[var].bounds().max = ds.attributes[var].bounds.read().max;
         }
 
-        drawlist_infos.write().push_back(drawlist_info{dl_id, true, dl.appearance_drawlist});
+        drawlist_infos.write().emplace_back(drawlist_info{dl_id, true, dl.appearance_drawlist});
 
         _update_plot_list();
 
         // checking histogram (large vis/axis histograms) rendering or standard rendering
         _update_registered_histograms();
     }
+}
+
+void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info){
+    bool any_dl_affected{};
+    for(const auto& dl: drawlist_infos.read()){
+        if(dataset_ids.contains(dl.drawlist_read().parent_dataset)){
+            any_dl_affected = true;
+            break;
+        }
+    }
+    if(!any_dl_affected)    
+        return;
+    
+    // creating intersection of the new attributes
+    std::vector<std::string> new_attributes;
+    for(const auto& [dl, pos]: util::pos_iter(drawlist_infos.read())){
+        int intersection_index{-1};
+        for(int i: util::size_range(dl.dataset_read().attributes)){
+            if(pos == util::iterator_pos::first && i >= new_attributes.size())
+                new_attributes.emplace_back(dl.dataset_read().attributes[i].id);
+            
+            if(pos != util::iterator_pos::first && (i < new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
+                intersection_index = i;
+                break;
+            }
+        }
+        // removing attributes wich are not in the intersectoin set
+        if(intersection_index > 0)
+            new_attributes.erase(new_attributes.begin() + intersection_index, new_attributes.end());
+    }
+
+    if(logger.logging_level >= logging::level::l_5)
+        logger << logging::info_prefix << " scatterplot_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
+
+    attributes().clear();
+    for(int i: util::size_range(new_attributes)){
+        attributes().emplace_back(structures::attribute{new_attributes[i], drawlist_infos.read().front().drawlist_read().dataset_read().attributes[i].display_name});
+        for(const auto& dl: drawlist_infos.read()){
+            const auto& ds_bounds = dl.dataset_read().attributes[i].bounds.read();
+            const auto& dl_bounds = attributes.read().back().bounds.read();
+            if(ds_bounds.min < dl_bounds.min)
+                attributes().back().bounds().min = ds_bounds.min;
+            if(ds_bounds.max > dl_bounds.max)
+                attributes().back().bounds().max = ds_bounds.max;
+        }
+    }
+
+    // deleting all removed attributes in sorting order
+    for(int i: util::rev_size_range(attribute_order_infos.read())){
+        if(attribute_order_infos.read()[i].attribut_index >= attributes.read().size())
+            attribute_order_infos().erase(attribute_order_infos().begin() + i);
+    }
+    // adding new attribute references
+    for(int i: util::i_range(attributes.read().size() - attribute_order_infos.read().size())){
+        uint32_t cur_index = attribute_order_infos.read().size();
+        attribute_order_infos().emplace_back(attribute_order_info{cur_index});
+    }
+    _update_plot_list();
+    _update_registered_histograms();
 }
 
 void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -441,11 +501,23 @@ void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string
     }
 }
 
+void scatterplot_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
+    bool request_render{};
+    for(auto drawlist_id: drawlist_ids){
+        if(globals::drawlists.read().at(drawlist_id).changed){
+            request_render = true;
+            break;
+        }
+    }
+    if(request_render)
+        _drawlists_updated = true;  // has to be done delayed as current plot imageas might be still in use and might have to be recreated
+}
+
 std::vector<uint32_t> scatterplot_workbench::get_active_ordered_indices(){
     std::vector<uint32_t> indices;
     for(const auto& i: attribute_order_infos.read()){
         if(i.active)
-            indices.push_back(i.attribut_index);
+            indices.emplace_back(i.attribut_index);
     }
     return indices;
 }
