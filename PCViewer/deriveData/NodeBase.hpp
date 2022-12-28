@@ -52,6 +52,13 @@ private:
     float _d;
 };
 
+class IndexType: public Type, public Creatable<IndexType, Type>{
+    float _d{}; // default index is 0
+public:
+    ImVec4 color() const override{return {.1,.1,1,1};}
+    column_memory_view<float> data() override {return column_memory_view(memory_view(_d));}
+};
+
 class ConstantFloatType: public Type, public Creatable<ConstantFloatType, Type>{
     ImVec4 color() const override{return {1, .5, 0, 1};};
     column_memory_view<float> data() override{return {};};    // always returns null pointer as data is not changable
@@ -160,7 +167,7 @@ struct Registry{
         std::function<std::unique_ptr<Node>()> create;
     };
     static std::map<std::string, Entry> nodes;
-    Registry(std::string name, std::function<std::unique_ptr<Node>()> createFunction) {if(nodes.count(name) == 0) nodes[name] = {createFunction(), createFunction};};
+    Registry(std::string name, std::function<std::unique_ptr<Node>()> createFunction) {std::replace(name.begin(), name.end(), '_', ' '); if(nodes.count(name) == 0) nodes[name] = {createFunction(), createFunction};};
 };
 
 // registers the nodes with a standard constructor

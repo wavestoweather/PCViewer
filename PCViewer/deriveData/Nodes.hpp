@@ -58,6 +58,39 @@ inline float unaryReductionFunction(const float_column_views& input, uint32_t co
     return initVal;
 };
 
+inline void applyUnaryReductionFunction(const float_column_views& input, const column_memory_view<float>& group_indices, float init_value, column_memory_view<float>& result, std::function<float(float, float)> combine_f, std::function<float(float, size_t)> finish_f = [](float a, size_t){return a;}){
+    // init values
+    struct per_group_data{float combine_val; size_t count;};
+    std::map<size_t, per_group_data> reduction_data;
+    if(input[0].equalDataLayout(group_indices)){
+        for(int i: irange(input[0].cols[0].size())){
+            size_t group_index = size_t(group_indices.cols[0][i]);
+            bool contained = reduction_data.count(group_index);
+            auto& e = reduction_data[group_index];
+            if(!contained)
+                e = {init_value, 0};
+            e.combine_val = combine_f(e.combine_val, input[0].cols[0][i]);
+            ++e.count;
+        }
+    }
+    else{
+        for(size_t i: irange(input[0].size())){
+            size_t group_index = group_indices(i, 0);
+            bool contained = reduction_data.count(group_index);
+            auto& e = reduction_data[group_index];
+            if(!contained)
+                e = {init_value, 0};
+            e.combine_val = combine_f(e.combine_val, input[0](i, 0));
+            ++e.count;
+        }
+    }
+    assert(group_indices.equalDataLayout(result));  // copying the reduced values to the result view. Automatically takes multi dimensional indices into account
+    for(size_t i: irange(group_indices.cols[0].size())){
+        auto& d = reduction_data[size_t(group_indices.cols[0][i])];
+        result.cols[0][i] = finish_f(d.combine_val, d.count);
+    }
+}
+
 inline void applyBinaryFunction(const float_column_views& input, float_column_views& output, uint32_t col, std::function<float(float, float)> f){
     assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
     if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){      // fast operation possible
@@ -298,11 +331,11 @@ public:
         Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Sum"),
         VariableInput(false, 1)
     {
-        input_elements[middle_input_id] = crude_json::array{1., 1.};
+        input_elements[input_input_id] = crude_json::array{1., 1.};
     }
 
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        auto& prefactors = input_elements[middle_input_id].get<crude_json::array>();
+        auto& prefactors = input_elements[input_input_id].get<crude_json::array>();
         assert(prefactors.size() == input.size());
         applyNAryFunction(input, output, 
             [&prefactors](const std::vector<float>& v) {
@@ -314,8 +347,8 @@ public:
         );
     }
 
-    void pinAddAction() override {input_elements[middle_input_id].get<crude_json::array>().push_back(1.);}
-    void pinRemoveAction(int i) override {input_elements[middle_input_id].get<crude_json::array>().erase(input_elements[middle_input_id].get<crude_json::array>().begin() + i);}
+    void pinAddAction() override {input_elements[input_input_id].get<crude_json::array>().push_back(1.);}
+    void pinRemoveAction(int i) override {input_elements[input_input_id].get<crude_json::array>().erase(input_elements[input_input_id].get<crude_json::array>().begin() + i);}
 };
 
 class Norm: public Node, public VariableInput, public Creatable<Norm>{
@@ -528,8 +561,9 @@ public:
     }
 };
 
-class ViewTransformNode{};  // simple type to signal that the deriving class does a view transformation to signal that for dataset input nodes an out pin with outputCounts == 1 can be forwared // TODO complex interactions are at work, think about
+//class ViewTransformNode{};  // simple type to signal that the deriving class does a view transformation to signal that for dataset input nodes an out pin with outputCounts == 1 can be forwared // TODO complex interactions are at work, think about
 
+// currently unused vector types. Easier to make all the more multidim things with variable einputs
 class UnaryVec2: public Unary<Vec2Type>{
 public:
     UnaryVec2(std::string_view header = "", std::string_view body = ""): Unary(header, body){};
@@ -790,6 +824,74 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return std::pow(a, b);});
+    }
+};
+
+class Min_Reduction: public Binary<FloatType>, public Creatable<Min_Reduction>{
+public:
+    Min_Reduction(): Binary("Min"){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index";}
+
+    // input[0] has to contain the data values, input[1] has to contain the indices
+    virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        applyUnaryReductionFunction(input, input[1], std::numeric_limits<float>::max(), output[0], [](float a, float b){return std::min(a, b);});
+    }
+};
+
+class Max_Reduction: public Binary<FloatType>, public Creatable<Max_Reduction>{
+public:
+    Max_Reduction(): Binary("Max"){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index";}
+
+    // input[0] has to contain the data values, input[1] has to contain the indices
+    virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        applyUnaryReductionFunction(input, input[1], std::numeric_limits<float>::lowest(), output[0], [](float a, float b){return std::max(a, b);});
+    }
+};
+
+class Sum_Reduction: public Binary<FloatType>, public Creatable<Sum_Reduction>{
+public:
+    Sum_Reduction(): Binary("Sum"){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index";}
+
+    // input[0] has to contain the data values, input[1] has to contain the indices
+    virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        applyUnaryReductionFunction(input, input[1], 0, output[0], [](float a, float b){return a + b;});
+    }
+};
+
+class Mul_Reduction: public Binary<FloatType>, public Creatable<Mul_Reduction>{
+public:
+    Mul_Reduction(): Binary("Multiplication"){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index";}
+
+    // input[0] has to contain the data values, input[1] has to contain the indices
+    virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        applyUnaryReductionFunction(input, input[1], 0, output[0], [](float a, float b){return a * b;});
+    }
+};
+
+class Average_Reduction: public Binary<FloatType>, public Creatable<Average_Reduction>{
+public:
+    Average_Reduction(): Binary("Average"){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index";}
+
+    // input[0] has to contain the data values, input[1] has to contain the indices
+    virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        applyUnaryReductionFunction(input, input[1], 0, output[0], [](float a, float b){return a + b;}, [](float a, size_t c){return double(a) / c;});
+    }
+};
+
+class StdDev_Reduction: public Binary<FloatType>, public Creatable<StdDev_Reduction>{
+public:
+    StdDev_Reduction(): Binary("Standard deviation"){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index";}
+
+    // input[0] has to contain the data values, input[1] has to contain the indices
+    virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        auto average_f = [](float a, size_t c){return double(a) / c;};
+        // use stddev = sqrt(expectation(vals^2) - expectation(vals)^2))
+        // calc expectation(vals) and copy to temporary array
+        applyUnaryReductionFunction(input, input[1], 0, output[0], [](float a, float b){return double(a) + b;}, average_f);
+        std::vector<float> expect(output[0].cols[0].begin(), output[0].cols[0].end());
+        // calc expectation(vals^2)
+        applyUnaryReductionFunction(input, input[1], 0, output[0], [](float a, float b){return double(a) * a + double(b) * b;}, average_f);
+        for(size_t i: util::size_range(output[0].cols[0]))
+            output[0].cols[0][i] = std::sqrt(output[0].cols[0][i] - expect[i] * expect[i]);
     }
 };
 
