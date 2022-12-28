@@ -126,6 +126,12 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
             return false;
         return true;
     }
+    // check less equal
+    bool dataLayoutLE(const column_memory_view& o) const{
+        if(size() < o.size())
+            return true;
+        return false;
+    }
 
     T& operator()(uint64_t index, uint32_t column){
         auto cI = columnIndex(index);

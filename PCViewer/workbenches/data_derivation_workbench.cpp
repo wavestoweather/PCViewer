@@ -499,8 +499,13 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         outputLayout.columnDimensionIndices = deriveData::memory_view<uint32_t>(dimsIndex);
     }
 
+    // handling reduction nodes to take the indices buffer
+    bool reduction_node = dynamic_cast<deriveData::Nodes::Reduction*>(nodes[node].node.get());
+    if(reduction_node)
+        outputLayout = inputData[0];
+
     // removing inplace which can not be used due to data inflation (different data layouts)
-    if(!equalDataLayout){
+    if(!equalDataLayout && !reduction_node){
         logger << logging::warning_prefix << " Data layouts for node " << node << " with title " << nodes[node].node->name << " and body " << nodes[node].node->middleText << " has to inflate data because the input data has not euqal data layout" << logging::endl;
         std::vector<int> keptInplaceIndices;
         for(int i: inplaceIndices){
@@ -529,8 +534,10 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     }
     else{
         for(int i: inplaceIndices){
-            if(inputData[i].equalDataLayout(outputLayout))
-                memoryViewPool.insert(memoryViewPool.end(), inputData[i].cols.begin(), inputData[i].cols.end());
+            for(auto& col: inputData[i].cols){
+                if(col.size() >= outputLayout.size())
+                    memoryViewPool.emplace_back(col);
+            }
         }
         if(memoryViewPool.size() < nodes[node].node->outputChannels()){
             int storageSize = data_storage.size();
