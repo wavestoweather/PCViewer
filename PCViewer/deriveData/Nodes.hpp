@@ -170,30 +170,18 @@ inline void tryAlignInputOutput(const float_column_views& input, float_column_vi
 // special nodes
 // ------------------------------------------------------------------------------------------
 
-class Input: public Node{
-public:
-    Input(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
-        std::vector<std::string>&& inputNames = {},
-        std::vector<std::unique_ptr<Type>>&& outputTypes = {},
-        std::vector<std::string>&& outputNames = {}, 
-        std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
+class Input{
 };
 
-class Output: public Node{
-public:
-    Output(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
-        std::vector<std::string>&& inputNames = {},
-        std::vector<std::unique_ptr<Type>>&& outputTypes = {},
-        std::vector<std::string>&& outputNames = {}, 
-        std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
+class Output{
 };
 
-class DatasetInput: public Input, public Creatable<DatasetInput>{
+class DatasetInput: public Node, public Input, public Creatable<DatasetInput>{
 public:
     std::string_view datasetId;
 
     DatasetInput(std::string_view datasetID = {""}):
-        Input(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
+        Node(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
     {
         name = "Dataset Input";
     }
@@ -203,13 +191,13 @@ public:
     };
 };
 
-class DataCreation: public Input{
+class DataCreation: public Node, public Input{
 public:
     DataCreation(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},
         std::vector<std::unique_ptr<Type>>&& outputTypes = {},
         std::vector<std::string>&& outputNames = {}, 
-        std::string_view header = {}, std::string_view mt = {}): Input(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
+        std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt){};
 };
 
 class Vector_Zero: public DataCreation, public Creatable<Vector_Zero>{
@@ -239,11 +227,20 @@ public:
     };
 };
 
-class Serialization{
+class Serialization: public Node{
 public:
+    Serialization(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
+        std::vector<std::string>&& inputNames = {},
+        std::vector<std::unique_ptr<Type>>&& outputTypes = {},
+        std::vector<std::string>&& outputNames = {}, 
+        std::string_view header = {}, std::string_view mt = {}): Node(std::move(inputTypes), std::move(inputNames), std::move(outputTypes), std::move(outputNames), header, mt) {}
+
     std::string serialize(const float_column_views& input) const{
         // prints at max the first 50 and last 50 items of a vector
         std::stringstream out;
+        std::string out_name = input_elements[middle_input_id]["Output Name"].get<std::string>();
+        if(out_name.size())
+            out << out_name << ": ";
         out << "[ ";
         if(input[0].columnSize() < 100){
             for(int i: irange(input[0].columnSize())){
@@ -287,19 +284,23 @@ public:
 
 class Print_Vector: public Output, public Serialization, public Creatable<Print_Vector>{
 public:
-    Print_Vector(): Output(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){}
+    Print_Vector(): Serialization(createFilledVec<FloatType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Vector"){
+        input_elements[middle_input_id]["Output Name"] = "";
+    }
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        throw std::runtime_error{"Print_Vector::applyOperationCpu() Print nodes do not operate on the data. Only call serialize"};
+        // nothing to do
     }
 };
 
 class Print_Indices: public Output, public Serialization, public Creatable<Print_Indices>{
 public:
-    Print_Indices(): Output(createFilledVec<IndexType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Indices"){}
+    Print_Indices(): Serialization(createFilledVec<IndexType, Type>(1), {""}, createFilledVec<FloatType, Type>(0), {}, "Print Indices"){
+        input_elements[middle_input_id]["Output Name"] = "";
+    }
 
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        throw std::runtime_error{"Print_Indices::applyOperationCpu() Print nodes do not operate on the data. Only call serialize"};
+        // nothing to do
     }
 };
 
@@ -323,12 +324,12 @@ public:
     VariableOutput(int minOutputs = 0, int maxOutputs = std::numeric_limits<int>::max()): minOutputs(minOutputs), maxOutputs(maxOutputs) {}
 };
 
-class DatasetOutput: public Output, public VariableInput, public Creatable<DatasetOutput>{
+class DatasetOutput: public Node, public Output, public VariableInput, public Creatable<DatasetOutput>{
 public:
     std::string_view datasetId;
 
     DatasetOutput(std::string_view datasetID = {""}):
-        Output(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
+        Node(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(0),{}, "", ""), datasetId(datasetID)
     {
         name = "Dataset Output";
     }

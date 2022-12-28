@@ -556,11 +556,11 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         }
     }
 
-    // executing the node/serializing teh data
     if(deriveData::Nodes::Serialization* s = dynamic_cast<deriveData::Nodes::Serialization*>(nodes[node].node.get()))
-        logger << logging::info_prefix << s->serialize(inputData) << logging::endl;
-    else
-        nodes[node].node->applyOperationCpu(inputData, outputData);
+        logger << logging::info_prefix << " " << s->serialize(inputData) << logging::endl;
+
+    // executing the node/serializing teh data
+    nodes[node].node->applyOperationCpu(inputData, outputData);
 
     // saving the cache and setting up the counts for the current data
     node_infos[node].output_counts.resize(nodes[node].outputIds.size());
