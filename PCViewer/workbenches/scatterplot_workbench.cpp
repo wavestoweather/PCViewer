@@ -122,11 +122,15 @@ void scatterplot_workbench::_update_plot_images(){
 void scatterplot_workbench::_update_plot_list(){
     auto active_indices = get_active_ordered_indices();
     plot_list().clear();
-    if(settings.read().plot_type == plot_type_t::matrix){
+    switch(settings.read().plot_type){
+    case plot_type_t::matrix:
         for(uint32_t i: util::i_range(1, active_indices.size())){
             for(uint32_t j: util::i_range(i))
-                plot_list().emplace_back(attribute_pair{i, j});
+                plot_list().emplace_back(attribute_pair{active_indices[i], active_indices[j]});
         }
+        break;
+    case plot_type_t::list:
+        break;
     }
 }
 
@@ -184,6 +188,7 @@ void scatterplot_workbench::show()
     request_render |= local_change;
     request_render |= attributes.changed;
     request_render |= attribute_order_infos.changed;
+    if(attribute_order_infos.changed) _update_plot_list();
     request_render |= settings.changed;
     request_render |= _drawlists_updated;
     if(globals::drawlists.changed){
@@ -206,13 +211,14 @@ void scatterplot_workbench::show()
             util::imgui::AddTextVertical(attributes.read()[active_indices[i]].display_name.c_str(), text_pos, .5f);
             ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x + ImGui::GetTextLineHeightWithSpacing(), ImGui::GetCursorScreenPos().y});
             for(uint32_t j: util::i_range(i)){
-                if(!plot_datas.contains({i, j}))
+                attribute_pair p = {active_indices[i], active_indices[j]};
+                if(!plot_datas.contains(p))
                     continue;
                 if(j != 0)  
                     ImGui::SameLine();
                 auto c_pos = ImGui::GetCursorScreenPos();
                 ImGui::GetWindowDrawList()->AddRectFilled(c_pos, {c_pos.x + settings.read().plot_width, c_pos.y + settings.read().plot_width}, ImColor(settings.read().plot_background_color));
-                ImGui::Image(plot_datas[{i, j}].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
+                ImGui::Image(plot_datas[p].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
             }
         }
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetTextLineHeight());
