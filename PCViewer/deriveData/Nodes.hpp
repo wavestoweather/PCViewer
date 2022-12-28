@@ -111,7 +111,7 @@ inline void applyBinaryFunction(const float_column_views& input, float_column_vi
 
 inline std::tuple<float, float> binaryReductionFunction(const float_column_views& input, uint32_t col, std::tuple<float, float> initVal, std::function<std::tuple<float, float>(std::tuple<float, float>, float)> f){
     for(int i: irange(input[0].cols[col].size()))
-        initVal = f(initVal, input[0].cols[i]);
+        initVal = f(initVal, input[0].cols[col][i]);
     return initVal;
 };
 
@@ -373,9 +373,9 @@ public:
     void pinRemoveAction(int i) override {input_elements[input_input_id].get<crude_json::array>().erase(input_elements[input_input_id].get<crude_json::array>().begin() + i);}
 };
 
-class Norm: public Node, public VariableInput, public Creatable<Norm>{
+class Lp_Norm: public Node, public VariableInput, public Creatable<Lp_Norm>{
 public:
-    Norm():
+    Lp_Norm():
         Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Lp-Norm"),
         VariableInput(false, 1)
     {
@@ -496,6 +496,18 @@ class Unary: public Node{
 public:
     Unary(std::string_view header, std::string_view middle):
         Node(createFilledVec<T, Type>(1), {std::string()}, createFilledVec<T_out, Type>(1),{std::string()}, header, middle){};
+};
+
+class Cast_to_Float: public Unary<IndexType, FloatType>, public Creatable<Cast_to_Float>{
+public:
+    Cast_to_Float(): Unary("", "cast_to<float_vec>") {}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{     
+        if(input[0].cols[0] == output[0].cols[0])
+            return;
+        for(size_t i: util::size_range(input[0].cols[0]))
+            output[0].cols[0][i] = input[0].cols[0][i];
+    }
 };
 
 class Inverse: public Unary<FloatType>, public Creatable<Inverse>{

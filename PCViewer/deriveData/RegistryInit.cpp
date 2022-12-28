@@ -11,10 +11,11 @@ REGISTER(Print_Indices);
 REGISTER(DatasetOutput);
 REGISTER(Derivation);
 REGISTER(Sum);
-REGISTER(Norm);
+REGISTER(Lp_Norm);
 REGISTER(PCA_Projection);
 REGISTER(TSNE_Projection);
 // unary nodes
+REGISTER(Cast_to_Float);
 REGISTER(Inverse);
 REGISTER(Negate);
 REGISTER(Normalization);
