@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
 #include <type_traits>
+#include <array>
+#include <cstdint>
 #include "../range.hpp"
 
 namespace deriveData{

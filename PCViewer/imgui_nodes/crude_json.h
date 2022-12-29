@@ -91,6 +91,7 @@ struct value
     const value& operator[](const string& key) const;
 
     bool contains(const string& key) const;
+    size_t size() const;
 
     void push_back(const value& value);
     void push_back(value&& value);

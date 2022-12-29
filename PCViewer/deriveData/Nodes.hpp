@@ -17,6 +17,7 @@
 #include <robin_hood.h>
 #include <radix.hpp>
 #include <sstream>
+#include "k_means.hpp"
 
 namespace deriveData{
 namespace Nodes{
@@ -488,6 +489,33 @@ public:
     }
 };
 
+class K_Means: public Node, public VariableInput, public Creatable<K_Means>{
+public:
+    K_Means():
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<IndexType, Type>(1), {""}, "K Means Clustering"),
+        VariableInput(false, 1)
+    {
+        util::json::add_enum(input_elements[middle_input_id], "Distance Method", k_means::distance_method_names, k_means::distance_method_t::norm);
+
+        input_elements[middle_input_id]["Amount of cluster"] = 5.;
+
+        util::json::add_enum(input_elements[middle_input_id], "Init method", k_means::init_method_names, k_means::init_method_t::plus_plus);
+        util::json::add_enum(input_elements[middle_input_id], "K Means Method", k_means::mean_method_names, k_means::mean_method_t::mean);
+
+        input_elements[middle_input_id]["Max Iterations"] = 20.;
+    }
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        k_means::k_means_settings_t settings;
+        settings.distance_method = util::json::get_enum_val<k_means::distance_method_t>(input_elements[middle_input_id]["Distance Method"]);
+        settings.cluster_count = static_cast<int>(input_elements[middle_input_id]["Amount of cluster"].get<double>());
+        settings.init_method = util::json::get_enum_val<k_means::init_method_t>(input_elements[middle_input_id]["Init method"]);
+        settings.mean_method = util::json::get_enum_val<k_means::mean_method_t>(input_elements[middle_input_id]["K Means Method"]);
+        settings.max_iteration = static_cast<int>(input_elements[middle_input_id]["Max Iterations"].get<double>());
+        k_means::run(input, output, settings);
+    }
+};
+
 // ------------------------------------------------------------------------------------------
 // unary nodes
 // ------------------------------------------------------------------------------------------
@@ -501,7 +529,19 @@ public:
 
 class Cast_to_Float: public Unary<IndexType, FloatType>, public Creatable<Cast_to_Float>{
 public:
-    Cast_to_Float(): Unary("", "cast_to<float_vec>") {}
+    Cast_to_Float(): Unary("", "cast_to<float[]>") {}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{     
+        if(input[0].cols[0] == output[0].cols[0])
+            return;
+        for(size_t i: util::size_range(input[0].cols[0]))
+            output[0].cols[0][i] = input[0].cols[0][i];
+    }
+};
+
+class Cast_to_Index: public Unary<FloatType, IndexType>, public Creatable<Cast_to_Index>{
+public:
+    Cast_to_Index(): Unary("", "cast_to<index[]>") {}
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{     
         if(input[0].cols[0] == output[0].cols[0])

@@ -10,6 +10,7 @@
 #include "../imgui_nodes/crude_json.h"
 #include "../imgui/imgui_stdlib.h"
 #include "MemoryView.hpp"
+#include "../util/json_util.hpp"
 
 namespace deriveData{
 template<class T, class Base = T>
@@ -140,6 +141,16 @@ public:
                     ImGui::InputDouble(name.c_str(), &val.get<double>());
                 if(val.is_boolean())
                     ImGui::Checkbox(name.c_str(), &val.get<bool>());
+                if(util::json::is_enumeration(val)){
+                    int ind = int(val["chosen"].get<double>());
+                    if(ax::NodeEditor::BeginNodeCombo(name.c_str(), val["choices"][ind].get<std::string>().c_str())){
+                        for(int i: irange(val["choices"].size())){
+                            if(ImGui::MenuItem(val["choices"][i].get<std::string>().c_str()))
+                                val["chosen"] = double(i);
+                        }
+                        ax::NodeEditor::EndNodeCombo();
+                    }
+                }
             }
         }
         ImGui::PopItemWidth();

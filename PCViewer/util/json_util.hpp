@@ -2,6 +2,7 @@
 #include <c_file.hpp>
 #include <filesystem>
 #include <fstream>
+#include <enum_names.hpp>
 #include "../imgui_nodes/crude_json.h"
 
 #define JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, struct, field) json[#field] = struct.field
@@ -12,6 +13,7 @@
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, struct, field, type_json) struct.field = static_cast<decltype(struct.field)>(json[#field].get<type_json>())
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, struct, field) struct.field.x = json[#field][0].get<double>(); struct.field.y = json[#field][1].get<double>(); struct.field.z = json[#field][2].get<double>(); struct.field.w = json[#field][3].get<double>();
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_ENUM_NAME(json, struct, field, enum_names) struct.field = enum_names[json[#field].get<std::string>()];
+
 #define COMP_EQ_OTHER(o, field) if(field != o.field) return false;
 #define COMP_EQ_OTHER_VEC4(o, field) if(field.x != o.field.x || field.y != o.field.y || field.z != o.field.z || field.w != o.field.w) return false;
 
@@ -32,6 +34,25 @@ inline crude_json::value open_json(std::string_view filename){
 inline void save_json(std::string_view filename, const crude_json::value& json, int indent = -1){
     std::ofstream file(std::string(filename), std::ios::binary);
     file << json.dump(indent);
+}
+
+inline bool is_enumeration(const crude_json::value& val){
+    return val.is_object() && val.contains("type") && val["type"].is_string() && val["type"].get<std::string>() == "enumeration" && val.contains("choices") && val["choices"].is_array() && val.contains("chosen") && val["chosen"].is_number();
+}
+
+template<typename T>
+inline void add_enum(crude_json::value& val, const std::string& enum_name, const structures::enum_names<T> names, T default_val){
+    val[enum_name]["type"] = "enumeration"; 
+    for(auto e: structures::enum_iteration<T>{}) 
+        val[enum_name]["choices"][int(e)] = std::string(names[e]); 
+    val[enum_name]["chosen"] = double(default_val);
+}
+
+template<typename T>
+inline T get_enum_val(const crude_json::value& val){
+    if(!is_enumeration(val))
+        throw std::runtime_error{"util::json::get_enum_val() json given is not an enum"};
+    return static_cast<T>(val["chosen"].get<double>());
 }
 }
 }

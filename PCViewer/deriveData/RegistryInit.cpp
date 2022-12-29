@@ -14,8 +14,10 @@ REGISTER(Sum);
 REGISTER(Lp_Norm);
 REGISTER(PCA_Projection);
 REGISTER(TSNE_Projection);
+REGISTER(K_Means)
 // unary nodes
 REGISTER(Cast_to_Float);
+REGISTER(Cast_to_Index);
 REGISTER(Inverse);
 REGISTER(Negate);
 REGISTER(Normalization);
