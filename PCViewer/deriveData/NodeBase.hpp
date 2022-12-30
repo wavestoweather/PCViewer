@@ -113,19 +113,23 @@ public:
     std::string name;
     std::string middleText;
 
+    bool inplace_possible;
+
     crude_json::value input_elements;
 
     Node(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
         std::vector<std::string>&& inputNames = {},
         std::vector<std::unique_ptr<Type>>&& outputTypes = {},
         std::vector<std::string>&& outputNames = {}, 
-        std::string_view header = {}, std::string_view mt = {}):
+        std::string_view header = {}, std::string_view mt = {},
+        bool inplace_possible = true):
         inputTypes(std::move(inputTypes)),
         inputNames(inputNames),
         outputTypes(std::move(outputTypes)),
         outputNames(outputNames),
         name(header),
         middleText(mt),
+        inplace_possible(inplace_possible),
         input_elements(crude_json::type_t::object){}
 
     virtual int outputChannels() const { uint32_t count{}; for(const auto& t: outputTypes) count += t->data().cols.size();return count;};

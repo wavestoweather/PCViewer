@@ -492,7 +492,7 @@ public:
 class K_Means: public Node, public VariableInput, public Creatable<K_Means>{
 public:
     K_Means():
-        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<IndexType, Type>(1), {""}, "K Means Clustering"),
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<IndexType, Type>(1), {""}, "K Means Clustering", {}, false),
         VariableInput(false, 1)
     {
         util::json::add_enum(input_elements[middle_input_id], "Distance Method", k_means::distance_method_names, k_means::distance_method_t::norm);

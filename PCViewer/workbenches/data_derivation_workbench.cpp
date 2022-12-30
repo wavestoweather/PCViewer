@@ -515,6 +515,10 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         inplaceIndices = std::move(keptInplaceIndices);
     }
 
+    // clearing inplace buffers if node does not support inplace operation
+    if(!nodes[node].node->inplace_possible)
+        inplaceIndices.clear();
+
     // output data (merging the inplace buffers and adding new buffers. if the data layout does not fit to the outputLayout inplace can not be used)
     deriveData::float_column_views outputData(nodes[node].outputIds.size());
     std::vector<deriveData::memory_view<float>> memoryViewPool;

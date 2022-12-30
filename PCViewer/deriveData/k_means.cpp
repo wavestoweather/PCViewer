@@ -63,14 +63,14 @@ void k_means::run(const float_column_views& input, float_column_views& output, c
     std::default_random_engine random_engine{std::random_device{}()};
     switch(settings.init_method){
     case init_method_t::forgy:{
-        std::uniform_int_distribution<size_t> distribution(0, data_size);
+        std::uniform_int_distribution<size_t> distribution(0, data_size - 1);
         for(auto& center: cluster_centers){
             size_t index = distribution(random_engine);
             for(int i: util::size_range(input)) center[i] = equal_layout ? input[i].cols[0][index]: input[i](index, 0);
         }
         break;}
     case init_method_t::uniform_random:{
-        std::uniform_int_distribution<int> distribution(0, settings.cluster_count);
+        std::uniform_int_distribution<int> distribution(0, settings.cluster_count - 1);
         for(int i: util::i_range(data_size)) output[0].cols[0][i] = distribution(random_engine);
         calc_center_pos(input, output, cluster_centers, equal_layout, data_size);
         break;}
@@ -82,6 +82,8 @@ void k_means::run(const float_column_views& input, float_column_views& output, c
                 averages[d].first += v;
                 averages[d].second += v * v;
             }
+            averages[d].first /= data_size;
+            averages[d].second /= data_size;
         }
         for(auto& v: averages) v.second = std::sqrt(v.second - v.first * v.first); // converting second order to standard deviation
         for(int d: util::size_range(input)){
@@ -90,19 +92,20 @@ void k_means::run(const float_column_views& input, float_column_views& output, c
         }
         break;}
     case init_method_t::plus_plus:{
-        std::uniform_int_distribution<size_t> distribution(0, data_size);
+        std::uniform_int_distribution<size_t> distribution(0, data_size - 1);
+        std::uniform_real_distribution<float> f_distribution(0, 1);
         size_t index = distribution(random_engine);
         for(int i: util::size_range(input)) cluster_centers[0][i] = equal_layout ? input[i].cols[0][index]: input[i](index, 0);
         std::vector<float> probabilities(data_size, std::numeric_limits<float>::infinity());
         for(int i: util::i_range(1, settings.cluster_count)){
             double probability_sum{};
             for(size_t j: util::i_range(data_size)){
-                probabilities[j] = std::min(probabilities[j], distance(input, j, cluster_centers[i], settings.distance_method, equal_layout));
+                probabilities[j] = std::min(probabilities[j], distance(input, j, cluster_centers[i - 1], settings.distance_method, equal_layout));
                 probability_sum += probabilities[j];
             }
             if(probability_sum <= 0)
                 continue;
-            float rand = distribution(random_engine) * probability_sum;
+            float rand = f_distribution(random_engine) * probability_sum;
             for(size_t j: util::i_range(data_size)){
                 if((rand -= probabilities[j]) > 0)
                     continue;
