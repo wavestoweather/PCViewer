@@ -12,7 +12,7 @@ public:
     size_t data_size{};
 
     KdTree(const db_scan::float_column_view& points): points(points){
-        for(int i: util::i_range(points.size() - 1))
+        for(int i: util::i_range(1, points.size() - 1))
             same_layout &= points[i - 1].equalDataLayout(points[i]);
             
         data_size = same_layout ? points[0].cols[0].size() : points[0].size();
@@ -53,7 +53,7 @@ protected:
             r = radix::sort_indirect(begin, end, tmp.begin(), [&](size_t index){return points[level].cols[0][index];});
         else
             r = radix::sort_indirect(begin, end, tmp.begin(), [&](size_t index){return points[level](index, 0);});
-        if(r.begin != begin)
+        if(&*r.begin != &*begin)
             std::copy(r.begin, r.end, begin);
         
         auto lbegin = begin;
@@ -172,7 +172,7 @@ bool expandCluster(int cur_cluster_index ,size_t index, db_scan::float_column_vi
 
 void db_scan::run(const float_column_view& input, float_column_view& output, const db_scans_settings_t& settings){
     const KdTree tree(input);
-    int cur_cluster_id{};
+    int cur_cluster_id{1};
     for(size_t i: util::i_range(tree.data_size)){
         if(tree.same_layout && output[0].cols[0][i] == cluster_unclassified && expandCluster(cur_cluster_id, i, output, tree, settings) ||
             !tree.same_layout && output[0](i, 0) == cluster_unclassified && expandCluster(cur_cluster_id, i, output, tree, settings))
