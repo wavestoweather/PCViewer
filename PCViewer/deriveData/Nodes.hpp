@@ -18,6 +18,7 @@
 #include <radix.hpp>
 #include <sstream>
 #include "k_means.hpp"
+#include "db_scan.hpp"
 
 namespace deriveData{
 namespace Nodes{
@@ -513,6 +514,25 @@ public:
         settings.mean_method = util::json::get_enum_val<k_means::mean_method_t>(input_elements[middle_input_id]["K Means Method"]);
         settings.max_iteration = static_cast<int>(input_elements[middle_input_id]["Max Iterations"].get<double>());
         k_means::run(input, output, settings);
+    }
+};
+
+class DB_Scan: public Node, public VariableInput, public Creatable<DB_Scan>{
+public:
+    DB_Scan():
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<IndexType, Type>(1), {""}, "DB-Scan Clustering", {}, false),
+        VariableInput(false, 1)
+    {
+        input_elements[middle_input_id]["Epsilon"] = .1;
+        input_elements[middle_input_id]["Min Points"] = 5.;
+    }
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        db_scan::db_scans_settings_t settings{};
+        settings.epsilon = input_elements[middle_input_id]["Epsilon"].get<double>();
+        settings.min_points = static_cast<int>(input_elements[middle_input_id]["Min Points"].get<double>());
+
+        db_scan::run(input, output, settings);
     }
 };
 

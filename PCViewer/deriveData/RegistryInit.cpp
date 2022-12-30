@@ -14,7 +14,8 @@ REGISTER(Sum);
 REGISTER(Lp_Norm);
 REGISTER(PCA_Projection);
 REGISTER(TSNE_Projection);
-REGISTER(K_Means)
+REGISTER(K_Means);
+REGISTER(DB_Scan);
 // unary nodes
 REGISTER(Cast_to_Float);
 REGISTER(Cast_to_Index);
