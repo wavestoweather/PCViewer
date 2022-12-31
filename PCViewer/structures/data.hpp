@@ -42,6 +42,7 @@ template<class T = float>
 class data{
     public:
     
+    std::vector<std::string>            dimension_names;
     std::vector<uint32_t>               dimension_sizes;
     std::vector<std::vector<uint32_t>>  column_dimensions;   // for constant columns their corresponding vector here is empty
     std::vector<std::vector<T>>         columns;

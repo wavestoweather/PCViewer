@@ -35,7 +35,8 @@ namespace util{
 namespace dataset{
 namespace open_internals{
 
-load_result<float> open_netcdf_float(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
+template<typename T>
+load_result<T> open_netcdf_t(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
     structures::netcdf_file netcdf(filename);
     auto& variables = netcdf.get_variable_infos();
     if(query_attributes.size()){
@@ -44,47 +45,17 @@ load_result<float> open_netcdf_float(std::string_view filename, memory_view<stru
                 throw std::runtime_error{"open_netcdf() Attributes of the attribute query are not consistent with the netcdf file"};
         }
     }
-    load_result<float> ret{};
-    for(const auto& d: netcdf.get_dimension_infos())
+    load_result<T> ret{};
+    for(const auto& d: netcdf.get_dimension_infos()){
         ret.data.dimension_sizes.push_back(d.size);
+        ret.data.dimension_names.push_back(d.name);
+    }
     
     for(int var: util::size_range(variables)){
         if(query_attributes.size() > var && !query_attributes[var].is_active)
             continue;
         ret.data.column_dimensions.push_back(std::vector<uint32_t>(variables[var].dependant_dimensions.begin(), variables[var].dependant_dimensions.end()));
-        auto [data, fill_value] = netcdf.read_variable<float>(var);
-        ret.data.columns.push_back(std::move(data));
-        ret.fill_values.push_back(fill_value);
-        ret.attributes.push_back(structures::attribute{variables[var].name, variables[var].name});
-        for(float f: ret.data.columns.back()){
-            if(ret.attributes.back().bounds.read().min > f)
-                ret.attributes.back().bounds().min = f;
-            if(ret.attributes.back().bounds.read().max < f)
-                ret.attributes.back().bounds().max = f;
-        }
-    }
-
-    return ret;
-}
-
-load_result<half> open_netcdf_half(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
-    structures::netcdf_file netcdf(filename);
-    auto variables = netcdf.get_variable_infos();
-    if(query_attributes.size()){
-        for(int var: util::size_range(variables)){
-            if(query_attributes[var].id != variables[var].name)
-                throw std::runtime_error{"open_netcdf() Attributes of the attribute query are not consistent with the netcdf file"};
-        }
-    }
-    load_result<half> ret{};
-    for(const auto& d: netcdf.get_dimension_infos())
-        ret.data.dimension_sizes.push_back(d.size);
-    
-    for(int var: util::size_range(variables)){
-        if(query_attributes.size() > var && !query_attributes[var].is_active)
-            continue;
-        ret.data.column_dimensions.push_back(std::vector<uint32_t>(variables[var].dependant_dimensions.begin(), variables[var].dependant_dimensions.end()));
-        auto [data, fill_value] = netcdf.read_variable<half>(var);
+        auto [data, fill_value] = netcdf.read_variable<T>(var);
         ret.data.columns.push_back(std::move(data));
         ret.fill_values.push_back(fill_value);
         ret.attributes.push_back(structures::attribute{variables[var].name, variables[var].name});
@@ -100,10 +71,10 @@ load_result<half> open_netcdf_half(std::string_view filename, memory_view<struct
 }
 
 template<> load_result<float> open_netcdf<float>(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
-    return open_netcdf_float(filename, query_attributes, partial_info);
+    return open_netcdf_t<float>(filename, query_attributes, partial_info);
 }
 template<> load_result<half> open_netcdf<half>(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
-    return open_netcdf_half(filename, query_attributes, partial_info);
+    return open_netcdf_t<half>(filename, query_attributes, partial_info);
 }
 
 template<typename T, typename predicate>

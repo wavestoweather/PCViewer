@@ -3,6 +3,7 @@
 #include <type_traits>
 #include <array>
 #include <cstdint>
+#include <string_view>
 #include "../range.hpp"
 
 namespace deriveData{
@@ -56,6 +57,7 @@ public:
 
 template<class T>
 struct column_memory_view{ // holds one or more columns (done to also be able to hold vectors)
+    std::vector<std::string_view> dimensionNames{};
     memory_view<uint32_t> dimensionSizes{};
     memory_view<uint32_t> columnDimensionIndices{};
     std::vector<memory_view<T>> cols{};
