@@ -4,6 +4,10 @@
 #include <imgui_internal.h>
 #include <scatterplot_renderer.hpp>
 #include <mutex>
+#include <brushes.hpp>
+#include <brush_util.hpp>
+#include <util.hpp>
+#include <descriptor_set_storage.hpp>
 
 namespace workbenches
 {
@@ -126,7 +130,7 @@ void scatterplot_workbench::_update_plot_list(){
     case plot_type_t::matrix:
         for(uint32_t i: util::i_range(1, active_indices.size())){
             for(uint32_t j: util::i_range(i))
-                plot_list().emplace_back(attribute_pair{active_indices[i], active_indices[j]});
+                plot_list().emplace_back(attribute_pair{int(active_indices[i]), int(active_indices[j])});
         }
         break;
     case plot_type_t::list:
@@ -175,6 +179,34 @@ void scatterplot_workbench::notify_drawlist_dataset_update()
 {
     
 }
+
+void draw_lassos(scatterplot_workbench::attribute_pair p, float plot_width, ImVec4 min_max, ImU32 color = util::brushes::get_brush_color(), float thickness = globals::brush_edit_data.brush_line_width, const ImVec2& base_pos = ImGui::GetCursorScreenPos()){
+    if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::none)
+        return;
+    
+    bool swap{p.a > p.b};
+    if(swap)
+        std::swap(p.a, p.b);
+    const auto& lassos = util::brushes::get_selected_lasso_brush_const();
+    try{
+        auto& lasso = util::memory_view<const structures::polygon>(lassos).find([&](const structures::polygon& e){return e.attr1 == p.a && e.attr2 == p.b;});
+        if(lasso.borderPoints.empty()) return;
+        ImVec2 const* last_p = &lasso.borderPoints.back();
+        for(const ImVec2& cur_p: lasso.borderPoints){
+            ImVec2 normalized_start{util::normalize_val_for_range(last_p->x, min_max[0], min_max[2]), util::normalize_val_for_range(last_p->y, min_max[1], min_max[3])};
+            ImVec2 normalized_end{util::normalize_val_for_range(cur_p.x, min_max[0], min_max[2]), util::normalize_val_for_range(cur_p.y, min_max[1], min_max[3])};
+            normalized_start.y = 1 - normalized_start.y;
+            normalized_end.y = 1 - normalized_end.y;
+            ImVec2 start{util::unnormalize_val_for_range(normalized_start.x, base_pos.x, base_pos.x + plot_width), util::unnormalize_val_for_range(normalized_start.y, base_pos.y, base_pos.y + plot_width)}; 
+            ImVec2 end{util::unnormalize_val_for_range(normalized_end.x, base_pos.x, base_pos.x + plot_width), util::unnormalize_val_for_range(normalized_end.y, base_pos.y, base_pos.y + plot_width)}; 
+            if(swap)
+                std::swap(start, end);
+            ImGui::GetWindowDrawList()->AddLine(start, end, color, thickness);
+            last_p = &cur_p;
+        }
+    }
+    catch(std::exception e){}
+}
     
 void scatterplot_workbench::show() 
 {
@@ -206,6 +238,8 @@ void scatterplot_workbench::show()
     const auto active_indices = get_active_ordered_indices();
     if(_plot_x_vals.size() < active_indices.size()) _plot_x_vals.resize(active_indices.size());
     // plot views ------------------------------------------------------
+    attribute_pair  hovered_pair{-1, -1};
+    ImVec4          hovered_rect{};
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
         // matrix should be displayed as a left lower triangular matrix
@@ -214,16 +248,32 @@ void scatterplot_workbench::show()
             util::imgui::AddTextVertical(attributes.read()[active_indices[i]].display_name.c_str(), text_pos, .5f);
             ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x + ImGui::GetTextLineHeightWithSpacing(), ImGui::GetCursorScreenPos().y});
             for(uint32_t j: util::i_range(i)){
-                attribute_pair p = {active_indices[i], active_indices[j]};
+                attribute_pair p = {int(active_indices[i]), int(active_indices[j])};
                 if(!plot_datas.contains(p))
                     continue;
                 if(j != 0)  
                     ImGui::SameLine();
                 auto c_pos = ImGui::GetCursorScreenPos();
                 ImGui::GetWindowDrawList()->AddRectFilled(c_pos, {c_pos.x + settings.read().plot_width, c_pos.y + settings.read().plot_width}, ImColor(settings.read().plot_background_color));
+                if(plot_additional_datas.contains(p) && globals::descriptor_sets.count(plot_additional_datas[p].background_image)){
+                    ImGui::Image(globals::descriptor_sets[plot_additional_datas[p].background_image]->descriptor_set, {float(settings.read().plot_width), float(settings.read().plot_width)});
+                    ImGui::SetCursorScreenPos(c_pos);
+                }
                 ImGui::Image(plot_datas[p].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
-                if(ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                if(ImGui::IsItemClicked(ImGuiMouseButton_Right)){
                     ImGui::OpenPopup(plot_menu_id.data());
+                    _popup_attributes = p;
+                }
+                if(ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)){
+                    hovered_pair = p;
+                    hovered_rect = {c_pos.x, c_pos.x + settings.read().plot_width, c_pos.y, c_pos.y + settings.read().plot_width};
+                }
+                if(ImGui::BeginDragDropTarget()){
+                    if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("image"))
+                        plot_additional_datas[p].background_image = *reinterpret_cast<const std::string_view*>(payload->Data);
+                    ImGui::EndDragDropTarget();
+                }
+                draw_lassos(p, settings.read().plot_width, {attributes.read()[j].bounds.read().min, attributes.read()[i].bounds.read().min, attributes.read()[j].bounds.read().max, attributes.read()[i].bounds.read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
                 _plot_x_vals[j] = c_pos.x;
             }
         }
@@ -241,8 +291,43 @@ void scatterplot_workbench::show()
             if(!first)
                 ImGui::SameLine();
             ImGui::Image(plot_datas[p].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
+            if(ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                ImGui::OpenPopup(plot_menu_id.data());
+            if(ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                hovered_pair = p;
+            draw_lassos(p, settings.read().plot_width, {attributes.read()[p.a].bounds.read().min, attributes.read()[p.b].bounds.read().min, attributes.read()[p.a].bounds.read().max, attributes.read()[p.b].bounds.read().max});
         }
         break;
+    }
+    // lasso brushes ----------------------------------------------------
+    // cleearing old points if fresh button press
+    if(hovered_pair.a > hovered_pair.b)
+        std::swap(hovered_pair.a, hovered_pair.b);
+
+    auto get_attr_pos = [&](const ImVec2& pos = ImGui::GetMousePos()){
+        ImVec2 mouse_norm{util::normalize_val_for_range(pos.x, hovered_rect[0], hovered_rect[1]), util::normalize_val_for_range(pos.y, hovered_rect[2], hovered_rect[3])};
+        mouse_norm.y = 1 - mouse_norm.y;
+        ImVec2 attr_pos{util::unnormalize_val_for_range(mouse_norm.x, attributes.read()[hovered_pair.a].bounds.read().min, attributes.read()[hovered_pair.a].bounds.read().max), util::unnormalize_val_for_range(mouse_norm.y, attributes.read()[hovered_pair.b].bounds.read().min, attributes.read()[hovered_pair.b].bounds.read().max)};
+        return attr_pos;
+    };
+    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none && hovered_pair != attribute_pair{-1, -1}){
+        try{
+            auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.a && e.attr2 == hovered_pair.b;});
+            polygon.borderPoints.clear();
+        } catch(std::exception e){
+            util::brushes::get_selected_lasso_brush().emplace_back(structures::polygon{int(hovered_pair.a), int(hovered_pair.b), {}});
+        }
+        _last_lasso_point = ImGui::GetMousePos();
+        _started_lasso_attributes = hovered_pair;
+    }
+    if(ImGui::IsMouseDown(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none &&
+        util::distance(_last_lasso_point, ImGui::GetMousePos()) > globals::brush_edit_data.drag_threshold &&
+        _started_lasso_attributes == hovered_pair){
+        auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.a && e.attr2 == hovered_pair.b;});
+        if(polygon.borderPoints.empty())
+            polygon.borderPoints.emplace_back(get_attr_pos(_last_lasso_point));
+        polygon.borderPoints.emplace_back(get_attr_pos());
+        _last_lasso_point = ImGui::GetMousePos();
     }
 
     // settings ---------------------------------------------------------
@@ -283,8 +368,8 @@ void scatterplot_workbench::show()
             for(uint32_t i: util::i_range(1, attributes.read().size())){
                 for(uint32_t j: util::i_range(0, i)){
                     //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
-                    if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{i, j}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
-                        plot_list().emplace_back(attribute_pair{i, j});
+                    if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{int(i), int(j)}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
+                        plot_list().emplace_back(attribute_pair{int(i), int(j)});
                 }
             }
             break;
@@ -367,7 +452,7 @@ void scatterplot_workbench::show()
                 ImGui::EndCombo();
             }
             ImGui::TableNextColumn();
-            if(ImGui::DragFloat("##rad", &dl.scatter_appearance.ref_no_track().radius, 1, .5f, 100))
+            if(ImGui::DragFloat("##rad", &dl.scatter_appearance.ref_no_track().radius, 1, 1.f, 100.f))
                 drawlist_infos()[dl_index].scatter_appearance();
             ImGui::PopID();
         }
@@ -383,10 +468,25 @@ void scatterplot_workbench::show()
 
     // poups
     if(ImGui::BeginPopup(plot_menu_id.data())){
-        ImGui::PushItemWidth(80);
+        ImGui::PushItemWidth(100);
         ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
         if(ImGui::InputScalar("Plot width", ImGuiDataType_U32, &settings.ref_no_track().plot_width, {}, {}, {}, ImGuiInputTextFlags_EnterReturnsTrue))
             settings().plot_width = std::clamp(settings.read().plot_width, 50u, 10000u);
+        ImGui::Separator();
+        float diff = attributes.read()[_popup_attributes.a].bounds.read().max - attributes.read()[_popup_attributes.a].bounds.read().min;
+        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.a].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.a].bounds.ref_no_track().data(), diff * 1e-3))
+            attributes()[_popup_attributes.a].bounds();
+        diff = attributes.read()[_popup_attributes.b].bounds.read().max - attributes.read()[_popup_attributes.b].bounds.read().min;
+        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.b].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.b].bounds.ref_no_track().data(), diff * 1e-3))
+            attributes()[_popup_attributes.b].bounds();
+        if(ImGui::MenuItem(("Swap " + attributes.read()[_popup_attributes.a].display_name + " bounds").c_str()))
+            std::swap(attributes()[_popup_attributes.a].bounds().min, attributes()[_popup_attributes.a].bounds().max);
+        if(ImGui::MenuItem(("Swap " + attributes.read()[_popup_attributes.b].display_name + " bounds").c_str()))
+            std::swap(attributes()[_popup_attributes.b].bounds().min, attributes()[_popup_attributes.b].bounds().max);
+        ImGui::Separator();
+        if(ImGui::DragFloat("Uniform radius", &settings.read().uniform_radius, 1, 1, 100))
+            for(auto& dl: drawlist_infos())
+                dl.scatter_appearance().radius = settings.read().uniform_radius;
         ImGui::PopItemWidth();
         ImGui::EndPopup();
     }

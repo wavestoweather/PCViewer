@@ -34,6 +34,7 @@ namespace scatterplot_wb{
         mutable ImVec4 plot_background_color{0, 0, 0, 1};
         plot_type_t plot_type{plot_type_t::matrix};
         size_t      large_vis_threshold{500000};
+        mutable float uniform_radius{1.f};
 
         bool operator==(const settings_t& o){
             COMP_EQ_OTHER(o, plot_width);
@@ -43,6 +44,7 @@ namespace scatterplot_wb{
             COMP_EQ_OTHER_VEC4(o, plot_background_color);
             COMP_EQ_OTHER(o, plot_type);
             COMP_EQ_OTHER(o, large_vis_threshold);
+            COMP_EQ_OTHER(o, uniform_radius);
             return true;
         }
         settings_t() = default;
@@ -55,6 +57,7 @@ namespace scatterplot_wb{
             JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, t, plot_background_color);
             JSON_ASSIGN_JSON_FIELD_TO_STRUCT_ENUM_NAME(json, t, plot_type, plot_type_names);
             JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, large_vis_threshold, double);
+            JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, uniform_radius, double);
         }
         operator crude_json::value() const {
             auto& t = *this;
@@ -66,6 +69,7 @@ namespace scatterplot_wb{
             JSON_ASSIGN_STRUCT_FIELD_TO_JSON_VEC4(json, t, plot_background_color);
             JSON_ASSIGN_STRUCT_FIELD_TO_JSON_ENUM_NAME(json, t, plot_type, plot_type_names);
             JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, large_vis_threshold, double);
+            JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, uniform_radius, double);
             return json;
         }
     };
@@ -110,11 +114,18 @@ namespace scatterplot_wb{
         // samples are never stored here, as the sample count is only relevant for rendering, the image here always has only 1spp
     };
 
+    struct plot_additional_data_t{
+        std::string_view background_image{}; // only stores the string view to avoid problems when deleting the image
+        ImVec2           left_top{}; // describes the pos in attribute values of the left top corner
+        ImVec2           right_bot{};// describes the pos in attirbute values of the right bot corener
+    };
+
     struct attribute_pair{
-        uint32_t a;
-        uint32_t b;
+        int a;
+        int b;
 
         bool operator==(const attribute_pair& o) const {return a == o.a && b == o.b;}
+        bool operator!=(const attribute_pair& o) const {return a != o.a || b != o.b;}
     };
 
     struct pipeline_data{

@@ -69,6 +69,12 @@ struct brush_edit_data{
     brush_region        hovered_region_on_click{brush_region::COUNT};
     robin_hood::unordered_set<range_id>  selected_ranges{};
 
+    ImColor             local_color{.2f, .0f, .8f, 1.f};
+    ImColor             global_color{1.f, .0f, .1f, 1.f};
+    ImColor             selected_color{.8f, .8f, .0f, 1.f};
+    float               brush_line_width{2.f}; 
+    float               drag_threshold{5.f};           
+
     void clear(){
         brush_type = brush_type::none;
         hovered_region_on_click = brush_region::COUNT;

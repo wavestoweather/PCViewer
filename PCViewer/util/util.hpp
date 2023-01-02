@@ -41,4 +41,22 @@ inline std::vector<uint32_t> bool_vector_to_uint(const std::vector<bool>& v){
     }
     return res;
 }
+
+inline double distance(const ImVec2& a, const ImVec2& b){
+    double d{};
+    for(int i: util::i_range(2)){
+        double diff = a[i] - b[i];
+        d += diff * diff;
+    }
+    return std::sqrt(d);
+}
+
+inline double distance(const ImVec4& a, const ImVec4& b){
+    double d{};
+    for(int i: util::i_range(4)){
+        double diff = a[i] - b[i];
+        d += diff * diff;
+    }
+    return std::sqrt(d);
+}
 }

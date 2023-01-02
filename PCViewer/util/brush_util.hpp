@@ -10,6 +10,7 @@
 #include <vk_mem_alloc.h>
 #include <stager.hpp>
 #include <robin_hood.h>
+#include <util.hpp>
 
 namespace util{
 namespace brushes{
@@ -238,6 +239,45 @@ inline structures::range_brush& get_selected_range_brush(){
         assert(false && "Not yet implementd");
         static structures::range_brush none{};
         return none;
+    }
+}
+
+inline const structures::lasso_brush& get_selected_lasso_brush_const(){
+    switch(globals::brush_edit_data.brush_type){
+    case structures::brush_edit_data::brush_type::global:
+        assert(std::count_if(globals::global_brushes.read().begin(), globals::global_brushes.read().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;}) != 0);
+        return std::find_if(globals::global_brushes.read().begin(), globals::global_brushes.read().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;})->read().lassos;
+    case structures::brush_edit_data::brush_type::local:
+        return globals::drawlists.read().at(globals::brush_edit_data.local_brush_id).read().local_brushes.read().lassos;
+    default:
+        assert(false && "Not yet implementd");
+        static structures::lasso_brush none{};
+        return none;
+    }
+}
+
+inline structures::lasso_brush& get_selected_lasso_brush(){
+    switch(globals::brush_edit_data.brush_type){
+    case structures::brush_edit_data::brush_type::global:
+        assert(std::count_if(globals::global_brushes.read().begin(), globals::global_brushes.read().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;}) != 0);
+        return std::find_if(globals::global_brushes().begin(), globals::global_brushes().end(), [&](const structures::tracked_brush& b){return b.read().id == globals::brush_edit_data.global_brush_id;})->write().lassos;
+    case structures::brush_edit_data::brush_type::local:
+        return globals::drawlists().at(globals::brush_edit_data.local_brush_id)().local_brushes().lassos;
+    default:
+        assert(false && "Not yet implementd");
+        static structures::lasso_brush none{};
+        return none;
+    }
+}
+
+inline ImU32 get_brush_color(){
+    switch(globals::brush_edit_data.brush_type){
+    case structures::brush_edit_data::brush_type::global:
+        return static_cast<ImU32>(globals::brush_edit_data.global_color);
+    case structures::brush_edit_data::brush_type::local:
+        return static_cast<ImU32>(globals::brush_edit_data.local_color);
+    default:
+    return IM_COL32_WHITE;
     }
 }
 

@@ -61,7 +61,7 @@ void write_activations(uint iteration, bool a){
 float cached_values[maxAmtOfColumns];
 bool check_activations(uint index, uint64_t brush_address){
     Brushes brushes = Brushes(brush_address);
-    bool a = brushes.range_brush_count == 0 || brush_combination == combine_and;
+    bool a = (brushes.range_brush_count == 0 && brushes.lasso_brush_count == 0) || brush_combination == combine_and;
     for(int range_brush = 0; range_brush < brushes.range_brush_count; ++range_brush){
         bool inside = true;
         uint brush_offset = uint(brushes.data[range_brush]);
@@ -91,8 +91,38 @@ bool check_activations(uint index, uint64_t brush_address){
     }
 
     // lasso brushes (TODO)
+    for(int lasso = 0; lasso < brushes.lasso_brush_count; ++lasso){
+        int base_lasso = int(brushes.data[brushes.lasso_brush_offset + lasso]);
+        int polygon_count = int(brushes.data[base_lasso]);
+        for(int polygon = 0; polygon < polygon_count; ++polygon){
+            int polygon_base = int(brushes.data[base_lasso + polygon + 1]);
+            int attr1 = int(brushes.data[polygon_base]);
+            int attr2 = int(brushes.data[polygon_base + 1]);
+            int amtBorder = int(brushes.data[polygon_base + 2]);
+            int p_base = polygon_base + 3;
+            bool inLasso = amtBorder == 0;
+            if(isinf(cached_values[attr1]))
+                cached_values[attr1] = get_packed_data(index, attr1);
+            if(isinf(cached_values[attr2]))
+                cached_values[attr2] = get_packed_data(index, attr2);
+            vec2 d = vec2(cached_values[attr1], cached_values[attr2]);
+            for(int i = 0; i < amtBorder; ++i){
+                vec2 ap = vec2(brushes.data[p_base + i * 2], brushes.data[p_base + 1 + i * 2]);
+                int j = (i + 1) % amtBorder;
+                vec2 b = vec2(brushes.data[p_base + j * 2], brushes.data[p_base + 1 + j * 2]);
+                //calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+                if( ((ap.y > d.y) != (b.y > d.y)) &&
+                    (d.x < (b.x - ap.x) * (d.y - ap.y) / (b.y - ap.y) + ap.x) )
+                    inLasso = !inLasso;
+            }
+            if(brush_combination == combine_and && !inLasso)
+                return false;
+            else if(brush_combination == combine_or && inLasso)
+                return true;
+        }
+    }
 
-    return a;
+    return true;
 }
 
 // it is guaranteed that if the pipeline is executed there do exist brushes (so check for on brushes is useless)
