@@ -7,8 +7,8 @@ namespace util{
 // ranges with integer values
 class i_range {
 public:
-    i_range(int64_t end): _begin(0), _end(end < 0 ? 0: end), _step(1){}; // single element constructor 
-    i_range(unsigned long begin, unsigned long end, long step = 1):
+    constexpr i_range(int64_t end): _begin(0), _end(end < 0 ? 0: end), _step(1){}; // single element constructor 
+    constexpr i_range(unsigned long begin, unsigned long end, long step = 1):
      _begin(begin), _end(end), _step(step){
         assert(step != 0 && "step of 0 is invalid");
         if((begin > end && step > 0) || (begin < end && step < 0))
@@ -39,7 +39,7 @@ private:
 class size_range{
 public:
     template<class T>
-    size_range(const T& sizeable): _end(sizeable.size()){};
+    constexpr size_range(const T& sizeable): _end(sizeable.size()){};
 
     class iterator{
         friend class size_range;
@@ -175,6 +175,32 @@ public:
     };
 
     explicit pos_iter(T& iterable) : iterable_(iterable) {}
+    iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
+    iterator end() const {return iterator(iterable_, std::end(iterable_));}
+};
+
+template<typename T>
+class indexed_iter {
+    T& iterable_;
+public:
+    class iterator{
+        friend class indexed_iter;
+    public:
+        using iter_type = decltype(std::begin(iterable_));
+        using deref_iter_type = decltype(*std::begin(iterable_));
+        std::pair<deref_iter_type&, size_t> operator*() {return {*_i, _i - iter_.begin()};}
+        const iterator& operator++() { ++_i; return *this;}
+        iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
+        bool operator==(const iterator& o) const{return _i == o._i;}
+        bool operator!=(const iterator& o) const{return _i != o._i;}
+    protected:
+        iterator(const T& iterable, iter_type iter): iter_(iterable), _i(iter) {} 
+    private:
+        const T& iter_;
+        iter_type _i;
+    };
+
+    constexpr explicit indexed_iter(T& iterable) : iterable_(iterable) {}
     iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };

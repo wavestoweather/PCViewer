@@ -178,6 +178,8 @@ void scatterplot_workbench::notify_drawlist_dataset_update()
     
 void scatterplot_workbench::show() 
 {
+    const std::string_view plot_menu_id{"plot_menu"};
+
     if(!active) 
         return;
 
@@ -202,6 +204,7 @@ void scatterplot_workbench::show()
     ImGui::Begin(id.data(), &active, ImGuiWindowFlags_HorizontalScrollbar);
 
     const auto active_indices = get_active_ordered_indices();
+    if(_plot_x_vals.size() < active_indices.size()) _plot_x_vals.resize(active_indices.size());
     // plot views ------------------------------------------------------
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
@@ -219,12 +222,15 @@ void scatterplot_workbench::show()
                 auto c_pos = ImGui::GetCursorScreenPos();
                 ImGui::GetWindowDrawList()->AddRectFilled(c_pos, {c_pos.x + settings.read().plot_width, c_pos.y + settings.read().plot_width}, ImColor(settings.read().plot_background_color));
                 ImGui::Image(plot_datas[p].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
+                if(ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                    ImGui::OpenPopup(plot_menu_id.data());
+                _plot_x_vals[j] = c_pos.x;
             }
         }
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetTextLineHeight());
         for(int i: util::i_range(int(active_indices.size()) - 1)){
-            if(i != 0)
-                ImGui::SameLine(i * settings.read().plot_width + ImGui::GetTextLineHeight());
+            if(i) ImGui::SameLine();
+            float width = ImGui::CalcTextSize(attributes.read()[active_indices[i]].display_name.c_str()).x;
+            ImGui::SetCursorScreenPos({_plot_x_vals[i] + settings.read().plot_width / 2.f - width / 2.f, ImGui::GetCursorScreenPos().y});
             ImGui::Text("%s", attributes.read()[active_indices[i]].display_name.c_str());
         }
         break;
@@ -374,6 +380,16 @@ void scatterplot_workbench::show()
         ImGui::EndTable();
 
     ImGui::EndTable();
+
+    // poups
+    if(ImGui::BeginPopup(plot_menu_id.data())){
+        ImGui::PushItemWidth(80);
+        ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+        if(ImGui::InputScalar("Plot width", ImGuiDataType_U32, &settings.ref_no_track().plot_width, {}, {}, {}, ImGuiInputTextFlags_EnterReturnsTrue))
+            settings().plot_width = std::clamp(settings.read().plot_width, 50u, 10000u);
+        ImGui::PopItemWidth();
+        ImGui::EndPopup();
+    }
 
     ImGui::End();
 }

@@ -17,7 +17,8 @@ class scatterplot_workbench: public structures::workbench, public structures::dr
     std::vector<std::unique_ptr<appearance_tracker>>    _appearance_storage; // used for unlinked drawlists
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
 
-    bool _drawlists_updated{};
+    bool                _drawlists_updated{};
+    std::vector<float>  _plot_x_vals{};
 
     void _update_registered_histograms();
     void _update_plot_images();
