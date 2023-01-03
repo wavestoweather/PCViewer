@@ -9,6 +9,7 @@
 #include <../imgui_file_dialog/ImGuiFileDialog.h>
 #include <drawlist_util.hpp>
 #include <regex>
+#include <drawlist_colors_workbench.hpp>
 
 namespace workbenches
 {
@@ -132,7 +133,10 @@ void data_workbench::show()
         }
         ImGui::SameLine();
         ImGui::PushItemWidth(150);
-        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, 1e-20, 1, "%.3g")){
+        _uniform_alpha = 0;
+        for(const auto& [dl_id, dl]: globals::drawlists.read())
+            _uniform_alpha += dl.read().appearance_drawlist.read().color.w / double(globals::drawlists.read().size());
+        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, std::max(1e-20, _uniform_alpha * (180./200)), std::min(1., _uniform_alpha * (220./200)), "%.3g")){
             if(globals::selected_drawlists.size()){
                 for(const auto& dl: globals::selected_drawlists)
                     globals::drawlists()[dl]().appearance_drawlist().color.w = _uniform_alpha;
@@ -143,6 +147,10 @@ void data_workbench::show()
             }
         }
         ImGui::PopItemWidth();
+        ImGui::SameLine();
+        if(ImGui::Button("Drawlist colors"))
+            util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::drawlist_color_wb_id;})->active = true;
+        
 
         if(ImGui::BeginTable("Drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible

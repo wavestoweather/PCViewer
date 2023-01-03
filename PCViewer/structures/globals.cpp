@@ -31,6 +31,7 @@
 #include <priority_globals.hpp>
 #include <distance_calculator.hpp>
 #include <radix.hpp>
+#include <global_settings.hpp>
 
 #ifdef min
 #undef min
@@ -96,6 +97,8 @@ std::atomic<float> priority_center_vealue{};
 std::atomic<float> priority_center_distance{};
 std::atomic<uint32_t> priority_center_attribute_id{};
 const std::string_view priority_drawlist_standard_order{"standard"};
+
+structures::globals_settings_t  settings{};
 }
 
 namespace structures{

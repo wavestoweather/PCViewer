@@ -28,6 +28,8 @@
 #include <stopwatch.hpp>
 #include <descriptor_set_storage.hpp>
 #include <imgui_util.hpp>
+#include <global_settings.hpp>
+#include <drawlist_colors_workbench.hpp>
 #include "../cimg/CImg.h"
 #include "../vulkan/vk_format_util.hpp"
 
@@ -640,6 +642,11 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         drawlist().name = convert_data.dst_name;
         drawlist().parent_dataset = convert_data.ds_id;
         drawlist().parent_templatelist = convert_data.tl_id;
+        if(globals::settings.drawlist_creation_assign_color){
+            drawlist().appearance_drawlist().color = reinterpret_cast<workbenches::drawlist_colors_workbench*>(util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::drawlist_color_wb_id;}).get())->get_next_imcolor().Value;
+            drawlist().appearance_drawlist().color.w = 1;
+        }
+        drawlist().appearance_drawlist().color.w = std::clamp(1.0f/ (drawlist.read().const_templatelist().data_size * float(globals::settings.drawlist_creation_alpha_factor)), 1e-6f, 1.f);
         drawlist().active_indices_bitset.resize(ds.read().templatelist_index.at(convert_data.tl_id)->data_size, true);
 
         auto median_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (ds.read().attributes.size() + 2) * sizeof(float));

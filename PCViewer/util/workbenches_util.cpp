@@ -8,6 +8,7 @@
 #include <images_workbench.hpp>
 #include <load_behaviour.hpp>
 #include <drawlist_creation_behaviour.hpp>
+#include <drawlist_colors_workbench.hpp>
 
 namespace util{
 namespace workbench{
@@ -25,6 +26,12 @@ void setup_default_workbenches(){
     globals::dataset_dependencies.push_back(data_wb.get());
     globals::primary_workbench = data_wb.get();
     globals::workbenches.emplace_back(std::move(data_wb));
+
+    auto drawlist_color_wb = std::make_unique<workbenches::drawlist_colors_workbench>(globals::drawlist_color_wb_id);
+    globals::workbenches.emplace_back(std::move(drawlist_color_wb));
+
+    auto images_wb = std::make_unique<workbenches::images_workbench>(images_wb_id);
+    globals::workbenches.emplace_back(std::move(images_wb));
 
     auto parallel_coordinates_wb = std::make_unique<workbenches::parallel_coordinates_workbench>(parallel_coordinates_wb_id);
     parallel_coordinates_wb->active = true;
@@ -44,8 +51,6 @@ void setup_default_workbenches(){
     auto compression_wb = std::make_unique<workbenches::compression_workbench>(compression_wb_id);
     globals::workbenches.emplace_back(std::move(compression_wb));
 
-    auto images_wb = std::make_unique<workbenches::images_workbench>(images_wb_id);
-    globals::workbenches.emplace_back(std::move(images_wb));
 
     // load behavoiur setup ----------------------------------------------------------
     globals::load_behaviour.on_load.push_back({false, 1, {0, std::numeric_limits<size_t>::max()}});

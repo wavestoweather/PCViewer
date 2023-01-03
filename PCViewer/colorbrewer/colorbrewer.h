@@ -866,4 +866,54 @@ inline std::vector<T> brew(const std::string& colorName, size_t colorCount)
     return {};
 }
 
+struct palette_info_t{
+    std::string_view name;
+    int              min_colors;
+    int              max_colors;    // including this index
+};
+inline const std::vector<palette_info_t>& brew_pallete_infos(){
+    static std::vector<palette_info_t> palettes{
+        {"YlGn", 3, 9},
+        {"YlGnBu", 3, 9},
+        {"GnBu", 3, 9},
+        {"BuGn", 3, 9},
+        {"PuBuGn", 3, 9},
+        {"PuBu", 3, 9},
+        {"BuPu", 3, 9},
+        {"RdPu", 3, 9},
+        {"PuRd", 3, 9},
+        {"OrRd", 3, 9},
+        {"YlOrRd", 3, 9},
+        {"Black", 3, 20},
+        {"YlOrBr", 3, 9},
+        {"Purples", 3, 9},
+        {"Blues", 3, 9},
+        {"Greens", 3, 9},
+        {"Oranges", 3, 9},
+        {"Reds", 3, 9},
+        {"Greys", 3, 9},
+        {"PuOr", 3, 11},
+        {"BrBG", 3, 11},
+        {"PRGn", 3, 11},
+        {"PiYG", 3, 11},
+        {"RdBu", 3, 11},
+        {"RdGy", 3, 11},
+        {"RdYlBu", 3, 11},
+        {"Spectral", 3, 11},
+        {"RdYlGn", 3, 11},
+        {"Accent", 3, 8},
+        {"Dark2", 3, 8},
+        {"Dark2Extended", 3, 12},
+        {"Dark2ReorderSplitYellowExtended", 3, 12},
+        {"Dark2ReorderSplitYellowExtendedSaturated", 3, 12},
+        {"Paired", 3, 12},
+        {"Pastel1", 3, 9},
+        {"Pastel2", 3, 8},
+        {"Set1", 3, 9},
+        {"Set2", 3, 8},
+        {"Set3", 3, 12}
+    };
+    return palettes;
+}
+
 #endif

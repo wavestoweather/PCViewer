@@ -36,7 +36,7 @@ namespace scatterplot_wb{
         size_t      large_vis_threshold{500000};
         mutable float uniform_radius{1.f};
 
-        bool operator==(const settings_t& o){
+        bool operator==(const settings_t& o) const{
             COMP_EQ_OTHER(o, plot_width);
             COMP_EQ_OTHER(o, sample_count);
             COMP_EQ_OTHER(o, plot_padding);

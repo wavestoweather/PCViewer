@@ -1,5 +1,6 @@
 #pragma once
 #include <ranges.hpp>
+#include <cmath>
 
 namespace util{
 template<typename T>

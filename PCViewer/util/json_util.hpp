@@ -6,10 +6,12 @@
 #include "../imgui_nodes/crude_json.h"
 
 #define JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, struct, field) json[#field] = struct.field
+#define JSON_ASSIGN_THIS_FIELD_TO_JSON(json, field) json[#field] = field
 #define JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, struct, field, type_json) json[#field] = static_cast<type_json>(struct.field)
 #define JSON_ASSIGN_STRUCT_FIELD_TO_JSON_VEC4(json, struct, field) json[#field][0] = static_cast<double>(struct.field.x); json[#field][1] = static_cast<double>(struct.field.y); json[#field][2] = static_cast<double>(struct.field.z); json[#field][3] = static_cast<double>(struct.field.w);
 #define JSON_ASSIGN_STRUCT_FIELD_TO_JSON_ENUM_NAME(json, struct, field, enum_names) json[#field] = std::string(enum_names[struct.field]);
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, struct, field) struct.field = json[#field].get<decltype(field)>()
+#define JSON_ASSIGN_JSON_FIELD_TO_THIS(json, field) field = json[#field].get<decltype(field)>()
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, struct, field, type_json) struct.field = static_cast<decltype(struct.field)>(json[#field].get<type_json>())
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_VEC4(json, struct, field) struct.field.x = json[#field][0].get<double>(); struct.field.y = json[#field][1].get<double>(); struct.field.z = json[#field][2].get<double>(); struct.field.w = json[#field][3].get<double>();
 #define JSON_ASSIGN_JSON_FIELD_TO_STRUCT_ENUM_NAME(json, struct, field, enum_names) struct.field = enum_names[json[#field].get<std::string>()];
