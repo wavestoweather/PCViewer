@@ -68,7 +68,7 @@ void main() {
     
     if(index_buffer_address != 0){
         IndexBuffer index_buffer = IndexBuffer(index_buffer_address);
-        vertex_index = int(index_buffer.i[vertex_index]);
+        data_index = int(index_buffer.i[data_index]);
     }
 
     uint in_between = (vertex_count_per_line - 1) / (attr_infos.attribute_count - 1);

@@ -5,7 +5,7 @@
 namespace workbenches{
 class drawlist_colors_workbench: public structures::workbench{
     struct session_state_t{
-        std::string         color_palette_name{"Paired"}; // is either the name of a color_brewer palette or "custom"
+        std::string         color_palette_name{"Set3"}; // is either the name of a color_brewer palette or "custom"
         int                 color_palette_color_count{12};
         std::vector<ImColor> colors{};
         int                 cur_color{};

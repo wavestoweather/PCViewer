@@ -80,17 +80,17 @@ void data_workbench::show()
                         _tl_convert_data.trim = {0, tl->data_size};
                         popup_open_tl_to_dltl = true;
                     }
-                    if(ImGui::Button("Add templatelist")){
-                        _popup_ds_id = ds_id;
-                        popup_open_add_tl = true;
-                    }
-                    ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 230));
-                    if(ImGui::Button("Delete")){
-                        _popup_ds_id = ds_id;
-                        popup_open_delete_ds = true;
-                    }
-                    ImGui::PopStyleColor();
                 }
+                if(ImGui::Button("Add templatelist")){
+                    _popup_ds_id = ds_id;
+                    popup_open_add_tl = true;
+                }
+                ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 230));
+                if(ImGui::Button("Delete")){
+                    _popup_ds_id = ds_id;
+                    popup_open_delete_ds = true;
+                }
+                ImGui::PopStyleColor();
                 ImGui::TreePop();
             }
         }
@@ -134,8 +134,14 @@ void data_workbench::show()
         ImGui::SameLine();
         ImGui::PushItemWidth(150);
         _uniform_alpha = 0;
-        for(const auto& [dl_id, dl]: globals::drawlists.read())
-            _uniform_alpha += dl.read().appearance_drawlist.read().color.w / double(globals::drawlists.read().size());
+        int alpha_count = 0;
+        for(const auto& [dl_id, dl]: globals::drawlists.read()){
+            if(std::regex_search(dl_id.begin(), dl_id.end(), table_regex)){
+                _uniform_alpha += dl.read().appearance_drawlist.read().color.w;
+                ++alpha_count;
+            }
+        }
+        if(alpha_count) _uniform_alpha /= alpha_count;
         if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, std::max(1e-20, _uniform_alpha * (180./200)), std::min(1., _uniform_alpha * (220./200)), "%.3g")){
             if(globals::selected_drawlists.size()){
                 for(const auto& dl: globals::selected_drawlists)
@@ -314,36 +320,183 @@ void data_workbench::show()
     ImGui::End();
 
     // popups -------------------------------------------------------
+    using uniform_split = structures::templatelist_split_data::uniform_value_split;
+    using value_split = structures::templatelist_split_data::value_split;
+    using quantile_split = structures::templatelist_split_data::quantile_split;
+    using automatic_split = structures::templatelist_split_data::automatic_split;
     if(popup_open_tl_to_dltl)
         ImGui::OpenPopup(popup_tl_to_dltl.data());
-    if(ImGui::BeginPopupModal(popup_tl_to_dltl.data())){
-        const auto& tl = *globals::datasets.read().at(_popup_ds_id).read().templatelist_index.at(_popup_tl_id);
+    if(ImGui::BeginPopupModal(popup_tl_to_dltl.data(), {}, ImGuiWindowFlags_AlwaysAutoResize)){
+        const auto& ds = globals::datasets.read().at(_popup_ds_id).read();
+        const auto& tl = *ds.templatelist_index.at(_popup_tl_id);
         if(ImGui::BeginTabBar("Destination")){
             if(ImGui::BeginTabItem("Drawlist")){
                 _tl_convert_data.dst = structures::templatelist_convert_data::destination::drawlist;
-                ImGui::Text("%s", (std::string("Creating a DRAWLIST list from ") + tl.name).c_str());
+                _tl_split_data.create_drawlists = true;
+                ImGui::Text("Creating a DRAWLIST list from %s", tl.name.c_str());
                 ImGui::EndTabItem();
             }
             if(ImGui::BeginTabItem("TemplateList")){
                 _tl_convert_data.dst = structures::templatelist_convert_data::destination::templatelist;
-                ImGui::Text("%s", (std::string("Creating a TEMPLATELIST from ") + tl.name).c_str());
+                _tl_split_data.create_drawlists = false;
+                ImGui::Text("Creating a TEMPLATELIST from %s", tl.name.c_str());
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
         }
-        ImGui::InputText("Output name", &_tl_convert_data.dst_name);
-        if(ImGui::CollapsingHeader("Subsample/Trim")){
-            ImGui::Checkbox("Random subsampling (If enabled subsampling rate is transformed into probaility)", &_tl_convert_data.random_subsampling);
-            if(ImGui::InputInt("Subsampling Rate", &_tl_convert_data.subsampling)) _tl_convert_data.subsampling = std::max(_tl_convert_data.subsampling, 1);
-            if(ImGui::InputScalarN("Trim indcies", ImGuiDataType_U64, _tl_convert_data.trim.data(), 2)){
-                _tl_convert_data.trim.min = std::clamp<size_t>(_tl_convert_data.trim.min, 0u, _tl_convert_data.trim.max - 1);
-                _tl_convert_data.trim.max = std::clamp<size_t>(_tl_convert_data.trim.max, _tl_convert_data.trim.min + 1, size_t(tl.data_size));
+        bool split{true};
+        _tl_split_data.attribute = std::min(_tl_split_data.attribute, int(ds.attributes.size()) - 1);
+        if(ImGui::BeginTabBar("Trim/Subsample/Split")){
+            if(ImGui::BeginTabItem("Subsample/Trim")){
+                split = false;
+                ImGui::Checkbox("Random subsampling (If enabled subsampling rate is transformed into probaility)", &_tl_convert_data.random_subsampling);
+                if(ImGui::InputInt("Subsampling Rate", &_tl_convert_data.subsampling)) _tl_convert_data.subsampling = std::max(_tl_convert_data.subsampling, 1);
+                if(ImGui::InputScalarN("Trim indcies", ImGuiDataType_U64, _tl_convert_data.trim.data(), 2)){
+                    _tl_convert_data.trim.min = std::clamp<size_t>(_tl_convert_data.trim.min, 0u, _tl_convert_data.trim.max - 1);
+                    _tl_convert_data.trim.max = std::clamp<size_t>(_tl_convert_data.trim.max, _tl_convert_data.trim.min + 1, size_t(tl.data_size));
+                }
+                ImGui::EndTabItem();
             }
+            if(ImGui::BeginTabItem("Uniform Value Split")){
+                if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
+                    for(int att: util::size_range(ds.attributes)){
+                        if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())) _tl_split_data.attribute = att;
+                    }
+                    ImGui::EndCombo();
+                }
+                if(!std::holds_alternative<uniform_split>(_tl_split_data.additional_info))
+                    _tl_split_data.additional_info = uniform_split{};
+                ImGui::InputInt("Amount of split groups", &std::get<uniform_split>(_tl_split_data.additional_info).split_count);
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem("Value Split")){
+                if(!std::holds_alternative<value_split>(_tl_split_data.additional_info))
+                    _tl_split_data.additional_info = value_split{{ds.attributes[_tl_split_data.attribute].bounds.read().min, ds.attributes[_tl_split_data.attribute].bounds.read().max}};
+                if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
+                    for(int att: util::size_range(ds.attributes)){
+                        if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())){
+                            _tl_split_data.attribute = att;
+                            std::get<value_split>(_tl_split_data.additional_info).values = {ds.attributes[_tl_split_data.attribute].bounds.read().min, ds.attributes[_tl_split_data.attribute].bounds.read().max};
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                auto& values = std::get<value_split>(_tl_split_data.additional_info).values;
+                int delete_item{-1}, add_item{-1};
+                ImGui::Text("Split values:");
+                for(int i: util::size_range(values)){
+                    float min = ds.attributes[_tl_split_data.attribute].bounds.read().min, max = ds.attributes[_tl_split_data.attribute].bounds.read().max, speed = .01f;
+                    if(i == 0) speed = 0.0000000001;
+                    else if(i == values.size() - 1) speed = 0.000000001;
+                    else {min = values[i - 1], max = values[i + 1]; speed = (max - min) / 500;}
+                    ImGui::DragFloat(("##quantile" + std::to_string(i)).c_str(), values.data() + i, speed, min, max);
+                    if(i != 0 && i != values.size()-1){
+                        ImGui::SameLine();
+                        if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) delete_item = i;
+                    }
+                    if(i < values.size() - 1){
+                        static float buttonHeight = 10;
+                        static float space = 5;
+                        float prevCursorPosY = ImGui::GetCursorPosY();
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() / 2.0f + space);
+                        if(ImGui::Button(("##addButton" + std::to_string(i)).c_str(), ImVec2(250,buttonHeight))){
+                            add_item = i;
+                        }
+                        ImGui::SetCursorPosY(prevCursorPosY + space);
+                    }
+                }
+                if(add_item >= 0) values.insert(values.begin() + add_item + 1, (values[add_item] + values[add_item + 1]) / 2.0f);
+                if(delete_item >= 0) values.erase(values.begin() + delete_item);
+
+                if(ImGui::Button("Unify value differences")){
+                    for(int i: util::i_range(1, values.size() - 1))
+                        values[i] = i * (values.back() - values.front()) / (values.size() - 1);
+                }
+
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem("Quantile Split")){
+                if(!std::holds_alternative<quantile_split>(_tl_split_data.additional_info))
+                    _tl_split_data.additional_info = quantile_split{{.0f, 1.f}};
+                if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
+                    for(int att: util::size_range(ds.attributes)){
+                        if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())){
+                            _tl_split_data.attribute = att;
+                            std::get<quantile_split>(_tl_split_data.additional_info).quantiles = {.0f,1.f};
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::Text("Split quantlies:");
+                auto& quantiles = std::get<quantile_split>(_tl_split_data.additional_info).quantiles;
+                int delete_item{-1}, add_item{-1};
+                for(int i: util::size_range(quantiles)){
+                    float min = 0, max = 1, speed = .01f;
+                    if(i == 0) speed = 0.0000000001;
+                    else if(i == quantiles.size() - 1) speed = 0.000000001;
+                    else {min = quantiles[i - 1], max = quantiles[i + 1];}
+                    ImGui::DragFloat(("##quantile" + std::to_string(i)).c_str(), quantiles.data() + i, speed, min, max);
+                    if(i != 0 && i != quantiles.size()-1){
+                        ImGui::SameLine();
+                        if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) delete_item = i;
+                    }
+                    if(i < quantiles.size() - 1){
+                        static float buttonHeight = 10;
+                        static float space = 5;
+                        float prevCursorPosY = ImGui::GetCursorPosY();
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() / 2.0f + space);
+                        if(ImGui::Button(("##addButton" + std::to_string(i)).c_str(), ImVec2(250,buttonHeight))){
+                            add_item = i;
+                        }
+                        ImGui::SetCursorPosY(prevCursorPosY + space);
+                    }
+                }
+                if(add_item >= 0) quantiles.insert(quantiles.begin() + add_item + 1, (quantiles[add_item] + quantiles[add_item + 1]) / 2.0f);
+                if(delete_item >= 0) quantiles.erase(quantiles.begin() + delete_item);
+
+                if(ImGui::Button("Unify quantiles")){
+                    for(int i: util::i_range(1, quantiles.size() - 1))
+                        quantiles[i] = i / double(quantiles.size() - 1);
+                }
+
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem("Automatic Split")){
+                if(!std::holds_alternative<automatic_split>(_tl_split_data.additional_info))
+                    _tl_split_data.additional_info = automatic_split{};
+                ImGui::Text("Only select variables with discrete values.\n If too much values wrt data size are found, no split will be performed.");
+                if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
+                    for(int att: util::size_range(ds.attributes)){
+                        if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())){
+                            _tl_split_data.attribute = att;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
+        }
+        
+        ImGui::InputText("Output name", split ? &_tl_split_data.dst_name_format: &_tl_convert_data.dst_name);
+        if(ImGui::IsItemHovered()){
+            ImGui::BeginTooltip();
+            ImGui::Text("for split enter a format string to distinguish resulting drawlists, eg. test_%%d");
+            ImGui::EndTooltip();
         }
 
         if(ImGui::Button("Create") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
             ImGui::CloseCurrentPopup();
-            util::dataset::convert_templatelist(_tl_convert_data);
+            _tl_convert_data.ds_id = ds.id;
+            _tl_convert_data.tl_id = tl.name;
+            _tl_split_data.ds_id = ds.id;
+            _tl_split_data.tl_id = tl.name;
+            if(split)
+                util::dataset::split_templatelist(_tl_split_data);
+            else
+                util::dataset::convert_templatelist(_tl_convert_data);
         }
         ImGui::SameLine();
         if(ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))

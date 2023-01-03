@@ -14,6 +14,7 @@ void drawlist_colors_workbench::show(){
     ImGui::Begin(id.data(), &active, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
 
     for(auto&& [c, i]: util::indexed_iter(_session_state.colors)){
+        ImGui::PushID(i);
         if(i != 0)
             ImGui::SameLine();
         ImGui::ColorEdit4("##dl_cols", &c.Value.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_DisplayRGB);
@@ -22,6 +23,7 @@ void drawlist_colors_workbench::show(){
             ImVec2 max = ImGui::GetItemRectMax();
             ImGui::GetWindowDrawList()->AddRect(min, max, IM_COL32(80, 80, 255, 255), 0, 0, 2);
         }
+        ImGui::PopID();
     }
     const auto& palette_infos = brew_pallete_infos();
     if(ImGui::BeginCombo("Select palette", _session_state.color_palette_name.c_str())){

@@ -30,6 +30,7 @@
 #include <imgui_util.hpp>
 #include <global_settings.hpp>
 #include <drawlist_colors_workbench.hpp>
+#include <radix.hpp>
 #include "../cimg/CImg.h"
 #include "../vulkan/vk_format_util.hpp"
 
@@ -640,8 +641,8 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         structures::tracked_drawlist drawlist{};
         drawlist().id = convert_data.dst_name;
         drawlist().name = convert_data.dst_name;
-        drawlist().parent_dataset = convert_data.ds_id;
-        drawlist().parent_templatelist = convert_data.tl_id;
+        drawlist().parent_dataset = ds.read().id;
+        drawlist().parent_templatelist = ds.read().templatelist_index.at(convert_data.tl_id)->name;
         if(globals::settings.drawlist_creation_assign_color){
             drawlist().appearance_drawlist().color = reinterpret_cast<workbenches::drawlist_colors_workbench*>(util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::drawlist_color_wb_id;}).get())->get_next_imcolor().Value;
             drawlist().appearance_drawlist().color.w = 1;
@@ -688,16 +689,21 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         templatelist.flags.identity_indices = convert_data.dst_name == structures::templatelist_name_all_indices;
         templatelist.min_maxs.resize(ds.read().attributes.size());
         if(!templatelist.flags.identity_indices){
-                templatelist.indices.resize((convert_data.trim.max - convert_data.trim.min + convert_data.subsampling - 1) / convert_data.subsampling);
-            if(convert_data.random_subsampling){
-                std::default_random_engine generator;
-                std::uniform_int_distribution<uint32_t> distribution(convert_data.trim.min, convert_data.trim.max);
-                for(uint32_t& u: templatelist.indices)
-                    u = distribution(generator);
+            if(convert_data.indices){
+                templatelist.indices = *convert_data.indices;
             }
             else{
-                for(uint32_t i: util::i_range(convert_data.trim.min, convert_data.trim.max, convert_data.subsampling))
-                    templatelist.indices[(i - convert_data.trim.min) / convert_data.subsampling] = i;
+                templatelist.indices.resize((convert_data.trim.max - convert_data.trim.min + convert_data.subsampling - 1) / convert_data.subsampling);
+                if(convert_data.random_subsampling){
+                    std::default_random_engine generator;
+                    std::uniform_int_distribution<uint32_t> distribution(convert_data.trim.min, convert_data.trim.max);
+                    for(uint32_t& u: templatelist.indices)
+                        u = distribution(generator);
+                }
+                else{
+                    for(uint32_t i: util::i_range(convert_data.trim.min, convert_data.trim.max, convert_data.subsampling))
+                        templatelist.indices[(i - convert_data.trim.min) / convert_data.subsampling] = i;
+                }
             }
             auto indices_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, templatelist.indices.size() * sizeof(templatelist.indices[0]));
             auto indices_alloc_info = util::vma::initializers::allocationCreateInfo();
@@ -734,6 +740,107 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
     }
     default:
         throw std::runtime_error("convert_templatelist() Destination unkown (should be either structures::dataset_convert_data::destination::drawlist or structures::dataset_convert_data::destination::templatelist)");
+    }
+}
+
+void split_templatelist(const structures::templatelist_split_data& split_data){
+    // creating the indexlists for the splits
+    const auto& ds = globals::datasets.read().at(split_data.ds_id).read();
+    const auto& tl = *ds.templatelist_index.at(split_data.tl_id);
+    auto index_lists = std::visit([&split_data, &ds, &tl](auto&& arg){using namespace structures ;using T = std::decay_t<decltype(arg)>;
+        std::vector<std::vector<uint32_t>> index_lists;
+        const auto& [attribute_min, attribute_max] = tl.min_maxs[split_data.attribute];
+        float diff = attribute_max - attribute_min;
+        if constexpr(std::is_same_v<T, templatelist_split_data::uniform_value_split>){
+            index_lists.resize(arg.split_count);
+            for(uint32_t i: util::i_range(tl.data_size)){
+                if(!tl.flags.identity_indices)
+                    i = tl.indices[i];
+                float v = std::visit([&i, &split_data](auto&& data){return float(data(i, split_data.attribute));}, ds.cpu_data.read());
+                int index = int(((v - attribute_min) / diff) * (arg.split_count - 1) + .5f);
+                index_lists[index].push_back(i);
+            }
+        }
+        else if constexpr(std::is_same_v<T, templatelist_split_data::value_split>){
+            index_lists.resize(arg.values.size());
+            for(uint32_t i: util::i_range(tl.data_size)){
+                if(!tl.flags.identity_indices)
+                    i = tl.indices[i];
+                float v = std::visit([&i, &split_data](auto&& data){return float(data(i, split_data.attribute));}, ds.cpu_data.read());
+                int index = std::upper_bound(arg.values.begin(), arg.values.end(), v) - arg.values.begin();
+                index = std::clamp(index, 0, int(index_lists.size()) - 1);
+                index_lists[index].push_back(i);
+            }
+        } 
+        else if constexpr(std::is_same_v<T, templatelist_split_data::quantile_split>){
+            auto ordered = tl.indices;
+            if(tl.flags.identity_indices){
+                ordered.resize(tl.data_size);
+                std::iota(ordered.begin(), ordered.end(), 0);
+            }
+            radix::sort_indirect(ordered, [&](uint32_t i){return std::visit([&](auto&& data){return float(data(i, split_data.attribute));}, ds.cpu_data.read());});
+            auto quantiles = arg.quantiles;
+            quantiles.front() = 0; quantiles.back() = 1;    // assure that we span the whole domain
+            index_lists.resize(quantiles.size() - 1);
+            for(int i: util::size_range(index_lists))
+                index_lists[i] = std::vector<uint32_t>(ordered.begin() + ordered.size() * quantiles[i], ordered.begin() + ordered.size() * quantiles[i + 1]);
+        }
+        else if constexpr(std::is_same_v<T, templatelist_split_data::automatic_split>){
+            robin_hood::unordered_map<float, std::vector<uint32_t>> map;
+            bool split{true};
+            for(uint32_t i: util::i_range(tl.data_size)){
+                if(!tl.flags.identity_indices)
+                    i = tl.indices[i];
+                float v = std::visit([&i, &split_data](auto&& data){return float(data(i, split_data.attribute));}, ds.cpu_data.read());
+                map[v].push_back(i);
+                if(map.size() * 10 > tl.data_size){
+                    split = false;
+                    break;
+                }
+            }
+            if(split){
+                std::set<float> vals; for(const auto& [v, indices]: map) vals.insert(v);
+                for(float v: vals)
+                    index_lists.emplace_back(std::move(map[v]));
+            }
+            else if (::logger.logging_level >= logging::level::l_1){
+                ::logger << logging::error_prefix << " split_templatelist::automatic_split() Too many values for the amount of datapoints. No split was done" << logging::endl;
+            }
+        }
+
+        // pruning unused index lists to avoid empty templatelists
+        for(int i: util::rev_size_range(index_lists))
+            if(index_lists[i].empty())
+                index_lists.erase(index_lists.begin() + i);
+        return index_lists;
+    }, split_data.additional_info);
+
+    if(index_lists.empty())
+        return;
+
+    // creating a templatelist with every index_list
+    std::vector<std::string> tl_to_dl;
+    for(const auto& [indices, i]: util::indexed_iter(index_lists)){
+        structures::templatelist_convert_data convert_data{};
+        convert_data.ds_id = split_data.ds_id;
+        convert_data.tl_id = split_data.tl_id;
+        char formatted_string[200];
+        snprintf(formatted_string, sizeof(formatted_string), split_data.dst_name_format.c_str(), int(i));
+        convert_data.dst_name = formatted_string;
+        convert_data.dst = structures::templatelist_convert_data::destination::templatelist;
+        convert_data.indices = &indices;
+        convert_templatelist(convert_data);
+        if(split_data.create_drawlists)
+            tl_to_dl.emplace_back(convert_data.dst_name);
+    }
+    for(const auto& tl: util::rev_iter(tl_to_dl)){
+        structures::templatelist_convert_data convert_data{};
+        convert_data.ds_id = split_data.ds_id;
+        convert_data.tl_id = tl;
+        convert_data.dst_name = tl;
+        convert_data.trim = {0, std::numeric_limits<size_t>::max()};
+        convert_data.dst = structures::templatelist_convert_data::destination::drawlist;
+        convert_templatelist(convert_data);
     }
 }
 
@@ -1108,12 +1215,14 @@ void check_dataset_update(){
         }
         globals::datasets.changed = false;
         // setting the changed flags on drawlists created from this dataset
-        for(auto dl: changed_datasets){
-            if(globals::drawlists.read().at(dl).read().histogram_registry.const_access()->name_to_registry_key.empty())
+        for(const auto& [dl_id, dl]: globals::drawlists.read()){
+            if(!util::memory_view(changed_datasets).contains(dl.read().parent_dataset))
                 continue;
-            if(!globals::drawlists()[dl]().local_brushes.read().empty())    // if local brushes exist notify that these should be reapplied
-                globals::drawlists()[dl]().local_brushes();
-            globals::drawlists()[dl]().histogram_registry.access()->request_change_all();
+            if(dl.read().histogram_registry.const_access()->name_to_registry_key.empty())
+                continue;
+            if(!globals::drawlists()[dl_id]().local_brushes.read().empty())    // if local brushes exist notify that these should be reapplied
+                globals::drawlists()[dl_id]().local_brushes();
+            globals::drawlists()[dl_id]().histogram_registry.access()->request_change_all();
         }
     }
 }

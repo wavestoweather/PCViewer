@@ -52,6 +52,7 @@ globals::dataset_t open_dataset(std::string_view filename, memory_view<structure
 
 
 void convert_templatelist(const structures::templatelist_convert_data& convert_data);
+void split_templatelist(const structures::templatelist_split_data& split_data);
 
 inline void fill_query_attributes(){
     // the attribute query is done for the first dataset to open

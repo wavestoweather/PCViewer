@@ -909,7 +909,7 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
             if(first_dl && i >= new_attributes.size())
                 new_attributes.push_back(dl.drawlist_read().dataset_read().attributes[i].id);
 
-            if(!first_dl && (i < new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
+            if(!first_dl && (i >= new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
                 intersect_index = i;
                 break;
             }

@@ -14,6 +14,7 @@ class data_workbench: public structures::workbench, public structures::drawlist_
     float                           _uniform_alpha{.01f};
     
     structures::templatelist_convert_data _tl_convert_data{};
+    structures::templatelist_split_data   _tl_split_data{};
 
 public:
     data_workbench(std::string_view id): workbench(id) {};
