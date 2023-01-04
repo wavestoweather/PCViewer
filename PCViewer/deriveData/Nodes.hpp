@@ -341,15 +341,6 @@ public:
     };
 };
 
-class Derivation: public Node, public VariableInput, public Creatable<Derivation>{
-public:
-    Derivation(): Node(createFilledVec<FloatType, Type>(0), {}, createFilledVec<FloatType, Type>(1), {""}, "Derivation"){};
-
-    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
-        // TODO: implement
-    };
-};
-
 class Sum: public Node, public VariableInput, public Creatable<Sum>{
 public:
     Sum(): 
@@ -564,10 +555,8 @@ public:
     Cast_to_Index(): Unary("", "cast_to<index[]>") {}
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{     
-        if(input[0].cols[0] == output[0].cols[0])
-            return;
         for(size_t i: util::size_range(input[0].cols[0]))
-            output[0].cols[0][i] = input[0].cols[0][i];
+            output[0].cols[0][i] = std::floor(input[0].cols[0][i]);
     }
 };
 
@@ -1011,6 +1000,64 @@ public:
         applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return a + double(b) * b;}, average_f);
         for(size_t i: util::size_range(output[0].cols[0]))
             output[0].cols[0][i] = std::sqrt(output[0].cols[0][i] - expect[i] * expect[i]);
+    }
+};
+
+
+class Derivation: public Binary<FloatType>, public Creatable<Derivation>{
+    enum class difference_t: uint32_t{
+        forward,
+        backward,
+        central,
+        COUNT
+    };
+    const structures::enum_names<difference_t> difference_names{
+        "forward",
+        "backward",
+        "central"
+    };
+public:
+    Derivation(): Binary("Derivation", "") 
+    {
+        inputNames[0] = "h";
+        input_elements[middle_input_id]["Dimension"] = dimension_selector;
+        util::json::add_enum(input_elements[middle_input_id], "Difference Method", difference_names, difference_t::central);
+        inplace_possible = false;
+    }
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        // at index 0 the width has to be entered
+        std::vector<size_t> dimension_indices, dimension_indices_back;
+        std::vector<size_t> dimension_indices_c;
+        uint32_t dim{(uint32_t)input_elements[middle_input_id]["Dimension"]["selected_dim"].get<double>()};
+        switch(util::json::get_enum_val<difference_t>(input_elements[middle_input_id]["Dimension"])){
+        case difference_t::forward:
+            for(size_t i: util::size_range(input[1].cols[0])){
+                dimension_indices_c = dimension_indices = input[1].columnIndexToDimensionIndices(i);
+                if(dimension_indices[dim] < input[1].dimensionSizes[dim] - 1);
+                    dimension_indices[dim]++;
+                output[0].cols[0][i] = (input[1].atDimensionIndices(dimension_indices) - input[1].cols[0][i]) / input[0].atDimensionIndices(dimension_indices_c);
+            }
+            break;
+        case difference_t::backward:
+            for(size_t i: util::size_range(input[1].cols[0])){
+                dimension_indices_c = dimension_indices = input[1].columnIndexToDimensionIndices(i);
+                if(dimension_indices[dim] > 0);
+                    dimension_indices[dim]--;
+                output[0].cols[0][i] = (input[1].cols[0][i] - input[1].atDimensionIndices(dimension_indices)) / input[0].atDimensionIndices(dimension_indices_c);
+            }
+            break;
+        case difference_t::central:
+            for(size_t i: util::size_range(input[1].cols[0])){
+                dimension_indices_c = dimension_indices_back = dimension_indices = input[1].columnIndexToDimensionIndices(i);
+                if(dimension_indices[dim] < input[1].dimensionSizes[dim] - 1);
+                    dimension_indices[dim]++;
+                if(dimension_indices_back[dim] > 0);
+                    dimension_indices_back[dim]--;
+                output[0].cols[0][i] = (input[1].atDimensionIndices(dimension_indices) - input[1].atDimensionIndices(dimension_indices_back)) / (2 * input[0].atDimensionIndices(dimension_indices_c));
+            }
+            break;
+        }
     }
 };
 

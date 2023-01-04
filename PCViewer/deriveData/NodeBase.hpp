@@ -104,6 +104,7 @@ class Node{
 public:
     const std::string middle_input_id = "middle_inputs";
     const std::string input_input_id = "input_inputs";  // this should always be an array
+    const crude_json::value dimension_selector = crude_json::object{{"type", "dim_sel"}, {"selected_dim", .0}};
 
     std::vector<std::unique_ptr<Type>> inputTypes;
     std::vector<std::string> inputNames;

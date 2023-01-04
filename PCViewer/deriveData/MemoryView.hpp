@@ -162,6 +162,10 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
         return dimensionIndex(dimensionIndices);
     }
 
+    float atDimensionIndices(const std::vector<uint64_t>& indices, int col = 0) const{
+        return cols[col][dimensionIndex(indices)];
+    }
+
     operator bool() const{ return cols.size();};
 private:
     uint64_t dimensionIndex(const std::vector<uint64_t>& dimensionIndices) const{
