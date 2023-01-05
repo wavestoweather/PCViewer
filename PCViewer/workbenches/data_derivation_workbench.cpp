@@ -94,10 +94,13 @@ void data_derivation_workbench::show(){
                 if(variable_input->namedInput){
                     ImGui::PushItemWidth(100);
                     if(i > variable_input->minNodes){
+                        bool empty = node->inputNames[i] == "##";
+                        if(empty) node->inputNames[i] = "";
                         if(ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i])){
                             if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get()))
                                 globals::datasets()[ds_output->datasetId]().attributes[i].display_name = node->inputNames[i]; 
                         }
+                        if(node->inputNames[i].empty()) node->inputNames[i] = "##";
                     }
                     else
                         ImGui::TextUnformatted(node->inputNames[i].c_str());
@@ -185,6 +188,8 @@ void data_derivation_workbench::show(){
                 for(const auto& [ds_id, ds]: globals::datasets.read()){
                     if(ImGui::MenuItem(ds_id.data())){
                         dataset_input->datasetId = ds_id;
+                        _cur_dimensions.clear();
+                        for(const auto& d: std::visit([](auto&& data){return data.dimension_names;}, ds.read().cpu_data.read())) _cur_dimensions.emplace_back(d);
                         std::string main_string(main_execution_graph_id);
                         while(node_pins.outputIds.size())
                             _execution_graphs[main_string]->removePin(node_pins.outputIds[0], false);
@@ -220,7 +225,7 @@ void data_derivation_workbench::show(){
             ImGui::PopItemWidth();
         }
         ImGui::Spring(1, 0);
-        node->imguiMiddleElements();
+        node->imguiMiddleElements(std::vector<std::string_view>(_cur_dimensions.begin(), _cur_dimensions.end()));
         ImGui::Spring(1, 0);
 
         // outputs
@@ -530,6 +535,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         auto& ds_data = std::get<structures::data<float>>(ds.cpu_data.ref_no_track());
         for(int i: irange(outputData)){
             deriveData::column_memory_view<float> columnView;
+            columnView.dimensionNames = std::vector<std::string_view>(ds_data.dimension_names.begin(), ds_data.dimension_names.end());
             columnView.dimensionSizes = deriveData::memory_view<uint32_t>(ds_data.dimension_sizes);
             columnView.columnDimensionIndices = deriveData::memory_view<uint32_t>(ds_data.column_dimensions[i]);
             columnView.cols = {deriveData::memory_view<float>(ds_data.columns[i])};

@@ -42,6 +42,7 @@ private:
     int64_t                         _context_pin_id{};
     int64_t                         _context_link_id{};
     ImVec2                          _popup_pos{};
+    std::vector<std::string>        _cur_dimensions{};
 
     bool                            _create_new_node{false};
 

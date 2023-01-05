@@ -104,7 +104,7 @@ class Node{
 public:
     const std::string middle_input_id = "middle_inputs";
     const std::string input_input_id = "input_inputs";  // this should always be an array
-    const crude_json::value dimension_selector = crude_json::object{{"type", "dim_sel"}, {"selected_dim", .0}};
+    const crude_json::value dimension_selector = crude_json::object{{"type", "dim_sel"}, {"selected_dim", "Select"}};
 
     std::vector<std::unique_ptr<Type>> inputTypes;
     std::vector<std::string> inputNames;
@@ -135,7 +135,7 @@ public:
 
     virtual int outputChannels() const { uint32_t count{}; for(const auto& t: outputTypes) count += t->data().cols.size();return count;};
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;
-    virtual void imguiMiddleElements() { 
+    virtual void imguiMiddleElements(const std::vector<std::string_view> attributes = {}) { 
         if(middleText.size()) ImGui::TextUnformatted(middleText.c_str());
         ImGui::PushItemWidth(70);
         if(input_elements.contains(middle_input_id)){
@@ -146,6 +146,15 @@ public:
                     ImGui::InputDouble(name.c_str(), &val.get<double>());
                 if(val.is_boolean())
                     ImGui::Checkbox(name.c_str(), &val.get<bool>());
+                if(util::json::is_dimension_selection(val)){
+                    std::string dim = val["selected_dim"].get<std::string>();
+                    if(ax::NodeEditor::BeginNodeCombo("Dimension", dim.c_str())){
+                        for(auto a: attributes)
+                            if(ImGui::MenuItem(a.data()))
+                                val["selected_dim"] = std::string(a);
+                        ax::NodeEditor::EndNodeCombo();
+                    }
+                }
                 if(util::json::is_enumeration(val)){
                     int ind = int(val["chosen"].get<double>());
                     if(ax::NodeEditor::BeginNodeCombo(name.c_str(), val["choices"][ind].get<std::string>().c_str())){

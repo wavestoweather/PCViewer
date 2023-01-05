@@ -1020,6 +1020,7 @@ public:
     Derivation(): Binary("Derivation", "") 
     {
         inputNames[0] = "h";
+        inputTypes[0]->data()(0,0) = 1.f;
         input_elements[middle_input_id]["Dimension"] = dimension_selector;
         util::json::add_enum(input_elements[middle_input_id], "Difference Method", difference_names, difference_t::central);
         inplace_possible = false;
@@ -1029,12 +1030,16 @@ public:
         // at index 0 the width has to be entered
         std::vector<size_t> dimension_indices, dimension_indices_back;
         std::vector<size_t> dimension_indices_c;
-        uint32_t dim{(uint32_t)input_elements[middle_input_id]["Dimension"]["selected_dim"].get<double>()};
-        switch(util::json::get_enum_val<difference_t>(input_elements[middle_input_id]["Dimension"])){
+        std::string dimension = input_elements[middle_input_id]["Dimension"]["selected_dim"].get<std::string>();
+        auto dim_ptr = std::find(input[1].dimensionNames.begin(), input[1].dimensionNames.end(), dimension);
+        if(dim_ptr == input[1].dimensionNames.end())    
+            throw std::runtime_error{"Derivation::applyOperationCpu() Dimension " + dimension + " not available with current data input. Reselect dimension"};
+        uint32_t dim{uint32_t(dim_ptr - input[1].dimensionNames.begin())};
+        switch(util::json::get_enum_val<difference_t>(input_elements[middle_input_id]["Difference Method"])){
         case difference_t::forward:
             for(size_t i: util::size_range(input[1].cols[0])){
                 dimension_indices_c = dimension_indices = input[1].columnIndexToDimensionIndices(i);
-                if(dimension_indices[dim] < input[1].dimensionSizes[dim] - 1);
+                if(dimension_indices[dim] < input[1].dimensionSizes[dim] - 1)
                     dimension_indices[dim]++;
                 output[0].cols[0][i] = (input[1].atDimensionIndices(dimension_indices) - input[1].cols[0][i]) / input[0].atDimensionIndices(dimension_indices_c);
             }
@@ -1042,7 +1047,7 @@ public:
         case difference_t::backward:
             for(size_t i: util::size_range(input[1].cols[0])){
                 dimension_indices_c = dimension_indices = input[1].columnIndexToDimensionIndices(i);
-                if(dimension_indices[dim] > 0);
+                if(dimension_indices[dim] > 0)
                     dimension_indices[dim]--;
                 output[0].cols[0][i] = (input[1].cols[0][i] - input[1].atDimensionIndices(dimension_indices)) / input[0].atDimensionIndices(dimension_indices_c);
             }
@@ -1050,9 +1055,9 @@ public:
         case difference_t::central:
             for(size_t i: util::size_range(input[1].cols[0])){
                 dimension_indices_c = dimension_indices_back = dimension_indices = input[1].columnIndexToDimensionIndices(i);
-                if(dimension_indices[dim] < input[1].dimensionSizes[dim] - 1);
+                if(dimension_indices[dim] < input[1].dimensionSizes[dim] - 1)
                     dimension_indices[dim]++;
-                if(dimension_indices_back[dim] > 0);
+                if(dimension_indices_back[dim] > 0)
                     dimension_indices_back[dim]--;
                 output[0].cols[0][i] = (input[1].atDimensionIndices(dimension_indices) - input[1].atDimensionIndices(dimension_indices_back)) / (2 * input[0].atDimensionIndices(dimension_indices_c));
             }

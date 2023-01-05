@@ -38,6 +38,10 @@ inline void save_json(std::string_view filename, const crude_json::value& json, 
     file << json.dump(indent);
 }
 
+inline bool is_dimension_selection(const crude_json::value& val){
+    return val.is_object() && val.contains("type") && val["type"].is_string() && val["type"].get<std::string>() == "dim_sel" && val.contains("selected_dim") && val["selected_dim"].is_string();
+}
+
 inline bool is_enumeration(const crude_json::value& val){
     return val.is_object() && val.contains("type") && val["type"].is_string() && val["type"].get<std::string>() == "enumeration" && val.contains("choices") && val["choices"].is_array() && val.contains("chosen") && val["chosen"].is_number();
 }
