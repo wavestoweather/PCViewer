@@ -319,43 +319,49 @@ void parallel_coordinates_workbench::show(){
     ImGui::Image(plot_data.read().image_descriptor, pic_size);
 
     if(setting.read().enable_axis_lines){
+        auto col = ImGui::ColorConvertFloat4ToU32(setting.read().plot_background);
         float y1 = pic_pos.y;
         float y2 = y1 + pic_size.y - 1;
         ImVec4 inv_color{(1 - setting.read().plot_background.x), (1 - setting.read().plot_background.y), (1 - setting.read().plot_background.z), 1.f};
         auto line_col = IM_COL32(inv_color.x * 255, inv_color.y * 255, inv_color.z * 255, 255);
         for(int i: util::i_range(labels_count)){
             float x = pic_pos.x + (pic_size.x - 1) * i / (labels_count - 1);
-            ImGui::GetWindowDrawList()->AddLine({x, y1}, {x, y2}, line_col);
+            ImGui::GetWindowDrawList()->AddLine({x - 1, y1}, {x - 1, y2}, col);
+            ImGui::GetWindowDrawList()->AddLine({x, y1    }, {x, y2    }, line_col);
+            ImGui::GetWindowDrawList()->AddLine({x + 1, y1}, {x + 1, y2}, col);
         }
-        int att_pos = 0;
-        for(const auto& att_ref: attributes_order_info.read()){
-            if(!att_ref.active)
-                continue;
+        if(setting.read().axis_tick_label){
+            ImGui::PushFontShadow(col);
+            int att_pos = 0;
+            for(const auto& att_ref: attributes_order_info.read()){
+                if(!att_ref.active)
+                    continue;
 
-            float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
-            const auto& attribute = attributes.read()[att_ref.attribut_index];
-            float min_tick = attribute.bounds.read().min;
-            float max_tick = attribute.bounds.read().max;
-            double diff = max_tick - min_tick;
-            double cell = diff / setting.read().axis_tick_count;
-            double base = std::pow(10., std::floor(std::log10(cell)));
-            double unit = base, U;
-            constexpr double h = .5, h5 = .5 + 1.5 * h;
-            if((U = 2 * base) - cell < h * (cell - unit)) { 
-                unit = U;
-                if((U = 5 * base) - cell < h5 * (cell - unit)){
+                float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
+                const auto& attribute = attributes.read()[att_ref.attribut_index];
+                float min_tick = attribute.bounds.read().min;
+                float max_tick = attribute.bounds.read().max;
+                double diff = max_tick - min_tick;
+                double cell = diff / setting.read().axis_tick_count;
+                double base = std::pow(10., std::floor(std::log10(cell)));
+                double unit = base, U;
+                constexpr double h = .5, h5 = .5 + 1.5 * h;
+                if((U = 2 * base) - cell < h * (cell - unit)) { 
                     unit = U;
-                    if((U = 10 * base) - cell < h * (cell - unit))
+                    if((U = 5 * base) - cell < h5 * (cell - unit)){
                         unit = U;
-            }}
-            constexpr double rounding_eps = 1e-10;
-            double ns = std::floor(min_tick / unit + rounding_eps) * unit; while(ns < min_tick) ns += unit;
-            double nu = std::ceil(max_tick / unit - rounding_eps) * unit; while(nu > max_tick) nu -= unit;
-            const auto cursor_pos = ImGui::GetCursorScreenPos();
-            for(double tick_val = ns; tick_val <= nu; tick_val += unit){
-                float y = (tick_val - attribute.bounds.read().max) / (attribute.bounds.read().min - attribute.bounds.read().max) * pic_size.y + pic_pos.y;
-                ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y}, {x + tick_width / 2, y}, line_col);
-                if(setting.read().axis_tick_label){
+                        if((U = 10 * base) - cell < h * (cell - unit))
+                            unit = U;
+                }}
+                constexpr double rounding_eps = 1e-10;
+                double ns = std::floor(min_tick / unit + rounding_eps) * unit; while(ns < min_tick) ns += unit;
+                double nu = std::ceil(max_tick / unit - rounding_eps) * unit; while(nu > max_tick) nu -= unit;
+                const auto cursor_pos = ImGui::GetCursorScreenPos();
+                for(double tick_val = ns; tick_val <= nu; tick_val += unit){
+                    float y = (tick_val - attribute.bounds.read().max) / (attribute.bounds.read().min - attribute.bounds.read().max) * pic_size.y + pic_pos.y;
+                    ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y - 1}, {x + tick_width / 2, y - 1}, col);
+                    ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y    }, {x + tick_width / 2, y    }, line_col);
+                    ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y + 1}, {x + tick_width / 2, y + 1}, col);
                     if(x > pic_pos.x + (1. - (1. / labels_count)) * pic_size.x)
                         ImGui::SetCursorScreenPos({x - ImGui::GetFontSize() * 3, y - .5f * ImGui::GetTextLineHeight()});
                     else
@@ -363,10 +369,11 @@ void parallel_coordinates_workbench::show(){
                     
                     ImGui::TextColored(inv_color, setting.read().axis_tick_fmt.c_str(), tick_val);
                 }
+                ImGui::SetCursorScreenPos(cursor_pos);
+                ++att_pos;
             }
-            ImGui::SetCursorScreenPos(cursor_pos);
-            ++att_pos;
-        }  
+            ImGui::PopFontShadow();
+        }
     }
 
     // attribute min values
@@ -581,24 +588,16 @@ void parallel_coordinates_workbench::show(){
                     globals::priority_center_vealue = util::unnormalize_val_for_range(util::normalize_val_for_range(ImGui::GetMousePos().y, b.y, pic_pos.y), bounds.min, bounds.max);
                     globals::priority_center_distance = std::max(globals::priority_center_vealue - bounds.min, bounds.max - globals::priority_center_vealue);
                     logger << logging::info_prefix << " priority attribute: " << attributes.read()[attr_ref.attribut_index].display_name << ", priority center: " << globals::priority_center_vealue << ", priority distance " << globals::priority_center_distance << logging::endl;
-                    if(_select_priority_center_all){
-                        for(auto& dl: drawlist_infos.ref_no_track()){
-                            dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
-                            dl.drawlist_write().delayed_ops.priority_sorting_done = false;
-                            dl.drawlist_write().delayed_ops.delayed_ops_done = false;
-                            dl.priority_render = true;
-                        }
-                    }
-                    if(_select_priority_center_single){
-                        for(auto& dl: drawlist_infos.ref_no_track()){
-                            if(!util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id) && !globals::selected_drawlists.empty())
-                                continue;
-                            dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
-                            dl.drawlist_write().delayed_ops.priority_sorting_done = false;
-                            dl.drawlist_write().delayed_ops.delayed_ops_done = false;
-                            dl.priority_render = true;
+                    for(auto& dl: drawlist_infos.ref_no_track()){
+                        if(_select_priority_center_single && !util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id) && !globals::selected_drawlists.empty())
+                            continue;
+                        dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
+                        dl.drawlist_write().delayed_ops.priority_sorting_done = false;
+                        dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+                        dl.appearance->write().color.w = .9;
+                        dl.priority_render = true;
+                        if(_select_priority_center_single)
                             break;
-                        }
                     }
                     _select_priority_center_all = _select_priority_center_single = false;
                     _update_registered_histograms(true);

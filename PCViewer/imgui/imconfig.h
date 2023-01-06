@@ -123,3 +123,19 @@ namespace ImGui
     void MyFunction(const char* name, const MyMatrix44& v);
 }
 */
+
+namespace ImGui
+{
+    inline int custom_UseFontShadow{};
+    inline unsigned int custom_FontShadowColor{};
+
+    inline static void PushFontShadow(unsigned int col){
+        custom_UseFontShadow++;
+        custom_FontShadowColor = col;
+    }
+
+    inline static void PopFontShadow(void)
+    {
+        custom_UseFontShadow--;
+    }
+}
