@@ -18,8 +18,6 @@ struct workbench{
     const std::string   id;
 
     workbench(std::string_view id): id(id) {};
-    // is called when an update to global drawlists or global datasets occured (This includes drawlist and dataset deletions)
-    virtual void notify_drawlist_dataset_update() {};
     // method to show the imgui window
     virtual void show() = 0;
     
@@ -47,14 +45,12 @@ struct drawlist_dataset_dependency: public dataset_dependency{
     virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) {};
 };
 
-namespace workbenches{
-    struct attribute_order_info{
-        uint32_t    attribut_index{};
-        bool        active{true};
+struct attribute_order_info{
+    uint32_t    attribut_index{};
+    bool        active{true};
 
-        bool operator==(const attribute_order_info& o) const {return attribut_index == o.attribut_index && active == o.active;}
-    };
-}
+    bool operator==(const attribute_order_info& o) const {return attribut_index == o.attribut_index && active == o.active;}
+};
 }
 
 namespace globals{

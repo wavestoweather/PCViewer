@@ -1,0 +1,42 @@
+#pragma once
+#include <workbench_base.hpp>
+#include <violin_structures.hpp>
+#include <robin_hood.h>
+
+namespace workbenches{
+class violin_attribute_workbench: public structures::workbench, public structures::drawlist_dataset_dependency{
+    using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
+    using registered_histogram = structures::histogram_registry::scoped_registrator_t;
+    using registered_histogram_map = robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>>;
+    using appearance_storage_t = std::vector<std::unique_ptr<appearance_tracker>>;
+    using drawlist_attribute_histograms_t = robin_hood::unordered_map<structures::violins::drawlist_attribute, std::vector<float>>; 
+
+    appearance_storage_t        _appearance_storage; // used for unlinked drawlists
+    registered_histogram_map    _registered_histograms;
+    drawlist_attribute_histograms_t _drawlist_attribute_histograms;
+
+    void _update_attribute_histograms();
+    void _update_registered_histograms();
+public:
+    using attribute_session_state_t = structures::violins::attribute_session_state_t;
+    attribute_session_state_t    session_state{};
+
+    violin_attribute_workbench(std::string_view id);
+
+    void show() override;
+
+    void                set_settings(const crude_json::value& json) {};
+    crude_json::value   get_settings() const {return {};};
+    void                set_session_data(const crude_json::value& json) override {}
+    crude_json::value   get_session_data() const {return {};}
+
+    // drawlist_dataset_dependency methods
+    void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
+    void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
+    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info = {}) override {};
+
+    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
+    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
+    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
+};
+}

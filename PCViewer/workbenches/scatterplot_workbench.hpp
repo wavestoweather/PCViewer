@@ -2,7 +2,6 @@
 
 #include <workbench_base.hpp>
 #include <scatterplot_structs.hpp>
-#include <change_tracker.hpp>
 #include <robin_hood.h>
 
 namespace workbenches{
@@ -12,7 +11,7 @@ public:
     using drawlist_info = structures::scatterplot_wb::drawlist_info;
     using plot_data_t = structures::scatterplot_wb::plot_data_t;
     using plot_additional_data_t = structures::scatterplot_wb::plot_additional_data_t;
-    using attribute_order_info = structures::workbenches::attribute_order_info;
+    using attribute_order_info = structures::attribute_order_info;
     using attribute_pair = structures::scatterplot_wb::attribute_pair;
     template<typename T> using changing_vector = structures::change_tracker<std::vector<T>>;
 private:
@@ -48,7 +47,6 @@ public:
     scatterplot_workbench(std::string_view id);
 
     // workbench override methods
-    void notify_drawlist_dataset_update() override;
     void show() override;
 
     void                set_settings(const crude_json::value& json) override {settings = settings_t(json);}

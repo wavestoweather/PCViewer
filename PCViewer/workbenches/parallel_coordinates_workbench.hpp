@@ -11,7 +11,7 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
-    using attribute_order_info = structures::workbenches::attribute_order_info;
+    using attribute_order_info = structures::attribute_order_info;
 
     // both are unique_ptrs to avoid issues with the memory_views when data elements are deleted in the vector
     std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;

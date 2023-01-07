@@ -327,8 +327,8 @@ void parallel_coordinates_workbench::show(){
         for(int i: util::i_range(labels_count)){
             float x = pic_pos.x + (pic_size.x - 1) * i / (labels_count - 1);
             ImGui::GetWindowDrawList()->AddLine({x - 1, y1}, {x - 1, y2}, col);
-            ImGui::GetWindowDrawList()->AddLine({x, y1    }, {x, y2    }, line_col);
             ImGui::GetWindowDrawList()->AddLine({x + 1, y1}, {x + 1, y2}, col);
+            ImGui::GetWindowDrawList()->AddLine({x, y1    }, {x, y2    }, line_col);
         }
         if(setting.read().axis_tick_label){
             ImGui::PushFontShadow(col);
@@ -360,8 +360,8 @@ void parallel_coordinates_workbench::show(){
                 for(double tick_val = ns; tick_val <= nu; tick_val += unit){
                     float y = (tick_val - attribute.bounds.read().max) / (attribute.bounds.read().min - attribute.bounds.read().max) * pic_size.y + pic_pos.y;
                     ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y - 1}, {x + tick_width / 2, y - 1}, col);
-                    ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y    }, {x + tick_width / 2, y    }, line_col);
                     ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y + 1}, {x + tick_width / 2, y + 1}, col);
+                    ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y    }, {x + tick_width / 2, y    }, line_col);
                     if(x > pic_pos.x + (1. - (1. / labels_count)) * pic_size.x)
                         ImGui::SetCursorScreenPos({x - ImGui::GetFontSize() * 3, y - .5f * ImGui::GetTextLineHeight()});
                     else

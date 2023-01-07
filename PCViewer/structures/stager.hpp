@@ -18,6 +18,7 @@ public:
         COUNT
     };
     struct task_base{
+        transfer_direction                  transfer_dir{transfer_direction::upload};
         util::memory_view<const uint8_t>    data_upload{};
         util::memory_view<uint8_t>          data_download{};
         util::memory_view<VkSemaphore>      wait_semaphores{};
@@ -28,24 +29,21 @@ public:
         std::vector<std::atomic<bool>*>     cpu_unsignal_flags{};
 
         task_base() = default;
-        task_base(util::memory_view<const uint8_t> data_upload): data_upload(data_upload){}
-        task_base(util::memory_view<uint8_t> data_download): data_download(data_download){}
+        task_base(transfer_direction transfer_dir, util::memory_view<const uint8_t> data_upload): transfer_dir(transfer_dir), data_upload(data_upload){}
+        task_base(transfer_direction transfer_dir, util::memory_view<uint8_t> data_download): transfer_dir(transfer_dir), data_download(data_download){}
         virtual ~task_base(){}
     };
     struct staging_buffer_info: public task_base{
-        transfer_direction                  transfer_dir{transfer_direction::upload};
         VkBuffer                            dst_buffer{};
         size_t                              dst_buffer_offset{};
 
         staging_buffer_info() = default;
-        staging_buffer_info(transfer_direction transfer_dir, VkBuffer dst_buffer, size_t dst_buffer_offset, const task_base& task_b):
-            transfer_dir{transfer_dir},
+        staging_buffer_info(VkBuffer dst_buffer, size_t dst_buffer_offset, const task_base& task_b):
             dst_buffer{dst_buffer},
             dst_buffer_offset{dst_buffer_offset},
             task_base{task_b}{}
     };
     struct staging_image_info: public task_base{
-        transfer_direction                  transfer_dir{transfer_direction::upload};
         VkImage                             dst_image{};
         VkImageLayout                       start_layout{};
         VkImageLayout                       end_layout{};   // after staging the image is in this image layout

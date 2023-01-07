@@ -661,7 +661,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         // uploading bitset_vector
         // TODO: might be unnecesary, as this bitvector will be filled by brushing pipeline
         util::memory_view<const uint8_t> data = util::memory_view(drawlist.read().active_indices_bitset.data(), (drawlist.read().active_indices_bitset.size() + drawlist.read().active_indices_bitset.bits_per_block - 1) / drawlist.read().active_indices_bitset.bits_per_block);
-        structures::stager::staging_buffer_info staging_info = {structures::stager::transfer_direction::upload, drawlist.read().active_indices_bitset_gpu.buffer, 0ul, structures::stager::task_base(data)};
+        structures::stager::staging_buffer_info staging_info = {drawlist.read().active_indices_bitset_gpu.buffer, 0ul, structures::stager::task_base{structures::stager::transfer_direction::upload, data}};
         globals::stager.add_staging_task(staging_info);
 
         // waiting uploads

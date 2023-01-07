@@ -175,11 +175,6 @@ scatterplot_workbench::scatterplot_workbench(std::string_view id):
     
 }
 
-void scatterplot_workbench::notify_drawlist_dataset_update() 
-{
-    
-}
-
 void draw_lassos(scatterplot_workbench::attribute_pair p, float plot_width, ImVec4 min_max, ImU32 color = util::brushes::get_brush_color(), float thickness = globals::brush_edit_data.brush_line_width, const ImVec2& base_pos = ImGui::GetCursorScreenPos()){
     if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::none)
         return;

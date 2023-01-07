@@ -56,6 +56,18 @@ inline std::tuple<std::vector<uint32_t>, std::vector<int>, bool, bool> get_indic
     return {parsed_indices, parsed_bins, min_hist, max_hist};
 }
 
+inline bool id_contains_attributes(std::string_view id, util::memory_view<const uint32_t> attribute_indices){
+    std::string_view indices;
+    getline(id, indices, '|');
+    int index_pos{};
+    for(std::string_view cur; getline(indices, cur, '_');){
+        uint32_t cur_num; std::from_chars(cur.data(), cur.data() + cur.size(), cur_num);
+        if(cur_num != attribute_indices[index_pos++])
+            return false;
+    }
+    return index_pos == attribute_indices.size();
+}
+
 void check_histogram_update();
 }
 }
