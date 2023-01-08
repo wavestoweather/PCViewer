@@ -44,6 +44,7 @@ public:
     void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
     void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
 
-    std::vector<drawlist_attribute> get_active_drawlist_attributes();
+    std::vector<drawlist_attribute> get_active_drawlist_attributes() const;
+    std::vector<uint32_t> get_active_indices() const;
 };
 }

@@ -180,11 +180,11 @@ public:
 };
 
 template<typename T>
-class indexed_iter {
+class enumerate {
     T& iterable_;
 public:
     class iterator{
-        friend class indexed_iter;
+        friend class enumerate;
     public:
         using iter_type = decltype(std::begin(iterable_));
         using deref_iter_type = decltype(*std::begin(iterable_));
@@ -200,7 +200,7 @@ public:
         iter_type _i;
     };
 
-    constexpr explicit indexed_iter(T& iterable) : iterable_(iterable) {}
+    constexpr explicit enumerate(T& iterable) : iterable_(iterable) {}
     iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };

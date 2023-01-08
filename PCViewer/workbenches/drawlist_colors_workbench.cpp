@@ -13,7 +13,7 @@ void drawlist_colors_workbench::show(){
     
     ImGui::Begin(id.data(), &active, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
 
-    for(auto&& [c, i]: util::indexed_iter(_session_state.colors)){
+    for(auto&& [c, i]: util::enumerate(_session_state.colors)){
         ImGui::PushID(i);
         if(i != 0)
             ImGui::SameLine();

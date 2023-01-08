@@ -10,7 +10,7 @@ using attribute_order_info = structures::attribute_order_info;
 
 struct drawlist_attribute{
     std::string_view dl;
-    int              attribute;
+    uint32_t         attribute;
 
     bool operator==(const drawlist_attribute& da) const {return dl == da.dl && attribute == da.attribute;}
 
@@ -43,14 +43,31 @@ struct drawlist_info{
     DECL_DL_TEMPLATELIST_READ(drawlist_id)
 };
 
+enum class violin_base_pos_t{
+    left,
+    middle,
+    right
+};
+enum class violin_dir_t{
+    left,
+    right
+};
+struct violin_appearance_t{
+    violin_base_pos_t   base_pos;
+    violin_dir_t        dir;
+    ImVec4              color;
+    bool                span_full;
+};
+
 struct session_common{
     std::vector<drawlist_info>  drawlist_infos{};
     std::vector<attribute>      attributes{};
+    std::vector<violin_appearance_t> attribute_violin_appearances{};
     std::vector<attribute_order_info> attribute_order_infos{};
     std::vector<uint8_t>        attribute_log{};
 };
 struct drawlist_session_state_t: public session_common{
-    std::array<int, 2> matrix_dimensions;
+    std::array<int, 2>            matrix_dimensions;
 };
 struct attribute_session_state_t: public session_common{
 };
@@ -61,6 +78,8 @@ struct settings_common{
     int     histogram_bin_count{100};
     float   smoothing_std_dev{-1};
     bool    ignore_zero_bins{false};
+    float   plot_height{200};
+    float   plot_padding{5};
 };
 struct attribute_settings_t: public settings_common{
 
@@ -68,6 +87,7 @@ struct attribute_settings_t: public settings_common{
 struct drawlist_settings_t: public settings_common{
     std::array<int, 2> matrix_dimensions{5, 2};
 };
+
 }
 }
 

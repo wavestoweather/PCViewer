@@ -11,7 +11,7 @@ inline std::vector<ImU32> brew_u32(const std::string& color_name, size_t color_c
 
     std::stringstream converter; converter << std::hex; // setting the converter to hex
     std::vector<ImU32> output(colors.size());
-    for(const auto&& [v, i]: util::indexed_iter(colors)){
+    for(const auto&& [v, i]: util::enumerate(colors)){
         converter << v.substr(1);
         converter >> output[i];
         output[i] |= 255 << IM_COL32_A_SHIFT;
@@ -24,7 +24,7 @@ inline std::vector<ImColor> brew_imcol(const std::string& color_name, size_t col
 
     ImU32 c;
     std::vector<ImColor> output(colors.size());
-    for(const auto&& [v, i]: util::indexed_iter(colors)){
+    for(const auto&& [v, i]: util::enumerate(colors)){
         std::stringstream converter; 
         converter << std::hex << v.substr(1);
         converter >> c;

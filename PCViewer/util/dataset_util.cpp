@@ -820,7 +820,7 @@ void split_templatelist(const structures::templatelist_split_data& split_data){
 
     // creating a templatelist with every index_list
     std::vector<std::string> tl_to_dl;
-    for(const auto& [indices, i]: util::indexed_iter(index_lists)){
+    for(const auto& [indices, i]: util::enumerate(index_lists)){
         structures::templatelist_convert_data convert_data{};
         convert_data.ds_id = split_data.ds_id;
         convert_data.tl_id = split_data.tl_id;
