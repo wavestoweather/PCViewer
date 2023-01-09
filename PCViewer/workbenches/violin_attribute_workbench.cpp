@@ -4,7 +4,7 @@
 namespace workbenches{
 void violin_attribute_workbench::_update_attribute_histograms(){
     // check for still active histogram update
-    for(const auto& dl: session_state.drawlist_infos){
+    for(const auto& [dl_id, dl]: session_state.drawlists){
         if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms[dl.drawlist_id].size()){
             auto access = dl.drawlist_read().histogram_registry.const_access();
             if(!access->dataset_update_done)    
@@ -28,7 +28,7 @@ void violin_attribute_workbench::_update_attribute_histograms(){
 void violin_attribute_workbench::_update_registered_histograms(){
     auto active_drawlist_attributes = get_active_drawlist_attributes();
     auto active_attribute_indices = get_active_indices();
-    for(const auto& dl: session_state.drawlist_infos){
+    for(const auto& [dl_id, dl]: session_state.drawlists){
 
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
         for(auto a: active_attribute_indices){
@@ -89,7 +89,7 @@ std::vector<violin_attribute_workbench::drawlist_attribute> violin_attribute_wor
     for(const auto& i: session_state.attribute_order_infos){
         if(!i.active)
             continue;
-        for(const auto& dl: session_state.drawlist_infos){
+        for(const auto& [dl_id, dl]: session_state.drawlists){
             if(!dl.appearance->read().show)
                 continue;
             ret.emplace_back(drawlist_attribute{dl.drawlist_id, i.attribut_index});

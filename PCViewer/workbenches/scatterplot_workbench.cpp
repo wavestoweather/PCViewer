@@ -511,20 +511,6 @@ void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_vi
 
         auto& dl = globals::drawlists.write().at(dl_id).write();
         auto& ds = dl.dataset_read();
-        if(drawlist_infos.read().empty()){
-            // setting up the internal states
-            attributes = ds.attributes;
-            for(auto& attribute: attributes()){
-                if(attribute.bounds.read().min == attribute.bounds.read().max){
-                    float diff = (std::abs(attribute.bounds.read().max) + .1f) * .01f;
-                    attribute.bounds().min -= diff;
-                    attribute.bounds().max += diff;
-                }
-            }
-            attribute_order_infos().resize(attributes.read().size());
-            for(int i: util::size_range(attribute_order_infos.read()))
-                attribute_order_infos.write()[i].attribut_index = i;
-        }
         // check attribute consistency
         for(int var: util::size_range(attributes.read()))
             if(attributes.read()[var].id != ds.attributes[var].id)

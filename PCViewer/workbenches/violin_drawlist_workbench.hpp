@@ -16,6 +16,7 @@ class violin_drawlist_workbench: public structures::workbench, public structures
     drawlist_attribute_histograms_t _drawlist_attribute_histograms;
     std::vector<float>          _per_attribute_max{};
     float                       _global_max{};
+    std::tuple<std::string_view, int> _hovered_dl_attribute{};
 
     void _update_attribute_histograms();
     void _update_registered_histograms();
@@ -38,11 +39,11 @@ public:
     // drawlist_dataset_dependency methods
     void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
     void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info = {}) override {}
-    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info = {}) override {};
+    void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info = {}) override;
 
-    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
-    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
-    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override{};
+    void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
+    void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
+    void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
 
     std::vector<drawlist_attribute> get_active_drawlist_attributes() const;
     std::vector<uint32_t> get_active_indices() const;

@@ -22,7 +22,7 @@ public:
         util::memory_view<const uint8_t>    data_upload{};
         util::memory_view<uint8_t>          data_download{};
         util::memory_view<VkSemaphore>      wait_semaphores{};
-        util::memory_view<uint32_t>         wait_flags{};
+        util::memory_view<const VkPipelineStageFlags> wait_flags{};
         util::memory_view<VkSemaphore>      signal_semaphores{};
         semaphore*                          cpu_semaphore{};
         std::vector<std::atomic<bool>*>     cpu_signal_flags{};

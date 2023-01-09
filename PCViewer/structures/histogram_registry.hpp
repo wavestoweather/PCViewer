@@ -102,6 +102,8 @@ struct histogram_registry{
         if(entry.registered_registrators.empty()){
             util::vk::destroy_buffer(gpu_buffers[id]);
             gpu_buffers.erase(id);
+            if(cpu_histograms.contains(id))
+                cpu_histograms.erase(id);
             name_to_registry_key.erase(id);
             registry.erase(key);
         }

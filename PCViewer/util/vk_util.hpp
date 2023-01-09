@@ -356,7 +356,7 @@ inline VkCommandBuffer create_begin_command_buffer(VkCommandPool pool, const VkC
     return command;
 }
 
-inline void commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkPipelineStageFlags> wait_masks = {}, util::memory_view<VkSemaphore> signal_semaphores = {}, VkFence fence = {}){
+inline void commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<const VkPipelineStageFlags> wait_masks = {}, util::memory_view<VkSemaphore> signal_semaphores = {}, VkFence fence = {}){
     VkCommandBufferSubmitInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
     info.commandBuffer = commands;
     VkSubmitInfo submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO};
@@ -370,7 +370,7 @@ inline void commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util:
     vkQueueSubmit(queue, 1, &submit_info, fence);
 }
 
-inline void end_commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<VkPipelineStageFlags> wait_masks = {}, util::memory_view<VkSemaphore> signal_semaphores = {}, VkFence fence = {}){
+inline void end_commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util::memory_view<VkSemaphore> wait_semaphores = {}, util::memory_view<const VkPipelineStageFlags> wait_masks = {}, util::memory_view<VkSemaphore> signal_semaphores = {}, VkFence fence = {}){
     assert(wait_masks.size() == wait_semaphores.size());
     auto res = vkEndCommandBuffer(commands);
     util::check_vk_result(res);

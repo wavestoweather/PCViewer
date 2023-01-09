@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <violin_structures.hpp>
+#include <util.hpp>
 
 namespace util{
 namespace violins{
@@ -61,15 +62,51 @@ inline void imgui_violin_infill(const ImVec2& plot_min, const ImVec2& plot_max, 
         for(int h: util::i_range(start_bin, end_bin))
             hist_val += histogram_values[h] / diff;
         // transforming the histogram value to x offeset for the area
-        hist_val *= norm;
-        const ImVec2 min_box{base_x           , plot_min.y + i};
+        hist_val /= norm;
+        ImVec2 min_box{base_x           , plot_min.y + i};
         const ImVec2 max_box{base_x + hist_val, plot_min.y + i + 1};
+        if(violin_app.dir == structures::violins::violin_dir_t::left_right) min_box.x -= hist_val; // add other side 
         ImGui::GetWindowDrawList()->AddRectFilled(min_box, max_box, ImGui::ColorConvertFloat4ToU32(violin_app.color));
     }
 }
 
 // returns a value between 0 and 1 if border is hovered, nan otherwise
-inline float imgui_violin_border(const ImVec2& plot_min, const ImVec2& plot_max, util::memory_view<const float> histogram_values, float hist_normalization_fac, const structures::violins::violin_appearance_t& violin_app, bool is_hovered = false, float hover_dist = 5){
+inline float imgui_violin_border(const ImVec2& plot_min, const ImVec2& plot_max, util::memory_view<const float> histogram_values, float hist_normalization_fac, const structures::violins::violin_appearance_t& violin_app, float line_thickness, float hover_dist = 5){
+    // draws lines on the left and the right of the voilin
+    const float base_x = violin_app.base_pos == structures::violins::violin_base_pos_t::left ? plot_min.x : violin_app.base_pos == structures::violins::violin_base_pos_t::middle ? .5f * (plot_min.x + plot_max.x) : plot_max.x;
+    const float norm = hist_normalization_fac * (violin_app.span_full ? 1.f : 2.f) * (violin_app.dir == structures::violins::violin_dir_t::right ? 1.f: -1.f);
+    const bool double_sided = violin_app.dir == structures::violins::violin_dir_t::left_right;
+    const ImU32 col = ImGui::ColorConvertFloat4ToU32(violin_app.color);
+
+    // connection line
+    float b_w = histogram_values[0] / norm;
+    ImVec2 b_a{base_x, plot_min.y};
+    ImVec2 b_b{base_x + b_w, plot_min.y};
+    if(double_sided) b_a.x -= b_w; // add other side 
+    ImGui::GetWindowDrawList()->AddLine(b_a, b_b, col, line_thickness);
+    // inbetween lines
+    for(int i: util::i_range(histogram_values.size() - 1)){
+        const float start_r = i / float(histogram_values.size() - 1);
+        const float end_r = (i + 1) / float(histogram_values.size() - 1);
+        const float hist_val_start = histogram_values[i] / norm;
+        const float hist_val_end = histogram_values[i + 1] / norm;
+        ImVec2 a{base_x + hist_val_start, util::unnormalize_val_for_range(start_r, plot_min.y, plot_max.y)};
+        ImVec2 b{base_x + hist_val_end, util::unnormalize_val_for_range(end_r, plot_min.y, plot_max.y)};
+        ImGui::GetWindowDrawList()->AddLine(a, b, col, line_thickness);
+        if(double_sided){
+            a.x = base_x - hist_val_start;
+            b.y = base_x - hist_val_end;
+            ImGui::GetWindowDrawList()->AddLine(a, b, col, line_thickness);
+        }
+    }
+    if(!double_sided)
+        ImGui::GetWindowDrawList()->AddLine({base_x, plot_min.y}, {base_x, plot_max.y}, col, line_thickness);
+    // end connecting line
+    b_w = histogram_values.back() / norm;
+    b_a = {base_x, plot_min.y};
+    b_b = {base_x + b_w, plot_min.y};
+    if(double_sided) b_a.x -= b_w; // add other side 
+    ImGui::GetWindowDrawList()->AddLine(b_a, b_b, col, line_thickness);
     return std::numeric_limits<float>::quiet_NaN();
 }
 
