@@ -200,7 +200,7 @@ void draw_lassos(scatterplot_workbench::attribute_pair p, float plot_width, ImVe
             last_p = &cur_p;
         }
     }
-    catch(std::exception e){}
+    catch(std::exception& e){}
 }
     
 void scatterplot_workbench::show() 
@@ -268,7 +268,7 @@ void scatterplot_workbench::show()
                         plot_additional_datas[p].background_image = *reinterpret_cast<const std::string_view*>(payload->Data);
                     ImGui::EndDragDropTarget();
                 }
-                draw_lassos(p, settings.read().plot_width, {attributes.read()[j].bounds.read().min, attributes.read()[i].bounds.read().min, attributes.read()[j].bounds.read().max, attributes.read()[i].bounds.read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
+                draw_lassos(p, settings.read().plot_width, {attributes.read()[p.b].bounds.read().min, attributes.read()[p.a].bounds.read().min, attributes.read()[p.b].bounds.read().max, attributes.read()[p.a].bounds.read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
                 _plot_x_vals[j] = c_pos.x;
             }
         }
