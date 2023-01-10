@@ -11,6 +11,17 @@
 
 namespace util{
 namespace imgui{
+class scoped_id{
+public:
+    scoped_id(std::string_view id) {ImGui::PushID(id.data());}
+    scoped_id(const scoped_id&) = delete;
+    scoped_id& operator=(const scoped_id&) = delete;
+    scoped_id(scoped_id&&) = delete;
+    scoped_id& operator=(scoped_id&&) = delete;
+    
+    ~scoped_id() {ImGui::PopID();}
+};
+
 inline void load_fonts(std::string_view font_folder, util::memory_view<float> font_sizes){
     if(!std::filesystem::exists(font_folder)){
         std::cout << "[warning] Font folder " << font_folder << " could not be found. Only standard font will be available" << std::endl;

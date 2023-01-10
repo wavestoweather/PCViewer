@@ -17,12 +17,13 @@ class violin_drawlist_workbench: public structures::workbench, public structures
     std::vector<float>          _per_attribute_max{};
     float                       _global_max{};
     std::tuple<std::string_view, int> _hovered_dl_attribute{};
+    int                         _popup_matrix_element{};
 
     void _update_attribute_histograms();
     void _update_registered_histograms();
 public:
     using drawlist_settings_t = structures::change_tracker<structures::violins::drawlist_settings_t>;
-    using drawlist_session_state_t = structures::violins::drawlist_session_state_t;
+    using drawlist_session_state_t = structures::change_tracker<structures::violins::drawlist_session_state_t>;
     using drawlist_attribute = structures::violins::drawlist_attribute;
     drawlist_settings_t         settings{};
     drawlist_session_state_t    session_state{};

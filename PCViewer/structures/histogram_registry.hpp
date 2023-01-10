@@ -42,7 +42,7 @@ struct histogram_registry{
     robin_hood::unordered_map<histogram_registry_key, histogram_registry_entry> registry{};
     robin_hood::unordered_map<std::string_view, histogram_registry_key>         name_to_registry_key{}; 
     robin_hood::unordered_map<std::string_view, buffer_info>                    gpu_buffers{};
-    robin_hood::unordered_map<std::string_view, std::vector<float>>             cpu_histograms{};
+    robin_hood::unordered_map<std::string_view, std::vector<uint32_t>>          cpu_histograms{};
     bool                                                                        block_update_done{};    // is set to true after a single gpu block of data has been processed (used to signal next gpu buffer counting)
     bool                                                                        dataset_update_done{};  // is set to true when the whole dataset was counted/when last block update is done (used to signal rendering)
     bool                                                                        registrators_done{true};// is true after all scoped registrators have called signal_registry_done(...) (used to wait with next update round for rendering/processing of all histograms) 

@@ -8,7 +8,7 @@ namespace util{
 class i_range {
 public:
     constexpr i_range(int64_t end): _begin(0), _end(end < 0 ? 0: end), _step(1){}; // single element constructor 
-    constexpr i_range(unsigned long begin, unsigned long end, long step = 1):
+    constexpr i_range(long begin, long end, long step = 1):
      _begin(begin), _end(end), _step(step){
         assert(step != 0 && "step of 0 is invalid");
         if((begin > end && step > 0) || (begin < end && step < 0))
@@ -32,7 +32,7 @@ public:
     iterator begin() const { return iterator(_begin, _step); }
     iterator end() const { return iterator(_end); }
 private:
-    unsigned long _begin, _end;
+    long _begin, _end;
     long _step;
 };
 

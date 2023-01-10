@@ -1,6 +1,7 @@
 #pragma once
 #include <mutex>
 #include <condition_variable>
+#include <memory>
 
 namespace structures{
 class semaphore{
@@ -22,4 +23,5 @@ public:
     }
     unsigned long peekCount(){return _count;};
 };
+using unique_semaphore = std::unique_ptr<semaphore>;
 }

@@ -1207,7 +1207,7 @@ void check_dataset_update(){
             if(ds.changed)
                 changed_datasets.push_back(ds_id);
         }
-        for(auto& workbench: globals::drawlist_dataset_dependencies)
+        for(auto& workbench: globals::dataset_dependencies)
             workbench->signal_dataset_update(changed_datasets, {});
         for(auto id: changed_datasets){
             globals::datasets.ref_no_track()[id].ref_no_track().clear_change();

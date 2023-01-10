@@ -891,7 +891,7 @@ void histogram_counter::_task_thread_function(){
                 signal_semaphores.insert(signal_semaphores.end(), cur->signal_semaphores.begin(), cur->signal_semaphores.end());
             bool cpu_histogram_needed = dl.histogram_registry.const_access()->registry.at(key).cpu_histogram_needed;
             if(cpu_histogram_needed){
-                download_semaphores.push_back(util::vk::create_semaphore(util::vk::initializers::semaphoreCreateInfo()));
+                download_semaphores.emplace_back(util::vk::create_semaphore(util::vk::initializers::semaphoreCreateInfo()));
                 signal_semaphores.emplace_back(download_semaphores.back());
             }
             count_info.gpu_sync_info.signal_semaphores = signal_semaphores;
@@ -905,8 +905,8 @@ void histogram_counter::_task_thread_function(){
                 staging_info.transfer_dir = stager::transfer_direction::download;
                 staging_info.data_download = util::memory_view(access->cpu_histograms[hist]);
                 staging_info.dst_buffer = access->gpu_buffers[hist].buffer;
-                staging_info.wait_semaphores = download_semaphores.back();
-                staging_info.wait_flags = download_wait_flag;
+                staging_info.wait_semaphores = {download_semaphores.back()};
+                staging_info.wait_flags = {download_wait_flag};
                 globals::stager.add_staging_task(staging_info);
             }
         }
@@ -920,6 +920,7 @@ void histogram_counter::_task_thread_function(){
             globals::stager.wait_for_completion();
             for(VkSemaphore sem: download_semaphores)
                 util::vk::destroy_semaphore(sem);
+            download_semaphores.clear();
         }
             
         {

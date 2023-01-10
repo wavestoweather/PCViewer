@@ -60,12 +60,12 @@ struct violin_appearance_t{
 };
 
 struct session_common{
-    std::vector<std::string_view> matrix_elements{};
-    std::map<std::string_view, drawlist_info> drawlists{};
-    std::vector<attribute>      attributes{};
-    std::vector<violin_appearance_t> attribute_violin_appearances{};
-    std::vector<attribute_order_info> attribute_order_infos{};
-    std::vector<uint8_t>        attribute_log{};
+    std::vector<std::string_view>               matrix_elements{};
+    std::map<std::string_view, drawlist_info>   drawlists{};
+    std::vector<attribute>                      attributes{};
+    mutable std::vector<violin_appearance_t>    attribute_violin_appearances{};
+    std::vector<attribute_order_info>           attribute_order_infos{};
+    std::vector<uint8_t>                        attribute_log{};
 };
 struct drawlist_session_state_t: public session_common{
 };
@@ -89,7 +89,7 @@ struct attribute_settings_t: public settings_common{
 
 };
 struct drawlist_settings_t: public settings_common{
-    mutable std::array<int, 2> matrix_dimensions{5, 2};
+    mutable std::array<int, 2> matrix_dimensions{2, 5};
 };
 
 //const std::array<std::string_view, 7> violin_positions{"left full", "left half", "middle left", "middle right", "middle both", "right full", "right half"};
