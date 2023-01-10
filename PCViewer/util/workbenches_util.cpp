@@ -10,6 +10,7 @@
 #include <drawlist_creation_behaviour.hpp>
 #include <drawlist_colors_workbench.hpp>
 #include <violin_drawlist_workbench.hpp>
+#include <violin_attribute_workbench.hpp>
 
 namespace util{
 namespace workbench{
@@ -21,6 +22,7 @@ void setup_default_workbenches(){
     const std::string_view compression_wb_id{"Compresssion workbench"};
     const std::string_view images_wb_id{"Images workbench"};
     const std::string_view violin_drawlist_wb_id{"Violin drawlist workbench"};
+    const std::string_view violin_attribute_wb_id{"Violin attribute workbench"};
 
     // register all available workbenches -------------------------------------------
     auto data_wb = std::make_unique<workbenches::data_workbench>(data_wb_id);
@@ -58,6 +60,11 @@ void setup_default_workbenches(){
     globals::dataset_dependencies.push_back(violin_drawlist_wb.get());
     globals::drawlist_dataset_dependencies.push_back(violin_drawlist_wb.get());
     globals::workbenches.emplace_back(std::move(violin_drawlist_wb));
+    
+    auto violin_attribute_wb = std::make_unique<workbenches::violin_attribute_workbench>(violin_attribute_wb_id);
+    globals::dataset_dependencies.push_back(violin_attribute_wb.get());
+    globals::drawlist_dataset_dependencies.push_back(violin_attribute_wb.get());
+    globals::workbenches.emplace_back(std::move(violin_attribute_wb));
 
     // load behavoiur setup ----------------------------------------------------------
     globals::load_behaviour.on_load.push_back({false, 1, {0, std::numeric_limits<size_t>::max()}});

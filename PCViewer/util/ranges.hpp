@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cinttypes>
 #include <iterator>
+#include <functional>
 
 namespace util{
 // ranges with integer values
@@ -204,4 +205,34 @@ public:
     iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
+
+template<typename T>
+class contains{
+    const T& _e;
+public:
+    constexpr contains(const T& e): _e(e) {}
+};
+template<typename T, typename U>
+bool operator|(const T& range, const contains<U>& e){
+    for(const auto& el: range)
+        if(el == e._e)
+            return true;
+    return false;
 }
+
+template<typename T>
+class contains_if{
+public:
+    std::function<bool(const T&)> _f;
+    constexpr contains_if(std::function<bool(const T&)> f): _f(f) {}
+};
+template<typename T, typename U>
+bool operator|(const T& range, const contains_if<U>& e){
+    for(const auto& el: range)
+        if(e._f(el))
+            return true;
+    return false;
+}
+
+}
+

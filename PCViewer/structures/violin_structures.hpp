@@ -60,16 +60,17 @@ struct violin_appearance_t{
 };
 
 struct session_common{
-    std::vector<std::string_view>               matrix_elements{};
-    std::map<std::string_view, drawlist_info>   drawlists{};
     std::vector<attribute>                      attributes{};
-    mutable std::vector<violin_appearance_t>    attribute_violin_appearances{};
     std::vector<attribute_order_info>           attribute_order_infos{};
+    mutable std::vector<violin_appearance_t>    attribute_violin_appearances{};
     std::vector<uint8_t>                        attribute_log{};
 };
 struct drawlist_session_state_t: public session_common{
+    std::map<std::string_view, drawlist_info>   drawlists{};
+    std::vector<std::string_view>               matrix_elements{};
 };
 struct attribute_session_state_t: public session_common{
+    std::vector<drawlist_info>                  drawlists{};
 };
 
 struct settings_common{
