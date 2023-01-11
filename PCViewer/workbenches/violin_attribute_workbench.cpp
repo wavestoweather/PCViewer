@@ -15,9 +15,11 @@ void violin_attribute_workbench::_update_attribute_histograms(){
 
     // blending the histogram values according to the settings ---------------------------------------------
     const auto active_drawlist_attributes = get_active_drawlist_attributes();
-    std::tie(_global_max, _per_attribute_max, _drawlist_attribute_histograms) = util::violins::update_histograms(active_drawlist_attributes, settings.read().smoothing_std_dev, settings.read().histogram_bin_count, session_state.read().attributes.size(), settings.read().ignore_zero_bins, session_state.read().attribute_log);
+    const auto attribute_bounds = get_attribute_min_max();
+    std::tie(_global_max, _per_attribute_max, _drawlist_attribute_histograms) = util::violins::update_histograms(active_drawlist_attributes, attribute_bounds, settings.read().smoothing_std_dev, settings.read().histogram_bin_count, session_state.read().attributes.size(), settings.read().ignore_zero_bins, session_state.read().attribute_log);
 
     settings.changed = false;
+    session_state.changed = false;
     for(auto& [dl, registrators]: _registered_histograms){
         // locking the registry before signaling the reigstrators
         auto registry_lock = globals::drawlists.read().at(dl).read().histogram_registry.const_access();
@@ -33,7 +35,7 @@ void violin_attribute_workbench::_update_registered_histograms(){
 
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
         for(auto a: active_attribute_indices){
-            auto registrator_id = util::histogram_registry::get_id_string(a, settings.read().histogram_bin_count, false, false);
+            auto registrator_id = util::histogram_registry::get_id_string(a, settings.read().histogram_bin_count, session_state.read().attributes[a].bounds.read(), false, false);
             int registrator_index{-1};
             for(int j: util::size_range(_registered_histograms[dl.drawlist_id])){
                 if(_registered_histograms[dl.drawlist_id][j].registry_id == registrator_id){
@@ -46,7 +48,7 @@ void violin_attribute_workbench::_update_registered_histograms(){
             else{
                 // adding the new histogram
                 auto& drawlist = dl.drawlist_write();
-                _registered_histograms[dl.drawlist_id].emplace_back(*drawlist.histogram_registry.access(), a, settings.read().histogram_bin_count, false, false, true);
+                _registered_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(a, settings.read().histogram_bin_count, session_state.read().attributes[a].bounds.read(), false, false, true));
                 registrator_needed.push_back(true);
             }
         }
@@ -477,5 +479,12 @@ std::vector<uint32_t> violin_attribute_workbench::get_active_indices() const{
         if(i.active)
             ret.emplace_back(i.attribut_index);
     return ret;
+}
+
+std::vector<structures::min_max<float>> violin_attribute_workbench::get_attribute_min_max() const{
+    std::vector<structures::min_max<float>> bounds;
+    for(const auto& a: session_state.read().attributes)
+        bounds.emplace_back(a.bounds.read());
+    return bounds;
 }
 }

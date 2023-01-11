@@ -12,6 +12,9 @@
 namespace workbenches
 {
 void scatterplot_workbench::_update_registered_histograms(){
+    if(!all_registrators_updated())
+        return;
+
     std::array<int, 2> bucket_sizes{int(settings.read().plot_width), int(settings.read().plot_width)};
     auto active_indices = get_active_ordered_indices();
     for(const auto& dl: drawlist_infos.read()){
@@ -23,6 +26,7 @@ void scatterplot_workbench::_update_registered_histograms(){
         // setting up the bin sizes
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
         std::array<uint32_t, 2> indices;
+        std::array<structures::min_max<float>, 2> bounds;
 
         // creating the new registratros and flag the used registrators as true -------------------------
         switch(settings.read().plot_type){
@@ -32,16 +36,16 @@ void scatterplot_workbench::_update_registered_histograms(){
         case plot_type_t::matrix:
             for(int i: util::i_range(active_indices.size() - 1)){
                 for(int j: util::i_range(i + 1, active_indices.size())){
-                    indices[0] = active_indices[i];
-                    indices[1] = active_indices[j];
-                    auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, false, false);
+                    indices = {active_indices[i], active_indices[j]};
+                    bounds = {attributes.read()[indices[0]].bounds.read(), attributes.read()[indices[1]].bounds.read()};
+                    auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, false);
                     size_t registrator_index = util::memory_view(_registered_histograms[dl.drawlist_id]).index_of([&registrator_id](const registered_histogram& h){return registrator_id == h.registry_id;});
                     if(registrator_index != util::memory_view<>::n_pos)
                         registrator_needed[registrator_index] = true;
                     else{
                         // adding new histogram
                         auto& drawlist = dl.drawlist_write();
-                        _registered_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(indices, bucket_sizes, false, false, false));
+                        _registered_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(indices, bucket_sizes, bounds, false, false, false));
                         registrator_needed.emplace_back(true);
                     }
                 }
@@ -68,6 +72,7 @@ void scatterplot_workbench::_update_registered_histograms(){
     // setting update singal flags
     for(const auto& dl: drawlist_infos.read())
         dl.drawlist_write().histogram_registry.access()->request_change_all();
+    _request_registrators_update = false;
 }
 
 void scatterplot_workbench::_update_plot_images(){
@@ -140,13 +145,8 @@ void scatterplot_workbench::_update_plot_list(){
 
 void scatterplot_workbench::_render_plot(){
     // check for still active histogram update
-    for(const auto& dl: drawlist_infos.read()){
-        if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms[dl.drawlist_id].size()){
-            auto access = dl.drawlist_read().histogram_registry.const_access();
-            if(!access->dataset_update_done)    
-                return;
-        }
-    }
+    if(!all_registrators_updated())
+        return;
 
     _update_plot_images();  // all plot images are recreated before rendering is issued
 
@@ -225,8 +225,13 @@ void scatterplot_workbench::show()
             request_render |= globals::drawlists.read().at(dl.drawlist_id).changed;
     }
 
+    _request_registrators_update |= attributes.changed;
+
     if(request_render)
         _render_plot();
+
+    if(_request_registrators_update)
+        _update_registered_histograms();
 
     ImGui::Begin(id.data(), &active, ImGuiWindowFlags_HorizontalScrollbar);
 
@@ -461,7 +466,7 @@ void scatterplot_workbench::show()
 
     ImGui::EndTable();
 
-    // poups
+    // popups
     if(ImGui::BeginPopup(plot_menu_id.data())){
         ImGui::PushItemWidth(100);
         ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
@@ -623,5 +628,16 @@ std::vector<uint32_t> scatterplot_workbench::get_active_ordered_indices(){
             indices.emplace_back(i.attribut_index);
     }
     return indices;
+}
+
+bool scatterplot_workbench::all_registrators_updated() const{
+    for(const auto& dl: drawlist_infos.read()){
+        if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms.at(dl.drawlist_id).size()){
+            auto access = dl.drawlist_read().histogram_registry.const_access();
+            if(!access->dataset_update_done)    
+                return false;
+        }
+    }
+    return true;
 }
 }

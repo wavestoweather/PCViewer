@@ -16,8 +16,9 @@ struct histogram_registry_key{
     bool                    is_max_histogram:1;
     std::vector<uint32_t>   attribute_indices{};
     std::vector<int>        bin_sizes{};            // for - any bin size available will be taken and defaults to the abs() of the val
+    std::vector<structures::min_max<float>> min_max{};
 
-    bool operator==(const histogram_registry_key& o) const {return attribute_indices == o.attribute_indices && bin_sizes == o.bin_sizes && is_min_histogram == o.is_min_histogram && is_max_histogram == o.is_max_histogram;}
+    bool operator==(const histogram_registry_key& o) const {return attribute_indices == o.attribute_indices && bin_sizes == o.bin_sizes && min_max == o.min_max && is_min_histogram == o.is_min_histogram && is_max_histogram == o.is_max_histogram;}
 };
 
 typedef uint64_t registrator_id_t;
@@ -33,7 +34,7 @@ struct histogram_registry_entry{
 
 template<> struct std::hash<structures::histogram_registry_key>{
     size_t operator()(const structures::histogram_registry_key& k) const {
-        return std::hash_combine(std::hash_combine(util::memory_view<const uint32_t>(k.attribute_indices).data_hash(), util::memory_view<const int>(k.bin_sizes).data_hash()), size_t((k.is_max_histogram << 1) | k.is_min_histogram));
+        return std::hash_combine(std::hash_combine(std::hash_combine(util::memory_view<const uint32_t>(k.attribute_indices).data_hash(), util::memory_view<const int>(k.bin_sizes).data_hash()), util::memory_view<const float>(util::memory_view<const structures::min_max<float>>(k.min_max)).data_hash()), size_t((k.is_max_histogram << 1) | k.is_min_histogram));
     }
 };
 
@@ -56,18 +57,19 @@ struct histogram_registry{
     }
 
     // the preferred way of registering and unregistering is by using a scoped_registrator_t object which can be retrieved via scoped_registrator(...)
-    std::string_view register_histogram(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, registrator_id_t registrator_id,  bool is_min_hist, bool is_max_hist, bool cpu_hist_needed){
-        histogram_registry_key key{is_min_hist, is_max_hist, std::vector<uint32_t>(attribute_indices.size()), std::vector<int>(bin_sizes.size())};
+    std::string_view register_histogram(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, util::memory_view<const structures::min_max<float>> min_max, registrator_id_t registrator_id,  bool is_min_hist, bool is_max_hist, bool cpu_hist_needed){
+        histogram_registry_key key{is_min_hist, is_max_hist, std::vector<uint32_t>(attribute_indices.size()), std::vector<int>(bin_sizes.size()), std::vector<structures::min_max<float>>(min_max.size())};
         std::vector<uint32_t> sorted(attribute_indices.size()); std::iota(sorted.begin(), sorted.end(), 0);
         std::sort(sorted.begin(), sorted.end(), [&](uint32_t l, uint32_t r){return attribute_indices[l] < attribute_indices[r];});
         for(int i: util::size_range(sorted)){
             key.attribute_indices[i] = attribute_indices[sorted[i]];
             key.bin_sizes[i] = bin_sizes[sorted[i]];
+            key.min_max[i] = min_max[sorted[i]];
         }
         auto& entry = registry[key];
         entry.registered_registrators.insert(registrator_id);
         if(entry.hist_id.empty()){
-            entry.hist_id = util::histogram_registry::get_id_string(key.attribute_indices, key.bin_sizes, is_min_hist, is_max_hist);
+            entry.hist_id = util::histogram_registry::get_id_string(key.attribute_indices, key.bin_sizes, key.min_max, is_min_hist, is_max_hist);
             name_to_registry_key[entry.hist_id] = key;
             entry.cpu_histogram_needed |= cpu_hist_needed;
             change_request.insert(entry.hist_id);
@@ -94,6 +96,7 @@ struct histogram_registry{
     void unregister_histogram(std::string_view id, registrator_id_t registrator_id){
         assert(name_to_registry_key.contains(id) && "Registry does not hold id");
         const auto key = name_to_registry_key[id];
+        assert(registry.contains(key) && "Registry/name_to_registry_key mismatch");
         auto& entry = registry[key];
         assert(entry.registered_registrators.contains(registrator_id) && "Registry entry does not hold registrator_id");
         entry.registered_registrators.erase(registrator_id);
@@ -135,10 +138,10 @@ struct histogram_registry{
         registrator_id_t    registrator_id{};
         std::string_view    registry_id{};
         
-        scoped_registrator_t(histogram_registry& registry, util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, bool is_min_hist, bool is_max_hist, bool cpu_hist_needed):
+        scoped_registrator_t(histogram_registry& registry, util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, util::memory_view<const structures::min_max<float>> min_max, bool is_min_hist, bool is_max_hist, bool cpu_hist_needed):
             registry(registry),
             registrator_id(registrator_id_counter++),
-            registry_id(registry.register_histogram(attribute_indices, bin_sizes, registrator_id, is_min_hist, is_max_hist, cpu_hist_needed))
+            registry_id(registry.register_histogram(attribute_indices, bin_sizes, min_max, registrator_id, is_min_hist, is_max_hist, cpu_hist_needed))
         {
             // signaling that the registrator was used to run first count
             signal_registry_used();
@@ -191,8 +194,8 @@ struct histogram_registry{
             registry.registrators_done = true;          // all registrators used the histograms
         }
     };
-    scoped_registrator_t scoped_registrator(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, bool is_min_hist, bool is_max_hist, bool cpu_hist_needed){
-        return scoped_registrator_t(*this, attribute_indices, bin_sizes, is_min_hist, is_max_hist, cpu_hist_needed);
+    scoped_registrator_t scoped_registrator(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, util::memory_view<const structures::min_max<float>> min_max, bool is_min_hist, bool is_max_hist, bool cpu_hist_needed){
+        return scoped_registrator_t(*this, attribute_indices, bin_sizes, min_max, is_min_hist, is_max_hist, cpu_hist_needed);
     }
 };
 using thread_safe_hist_reg = thread_safe<histogram_registry>;

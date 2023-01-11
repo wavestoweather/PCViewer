@@ -384,11 +384,13 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
                 for(int i: util::i_range(indices.size() - 1)){
                     std::vector<uint32_t> hist_indices;
+                    std::vector<structures::min_max<float>> attribute_bounds; 
 
                     push_constants_large_vis pc{};
                     pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
                     if(info.workbench.setting.read().render_splines){
                         hist_indices = {indices[std::max<int>(int(i - 1), 0)], indices[i], indices[i + 1], indices[std::min<uint32_t>(i + 2, indices.size() - 1)]};
+                        attribute_bounds = {info.workbench.attributes.read()[hist_indices[0]].bounds.read(), info.workbench.attributes.read()[hist_indices[1]].bounds.read(), info.workbench.attributes.read()[hist_indices[2]].bounds.read(), info.workbench.attributes.read()[hist_indices[3]].bounds.read()};
                         std::vector<uint32_t> ordering(hist_indices.size());
                         std::iota(ordering.begin(), ordering.end(), 0);
                         std::sort(ordering.begin(), ordering.end(), [&](uint32_t a, uint32_t b){return hist_indices[a] < hist_indices[b];});
@@ -404,6 +406,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     }
                     else{
                         hist_indices = {indices[i], indices[i + 1]};
+                        attribute_bounds = {info.workbench.attributes.read()[hist_indices[0]].bounds.read(), info.workbench.attributes.read()[hist_indices[1]].bounds.read()};
                         pc.a_axis = indices[i] < indices[i + 1] ? i + 1 : i;
                         pc.b_axis = indices[i] < indices[i + 1] ? i : i + 1;
                         pc.a_size = bin_sizes[0];
@@ -413,7 +416,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     // getting the correct hist information
                     bool is_max_hist = dl.priority_render;
                     pc.priority_rendering = dl.priority_render;
-                    std::string id = util::histogram_registry::get_id_string(hist_indices, bin_sizes, false, is_max_hist);
+                    std::string id = util::histogram_registry::get_id_string(hist_indices, bin_sizes, attribute_bounds, false, is_max_hist);
                     {
                         auto hist_access = drawlist.histogram_registry.const_access();
                         if(!hist_access->name_to_registry_key.contains(id) || !hist_access->gpu_buffers.contains(id)){
@@ -487,7 +490,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
                 uint32_t index = active_attribute_indices[i];
                 int bin_size = info.workbench.plot_data.read().height;
-                std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, false, false);
+                std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, info.workbench.attributes.read()[index].bounds.read(), false, false);
                 {
                     auto hist_access = dl_info.drawlist_read().histogram_registry.const_access();
                     if(!hist_access->name_to_registry_key.contains(hist_id) || !hist_access->gpu_buffers.contains(hist_id)){

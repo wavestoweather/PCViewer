@@ -851,6 +851,8 @@ void histogram_counter::_task_thread_function(){
         constexpr uint32_t          download_wait_flag{VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
         int count{};
         for(auto hist: histograms){
+            if(_thread_finish)
+                return;
             auto key = dl.histogram_registry.const_access()->name_to_registry_key.at(hist);
 
             if(!dl.histogram_registry.const_access()->gpu_buffers.contains(hist)){
@@ -860,10 +862,6 @@ void histogram_counter::_task_thread_function(){
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
                 dl.histogram_registry.access()->gpu_buffers[hist] = util::vk::create_buffer(buffer_info, alloc_info);
             }
-
-            std::vector<structures::min_max<float>> column_min_max(key.attribute_indices.size());
-            for(int i: util::size_range(column_min_max))
-                column_min_max[i] = dl.dataset_read().attributes[key.attribute_indices[i]].bounds.read();
 
             pipelines::histogram_counter::count_info count_info{};
             count_info.data_type = dl.dataset_read().data_flags.data_type;
@@ -876,7 +874,7 @@ void histogram_counter::_task_thread_function(){
             count_info.clear_counts = cur->clear_counts;
             count_info.column_indices = key.attribute_indices;
             count_info.bin_sizes = key.bin_sizes;
-            count_info.column_min_max = column_min_max;
+            count_info.column_min_max = key.min_max;
             if(key.is_max_histogram)
                 count_info.reduction_type = structures::histogram_counter_structs::reduction_type_t::max;
             if(key.is_min_histogram)
@@ -1075,6 +1073,7 @@ void priority_sorter::_task_thread_function(){
             staging_info.cpu_signal_flags = std::move(cur->cpu_signal_flags);
             staging_info.cpu_unsignal_flags = std::move(cur->cpu_unsignal_flags);
             globals::stager.add_staging_task(staging_info);
+            globals::stager.wait_for_completion();
         }
         // the signal flags are set by the last uploadstaging task
         if(::logger.logging_level >= logging::level::l_5)

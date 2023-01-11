@@ -259,8 +259,9 @@ void scatterplot_renderer::render(const render_info& info){
                 push_constants_large_vis pc{};
                 {
                     std::array<int, 2> bin_sizes{int(p_key.width), int(p_key.width)};
+                    std::array<structures::min_max<float>, 2> min_max{info.workbench.attributes.read()[axis_pair.a].bounds.read(), info.workbench.attributes.read()[axis_pair.b].bounds.read()};
                     auto hist_access = dl.drawlist_read().histogram_registry.const_access();
-                    std::string histogram_id = util::histogram_registry::get_id_string(util::memory_view(&axis_pair.a, 2), bin_sizes, false, false);
+                    std::string histogram_id = util::histogram_registry::get_id_string(util::memory_view(&axis_pair.a, 2), bin_sizes, min_max, false, false);
                     if(!hist_access->name_to_registry_key.contains(histogram_id)){
                         if(logger.logging_level > logging::level::l_4)
                             logger << logging::warning_prefix << " scatterplot_renderer::render() Missing histogram for attributes " << info.workbench.attributes.read()[axis_pair.a].display_name << "|" << info.workbench.attributes.read()[axis_pair.b].display_name << " for drawwlist " << dl.drawlist_id << logging::endl;

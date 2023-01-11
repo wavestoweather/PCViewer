@@ -20,6 +20,8 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_axis_histograms;
     bool                                                     _select_priority_center_single{false};
     bool                                                     _select_priority_center_all{false};
+    bool                                                     _request_registered_histograms_update{false};
+    bool                                                     _request_registered_histograms_update_var{false};
 
     void _update_plot_image();
     void _draw_setting_list();
@@ -102,6 +104,7 @@ public:
 
     void render_plot();
     std::vector<uint32_t> get_active_ordered_indices() const;
+    bool                  all_registrators_updated() const;
 
     // overriden methods
     void show() override;

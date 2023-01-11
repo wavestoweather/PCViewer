@@ -79,7 +79,7 @@ public:
         bool                                clear_counts{};
         util::memory_view<uint32_t>         column_indices{};
         util::memory_view<int>              bin_sizes{};
-        util::memory_view<structures::min_max<float>> column_min_max{};
+        util::memory_view<const structures::min_max<float>> column_min_max{};
         reduction_type_t                    reduction_type{reduction_type_t::sum};                                
         structures::gpu_sync_info           gpu_sync_info{};
         structures::gpu_timing_info*        gpu_timing_info{};

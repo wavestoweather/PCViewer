@@ -30,6 +30,7 @@ private:
     attribute_pair      _started_lasso_attributes{};
     ImVec2              _last_lasso_point{};
     attribute_pair      _popup_attributes{};
+    bool                _request_registrators_update{};
 
     void _update_registered_histograms();
     void _update_plot_images();
@@ -63,6 +64,7 @@ public:
     void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
     void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
 
-    std::vector<uint32_t> get_active_ordered_indices();
+    std::vector<uint32_t>   get_active_ordered_indices();
+    bool                    all_registrators_updated() const;
 };
 }

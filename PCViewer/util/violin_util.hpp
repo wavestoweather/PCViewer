@@ -10,7 +10,7 @@ using drawlist_attribute = structures::violins::drawlist_attribute;
 using attribute_histograms_t = std::tuple<float, std::vector<float>, histograms_t>;
 using violin_position_order_t = std::tuple<std::vector<structures::violins::violin_appearance_t>, std::vector<structures::attribute_order_info>>;
 
-inline attribute_histograms_t update_histograms(const std::vector<drawlist_attribute>& active_drawlist_attributes, float std_dev, int histogram_bin_count, int active_attributes_count, bool ignore_zero_bins, util::memory_view<const uint8_t> attribute_log){
+inline attribute_histograms_t update_histograms(const std::vector<drawlist_attribute>& active_drawlist_attributes, util::memory_view<const structures::min_max<float>> attribute_min_max, float std_dev, int histogram_bin_count, int active_attributes_count, bool ignore_zero_bins, util::memory_view<const uint8_t> attribute_log){
     float               global_max{};
     std::vector<float>  per_attribute_max(active_attributes_count, .0f);
     histograms_t        histograms;
@@ -19,7 +19,7 @@ inline attribute_histograms_t update_histograms(const std::vector<drawlist_attri
 
     // integrating to 3 sigma std dev
     for(const auto& da: active_drawlist_attributes){
-        const auto histogram_id = util::histogram_registry::get_id_string(da.attribute, histogram_bin_count, false, false);
+        const auto histogram_id = util::histogram_registry::get_id_string(da.attribute, histogram_bin_count, attribute_min_max[da.attribute], false, false);
         const auto histogram_access = da.drawlist_read().histogram_registry.const_access();
         const auto& original_histogram = histogram_access->cpu_histograms.at(histogram_id);
         auto& histogram = histograms[da];

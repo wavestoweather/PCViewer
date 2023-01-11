@@ -48,5 +48,6 @@ public:
 
     std::vector<drawlist_attribute> get_active_drawlist_attributes() const;
     std::vector<uint32_t> get_active_indices() const;
+    std::vector<structures::min_max<float>> get_attribute_min_max() const;
 };
 }
