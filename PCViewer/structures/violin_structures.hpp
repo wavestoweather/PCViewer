@@ -74,7 +74,7 @@ struct attribute_session_state_t: public session_common{
 };
 
 struct settings_common{
-    mutable ImVec4  plot_background{1.f, 1.f, 1.f, 1.f};
+    mutable ImVec4  plot_background{.0f, .0f, .0f, 1.f};
     mutable float   line_hover_dist{5.f};
     mutable float   line_thickness{1.f};
     mutable float   line_alpha{1.f};
