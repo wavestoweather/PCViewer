@@ -208,9 +208,9 @@ public:
 
 template<typename T>
 class contains{
-    const T& _e;
 public:
     constexpr contains(const T& e): _e(e) {}
+    const T& _e;
 };
 template<typename T, typename U>
 bool operator|(const T& range, const contains<U>& e){

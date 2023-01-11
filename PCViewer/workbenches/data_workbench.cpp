@@ -227,7 +227,7 @@ void data_workbench::show()
                 auto& appearance_no_track = globals::drawlists.ref_no_track()[dl_id].ref_no_track().appearance_drawlist.ref_no_track();
                 ImGui::TableNextColumn();
                 if(ImGui::Checkbox("##dlactive", &appearance_no_track.show)){
-                    if(globals::selected_drawlists.size()){
+                    if(globals::selected_drawlists | util::contains(dl_id)){
                         for(const auto& selected_dl: globals::selected_drawlists)
                             globals::drawlists()[selected_dl]().appearance_drawlist().show = appearance_no_track.show;
                     }
@@ -236,7 +236,7 @@ void data_workbench::show()
                 ImGui::TableNextColumn();
                 int color_edit_flags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar;
                 if(ImGui::ColorEdit4("##dlcolor", &appearance_no_track.color.x, color_edit_flags)){
-                    if(globals::selected_drawlists.size()){
+                    if(globals::selected_drawlists | util::contains(dl_id)){
                         for(const auto& selected_dl: globals::selected_drawlists)
                             globals::drawlists()[selected_dl]().appearance_drawlist().color = appearance_no_track.color;
                     }
