@@ -3,6 +3,7 @@
 #include <cinttypes>
 #include <iterator>
 #include <functional>
+#include <optional>
 
 namespace util{
 // ranges with integer values
@@ -206,6 +207,10 @@ public:
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// reanges operators for easier range querying. 
+// For example usage see test/ranges_test.cpp 
+// ---------------------------------------------------------------------------------------------------------------------------------
 template<typename T>
 class contains{
 public:
@@ -232,6 +237,36 @@ bool operator|(const T& range, const contains_if<U>& e){
         if(e._f(el))
             return true;
     return false;
+}
+
+template<typename T>
+class try_find{
+public:
+    constexpr try_find(const T& e): e(e) {}
+    const T& e;
+};
+template<typename T>
+using optional_ref = std::optional<std::reference_wrapper<T>>;
+template<typename T, typename U>
+optional_ref<U> operator|(T& range, const try_find<U>& e){
+    for(auto& el: range)
+        if(el == e.e)
+            return {std::reference_wrapper<U>{el}};
+    return {};
+}
+
+template<typename T>
+class try_find_if{
+public:
+    std::function<bool(const T&)> f;
+    constexpr try_find_if(std::function<bool(const T&)> f): f(f) {}
+};
+template<typename T, typename U>
+optional_ref<U> operator|(T& range, const try_find_if<U>& e){
+    for(auto& el: range)
+        if(e.f(el))
+            return {std::reference_wrapper<U>{el}};
+    return {};
 }
 
 }

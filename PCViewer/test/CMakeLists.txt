@@ -3,6 +3,7 @@ create_test_sourcelist(Tests
     radix_sort_test.cpp
     struct_to_json_tests.cpp
     iterator_test.cpp
+    ranges_test.cpp
 )
 
 file(GLOB src
