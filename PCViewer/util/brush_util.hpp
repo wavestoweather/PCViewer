@@ -117,6 +117,8 @@ inline void upload_changed_brushes(){
         range_brush_refs range_brushes;
         lasso_brush_refs lasso_brushes;
         for(const auto& brush: globals::global_brushes.read()){
+            if(!brush.read().active)
+                continue;
             range_brushes.push_back(&brush.read().ranges);
             lasso_brushes.push_back(&brush.read().lassos);
         }
