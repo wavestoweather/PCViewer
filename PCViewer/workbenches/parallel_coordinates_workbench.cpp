@@ -74,6 +74,12 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
     // updating registered histograms (iterating through indices pairs and checking for registered histogram)
     const auto active_indices = get_active_ordered_indices();
     for(const auto& dl: drawlist_infos.read()){
+        // setting the flag for resorting priority rendering
+        if(dl.priority_render){
+            dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+            dl.drawlist_write().delayed_ops.priority_sorting_done = false;
+            dl.drawlist_write().delayed_ops.priority_rendering_sorting_started = false;
+        }
         if(dl.drawlist_read().const_templatelist().data_size < setting.read().histogram_rendering_threshold){
             _registered_histograms.erase(dl.drawlist_id);
             continue;
@@ -128,49 +134,42 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
                 logger << val.hist_id << " ";
             logger << logging::endl;
         }
-        // setting the flag for resorting priority rendering
-        if(dl.priority_render){
-            dl.drawlist_write().delayed_ops.delayed_ops_done = false;
-            dl.drawlist_write().delayed_ops.priority_sorting_done = false;
-            dl.drawlist_write().delayed_ops.priority_rendering_sorting_started = false;
-        }
     }
     // 1 dimensional histograms for axis axis histogram rendering
-    if(setting.read().hist_type != histogram_type::none){
-        for(const auto& dl: drawlist_infos.read()){
-            if(!dl.appearance->read().show_histogram){
+    for(const auto& dl: drawlist_infos.read()){
+        if(setting.read().hist_type == histogram_type::none || !dl.appearance->read().show_histogram){
+            if(_registered_axis_histograms.contains(dl.drawlist_id))
                 _registered_axis_histograms.erase(dl.drawlist_id);
-                continue;
-            }
+            continue;
+        }
 
-            std::vector<bool> registrator_needed(_registered_axis_histograms[dl.drawlist_id].size(), false);
-            for(uint i: active_indices){
-                int height = plot_data.read().height;
-                auto registrator_id = util::histogram_registry::get_id_string(i, height, attributes.read()[i].bounds.read(), false, false);
-                int registrator_index{-1};
-                for(int j: util::size_range(_registered_axis_histograms[dl.drawlist_id])){
-                    if(_registered_axis_histograms[dl.drawlist_id][j].registry_id == registrator_id){
-                        registrator_id = j;
-                        break;
-                    }
-                }
-                if(registrator_index >= 0)
-                    registrator_needed[registrator_index] = true;
-                else{
-                    auto& drawlist = dl.drawlist_write();
-                    _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, attributes.read()[i].bounds.read(), false, false, false));
-                    registrator_needed.push_back(true);
+        std::vector<bool> registrator_needed(_registered_axis_histograms[dl.drawlist_id].size(), false);
+        for(uint i: active_indices){
+            int height = plot_data.read().height;
+            auto registrator_id = util::histogram_registry::get_id_string(i, height, attributes.read()[i].bounds.read(), false, false);
+            int registrator_index{-1};
+            for(int j: util::size_range(_registered_axis_histograms[dl.drawlist_id])){
+                if(_registered_axis_histograms[dl.drawlist_id][j].registry_id == registrator_id){
+                    registrator_id = j;
+                    break;
                 }
             }
-            // removing unused registrators
-            auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
-            for(int i: util::rev_size_range(_registered_axis_histograms[dl.drawlist_id])){
-                if(!registrator_needed[i])
-                    _registered_axis_histograms[dl.drawlist_id].erase(_registered_axis_histograms[dl.drawlist_id].begin() + i);
+            if(registrator_index >= 0)
+                registrator_needed[registrator_index] = true;
+            else{
+                auto& drawlist = dl.drawlist_write();
+                _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, attributes.read()[i].bounds.read(), false, false, false));
+                registrator_needed.push_back(true);
             }
-            if(logger.logging_level >= logging::level::l_5){
-                logger << logging::info_prefix << " parallel_coordinates_workbench:: Updated axis histogram registry for drawlist " << dl.drawlist_id << " now requiring " << _registered_axis_histograms[dl.drawlist_id].size() << " histograms" << logging::endl;
-            }
+        }
+        // removing unused registrators
+        auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
+        for(int i: util::rev_size_range(_registered_axis_histograms[dl.drawlist_id])){
+            if(!registrator_needed[i])
+                _registered_axis_histograms[dl.drawlist_id].erase(_registered_axis_histograms[dl.drawlist_id].begin() + i);
+        }
+        if(logger.logging_level >= logging::level::l_5){
+            logger << logging::info_prefix << " parallel_coordinates_workbench:: Updated axis histogram registry for drawlist " << dl.drawlist_id << " now requiring " << _registered_axis_histograms[dl.drawlist_id].size() << " histograms" << logging::endl;
         }
     }
     if(request_update){
