@@ -55,7 +55,7 @@ enum class violin_dir_t{
 struct violin_appearance_t{
     violin_base_pos_t   base_pos{violin_base_pos_t::middle};
     violin_dir_t        dir{violin_dir_t::left_right};
-    ImVec4              color{};
+    ImVec4              color{1.f, 1.f, 1.f, 1.f};
     bool                span_full{false};
 };
 
@@ -78,13 +78,15 @@ struct settings_common{
     mutable float   line_hover_dist{5.f};
     mutable float   line_thickness{1.f};
     mutable float   line_alpha{1.f};
-    mutable float   area_alpha{.1f};
+    mutable float   area_alpha{.5f};
             int     histogram_bin_count{100};
             float   smoothing_std_dev{-1};
             bool    ignore_zero_bins{false};
     mutable float   plot_height{200};
     mutable float   plot_padding{5};
-    mutable bool    reposition_attributes_on_update{true};
+    mutable bool    reposition_attributes_on_update{false};
+    mutable std::string attribute_color_palette_type{"Qualitative"};
+    mutable std::string attribute_color_palette{"Set3"};
 };
 struct attribute_settings_t: public settings_common{
 

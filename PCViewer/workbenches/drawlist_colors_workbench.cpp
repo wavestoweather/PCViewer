@@ -25,7 +25,7 @@ void drawlist_colors_workbench::show(){
         }
         ImGui::PopID();
     }
-    const auto& palette_infos = brew_pallete_infos();
+    const auto& palette_infos = brew_palette_infos();
     if(ImGui::BeginCombo("Select palette", _session_state.color_palette_name.c_str())){
         for(const auto& info: palette_infos){
             if(ImGui::MenuItem(info.name.data())){

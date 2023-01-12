@@ -207,6 +207,32 @@ public:
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
 
+template<typename T>
+class const_enumerate {
+    const T& iterable_;
+public:
+    class iterator{
+        friend class const_enumerate;
+    public:
+        using iter_type = decltype(std::begin(iterable_));
+        using deref_iter_type = decltype(*std::begin(iterable_));
+        std::pair<deref_iter_type&, size_t> operator*() {return {*_i, _i - iter_.begin()};}
+        const iterator& operator++() { ++_i; return *this;}
+        iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
+        bool operator==(const iterator& o) const{return _i == o._i;}
+        bool operator!=(const iterator& o) const{return _i != o._i;}
+    protected:
+        iterator(const T& iterable, iter_type iter): iter_(iterable), _i(iter) {} 
+    private:
+        const T& iter_;
+        iter_type _i;
+    };
+
+    constexpr explicit const_enumerate(const T& iterable) : iterable_(iterable) {}
+    iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
+    iterator end() const {return iterator(iterable_, std::end(iterable_));}
+};
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // reanges operators for easier range querying. 
 // For example usage see test/ranges_test.cpp 
@@ -266,6 +292,20 @@ optional_ref<U> operator|(T& range, const try_find_if<U>& e){
     for(auto& el: range)
         if(e.f(el))
             return {std::reference_wrapper<U>{el}};
+    return {};
+}
+
+template<typename T>
+class try_pick_if{
+public:
+    std::function<bool(const T&)> f;
+    constexpr try_pick_if(std::function<bool(const T&)> f): f(f) {}
+};
+template<typename T, typename U>
+std::optional<U> operator|(const T& range, const try_pick_if<U>& e){
+    for(auto& el: range)
+        if(e.f(el))
+            return {el};
     return {};
 }
 

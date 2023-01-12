@@ -21,6 +21,7 @@ class violin_drawlist_workbench: public structures::workbench, public structures
 
     void _update_attribute_histograms();
     void _update_registered_histograms();
+    void _update_attribute_positioning(bool update_direct = false);
 public:
     using drawlist_settings_t = structures::change_tracker<structures::violins::drawlist_settings_t>;
     using drawlist_session_state_t = structures::change_tracker<structures::violins::drawlist_session_state_t>;

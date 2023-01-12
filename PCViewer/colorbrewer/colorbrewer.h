@@ -43,12 +43,13 @@
 #ifndef COLORBREWER_H
 #define COLORBREWER_H
 
-#include <string>
+#include <string_view>
 #include <vector>
+#include <map>
 //#include <initializer_list>
 
 template <typename T>
-inline std::vector<T> brew(const std::string& colorName, size_t colorCount)
+inline std::vector<T> brew(std::string_view colorName, size_t colorCount)
 {
     if (colorName == "YlGn") {
         switch (colorCount) {
@@ -871,8 +872,8 @@ struct palette_info_t{
     int              min_colors;
     int              max_colors;    // including this index
 };
-inline const std::vector<palette_info_t>& brew_pallete_infos(){
-    static std::vector<palette_info_t> palettes{
+inline const std::vector<palette_info_t>& brew_palette_infos(){
+    static const std::vector<palette_info_t> palettes{
         {"YlGn", 3, 9},
         {"YlGnBu", 3, 9},
         {"GnBu", 3, 9},
@@ -914,6 +915,17 @@ inline const std::vector<palette_info_t>& brew_pallete_infos(){
         {"Set3", 3, 12}
     };
     return palettes;
+}
+
+inline const std::map<std::string_view, std::vector<std::string_view>>& brew_palette_types(){
+    static const std::map<std::string_view, std::vector<std::string_view>> palette_types{
+        {"Sequential",  {"YlGn", "YlGnBu", "GnBu", "BuGn", "PuBuGn", "PuBu", "BuPu","RdPu", "PuRd", "OrRd","YlOrRd", "Black","YlOrBr", 
+                        "Purples", "Blues", "Greens", "Oranges", "Reds", "Greys"}},
+        {"Diverging",   {"PuOr", "BrBG", "PRGn", "PiYG", "RdBu", "RdGy", "RdYlBu", "Spectral", "RdYlGn"}},
+        {"Qualitative", {"Accent", "Dark2", "Dark2Extended","Dark2ReorderSplitYellowExtended", "Dark2ReorderSplitYellowExtendedSaturated", 
+                        "Paired", "Pastel1", "Pastel2", "Set1", "Set2", "Set3"}}
+    };
+    return palette_types;
 }
 
 #endif

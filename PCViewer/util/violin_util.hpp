@@ -2,6 +2,7 @@
 #include <vector>
 #include <violin_structures.hpp>
 #include <util.hpp>
+#include <color_brewer_util.hpp>
 
 namespace util{
 namespace violins{
@@ -105,15 +106,106 @@ inline float imgui_violin_border(const ImVec2& plot_min, const ImVec2& plot_max,
         ImGui::GetWindowDrawList()->AddLine({base_x, plot_min.y}, {base_x, plot_max.y}, col, line_thickness);
     // end connecting line
     b_w = histogram_values[0] / norm * plot_width;
-    b_a = {base_x, plot_min.y};
-    b_b = {base_x + b_w, plot_min.y};
+    b_a = {base_x, plot_max.y};
+    b_b = {base_x + b_w, plot_max.y};
     if(double_sided) b_a.x -= b_w; // add other side 
     ImGui::GetWindowDrawList()->AddLine(b_a, b_b, col, line_thickness);
     return std::numeric_limits<float>::quiet_NaN();
 }
 
-inline violin_position_order_t get_violin_pos_order(){
-    return {};
+inline violin_position_order_t get_violin_pos_order(const std::vector<std::vector<std::reference_wrapper<structures::violins::histogram>>> per_attribute_histograms, const std::vector<uint32_t>& active_attributes, const std::vector<structures::violins::violin_appearance_t>& attribute_position_scaling, std::string_view palette_name){
+    const auto color_palette = (brew_palette_infos() | util::try_pick_if<palette_info_t>([&palette_name](const palette_info_t& t){return t.name == palette_name;})).value();
+    const size_t attribute_count = per_attribute_histograms.size();
+
+    std::vector<structures::violins::violin_appearance_t> violin_positions(attribute_count, structures::violins::violin_appearance_t{});
+
+    // the overlap is calculated between all combinations of attributes
+    std::vector<std::vector<float>> hist_overlaps(attribute_count, std::vector<float>(attribute_count, 0));
+    for(uint32_t i: util::i_range(attribute_count)){
+        if(!(active_attributes | util::contains(i))) continue;
+        for(int j: util::i_range(i + 1, attribute_count)){
+            if(!(active_attributes | util::contains(j))) continue;
+            // sum up overlap over all histograms
+            for(int h: util::size_range(per_attribute_histograms[i])){
+                for(int b: util::size_range(per_attribute_histograms[i][h].get().smoothed_values))
+                    hist_overlaps[i][j] += std::min(per_attribute_histograms[i][h].get().smoothed_values[b], per_attribute_histograms[j][h].get().smoothed_values[b]);
+            }
+        }
+    }
+
+    // Now the histograms are moved to different sizes of the middle violin
+    // Goal is to put the most similar (highes hist_overlap) to different sides of the violin plots
+    // placed_attributes contains the attributes in order they should be rendered, from back to front
+    std::vector<uint32_t> placed_attributes;
+    while(true){
+        float cur_max = -1;
+        int i_max = -1;
+        int j_max = -1;
+
+        for(int i: util::size_range(hist_overlaps)){
+            if(placed_attributes | util::contains(uint32_t(i)))
+                continue;
+            for(int j: util::i_range(i + 1, hist_overlaps.size())){
+                if(placed_attributes | util::contains(uint32_t(j)))
+                    continue;
+                if(hist_overlaps[i][j] > cur_max){
+                    cur_max = hist_overlaps[i][j];
+                    i_max = i;
+                    j_max = j;
+                }
+            }
+        }
+
+        if(i_max == -1 || j_max == -1) break;
+
+        // for following positioning we have to consider the already positioned sides
+        if(placed_attributes.empty()){
+            violin_positions[i_max].dir = structures::violins::violin_dir_t::left;
+            violin_positions[j_max].dir = structures::violins::violin_dir_t::right;
+        }
+        else{
+            // checking the overlap on both sides if i is left and if i is right
+            // to do this iterate over all placed attributes and adding the histogram overlap to either i_left or i_right
+            float overlap_i_left{}, overlap_i_right{};
+
+            for(uint32_t attribute: placed_attributes){
+                uint32_t i_min = std::min<uint32_t>(attribute, i_max);
+                uint32_t i_maxx = std::max<uint32_t>(attribute, i_max);
+                uint32_t j_min = std::min<uint32_t>(attribute, j_max);
+                uint32_t j_maxx = std::max<uint32_t>(attribute, j_max);
+                if(violin_positions[attribute].dir == structures::violins::violin_dir_t::left){
+                    overlap_i_left += hist_overlaps[i_min][i_maxx];
+                    overlap_i_right += hist_overlaps[j_min][j_maxx];
+                }
+                else{
+                    overlap_i_left += hist_overlaps[j_min][j_maxx];
+                    overlap_i_right += hist_overlaps[i_min][i_maxx];
+                }
+            }
+            if(overlap_i_left < overlap_i_right){
+                violin_positions[i_max].dir = structures::violins::violin_dir_t::left;
+                violin_positions[j_max].dir = structures::violins::violin_dir_t::right;
+            }
+            else{
+                violin_positions[i_max].dir = structures::violins::violin_dir_t::right;
+                violin_positions[j_max].dir = structures::violins::violin_dir_t::left;
+            }
+        }
+
+        placed_attributes.emplace_back(i_max);
+        placed_attributes.emplace_back(j_max);
+    }
+
+    // assign the colors to the attributes and creating the order array
+    std::vector<structures::attribute_order_info> attribute_order(attribute_count);
+    auto rev_attributes = util::rev_iter(placed_attributes);
+    for(auto [a, i]: util::enumerate(rev_attributes)){
+        attribute_order[i].attribut_index = a;
+        attribute_order[i].active = active_attributes | util::contains(a);
+        violin_positions[a].color = util::color_brewer::brew_imcol(palette_name, color_palette.max_colors)[i % color_palette.max_colors].Value;
+    }
+
+    return {std::move(violin_positions), std::move(attribute_order)};
 }
 }
 }

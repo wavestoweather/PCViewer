@@ -1,5 +1,6 @@
 #include "violin_drawlist_workbench.hpp"
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_util.hpp>
 #include <violin_util.hpp>
 #include <histogram_registry_util.hpp>
@@ -20,6 +21,8 @@ void violin_drawlist_workbench::_update_attribute_histograms(){
     const auto active_drawlist_attributes = get_active_drawlist_attributes();
     const auto attribute_bounds = get_attribute_min_max();
     std::tie(_global_max, _per_attribute_max, _drawlist_attribute_histograms) = util::violins::update_histograms(active_drawlist_attributes, attribute_bounds, settings.read().smoothing_std_dev, settings.read().histogram_bin_count, session_state.read().attributes.size(), settings.read().ignore_zero_bins, session_state.read().attribute_log);
+
+    _update_attribute_positioning();
 
     settings.changed = false;
     session_state.changed = false;
@@ -70,6 +73,27 @@ void violin_drawlist_workbench::_update_registered_histograms(){
             logger << logging::endl;
         }
     }
+}
+
+void violin_drawlist_workbench::_update_attribute_positioning(bool update_direct){
+    if(!settings.read().reposition_attributes_on_update && !update_direct)
+        return;
+    structures::violins::histogram d;
+    std::vector<std::vector<std::reference_wrapper<structures::violins::histogram>>> per_attribute_histograms(session_state.read().attributes.size());
+    for(const auto& [dl_id, dl]: session_state.read().drawlists){
+        if(!dl.appearance->read().show)
+            continue;
+        for(uint32_t a: util::size_range(session_state.read().attributes)){
+            if(_drawlist_attribute_histograms.contains({dl_id, a}))
+                per_attribute_histograms[a].emplace_back(_drawlist_attribute_histograms.at({dl_id, a}));
+            else
+                per_attribute_histograms[a].emplace_back(d);
+        }
+    }
+    if(per_attribute_histograms.empty())
+        return;
+    const auto active_attributes = get_active_indices();
+    std::tie(session_state().attribute_violin_appearances, session_state().attribute_order_infos) = util::violins::get_violin_pos_order(per_attribute_histograms, active_attributes, session_state.read().attribute_violin_appearances, settings.read().attribute_color_palette);
 }
 
 violin_drawlist_workbench::violin_drawlist_workbench(std::string_view id): workbench(id){
@@ -206,7 +230,26 @@ void violin_drawlist_workbench::show(){
             settings();
         ImGui::DragFloat("Plot height", &settings.read().plot_height, 1, 5, 50000);
         ImGui::DragFloat("Plot padding", &settings.read().plot_padding, 1, 0, 100);
+        ImGui::Separator();
+        ImGui::Text("Attrribute coloring");
+        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x / 4);
+        if(ImGui::BeginCombo("Palette type", settings.read().attribute_color_palette_type.c_str())){
+            for(const auto& [name, palette]: brew_palette_types())
+                if(ImGui::MenuItem(name.data()))
+                    settings.read().attribute_color_palette_type = name;
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if(ImGui::BeginCombo("Color Scheme", settings.read().attribute_color_palette.c_str())){
+            for(const auto& palette: brew_palette_types().at(settings.read().attribute_color_palette_type))
+                if(ImGui::MenuItem(palette.data()))
+                    settings.read().attribute_color_palette = palette;
+            ImGui::EndCombo();
+        }
+        ImGui::PopItemWidth();
         ImGui::Checkbox("Auto-repositon attributes", &settings.read().reposition_attributes_on_update);
+        if(ImGui::Button("Reposition/recolor attributes"))
+            _update_attribute_positioning(true);
 
         ImGui::TableNextColumn();
         if(ImGui::BeginTable("attributes", 7, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
@@ -299,7 +342,13 @@ void violin_drawlist_workbench::show(){
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Selectable(dl_id.data());
+                bool selected = globals::selected_drawlists | util::contains(dl_id);
+                if(ImGui::Selectable(dl_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
+                    if(selected)
+                        globals::selected_drawlists.clear();
+                    else
+                        globals::selected_drawlists.emplace_back(dl_id);
+                }
                 if(ImGui::BeginDragDropSource()){
                     ImGui::SetDragDropPayload(drag_type_matrix.data(), &dl_id, sizeof(dl_id));
                     ImGui::Text("%s", dl_id.data());

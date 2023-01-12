@@ -6,7 +6,7 @@
 
 namespace util{
 namespace color_brewer{
-inline std::vector<ImU32> brew_u32(const std::string& color_name, size_t color_count){
+inline std::vector<ImU32> brew_u32(std::string_view color_name, size_t color_count){
     auto colors = brew<std::string_view>(color_name, color_count);
 
     std::stringstream converter; converter << std::hex; // setting the converter to hex
@@ -19,7 +19,7 @@ inline std::vector<ImU32> brew_u32(const std::string& color_name, size_t color_c
     return output;
 }
 
-inline std::vector<ImColor> brew_imcol(const std::string& color_name, size_t color_count){
+inline std::vector<ImColor> brew_imcol(std::string_view color_name, size_t color_count){
     auto colors = brew<std::string_view>(color_name, color_count);
 
     ImU32 c;
