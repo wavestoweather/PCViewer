@@ -31,6 +31,10 @@
 #include <main_window_util.hpp>
 #include <settings_manager.hpp>
 
+#ifdef min
+#undef min
+#endif
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
     logger << logging::vulkan_validation_prefix << " " << pCallbackData->pMessage << logging::endl;
@@ -140,7 +144,8 @@ int main(int argc, char* argv[]){
     ImGui::GetIO().ConfigViewportsNoDecoration = false;
     std::vector<float> font_sizes{10.f, 15.f, 25.f};
     util::imgui::load_fonts("fonts/", font_sizes);
-    ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
+    if(ImGui::GetIO().Fonts->Fonts.size() > 1)
+        ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
     if(globals::commandline_parser.isSet("printfontinfo"))
         logger << "[info] Amount of fonts available: " << ImGui::GetIO().Fonts->Fonts.size() / font_sizes.size() << logging::endl;
 
