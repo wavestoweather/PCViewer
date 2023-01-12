@@ -229,6 +229,16 @@ public:
     };
 };
 
+class Vector_Iota: public DataCreation, public Creatable<Vector_Iota>{
+public:
+    Vector_Iota(): DataCreation(createFilledVec<FloatType, Type>(1), {"Size"}, createFilledVec<FloatType, Type>(1), {""}, "Iota Vector", ""){};
+
+    void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        size_t cur_index{};
+        applyNonaryFunction(input, output, 0, [&cur_index](){return cur_index++;});
+    };
+};
+
 class Serialization: public Node{
 public:
     Serialization(std::vector<std::unique_ptr<Type>>&& inputTypes = {},

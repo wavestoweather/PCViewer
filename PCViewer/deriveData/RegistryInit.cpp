@@ -6,6 +6,7 @@ REGISTER(DatasetInput);
 REGISTER(Vector_Zero);
 REGISTER(Vector_One);
 REGISTER(Vector_Random);
+REGISTER(Vector_Iota);
 REGISTER(Print_Vector);
 REGISTER(Print_Indices);
 REGISTER(DatasetOutput);
