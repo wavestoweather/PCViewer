@@ -12,6 +12,10 @@
 #include <violin_drawlist_workbench.hpp>
 #include <violin_attribute_workbench.hpp>
 
+#ifdef max
+#undef max
+#endif
+
 namespace util{
 namespace workbench{
 void setup_default_workbenches(){

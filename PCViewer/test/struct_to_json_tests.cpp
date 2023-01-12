@@ -21,7 +21,7 @@ bool check_struct(){
     return test_result::parse_error;
 }
 
-int struct_to_json_tests(int argc, char** argv){
+int struct_to_json_tests(int argc, char** const argv){
     check_res(check_struct<workbenches::parallel_coordinates_workbench::settings_t>());
     check_res(check_struct<structures::scatterplot_wb::settings_t>());
 

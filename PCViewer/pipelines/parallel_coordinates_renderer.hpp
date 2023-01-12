@@ -49,9 +49,9 @@ class parallel_coordinates_renderer{
         uint32_t    c_size{};
         uint32_t    d_size{};
         float       padding{};
-        uint        priority_rendering{};         // 1 indicates priority rendering should be used
+        uint32_t    priority_rendering{};         // 1 indicates priority rendering should be used
         ImVec4      color{};
-        uint        line_verts{2};
+        uint32_t    line_verts{2};
     };
 
     struct push_constants_hist_vert{
@@ -59,8 +59,8 @@ class parallel_coordinates_renderer{
     };
     struct push_constants_hist_frag{
         uint64_t histogram_address{};
-        uint     bin_count{};
-        uint     mapping_type{};
+        uint32_t bin_count{};
+        uint32_t mapping_type{};
         ImVec4   color{};
         float    blur_radius{};
     };

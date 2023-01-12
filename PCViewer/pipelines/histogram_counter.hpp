@@ -8,6 +8,10 @@
 #include <data_type.hpp>
 #include <default_hash.hpp>
 
+#ifdef max
+#undef max
+#endif
+
 namespace structures{
 namespace histogram_counter_structs{
 enum class reduction_type_t: uint32_t{

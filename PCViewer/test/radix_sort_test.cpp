@@ -9,6 +9,7 @@
 #include <ranges.hpp>
 #include <string_view>
 #include <radix_sort.hpp>
+#include <numeric>
 #include "test_commons.hpp"
 
 #define BENCHMARK_STD_SORT
@@ -174,7 +175,7 @@ int benchmark_inplace_radix(size_t n, double max, std::string_view test_name, in
     return test_result::success;
 }
 
-int radix_sort_test(int, char**){
+int radix_sort_test(int, char** const){
     // transformer tests
     check_res(test_transformer(.5f));
     check_res(test_transformer(.5));

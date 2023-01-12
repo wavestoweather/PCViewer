@@ -34,6 +34,14 @@
 #include "../cimg/CImg.h"
 #include "../vulkan/vk_format_util.hpp"
 
+#ifdef min
+#undef min
+#endif
+
+#ifdef max
+#undef max
+#endif
+
 namespace util{
 namespace dataset{
 namespace open_internals{

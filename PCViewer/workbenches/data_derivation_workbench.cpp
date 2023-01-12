@@ -429,7 +429,7 @@ bool data_derivation_workbench::_is_input_pin(int64_t pin_id){
 
 std::set<int64_t> data_derivation_workbench::_get_active_links_recursive(int64_t node)
 {
-    std::set<long> output;
+    std::set<int64_t> output;
     auto& [nodes, pin_to_nodes, links, link_to_connection, pin_to_links] = *_execution_graphs[std::string(main_execution_graph_id)];
     for(int i: nodes[node].inputIds){
         if(pin_to_links.count(i) && pin_to_links[i].size()){

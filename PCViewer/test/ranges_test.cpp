@@ -37,7 +37,7 @@ int test_find_if(){
     return test_result::success;
 }
 
-int ranges_test(int argc, char** argv){
+int ranges_test(int argc, char** const argv){
     check_res(test_find());
     check_res(test_find_if());
 

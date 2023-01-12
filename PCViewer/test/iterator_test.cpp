@@ -30,7 +30,7 @@ int test_last_iterator(){
     return test_result::success;
 }
 
-int iterator_test(int argc, char** argv){
+int iterator_test(int argc, char** const argv){
     check_res(test_first_iterator());
     check_res(test_last_iterator());
 

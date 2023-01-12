@@ -158,7 +158,7 @@ void violin_attribute_workbench::show(){
             if(hovered_plot)
                 line_thickness *= 2;
             float hover_val = util::violins::imgui_violin_border(plot_min, plot_max, histogram.smoothed_values, hist_normalization_fac, violin_app, line_thickness);
-            if(isnanf(hover_val)){
+            if(isnan(hover_val)){
                 if(hovered_plot)
                     _hovered_dl_attribute = {};
                 continue;

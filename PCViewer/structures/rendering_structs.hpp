@@ -66,7 +66,7 @@ namespace parallel_coordinates_renderer{
         bool operator==(const multisample_key& o) const {return util::memory_view<const uint32_t>(util::memory_view(*this)).equal_data(util::memory_view<const uint32_t>(util::memory_view(o)));}
     };
     struct multisample_val{
-        uint                    count{};
+        uint32_t                count{};
         structures::image_info  image{};
         VkImageView             image_view{};
     };

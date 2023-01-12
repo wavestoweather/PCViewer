@@ -144,7 +144,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         }
 
         std::vector<bool> registrator_needed(_registered_axis_histograms[dl.drawlist_id].size(), false);
-        for(uint i: active_indices){
+        for(uint32_t i: active_indices){
             int height = plot_data.read().height;
             auto registrator_id = util::histogram_registry::get_id_string(i, height, attributes.read()[i].bounds.read(), false, false);
             int registrator_index{-1};
