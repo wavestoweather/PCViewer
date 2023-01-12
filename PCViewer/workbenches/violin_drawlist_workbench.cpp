@@ -343,7 +343,7 @@ void violin_drawlist_workbench::show(){
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 bool selected = globals::selected_drawlists | util::contains(dl_id);
-                if(ImGui::Selectable(dl_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing)){
+                if(ImGui::Selectable(dl_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
                     if(selected)
                         globals::selected_drawlists.clear();
                     else

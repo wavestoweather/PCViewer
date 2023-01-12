@@ -142,7 +142,7 @@ void data_workbench::show()
             }
         }
         if(alpha_count) _uniform_alpha /= alpha_count;
-        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, std::max(1e-20, _uniform_alpha * (180./200)), std::min(1., _uniform_alpha * (220./200)), "%.3g")){
+        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, std::max(1e-20, _uniform_alpha * .5), std::min(1., _uniform_alpha * 2.), "%.3g")){
             if(globals::selected_drawlists.size()){
                 for(const auto& dl: globals::selected_drawlists)
                     globals::drawlists()[dl]().appearance_drawlist().color.w = _uniform_alpha;
