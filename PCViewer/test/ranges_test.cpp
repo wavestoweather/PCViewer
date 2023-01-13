@@ -1,6 +1,7 @@
 #include "test_commons.hpp"
 #include <ranges.hpp>
 #include <change_tracker.hpp>
+#include <map>
 
 struct test_result{
     static const int success = 0;
@@ -46,6 +47,11 @@ int test_rev_size_range(){
     structures::change_tracker<std::vector<int>> c;
     c() = {16, 10, 13};
     for(int i: util::rev_size_range(c.read()))
+        if(i < 0)
+            return test_result::error;
+
+    std::map<int, std::vector<int>> m{{2, {1,8,7}}};
+    for(int i: util::rev_size_range(m[2]))
         if(i < 0)
             return test_result::error;
     return test_result::success;

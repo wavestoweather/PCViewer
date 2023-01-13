@@ -56,7 +56,7 @@ To compile on windows 64 bit with VSCode follow these steps:
 - Install Vulkan from the [Vulkan website](https://vulkan.lunarg.com/sdk/home)
 - Open a terminal to install packages with vcpkg:
 ```
-    vcpkg install sdl2:x64-windows
+    vcpkg install sdl2[vulkan]:x64-windows
     vcpkg install netcdf-c:x64-windows
     vcpkg install libpng:x64-windows
     vcpkg install tbb:x64-windows

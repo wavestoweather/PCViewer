@@ -69,6 +69,10 @@ int main(int argc, char* argv[]){
     }
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_MAXIMIZED);
     window = SDL_CreateWindow("PCViewer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    if(!window){
+        std::cout << logging::error_prefix << " " << SDL_GetError() << std::endl;
+        return -1;
+    }
     // Setup Drag and drop callback
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
     uint32_t instance_extension_count = 0;
@@ -298,15 +302,17 @@ int main(int argc, char* argv[]){
                 continue;
 
             if(std::string_view(last_line).substr(0, logging::warning_prefix.size()) == logging::warning_prefix)
-                ImGui::TextColored({.75f, .4f, 0, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({.75f, .4f, 0, 1.f}, "%s", last_line.c_str());
             else if(std::string_view(last_line).substr(0, logging::error_prefix.size()) == logging::error_prefix)
-                ImGui::TextColored({.8f, 0, .2f, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({.8f, 0, .2f, 1.f}, "%s", last_line.c_str());
             else if(std::string_view(last_line).substr(0, logging::vulkan_validation_prefix.size()) == logging::vulkan_validation_prefix)
-                ImGui::TextColored({.2f, .2f, .2f, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({.2f, .2f, .2f, 1.f}, "%s", last_line.c_str());
             else
-                ImGui::TextColored({0, 0, 0, 1}, "%s", last_line.c_str());
+                ImGui::TextColored({0, 0, 0, 1.f}, "%s", last_line.c_str());
         }
-        ImGui::SetScrollHereY(1);
+        if(logger.scroll_bottom)
+            ImGui::SetScrollHereY(1);
+        logger.scroll_bottom = false;
         ImGui::End();   // log window
         ImGui::PopStyleColor();
 

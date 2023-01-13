@@ -34,7 +34,7 @@ const structures::enum_names<level> level_names{
 }
 
 namespace structures{
-template<uint32_t buffered_lines = 20>
+template<uint32_t buffered_lines = 30>
 class logger{
     std::array<std::stringstream, buffered_lines>   _last_lines{};
     uint32_t                                        _write_head{};
@@ -47,6 +47,7 @@ public:
     bool                        write_to_cout{true};
     bool                        prepare_full_lines_string{false};
     logging::level              logging_level{logging::level::l_4};
+    bool                        scroll_bottom{};
 
     static constexpr uint32_t   buffer_size{buffered_lines};
 
@@ -61,6 +62,7 @@ public:
     }
 
     logger& operator<<(const logging::endline& o){
+        scroll_bottom = true;
         _write_head = ++_write_head % buffered_lines;
         _last_lines[_write_head].str("");
 
