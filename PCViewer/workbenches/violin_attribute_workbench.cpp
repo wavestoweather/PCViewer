@@ -414,7 +414,7 @@ void violin_attribute_workbench::add_drawlists(const util::memory_view<std::stri
         for(int var: util::size_range(session_state.read().attributes)){
             if(session_state.read().attributes[var].id != ds.attributes[var].id)
                 break;
-            merge_index = var;
+            merge_index = var + 1;
         }
 
         if(merge_index < session_state.read().attributes.size()){

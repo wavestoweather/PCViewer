@@ -267,6 +267,8 @@ int main(int argc, char* argv[]){
             structures::drawlist_dataset_dependency* drawlist_dataset_wb = dynamic_cast<structures::drawlist_dataset_dependency*>(wb.get());
             if(dataset_wb || drawlist_dataset_wb){
                 ImGuiWindow* wb_window = ImGui::FindWindowByName(wb->id.c_str());
+                if(!ImGui::GetCurrentContext()->HoveredWindow || wb->id != ImGui::GetCurrentContext()->HoveredWindow->Name)
+                    continue;
                 ImRect bb = wb_window->Rect();
                 bb.Expand(-5);
                 ImGuiID dataset_id = ImGui::GetID((wb->id + "da").c_str());

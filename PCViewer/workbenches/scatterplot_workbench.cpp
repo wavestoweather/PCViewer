@@ -332,147 +332,149 @@ void scatterplot_workbench::show()
     }
 
     // settings ---------------------------------------------------------
-    ImGui::BeginTable("scatterplot_setting", 2, ImGuiTableFlags_Resizable);
-    // column setup
-    ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
-    ImGui::TableSetupColumn("Settings");
-    ImGui::TableSetupColumn("Drawlists");
-    ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
-    ImGui::TableNextColumn();
-    ImGui::TableHeader("Settings");
-    ImGui::TableNextColumn();
-    ImGui::TableHeader("Drawlists");
-
-    // settings
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    if(ImGui::BeginCombo("plot type", plot_type_names[settings.read().plot_type].data())){
-        for(auto t: structures::enum_iteration<plot_type_t>()){
-            if(ImGui::MenuItem(plot_type_names[t].data())){
-                settings().plot_type = t;
-                _update_plot_list();
-            }
-        }
-        ImGui::EndCombo();
-    }
-    if(ImGui::TreeNodeEx("Attribute Settings", ImGuiTreeNodeFlags_Framed)){
-        switch(settings.read().plot_type){
-        case plot_type_t::matrix:
-            ImGui::PushID("s_wb_att_set");
-            for(auto& attribute: attribute_order_infos.ref_no_track()){
-                if(ImGui::Checkbox(attributes.read()[attribute.attribut_index].id.data(), &attribute.active))
-                    attribute_order_infos();
-            }
-            ImGui::PopID();
-            break;
-        case plot_type_t::list:
-            for(uint32_t i: util::i_range(1, attributes.read().size())){
-                for(uint32_t j: util::i_range(0, i)){
-                    //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
-                    if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{int(i), int(j)}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
-                        plot_list().emplace_back(attribute_pair{int(i), int(j)});
-                }
-            }
-            break;
-        }
-        ImGui::TreePop();
-    }
-    if(ImGui::TreeNodeEx("General Settings", ImGuiTreeNodeFlags_Framed)){
-        ImGui::InputDouble("plot padding", &settings.read().plot_padding);
-        ImGui::ColorEdit4("##cols", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-        ImGui::TreePop();
-    }
-
-    // drawlists
-    std::string_view delete_drawlist{};
-    ImGui::TableNextColumn();
-        ImGui::BeginTable("drawlists", 8, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg);
-        ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Up");
-        ImGui::TableSetupColumn("Down");
-        ImGui::TableSetupColumn("Delete");
-        ImGui::TableSetupColumn("Active");
-        ImGui::TableSetupColumn("Color");
-        ImGui::TableSetupColumn("Splat form");
-        ImGui::TableSetupColumn("Radius");
-
-        // header labels
+    if(ImGui::BeginTable("scatterplot_setting", 2, ImGuiTableFlags_Resizable)){
+        // column setup
+        ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
+        ImGui::TableSetupColumn("Settings");
+        ImGui::TableSetupColumn("Drawlists");
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         ImGui::TableNextColumn();
-        ImGui::TableHeader("Name");
+        ImGui::TableHeader("Settings");
         ImGui::TableNextColumn();
-        ImGui::TableHeader("Up");
-        ImGui::TableNextColumn();
-        ImGui::TableHeader("Down");
-        ImGui::TableNextColumn();
-        ImGui::TableHeader("Delete");
-        ImGui::TableNextColumn();
-        ImGui::TableHeader("Active");
-        ImGui::TableNextColumn();
-        ImGui::TableHeader("Color");
-        ImGui::TableNextColumn();
-        ImGui::TableHeader("Splat form");
-        ImGui::TableNextColumn();
-        ImGui::TableHeader("Radius");
+        ImGui::TableHeader("Drawlists");
 
-        int up_index{-1}, down_index{-1};
-        ImGui::PushID(id.data());  // used to distinguish all ui elements in different workbenches
-        for(int dl_index: util::rev_size_range(drawlist_infos.read())){
-            if(dl_index < 0) break;
-            auto& dl = drawlist_infos.ref_no_track()[dl_index];
-            ImGui::PushID(dl.drawlist_id.data());
-            
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            DRAWLIST_SELECTABLE(dl.drawlist_id);
-            ImGui::TableNextColumn();
-            ImGui::BeginDisabled(dl_index == drawlist_infos.read().size() - 1);
-            if(ImGui::ArrowButton("##us", ImGuiDir_Up))
-                up_index = dl_index;
-            ImGui::EndDisabled();
-            ImGui::TableNextColumn();
-            ImGui::BeginDisabled(dl_index == 0);
-            if(ImGui::ArrowButton("##ds", ImGuiDir_Down))
-                down_index = dl_index;
-            ImGui::EndDisabled();
-            ImGui::TableNextColumn();
-            if(ImGui::Button("X##xs"))
-                delete_drawlist = dl.drawlist_id;
-            ImGui::TableNextColumn();
-            if(ImGui::Checkbox("##acts", &dl.appearance->ref_no_track().show))
-                dl.appearance->write();
-            ImGui::TableNextColumn();
-            if(ImGui::ColorEdit4("##cols", &dl.appearance->ref_no_track().color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
-                dl.appearance->write();
-            ImGui::TableNextColumn();
-            if(ImGui::BeginCombo("##form", splat_form_names[dl.scatter_appearance.read().splat].data())){
-                for(auto e: structures::enum_iteration<splat_form_t>()){
-                    if(ImGui::MenuItem(splat_form_names[e].data()))
-                        drawlist_infos()[dl_index].scatter_appearance().splat = e;
+        // settings
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        if(ImGui::BeginCombo("plot type", plot_type_names[settings.read().plot_type].data())){
+            for(auto t: structures::enum_iteration<plot_type_t>()){
+                if(ImGui::MenuItem(plot_type_names[t].data())){
+                    settings().plot_type = t;
+                    _update_plot_list();
                 }
-                ImGui::EndCombo();
             }
-            ImGui::TableNextColumn();
-            if(ImGui::DragFloat("##rad", &dl.scatter_appearance.ref_no_track().radius, 1, 1.f, 100.f))
-                drawlist_infos()[dl_index].scatter_appearance();
-            ImGui::PopID();
+            ImGui::EndCombo();
         }
-        ImGui::PopID();
-        if(up_index >= 0 && up_index < drawlist_infos.read().size() - 1)
-            std::swap(drawlist_infos()[up_index], drawlist_infos()[up_index + 1]);
-        if(down_index > 0)
-            std::swap(drawlist_infos()[down_index], drawlist_infos()[down_index - 1]);
+        if(ImGui::TreeNodeEx("Attribute Settings", ImGuiTreeNodeFlags_Framed)){
+            switch(settings.read().plot_type){
+            case plot_type_t::matrix:
+                ImGui::PushID("s_wb_att_set");
+                for(auto& attribute: attribute_order_infos.ref_no_track()){
+                    if(ImGui::Checkbox(attributes.read()[attribute.attribut_index].id.data(), &attribute.active))
+                        attribute_order_infos();
+                }
+                ImGui::PopID();
+                break;
+            case plot_type_t::list:
+                for(uint32_t i: util::i_range(1, attributes.read().size())){
+                    for(uint32_t j: util::i_range(0, i)){
+                        //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
+                        if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{int(i), int(j)}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
+                            plot_list().emplace_back(attribute_pair{int(i), int(j)});
+                    }
+                }
+                break;
+            }
+            ImGui::TreePop();
+        }
+        if(ImGui::TreeNodeEx("General Settings", ImGuiTreeNodeFlags_Framed)){
+            ImGui::InputDouble("plot padding", &settings.read().plot_padding);
+            ImGui::ColorEdit4("##cols", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+            ImGui::TreePop();
+        }
+
+        // drawlists
+        std::string_view delete_drawlist{};
+        ImGui::TableNextColumn();
+        if(ImGui::BeginTable("drawlists", 8, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Up");
+            ImGui::TableSetupColumn("Down");
+            ImGui::TableSetupColumn("Delete");
+            ImGui::TableSetupColumn("Active");
+            ImGui::TableSetupColumn("Color");
+            ImGui::TableSetupColumn("Splat form");
+            ImGui::TableSetupColumn("Radius");
+
+            // header labels
+            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Name");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Up");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Down");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Delete");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Active");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Color");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Splat form");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Radius");
+
+            int up_index{-1}, down_index{-1};
+            ImGui::PushID(id.data());  // used to distinguish all ui elements in different workbenches
+            for(int dl_index: util::rev_size_range(drawlist_infos.read())){
+                if(dl_index < 0) break;
+                auto& dl = drawlist_infos.ref_no_track()[dl_index];
+                ImGui::PushID(dl.drawlist_id.data());
+                
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                DRAWLIST_SELECTABLE(dl.drawlist_id);
+                ImGui::TableNextColumn();
+                ImGui::BeginDisabled(dl_index == drawlist_infos.read().size() - 1);
+                if(ImGui::ArrowButton("##us", ImGuiDir_Up))
+                    up_index = dl_index;
+                ImGui::EndDisabled();
+                ImGui::TableNextColumn();
+                ImGui::BeginDisabled(dl_index == 0);
+                if(ImGui::ArrowButton("##ds", ImGuiDir_Down))
+                    down_index = dl_index;
+                ImGui::EndDisabled();
+                ImGui::TableNextColumn();
+                if(ImGui::Button("X##xs"))
+                    delete_drawlist = dl.drawlist_id;
+                ImGui::TableNextColumn();
+                if(ImGui::Checkbox("##acts", &dl.appearance->ref_no_track().show))
+                    dl.appearance->write();
+                ImGui::TableNextColumn();
+                if(ImGui::ColorEdit4("##cols", &dl.appearance->ref_no_track().color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+                    dl.appearance->write();
+                ImGui::TableNextColumn();
+                if(ImGui::BeginCombo("##form", splat_form_names[dl.scatter_appearance.read().splat].data())){
+                    for(auto e: structures::enum_iteration<splat_form_t>()){
+                        if(ImGui::MenuItem(splat_form_names[e].data()))
+                            drawlist_infos()[dl_index].scatter_appearance().splat = e;
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::TableNextColumn();
+                if(ImGui::DragFloat("##rad", &dl.scatter_appearance.ref_no_track().radius, 1, 1.f, 100.f))
+                    drawlist_infos()[dl_index].scatter_appearance();
+                ImGui::PopID();
+            }
+            ImGui::PopID();
+            if(up_index >= 0 && up_index < drawlist_infos.read().size() - 1)
+                std::swap(drawlist_infos()[up_index], drawlist_infos()[up_index + 1]);
+            if(down_index > 0)
+                std::swap(drawlist_infos()[down_index], drawlist_infos()[down_index - 1]);
+
+            ImGui::EndTable();
+        }
 
         ImGui::EndTable();
-
-    ImGui::EndTable();
+    }
 
     // popups
     if(ImGui::BeginPopup(plot_menu_id.data())){
         ImGui::PushItemWidth(100);
         ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-        ImGui::BeginDisabled(plot_additional_datas.contains(_popup_attributes));
+        ImGui::BeginDisabled(!plot_additional_datas.contains(_popup_attributes));
         if(ImGui::MenuItem("Remove background image"))
             plot_additional_datas.erase(_popup_attributes);
         ImGui::EndDisabled();
