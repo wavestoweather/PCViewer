@@ -34,7 +34,7 @@ const structures::enum_names<level> level_names{
 }
 
 namespace structures{
-template<uint32_t buffered_lines = 30>
+template<uint32_t buffered_lines = 40>
 class logger{
     std::array<std::stringstream, buffered_lines>   _last_lines{};
     uint32_t                                        _write_head{};

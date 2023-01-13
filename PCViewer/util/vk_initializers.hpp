@@ -72,7 +72,7 @@ inline VkRenderPassBeginInfo renderPassBeginInfo(VkRenderPass renderPass = {}, V
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.framebuffer = framebuffer;
     renderPassBeginInfo.renderArea = renderArea;
-    renderPassBeginInfo.clearValueCount = clearValues.size();
+    renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassBeginInfo.pClearValues = clearValues.data();
     return renderPassBeginInfo;
 }
@@ -81,11 +81,11 @@ inline VkRenderPassCreateInfo renderPassCreateInfo(const memory_view<VkAttachmen
 {
     VkRenderPassCreateInfo renderPassCreateInfo {};
     renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassCreateInfo.attachmentCount = attachments.size();
+    renderPassCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
     renderPassCreateInfo.pAttachments = attachments.data();
-    renderPassCreateInfo.subpassCount = subpasses.size();
+    renderPassCreateInfo.subpassCount = static_cast<uint32_t>(subpasses.size());
     renderPassCreateInfo.pSubpasses = subpasses.data();
-    renderPassCreateInfo.dependencyCount = dependencies.size();
+    renderPassCreateInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
     renderPassCreateInfo.pDependencies = dependencies.data();
     return renderPassCreateInfo;
 }
@@ -168,7 +168,7 @@ inline VkFramebufferCreateInfo framebufferCreateInfo(VkRenderPass renderPass = {
     VkFramebufferCreateInfo framebufferCreateInfo {};
     framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferCreateInfo.renderPass = renderPass;
-    framebufferCreateInfo.attachmentCount = attachments.size();
+    framebufferCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
     framebufferCreateInfo.pAttachments = attachments.data();
     framebufferCreateInfo.width = width;
     framebufferCreateInfo.height = height;
@@ -294,7 +294,7 @@ inline VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {};
     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     descriptorSetLayoutCreateInfo.pBindings = bindings.data();
-    descriptorSetLayoutCreateInfo.bindingCount = bindings.size();
+    descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     return descriptorSetLayoutCreateInfo;
 }
 
@@ -304,9 +304,9 @@ inline VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo(
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutCreateInfo.flags = createFlags;
-    pipelineLayoutCreateInfo.setLayoutCount = descSetLayouts.size();
+    pipelineLayoutCreateInfo.setLayoutCount = static_cast<uint32_t>(descSetLayouts.size());
     pipelineLayoutCreateInfo.pSetLayouts = descSetLayouts.data();
-    pipelineLayoutCreateInfo.pushConstantRangeCount = pushConstantRanges.size();
+    pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
     pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
     return pipelineLayoutCreateInfo;
 }
@@ -318,7 +318,7 @@ inline VkDescriptorSetAllocateInfo descriptorSetAllocateInfo(
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {};
     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     descriptorSetAllocateInfo.descriptorPool = descriptorPool;
-    descriptorSetAllocateInfo.descriptorSetCount = layouts.size();
+    descriptorSetAllocateInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
     descriptorSetAllocateInfo.pSetLayouts = layouts.data();
     return descriptorSetAllocateInfo;
 }
@@ -466,7 +466,7 @@ inline VkPipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo(
 {
     VkPipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo {};
     pipelineColorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    pipelineColorBlendStateCreateInfo.attachmentCount = attachments.size();
+    pipelineColorBlendStateCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
     pipelineColorBlendStateCreateInfo.pAttachments = attachments.data();
     return pipelineColorBlendStateCreateInfo;
 }
@@ -540,7 +540,7 @@ inline VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo(
     pipelineCreateInfo.layout = layout;
     pipelineCreateInfo.renderPass = renderPass;
     pipelineCreateInfo.flags = flags;
-    pipelineCreateInfo.stageCount = shaderStages.size();
+    pipelineCreateInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
     pipelineCreateInfo.pStages = shaderStages.data();
     pipelineCreateInfo.basePipelineIndex = -1;
     pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -679,13 +679,13 @@ inline VkAttachmentDescription attachmentDescription(VkFormat format, VkSampleCo
 inline VkSubpassDescription subpassDescription(VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS, const memory_view<VkAttachmentReference> inputAttechments = {}, const memory_view<VkAttachmentReference> colorAttachments = {}, const memory_view<VkAttachmentReference> resolveAttachments = {}, const memory_view<VkAttachmentReference> depthStencilAttachment = {}, const memory_view<uint32_t> preserveAttachments = {}){
     VkSubpassDescription subpassDescription{};
     subpassDescription.pipelineBindPoint = bindPoint;
-    subpassDescription.inputAttachmentCount = inputAttechments.size();
+    subpassDescription.inputAttachmentCount = static_cast<uint32_t>(inputAttechments.size());
     subpassDescription.pInputAttachments = inputAttechments.data();
-    subpassDescription.colorAttachmentCount = colorAttachments.size();
+    subpassDescription.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
     subpassDescription.pColorAttachments = colorAttachments.data();
     subpassDescription.pResolveAttachments = resolveAttachments.data();
     subpassDescription.pDepthStencilAttachment = depthStencilAttachment.data();
-    subpassDescription.preserveAttachmentCount = preserveAttachments.size();
+    subpassDescription.preserveAttachmentCount = static_cast<uint32_t>(preserveAttachments.size());
     subpassDescription.pPreserveAttachments = preserveAttachments.data();
     return subpassDescription;
 }
