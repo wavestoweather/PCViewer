@@ -52,9 +52,21 @@ enum class violin_dir_t{
     right,
     left_right
 };
+enum class violin_scale_t{
+    self,
+    per_attribute,
+    all,
+    COUNT
+};
+const structures::enum_names<violin_scale_t> violin_scale_names{
+    "self",
+    "per attribute",
+    "all attrigbutes"
+};
 struct violin_appearance_t{
     violin_base_pos_t   base_pos{violin_base_pos_t::middle};
     violin_dir_t        dir{violin_dir_t::left_right};
+    violin_scale_t      scale{violin_scale_t::per_attribute};
     ImVec4              color{1.f, 1.f, 1.f, 1.f};
     bool                span_full{false};
 };

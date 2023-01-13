@@ -261,6 +261,7 @@ void violin_drawlist_workbench::show(){
             ImGui::TableSetupColumn("Show");
             ImGui::TableSetupColumn("Color");
             ImGui::TableSetupColumn("Position");
+            ImGui::TableSetupColumn("Scale");
             ImGui::TableSetupColumn("Log");
 
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
@@ -276,6 +277,8 @@ void violin_drawlist_workbench::show(){
             ImGui::TableHeader("Color");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Position");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Scale");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Log");
 
@@ -311,6 +314,13 @@ void violin_drawlist_workbench::show(){
                     for(const auto& [pos, name]: structures::violins::violin_positions)
                         if(ImGui::MenuItem(name.data()))
                             std::tie(att_app.base_pos, att_app.dir, att_app.span_full) = pos;
+                    ImGui::EndCombo();
+                }
+                ImGui::TableNextColumn();
+                if(ImGui::BeginCombo("##scale", structures::violins::violin_scale_names[att_app.scale].data())){
+                    for(const auto scale: structures::enum_iteration<structures::violins::violin_scale_t>{})
+                        if(ImGui::MenuItem(structures::violins::violin_scale_names[scale].data()))
+                            att_app.scale = scale;
                     ImGui::EndCombo();
                 }
                 ImGui::PopItemWidth();
