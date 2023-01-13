@@ -4,6 +4,7 @@
 #include <string_view_util.hpp>
 #include <min_max.hpp>
 #include <charconv>
+#include <fast_float.h>
 #include <numeric>
 
 namespace util{
@@ -60,9 +61,9 @@ inline std::tuple<std::vector<uint32_t>, std::vector<int>, std::vector<structure
     for(std::string_view cur; getline(min_max, cur, '_');){
         structures::min_max<float> mm;
         std::string_view c; getline(cur, c, ',');
-        std::from_chars(c.data(), c.data() + c.size(), mm.min);
+        fast_float::from_chars(c.data(), c.data() + c.size(), mm.min);
         getline(cur, c, ',');
-        std::from_chars(c.data(), c.data() + c.size(), mm.max);
+        fast_float::from_chars(c.data(), c.data() + c.size(), mm.max);
         parsed_min_max.emplace_back(mm);
     }
     bool min_hist{};
