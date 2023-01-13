@@ -63,6 +63,7 @@ void violin_drawlist_workbench::_update_registered_histograms(){
         // locking registry
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
         for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
+            if(i < 0) break;
             if(!registrator_needed[i])
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
@@ -431,6 +432,7 @@ void violin_drawlist_workbench::signal_dataset_update(const util::memory_view<st
 
     // deleting all removed attributes in sorting order
     for(int i: util::rev_size_range(session_state().attribute_order_infos)){
+        if(i < 0) break;
         if(session_state().attribute_order_infos[i].attribut_index >= session_state().attributes.size())
             session_state().attribute_order_infos.erase(session_state().attribute_order_infos.begin() + i);
     }

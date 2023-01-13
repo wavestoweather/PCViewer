@@ -58,6 +58,7 @@ void scatterplot_workbench::_update_registered_histograms(){
         // removing unused registrators -----------------------------------------------------------------
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
         for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
+            if(i < 0) break;
             if(!registrator_needed[i])
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
@@ -418,6 +419,7 @@ void scatterplot_workbench::show()
         int up_index{-1}, down_index{-1};
         ImGui::PushID(id.data());  // used to distinguish all ui elements in different workbenches
         for(int dl_index: util::rev_size_range(drawlist_infos.read())){
+            if(dl_index < 0) break;
             auto& dl = drawlist_infos.ref_no_track()[dl_index];
             ImGui::PushID(dl.drawlist_id.data());
             
@@ -470,6 +472,10 @@ void scatterplot_workbench::show()
     if(ImGui::BeginPopup(plot_menu_id.data())){
         ImGui::PushItemWidth(100);
         ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+        ImGui::BeginDisabled(plot_additional_datas.contains(_popup_attributes));
+        if(ImGui::MenuItem("Remove background image"))
+            plot_additional_datas.erase(_popup_attributes);
+        ImGui::EndDisabled();
         if(ImGui::InputScalar("Plot width", ImGuiDataType_U32, &settings.ref_no_track().plot_width, {}, {}, {}, ImGuiInputTextFlags_EnterReturnsTrue))
             settings().plot_width = std::clamp(settings.read().plot_width, 50u, 10000u);
         ImGui::Separator();

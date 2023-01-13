@@ -1,5 +1,6 @@
 #include "test_commons.hpp"
 #include <ranges.hpp>
+#include <change_tracker.hpp>
 
 struct test_result{
     static const int success = 0;
@@ -37,9 +38,23 @@ int test_find_if(){
     return test_result::success;
 }
 
+int test_rev_size_range(){
+    std::vector<int> v(16);
+    for(int i: util::rev_size_range(v))
+        if(i < 0)
+            return test_result::error;
+    structures::change_tracker<std::vector<int>> c;
+    c() = {16, 10, 13};
+    for(int i: util::rev_size_range(c.read()))
+        if(i < 0)
+            return test_result::error;
+    return test_result::success;
+}
+
 int ranges_test(int argc, char** const argv){
     check_res(test_find());
     check_res(test_find_if());
+    check_res(test_rev_size_range());
 
     std::cout << "[info] ranges_test successful" << std::endl;
     return test_result::success;

@@ -56,6 +56,7 @@ void violin_attribute_workbench::_update_registered_histograms(){
         // locking registry
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
         for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
+            if(i < 0) break;
             if(!registrator_needed[i])
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }

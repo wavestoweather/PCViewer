@@ -66,7 +66,7 @@ private:
 class rev_size_range{
 public:
     template<class T>
-    rev_size_range(const T& sizeable): _begin(sizeable.size() - 1){};
+    rev_size_range(const T& sizeable): _begin(static_cast<int64_t>(sizeable.size()) - 1){};
 
     class iterator{
         friend class rev_size_range;
@@ -77,15 +77,16 @@ public:
         bool operator==(const iterator& o) const {return _i == o._i;}
         bool operator!=(const iterator& o) const {return _i != o._i;}
     protected:
-        iterator(unsigned long start): _i(start){}
+        iterator(int64_t start): _i(start){}
+        iterator() = default;
     private:
-        int64_t _i;
+        int64_t _i{-1};
     };
 
     iterator begin() const { return iterator(_begin); }
-    iterator end() const { return iterator(-1); }
+    iterator end() const { return iterator(); }
 private:
-    unsigned long _begin;
+    int64_t _begin;
 };
 
 template<typename T>

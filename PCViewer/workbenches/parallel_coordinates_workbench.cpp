@@ -124,6 +124,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         // locking registry
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
         for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
+            if(i < 0) break;
             if(!registrator_needed[i])
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
@@ -165,6 +166,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         // removing unused registrators
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
         for(int i: util::rev_size_range(_registered_axis_histograms[dl.drawlist_id])){
+            if(i < 0) break;
             if(!registrator_needed[i])
                 _registered_axis_histograms[dl.drawlist_id].erase(_registered_axis_histograms[dl.drawlist_id].begin() + i);
         }
@@ -686,6 +688,7 @@ void parallel_coordinates_workbench::show(){
             
             int up_index{-1}, down_index{-1};
             for(int dl_index: util::rev_size_range(drawlist_infos.read())){
+                if(dl_index < 0) break;
                 auto& dl = drawlist_infos.ref_no_track()[dl_index];
                 std::string dl_string(dl.drawlist_id);
                 const auto& drawlist = globals::drawlists.read().at(dl.drawlist_id);
@@ -960,7 +963,8 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
         }
     }
     // deleting all removed attributes in sorting order
-    for(int i: util::rev_size_range(attributes_order_info.read())){
+    for(int64_t i: util::rev_size_range(attributes_order_info.read())){
+        if(i < 0) break;
         if(attributes_order_info.read()[i].attribut_index >= attributes.read().size())
             attributes_order_info().erase(attributes_order_info().begin() + i);
     }
