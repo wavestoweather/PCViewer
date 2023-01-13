@@ -33,6 +33,28 @@ add_subdirectory("glm")
 
 # Fügen Sie der ausführbaren Datei dieses Projekts eine Quelle hinzu.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
+
+# check if libraries can be found, tries to search specific libraries in a specific libraries folder
+find_package(Vulkan QUIET)
+if(NOT DEFINED Vulkan_FOUND)
+    set(lib_path "usr/lib/x86_64-linux-gnu")
+    find_library(Vulkan_LIBRARY
+    NAMES vulkan
+    PATHS ${lib_path})
+
+    find_library(ZLIB_LIBRARY
+    NAMES z
+    PATHS ${lib_path})
+
+    find_library(PNG_LIBRARY
+    NAMES png
+    PATHS ${lib_path})
+
+    find_library(X11_X11_LIB
+    NAMES X11
+    PATHS ${lib_path})
+endif()
+
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(netCDF CONFIG REQUIRED)
