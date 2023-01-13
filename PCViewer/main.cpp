@@ -142,6 +142,7 @@ int main(int argc, char* argv[]){
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
     ImGui::GetIO().ConfigViewportsNoDecoration = false;
+    ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
     std::vector<float> font_sizes{10.f, 15.f, 25.f};
     util::imgui::load_fonts("fonts/", font_sizes);
     if(ImGui::GetIO().Fonts->Fonts.size() > 1)

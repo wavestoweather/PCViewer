@@ -407,7 +407,7 @@ void RadixSortLSD(ValueType* array, size_t N) {
 }
 
 template <typename RadixableType, typename transformer>
-void RadixSortMSDTransform(RadixableType* data, size_t N, const transformer& transform, size_t bit = (8 * sizeof(transform({}))) - 1) {
+void RadixSortMSDTransform(RadixableType* data, size_t N, const transformer& transform, size_t bit = (8 * sizeof(std::declval<transformer>()({}))) - 1) {
   /*
    * We create a pointer to the right and left edges of the data. While the left
    * pointer is pointing to a number with a 0 in the current bit, shift the left

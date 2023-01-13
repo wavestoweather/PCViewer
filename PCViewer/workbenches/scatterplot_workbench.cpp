@@ -265,7 +265,7 @@ void scatterplot_workbench::show()
                     ImGui::OpenPopup(plot_menu_id.data());
                     _popup_attributes = p;
                 }
-                if(ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)){
+                if(ImGui::IsItemHovered()){
                     hovered_pair = p;
                     hovered_rect = {c_pos.x, c_pos.x + settings.read().plot_width, c_pos.y, c_pos.y + settings.read().plot_width};
                 }
@@ -294,7 +294,7 @@ void scatterplot_workbench::show()
             ImGui::Image(plot_datas[p].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
             if(ImGui::IsItemClicked(ImGuiMouseButton_Right))
                 ImGui::OpenPopup(plot_menu_id.data());
-            if(ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            if(ImGui::IsItemHovered())
                 hovered_pair = p;
             draw_lassos(p, settings.read().plot_width, {attributes.read()[p.a].bounds.read().min, attributes.read()[p.b].bounds.read().min, attributes.read()[p.a].bounds.read().max, attributes.read()[p.b].bounds.read().max});
         }
@@ -311,6 +311,8 @@ void scatterplot_workbench::show()
         ImVec2 attr_pos{util::unnormalize_val_for_range(mouse_norm.x, attributes.read()[hovered_pair.a].bounds.read().min, attributes.read()[hovered_pair.a].bounds.read().max), util::unnormalize_val_for_range(mouse_norm.y, attributes.read()[hovered_pair.b].bounds.read().min, attributes.read()[hovered_pair.b].bounds.read().max)};
         return attr_pos;
     };
+    if(hovered_pair != attribute_pair{-1, -1} && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     if(ImGui::IsMouseClicked(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none && hovered_pair != attribute_pair{-1, -1}){
         try{
             auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.a && e.attr2 == hovered_pair.b;});
@@ -478,8 +480,10 @@ void scatterplot_workbench::show()
         if(ImGui::MenuItem("Remove background image"))
             plot_additional_datas.erase(_popup_attributes);
         ImGui::EndDisabled();
-        if(ImGui::InputScalar("Plot width", ImGuiDataType_U32, &settings.ref_no_track().plot_width, {}, {}, {}, ImGuiInputTextFlags_EnterReturnsTrue))
+        if(ImGui::InputScalar("Plot width", ImGuiDataType_U32, &settings.ref_no_track().plot_width, {}, {}, {}, ImGuiInputTextFlags_EnterReturnsTrue)){
             settings().plot_width = std::clamp(settings.read().plot_width, 50u, 10000u);
+            _request_registrators_update |= true;
+        }
         ImGui::Separator();
         float diff = attributes.read()[_popup_attributes.a].bounds.read().max - attributes.read()[_popup_attributes.a].bounds.read().min;
         if(ImGui::DragFloat2(attributes.read()[_popup_attributes.a].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.a].bounds.ref_no_track().data(), diff * 1e-3))
