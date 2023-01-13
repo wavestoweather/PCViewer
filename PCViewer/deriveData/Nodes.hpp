@@ -239,6 +239,15 @@ public:
     };
 };
 
+class Active_Indices: public DataCreation, public Creatable<Active_Indices>{
+public:
+    Active_Indices(): DataCreation({}, {}, createFilledVec<FloatType, Type>(1), {""}, "Active Indices") {}
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        // nothing to do, everything has to be done outside, as more complex info is needed
+    };
+};
+
 class Serialization: public Node{
 public:
     Serialization(std::vector<std::unique_ptr<Type>>&& inputTypes = {},
