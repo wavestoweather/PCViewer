@@ -294,7 +294,7 @@ void scatterplot_renderer::render(const render_info& info){
                 vkCmdPushConstants(_render_commands.back(), pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
             }
             vkCmdBindPipeline(_render_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
-            vkCmdDraw(_render_commands.back(), histogram_render? fb_key.width * fb_key.width: dl.templatelist_read().data_size, 1, 0, 0);
+            vkCmdDraw(_render_commands.back(), histogram_render? fb_key.width * fb_key.width: static_cast<uint32_t>(dl.templatelist_read().data_size), 1, 0, 0);
         }
         vkCmdEndRenderPass(_render_commands.back());
 

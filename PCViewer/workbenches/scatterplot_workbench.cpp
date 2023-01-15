@@ -34,8 +34,8 @@ void scatterplot_workbench::_update_registered_histograms(){
 
             break;
         case plot_type_t::matrix:
-            for(int i: util::i_range(active_indices.size() - 1)){
-                for(int j: util::i_range(i + 1, active_indices.size())){
+            for(size_t i: util::i_range(active_indices.size() - 1)){
+                for(size_t j: util::i_range(i + 1, active_indices.size())){
                     indices = {active_indices[i], active_indices[j]};
                     bounds = {attributes.read()[indices[0]].bounds.read(), attributes.read()[indices[1]].bounds.read()};
                     auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, false);
@@ -57,8 +57,7 @@ void scatterplot_workbench::_update_registered_histograms(){
 
         // removing unused registrators -----------------------------------------------------------------
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
-        for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
-            if(i < 0) break;
+        for(size_t i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
             if(!registrator_needed[i])
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
@@ -134,8 +133,8 @@ void scatterplot_workbench::_update_plot_list(){
     plot_list().clear();
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
-        for(uint32_t i: util::i_range(1, active_indices.size())){
-            for(uint32_t j: util::i_range(i))
+        for(size_t i: util::i_range(1ull, active_indices.size())){
+            for(size_t j: util::i_range(i))
                 plot_list().emplace_back(attribute_pair{int(active_indices[i]), int(active_indices[j])});
         }
         break;
@@ -244,11 +243,11 @@ void scatterplot_workbench::show()
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
         // matrix should be displayed as a left lower triangular matrix
-        for(uint32_t i: util::i_range(1, active_indices.size())){
+        for(size_t i: util::i_range(1ull, active_indices.size())){
             ImVec2 text_pos = ImGui::GetCursorScreenPos(); text_pos.y += settings.read().plot_width / 2;
             util::imgui::AddTextVertical(attributes.read()[active_indices[i]].display_name.c_str(), text_pos, .5f);
             ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x + ImGui::GetTextLineHeightWithSpacing(), ImGui::GetCursorScreenPos().y});
-            for(uint32_t j: util::i_range(i)){
+            for(size_t j: util::i_range(i)){
                 attribute_pair p = {int(active_indices[i]), int(active_indices[j])};
                 if(!plot_datas.contains(p))
                     continue;
@@ -368,8 +367,8 @@ void scatterplot_workbench::show()
                 ImGui::PopID();
                 break;
             case plot_type_t::list:
-                for(uint32_t i: util::i_range(1, attributes.read().size())){
-                    for(uint32_t j: util::i_range(0, i)){
+                for(size_t i: util::i_range(1ull, attributes.read().size())){
+                    for(size_t j: util::i_range(i)){
                         //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
                         if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{int(i), int(j)}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
                             plot_list().emplace_back(attribute_pair{int(i), int(j)});
@@ -420,8 +419,7 @@ void scatterplot_workbench::show()
 
             int up_index{-1}, down_index{-1};
             ImGui::PushID(id.data());  // used to distinguish all ui elements in different workbenches
-            for(int dl_index: util::rev_size_range(drawlist_infos.read())){
-                if(dl_index < 0) break;
+            for(size_t dl_index: util::rev_size_range(drawlist_infos.read())){
                 auto& dl = drawlist_infos.ref_no_track()[dl_index];
                 ImGui::PushID(dl.drawlist_id.data());
                 
@@ -486,10 +484,10 @@ void scatterplot_workbench::show()
         }
         ImGui::Separator();
         float diff = attributes.read()[_popup_attributes.a].bounds.read().max - attributes.read()[_popup_attributes.a].bounds.read().min;
-        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.a].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.a].bounds.ref_no_track().data(), diff * 1e-3))
+        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.a].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.a].bounds.ref_no_track().data(), diff * 1e-3f))
             attributes()[_popup_attributes.a].bounds();
         diff = attributes.read()[_popup_attributes.b].bounds.read().max - attributes.read()[_popup_attributes.b].bounds.read().min;
-        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.b].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.b].bounds.ref_no_track().data(), diff * 1e-3))
+        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.b].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.b].bounds.ref_no_track().data(), diff * 1e-3f))
             attributes()[_popup_attributes.b].bounds();
         if(ImGui::MenuItem(("Swap " + attributes.read()[_popup_attributes.a].display_name + " bounds").c_str()))
             std::swap(attributes()[_popup_attributes.a].bounds().min, attributes()[_popup_attributes.a].bounds().max);
@@ -583,7 +581,7 @@ void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::s
         logger << logging::info_prefix << " scatterplot_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
 
     attributes().clear();
-    for(int i: util::size_range(new_attributes)){
+    for(size_t i: util::size_range(new_attributes)){
         attributes().emplace_back(structures::attribute{new_attributes[i], drawlist_infos.read().front().drawlist_read().dataset_read().attributes[i].display_name});
         for(const auto& dl: drawlist_infos.read()){
             const auto& ds_bounds = dl.dataset_read().attributes[i].bounds.read();
@@ -596,12 +594,12 @@ void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::s
     }
 
     // deleting all removed attributes in sorting order
-    for(int i: util::rev_size_range(attribute_order_infos.read())){
+    for(size_t i: util::rev_size_range(attribute_order_infos.read())){
         if(attribute_order_infos.read()[i].attribut_index >= attributes.read().size())
             attribute_order_infos().erase(attribute_order_infos().begin() + i);
     }
     // adding new attribute references
-    for(int i: util::i_range(attributes.read().size() - attribute_order_infos.read().size())){
+    for(size_t i: util::i_range(attributes.read().size() - attribute_order_infos.read().size())){
         uint32_t cur_index = attribute_order_infos.read().size();
         attribute_order_infos().emplace_back(attribute_order_info{cur_index});
     }
@@ -610,7 +608,7 @@ void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::s
 }
 
 void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
-    for(int i: util::rev_size_range(drawlist_infos.read())){
+    for(size_t i: util::rev_size_range(drawlist_infos.read())){
         if(drawlist_ids.contains(drawlist_infos.read()[i].drawlist_id)){
             std::string_view dl = drawlist_infos.read()[i].drawlist_id;
             // locking registry

@@ -34,6 +34,9 @@
 #ifdef min
 #undef min
 #endif
+#ifdef max
+#undef max
+#endif
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,VkDebugUtilsMessageTypeFlagsEXT messageType,const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,void* pUserData)
 {
@@ -147,6 +150,8 @@ int main(int argc, char* argv[]){
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
     ImGui::GetIO().ConfigViewportsNoDecoration = false;
     ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
+    ImGui::GetStyle().FrameRounding = 3.f;
+    ImGui::GetStyle().PopupRounding = 3.f;
     std::vector<float> font_sizes{10.f, 15.f, 25.f};
     util::imgui::load_fonts("fonts/", font_sizes);
     if(ImGui::GetIO().Fonts->Fonts.size() > 1)
@@ -176,7 +181,7 @@ int main(int argc, char* argv[]){
     auto setup_fence = util::vk::create_fence(util::vk::initializers::fenceCreateInfo());
     ImGui_ImplVulkan_CreateFontsTexture(setup_commands);
     util::vk::end_commit_command_buffer(setup_commands, globals::vk_context.graphics_queue, {}, {}, {}, setup_fence);
-    auto res = vkWaitForFences(globals::vk_context.device, 1, &setup_fence, VK_TRUE, 20e9); util::check_vk_result(res);
+    auto res = vkWaitForFences(globals::vk_context.device, 1, &setup_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
     util::vk::destroy_fence(setup_fence);
     util::vk::destroy_command_pool(setup_command_pool);
     ImGui_ImplVulkan_DestroyFontUploadObjects();
@@ -296,7 +301,7 @@ int main(int argc, char* argv[]){
         ImGui::PushStyleColor(ImGuiCol_WindowBg, {.8,.8,.8,1});
         ImGui::Begin(log_window_name.data());
         ImGui::SetWindowFontScale(.8f);
-        for(int i: util::i_range(logger.buffer_size)){
+        for(size_t i: util::i_range(logger.buffer_size)){
             auto last_line = logger.get_last_line(logger.buffer_size - 1 - i);
             if(last_line.empty())
                 continue;

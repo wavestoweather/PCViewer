@@ -34,7 +34,7 @@ struct histogram_registry_entry{
 
 template<> struct std::hash<structures::histogram_registry_key>{
     size_t operator()(const structures::histogram_registry_key& k) const {
-        return std::hash_combine(std::hash_combine(std::hash_combine(util::memory_view<const uint32_t>(k.attribute_indices).data_hash(), util::memory_view<const int>(k.bin_sizes).data_hash()), util::memory_view<const float>(util::memory_view<const structures::min_max<float>>(k.min_max)).data_hash()), size_t((k.is_max_histogram << 1) | k.is_min_histogram));
+        return std::hash_combine(std::hash_combine(std::hash_combine(util::memory_view<const uint32_t>(k.attribute_indices).data_hash(), util::memory_view<const int>(k.bin_sizes).data_hash()), util::memory_view<const float>(util::memory_view<const structures::min_max<float>>(k.min_max)).data_hash()), size_t((k.is_max_histogram << 1) | int(k.is_min_histogram)));
     }
 };
 
@@ -61,7 +61,7 @@ struct histogram_registry{
         histogram_registry_key key{is_min_hist, is_max_hist, std::vector<uint32_t>(attribute_indices.size()), std::vector<int>(bin_sizes.size()), std::vector<structures::min_max<float>>(min_max.size())};
         std::vector<uint32_t> sorted(attribute_indices.size()); std::iota(sorted.begin(), sorted.end(), 0);
         std::sort(sorted.begin(), sorted.end(), [&](uint32_t l, uint32_t r){return attribute_indices[l] < attribute_indices[r];});
-        for(int i: util::size_range(sorted)){
+        for(size_t i: util::size_range(sorted)){
             key.attribute_indices[i] = attribute_indices[sorted[i]];
             key.bin_sizes[i] = bin_sizes[sorted[i]];
             key.min_max[i] = min_max[sorted[i]];

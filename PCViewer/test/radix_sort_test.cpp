@@ -81,7 +81,7 @@ int test_sort_indirect(size_t n, double max){
     radix::sort_indirect(index_sort, [&](const uint32_t& v){return rand_vals[v];});
 
     // check increasing
-    for(int i: util::i_range(1, n)){
+    for(size_t i: util::i_range(1ull, n)){
         if(rand_vals[index_sort[i - 1]] > rand_vals[index_sort[i]])
             return test_result::values_fail;
     }

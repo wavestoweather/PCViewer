@@ -15,8 +15,8 @@ inline attribute_histograms_t update_histograms(const std::vector<drawlist_attri
     float               global_max{};
     std::vector<float>  per_attribute_max(active_attributes_count, .0f);
     histograms_t        histograms;
-    double std_dev2 = 2 * std_dev * std_dev;
-    int k_size = std_dev < 0 ? .2 * histogram_bin_count + 1: std::ceil(std_dev * 3);
+    const float std_dev2 = 2 * std_dev * std_dev;
+    const int k_size = std_dev < 0 ? static_cast<int>(.2 * histogram_bin_count + 1): static_cast<int>(std::ceil(std_dev * 3));
 
     // integrating to 3 sigma std dev
     for(const auto& da: active_drawlist_attributes){
@@ -26,7 +26,7 @@ inline attribute_histograms_t update_histograms(const std::vector<drawlist_attri
         auto& histogram = histograms[da];
         histogram.smoothed_values.resize(original_histogram.size());
         histogram.area = histogram.max_val = 0;
-        for(int bin: util::size_range(original_histogram)){
+        for(size_t bin: util::size_range(original_histogram)){
             float divisor{}, divider{};
 
             for(int k: util::i_range(-k_size, k_size + 1)){
@@ -52,7 +52,7 @@ inline void imgui_violin_infill(const ImVec2& plot_min, const ImVec2& plot_max, 
     // norm and base already encompass violin position and direction. The base x position is always base_x, while the top x position can be calculated by base_x + hist_val * norm;
     const float base_x = (violin_app.base_pos == structures::violins::violin_base_pos_t::left ? plot_min.x : violin_app.base_pos == structures::violins::violin_base_pos_t::middle ? .5f * (plot_min.x + plot_max.x) : plot_max.x) + .5f;
     const float norm = hist_normalization_fac * (violin_app.span_full ? 1.f : 2.f) * (violin_app.dir == structures::violins::violin_dir_t::right ? 1.f: -1.f);
-    const int max_hist = histogram_values.size() - 1;
+    const size_t max_hist = histogram_values.size() - 1;
     // for each pixel add rectangle
     const int max_iter = static_cast<int>(plot_max.y - plot_min.y);
     for(int i: util::i_range(max_iter)){
@@ -79,7 +79,7 @@ inline float imgui_violin_border(const ImVec2& plot_min, const ImVec2& plot_max,
     const bool double_sided = violin_app.dir == structures::violins::violin_dir_t::left_right;
     const ImU32 col = ImGui::ColorConvertFloat4ToU32(violin_app.color);
     const float plot_width = plot_max.x - plot_min.x;
-    const int max_hist = histogram_values.size() - 1;
+    const size_t max_hist = histogram_values.size() - 1;
 
     // connection line
     float b_w = histogram_values[max_hist] / norm * plot_width;
@@ -88,7 +88,7 @@ inline float imgui_violin_border(const ImVec2& plot_min, const ImVec2& plot_max,
     if(double_sided) b_a.x -= b_w; // add other side 
     ImGui::GetWindowDrawList()->AddLine(b_a, b_b, col, line_thickness);
     // inbetween lines
-    for(int i: util::i_range(histogram_values.size() - 1)){
+    for(size_t i: util::i_range(histogram_values.size() - 1)){
         const float start_r = i / float(histogram_values.size() - 1);
         const float end_r = (i + 1) / float(histogram_values.size() - 1);
         const float hist_val_start = histogram_values[max_hist - i] / norm * plot_width;
@@ -121,13 +121,13 @@ inline violin_position_order_t get_violin_pos_order(const std::vector<std::vecto
 
     // the overlap is calculated between all combinations of attributes
     std::vector<std::vector<float>> hist_overlaps(attribute_count, std::vector<float>(attribute_count, 0));
-    for(uint32_t i: util::i_range(attribute_count)){
+    for(size_t i: util::i_range(attribute_count)){
         if(!(active_attributes | util::contains(i))) continue;
-        for(int j: util::i_range(i + 1, attribute_count)){
+        for(size_t j: util::i_range(i + 1, attribute_count)){
             if(!(active_attributes | util::contains(j))) continue;
             // sum up overlap over all histograms
-            for(int h: util::size_range(per_attribute_histograms[i])){
-                for(int b: util::size_range(per_attribute_histograms[i][h].get().smoothed_values))
+            for(size_t h: util::size_range(per_attribute_histograms[i])){
+                for(size_t b: util::size_range(per_attribute_histograms[i][h].get().smoothed_values))
                     hist_overlaps[i][j] += std::min(per_attribute_histograms[i][h].get().smoothed_values[b], per_attribute_histograms[j][h].get().smoothed_values[b]);
             }
         }
@@ -142,16 +142,16 @@ inline violin_position_order_t get_violin_pos_order(const std::vector<std::vecto
         int i_max = -1;
         int j_max = -1;
 
-        for(int i: util::size_range(hist_overlaps)){
+        for(size_t i: util::size_range(hist_overlaps)){
             if(placed_attributes | util::contains(uint32_t(i)))
                 continue;
-            for(int j: util::i_range(i + 1, hist_overlaps.size())){
+            for(size_t j: util::i_range(i + 1, hist_overlaps.size())){
                 if(placed_attributes | util::contains(uint32_t(j)))
                     continue;
                 if(hist_overlaps[i][j] > cur_max){
                     cur_max = hist_overlaps[i][j];
-                    i_max = i;
-                    j_max = j;
+                    i_max = static_cast<int>(i);
+                    j_max = static_cast<int>(j);
                 }
             }
         }

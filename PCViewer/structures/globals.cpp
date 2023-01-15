@@ -47,12 +47,16 @@ structures::logger<20> logger{};
 namespace globals{
 structures::vk_context vk_context{};
 
-datasets_t datasets{};
+structures::datasets_t datasets{};
 std::set<std::string_view> datasets_to_delete{};
 
-structures::drawlists_t drawlists{};
-std::vector<std::string_view> selected_drawlists{};
-std::set<std::string_view> drawlists_to_delete{};
+structures::drawlists_t         drawlists{};
+std::vector<std::string_view>   selected_drawlists{};
+std::set<std::string_view>      drawlists_to_delete{};
+
+std::vector<std::string_view>                                    selected_attributes;
+std::map<std::string_view, structures::unique_global_attribute>  attributes;
+structures::names_group                                          attribute_groups;
 
 structures::global_brushes global_brushes{};
 structures::brush_edit_data brush_edit_data{};

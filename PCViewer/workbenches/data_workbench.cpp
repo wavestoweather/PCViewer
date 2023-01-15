@@ -410,7 +410,7 @@ void data_workbench::show()
                 if(delete_item >= 0) values.erase(values.begin() + delete_item);
 
                 if(ImGui::Button("Unify value differences")){
-                    for(int i: util::i_range(1, values.size() - 1))
+                    for(size_t i: util::i_range(1ull, values.size() - 1))
                         values[i] = i * (values.back() - values.front()) / (values.size() - 1);
                 }
 
@@ -456,7 +456,7 @@ void data_workbench::show()
                 if(delete_item >= 0) quantiles.erase(quantiles.begin() + delete_item);
 
                 if(ImGui::Button("Unify quantiles")){
-                    for(int i: util::i_range(1, quantiles.size() - 1))
+                    for(size_t i: util::i_range(1ull, quantiles.size() - 1))
                         quantiles[i] = i / double(quantiles.size() - 1);
                 }
 
@@ -467,7 +467,7 @@ void data_workbench::show()
                     _tl_split_data.additional_info = automatic_split{};
                 ImGui::Text("Only select variables with discrete values.\n If too much values wrt data size are found, no split will be performed.");
                 if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
-                    for(int att: util::size_range(ds.attributes)){
+                    for(size_t att: util::size_range(ds.attributes)){
                         if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())){
                             _tl_split_data.attribute = att;
                         }

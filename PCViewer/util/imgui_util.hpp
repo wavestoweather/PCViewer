@@ -58,7 +58,7 @@ inline VkDescriptorPool create_desriptor_pool(){
         { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
         { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
     };
-    auto pool_info = util::vk::initializers::descriptorPoolCreateInfo(pool_sizes, 1000 * pool_sizes.size(), VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
+    auto pool_info = util::vk::initializers::descriptorPoolCreateInfo(pool_sizes, 1000 * static_cast<uint32_t>(pool_sizes.size()), VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
     return util::vk::create_descriptor_pool(pool_info);
 }
 

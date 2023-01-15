@@ -14,19 +14,19 @@ inline std::string get_id_string(util::memory_view<const uint32_t> attribute_ind
     std::vector<uint32_t> sorted(attribute_indices.size()); std::iota(sorted.begin(), sorted.end(), 0);
     std::sort(sorted.begin(), sorted.end(), [&](uint32_t l, uint32_t r){return attribute_indices[l] < attribute_indices[r];});
     std::string id;
-    for(int i: util::size_range(attribute_indices)){
+    for(size_t i: util::size_range(attribute_indices)){
         id += std::to_string(attribute_indices[sorted[i]]);
         if(i < attribute_indices.size() - 1)
             id += '_';
     }
     id += '|';
-    for(int i: util::size_range(bin_sizes)){
+    for(size_t i: util::size_range(bin_sizes)){
         id += std::to_string(bin_sizes[sorted[i]]);
         if(i < bin_sizes.size() - 1)
             id += '_';
     }
     id += '|';
-    for(int i: util::size_range(attribute_bounds)){
+    for(size_t i: util::size_range(attribute_bounds)){
         id += std::to_string(attribute_bounds[sorted[i]].min);
         id += ',';
         id += std::to_string(attribute_bounds[sorted[i]].max);

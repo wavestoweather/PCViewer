@@ -27,27 +27,27 @@ inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const 
     // creating an attribute major storage for the range_brushes to be able to convert the data more easily
     std::vector<std::map<uint32_t, std::vector<structures::min_max<float>>>> axis_brushes(range_brushes.size());
     uint32_t dynamic_size{static_cast<uint32_t>(range_brushes.size())};   // brush_offsets 
-    for(int i: size_range(range_brushes)){
+    for(size_t i: size_range(range_brushes)){
         auto& b = axis_brushes[i];
         for(const auto& range: *range_brushes[i])
             b[range.axis].push_back({range.min, range.max});
         dynamic_size += 1;                          // nAxisMaps
-        dynamic_size += b.size();                   // axisOffsets
+        dynamic_size += static_cast<uint32_t>(b.size());                   // axisOffsets
         for(const auto& [axis, ranges]: b){
             dynamic_size += 1;                      // nRanges
             dynamic_size += 1;                      // axis
-            dynamic_size += ranges.size() * 2;      // ranges
+            dynamic_size += static_cast<uint32_t>(ranges.size() * 2);      // ranges
         }
     }
-    dynamic_size += lasso_brushes.size();           // brush_offsets
-    for(int i: size_range(lasso_brushes)){
+    dynamic_size += static_cast<uint32_t>(lasso_brushes.size());           // brush_offsets
+    for(size_t i: size_range(lasso_brushes)){
         const auto& lasso_brush = *lasso_brushes[i];
         dynamic_size += 1;                          // nPolygons
-        dynamic_size += lasso_brush.size();         // polygonOffsets
+        dynamic_size += static_cast<uint32_t>(lasso_brush.size());         // polygonOffsets
         for(const auto& polygon: lasso_brush){
             dynamic_size += 2;                      // attr1, attr2
             dynamic_size += 1;                      // nBorderPoints
-            dynamic_size += polygon.borderPoints.size() * 2; // borderPoints
+            dynamic_size += static_cast<uint32_t>(polygon.borderPoints.size()) * 2; // borderPoints
         }
     }
 
@@ -59,17 +59,17 @@ inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const 
     //      with AxisMap = {float nrRanges, fl_brushEventoat axis, vector<Range> ranges}
     //      with Range = {float min, float max}
     structures::dynamic_struct<gpu_brush, float> gpu_data(dynamic_size);
-    gpu_data->range_brush_count = axis_brushes.size();
+    gpu_data->range_brush_count = static_cast<uint32_t>(axis_brushes.size());
     uint32_t cur_offset{static_cast<uint32_t>(axis_brushes.size())};   // base offset for the first brush comes after the offsets
-    for(int brush: size_range(axis_brushes)){
-        gpu_data[brush] = cur_offset;           // brush_offset
-        gpu_data[cur_offset++] = axis_brushes[brush].size();    // nAxisMaps
+    for(size_t brush: size_range(axis_brushes)){
+        gpu_data[brush] = float(cur_offset);           // brush_offset
+        gpu_data[cur_offset++] = float(axis_brushes[brush].size());    // nAxisMaps
         uint32_t axis_offsets = cur_offset;
-        cur_offset += axis_brushes[brush].size();               // skipping the axis offsets
+        cur_offset += static_cast<uint32_t>(axis_brushes[brush].size());               // skipping the axis offsets
         for(const auto& [axis, ranges]: axis_brushes[brush]){
-            gpu_data[axis_offsets++] = cur_offset;              // axisOffsets
-            gpu_data[cur_offset++] = ranges.size();             // nRanges
-            gpu_data[cur_offset++] = axis;                      // axis
+            gpu_data[axis_offsets++] = float(cur_offset);              // axisOffsets
+            gpu_data[cur_offset++] = float(ranges.size());             // nRanges
+            gpu_data[cur_offset++] = float(axis);                      // axis
             for(const auto& range: ranges){
                 gpu_data[cur_offset++] = range.min;             // min
                 gpu_data[cur_offset++] = range.max;             // max
@@ -84,20 +84,20 @@ inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const 
     //      with lasso_brush = {float nPolygons, vector<float> polygonOffsets, vector<polygon> polygons}
     //      with polygon = {float attr1, float attr2, float nBorderPoints, vector<vec2> borderPoints}
     //      with vec2 = {float p1, float p2}
-    gpu_data->lasso_brush_count = lasso_brushes.size();
+    gpu_data->lasso_brush_count = static_cast<uint32_t>(lasso_brushes.size());
     gpu_data->lasso_brush_offset = cur_offset;
-    cur_offset += lasso_brushes.size();
-    for(int i: size_range(lasso_brushes)){
+    cur_offset += static_cast<uint32_t>(lasso_brushes.size());
+    for(size_t i: size_range(lasso_brushes)){
         const auto& lasso_brush = *lasso_brushes[i];
-        gpu_data[gpu_data->lasso_brush_offset + i] = cur_offset;    // brush_offset
-        gpu_data[cur_offset++] = lasso_brush.size();                // nPolygons
+        gpu_data[gpu_data->lasso_brush_offset + i] = float(cur_offset);    // brush_offset
+        gpu_data[cur_offset++] = float(lasso_brush.size());                // nPolygons
         uint32_t polygon_offsets = cur_offset;
-        cur_offset += lasso_brush.size();                           // skipping the polygon_offsets
+        cur_offset += static_cast<uint32_t>(lasso_brush.size());           // skipping the polygon_offsets
         for(const auto& polygon: lasso_brush){
-            gpu_data[polygon_offsets++] = cur_offset;               // polygon_offsets
-            gpu_data[cur_offset++] = polygon.attr1;                 // attr1
-            gpu_data[cur_offset++] = polygon.attr2;                 // attr2
-            gpu_data[cur_offset++] = polygon.borderPoints.size();   // nBorderPoints
+            gpu_data[polygon_offsets++] = float(cur_offset);               // polygon_offsets
+            gpu_data[cur_offset++] = float(polygon.attr1);                 // attr1
+            gpu_data[cur_offset++] = float(polygon.attr2);                 // attr2
+            gpu_data[cur_offset++] = float(polygon.borderPoints.size());   // nBorderPoints
             for(const auto& b: polygon.borderPoints){
                 gpu_data[cur_offset++] = b.x;                       // p1
                 gpu_data[cur_offset++] = b.y;                       // p2

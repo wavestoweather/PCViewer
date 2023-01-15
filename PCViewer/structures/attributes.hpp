@@ -6,9 +6,12 @@
 #include <array>
 #include <change_tracker.hpp>
 #include <min_max.hpp>
+#include <group.hpp>
+#include <imgui.h>
 
 namespace structures{
 
+// attribute that is stored in datasets
 struct attribute{
     std::string                     id{};
     std::string                     display_name{};
@@ -31,8 +34,17 @@ struct query_attribute{
 
     bool operator==(const query_attribute& o) const {return id == o.id && dimension_size == o.dimension_size && dependant_dimensions == o.dependant_dimensions;};
 };
+
+struct global_attribute: public attribute{
+    // has all members from the attribute struct, needs a view additional infos
+    change_tracker<bool>    active;
+    change_tracker<ImVec4>  color{ImVec4{1.f, 1.f, 1.f, 1.f}};
+};
+using unique_global_attribute = std::unique_ptr<global_attribute>;
 }
 
 namespace globals{
-// no global attributes as attributes are only stored in datasets (eases the change of attributes)
+extern std::vector<std::string_view>                                    selected_attributes;
+extern std::map<std::string_view, structures::unique_global_attribute>  attributes;
+extern structures::names_group                                          attribute_groups;
 }

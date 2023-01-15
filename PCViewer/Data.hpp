@@ -72,7 +72,7 @@ class Data{
         uint64_t dataSize = calcDataSize();
         std::vector<uint8_t> data(headerSize + dataSize);       //byte vector
         createPackedHeaderData(data);
-        createPackedData(data, headerSize);
+        createPackedData(data, static_cast<uint32_t>(headerSize));
         std::copy(data.begin(), data.end(), (uint8_t*)dst);
     };
 
@@ -129,7 +129,7 @@ class Data{
                 redData[redDataCur++] = columns[c][indexReducedDimIndices(redDimIndices, c)];
                 //increase dimension itertor
                 redDimIndices.back() += redDimIncrements.back();
-                for(int d = redDimIndices.size() - 1; d > 0; --d){
+                for(int d = int(redDimIndices.size()) - 1; d > 0; --d){
                     if(redDimIndices[d] >= redDimStops[d]){
                         redDimIndices[d] = redDimStarts[d];
                         redDimIndices[d - 1] += redDimIncrements[d -1];

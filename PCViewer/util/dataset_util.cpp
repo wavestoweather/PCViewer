@@ -489,14 +489,14 @@ template<> structures::data<float> open_data(std::string_view filename){
     return open_data_impl<float>(filename);
 }
 
-globals::dataset_t open_dataset(std::string_view filename, memory_view<structures::query_attribute> query_attributes, data_type_preference data_type_pref){    
+structures::dataset_t open_dataset(std::string_view filename, memory_view<structures::query_attribute> query_attributes, data_type_preference data_type_pref){    
     // this method will open only a single dataset. If all datasets from a folder should be opened, handle the readout of all datasets outside this function
     // compressed data will be read nevertheless
 
     if(!std::filesystem::exists(filename))
         throw std::runtime_error{"open_dataset() file " + std::string(filename) + " does not exist"};
 
-    globals::dataset_t dataset;
+    structures::dataset_t dataset;
     auto [file, file_extension] = util::get_file_extension(filename);
     dataset().id = file;
     switch(data_type_pref){
@@ -709,7 +709,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
                         u = distribution(generator);
                 }
                 else{
-                    for(uint32_t i: util::i_range(convert_data.trim.min, convert_data.trim.max, convert_data.subsampling))
+                    for(size_t i: util::i_range(convert_data.trim.min, convert_data.trim.max, size_t(convert_data.subsampling)))
                         templatelist.indices[(i - convert_data.trim.min) / convert_data.subsampling] = i;
                 }
             }
@@ -722,7 +722,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
             globals::stager.add_staging_task(staging_info);
         
             std::visit([&templatelist](auto&& data){
-                for(int var: util::size_range(templatelist.min_maxs)){
+                for(size_t var: util::size_range(templatelist.min_maxs)){
                     for(uint32_t i: templatelist.indices){
                         auto val = data(i, var);
                         if(val < templatelist.min_maxs[var].min)
@@ -852,7 +852,7 @@ void split_templatelist(const structures::templatelist_split_data& split_data){
     }
 }
 
-void execute_laod_behaviour(globals::dataset_t& ds){
+void execute_laod_behaviour(structures::dataset_t& ds){
     for(int load_behaviour_index: util::size_range(globals::load_behaviour.on_load)){
         auto &load_behaviour = globals::load_behaviour.on_load[load_behaviour_index];
 
@@ -1160,13 +1160,13 @@ void check_dataset_data_update(){
             }
             // removing unused gpu columns
             if(ds.read().gpu_data.columns.size() > column_count){
-                for(int i: util::i_range(ds.read().gpu_data.columns.size() - 1, column_count - 1, -1)){
+                for(int64_t i: util::i_range(static_cast<int64_t>(ds.read().gpu_data.columns.size()) - 1, static_cast<int64_t>(column_count) - 1, -1ll)){
                     util::vk::destroy_buffer(globals::datasets()[ds_id]().gpu_data.columns[i]);
                     globals::datasets()[ds_id]().gpu_data.columns.pop_back();
                 }
             }
             // updating gpu columns
-            for(int i: util::size_range(ds.read().attributes)){
+            for(size_t i: util::size_range(ds.read().attributes)){
                 if(!ds.read().attributes[i].bounds.changed)
                     continue;
 

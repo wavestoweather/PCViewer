@@ -7,10 +7,11 @@
 
 namespace util{
 // ranges with integer values
+template<typename T>
 class i_range {
 public:
-    constexpr i_range(int64_t end): _begin(0), _end(end < 0 ? 0: end), _step(1){}; // single element constructor 
-    constexpr i_range(long begin, long end, long step = 1):
+    constexpr i_range(T end): _begin(0), _end(end < 0 ? 0: end), _step(1){}; // single element constructor 
+    constexpr i_range(T begin, T end, T step = T(1)):
      _begin(begin), _end(end), _step(step){
         assert(step != 0 && "step of 0 is invalid");
         if((begin > end && step > 0) || (begin < end && step < 0))
@@ -20,22 +21,22 @@ public:
     class iterator {
         friend class i_range;
     public:
-        long int operator *() const { return i_; }
+        T operator *() const { return i_; }
         const iterator &operator ++() { i_ += _step; return *this; }
         iterator operator ++(int) { iterator copy(*this); i_ += _step; return copy; }    
         bool operator ==(const iterator &other) const { return i_ == other.i_; }
         bool operator !=(const iterator &other) const { return i_ != other.i_; } 
     protected:
-        iterator(long int start, long step = 1) : i_ (start), _step(step) { }    
+        iterator(T start, T step = 1) : i_ (start), _step(step) { }    
     private:
-        long i_, _step;
+        T i_, _step;
     };  
 
     iterator begin() const { return iterator(_begin, _step); }
     iterator end() const { return iterator(_end); }
 private:
-    long _begin, _end;
-    long _step;
+    T _begin, _end;
+    T _step;
 };
 
 class size_range{
@@ -46,47 +47,47 @@ public:
     class iterator{
         friend class size_range;
     public:
-        unsigned long operator*() const { return _i;}
+        uint64_t operator*() const { return _i;}
         const iterator& operator++() { ++_i; return *this; }
         iterator operator++(int) { iterator copy(*this); ++_i; return copy; }
         bool operator==(const iterator& o) const {return _i == o._i;}
         bool operator!=(const iterator& o) const {return _i != o._i;}
     protected:
-        iterator(unsigned long start): _i(start){}
+        iterator(uint64_t start): _i(start){}
     private:
-        unsigned long _i;
+        uint64_t _i;
     };
 
     iterator begin() const { return iterator(0); }
     iterator end() const { return iterator(_end); }
 private:
-    unsigned long _end;
+    uint64_t _end;
 };
 
 class rev_size_range{
 public:
     template<class T>
-    rev_size_range(const T& sizeable): _begin(static_cast<int64_t>(sizeable.size()) - 1){};
+    rev_size_range(const T& sizeable): _begin(sizeable.size() - 1){};
 
     class iterator{
         friend class rev_size_range;
     public:
-        int64_t operator*() const { return _i;}
+        uint64_t operator*() const { return _i;}
         const iterator& operator++() { --_i; return *this; }
         iterator operator++(int) { iterator copy(*this); --_i; return copy; }
         bool operator==(const iterator& o) const {return _i == o._i;}
         bool operator!=(const iterator& o) const {return _i != o._i;}
     protected:
-        iterator(int64_t start): _i(start){}
+        iterator(uint64_t start): _i(start){}
         iterator() = default;
     private:
-        int64_t _i{-1};
+        uint64_t _i{uint64_t(-1)};
     };
 
     iterator begin() const { return iterator(_begin); }
     iterator end() const { return iterator(); }
 private:
-    int64_t _begin;
+    uint64_t _begin;
 };
 
 template<typename T>

@@ -10,7 +10,11 @@ struct c_file{
         end     // seek from end of file
     };
 
+#ifdef _WIN32
+    c_file(std::string_view filename, std::string_view open_mode) {fopen_s(&handle, filename.data(), open_mode.data());}
+#else
     c_file(std::string_view filename, std::string_view open_mode): handle(fopen(filename.data(), open_mode.data())){}
+#endif
     ~c_file() {if(handle) fclose(handle);}
     c_file(const c_file&) = delete;
     c_file& operator=(const c_file&) = delete;

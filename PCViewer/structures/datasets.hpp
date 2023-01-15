@@ -87,15 +87,12 @@ struct dataset{
     }
 };
 
+using dataset_t = unique_tracker<dataset>;
+using datasets_t = change_tracker<std::map<std::string_view, dataset_t>>;
 }
 
 namespace globals{
-
-template<class T>
-using changing = structures::change_tracker<T>;
-using dataset_t = structures::unique_tracker<structures::dataset>;
-using datasets_t = changing<std::map<std::string_view, dataset_t>>;
-extern datasets_t datasets;
+extern structures::datasets_t datasets;
 extern std::set<std::string_view> datasets_to_delete;   // is emptied in the main thread, only add delete tasks
 }
 

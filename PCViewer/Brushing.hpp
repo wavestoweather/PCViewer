@@ -73,7 +73,7 @@ namespace brushing{
         for(int i: irange(rangeBrushes)){
             auto& b = axisBrushes[i];
             for(const auto& range: rangeBrushes[i]){
-                b[range.axis].push_back({range.min, range.max});
+                b[range.axis].emplace_back(MM{range.min, range.max});
                 axisActive[range.axis] = true;
             }
         }
@@ -159,7 +159,7 @@ namespace brushing{
         for(int i: irange(rangeBrushes)){
             auto& b = axisBrushes[i];
             for(const auto& range: rangeBrushes[i]){
-                b[range.axis].push_back({range.min, range.max});
+                b[range.axis].emplace_back(MM{range.min, range.max});
             }
         }
 
@@ -175,23 +175,23 @@ namespace brushing{
         for(int brush: irange(axisBrushes)){
             // adding a brush
             brushData[brush] = brushData.size();        // inserting the correct offset
-            brushData.push_back(axisBrushes[brush].size()); // number of axis maps
+            brushData.emplace_back(axisBrushes[brush].size()); // number of axis maps
             size_t axisOffsetsIndex = brushData.size(); // safing index for fast access later
             brushData.resize(brushData.size() + axisBrushes[brush].size());   // reserving space for axisOffsets
             // adding the Axis Maps
             int curMap = 0;
             for(const auto [axis, ranges]: axisBrushes[brush]){
                 brushData[axisOffsetsIndex + curMap] = brushData.size();    // correct offset for the current axis map
-                brushData.push_back(ranges.size());                         // ranges size
-                brushData.push_back(axis);
+                brushData.emplace_back(ranges.size());                         // ranges size
+                brushData.emplace_back(axis);
                 size_t rangesOffsetsIndex = brushData.size();
                 brushData.resize(brushData.size() + ranges.size());
                 //adding the ranges
                 int curRange = 0;
                 for(const auto range: ranges){
                     brushData[rangesOffsetsIndex + curRange] = brushData.size();
-                    brushData.push_back(range.min);
-                    brushData.push_back(range.max);
+                    brushData.emplace_back(range.min);
+                    brushData.emplace_back(range.max);
                     ++curRange;
                 }       
                 ++curMap;

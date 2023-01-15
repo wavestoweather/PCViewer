@@ -12,7 +12,7 @@ public:
     size_t data_size{};
 
     KdTree(const db_scan::float_column_view& points): points(points){
-        for(int i: util::i_range(1, points.size() - 1))
+        for(size_t i: util::i_range(1ull, points.size() - 1))
             same_layout &= points[i - 1].equalDataLayout(points[i]);
             
         data_size = same_layout ? points[0].cols[0].size() : points[0].size();

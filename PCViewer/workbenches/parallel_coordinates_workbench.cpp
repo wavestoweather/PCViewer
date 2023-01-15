@@ -52,12 +52,12 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
     auto from_it = std::find(attributes_order_info().begin(), attributes_order_info().end(), from);
     auto to_it = std::find(attributes_order_info().begin(), attributes_order_info().end(), to);
     if(ImGui::IsKeyDown(ImGuiKey_ModCtrl)){
-        int from_ind = std::distance(attributes_order_info().begin(), from_it);
-        int to_ind = std::distance(attributes_order_info().begin(), to_it);
-        int lower = std::min(from_ind, to_ind);
-        int higher = std::max(from_ind, to_ind);
+        auto from_ind = std::distance(attributes_order_info().begin(), from_it);
+        auto to_ind = std::distance(attributes_order_info().begin(), to_it);
+        auto lower = std::min(from_ind, to_ind);
+        auto higher = std::max(from_ind, to_ind);
         int direction = from_ind < to_ind ? -1 : 1; // direction is the shuffle direction of all elements except from
-        int start_ind = from_ind - direction;
+        auto start_ind = from_ind - direction;
         for(;start_ind >= lower && start_ind <= higher; start_ind -= direction)
             attributes_order_info()[start_ind + direction] = attributes_order_info()[start_ind];
         attributes_order_info()[to_ind] = from;
@@ -87,13 +87,13 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
 
         // multidimensional histograms for parallel coordinates plotting
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
-        for(int i: util::i_range(active_indices.size() - 1)){
+        for(size_t i: util::i_range(active_indices.size() - 1)){
             std::vector<uint32_t> indices;
             std::vector<int> bucket_sizes;
             std::vector<structures::min_max<float>> bounds;
             int height = plot_data.read().height;
             if(setting.read().render_splines){
-                indices = {active_indices[std::max(i - 1, 0)], active_indices[i], active_indices[i + 1], active_indices[std::min<uint32_t>(i + 2, active_indices.size() - 1)]};
+                indices = {active_indices[std::max(static_cast<uint32_t>(i) - 1, 0u)], active_indices[i], active_indices[i + 1], active_indices[std::min(static_cast<uint32_t>(i) + 2, static_cast<uint32_t>(active_indices.size()) - 1)]};
                 bounds = {attributes.read()[indices[0]].bounds.read(), attributes.read()[indices[1]].bounds.read(), attributes.read()[indices[2]].bounds.read(), attributes.read()[indices[3]].bounds.read()};
                 bucket_sizes = {config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res};
             }
@@ -105,9 +105,9 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             bool max_needed = dl.priority_render;
             auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, max_needed);
             int registrator_index{-1};
-            for(int j: util::size_range(_registered_histograms[dl.drawlist_id])){
+            for(size_t j: util::size_range(_registered_histograms[dl.drawlist_id])){
                 if(_registered_histograms[dl.drawlist_id][j].registry_id == registrator_id){
-                    registrator_index = j;
+                    registrator_index = static_cast<int>(j);
                     break;
                 }
             }
@@ -123,8 +123,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         // removing unused registrators
         // locking registry
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
-        for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
-            if(i < 0) break;
+        for(size_t i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
             if(!registrator_needed[i])
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
@@ -149,9 +148,9 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             int height = plot_data.read().height;
             auto registrator_id = util::histogram_registry::get_id_string(i, height, attributes.read()[i].bounds.read(), false, false);
             int registrator_index{-1};
-            for(int j: util::size_range(_registered_axis_histograms[dl.drawlist_id])){
+            for(size_t j: util::size_range(_registered_axis_histograms[dl.drawlist_id])){
                 if(_registered_axis_histograms[dl.drawlist_id][j].registry_id == registrator_id){
-                    registrator_id = j;
+                    registrator_id = static_cast<int>(j);
                     break;
                 }
             }
@@ -165,8 +164,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         }
         // removing unused registrators
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
-        for(int i: util::rev_size_range(_registered_axis_histograms[dl.drawlist_id])){
-            if(i < 0) break;
+        for(size_t i: util::rev_size_range(_registered_axis_histograms[dl.drawlist_id])){
             if(!registrator_needed[i])
                 _registered_axis_histograms[dl.drawlist_id].erase(_registered_axis_histograms[dl.drawlist_id].begin() + i);
         }
@@ -249,12 +247,12 @@ void parallel_coordinates_workbench::show(){
             ++labels_count;
 
     constexpr float tick_width = 10;
-    const size_t padding_side = 10;
+    const float padding_side = 10;
     const ImVec2 button_size{70, 20};
-    const size_t gap = (content_size.x - 2 * padding_side) / (labels_count - 1);
-    const size_t button_gap = (content_size.x - 2 * padding_side - button_size.x) / (labels_count - 1);
+    const float gap = static_cast<float>((content_size.x - 2 * padding_side) / (labels_count - 1));
+    const float button_gap = static_cast<float>((content_size.x - 2 * padding_side - button_size.x) / (labels_count - 1));
 
-    size_t cur_offset{};
+    float cur_offset{};
     ImGui::Dummy({1, 1});
     // attribute labels
     for(const auto& att_ref: attributes_order_info.read()){
@@ -264,7 +262,7 @@ void parallel_coordinates_workbench::show(){
         ImGui::SameLine(cur_offset);
         
         std::string name = attributes.read()[att_ref.attribut_index].display_name;
-        int text_size = ImGui::CalcTextSize(name.c_str()).x;
+        float text_size = ImGui::CalcTextSize(name.c_str()).x;
         if(text_size > button_size.x){
             //add ellipsis at the end of the text
             bool too_long = true;
@@ -373,7 +371,7 @@ void parallel_coordinates_workbench::show(){
                 double nu = std::ceil(max_tick / unit - rounding_eps) * unit; while(nu > max_tick) nu -= unit;
                 const auto cursor_pos = ImGui::GetCursorScreenPos();
                 for(double tick_val = ns; tick_val <= nu; tick_val += unit){
-                    float y = (tick_val - attribute.bounds.read().max) / (attribute.bounds.read().min - attribute.bounds.read().max) * pic_size.y + pic_pos.y;
+                    float y = static_cast<float>((tick_val - attribute.bounds.read().max) / (attribute.bounds.read().min - attribute.bounds.read().max) * pic_size.y + pic_pos.y);
                     ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y - 1}, {x + tick_width / 2, y - 1}, col);
                     ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y + 1}, {x + tick_width / 2, y + 1}, col);
                     ImGui::GetWindowDrawList()->AddLine({x - tick_width / 2, y    }, {x + tick_width / 2, y    }, line_col);
@@ -687,8 +685,7 @@ void parallel_coordinates_workbench::show(){
             ImGui::TableHeader("Median");
             
             int up_index{-1}, down_index{-1};
-            for(int dl_index: util::rev_size_range(drawlist_infos.read())){
-                if(dl_index < 0) break;
+            for(size_t dl_index: util::rev_size_range(drawlist_infos.read())){
                 auto& dl = drawlist_infos.ref_no_track()[dl_index];
                 std::string dl_string(dl.drawlist_id);
                 const auto& drawlist = globals::drawlists.read().at(dl.drawlist_id);
@@ -963,8 +960,7 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
         }
     }
     // deleting all removed attributes in sorting order
-    for(int64_t i: util::rev_size_range(attributes_order_info.read())){
-        if(i < 0) break;
+    for(size_t i: util::rev_size_range(attributes_order_info.read())){
         if(attributes_order_info.read()[i].attribut_index >= attributes.read().size())
             attributes_order_info().erase(attributes_order_info().begin() + i);
     }
@@ -1048,7 +1044,7 @@ void parallel_coordinates_workbench::signal_drawlist_update(const util::memory_v
 }
 
 void parallel_coordinates_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
-    for(int i: util::rev_size_range(drawlist_infos.read())){
+    for(size_t i: util::rev_size_range(drawlist_infos.read())){
         if(drawlist_ids.contains(drawlist_infos.read()[i].drawlist_id)){
             std::string_view dl = drawlist_infos.read()[i].drawlist_id;
             // locking registry

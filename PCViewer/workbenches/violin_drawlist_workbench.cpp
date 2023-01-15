@@ -62,8 +62,7 @@ void violin_drawlist_workbench::_update_registered_histograms(){
         // removing unused registrators
         // locking registry
         auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
-        for(int i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
-            if(i < 0) break;
+        for(size_t i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
             if(!registrator_needed[i])
                 _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
         }
@@ -173,8 +172,7 @@ void violin_drawlist_workbench::show(){
             auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[att];
             violin_app.color.w = settings.read().area_alpha;
             const auto& histogram = _drawlist_attribute_histograms[{dl_id, att}];
-            // TODO adjust max val
-            const float hist_normalization_fac = histogram.max_val;
+            const float hist_normalization_fac = violin_app.scale == structures::violins::violin_scale_t::self ? histogram.max_val: violin_app.scale == structures::violins::violin_scale_t::per_attribute ? _per_attribute_max[att]: _global_max;
             util::violins::imgui_violin_infill(plot_min, plot_max, histogram.smoothed_values, hist_normalization_fac, violin_app);
         }
         // border drawing
@@ -185,8 +183,7 @@ void violin_drawlist_workbench::show(){
             auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[att];
             violin_app.color.w = settings.read().line_alpha;
             const auto& histogram = _drawlist_attribute_histograms[{dl_id, att}];
-            // TODO adjust max val
-            const float hist_normalization_fac = histogram.max_val;
+            const float hist_normalization_fac = violin_app.scale == structures::violins::violin_scale_t::self ? histogram.max_val: violin_app.scale == structures::violins::violin_scale_t::per_attribute ? _per_attribute_max[att]: _global_max;
             float line_thickness = settings.read().line_thickness;
             const bool hovered_plot = _hovered_dl_attribute == std::tuple{dl_id, att};
             if(hovered_plot)
@@ -254,7 +251,7 @@ void violin_drawlist_workbench::show(){
             _update_attribute_positioning(true);
 
         ImGui::TableNextColumn();
-        if(ImGui::BeginTable("attributes", 7, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+        if(ImGui::BeginTable("attributes", 8, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Up");
             ImGui::TableSetupColumn("Down");
@@ -441,8 +438,7 @@ void violin_drawlist_workbench::signal_dataset_update(const util::memory_view<st
     }
 
     // deleting all removed attributes in sorting order
-    for(int i: util::rev_size_range(session_state().attribute_order_infos)){
-        if(i < 0) break;
+    for(size_t i: util::rev_size_range(session_state().attribute_order_infos)){
         if(session_state().attribute_order_infos[i].attribut_index >= session_state().attributes.size())
             session_state().attribute_order_infos.erase(session_state().attribute_order_infos.begin() + i);
     }

@@ -360,10 +360,10 @@ inline void commit_command_buffer(VkCommandBuffer commands, VkQueue queue, util:
     VkCommandBufferSubmitInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
     info.commandBuffer = commands;
     VkSubmitInfo submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit_info.waitSemaphoreCount = wait_semaphores.size();
+    submit_info.waitSemaphoreCount = static_cast<uint32_t>(wait_semaphores.size());
     submit_info.pWaitSemaphores = wait_semaphores.data();
     submit_info.pWaitDstStageMask = wait_masks.data();
-    submit_info.signalSemaphoreCount = signal_semaphores.size();
+    submit_info.signalSemaphoreCount = static_cast<uint32_t>(signal_semaphores.size());
     submit_info.pSignalSemaphores = signal_semaphores.data();
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &commands;
@@ -397,7 +397,7 @@ inline VkDeviceAddress get_buffer_address(const structures::buffer_info& buffer)
 inline void convert_image_layouts_execute(util::memory_view<VkImageMemoryBarrier> image_barriers){
     std::scoped_lock lock(*globals::vk_context.graphics_mutex);
     auto commands = create_begin_command_buffer(globals::vk_context.general_graphics_command_pool);
-    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, {}, 0, {}, 0, {}, image_barriers.size(), image_barriers.data());
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, {}, 0, {}, 0, {}, static_cast<uint32_t>(image_barriers.size()), image_barriers.data());
     auto fence = create_fence(initializers::fenceCreateInfo());
     end_commit_command_buffer(commands, globals::vk_context.graphics_queue, {}, {}, {}, fence);
     auto res = vkWaitForFences(globals::vk_context.device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);

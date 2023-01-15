@@ -56,7 +56,7 @@ private:
 class IndexType: public Type, public Creatable<IndexType, Type>{
     float _d{}; // default index is 0
 public:
-    ImVec4 color() const override{return {.1,.1,1,1};}
+    ImVec4 color() const override{return {.1f,.1f,1.f,1.f};}
     column_memory_view<float> data() override {return column_memory_view(memory_view(_d));}
 };
 
