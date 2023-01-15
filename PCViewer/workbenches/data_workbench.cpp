@@ -30,15 +30,18 @@ void data_workbench::show()
 
     ImGui::Begin(id.c_str());
     // 3 column layout with the following layout
-    //  |   c1      |    c2     |    c3     |
-    //  | datasets  | drawlists | global brushes|
-    if(ImGui::BeginTable("data_workbench_cols", 3, ImGuiTableFlags_Resizable)){
+    //  |   c1      |     c2    |    c3     |    c4     |
+    //  | datasets  | attributes| drawlists | global brushes|
+    if(ImGui::BeginTable("data_workbench_cols", 4, ImGuiTableFlags_Resizable)){
         ImGui::TableSetupColumn("Datasets");
+        ImGui::TableSetupColumn("Attributes");
         ImGui::TableSetupColumn("Drawlists");
         ImGui::TableSetupColumn("Global brushes");
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         ImGui::TableNextColumn();
         ImGui::TableHeader("Datasets");
+        ImGui::TableNextColumn();
+        ImGui::TableHeader("Attributes");
         ImGui::TableNextColumn();
         ImGui::TableHeader("Drawlists");
         ImGui::TableNextColumn();
@@ -46,7 +49,7 @@ void data_workbench::show()
 
         ImGui::TableNextRow();
 
-        // c1
+        // c1 | Datasets --------------------------------------------------------------------------------------------------------------------------------------
         ImGui::TableNextColumn();
 
         bool open = ImGui::InputText("Directory Path", &_open_filename, ImGuiInputTextFlags_EnterReturnsTrue);
@@ -98,14 +101,95 @@ void data_workbench::show()
             ImGui::OpenPopup(popup_add_empty_ds.data());
         }
 
-        // c2
+        // c2 | Attributes --------------------------------------------------------------------------------------------------------------------------------------
+        ImGui::TableNextColumn();
+        // filter row
+        if(_attribute_regex_error)
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, {1.f, 0.f, 0.f, .5f});
+        ImGui::PushItemWidth(150);
+        bool reselect_all_attributes = ImGui::InputText("Fileter##a", &_attribute_table_filter) && _attribute_table_filter.size();
+        ImGui::PopItemWidth();
+        if(_regex_error)
+            ImGui::PopStyleColor();
+        std::regex attribute_table_regex;
+        try{
+            attribute_table_regex = std::regex(_attribute_table_filter);
+            _attribute_regex_error = false;
+        }
+        catch(std::exception){
+            _attribute_regex_error = true;
+            reselect_all_attributes = false;
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Deselect all##at")){
+            globals::selected_attributes.clear();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Select all##at") || reselect_all_attributes){
+            globals::selected_attributes.clear();
+            for(const auto& [at_id, at]: globals::attributes.read()){
+                if(std::regex_search(at_id.begin(), at_id.end(), attribute_table_regex))
+                    globals::selected_attributes.emplace_back(at_id);
+            }
+        }
+        ImGui::SameLine();
+        ImGui::PushItemWidth(50);
+        _uniform_attribute_alpha = 0;
+        int alpha_count = 0;
+        for(const auto& [at_id, at]: globals::attributes.read()){
+            if(std::regex_search(at_id.begin(), at_id.end(), attribute_table_regex)){
+                _uniform_attribute_alpha += at.read().color.read().w;
+                ++alpha_count;
+            }
+        }
+        if(alpha_count) _uniform_attribute_alpha /= alpha_count;
+        if(ImGui::DragFloat("Uniform alpha##at", &_uniform_attribute_alpha, _uniform_attribute_alpha / 200.f, std::max(1e-20f, _uniform_attribute_alpha * .5f), std::min(1.f, _uniform_attribute_alpha * 2.f), "%.3g")){
+            if(globals::selected_attributes.size()){
+                for(auto at: globals::selected_attributes)
+                    globals::attributes()[at]().color().w = _uniform_attribute_alpha;
+            }
+            else{
+                for(const auto& [at_id, at]: globals::attributes.read())
+                    if(std::regex_search(at_id.begin(), at_id.end(), attribute_table_regex))
+                        globals::attributes()[at_id]().color().w = _uniform_attribute_alpha;
+            }
+        }
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        if(ImGui::Button("Attribute colors"))
+            globals::workbench_index.at(globals::load_color_wb_id).active = true;
+
+        if(ImGui::BeginTable("Attributes", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+            ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Active");
+            ImGui::TableSetupColumn("Color");
+            ImGui::TableSetupColumn("Delete");
+
+            // top row
+            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Name");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Active");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Color");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Delete");
+
+            
+
+            ImGui::EndTable();
+        }
+
+        // c3 | Drawlists ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
         ImGui::TableNextColumn();
 
         // filter row
         if(_regex_error)
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, {1, 0, 0, .5});
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, {1.f, 0.f, 0.f, .5f});
         ImGui::PushItemWidth(150);
-        bool reselect_all = ImGui::InputText("Filter", &_table_filter) && _table_filter.size();
+        bool reselect_all = ImGui::InputText("Filter##d", &_table_filter) && _table_filter.size();
         ImGui::PopItemWidth();
         if(_regex_error)
             ImGui::PopStyleColor();
@@ -114,7 +198,7 @@ void data_workbench::show()
             table_regex = std::regex(_table_filter);
             _regex_error = false;
         }
-        catch(std::exception e){
+        catch(std::exception){
             _regex_error = true;
             reselect_all = false;
         };
@@ -132,9 +216,9 @@ void data_workbench::show()
                     globals::selected_drawlists.push_back(dl_id);
         }
         ImGui::SameLine();
-        ImGui::PushItemWidth(150);
+        ImGui::PushItemWidth(50);
         _uniform_alpha = 0;
-        int alpha_count = 0;
+        alpha_count = 0;
         for(const auto& [dl_id, dl]: globals::drawlists.read()){
             if(std::regex_search(dl_id.begin(), dl_id.end(), table_regex)){
                 _uniform_alpha += dl.read().appearance_drawlist.read().color.w;
@@ -142,29 +226,28 @@ void data_workbench::show()
             }
         }
         if(alpha_count) _uniform_alpha /= alpha_count;
-        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, std::max(1e-20, _uniform_alpha * .5), std::min(1., _uniform_alpha * 2.), "%.3g")){
+        if(ImGui::DragFloat("Uniform alpha", &_uniform_alpha, _uniform_alpha / 200, std::max(1e-20f, _uniform_alpha * .5f), std::min(1.f, _uniform_alpha * 2.f), "%.3g")){
             if(globals::selected_drawlists.size()){
                 for(const auto& dl: globals::selected_drawlists)
                     globals::drawlists()[dl]().appearance_drawlist().color.w = _uniform_alpha;
             }
             else{
                 for(auto& [dl_id, dl]: globals::drawlists())
-                    dl().appearance_drawlist().color.w = _uniform_alpha;
+                    if(std::regex_search(dl_id.begin(), dl_id.end(), table_regex))
+                        dl().appearance_drawlist().color.w = _uniform_alpha;
             }
         }
         ImGui::PopItemWidth();
         ImGui::SameLine();
         if(ImGui::Button("Drawlist colors"))
-            util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::load_color_wb_id;})->active = true;
+            globals::workbench_index.at(globals::load_color_wb_id).active = true;
         
 
-        if(ImGui::BeginTable("Drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+        if(ImGui::BeginTable("Drawlists", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
             ImGui::TableSetupColumn("Color");
-            ImGui::TableSetupColumn("Median");
-            ImGui::TableSetupColumn("Median color");
             ImGui::TableSetupColumn("Delete");
 
             // top row
@@ -193,7 +276,7 @@ void data_workbench::show()
                     else if(selected)
                         globals::selected_drawlists.clear();
                     else if(ImGui::GetIO().KeyShift){
-                        uint32_t start_index = util::drawlist::drawlist_index(globals::selected_drawlists.back());
+                        uint32_t start_index = static_cast<uint32_t>(util::drawlist::drawlist_index(globals::selected_drawlists.back()));
                         uint32_t end_index = ImGui::TableGetRowIndex() - 1;
                         if(start_index > end_index)
                             std::swap(start_index, end_index);
@@ -273,7 +356,7 @@ void data_workbench::show()
             ImGui::TableNextColumn();
 
             int brush_delete = -1;
-            for(int i: util::size_range(globals::global_brushes.read())){
+            for(size_t i: util::size_range(globals::global_brushes.read())){
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 const auto& gb = globals::global_brushes.read()[i].read();
@@ -292,7 +375,7 @@ void data_workbench::show()
                     globals::global_brushes()[i]();
                 ImGui::TableNextColumn();
                 if(ImGui::Button(("X##gbd" + std::to_string(gb.id)).c_str()))
-                    brush_delete = i;
+                    brush_delete = static_cast<int>(i);
             }
             if(brush_delete >= 0){
                 globals::global_brushes().erase(globals::global_brushes().begin() + brush_delete);
@@ -359,8 +442,8 @@ void data_workbench::show()
             }
             if(ImGui::BeginTabItem("Uniform Value Split")){
                 if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
-                    for(int att: util::size_range(ds.attributes)){
-                        if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())) _tl_split_data.attribute = att;
+                    for(size_t att: util::size_range(ds.attributes)){
+                        if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())) _tl_split_data.attribute = static_cast<int>(att);
                     }
                     ImGui::EndCombo();
                 }
@@ -373,9 +456,9 @@ void data_workbench::show()
                 if(!std::holds_alternative<value_split>(_tl_split_data.additional_info))
                     _tl_split_data.additional_info = value_split{{ds.attributes[_tl_split_data.attribute].bounds.read().min, ds.attributes[_tl_split_data.attribute].bounds.read().max}};
                 if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
-                    for(int att: util::size_range(ds.attributes)){
+                    for(size_t att: util::size_range(ds.attributes)){
                         if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())){
-                            _tl_split_data.attribute = att;
+                            _tl_split_data.attribute = static_cast<int>(att);
                             std::get<value_split>(_tl_split_data.additional_info).values = {ds.attributes[_tl_split_data.attribute].bounds.read().min, ds.attributes[_tl_split_data.attribute].bounds.read().max};
                         }
                     }
@@ -385,15 +468,15 @@ void data_workbench::show()
                 auto& values = std::get<value_split>(_tl_split_data.additional_info).values;
                 int delete_item{-1}, add_item{-1};
                 ImGui::Text("Split values:");
-                for(int i: util::size_range(values)){
+                for(size_t i: util::size_range(values)){
                     float min = ds.attributes[_tl_split_data.attribute].bounds.read().min, max = ds.attributes[_tl_split_data.attribute].bounds.read().max, speed = .01f;
-                    if(i == 0) speed = 0.0000000001;
-                    else if(i == values.size() - 1) speed = 0.000000001;
+                    if(i == 0) speed = 0.0000000001f;
+                    else if(i == values.size() - 1) speed = 0.000000001f;
                     else {min = values[i - 1], max = values[i + 1]; speed = (max - min) / 500;}
                     ImGui::DragFloat(("##quantile" + std::to_string(i)).c_str(), values.data() + i, speed, min, max);
                     if(i != 0 && i != values.size()-1){
                         ImGui::SameLine();
-                        if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) delete_item = i;
+                        if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) delete_item = static_cast<int>(i);
                     }
                     if(i < values.size() - 1){
                         static float buttonHeight = 10;
@@ -401,7 +484,7 @@ void data_workbench::show()
                         float prevCursorPosY = ImGui::GetCursorPosY();
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() / 2.0f + space);
                         if(ImGui::Button(("##addButton" + std::to_string(i)).c_str(), ImVec2(250,buttonHeight))){
-                            add_item = i;
+                            add_item = static_cast<int>(i);
                         }
                         ImGui::SetCursorPosY(prevCursorPosY + space);
                     }
@@ -420,9 +503,9 @@ void data_workbench::show()
                 if(!std::holds_alternative<quantile_split>(_tl_split_data.additional_info))
                     _tl_split_data.additional_info = quantile_split{{.0f, 1.f}};
                 if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
-                    for(int att: util::size_range(ds.attributes)){
+                    for(size_t att: util::size_range(ds.attributes)){
                         if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())){
-                            _tl_split_data.attribute = att;
+                            _tl_split_data.attribute = static_cast<int>(att);
                             std::get<quantile_split>(_tl_split_data.additional_info).quantiles = {.0f,1.f};
                         }
                     }
@@ -431,15 +514,15 @@ void data_workbench::show()
                 ImGui::Text("Split quantlies:");
                 auto& quantiles = std::get<quantile_split>(_tl_split_data.additional_info).quantiles;
                 int delete_item{-1}, add_item{-1};
-                for(int i: util::size_range(quantiles)){
+                for(size_t i: util::size_range(quantiles)){
                     float min = 0, max = 1, speed = .01f;
-                    if(i == 0) speed = 0.0000000001;
-                    else if(i == quantiles.size() - 1) speed = 0.000000001;
+                    if(i == 0) speed = 0.0000000001f;
+                    else if(i == quantiles.size() - 1) speed = 0.000000001f;
                     else {min = quantiles[i - 1], max = quantiles[i + 1];}
                     ImGui::DragFloat(("##quantile" + std::to_string(i)).c_str(), quantiles.data() + i, speed, min, max);
                     if(i != 0 && i != quantiles.size()-1){
                         ImGui::SameLine();
-                        if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) delete_item = i;
+                        if(ImGui::Button(("X##deleteQuant" + std::to_string(i)).c_str())) delete_item = static_cast<int>(i);
                     }
                     if(i < quantiles.size() - 1){
                         static float buttonHeight = 10;
@@ -447,7 +530,7 @@ void data_workbench::show()
                         float prevCursorPosY = ImGui::GetCursorPosY();
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() / 2.0f + space);
                         if(ImGui::Button(("##addButton" + std::to_string(i)).c_str(), ImVec2(250,buttonHeight))){
-                            add_item = i;
+                            add_item = static_cast<int>(i);
                         }
                         ImGui::SetCursorPosY(prevCursorPosY + space);
                     }
@@ -457,7 +540,7 @@ void data_workbench::show()
 
                 if(ImGui::Button("Unify quantiles")){
                     for(size_t i: util::i_range(1ull, quantiles.size() - 1))
-                        quantiles[i] = i / double(quantiles.size() - 1);
+                        quantiles[i] = i / float(quantiles.size() - 1);
                 }
 
                 ImGui::EndTabItem();
@@ -469,7 +552,7 @@ void data_workbench::show()
                 if(ImGui::BeginCombo("Split axis", ds.attributes[_tl_split_data.attribute].display_name.c_str())){
                     for(size_t att: util::size_range(ds.attributes)){
                         if(ImGui::MenuItem(ds.attributes[att].display_name.c_str())){
-                            _tl_split_data.attribute = att;
+                            _tl_split_data.attribute = static_cast<int>(att);
                         }
                     }
                     ImGui::EndCombo();

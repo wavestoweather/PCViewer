@@ -10,8 +10,11 @@ class data_workbench: public structures::workbench, public structures::drawlist_
     std::string_view                _popup_tl_id{};
     std::string                     _open_filename{};
     std::string                     _table_filter{};
+    std::string                     _attribute_table_filter{};
     bool                            _regex_error{};
+    bool                            _attribute_regex_error{};
     float                           _uniform_alpha{.01f};
+    float                           _uniform_attribute_alpha{.01f};
     
     structures::templatelist_convert_data _tl_convert_data{};
     structures::templatelist_split_data   _tl_split_data{};

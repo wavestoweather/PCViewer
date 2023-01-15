@@ -63,4 +63,6 @@ using dataset_dependencies_t = std::vector<structures::dataset_dependency*>;
 extern dataset_dependencies_t dataset_dependencies;                     // also contains all drawlist_dataset_dependencies as they are a specialization
 using drawlist_dataset_dependencies_t = std::vector<structures::drawlist_dataset_dependency*>;
 extern drawlist_dataset_dependencies_t drawlist_dataset_dependencies;
+using workbench_index_t = std::map<std::string_view, structures::workbench&>;
+extern workbench_index_t workbench_index;
 }

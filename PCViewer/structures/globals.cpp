@@ -54,9 +54,9 @@ structures::drawlists_t         drawlists{};
 std::vector<std::string_view>   selected_drawlists{};
 std::set<std::string_view>      drawlists_to_delete{};
 
-std::vector<std::string_view>                                    selected_attributes;
-std::map<std::string_view, structures::unique_global_attribute>  attributes;
-structures::names_group                                          attribute_groups;
+structures::attributes_t        attributes{};
+std::vector<std::string_view>   selected_attributes{};
+structures::names_group         attribute_groups{};
 
 structures::global_brushes global_brushes{};
 structures::brush_edit_data brush_edit_data{};
@@ -86,6 +86,7 @@ structures::workbench* primary_workbench{};
 structures::workbench* secondary_workbench{};
 dataset_dependencies_t dataset_dependencies{};
 drawlist_dataset_dependencies_t drawlist_dataset_dependencies{}; 
+workbench_index_t workbench_index{};                                // uses a std map to enable lexicographical iteration over all workbenches
 
 structures::imgui_globals imgui{};
 

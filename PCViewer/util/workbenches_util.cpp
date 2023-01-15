@@ -70,6 +70,10 @@ void setup_default_workbenches(){
     globals::drawlist_dataset_dependencies.push_back(violin_attribute_wb.get());
     globals::workbenches.emplace_back(std::move(violin_attribute_wb));
 
+    // workbench index setup
+    for(auto& wb: globals::workbenches)
+        globals::workbench_index.insert({wb->id, *wb});
+
     // load behavoiur setup ----------------------------------------------------------
     globals::load_behaviour.on_load.push_back({false, 1, {0, std::numeric_limits<size_t>::max()}});
     globals::drawlist_creation_behaviour.coupled_workbenches.push_back(parallel_coordinates_wb_id);

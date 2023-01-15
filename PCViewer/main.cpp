@@ -298,10 +298,10 @@ int main(int argc, char* argv[]){
             }
         }
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, {.8,.8,.8,1});
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, {.8f,.8f,.8f,1.f});
         ImGui::Begin(log_window_name.data());
         ImGui::SetWindowFontScale(.8f);
-        for(size_t i: util::i_range(logger.buffer_size)){
+        for(uint32_t i: util::i_range(logger.buffer_size)){
             auto last_line = logger.get_last_line(logger.buffer_size - 1 - i);
             if(last_line.empty())
                 continue;
@@ -321,7 +321,7 @@ int main(int argc, char* argv[]){
         ImGui::End();   // log window
         ImGui::PopStyleColor();
 
-        if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")){
+        if(ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey", 32, {400, 250})){
             if(ImGuiFileDialog::Instance()->IsOk()){
                 auto selection = ImGuiFileDialog::Instance()->GetSelection();                
                 for(auto& [id, path]: selection)
