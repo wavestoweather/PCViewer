@@ -1160,7 +1160,7 @@ void check_dataset_data_update(){
             }
             // removing unused gpu columns
             if(ds.read().gpu_data.columns.size() > column_count){
-                for(int64_t i: util::i_range(static_cast<int64_t>(ds.read().gpu_data.columns.size()) - 1, static_cast<int64_t>(column_count) - 1, -1ll)){
+                for(int64_t i: util::i_range(static_cast<int64_t>(ds.read().gpu_data.columns.size()) - 1, static_cast<int64_t>(column_count) - 1, static_cast<int64_t>(-1))){
                     util::vk::destroy_buffer(globals::datasets()[ds_id]().gpu_data.columns[i]);
                     globals::datasets()[ds_id]().gpu_data.columns.pop_back();
                 }

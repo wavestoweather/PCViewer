@@ -32,11 +32,11 @@ void data_workbench::show()
     // 3 column layout with the following layout
     //  |   c1      |     c2    |    c3     |    c4     |
     //  | datasets  | attributes| drawlists | global brushes|
-    if(ImGui::BeginTable("data_workbench_cols", 4, ImGuiTableFlags_Resizable)){
-        ImGui::TableSetupColumn("Datasets");
-        ImGui::TableSetupColumn("Attributes");
-        ImGui::TableSetupColumn("Drawlists");
-        ImGui::TableSetupColumn("Global brushes");
+    if(ImGui::BeginTable("data_workbench_cols", 4, ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingStretchProp)){
+        ImGui::TableSetupColumn("Datasets", {}, .2f);
+        ImGui::TableSetupColumn("Attributes", {}, .4f);
+        ImGui::TableSetupColumn("Drawlists", {}, .4f);
+        ImGui::TableSetupColumn("Global brushes", {}, .2f);
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         ImGui::TableNextColumn();
         ImGui::TableHeader("Datasets");
@@ -52,7 +52,9 @@ void data_workbench::show()
         // c1 | Datasets --------------------------------------------------------------------------------------------------------------------------------------
         ImGui::TableNextColumn();
 
+        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Directory Path        Open").x);
         bool open = ImGui::InputText("Directory Path", &_open_filename, ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::PopItemWidth();
         if (ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::Text("Enter either a file including filepath,\nOr a folder (division with /) and all datasets in the folder will be loaded\nOr drag and drop files to load onto application.");
@@ -493,7 +495,7 @@ void data_workbench::show()
                 if(delete_item >= 0) values.erase(values.begin() + delete_item);
 
                 if(ImGui::Button("Unify value differences")){
-                    for(size_t i: util::i_range(1ull, values.size() - 1))
+                    for(size_t i: util::i_range(size_t(1), values.size() - 1))
                         values[i] = i * (values.back() - values.front()) / (values.size() - 1);
                 }
 
@@ -539,7 +541,7 @@ void data_workbench::show()
                 if(delete_item >= 0) quantiles.erase(quantiles.begin() + delete_item);
 
                 if(ImGui::Button("Unify quantiles")){
-                    for(size_t i: util::i_range(1ull, quantiles.size() - 1))
+                    for(size_t i: util::i_range(size_t(1), quantiles.size() - 1))
                         quantiles[i] = i / float(quantiles.size() - 1);
                 }
 

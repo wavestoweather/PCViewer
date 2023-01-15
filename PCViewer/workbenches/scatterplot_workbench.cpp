@@ -133,7 +133,7 @@ void scatterplot_workbench::_update_plot_list(){
     plot_list().clear();
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
-        for(size_t i: util::i_range(1ull, active_indices.size())){
+        for(size_t i: util::i_range(size_t(1), active_indices.size())){
             for(size_t j: util::i_range(i))
                 plot_list().emplace_back(attribute_pair{int(active_indices[i]), int(active_indices[j])});
         }
@@ -243,7 +243,7 @@ void scatterplot_workbench::show()
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
         // matrix should be displayed as a left lower triangular matrix
-        for(size_t i: util::i_range(1ull, active_indices.size())){
+        for(size_t i: util::i_range(size_t(1), active_indices.size())){
             ImVec2 text_pos = ImGui::GetCursorScreenPos(); text_pos.y += settings.read().plot_width / 2;
             util::imgui::AddTextVertical(attributes.read()[active_indices[i]].display_name.c_str(), text_pos, .5f);
             ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x + ImGui::GetTextLineHeightWithSpacing(), ImGui::GetCursorScreenPos().y});
@@ -367,7 +367,7 @@ void scatterplot_workbench::show()
                 ImGui::PopID();
                 break;
             case plot_type_t::list:
-                for(size_t i: util::i_range(1ull, attributes.read().size())){
+                for(size_t i: util::i_range(size_t(1), attributes.read().size())){
                     for(size_t j: util::i_range(i)){
                         //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
                         if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{int(i), int(j)}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
