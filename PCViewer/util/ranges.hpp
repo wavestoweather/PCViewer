@@ -102,6 +102,7 @@ public:
 
 template<typename T>
 class first_iter {
+    std::optional<T> storage;
     T& iterable_;
 public:
     class iterator{
@@ -122,6 +123,7 @@ public:
     };
 
     explicit first_iter(T& iterable) : iterable_(iterable) {}
+    explicit first_iter(T&& iterable) : storage(iterable), iterable_(*storage) {}
     iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
@@ -293,7 +295,7 @@ template<typename T, typename U>
 optional_ref<U> operator|(T& range, const try_find_if<U>& e){
     for(auto& el: range)
         if(e.f(el))
-            return {std::reference_wrapper<U>{el}};
+            return {std::reference_wrapper<U>(el)};
     return {};
 }
 

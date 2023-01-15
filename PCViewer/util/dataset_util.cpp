@@ -29,7 +29,7 @@
 #include <descriptor_set_storage.hpp>
 #include <imgui_util.hpp>
 #include <global_settings.hpp>
-#include <drawlist_colors_workbench.hpp>
+#include <load_colors_workbench.hpp>
 #include <radix.hpp>
 #include "../cimg/CImg.h"
 #include "../vulkan/vk_format_util.hpp"
@@ -652,7 +652,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         drawlist().parent_dataset = ds.read().id;
         drawlist().parent_templatelist = ds.read().templatelist_index.at(convert_data.tl_id)->name;
         if(globals::settings.drawlist_creation_assign_color){
-            drawlist().appearance_drawlist().color = reinterpret_cast<workbenches::drawlist_colors_workbench*>(util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::drawlist_color_wb_id;}).get())->get_next_imcolor().Value;
+            drawlist().appearance_drawlist().color = reinterpret_cast<workbenches::load_colors_workbench*>(util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::load_color_wb_id;}).get())->get_next_drawlist_imcolor().Value;
             drawlist().appearance_drawlist().color.w = 1;
         }
         drawlist().appearance_drawlist().color.w = std::clamp(1.0f/ (drawlist.read().const_templatelist().data_size * float(globals::settings.drawlist_creation_alpha_factor)), 1e-6f, 1.f);

@@ -423,7 +423,7 @@ void parallel_coordinates_workbench::show(){
     if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none){ 
         bool any_hover = false;
         robin_hood::unordered_set<structures::brush_id> brush_delete;
-        ImVec2 mouse_pos = {ImGui::GetIO().MousePos.x - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).x, ImGui::GetIO().MousePos.y - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0).y};
+        ImVec2 mouse_pos = {ImGui::GetIO().MousePos.x - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, static_cast<float>(setting.read().brush_drag_threshold)).x, ImGui::GetIO().MousePos.y - ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0).y};
 
         const structures::range_brush& selected_brush = util::brushes::get_selected_range_brush_const();
         float brush_gap = pic_size.x / (labels_count - 1);
@@ -477,7 +477,7 @@ void parallel_coordinates_workbench::show(){
                 globals::brush_edit_data.hovered_region_on_click = hovered_region;
             }
             // dragging
-            if(globals::brush_edit_data.selected_ranges.contains(brush.id) && ((ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, setting.read().brush_drag_threshold).y) || ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))){
+            if(globals::brush_edit_data.selected_ranges.contains(brush.id) && ((ImGui::IsMouseDown(ImGuiMouseButton_Left) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, static_cast<float>(setting.read().brush_drag_threshold)).y) || ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))){
                 float delta;
                 if(ImGui::IsMouseDown(ImGuiMouseButton_Left))
                     delta = -ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, float(setting.read().brush_drag_threshold)).y / pic_size.y;
@@ -553,7 +553,7 @@ void parallel_coordinates_workbench::show(){
         for(const auto& attr_ref: attributes_order_info.read()){
             if(!attr_ref.active)
                 continue;
-            float x = brush_gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2;
+            float x = static_cast<float>(brush_gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2);
             bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + float(setting.read().brush_box_width), pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
             if(!any_hover && axis_hover && globals::brush_edit_data.selected_ranges.empty()){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);

@@ -47,7 +47,7 @@ public:
 
 class FloatType: public Type, public Creatable<FloatType, Type>{
 public:
-    ImVec4 color() const override{return {1,0,0,1};};
+    ImVec4 color() const override{return {1.f,0.f,0.f,1.f};};
     column_memory_view<float> data() override {return column_memory_view(memory_view(_d));};
 private:
     float _d;
@@ -61,13 +61,13 @@ public:
 };
 
 class ConstantFloatType: public Type, public Creatable<ConstantFloatType, Type>{
-    ImVec4 color() const override{return {1, .5, 0, 1};};
+    ImVec4 color() const override{return {1.f, .5f, 0.f, 1.f};};
     column_memory_view<float> data() override{return {};};    // always returns null pointer as data is not changable
 };
 
 class VectorType: public Type,  public Creatable<VectorType, Type>{
 public:
-    ImVec4 color() const override{return {0,1,0,1};};
+    ImVec4 color() const override{return {0.f,1.f,0.f,1.f};};
     column_memory_view<float> data() override{return column_memory_view(memory_view(_d));};
 private:
     std::vector<float> _d;
@@ -75,7 +75,7 @@ private:
 
 class Vec2Type: public Type,  public Creatable<Vec2Type, Type>{
 public:
-    ImVec4 color() const override{return {.5, .5, .5, 1};};
+    ImVec4 color() const override{return {.5f, .5f, .5f, 1.f};};
     column_memory_view<float> data() override{return column_memory_view(memory_view(_d));};
 private:
     std::array<float, 2> _d;
@@ -83,7 +83,7 @@ private:
 
 class Vec3Type: public Type,  public Creatable<Vec3Type, Type>{
 public:
-    ImVec4 color() const override{return {1,1,1,1};};
+    ImVec4 color() const override{return {1.f,1.f,1.f,1.f};};
     column_memory_view<float> data() override{return column_memory_view(memory_view(_d));};
 private:
     std::array<float, 3> _d;
@@ -91,7 +91,7 @@ private:
 
 class Vec4Type: public Type,  public Creatable<Vec4Type, Type>{
 public:
-    ImVec4 color() const override{return {.1, .1, .1, 1};};
+    ImVec4 color() const override{return {.1f, .1f, .1f, 1.f};};
     column_memory_view<float> data() override{return column_memory_view(memory_view(_d));};
 private:
     std::array<float, 4> _d;

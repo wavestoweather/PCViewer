@@ -9,7 +9,7 @@
 #include <../imgui_file_dialog/ImGuiFileDialog.h>
 #include <drawlist_util.hpp>
 #include <regex>
-#include <drawlist_colors_workbench.hpp>
+#include <load_colors_workbench.hpp>
 
 namespace workbenches
 {
@@ -155,7 +155,7 @@ void data_workbench::show()
         ImGui::PopItemWidth();
         ImGui::SameLine();
         if(ImGui::Button("Drawlist colors"))
-            util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::drawlist_color_wb_id;})->active = true;
+            util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::load_color_wb_id;})->active = true;
         
 
         if(ImGui::BeginTable("Drawlists", 6, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){

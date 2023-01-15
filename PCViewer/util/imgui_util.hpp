@@ -14,6 +14,7 @@ namespace imgui{
 class scoped_id{
 public:
     scoped_id(std::string_view id) {ImGui::PushID(id.data());}
+    scoped_id(int id) {ImGui::PushID(id);}
     scoped_id(const scoped_id&) = delete;
     scoped_id& operator=(const scoped_id&) = delete;
     scoped_id(scoped_id&&) = delete;

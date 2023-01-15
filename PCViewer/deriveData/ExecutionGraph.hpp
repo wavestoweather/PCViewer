@@ -141,13 +141,13 @@ struct ExecutionGraph{
         pinToLinks.erase(pinId);
         int64_t nodeId = pinToNodes[pinId];
         if(isInput){
-            int index = std::find(nodes[nodeId].inputIds.begin(), nodes[nodeId].inputIds.end(), pinId) - nodes[nodeId].inputIds.begin();
+            auto index = std::find(nodes[nodeId].inputIds.begin(), nodes[nodeId].inputIds.end(), pinId) - nodes[nodeId].inputIds.begin();
             nodes[nodeId].inputIds.erase(nodes[nodeId].inputIds.begin() + index);
             nodes[nodeId].node->inputNames.erase(nodes[nodeId].node->inputNames.begin() + index);
             nodes[nodeId].node->inputTypes.erase(nodes[nodeId].node->inputTypes.begin() + index);
         }
         else{
-            int index = std::find(nodes[nodeId].outputIds.begin(), nodes[nodeId].outputIds.end(), pinId) - nodes[nodeId].outputIds.begin();
+            auto index = std::find(nodes[nodeId].outputIds.begin(), nodes[nodeId].outputIds.end(), pinId) - nodes[nodeId].outputIds.begin();
             nodes[nodeId].outputIds.erase(nodes[nodeId].outputIds.begin() + index);
             nodes[nodeId].node->outputNames.erase(nodes[nodeId].node->outputNames.begin() + index);
             nodes[nodeId].node->outputTypes.erase(nodes[nodeId].node->outputTypes.begin() + index);

@@ -8,7 +8,7 @@
 #include <images_workbench.hpp>
 #include <load_behaviour.hpp>
 #include <drawlist_creation_behaviour.hpp>
-#include <drawlist_colors_workbench.hpp>
+#include <load_colors_workbench.hpp>
 #include <violin_drawlist_workbench.hpp>
 #include <violin_attribute_workbench.hpp>
 
@@ -35,8 +35,8 @@ void setup_default_workbenches(){
     globals::primary_workbench = data_wb.get();
     globals::workbenches.emplace_back(std::move(data_wb));
 
-    auto drawlist_color_wb = std::make_unique<workbenches::drawlist_colors_workbench>(globals::drawlist_color_wb_id);
-    globals::workbenches.emplace_back(std::move(drawlist_color_wb));
+    auto load_color_wb = std::make_unique<workbenches::load_colors_workbench>(globals::load_color_wb_id);
+    globals::workbenches.emplace_back(std::move(load_color_wb));
 
     auto images_wb = std::make_unique<workbenches::images_workbench>(images_wb_id);
     globals::workbenches.emplace_back(std::move(images_wb));
