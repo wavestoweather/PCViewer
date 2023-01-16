@@ -15,8 +15,9 @@ namespace structures{
 struct attribute{
     std::string                     id{};
     std::string                     display_name{};
-    change_tracker<min_max<float>>  bounds{};                              // global shown bounds
-    std::map<std::string_view, float> categories{};
+    change_tracker<min_max<float>>  bounds{};                               // global shown bounds
+    std::map<std::string, float>    categories{};
+    std::vector<std::string_view>   ordered_categories{};                   // ordered by mapped value
     bool operator==(const attribute& o) const {return id == o.id && bounds.read() == o.bounds.read();}
 };
 

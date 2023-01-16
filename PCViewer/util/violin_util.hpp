@@ -198,8 +198,7 @@ inline violin_position_order_t get_violin_pos_order(const std::vector<std::vecto
 
     // assign the colors to the attributes and creating the order array
     std::vector<structures::attribute_order_info> attribute_order(attribute_count);
-    auto rev_attributes = util::rev_iter(placed_attributes);
-    for(auto [a, i]: util::enumerate(rev_attributes)){
+    for(auto [a, i]: util::enumerate(util::rev_iter(placed_attributes))){
         attribute_order[i].attribut_index = a;
         attribute_order[i].active = active_attributes | util::contains(a);
         violin_positions[a].color = util::color_brewer::brew_imcol(palette_name, color_palette.max_colors)[i % color_palette.max_colors].Value;

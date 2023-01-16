@@ -45,10 +45,26 @@
 namespace util{
 namespace dataset{
 namespace open_internals{
+template<typename T>
+inline void categories_convert_to_float(const std::set<std::string_view>& categories, const std::vector<std::string_view>& strings, structures::attribute& attribute, std::vector<T>& data){
+    for(auto&& [categorie, i]: util::enumerate(categories))
+        attribute.categories[std::string(categorie)] = static_cast<float>(i);
+
+    // ordered categories including ordering
+    for(const auto& [category, val]: attribute.categories)
+        attribute.ordered_categories.emplace_back(category);
+    std::sort(attribute.ordered_categories.begin(), attribute.ordered_categories.end(), [&attribute](std::string_view a, std::string_view b){return attribute.categories[std::string(a)] < attribute.categories[std::string(b)];});
+    attribute.ordered_categories.shrink_to_fit();
+
+    data.resize(strings.size());
+    for(size_t i: util::size_range(categories))
+        data[i] = static_cast<T>(attribute.categories[std::string(strings[i])]);
+};
 
 template<typename T>
 load_result<T> open_netcdf_t(std::string_view filename, memory_view<structures::query_attribute> query_attributes, const load_information* partial_info){
     structures::netcdf_file netcdf(filename);
+    memory_view<structures::query_attribute> queried_dimensions; for(size_t i: util::size_range(query_attributes)) if(query_attributes[i].is_dimension) {queried_dimensions = {query_attributes.data() + i, query_attributes.size() - i}; break;}
     auto& variables = netcdf.get_variable_infos();
     if(query_attributes.size()){
         for(size_t var: util::size_range(variables)){
@@ -58,18 +74,42 @@ load_result<T> open_netcdf_t(std::string_view filename, memory_view<structures::
     }
     load_result<T> ret{};
     for(const auto& d: netcdf.get_dimension_infos()){
+        if(queried_dimensions | util::try_find_if<structures::query_attribute>([&d](auto a){return a.id == d.name && a.is_string_length_dimension;}))
+            continue;
         ret.data.dimension_sizes.push_back(static_cast<uint32_t>(d.size));
         ret.data.dimension_names.push_back(d.name);
     }
-    
+
     for(size_t var: util::size_range(variables)){
         if(query_attributes.size() > var && !query_attributes[var].is_active)
             continue;
         ret.data.column_dimensions.push_back(std::vector<uint32_t>(variables[var].dependant_dimensions.begin(), variables[var].dependant_dimensions.end()));
-        auto [data, fill_value] = netcdf.read_variable<T>(static_cast<int>(var));
+        std::vector<T> data;
+        std::optional<T> fill_value;
+        ret.attributes.push_back(structures::attribute{variables[var].name, variables[var].name});
+        if(variables[var].variable_type == NC_CHAR){
+            auto [strings, fill] = netcdf.read_variable<char>(static_cast<int>(var));
+            // calculating the amount of strings
+            size_t string_length{};
+            size_t string_count{1}; for(int dim: variables[var].dependant_dimensions) if(!queried_dimensions[dim].is_string_length_dimension) string_count *= queried_dimensions[dim].dimension_size; else string_length = queried_dimensions[dim].dimension_size;
+            std::set<std::string_view> categories;
+            std::vector<std::string_view> category_views;
+            for(size_t i: util::i_range(string_count)){
+                char* start = strings.data() + i * string_length;
+                categories.emplace(start);
+                category_views.emplace_back(start);
+            }
+            categories_convert_to_float(categories, category_views, ret.attributes[var], data);
+        }
+        else if(variables[var].variable_type == NC_STRING){
+            auto [strings, fill] = netcdf.read_variable(static_cast<int>(var));
+            std::set<std::string_view> categories(strings.begin(), strings.end());
+            categories_convert_to_float(categories, strings, ret.attributes[var], data);
+        }
+        else
+            std::tie(data, fill_value) = netcdf.read_variable<T>(static_cast<int>(var));
         ret.data.columns.push_back(std::move(data));
         ret.fill_values.push_back(fill_value);
-        ret.attributes.push_back(structures::attribute{variables[var].name, variables[var].name});
         for(float f: ret.data.columns.back()){
             if(ret.attributes.back().bounds.read().min > f)
                 ret.attributes.back().bounds().min = f;
@@ -137,7 +177,8 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
 
     // parsing the data
     load_result<T> ret{};
-    std::map<uint32_t, T> category_values;
+    std::vector<std::set<std::string_view>> categories_set;
+    std::vector<robin_hood::unordered_map<size_t, std::string>> categories_at_index; // stored in a set to allow categories mixed with numbers
     ret.data.columns.resize(variable_names.size());
     ret.attributes.resize(variable_names.size());
     for(std::string_view line; getline(input_view, line);){
@@ -166,15 +207,10 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
             float val{};
             if(element.size()){
                 auto parse_res = fast_float::from_chars(element.data(), element.data() + element.size(), val);
-                if(parse_res.ec != std::errc{}){    // parsing error -> exchnage for category
+                if(parse_res.ec != std::errc{}){    // parsing error -> exchange for category
                     std::string el(element);
-                    if(ret.attributes[var].categories.count(el) > 0)
-                        val = ret.attributes[var].categories[el];
-                    else{
-                        val = category_values[var];
-                        category_values[var] += 1;
-                        ret.attributes[var].categories[el] = val;
-                    }
+                    categories_set[var].emplace(el);
+                    categories_at_index[var][ret.data.columns[var].size()] = std::move(el);
                 }
             }
 
@@ -183,6 +219,23 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
             if(val < ret.attributes[var].bounds.read().min)
                 ret.attributes[var].bounds().min = val;
             ret.data.columns[var].push_back(val);
+        }
+    }
+    for(size_t var: util::size_range(categories_set)){
+        if(categories_set[var].empty())
+            continue;
+        // creating the vector of categories for later conversion
+        std::vector<std::string_view> categories;
+        for(size_t i: util::size_range(ret.data.columns[var])){
+            if(!categories_at_index[var].contains(i))
+                categories_at_index[var][i] = std::to_string(static_cast<double>(ret.data.columns[var][i]));
+            categories.push_back(categories_at_index[var][i]);
+            categories_set[var].insert(categories_at_index[var][i]);
+            categories_convert_to_float(categories_set[var], categories, ret.attributes[var], ret.data.columns[var]);
+            categories_set[var] = {};
+            categories_at_index[var] = {};
+            const auto [min, max] = std::minmax_element(ret.data.columns[var].begin(), ret.data.columns[var].end());
+            ret.attributes[var].bounds = structures::min_max<float>{static_cast<float>(*min), static_cast<float>(*max)};
         }
     }
     stopwatch.lap();
@@ -960,7 +1013,7 @@ void check_datasets_to_open(){
                 ImGui::TableHeader("Trim indices");
 
                 for(auto& q: globals::attribute_query){
-                    if(!q.is_dimension && !q.is_string_length_dimension)
+                    if(!q.is_dimension || q.is_string_length_dimension)
                         continue;
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();

@@ -18,6 +18,7 @@ public:
     struct var_info{
         std::string         name;
         std::vector<int>    dependant_dimensions;
+        nc_type             variable_type;
     };
     struct dim_info{
         std::string name;
@@ -56,6 +57,7 @@ public:
             res = nc_inq_vardimid(_file_handle, i, _variable_infos[i].dependant_dimensions.data());
             if(res)
                 throw std::runtime_error("netcdf_file::get_variable_infos() Failed to get variable dimensions");
+            _variable_infos[i].variable_type = var_type(i);
         }
         return _variable_infos;
     }
@@ -241,15 +243,75 @@ public:
                 break;
             }
             case NC_CHAR:
-            //categorical data
             {
-                throw std::runtime_error("netcdf_file::read_variable() categorical data currently can not be read.");
+                // strings can be stored in this format, they then require 2 dims: one containing the amount of string, and one depicting the max string length
+                if constexpr (!std::is_same_v<T, char>)
+                    throw std::runtime_error{"netcdf_file::read_variable() Char variable has to be read out with read_variable<char>()"};
+                std::vector<char> vals(data_size);
+                res = nc_get_var_text(_file_handle, variable, vals.data());
+                if(res)
+                    throw std::runtime_error("netcdf_file::read_variable() Failed to variable values");
+                
+                char f;
+                res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
+                if(res)
+                    throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
+                
+                if constexpr (std::is_same_v<T, char>){
+                    ret = std::move(vals);
+                    if(has_fill)
+                        fill = f;
+                }
+                break;
+            }
+            case NC_STRING:
+            {
+                // string in netcdf is a vector of char*, thus real c-strings
+                if constexpr (!std::is_same_v<T, std::string_view>)
+                    throw std::runtime_error{"netcdf_file::read_variable() String variable has to be read out with read_variable<std::string_view>()"};
             }
             break;
             default:
                 throw std::runtime_error("netcdf_file::read_variable() Unknown variable type");
         }
 
+        return {ret, fill};
+    }
+    // string_view overload to avoid problems with conversion
+    std::tuple<std::vector<std::string_view>, std::optional<std::string_view>> read_variable(int variable){
+        if(_variable_infos.empty())
+            get_variable_infos();
+        if(_dimension_infos.empty())
+            get_dimension_infos();
+        size_t data_size{1};
+        for(int dim: _variable_infos[variable].dependant_dimensions)
+            data_size *= _dimension_infos[dim].size;
+        std::vector<std::string_view> ret;
+        std::optional<std::string_view> fill;
+        int has_fill{};
+        nc_type type;
+        int res = nc_inq_vartype(_file_handle, variable, &type);
+        if(res)
+            throw std::runtime_error("netcdf_file::read_variable() Failed to get variable type");
+
+        if(type != NC_STRING)
+             throw std::runtime_error("netcdf_file::read_variable() Tried to read non string variable with read_variable<std::string_view>()");
+
+        std::vector<char*> vals(data_size);
+        res = nc_get_var_string(_file_handle, variable, vals.data());
+        if(res)
+            throw std::runtime_error("netcdf_file::read_variable() Failed to variable values");
+        
+        char* f;
+        res = nc_inq_var_fill(_file_handle, variable, &has_fill, &f);
+        if(res)
+            throw std::runtime_error("netcdf_file::read_variable() Failed to get variable fill value");
+
+        ret.resize(data_size);
+        for(auto&& [e, i]: util::enumerate(ret))
+            e = std::string_view(vals[i]);
+        if(has_fill)
+            fill = std::string_view(f);
         return {ret, fill};
     }
 };

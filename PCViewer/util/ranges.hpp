@@ -93,16 +93,19 @@ private:
 template<typename T>
 class rev_iter {
 private:
+    std::optional<T> _storage;
     T& iterable_;
 public:
     explicit rev_iter(T& iterable) : iterable_{iterable} {}
+    explicit rev_iter(T&& iterable) : _storage(std::move(iterable)), iterable_(*_storage) {}
     auto begin() const { return std::rbegin(iterable_); }
     auto end() const { return std::rend(iterable_); }
+    size_t size() const { return iterable_.size(); }
 };
 
 template<typename T>
 class first_iter {
-    std::optional<T> storage;
+    std::optional<T> _storage;
     T& iterable_;
 public:
     class iterator{
@@ -123,7 +126,7 @@ public:
     };
 
     explicit first_iter(T& iterable) : iterable_(iterable) {}
-    explicit first_iter(T&& iterable) : storage(iterable), iterable_(*storage) {}
+    explicit first_iter(T&& iterable) : _storage(std::move(iterable)), iterable_(*_storage) {}
     iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
@@ -187,6 +190,7 @@ public:
 
 template<typename T>
 class enumerate {
+    std::optional<T> _storage;
     T& iterable_;
 public:
     class iterator{
@@ -194,21 +198,22 @@ public:
     public:
         using iter_type = decltype(std::begin(iterable_));
         using deref_iter_type = decltype(*std::begin(iterable_));
-        std::pair<deref_iter_type&, size_t> operator*() {return {*_i, _i - iter_.begin()};}
-        const iterator& operator++() { ++_i; return *this;}
-        iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
+        std::pair<deref_iter_type&, size_t> operator*() {return {*_i, _iter_pos};}
+        const iterator& operator++() { ++_i; ++_iter_pos; return *this;}
+        iterator& operator++(int) {iterator copy(*this); ++_i; ++_iter_pos; return copy;}
         bool operator==(const iterator& o) const{return _i == o._i;}
         bool operator!=(const iterator& o) const{return _i != o._i;}
     protected:
-        iterator(const T& iterable, iter_type iter): iter_(iterable), _i(iter) {} 
+        iterator(size_t iter_pos, iter_type iter): _iter_pos(iter_pos), _i(iter) {} 
     private:
-        const T& iter_;
+        size_t _iter_pos;
         iter_type _i;
     };
 
     constexpr explicit enumerate(T& iterable) : iterable_(iterable) {}
-    iterator begin() const {return iterator(iterable_, std::begin(iterable_));}
-    iterator end() const {return iterator(iterable_, std::end(iterable_));}
+    constexpr explicit enumerate(T&& iterable) : _storage(std::move(iterable)), iterable_(*_storage) {}
+    iterator begin() const {return iterator(0, std::begin(iterable_));}
+    iterator end() const {return iterator(iterable_.size(), std::end(iterable_));}
 };
 
 template<typename T>
