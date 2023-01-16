@@ -27,20 +27,20 @@ inline void applyNonaryFunction(const float_column_views& input, float_column_vi
     assert(input[0].dimensionSizes.empty());            // check for single value constant in input
     assert(input[0].cols.size() && output[0].cols.size()); // check for columns
     assert(output[0].size() == input[0].cols[col][0]);    // enough memory has to be allocated before this call is made..
-    for(int i: irange(output[0].size()))
+    for(size_t i: util::size_range(output[0]))
         output[0].cols[0][i] = f();
 };
 
 inline void applyUnaryFunction(const float_column_views& input, float_column_views& output, uint32_t col, std::function<float(float)> f){
     assert(input[0].equalDataLayout(output[0]));
-    for(size_t i: irange(input[0].cols[0].size()))
+    for(size_t i: util::size_range(input[0].cols[0]))
         output[0].cols[col][i] = f(input[0].cols[col][i]);
 };
 
 inline void applyMultiDimUnaryFunction(const float_column_views& input, float_column_views& output, const std::vector<uint32_t>& dims, std::function<float(const std::vector<float>&)> f){
     assert(input[0].equalDataLayout(output[0]));
     std::vector<float> in(dims.size());
-    for(int i: irange(output[0].cols[0].size())){
+    for(size_t i: util::size_range(output[0].cols[0])){
         for(int j: irange(dims))
             in[j] = input[0].cols[dims[j]][i];
         output[0].cols[0][i] = f(in);
@@ -50,15 +50,15 @@ inline void applyMultiDimUnaryFunction(const float_column_views& input, float_co
 inline void applyNAryFunction(const float_column_views& input, float_column_views& output, std::function<float(const std::vector<float>&)> f){
     assert(input[0].equalDataLayout(output[0]));
     std::vector<float> in(input.size());
-    for(int i: irange(output[0].cols[0].size())){
-        for(int j: irange(input))
+    for(size_t i: util::size_range(output[0].cols[0])){
+        for(size_t j: util::size_range(input))
             in[j] = input[j].cols[0][i];
         output[0].cols[0][i] = f(in);
     }
 }
 
 inline float unaryReductionFunction(const float_column_views& input, uint32_t col, float initVal, std::function<float(float, float)> f){
-    for(int i: irange(input[0].cols[col].size()))
+    for(size_t i: util::size_range(input[0].cols[col]))
         initVal = f(initVal, input[0].cols[i]);
     return initVal;
 };
@@ -69,7 +69,7 @@ inline void applyUnaryReductionFunction(const float_column_views& input, float i
     struct per_group_data{float combine_val; size_t count;};
     std::map<size_t, per_group_data> reduction_data;
     if(input[1].equalDataLayout(input[0])){
-        for(int i: irange(input[1].cols[0].size())){
+        for(size_t i: util::size_range(input[1].cols[0])){
             size_t group_index = size_t(input[0].cols[0][i]);
             bool contained = reduction_data.count(group_index);
             auto& e = reduction_data[group_index];
@@ -80,8 +80,8 @@ inline void applyUnaryReductionFunction(const float_column_views& input, float i
         }
     }
     else{
-        for(size_t i: irange(input[1].size())){
-            size_t group_index = input[0](i, 0);
+        for(size_t i: util::size_range(input[1])){
+            size_t group_index = static_cast<size_t>(input[0](i, 0));
             bool contained = reduction_data.count(group_index);
             auto& e = reduction_data[group_index];
             if(!contained)
@@ -91,7 +91,7 @@ inline void applyUnaryReductionFunction(const float_column_views& input, float i
         }
     }
     assert(input[0].equalDataLayout(result));  // copying the reduced values to the result view. Automatically takes multi dimensional indices into account
-    for(size_t i: irange(input[0].cols[0].size())){
+    for(size_t i: util::size_range(input[0].cols[0])){
         auto& d = reduction_data[size_t(input[0].cols[0][i])];
         result.cols[0][i] = finish_f(d.combine_val, d.count);
     }
@@ -100,19 +100,19 @@ inline void applyUnaryReductionFunction(const float_column_views& input, float i
 inline void applyBinaryFunction(const float_column_views& input, float_column_views& output, uint32_t col, std::function<float(float, float)> f){
     assert(input[0].size() == output[0].size() || input[1].size() == output[0].size()); // only one needs to have the same size
     if(input[0].equalDataLayout(input[1]) && input[0].equalDataLayout(output[0])){      // fast operation possible
-        for(long i: irange(output[0].cols[col].size())){
+        for(size_t i: util::size_range(output[0].cols[col])){
             output[0].cols[col][i] = f(input[0].cols[col][i], input[1].cols[col][i]);
         }
     }
     else{                                                                               // less efficient but more general
-        for(long i: irange(output[0].size())){
+        for(size_t i: util::size_range(output[0])){
             output[0](i, col) = f(input[0](i, col), input[1](i, col));
         }
     }
 };
 
 inline std::tuple<float, float> binaryReductionFunction(const float_column_views& input, uint32_t col, std::tuple<float, float> initVal, std::function<std::tuple<float, float>(std::tuple<float, float>, float)> f){
-    for(int i: irange(input[0].cols[col].size()))
+    for(size_t i: util::size_range(input[0].cols[col]))
         initVal = f(initVal, input[0].cols[col][i]);
     return initVal;
 };
@@ -125,10 +125,10 @@ inline void tryAlignInputOutput(const float_column_views& input, float_column_vi
         return;
     std::vector<int> preferredPlace(output[viewIndex].cols.size(), -1);
     // getting the preferred place
-    for(int i: irange(output[viewIndex].cols.size())){
-        for(int j: irange(input[viewIndex].cols.size())){
+    for(size_t i: util::size_range(output[viewIndex].cols)){
+        for(size_t j: util::size_range(input[viewIndex].cols)){
             if(input[viewIndex].cols[j] == output[viewIndex].cols[i]){
-                preferredPlace[i] = j;
+                preferredPlace[i] = static_cast<int>(j);
                 break;
             }
         }
@@ -148,13 +148,13 @@ inline void tryAlignInputOutput(const float_column_views& input, float_column_vi
     newOutput[0].dimensionSizes = output[viewIndex].dimensionSizes;
     newOutput[0].columnDimensionIndices = output[viewIndex].columnDimensionIndices;
     newOutput[0].cols.resize(output[viewIndex].cols.size());
-    for(int i: irange(preferredPlace)){
+    for(size_t i: util::size_range(preferredPlace)){
         if(preferredPlace[i] == -1) // no preferred place, skip
             continue;
         newOutput[0].cols[preferredPlace[i]] = output[viewIndex].cols[i];
     }
     int currentIndex = 0;
-    for(int i: irange(preferredPlace)){
+    for(size_t i: util::size_range(preferredPlace)){
         if(preferredPlace[i] != -1) // was already added, skip
             continue;
         while(newOutput[0].cols[currentIndex]) ++currentIndex;  // get next free spot
@@ -264,10 +264,10 @@ public:
             out << out_name << ": ";
         out << "[ ";
         if(input[0].columnSize() < 100){
-            for(int i: irange(input[0].columnSize())){
+            for(size_t i: util::i_range(input[0].columnSize())){
                 if(input[0].cols.size() > 1)
                     out << "(";
-                for(int j: irange(input[0].cols))
+                for(size_t j: util::size_range(input[0].cols))
                     out << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
                     out << "), ";
@@ -276,10 +276,10 @@ public:
             }
         }
         else{
-            for(int i: irange(50)){
+            for(int i: util::i_range(50)){
                  if(input[0].cols.size() > 1)
                     out << "(";
-                for(int j: irange(input[0].cols))
+                for(size_t j: util::size_range(input[0].cols))
                     out << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
                     out << "), ";
@@ -287,10 +287,10 @@ public:
                     out << "\n";
             }
             out << "\n" << "  ...  " << "\n";
-            for(int i: irange(input[0].columnSize() - 50, input[0].columnSize())){
+            for(size_t i: util::i_range(input[0].columnSize() - 50, input[0].columnSize())){
                 if(input[0].cols.size() > 1)
                     out << "(";
-                for(int j: irange(input[0].cols))
+                for(size_t j: util::size_range(input[0].cols))
                     out << input[0].cols[j][i] << ", ";
                 if(input[0].cols.size() > 1)
                     out << "), ";
@@ -375,8 +375,8 @@ public:
         applyNAryFunction(input, output, 
             [&prefactors](const std::vector<float>& v) {
                 float res{};
-                for(int i: util::size_range(v))
-                    res += prefactors[i].get<double>() * v[i];
+                for(size_t i: util::size_range(v))
+                    res += static_cast<float>(prefactors[i].get<double>() * v[i]);
                 return res;
             }
         );
@@ -396,7 +396,7 @@ public:
     }
 
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        float exp = input_elements[middle_input_id]["Lp-Norm"].get<double>();
+        float exp = static_cast<float>(input_elements[middle_input_id]["Lp-Norm"].get<double>());
         applyNAryFunction(input, output, 
             [&exp](const std::vector<float>& v){
                 float res{};
@@ -420,14 +420,14 @@ public:
         // convert data to 
         Eigen::MatrixXf m(input[0].size(), input.size());
         if(equalDataLayouts<float>(input)){
-            for(int i: util::size_range(input)){
-                for(int j: util::size_range(input[i].cols[0]))
+            for(size_t i: util::size_range(input)){
+                for(size_t j: util::size_range(input[i].cols[0]))
                     m(j, i) = input[i].cols[0][j];
             }
         }
         else{
-            for(int i: util::size_range(input)){
-                for(int j: util::i_range(input[i].size()))
+            for(size_t i: util::size_range(input)){
+                for(size_t j: util::i_range(input[i].size()))
                     m(j, i) = input[i](j, 0);
             }
         }
@@ -444,8 +444,8 @@ public:
         m = svd.matrixU().real() * svd.singularValues().real().asDiagonal();
         
         // transferring to teh output
-        for(int i: util::size_range(output)){
-            for(int j: util::size_range(output[i].cols[0]))
+        for(size_t i: util::size_range(output)){
+            for(size_t j: util::size_range(output[i].cols[0]))
                 output[i].cols[0][j] = m(j, i);
         }
     }
@@ -474,20 +474,20 @@ public:
         std::atomic<float> progress{};
 
         if(equalDataLayouts<float>(input)){
-            for(int i: util::size_range(input))
+            for(size_t i: util::size_range(input))
                 in[i] = util::memory_view<const float>{input[i].cols[0].data(), input[i].cols[0].size()};
         }
         else{
-            for(int i: util::size_range(input)){
+            for(size_t i: util::size_range(input)){
                 inflated_in.emplace_back(output[0].size());
-                for(int j: util::size_range(output[0].cols[0])){
+                for(size_t j: util::size_range(output[0].cols[0])){
                     const auto indices = output[0].columnIndexToDimensionIndices(j);
                     inflated_in.back()[j] = input[i].cols[0][input[i].dimensionIndicesToColumnIndex(indices)];
                 }
                 in[i] = util::memory_view<const float>{inflated_in.back().data(), inflated_in.back().size()};
             }
         }
-        for(int i: util::size_range(output))
+        for(size_t i: util::size_range(output))
             out[i] = util::memory_view<float>{output[i].cols[0].data(), output[i].cols[0].size()};
         TSNE::run_cols(in, out, input_elements[middle_input_id]["perplexity"].get<double>(), 
                                 input_elements[middle_input_id]["theta"].get<double>(),
@@ -539,7 +539,7 @@ public:
 
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         db_scan::db_scans_settings_t settings{};
-        settings.epsilon = input_elements[middle_input_id]["Epsilon"].get<double>();
+        settings.epsilon = static_cast<float>(input_elements[middle_input_id]["Epsilon"].get<double>());
         settings.min_points = static_cast<int>(input_elements[middle_input_id]["Min Points"].get<double>());
 
         db_scan::run(input, output, settings);
@@ -610,8 +610,8 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         auto [min, max] = binaryReductionFunction(input, 0, {std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()}, [](std::tuple<float, float> prev, float cur){return std::tuple<float, float>{std::min(std::get<0>(prev), cur), std::max(std::get<1>(prev), cur)};});
         if(min == max){
-            max += 1;
-            max *= 1.1;
+            max += 1.f;
+            max *= 1.1f;
         }
         float mi = min, ma = max;
         applyUnaryFunction(input, output, 0, [mi, ma](float in){return (in - mi) / (ma - mi);});
@@ -679,7 +679,7 @@ public:
                 val_to_index[*i] = cur_index++;
         }
         for(size_t i: util::size_range(input[0].cols[0]))
-            output[0].cols[0][i] = val_to_index[input[0].cols[0][i]];
+            output[0].cols[0][i] = static_cast<float>(val_to_index[input[0].cols[0][i]]);
     }
 };
 
@@ -704,7 +704,7 @@ public:
         assert(input.size() == 2 && input[0].cols.size() == 1 && input[1].cols.size() == 1 && output.size() == 1 && output[0].cols.size() == 2);
         const float_column_views inputPaired = {column_memory_view<float>{input[0].dimensionSizes, input[0].columnDimensionIndices, {input[0].cols[0], input[1].cols[0]}}};
         tryAlignInputOutput(inputPaired, output);
-        for(int col: irange(2)){
+        for(int col: util::i_range(2)){
             if(inputPaired[0].cols[col] != output[0].cols[col]){
                 applyUnaryFunction(inputPaired, output, col, [](float in){return in;});
             }
@@ -725,7 +725,7 @@ public:
         assert(input.size() == 1 && input[0].cols.size() == 2 && output.size() == 2 && output[0].cols.size() == 1 && output[1].cols.size() == 1);
         float_column_views outputPaired = {column_memory_view<float>{output[0].dimensionSizes, output[0].columnDimensionIndices, {output[0].cols[0], output[1].cols[0]}}};
         tryAlignInputOutput(input, outputPaired);
-        for(int col: irange(2)){
+        for(int col: util::i_range(2)){
             if(input[0].cols[col] != outputPaired[0].cols[col]){
                 applyUnaryFunction(input, outputPaired, col, [](float in){return in;});
             }
@@ -771,7 +771,7 @@ public:
         assert(input.size() == 3 && input[0].cols.size() == 1 && input[1].cols.size() == 1 && output.size() == 1 && output[0].cols.size() == 3);
         const float_column_views inputPaired = {column_memory_view<float>{input[0].dimensionSizes, input[0].columnDimensionIndices, {input[0].cols[0], input[1].cols[0], input[2].cols[0]}}};
         tryAlignInputOutput(inputPaired, output);
-        for(int col: irange(3)){
+        for(int col: util::i_range(3)){
             if(inputPaired[0].cols[col] != output[0].cols[col]){
                 applyUnaryFunction(inputPaired, output, col, [](float in){return in;});
             }
@@ -792,7 +792,7 @@ public:
         assert(input.size() == 1 && input[0].cols.size() == 3 && output.size() == 3 && output[0].cols.size() == 1 && output[1].cols.size() == 1);
         float_column_views outputPaired = {column_memory_view<float>{output[0].dimensionSizes, output[0].columnDimensionIndices, {output[0].cols[0], output[1].cols[0], output[2].cols[0]}}};
         tryAlignInputOutput(input, outputPaired);
-        for(int col: irange(3)){
+        for(int col: util::i_range(3)){
             if(input[0].cols[col] != outputPaired[0].cols[col]){
                 applyUnaryFunction(input, outputPaired, col, [](float in){return in;});
             }
@@ -840,7 +840,7 @@ public:
         assert(input.size() == 4 && input[0].cols.size() == 1 && input[1].cols.size() == 1 && output.size() == 1 && output[0].cols.size() == 4);
         const float_column_views inputPaired = {column_memory_view<float>{input[0].dimensionSizes, input[0].columnDimensionIndices, {input[0].cols[0], input[1].cols[0], input[2].cols[0], input[3].cols[0]}}};
         tryAlignInputOutput(inputPaired, output);
-        for(int col: irange(4)){
+        for(int col: util::i_range(4)){
             if(inputPaired[0].cols[col] != output[0].cols[col]){
                 applyUnaryFunction(inputPaired, output, col, [](float in){return in;});
             }
@@ -861,7 +861,7 @@ public:
         assert(input.size() == 1 && input[0].cols.size() == 4 && output.size() == 4 && output[0].cols.size() == 1 && output[1].cols.size() == 1);
         float_column_views outputPaired = {column_memory_view<float>{output[0].dimensionSizes, output[0].columnDimensionIndices, {output[0].cols[0], output[1].cols[0], output[2].cols[0], output[3].cols[0]}}};
         tryAlignInputOutput(input, outputPaired);
-        for(int col: irange(4)){
+        for(int col: util::i_range(4)){
             if(input[0].cols[col] != outputPaired[0].cols[col]){
                 applyUnaryFunction(input, outputPaired, col, [](float in){return in;});
             }

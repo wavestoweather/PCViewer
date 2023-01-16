@@ -134,7 +134,7 @@ public:
         inplace_possible(inplace_possible),
         input_elements(crude_json::type_t::object){}
 
-    virtual int outputChannels() const { uint32_t count{}; for(const auto& t: outputTypes) count += t->data().cols.size();return count;};
+    virtual int outputChannels() const { int count{}; for(const auto& t: outputTypes) count += static_cast<int>(t->data().cols.size()); return count;};
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;
     virtual void imguiMiddleElements(const std::vector<std::string_view>& attributes = {}, const std::vector<std::string_view>& drawlists = {}, const std::vector<std::string_view>& templatelists = {}) { 
         if(middleText.size()) ImGui::TextUnformatted(middleText.c_str());
@@ -164,7 +164,7 @@ public:
                 if(util::json::is_enumeration(val)){
                     int ind = int(val["chosen"].get<double>());
                     if(ax::NodeEditor::BeginNodeCombo(name.c_str(), val["choices"][ind].get<std::string>().c_str())){
-                        for(int i: irange(val["choices"].size())){
+                        for(size_t i: util::size_range(val["choices"])){
                             if(ImGui::MenuItem(val["choices"][i].get<std::string>().c_str()))
                                 val["chosen"] = double(i);
                         }

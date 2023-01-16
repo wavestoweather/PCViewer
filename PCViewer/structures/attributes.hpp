@@ -37,8 +37,13 @@ struct query_attribute{
 
 struct global_attribute: public attribute{
     // has all members from the attribute struct, needs a view additional infos
-    change_tracker<bool>    active;
+    change_tracker<bool>    active{true};
     change_tracker<ImVec4>  color{ImVec4{1.f, 1.f, 1.f, 1.f}};
+
+    uint32_t                usage_count{}; // usage count is increased when a datasets is loaded and contains this atttribute and is decreased when a dataset is destroyed. When the usage_count of an attribute reaches 0, it will be destroyed.
+    
+    global_attribute() = default;
+    global_attribute(const attribute& a, bool active, ImVec4 color): attribute(a), active(active), color(color) {}
 };
 using tracked_global_attribute_t = unique_tracker<global_attribute>;
 using attributes_t = change_tracker<std::map<std::string_view, tracked_global_attribute_t>>;

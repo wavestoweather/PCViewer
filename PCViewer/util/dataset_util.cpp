@@ -51,22 +51,22 @@ load_result<T> open_netcdf_t(std::string_view filename, memory_view<structures::
     structures::netcdf_file netcdf(filename);
     auto& variables = netcdf.get_variable_infos();
     if(query_attributes.size()){
-        for(int var: util::size_range(variables)){
+        for(size_t var: util::size_range(variables)){
             if(query_attributes[var].id != variables[var].name)
                 throw std::runtime_error{"open_netcdf() Attributes of the attribute query are not consistent with the netcdf file"};
         }
     }
     load_result<T> ret{};
     for(const auto& d: netcdf.get_dimension_infos()){
-        ret.data.dimension_sizes.push_back(d.size);
+        ret.data.dimension_sizes.push_back(static_cast<uint32_t>(d.size));
         ret.data.dimension_names.push_back(d.name);
     }
     
-    for(int var: util::size_range(variables)){
+    for(size_t var: util::size_range(variables)){
         if(query_attributes.size() > var && !query_attributes[var].is_active)
             continue;
         ret.data.column_dimensions.push_back(std::vector<uint32_t>(variables[var].dependant_dimensions.begin(), variables[var].dependant_dimensions.end()));
-        auto [data, fill_value] = netcdf.read_variable<T>(var);
+        auto [data, fill_value] = netcdf.read_variable<T>(static_cast<int>(var));
         ret.data.columns.push_back(std::move(data));
         ret.fill_values.push_back(fill_value);
         ret.attributes.push_back(structures::attribute{variables[var].name, variables[var].name});
@@ -128,7 +128,7 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
             variable_names.push_back(std::string(variable));
         }
         if(query_attributes.size()){
-            for(int var: util::size_range(variable_names)){
+            for(size_t var: util::size_range(variable_names)){
                 if(query_attributes.size() <= var || variable_names[var] != query_attributes[var].id)
                     throw std::runtime_error{"open_csv() Attributes of the attribute query are not consistent with the csv file"};
             }
@@ -190,14 +190,14 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
         logger << logging::info_prefix << " open_csv() Parsing took " << stopwatch.lap_ms() << " ms" << logging::endl;
 
     // lexicographically ordering categorical data (using the automatical sorting provided by map)
-    for(int var: util::size_range(ret.attributes)){
+    for(size_t var: util::size_range(ret.attributes)){
         auto& categories = ret.attributes[var].categories;
         if(categories.empty())
             continue;
         std::map<T, T> category_conversion;
         uint32_t counter{};
         for(auto& [category, value]: categories){
-            T val = counter++;
+            T val = static_cast<T>(counter++);
             category_conversion[value] = val;
             value = val;
         }
@@ -206,7 +206,7 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
         
     }
 
-    for(int var: util::size_range(ret.attributes)){
+    for(size_t var: util::size_range(ret.attributes)){
         ret.attributes[var].id = variable_names[var];
         ret.attributes[var].display_name = variable_names[var];
     }
@@ -249,18 +249,18 @@ load_result<half> open_combined(std::string_view folder, memory_view<structures:
         while(attribute_info_file >> variable >> min >> max){
             if(!query_attributes[c++].is_active)
                 continue;
-            ret.data.column_transforms.push_back(structures::scale_offset<float>{max - min, min});
-            ret.attributes.push_back(structures::attribute{variable, variable, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
+            ret.data.column_transforms.emplace_back(structures::scale_offset<float>{max - min, min});
+            ret.attributes.emplace_back(structures::attribute{variable, variable, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
         }
     }
     else if(std::filesystem::exists(json_info)){
         auto json = util::json::open_json(json_info);
         for(const auto& a: json["attributes"].get<crude_json::array>()){
             auto name = a["name"].get<std::string>();
-            float min = a["min"].get<double>();
-            float max = a["max"].get<double>();
-            ret.data.column_transforms.push_back(structures::scale_offset<float>{max - min, min});
-            ret.attributes.push_back(structures::attribute{name, name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
+            float min = static_cast<float>(a["min"].get<double>());
+            float max = static_cast<float>(a["max"].get<double>());
+            ret.data.column_transforms.emplace_back(structures::scale_offset<float>{max - min, min});
+            ret.attributes.emplace_back(structures::attribute{name, name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{min, max}}});
         }
     }
     else
@@ -268,7 +268,7 @@ load_result<half> open_combined(std::string_view folder, memory_view<structures:
     
 
     // loading the data
-    for(int i: util::i_range(query_attributes.size() - 1)){    // last element is dimension
+    for(size_t i: util::i_range(query_attributes.size() - 1)){    // last element is dimension
         if(!query_attributes[i].is_active)
             continue;
         std::string column_file_name = std::string(folder) + "/" + std::to_string(i) + ".col";
@@ -280,7 +280,7 @@ load_result<half> open_combined(std::string_view folder, memory_view<structures:
     }
 
     // setting up the data header
-    ret.data.dimension_sizes.push_back(query_attributes.back().dimension_size);
+    ret.data.dimension_sizes.emplace_back(query_attributes.back().dimension_size);
     ret.data.column_dimensions = std::vector<std::vector<uint32_t>>(ret.data.columns.size(), {0});
     assert(ret.data.columns.size() == ret.data.column_transforms.size());
     return ret;
@@ -300,12 +300,12 @@ std::vector<structures::query_attribute> get_netcdf_qeuery_attributes(std::strin
 
     // checking stringlength dimensions
     std::vector<bool> is_string_length_dim(dimensions.size());
-    for(int dim: util::size_range(dimensions)){
+    for(size_t dim: util::size_range(dimensions)){
         bool is_string_length = true;
-        for(int var: util::size_range(variables)){
+        for(size_t var: util::size_range(variables)){
             auto& variable = variables[var];
             if(std::count(variable.dependant_dimensions.begin(), variable.dependant_dimensions.end(), dim) > 0){
-                if(netcdf.var_type(var) != NC_CHAR){
+                if(netcdf.var_type(static_cast<int>(var)) != NC_CHAR){
                     is_string_length = false;
                     break;
                 }
@@ -316,10 +316,10 @@ std::vector<structures::query_attribute> get_netcdf_qeuery_attributes(std::strin
     
     // adding the variables
     size_t data_size = 1;
-    for(int dim: util::size_range(dimensions))
+    for(size_t dim: util::size_range(dimensions))
         if(!is_string_length_dim[dim])
             data_size *= dimensions[dim].size;
-    for(int var: util::size_range(variables)){
+    for(size_t var: util::size_range(variables)){
         auto dims_without_stringlength = variables[var].dependant_dimensions;
         erase_if(dims_without_stringlength, [&](int dim){return is_string_length_dim[dim];});
         query[var] = structures::query_attribute{
@@ -337,7 +337,7 @@ std::vector<structures::query_attribute> get_netcdf_qeuery_attributes(std::strin
     }
 
     // adding dimension values
-    for(int dim: util::size_range(dimensions)){
+    for(size_t dim: util::size_range(dimensions)){
         query.push_back(structures::query_attribute{
             true,    // dim
             is_string_length_dim[dim],     // string dim
@@ -455,7 +455,7 @@ std::vector<structures::query_attribute> get_combined_query_attributes(std::stri
                 {0, size_t(-1)}// trim bounds
             });
         }
-        size_t data_size = json["data_size"].get<double>();
+        size_t data_size = static_cast<size_t>(json["data_size"].get<double>());
         query.push_back(structures::query_attribute{
             true,           // dim
             false,          // string dim
@@ -577,7 +577,7 @@ structures::dataset_t open_dataset(std::string_view filename, memory_view<struct
     templatelist.name = structures::templatelist_name_all_indices;
     templatelist.flags.identity_indices = true;
     templatelist.min_maxs.resize(dataset.read().attributes.size());
-    for(int i: util::size_range(dataset.read().attributes))
+    for(size_t i: util::size_range(dataset.read().attributes))
         templatelist.min_maxs[i] = dataset.read().attributes[i].bounds.read();
     templatelist.data_size = dataset.read().data_size;
     dataset().templatelists.push_back(std::make_unique<const structures::templatelist>(std::move(templatelist)));
@@ -585,7 +585,7 @@ structures::dataset_t open_dataset(std::string_view filename, memory_view<struct
     
     // gpu_data setup
     const size_t header_size = std::visit([](auto&& data) {return util::data::header_size(data);}, dataset.read().cpu_data.read());
-    const uint32_t column_count = std::visit([](auto&& data) {return data.columns.size();}, dataset.read().cpu_data.read());
+    const size_t column_count = std::visit([](auto&& data) {return data.columns.size();}, dataset.read().cpu_data.read());
     auto header_info = util::vk::initializers::bufferCreateInfo(data_buffer_usage, header_size);
     auto header_alloc_info = util::vma::initializers::allocationCreateInfo();
     dataset().gpu_data.header = util::vk::create_buffer(header_info, header_alloc_info);
@@ -599,13 +599,13 @@ structures::dataset_t open_dataset(std::string_view filename, memory_view<struct
         
         if(logger.logging_level >= logging::level::l_3)
             logger << logging::info_prefix << " open_dataset() Data too large for gpu (" << double(full_byte_size) / (1 << 30) << " GByte but only " << double(globals::vk_context.gpu_mem_size) / (1 << 30) << " GByte available)" << logging::endl;
-        max_size_per_col = globals::vk_context.gpu_mem_size * .8 / column_count;
+        max_size_per_col = static_cast<size_t>(globals::vk_context.gpu_mem_size * .8 / column_count);
         // creating the streaiming infos
-        const uint32_t element_size = std::visit([](auto&& data){return sizeof(data.columns[0][0]);}, dataset.read().cpu_data.read());
-        const uint32_t block_size = max_size_per_col / element_size;
+        const size_t element_size = std::visit([](auto&& data){return sizeof(data.columns[0][0]);}, dataset.read().cpu_data.read());
+        const size_t block_size = max_size_per_col / element_size;
         dataset().gpu_stream_infos.emplace();
         dataset().gpu_stream_infos->block_size = block_size;
-        dataset().gpu_stream_infos->block_count = (dataset().data_size + block_size - 1) / block_size;
+        dataset().gpu_stream_infos->block_count = static_cast<uint32_t>((dataset().data_size + block_size - 1) / block_size);
         dataset().gpu_stream_infos->cur_block_index = 0;
         dataset().gpu_stream_infos->cur_block_size = block_size;
         dataset().gpu_stream_infos->forward_upload = true;
@@ -613,7 +613,7 @@ structures::dataset_t open_dataset(std::string_view filename, memory_view<struct
         dataset().registry.emplace();   // creating the registry
     }
     structures::stager::staging_buffer_info staging_info{};
-    for(int i: util::i_range(column_count)){
+    for(size_t i: util::i_range(column_count)){
         auto column_alloc_info = util::vma::initializers::allocationCreateInfo();
         VkBufferCreateInfo column_info{};
         util::memory_view<const uint8_t> upload_data = std::visit([&i](auto&& data) {return util::memory_view<const uint8_t>(util::memory_view(data.columns[i].data(), data.columns[i].size()));}, dataset.read().cpu_data.read());
@@ -634,7 +634,7 @@ structures::dataset_t open_dataset(std::string_view filename, memory_view<struct
     for(auto& attribute: dataset().attributes)
         attribute.bounds.changed = false;
     dataset().cpu_data.changed = false;
-    dataset().original_attribute_size = dataset.read().attributes.size();
+    dataset().original_attribute_size = static_cast<uint32_t>(dataset.read().attributes.size());
 
     globals::stager.wait_for_completion();    // wait for uploadsd, then continue
 
@@ -652,7 +652,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         drawlist().parent_dataset = ds.read().id;
         drawlist().parent_templatelist = ds.read().templatelist_index.at(convert_data.tl_id)->name;
         if(globals::settings.drawlist_creation_assign_color){
-            drawlist().appearance_drawlist().color = reinterpret_cast<workbenches::load_colors_workbench*>(util::memory_view(globals::workbenches).find([](const globals::unique_workbench& wb){return wb->id == globals::load_color_wb_id;}).get())->get_next_drawlist_imcolor().Value;
+            drawlist().appearance_drawlist().color = reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_drawlist_imcolor().Value;
             drawlist().appearance_drawlist().color.w = 1;
         }
         drawlist().appearance_drawlist().color.w = std::clamp(1.0f/ (drawlist.read().const_templatelist().data_size * float(globals::settings.drawlist_creation_alpha_factor)), 1e-6f, 1.f);
@@ -704,13 +704,13 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
                 templatelist.indices.resize((convert_data.trim.max - convert_data.trim.min + convert_data.subsampling - 1) / convert_data.subsampling);
                 if(convert_data.random_subsampling){
                     std::default_random_engine generator;
-                    std::uniform_int_distribution<uint32_t> distribution(convert_data.trim.min, convert_data.trim.max);
+                    std::uniform_int_distribution<uint32_t> distribution(static_cast<uint32_t>(convert_data.trim.min), static_cast<uint32_t>(convert_data.trim.max));
                     for(uint32_t& u: templatelist.indices)
                         u = distribution(generator);
                 }
                 else{
                     for(size_t i: util::i_range(convert_data.trim.min, convert_data.trim.max, size_t(convert_data.subsampling)))
-                        templatelist.indices[(i - convert_data.trim.min) / convert_data.subsampling] = i;
+                        templatelist.indices[(i - convert_data.trim.min) / convert_data.subsampling] = static_cast<uint32_t>(i);
                 }
             }
             auto indices_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, templatelist.indices.size() * sizeof(templatelist.indices[0]));
@@ -724,11 +724,11 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
             std::visit([&templatelist](auto&& data){
                 for(size_t var: util::size_range(templatelist.min_maxs)){
                     for(uint32_t i: templatelist.indices){
-                        auto val = data(i, var);
+                        auto val = data(i, static_cast<uint32_t>(var));
                         if(val < templatelist.min_maxs[var].min)
-                            templatelist.min_maxs[var].min = val;
+                            templatelist.min_maxs[var].min = static_cast<float>(val);
                         if(val > templatelist.min_maxs[var].max)
-                            templatelist.min_maxs[var].max = val;
+                            templatelist.min_maxs[var].max = static_cast<float>(val);
                     }
                 }
             }, ds.read().cpu_data.read());
@@ -737,7 +737,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
             globals::stager.wait_for_completion();    // waiting before moving to make sure the memory view for the data upload stays valid
         }
         else{
-            for(int i: util::size_range(ds.read().attributes))
+            for(size_t i: util::size_range(ds.read().attributes))
                 templatelist.min_maxs[i] = ds.read().attributes[i].bounds.read();
             templatelist.data_size = ds.read().data_size;
         }
@@ -761,23 +761,23 @@ void split_templatelist(const structures::templatelist_split_data& split_data){
         float diff = attribute_max - attribute_min;
         if constexpr(std::is_same_v<T, templatelist_split_data::uniform_value_split>){
             index_lists.resize(arg.split_count);
-            for(uint32_t i: util::i_range(tl.data_size)){
+            for(size_t i: util::i_range(tl.data_size)){
                 if(!tl.flags.identity_indices)
                     i = tl.indices[i];
-                float v = std::visit([&i, &split_data](auto&& data){return float(data(i, split_data.attribute));}, ds.cpu_data.read());
+                float v = std::visit([&i, &split_data](auto&& data){return float(data(static_cast<uint32_t>(i), split_data.attribute));}, ds.cpu_data.read());
                 int index = int(((v - attribute_min) / diff) * (arg.split_count - 1) + .5f);
-                index_lists[index].push_back(i);
+                index_lists[index].push_back(static_cast<uint32_t>(i));
             }
         }
         else if constexpr(std::is_same_v<T, templatelist_split_data::value_split>){
             index_lists.resize(arg.values.size());
-            for(uint32_t i: util::i_range(tl.data_size)){
+            for(size_t i: util::i_range(tl.data_size)){
                 if(!tl.flags.identity_indices)
                     i = tl.indices[i];
-                float v = std::visit([&i, &split_data](auto&& data){return float(data(i, split_data.attribute));}, ds.cpu_data.read());
-                int index = std::upper_bound(arg.values.begin(), arg.values.end(), v) - arg.values.begin();
+                float v = std::visit([&i, &split_data](auto&& data){return float(data(static_cast<uint32_t>(i), split_data.attribute));}, ds.cpu_data.read());
+                int index = static_cast<int>(std::upper_bound(arg.values.begin(), arg.values.end(), v) - arg.values.begin());
                 index = std::clamp(index, 0, int(index_lists.size()) - 1);
-                index_lists[index].push_back(i);
+                index_lists[index].emplace_back(i);
             }
         } 
         else if constexpr(std::is_same_v<T, templatelist_split_data::quantile_split>){
@@ -790,17 +790,17 @@ void split_templatelist(const structures::templatelist_split_data& split_data){
             auto quantiles = arg.quantiles;
             quantiles.front() = 0; quantiles.back() = 1;    // assure that we span the whole domain
             index_lists.resize(quantiles.size() - 1);
-            for(int i: util::size_range(index_lists))
-                index_lists[i] = std::vector<uint32_t>(ordered.begin() + ordered.size() * quantiles[i], ordered.begin() + ordered.size() * quantiles[i + 1]);
+            for(size_t i: util::size_range(index_lists))
+                index_lists[i] = std::vector<uint32_t>(ordered.begin() + static_cast<size_t>(ordered.size() * quantiles[i]), ordered.begin() + static_cast<size_t>(ordered.size() * quantiles[i + 1]));
         }
         else if constexpr(std::is_same_v<T, templatelist_split_data::automatic_split>){
             robin_hood::unordered_map<float, std::vector<uint32_t>> map;
             bool split{true};
-            for(uint32_t i: util::i_range(tl.data_size)){
+            for(size_t i: util::i_range(tl.data_size)){
                 if(!tl.flags.identity_indices)
                     i = tl.indices[i];
-                float v = std::visit([&i, &split_data](auto&& data){return float(data(i, split_data.attribute));}, ds.cpu_data.read());
-                map[v].push_back(i);
+                float v = std::visit([&i, &split_data](auto&& data){return float(data(static_cast<uint32_t>(i), split_data.attribute));}, ds.cpu_data.read());
+                map[v].emplace_back(i);
                 if(map.size() * 10 > tl.data_size){
                     split = false;
                     break;
@@ -817,7 +817,7 @@ void split_templatelist(const structures::templatelist_split_data& split_data){
         }
 
         // pruning unused index lists to avoid empty templatelists
-        for(int i: util::rev_size_range(index_lists))
+        for(size_t i: util::rev_size_range(index_lists))
             if(index_lists[i].empty())
                 index_lists.erase(index_lists.begin() + i);
         return index_lists;
@@ -853,7 +853,7 @@ void split_templatelist(const structures::templatelist_split_data& split_data){
 }
 
 void execute_laod_behaviour(structures::dataset_t& ds){
-    for(int load_behaviour_index: util::size_range(globals::load_behaviour.on_load)){
+    for(size_t load_behaviour_index: util::size_range(globals::load_behaviour.on_load)){
         auto &load_behaviour = globals::load_behaviour.on_load[load_behaviour_index];
 
         if(load_behaviour.subsampling != 1 || load_behaviour.trim.min != 0 || load_behaviour.trim.max < ds.read().data_size){
@@ -986,7 +986,7 @@ void check_datasets_to_open(){
         static std::vector<uint8_t> activations;
         if(activations.size() != globals::paths_to_open.size())
             activations = std::vector<uint8_t>(globals::paths_to_open.size(), true);
-        for(int i: util::size_range(activations))
+        for(size_t i: util::size_range(activations))
             ImGui::Checkbox(globals::paths_to_open[i].c_str(), reinterpret_cast<bool*>(activations.data()));
 
         if(ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
@@ -998,6 +998,20 @@ void check_datasets_to_open(){
                         throw std::runtime_error{"check_dataset_to_open() Could not add dataset to the internal datasets"};
                     if(logger.logging_level >= logging::level::l_4)
                         logger << logging::info_prefix << " Loaded dataset with size " << ds->second.read().data_size << logging::endl;
+
+                    // adding the attributes to the global attribute state
+                    for(const auto& attribute: ds->second.read().attributes){
+                        if(globals::attributes.read().count(attribute.id)){
+                            auto& gb_att = globals::attributes()[attribute.id]();
+                            gb_att.bounds().min = std::min(gb_att.bounds.read().min, attribute.bounds.read().min);
+                            gb_att.bounds().max = std::max(gb_att.bounds.read().max, attribute.bounds.read().max);
+                        }
+                        else{
+                            structures::tracked_global_attribute_t gb_attribute(attribute, true, reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_attribute_imcolor().Value);
+                            globals::attributes()[gb_attribute.read().id] = std::move(gb_attribute);
+                        }
+                        globals::attributes.ref_no_track()[attribute.id].ref_no_track().usage_count++;
+                    }
 
                     execute_laod_behaviour(ds->second);
                 }
@@ -1054,7 +1068,7 @@ void check_datasets_to_open(){
                 staging_info.start_layout = VK_IMAGE_LAYOUT_UNDEFINED;
                 staging_info.end_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 staging_info.subresource_layers.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                staging_info.bytes_per_pixel = FormatSize(format);
+                staging_info.bytes_per_pixel = static_cast<uint32_t>(FormatSize(format));
                 staging_info.image_extent = image_info.extent;
                 staging_info.data_upload = util::memory_view(images.back().data(), images.back().size());
                 globals::stager.add_staging_task(staging_info);
@@ -1093,6 +1107,13 @@ void check_dataset_deletion(){
         // deleting the datasets
         bool prev_dataset_state = globals::datasets.changed;
         for(auto& ds: globals::datasets_to_delete){
+            // decrementing the global attribute usage count and deleting the attribute
+            for(const auto& att: globals::datasets.read().at(ds).read().attributes){
+                --globals::attributes()[att.id]().usage_count;
+                if(globals::attributes.read().at(att.id).read().usage_count == 0)
+                    globals::attributes().erase(att.id);
+            }
+
             globals::datasets()[ds]().destroy_local_gpu_buffer();
             globals::datasets().erase(ds);
         }
@@ -1128,7 +1149,7 @@ void check_dataset_gpu_stream(){
         // appending upload task
         const structures::data<half>& data = std::get<structures::data<half>>(dataset.cpu_data.read());
         structures::stager::staging_buffer_info staging_info{};
-        for(int i: util::size_range(data.columns)){
+        for(size_t i: util::size_range(data.columns)){
             staging_info.dst_buffer = dataset.gpu_data.columns[i].buffer;
             size_t offset = dataset.gpu_stream_infos->cur_block_index * dataset.gpu_stream_infos->block_size;
             size_t rest_size = data.columns[i].size() - offset;
@@ -1150,8 +1171,8 @@ void check_dataset_data_update(){
             size_t column_count = std::visit([](auto&& d) {return d.columns.size();}, ds.read().cpu_data.read());
             // adding new gpu columns
             if(ds.read().gpu_data.columns.size() < column_count){
-                for(int i: util::i_range(column_count - ds.read().gpu_data.columns.size())){
-                    int cur_col = ds.read().gpu_data.columns.size();
+                for(size_t i: util::i_range(column_count - ds.read().gpu_data.columns.size())){
+                    size_t cur_col = ds.read().gpu_data.columns.size();
                     size_t column_size = std::visit([cur_col](auto&& data) {return data.columns[cur_col].size() * sizeof(data.columns[cur_col][0]);}, ds.read().cpu_data.read());
                     auto buffer_info = util::vk::initializers::bufferCreateInfo(data_buffer_usage, column_size);
                     auto alloc_info = util::vma::initializers::allocationCreateInfo();

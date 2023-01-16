@@ -162,7 +162,7 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
         {
             // checking for column or single row data in case of a constant
             if(dimensionSizes.empty()){  // row data
-                for(int i: util::size_range(data))
+                for(size_t i: util::size_range(data))
                     cols.push_back(memory_view(data.data() + i, 1));            
             }
             else{
@@ -261,7 +261,7 @@ private:
 template<class T>
 std::ostream& operator<<(std::ostream &stream, util::memory_view<T> var) {
     stream << "[ ";
-    for(int i: util::size_range(var)){
+    for(size_t i: util::size_range(var)){
         stream << var[i] << ", ";
     }
     return stream << "]";

@@ -10,6 +10,7 @@
 #include <drawlist_util.hpp>
 #include <regex>
 #include <load_colors_workbench.hpp>
+#include <imgui_util.hpp>
 
 namespace workbenches
 {
@@ -26,13 +27,14 @@ void data_workbench::show()
     bool popup_open_add_tl{false};
     bool popup_open_split_ds{false};
     bool popup_open_delete_ds{false};
+    bool popup_open_delete_tl{false};
     bool popup_open_add_empty_ds{false};
 
-    ImGui::Begin(id.c_str());
+    ImGui::Begin(id.c_str(), {}, ImGuiWindowFlags_NoScrollbar);
     // 3 column layout with the following layout
     //  |   c1      |     c2    |    c3     |    c4     |
     //  | datasets  | attributes| drawlists | global brushes|
-    if(ImGui::BeginTable("data_workbench_cols", 4, ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingStretchProp)){
+    if(ImGui::BeginTable("data_workbench_cols", 4, ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingStretchProp, ImGui::GetContentRegionAvail())){
         ImGui::TableSetupColumn("Datasets", {}, .2f);
         ImGui::TableSetupColumn("Attributes", {}, .4f);
         ImGui::TableSetupColumn("Drawlists", {}, .4f);
@@ -73,34 +75,59 @@ void data_workbench::show()
                 globals::paths_to_open.push_back(_open_filename);
             }
         }
-        ImGui::Separator();
-        for(const auto& [ds_id, dataset]: globals::datasets.read()){
-            if(ImGui::TreeNode(ds_id.data())){
-                for(const auto& tl: dataset.read().templatelists){
-                    if(ImGui::MenuItem(tl->name.c_str())){
-                        _popup_tl_id = tl->name;
-                        _popup_ds_id = ds_id;
-                        _tl_convert_data.ds_id = ds_id;
-                        _tl_convert_data.tl_id = tl->name;
-                        _tl_convert_data.trim = {0, tl->data_size};
-                        popup_open_tl_to_dltl = true;
-                    }
-                }
-                if(ImGui::Button("Add templatelist")){
-                    _popup_ds_id = ds_id;
-                    popup_open_add_tl = true;
-                }
-                ImGui::PushStyleColor(ImGuiCol_Button, (ImGuiCol)IM_COL32(220, 20, 0, 230));
-                if(ImGui::Button("Delete")){
+        if(ImGui::BeginTable("Datasets table", 2, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
+            ImGui::TableSetupScrollFreeze(1, 0);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Delete");
+
+            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Name");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Delete");
+
+            for(const auto& [ds_id, dataset]: globals::datasets.read()){
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                //ImVec4 ds_background{ImGui::GetStyle().Colors[ImGuiCol_TextSelectedBg]}; ds_background.w = .1f;
+                //ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(ds_background));
+                bool node_open = ImGui::TreeNodeEx(ds_id.data(), ImGuiTreeNodeFlags_Framed);
+                ImGui::TableNextColumn();
+                if(ImGui::Button(ICON_IGFD_CANCEL)){
                     _popup_ds_id = ds_id;
                     popup_open_delete_ds = true;
                 }
-                ImGui::PopStyleColor();
-                ImGui::TreePop();
+                if(node_open){
+                    for(const auto& tl: dataset.read().templatelists){
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        if(ImGui::MenuItem(tl->name.c_str())){
+                            _popup_tl_id = tl->name;
+                            _popup_ds_id = ds_id;
+                            _tl_convert_data.ds_id = ds_id;
+                            _tl_convert_data.tl_id = tl->name;
+                            _tl_convert_data.trim = {0, tl->data_size};
+                            popup_open_tl_to_dltl = true;
+                        }
+                        if(tl->name == structures::templatelist_name_all_indices)
+                            continue;
+                        ImGui::TableNextColumn();
+                        if(ImGui::Button(ICON_IGFD_CANCEL)){
+                            _popup_tl_id = ds_id;
+                            popup_open_delete_tl = true;
+                        }
+                    }
+                    ImGui::TreePop();
+                }
             }
-        }
-        if(ImGui::Button("Add empty dataset")){
-            ImGui::OpenPopup(popup_add_empty_ds.data());
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32_BLACK_TRANS);
+            if(ImGui::Button("Add empty dataset")){
+                ImGui::OpenPopup(popup_add_empty_ds.data());
+            }
+
+            ImGui::EndTable();
         }
 
         // c2 | Attributes --------------------------------------------------------------------------------------------------------------------------------------
@@ -161,12 +188,12 @@ void data_workbench::show()
         if(ImGui::Button("Attribute colors"))
             globals::workbench_index.at(globals::load_color_wb_id).active = true;
 
-        if(ImGui::BeginTable("Attributes", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+        if(ImGui::BeginTable("Attributes", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
+            ImGui::PushID("att_table");
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
             ImGui::TableSetupColumn("Color");
-            ImGui::TableSetupColumn("Delete");
 
             // top row
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
@@ -176,11 +203,59 @@ void data_workbench::show()
             ImGui::TableHeader("Active");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Color");
-            ImGui::TableNextColumn();
-            ImGui::TableHeader("Delete");
-
             
-
+            for(const auto& [att_id, att]: globals::attributes.read()){
+                util::imgui::scoped_id attribute_id(att_id.data());
+                if(!std::regex_search(att_id.begin(), att_id.end(), attribute_table_regex))
+                    continue;
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool selected = globals::selected_attributes | util::contains(att_id);
+                if(ImGui::Selectable(att_id.data(), selected)){
+                    // updating attribute selection
+                    if(selected && ImGui::GetIO().KeyCtrl)
+                        globals::selected_attributes.erase(std::find(globals::selected_attributes.begin(), globals::selected_attributes.end(), att_id));
+                    else if(selected)
+                        globals::selected_attributes.clear();
+                    else if(ImGui::GetIO().KeyShift){
+                        uint32_t start_index = static_cast<uint32_t>(util::drawlist::drawlist_index(globals::selected_attributes.back()));
+                        uint32_t end_index = ImGui::TableGetRowIndex() - 1;
+                        if(start_index > end_index)
+                            std::swap(start_index, end_index);
+                        uint32_t cur_ind{};
+                        for(const auto& [id_, dl_]: globals::drawlists.read()){
+                            if(cur_ind > end_index)
+                                break;
+                            if(cur_ind > start_index)
+                                globals::selected_attributes.push_back(id_);
+                            cur_ind++;
+                        }
+                    }
+                    else if(ImGui::GetIO().KeyCtrl)
+                        globals::selected_attributes.push_back(att_id);
+                    else
+                        globals::selected_attributes = {att_id};
+                }
+                ImGui::TableNextColumn();
+                auto& att_no_track =globals::attributes.ref_no_track()[att_id].ref_no_track();
+                if(ImGui::Checkbox("##a", &att_no_track.active.ref_no_track())){
+                    if(globals::selected_attributes.size() && selected)
+                        for(std::string_view att: globals::selected_attributes)
+                            globals::attributes()[att]().active = globals::attributes.read().at(att_id).read().active.read();
+                    else
+                        globals::attributes()[att_id]().active();
+                }
+                ImGui::TableNextColumn();
+                int color_edit_flags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar;
+                if(ImGui::ColorEdit4("##dlcolor", &att_no_track.color.ref_no_track().x, color_edit_flags)){
+                    if(globals::selected_attributes.size() && selected)
+                        for(std::string_view att: globals::selected_attributes)
+                            globals::attributes()[att]().color = globals::attributes.read().at(att_id).read().color.read();
+                    else
+                        globals::attributes()[att_id]().color();
+                }
+            }
+            ImGui::PopID();
             ImGui::EndTable();
         }
 
@@ -245,7 +320,7 @@ void data_workbench::show()
             globals::workbench_index.at(globals::load_color_wb_id).active = true;
         
 
-        if(ImGui::BeginTable("Drawlists", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+        if(ImGui::BeginTable("Drawlists", 4, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
@@ -274,7 +349,7 @@ void data_workbench::show()
                 if(ImGui::Selectable(dl_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
                     // updating drawlist selection
                     if(selected && ImGui::GetIO().KeyCtrl)
-                        globals::selected_drawlists.erase(std::find(globals::selected_drawlists.begin(), globals::selected_drawlists.end(), id));
+                        globals::selected_drawlists.erase(std::find(globals::selected_drawlists.begin(), globals::selected_drawlists.end(), dl_id));
                     else if(selected)
                         globals::selected_drawlists.clear();
                     else if(ImGui::GetIO().KeyShift){
@@ -341,7 +416,7 @@ void data_workbench::show()
         // c3
         ImGui::TableNextColumn();
 
-        if(ImGui::BeginTable("global_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+        if(ImGui::BeginTable("global_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
@@ -384,19 +459,23 @@ void data_workbench::show()
                 globals::brush_edit_data.clear();
             }
 
+            ImGui::TableNextRow();
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32_BLACK_TRANS);
+            ImGui::TableNextColumn();
+            if(ImGui::Button("+ Add global brush")){
+                structures::tracked_brush new_brush{};
+                auto cur_id = globals::cur_global_brush_id++;
+                new_brush.ref_no_track().id = cur_id;
+                new_brush.ref_no_track().name = "Global brush " + std::to_string(cur_id);
+                //globals::global_brushes.ref_no_track().emplace_back(structures::range_brush{}, structures::lasso_brush{}, structures::brush_id(cur_id), std::to_string(cur_id), true);
+                globals::global_brushes.ref_no_track().push_back(new_brush);
+                // selecting the last brush
+                globals::selected_drawlists.clear();
+                globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::global;
+                globals::brush_edit_data.global_brush_id =  cur_id;
+            }
+
             ImGui::EndTable();
-        }
-        if(ImGui::Button("+ Add global brush")){
-            structures::tracked_brush new_brush{};
-            auto cur_id = globals::cur_global_brush_id++;
-            new_brush.ref_no_track().id = cur_id;
-            new_brush.ref_no_track().name = "Global brush " + std::to_string(cur_id);
-            //globals::global_brushes.ref_no_track().emplace_back(structures::range_brush{}, structures::lasso_brush{}, structures::brush_id(cur_id), std::to_string(cur_id), true);
-            globals::global_brushes.ref_no_track().push_back(new_brush);
-            // selecting the last brush
-            globals::selected_drawlists.clear();
-            globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::global;
-            globals::brush_edit_data.global_brush_id =  cur_id;
         }
 
         ImGui::EndTable();

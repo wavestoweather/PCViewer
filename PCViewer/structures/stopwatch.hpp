@@ -28,9 +28,9 @@ public:
     double lap_ms(const std::string& id = "d", int start_index = 0, int end_index = -1){
         assert(_time_points.contains(id));
         if(start_index < 0)
-            start_index = _time_points[id].size() + start_index;
+            start_index = static_cast<int>(_time_points[id].size()) + start_index;
         if(end_index)
-            end_index = _time_points[id].size() + end_index;
+            end_index = static_cast<int>(_time_points[id].size()) + end_index;
         assert(start_index >= 0 && start_index < _time_points[id].size());
         assert(end_index >= 0 && end_index < _time_points[id].size());
         assert(start_index < end_index);

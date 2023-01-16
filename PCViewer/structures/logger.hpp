@@ -89,6 +89,10 @@ public:
     const std::string& get_last_lines() const{
         return _buffered_lines;
     }
+
+    bool even_write_head_pos() const{
+        return _write_head % 2 == 0;
+    }
 };
 }
 

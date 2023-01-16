@@ -37,13 +37,13 @@ inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(con
     assert(buffers.size() == data.columns.size());
     
     std::vector<VkDeviceAddress> device_addresses(buffers.size());
-    for(int i: util::size_range(buffers))
+    for(size_t i: util::size_range(buffers))
         device_addresses[i] = util::vk::get_buffer_address(buffers[i]);
     
-    uint32_t header_size = ::util::data::header_size(data);
+    size_t header_size = ::util::data::header_size(data);
     structures::dynamic_struct<gpu_header, uint32_t> packed_header((header_size - sizeof(gpu_header)) / sizeof(uint32_t));
-    packed_header->dimension_count = data.dimension_sizes.size();
-    packed_header->column_count = data.columns.size();
+    packed_header->dimension_count = static_cast<uint32_t>(data.dimension_sizes.size());
+    packed_header->column_count = static_cast<uint32_t>(data.columns.size());
 
     // dimension sizes
     uint32_t cur_offset{};
@@ -52,14 +52,14 @@ inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(con
     
     // column dimension counts
     for(const auto& column_dimension: data.column_dimensions)
-        packed_header[cur_offset++] = column_dimension.size();
+        packed_header[cur_offset++] = static_cast<uint32_t>(column_dimension.size());
     
     // reserving space for column dimension offsets
     uint32_t column_dimension_offset_index = cur_offset;
-    cur_offset += data.column_dimensions.size();
+    cur_offset += static_cast<uint32_t>(data.column_dimensions.size());
 
     // column dimensions and their offset
-    for(int i: size_range(data.column_dimensions)){
+    for(size_t i: size_range(data.column_dimensions)){
         packed_header[column_dimension_offset_index++] = cur_offset;
         for(auto j: data.column_dimensions[i])
             packed_header[cur_offset++] = j;

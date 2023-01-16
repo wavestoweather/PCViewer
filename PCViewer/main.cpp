@@ -151,6 +151,7 @@ int main(int argc, char* argv[]){
     ImGui::GetIO().ConfigViewportsNoDecoration = false;
     ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
     ImGui::GetStyle().FrameRounding = 3.f;
+    ImGui::GetStyle().WindowRounding = 8.f;
     ImGui::GetStyle().PopupRounding = 3.f;
     std::vector<float> font_sizes{10.f, 15.f, 25.f};
     util::imgui::load_fonts("fonts/", font_sizes);
@@ -305,6 +306,10 @@ int main(int argc, char* argv[]){
             auto last_line = logger.get_last_line(logger.buffer_size - 1 - i);
             if(last_line.empty())
                 continue;
+
+            // drawing background rectangle
+            if((i + uint32_t(logger.even_write_head_pos())) % 2 == 0)
+                ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetCursorScreenPos(), {ImGui::GetCursorScreenPos().x + ImGui::GetWindowContentRegionMax().x, ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeightWithSpacing()}, ImGui::ColorConvertFloat4ToU32({0.f, 0.f, 0.f, .15f}));
 
             if(std::string_view(last_line).substr(0, logging::warning_prefix.size()) == logging::warning_prefix)
                 ImGui::TextColored({.75f, .4f, 0, 1.f}, "%s", last_line.c_str());

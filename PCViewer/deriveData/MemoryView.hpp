@@ -42,7 +42,7 @@ public:
     bool equalData(const memory_view& o) const{
         if(_size != o._size)
             return false;
-        for(auto i: irange(_size)){
+        for(auto i: irange(static_cast<unsigned long>(_size))){
             if(_data[i] != o._data[i])
                 return false;
         }
@@ -70,7 +70,7 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
         {
             // checking for column or single row data in case of a constant
             if(dimensionSizes.empty()){  // row data
-                for(int i: irange(data.size()))
+                for(int i: irange(static_cast<unsigned long>(data.size())))
                     cols.push_back(memory_view(data.data() + i, 1));            
             }
             else{
@@ -87,12 +87,12 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
     // Note: diemnsionSizes.empty() indicates a constant in which case the size = 1
     uint64_t size() const{
         uint64_t ret{1};
-        for(auto s: irange(dimensionSizes.size())) ret *= dimensionSizes[s];
+        for(auto s: irange(static_cast<unsigned long>(dimensionSizes.size()))) ret *= dimensionSizes[s];
         return ret;
     }
     uint64_t columnSize() const{
         uint64_t ret{1};
-        for(auto s: irange(columnDimensionIndices.size())) ret *= dimensionSizes[columnDimensionIndices[s]];
+        for(auto s: irange(static_cast<unsigned long>(columnDimensionIndices.size()))) ret *= dimensionSizes[columnDimensionIndices[s]];
         return ret;
     }
     // returns if the columns span all dimensions
@@ -150,7 +150,7 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
 
     std::vector<uint64_t> columnIndexToDimensionIndices(uint64_t index) const{
         std::vector<uint64_t> dimensionIndices(dimensionSizes.size());
-        for(int i = columnDimensionIndices.size() - 1; i >= 0; --i){
+        for(int i = static_cast<int>(columnDimensionIndices.size()) - 1; i >= 0; --i){
             uint32_t dim  = columnDimensionIndices[i];
             dimensionIndices[dim] = index % dimensionSizes[dim];
             index /= dimensionSizes[dim];
@@ -181,7 +181,7 @@ private:
     }
     uint64_t columnIndex(uint64_t index) const{
         std::vector<uint64_t> dimensionIndices(dimensionSizes.size());
-        for(int i = dimensionSizes.size() - 1; i >= 0; --i){
+        for(int i = static_cast<int>(dimensionSizes.size()) - 1; i >= 0; --i){
             dimensionIndices[i] = index % dimensionSizes[i];
             index /= dimensionSizes[i];
         }

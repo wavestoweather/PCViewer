@@ -94,7 +94,7 @@ class data{
     // converts data index to column index (needed for non full dimensional columns)
     uint64_t columnIndex(uint32_t index, uint32_t column) const{
         std::vector<uint32_t> dimensionIndices(dimension_sizes.size());
-        for(int i = dimension_sizes.size() - 1; i >= 0; --i){
+        for(int i = static_cast<int>(dimension_sizes.size()) - 1; i >= 0; --i){
             dimensionIndices[i] = index % dimension_sizes[i];
             index /= dimension_sizes[i];
         }
@@ -154,7 +154,7 @@ class data{
                 redData[redDataCur++] = columns[c][indexReducedDimIndices(redDimIndices, c)];
                 //increase dimension itertor
                 redDimIndices.back() += redDimIncrements.back();
-                for(int d = redDimIndices.size() - 1; d > 0; --d){
+                for(int d = static_cast<int>(redDimIndices.size()) - 1; d > 0; --d){
                     if(redDimIndices[d] >= redDimStops[d]){
                         redDimIndices[d] = redDimStarts[d];
                         redDimIndices[d - 1] += redDimIncrements[d -1];
