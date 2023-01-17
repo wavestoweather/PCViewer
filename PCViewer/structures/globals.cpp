@@ -100,7 +100,7 @@ structures::priority_sorter priority_sorter{};
 
 std::atomic<float> priority_center_vealue{};
 std::atomic<float> priority_center_distance{};
-std::atomic<uint32_t> priority_center_attribute_id{};
+std::atomic<std::string_view> priority_center_attribute_id{};
 const std::string_view priority_drawlist_standard_order{"standard"};
 
 structures::globals_settings_t  settings{};

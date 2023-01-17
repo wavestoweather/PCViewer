@@ -11,22 +11,24 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
-    using attribute_order_info = structures::attribute_order_info;
+    using attribute_order_info_t = structures::attribute_info;
 
     // both are unique_ptrs to avoid issues with the memory_views when data elements are deleted in the vector
-    std::vector<std::unique_ptr<appearance_tracker>>         _storage_appearance;
-    std::vector<std::unique_ptr<structures::median_type>>    _storage_median_type;
+    std::vector<std::unique_ptr<appearance_tracker>>        _storage_appearance;
+    std::vector<std::unique_ptr<structures::median_type>>   _storage_median_type;
+    std::vector<std::unique_ptr<bool>>                      _storage_activation;
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_axis_histograms;
     bool                                                     _select_priority_center_single{false};
     bool                                                     _select_priority_center_all{false};
-    bool                                                     _request_registered_histograms_update{false};
-    bool                                                     _request_registered_histograms_update_var{false};
+    bool                                                     _request_registered_histograms_update{false};      // should be obsolete
+    bool                                                     _request_registered_histograms_update_var{false};  // should be obsolete
 
     void _update_plot_image();
     void _draw_setting_list();
-    void _swap_attributes(const attribute_order_info& from, const attribute_order_info& to);
+    void _swap_attributes(const attribute_order_info_t& from, const attribute_order_info_t& to);
     void _update_registered_histograms(bool request_update = false);
+    void _update_attribute_order_infos();
 public:
     enum histogram_type: uint32_t{
         none,
@@ -97,15 +99,14 @@ public:
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};     // the order here is the render order of the drawlists
     structures::alpha_mapping_type                          alpha_mapping_typ{};
     structures::change_tracker<plot_data>                   plot_data{};
-    structures::change_tracker<std::vector<structures::attribute>> attributes{};
-    structures::change_tracker<std::vector<attribute_order_info>> attributes_order_info{};
+    structures::change_tracker<std::vector<attribute_order_info_t>> attribute_order_infos{};
     render_strategy                                         render_strategy{};
 
     parallel_coordinates_workbench(const std::string_view id);
 
-    void render_plot();
-    std::vector<uint32_t> get_active_ordered_indices() const;
-    bool                  all_registrators_updated() const;
+    void                        render_plot();
+    std::vector<std::string_view> get_active_ordered_attributes() const;
+    bool                        all_registrators_updated() const;
 
     // overriden methods
     void show() override;

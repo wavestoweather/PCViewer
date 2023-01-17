@@ -292,7 +292,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
         uint32_t     data_flags;
     };
 
-    std::vector<uint32_t> active_attribute_indices = info.workbench.get_active_ordered_indices();     // these inlcude the order
+    std::vector<std::string_view> active_attributes = info.workbench.get_active_ordered_attributes();     // these inlcude the order
+    std::vector<std::string_view> active_attribute_indices = info.workbench.get_active_ordered_indices();     // these inlcude the order
 
     const auto& drawlists = globals::drawlists.read();
 

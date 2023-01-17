@@ -83,5 +83,14 @@ inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(con
 
     return packed_header;
 }
+
+inline std::vector<uint32_t> active_attributes_to_indices(util::memory_view<std::string_view> active_attributes, util::memory_view<const structures::attribute> dataset_attributes){
+    std::vector<uint32_t> active_indices(active_attributes.size());
+    for(auto&& [att, i]: util::enumerate(active_attributes)){
+        auto at = att;
+        active_indices[i] = static_cast<uint32_t>(dataset_attributes.index_of([at](const structures::attribute& a){return at == a.id;}));
+    }
+    return active_indices;
+}
 }
 }

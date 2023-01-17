@@ -9,8 +9,10 @@
 #include <group.hpp>
 #include <imgui.h>
 
-namespace structures{
+#define DECL_ATTRIBUTE_READ(att_id)   const structures::attribute&  attribute_read() const  {return globals::attributes.read().at(att_id).read();}
+#define DECL_ATTRIBUTE_WRITE(att_id)        structures::attribute&  attribute_write()       {return globals::attributes()[att_id]();}
 
+namespace structures{
 // attribute that is stored in datasets
 struct attribute{
     std::string                     id{};
@@ -59,4 +61,19 @@ namespace globals{
 extern std::vector<std::string_view> selected_attributes;
 extern structures::attributes_t     attributes;
 extern structures::names_group      attribute_groups;
+}
+
+namespace structures{
+using activation_tracker = change_tracker<bool>;
+using bounds_tracker = change_tracker<min_max<float>>;
+struct attribute_info{
+    std::string_view                        attribute_id{};
+    bool                                    linked_with_attribute{true};
+    util::memory_view<activation_tracker>   active{};
+    util::memory_view<bounds_tracker>       bounds{};
+    bool any_change() const {return active->changed || bounds->changed;}
+    void clear_change()     {active->changed = false; bounds->changed = false;}
+    DECL_ATTRIBUTE_READ(attribute_id);
+    DECL_ATTRIBUTE_WRITE(attribute_id);
+};
 }

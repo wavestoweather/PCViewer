@@ -12,6 +12,8 @@
 #include <splines.hpp>
 #include <priority_globals.hpp>
 #include <json_util.hpp>
+#include <data_util.hpp>
+#include <flat_set.hpp>
 
 namespace workbenches{
 
@@ -49,19 +51,19 @@ void parallel_coordinates_workbench::_draw_setting_list(){
     ImGui::InputInt("Axis tick count", &setting.read().axis_tick_count);
 }
 
-void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info& from, const attribute_order_info& to){
-    auto from_it = std::find(attributes_order_info().begin(), attributes_order_info().end(), from);
-    auto to_it = std::find(attributes_order_info().begin(), attributes_order_info().end(), to);
+void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info_t& from, const attribute_order_info_t& to){
+    auto from_it = std::find(attribute_order_infos().begin(), attribute_order_infos().end(), from);
+    auto to_it = std::find(attribute_order_infos().begin(), attribute_order_infos().end(), to);
     if(ImGui::IsKeyDown(ImGuiKey_ModCtrl)){
-        auto from_ind = std::distance(attributes_order_info().begin(), from_it);
-        auto to_ind = std::distance(attributes_order_info().begin(), to_it);
+        auto from_ind = std::distance(attribute_order_infos().begin(), from_it);
+        auto to_ind = std::distance(attribute_order_infos().begin(), to_it);
         auto lower = std::min(from_ind, to_ind);
         auto higher = std::max(from_ind, to_ind);
         int direction = from_ind < to_ind ? -1 : 1; // direction is the shuffle direction of all elements except from
         auto start_ind = from_ind - direction;
         for(;start_ind >= lower && start_ind <= higher; start_ind -= direction)
-            attributes_order_info()[start_ind + direction] = attributes_order_info()[start_ind];
-        attributes_order_info()[to_ind] = from;
+            attribute_order_infos()[start_ind + direction] = attribute_order_infos()[start_ind];
+        attribute_order_infos()[to_ind] = from;
     }
     else
         std::swap(*from_it, *to_it); 
@@ -73,8 +75,11 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
     if(!all_registrators_updated())
         return;
     // updating registered histograms (iterating through indices pairs and checking for registered histogram)
-    const auto active_indices = get_active_ordered_indices();
+    const auto active_attributes = get_active_ordered_attributes();
     for(const auto& dl: drawlist_infos.read()){
+        // active indices can only be calculated for a dataset as the attribute ordering in meory has to be considered
+        const auto& attributes = dl.dataset_read().attributes;
+        const auto active_indices = util::data::active_attributes_to_indices(active_attributes, attributes);
         // setting the flag for resorting priority rendering
         if(dl.priority_render){
             dl.drawlist_write().delayed_ops.delayed_ops_done = false;
@@ -95,12 +100,12 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             int height = plot_data.read().height;
             if(setting.read().render_splines){
                 indices = {active_indices[std::max(static_cast<uint32_t>(i) - 1, 0u)], active_indices[i], active_indices[i + 1], active_indices[std::min(static_cast<uint32_t>(i) + 2, static_cast<uint32_t>(active_indices.size()) - 1)]};
-                bounds = {attributes.read()[indices[0]].bounds.read(), attributes.read()[indices[1]].bounds.read(), attributes.read()[indices[2]].bounds.read(), attributes.read()[indices[3]].bounds.read()};
+                bounds = {attributes[indices[0]].bounds.read(), attributes[indices[1]].bounds.read(), attributes[indices[2]].bounds.read(), attributes[indices[3]].bounds.read()};
                 bucket_sizes = {config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res};
             }
             else{
                 indices = {active_indices[i], active_indices[i + 1]};
-                bounds = {attributes.read()[indices[0]].bounds.read(), attributes.read()[indices[1]].bounds.read()};
+                bounds = {attributes[indices[0]].bounds.read(), attributes[indices[1]].bounds.read()};
                 bucket_sizes = {height, height};
             }
             bool max_needed = dl.priority_render;
@@ -144,10 +149,13 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             continue;
         }
 
+        const auto& attributes = dl.dataset_read().attributes;
+        const auto active_indices = util::data::active_attributes_to_indices(active_attributes, attributes);
+
         std::vector<bool> registrator_needed(_registered_axis_histograms[dl.drawlist_id].size(), false);
         for(uint32_t i: active_indices){
             int height = plot_data.read().height;
-            auto registrator_id = util::histogram_registry::get_id_string(i, height, attributes.read()[i].bounds.read(), false, false);
+            auto registrator_id = util::histogram_registry::get_id_string(i, height, attributes[i].bounds.read(), false, false);
             int registrator_index{-1};
             for(size_t j: util::size_range(_registered_axis_histograms[dl.drawlist_id])){
                 if(_registered_axis_histograms[dl.drawlist_id][j].registry_id == registrator_id){
@@ -159,7 +167,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
                 registrator_needed[registrator_index] = true;
             else{
                 auto& drawlist = dl.drawlist_write();
-                _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, attributes.read()[i].bounds.read(), false, false, false));
+                _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, attributes[i].bounds.read(), false, false, false));
                 registrator_needed.push_back(true);
             }
         }
@@ -181,6 +189,42 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
     }
     _request_registered_histograms_update = false;
     _request_registered_histograms_update_var = false;
+}
+
+void parallel_coordinates_workbench::_update_attribute_order_infos(){
+    // getting the updated interesction of all dataset attributes
+    structures::flat_set<std::string_view> new_attributes;
+    for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
+        structures::flat_set<std::string_view> n;
+            for(const auto& att: dl.dataset_read().attributes)
+                n |= structures::flat_set<std::string_view>{{att.id}};
+        if(first)
+            new_attributes = std::move(n);
+        else
+            new_attributes &= n;
+    }
+
+    if(logger.logging_level >= logging::level::l_5)
+        logger << logging::info_prefix << " parallel_coordinates_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
+
+    structures::flat_set<std::string_view> old_attributes;
+    for(const auto& att_info: attribute_order_infos.read())
+        old_attributes |= structures::flat_set<std::string_view>{{att_info.attribute_id}};
+    auto attributes_to_add = new_attributes / old_attributes;
+    
+    // deleting all removed attributes in sorting order
+    for(size_t i: util::rev_size_range(attribute_order_infos)){
+        if(!new_attributes.contains(attribute_order_infos.read()[i].attribute_id)){
+            if(!attribute_order_infos.read()[i].linked_with_attribute)
+                bool todo = true;
+            attribute_order_infos().erase(attribute_order_infos.read().begin() + i);
+        }
+    }
+    // adding new attribute references
+    for(std::string_view att: attributes_to_add){
+        auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
+        attribute_order_infos().emplace_back(attribute_order_info_t{att, true, {attribute.active}, {attribute.bounds}});
+    }
 }
 
 void parallel_coordinates_workbench::show(){
@@ -211,8 +255,10 @@ void parallel_coordinates_workbench::show(){
     request_render |= local_change;
 
     // checking for attributes change
-    request_render |= attributes.changed;
-    request_render |= attributes_order_info.changed;
+    for(auto&& [att, i]: util::enumerate(attribute_order_infos.read()))
+        if(att.any_change())
+            attribute_order_infos();
+    request_render |= attribute_order_infos.changed;
     request_render |= setting.changed;
 
     // checking for changed image
@@ -243,7 +289,7 @@ void parallel_coordinates_workbench::show(){
     auto content_size = ImGui::GetWindowContentRegionMax();
 
     uint32_t labels_count{};
-    for(const auto& att_ref: attributes_order_info.read())
+    for(const auto& att_ref: attribute_order_infos.read())
         if(att_ref.active)
             ++labels_count;
 
@@ -256,13 +302,14 @@ void parallel_coordinates_workbench::show(){
     float cur_offset{};
     ImGui::Dummy({1, 1});
     // attribute labels
-    for(const auto& att_ref: attributes_order_info.read()){
+    for(const auto& att_ref: attribute_order_infos.read()){
         if(!att_ref.active)
             continue;
         
         ImGui::SameLine(cur_offset);
         
-        std::string name = attributes.read()[att_ref.attribut_index].display_name;
+        const auto& global_attribute = att_ref.attribute_read();
+        std::string name = global_attribute.display_name;
         float text_size = ImGui::CalcTextSize(name.c_str()).x;
         if(text_size > button_size.x){
             //add ellipsis at the end of the text
@@ -276,13 +323,13 @@ void parallel_coordinates_workbench::show(){
             name = cur_substr + "##" + name;
         }
         ImGui::Button(name.c_str(), button_size);
-        if (name != attributes.read()[att_ref.attribut_index].id && ImGui::IsItemHovered()) {
+        if (name != global_attribute.display_name && ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
-            ImGui::Text("%s", attributes.read()[att_ref.attribut_index].id.c_str());
+            ImGui::Text("%s", global_attribute.display_name.c_str());
             ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
             ImGui::EndTooltip();
         }
-        if (name == attributes.read()[att_ref.attribut_index].id && ImGui::IsItemHovered()) {
+        if (name == global_attribute.display_name && ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::Text("Drag and drop to switch axes, hold ctrl to shuffle");
             ImGui::EndTooltip();
@@ -292,14 +339,13 @@ void parallel_coordinates_workbench::show(){
         }
 
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-            const attribute_order_info p = att_ref;        //holding the attribute reference which should be switched
-            ImGui::SetDragDropPayload("ATTRIBUTE", &p, sizeof(p));
+            ImGui::SetDragDropPayload("ATTRIBUTE", &att_ref, sizeof(att_ref));
             ImGui::Text("Swap %s", name.c_str());
             ImGui::EndDragDropSource();
         }
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ATTRIBUTE")) {
-                const attribute_order_info other = *(const attribute_order_info*)payload->Data;
+                const attribute_order_info_t other = *(const attribute_order_info_t*)payload->Data;
 
                 _swap_attributes(other, att_ref);
             }
@@ -309,18 +355,18 @@ void parallel_coordinates_workbench::show(){
     // attribute max values
     ImGui::Dummy({1, 1});
     cur_offset = 0;
-    for(const auto& att_ref: attributes_order_info.read()){
+    for(const auto& [att_ref, i]: util::enumerate(attribute_order_infos.read())){
+        util::imgui::scoped_id att_id(att_ref.attribute_id.data());
         if(!att_ref.active)
             continue;
         
-        std::string name = setting.read().min_max_labes ? "max##" + attributes.read()[att_ref.attribut_index].id : "##max" + attributes.read()[att_ref.attribut_index].id;
         ImGui::SetNextItemWidth(button_size.x);
         ImGui::SameLine(cur_offset);
-        float diff = attributes.read()[att_ref.attribut_index].bounds.read().max - attributes.read()[att_ref.attribut_index].bounds.read().min;
-        if(ImGui::DragFloat(name.c_str(), &attributes.ref_no_track()[att_ref.attribut_index].bounds.ref_no_track().max, diff * .001f, 0, 0, "%6.4g")){
-            _request_registered_histograms_update = true;
-            _request_registered_histograms_update_var = true;
-            attributes()[att_ref.attribut_index].bounds().max;
+        float diff = att_ref.bounds->read().max - att_ref.bounds->read().min;
+        if(ImGui::DragFloat(setting.read().min_max_labes ? "max": "##ma", &attribute_order_infos.ref_no_track()[i].bounds->ref_no_track().max, diff * .001f, 0, 0, "%6.4g")){
+            //_request_registered_histograms_update = true;
+            //_request_registered_histograms_update_var = true;
+            attribute_order_infos()[i].bounds->write();
         }
         if(ImGui::IsItemClicked(ImGuiMouseButton_Right)){
             // todo minmaxpopup
@@ -347,15 +393,15 @@ void parallel_coordinates_workbench::show(){
         if(setting.read().enable_category_labels){
             int att_pos{};
             const float label_height = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y * 2;
-            for(const auto& att_ref: attributes_order_info.read()){
+            for(const auto& att_ref: attribute_order_infos.read()){
                 if(!att_ref.active)
                     continue;
-                if(attributes.read()[att_ref.attribut_index].categories.empty()){
+                if(att_ref.attribute_read().categories.empty()){
                     ++att_pos;
                     continue;
                 }
                 float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
-                const auto& attribute = attributes.read()[att_ref.attribut_index];
+                const auto& attribute = att_ref.attribute_read();
                 float min_val = attribute.bounds.read().min;
                 float max_val = attribute.bounds.read().max;
                 // going through the ordered categories and drawing a label if the distance to the previous label is large enough
@@ -380,16 +426,16 @@ void parallel_coordinates_workbench::show(){
         if(setting.read().axis_tick_label){
             ImGui::PushFontShadow(col);
             int att_pos{};
-            for(const auto& att_ref: attributes_order_info.read()){
+            for(const auto& att_ref: attribute_order_infos.read()){
                 if(!att_ref.active)
                     continue;
-                if(attributes.read()[att_ref.attribut_index].categories.size()){
+                if(att_ref.attribute_read().categories.size()){
                     ++att_pos;
                     continue;
                 }
 
                 float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
-                const auto& attribute = attributes.read()[att_ref.attribut_index];
+                const auto& attribute = att_ref.attribute_read();
                 float min_tick = attribute.bounds.read().min;
                 float max_tick = attribute.bounds.read().max;
                 double diff = max_tick - min_tick;
@@ -430,18 +476,18 @@ void parallel_coordinates_workbench::show(){
     // attribute min values
     ImGui::Dummy({1, 1});
     cur_offset = 0;
-    for(const auto& att_ref: attributes_order_info.read()){
+    for(const auto& [att_ref, i]: util::enumerate(attribute_order_infos.read())){
+        util::imgui::scoped_id att_id(att_ref.attribute_id.data());
         if(!att_ref.active)
             continue;
         
-        std::string name = setting.read().min_max_labes ? "min##" + attributes.read()[att_ref.attribut_index].id : "##min" + attributes.read()[att_ref.attribut_index].id;
         ImGui::SetNextItemWidth(button_size.x);
         ImGui::SameLine(cur_offset);
-        float diff = attributes.read()[att_ref.attribut_index].bounds.read().max - attributes.read()[att_ref.attribut_index].bounds.read().min;
-        if(ImGui::DragFloat(name.c_str(), &attributes.ref_no_track()[att_ref.attribut_index].bounds.ref_no_track().min, diff * .001f, 0, 0, "%6.4g")){
-            _request_registered_histograms_update = true;
-            _request_registered_histograms_update_var = true;
-            attributes()[att_ref.attribut_index].bounds().min;
+        float diff = att_ref.bounds->read().max - att_ref.bounds->read().min;
+        if(ImGui::DragFloat(setting.read().min_max_labes ? "min": "##mi", &attribute_order_infos.ref_no_track()[i].bounds->ref_no_track().min, diff * .001f, 0, 0, "%6.4g")){
+            //_request_registered_histograms_update = true;
+            //_request_registered_histograms_update_var = true;
+            attribute_order_infos()[i].bounds->write();
         }
         if(ImGui::IsItemClicked(ImGuiMouseButton_Right)){
             // todo minmaxpopup
@@ -450,12 +496,12 @@ void parallel_coordinates_workbench::show(){
     }
 
     // brush windows
-    std::map<uint32_t, uint32_t> place_of_ind;
+    std::map<std::string_view, uint32_t> place_of_attribute;
     if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none || _select_priority_center_single || _select_priority_center_all){
         uint32_t place = 0;
-        for(const auto& attr_ref: attributes_order_info.read())
-            if(attr_ref.active)
-                place_of_ind[attr_ref.attribut_index] = place++;
+        for(const auto& att_ref: attribute_order_infos.read())
+            if(att_ref.active)
+                place_of_attribute[att_ref.attribute_id] = place++;
     }
 
     if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none){ 
@@ -467,13 +513,15 @@ void parallel_coordinates_workbench::show(){
         float brush_gap = pic_size.x / (labels_count - 1);
 
         for(const auto& brush: selected_brush){
-            if(place_of_ind.count(brush.axis) == 0)
+            if(place_of_attribute.count(brush.attr) == 0)
                 continue;   // attribute not active
-            
-            float x = brush_gap * place_of_ind[brush.axis] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
 
-            float y = util::normalize_val_for_range(brush.max, attributes.read()[brush.axis].bounds.read().max, attributes.read()[brush.axis].bounds.read().min) * pic_size.y + pic_pos.y;
-            float height = (brush.max - brush.min) / (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min) * pic_size.y;
+            const auto& att_ref = (attribute_order_infos | util::try_find_if<const attribute_order_info_t>([&brush](auto& i){return i.attribute_id == brush.attr;}))->get();
+            
+            float x = brush_gap * place_of_attribute[brush.attr] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
+
+            float y = util::normalize_val_for_range(brush.max, att_ref.bounds->read().max, att_ref.bounds->read().min) * pic_size.y + pic_pos.y;
+            float height = (brush.max - brush.min) / (att_ref.bounds->read().max - att_ref.bounds->read().min) * pic_size.y;
             
             structures::brush_edit_data::brush_region hovered_region{structures::brush_edit_data::brush_region::COUNT};
             if(util::point_in_box(mouse_pos, {x, y}, {x + float(setting.read().brush_box_width), y + height}))
@@ -528,14 +576,14 @@ void parallel_coordinates_workbench::show(){
                 structures::axis_range& range       = *std::find(range_brush.begin(), range_brush.end(), brush);
                 switch(globals::brush_edit_data.hovered_region_on_click){
                 case structures::brush_edit_data::brush_region::top:
-                    range.max += delta * (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min);
+                    range.max += delta * (att_ref.bounds->read().max - att_ref.bounds->read().min);
                     break;
                 case structures::brush_edit_data::brush_region::bottom:
-                    range.min += delta * (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min);
+                    range.min += delta * (att_ref.bounds->read().max - att_ref.bounds->read().min);
                     break;
                 case structures::brush_edit_data::brush_region::body:
-                    range.max += delta * (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min);
-                    range.min += delta * (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min);
+                    range.max += delta * (att_ref.bounds->read().max - att_ref.bounds->read().min);
+                    range.min += delta * (att_ref.bounds->read().max - att_ref.bounds->read().min);
                     break;
                 }
 
@@ -564,8 +612,8 @@ void parallel_coordinates_workbench::show(){
             // Tooltip for hovered brush or selected brush
             if (brush_hovered || globals::brush_edit_data.selected_ranges.contains(brush.id)) {
                 float x_anchor = .5f;
-                if (place_of_ind[brush.axis] == 0) x_anchor = 0;
-                if (place_of_ind[brush.axis] == labels_count - 1) x_anchor = 1;
+                if (place_of_attribute[brush.attr] == 0) x_anchor = 0;
+                if (place_of_attribute[brush.attr] == labels_count - 1) x_anchor = 1;
 
                 ImGui::SetNextWindowPos({ x + float(setting.read().brush_box_width) / 2,y }, 0, { x_anchor,1 });
                 ImGui::SetNextWindowBgAlpha(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w * 0.60f);
@@ -588,18 +636,18 @@ void parallel_coordinates_workbench::show(){
 
         // brush creation
         bool new_brush{false};
-        for(const auto& attr_ref: attributes_order_info.read()){
-            if(!attr_ref.active)
+        for(const auto& att_ref: attribute_order_infos.read()){
+            if(!att_ref.active)
                 continue;
-            float x = static_cast<float>(brush_gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2);
+            float x = static_cast<float>(brush_gap * place_of_attribute[att_ref.attribute_id] + pic_pos.x - setting.read().brush_box_width / 2);
             bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + float(setting.read().brush_box_width), pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
             if(!any_hover && axis_hover && globals::brush_edit_data.selected_ranges.empty()){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
                 if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
-                    float val = util::normalize_val_for_range(mouse_pos.y, pic_pos.y, pic_pos.y + pic_size.y) * (attributes.read()[attr_ref.attribut_index].bounds.read().min - attributes.read()[attr_ref.attribut_index].bounds.read().max) + attributes.read()[attr_ref.attribut_index].bounds.read().max;
+                    float val = util::normalize_val_for_range(mouse_pos.y, pic_pos.y, pic_pos.y + pic_size.y) * (att_ref.bounds->read().min - att_ref.bounds->read().max) + att_ref.bounds->read().max;
 
-                    structures::axis_range new_range{attr_ref.attribut_index, globals::cur_brush_range_id++, val, val};
+                    structures::axis_range new_range{att_ref.attribute_id, globals::cur_brush_range_id++, val, val};
                     globals::brush_edit_data.selected_ranges.insert(new_range.id);
                     globals::brush_edit_data.hovered_region_on_click = structures::brush_edit_data::brush_region::top;
                     util::brushes::get_selected_range_brush().push_back(std::move(new_range));
@@ -629,19 +677,19 @@ void parallel_coordinates_workbench::show(){
         if(!util::point_in_box(ImGui::GetIO().MousePos, pic_pos, b) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             _select_priority_center_all = _select_priority_center_single = false;
 
-        for(const auto& attr_ref: attributes_order_info.read()){
-            if(!attr_ref.active)
+        for(const auto& att_ref: attribute_order_infos.read()){
+            if(!att_ref.active)
                 continue;
-            float x = gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
+            float x = gap * place_of_attribute[att_ref.attribute_id] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
             bool axis_hover = util::point_in_box(ImGui::GetMousePos(), {x, pic_pos.y}, {x + float(setting.read().brush_box_width), b.y});
             if(axis_hover){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                 if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
-                    const auto& bounds = attributes.read()[attr_ref.attribut_index].bounds.read();
-                    globals::priority_center_attribute_id = attr_ref.attribut_index;
+                    const auto& bounds = att_ref.bounds->read();
+                    globals::priority_center_attribute_id = att_ref.attribute_id;
                     globals::priority_center_vealue = util::unnormalize_val_for_range(util::normalize_val_for_range(ImGui::GetMousePos().y, b.y, pic_pos.y), bounds.min, bounds.max);
                     globals::priority_center_distance = std::max(globals::priority_center_vealue - bounds.min, bounds.max - globals::priority_center_vealue);
-                    logger << logging::info_prefix << " priority attribute: " << attributes.read()[attr_ref.attribut_index].display_name << ", priority center: " << globals::priority_center_vealue << ", priority distance " << globals::priority_center_distance << logging::endl;
+                    logger << logging::info_prefix << " priority attribute: " <<att_ref.attribute_read().display_name << ", priority center: " << globals::priority_center_vealue << ", priority distance " << globals::priority_center_distance << logging::endl;
                     for(auto& dl: drawlist_infos.ref_no_track()){
                         if(_select_priority_center_single && !util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id) && !globals::selected_drawlists.empty())
                             continue;
@@ -685,31 +733,16 @@ void parallel_coordinates_workbench::show(){
         // general settings
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        // activating the attributes
-        struct attr_ref_t{
-            std::string_view name; bool* active;
-            bool operator<(const attr_ref_t& o) const {return name < o.name;}
-        };
-        std::set<attr_ref_t> attribute_set;
-        for(auto& att_ref: attributes_order_info.ref_no_track())
-            attribute_set.insert(attr_ref_t{attributes.read()[att_ref.attribut_index].id, &att_ref.active});
-        for(auto& a: attribute_set){
-            if(ImGui::Checkbox((std::string(a.name) + "##activation").c_str(), a.active)){
-                attributes_order_info();
-                _request_registered_histograms_update = true;
-            }
-        }
         _draw_setting_list();
 
         // attribute settings
         ImGui::TableNextColumn();
-        if(ImGui::BeginTable("Attributes", 5, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+        if(ImGui::BeginTable("Attributes", 4, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(1, 0);
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Up");
             ImGui::TableSetupColumn("Down");
             ImGui::TableSetupColumn("Active");
-            ImGui::TableSetupColumn("Color");
 
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
             ImGui::TableNextColumn();
@@ -720,21 +753,38 @@ void parallel_coordinates_workbench::show(){
             ImGui::TableHeader("Down");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Active");
-            ImGui::TableNextColumn();
-            ImGui::TableHeader("Color");
 
-            for(const auto& a: attributes_order_info.read()){
-                auto& att_no_track = attributes.ref_no_track()[a.attribut_index];
-                util::imgui::scoped_id attribute_id(att_no_track.id.c_str());
+            int up_index{-1}, down_index{-1};
+            for(auto&& [att_ref, i]: util::enumerate(attribute_order_infos.read())){
+                auto& att_no_track = attribute_order_infos.ref_no_track()[i];
+                util::imgui::scoped_id attribute_id(att_no_track.attribute_id.data());
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                bool selected = globals::selected_attributes | util::contains(att_no_track.id);
-                if(ImGui::Selectable(att_no_track.display_name.c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
+                bool selected = globals::selected_attributes | util::contains(att_ref.attribute_id);
+                if(ImGui::Selectable(att_ref.attribute_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
 
                 }
                 ImGui::TableNextColumn();
-
+                ImGui::BeginDisabled(i == 0);
+                if(ImGui::ArrowButton("##up", ImGuiDir_Up))
+                    up_index = static_cast<int>(i);
+                ImGui::EndDisabled();
+                ImGui::TableNextColumn();
+                ImGui::BeginDisabled(i == attribute_order_infos.read().size() - 1);
+                if(ImGui::ArrowButton("##do", ImGuiDir_Down))
+                    down_index = static_cast<int>(i);
+                ImGui::EndDisabled();
+                ImGui::TableNextColumn();
+                if(ImGui::Checkbox("##a", &att_no_track.active->ref_no_track())){
+                    //if(globals::selected_attributes.size() && selected)
+                    //    for(std::string_view att: globals::selected_attributes)
+                    attribute_order_infos();
+                }
             }
+            if(up_index >= 0)
+                std::swap(attribute_order_infos()[up_index], attribute_order_infos()[up_index - 1]);
+            if(down_index >= 0)
+                std::swap(attribute_order_infos()[down_index], attribute_order_infos()[down_index + 1]);
             ImGui::EndTable();
         }
 
@@ -832,16 +882,16 @@ void parallel_coordinates_workbench::show(){
         if(ImGui::MenuItem("Fit axis to bounds", {}, false, bool(globals::brush_edit_data.selected_ranges.size()))){
             const auto& selected_ranges = util::brushes::get_selected_range_brush_const();
             // getting the extremum values for each axis if existent
-            std::vector<std::optional<structures::min_max<float>>> axis_values(attributes.read().size());
+            std::map<std::string_view, std::optional<structures::min_max<float>>> axis_values;
             for(const auto& range: selected_ranges){
-                if(axis_values[range.axis])
-                    axis_values[range.axis] = std::min_max(*axis_values[range.axis], {range.min, range.max});
+                if(axis_values[range.attr])
+                    axis_values[range.attr] = std::min_max(*axis_values[range.attr], {range.min, range.max});
                 else
-                    axis_values[range.axis] = structures::min_max<float>{range.min, range.max};
+                    axis_values[range.attr] = structures::min_max<float>{range.min, range.max};
             }
-            for(size_t i: util::size_range(attributes.read())){
-                if(axis_values[i])
-                    attributes()[i].bounds = *axis_values[i];
+            for(size_t i: util::size_range(attribute_order_infos.read())){
+                if(axis_values[attribute_order_infos.read()[i].attribute_id])
+                    attribute_order_infos()[i].bounds->write() = *axis_values[attribute_order_infos.read()[i].attribute_id];
             }
         }
         ImGui::DragInt("Live brush treshold", &setting.read().live_brush_threshold);
@@ -949,12 +999,11 @@ void parallel_coordinates_workbench::render_plot()
             dl_info.clear_change();
     }
     drawlist_infos.changed = false;
-    for(auto& attribute: attributes.ref_no_track()){
-        if(attribute.bounds.changed)
-            attribute.bounds.changed = false;
+    for(auto& att_ref: attribute_order_infos.ref_no_track()){
+        if(att_ref.bounds->changed)
+            att_ref.bounds->changed = false;
     }
-    attributes.changed = false;
-    attributes_order_info.changed = false;
+    attribute_order_infos.changed = false;
     setting.changed = false;
     // signaling all registrators
     for(auto& [dl, registrators]: _registered_histograms){
@@ -970,13 +1019,13 @@ void parallel_coordinates_workbench::render_plot()
     }
 }
 
-std::vector<uint32_t> parallel_coordinates_workbench::get_active_ordered_indices() const{
-    std::vector<uint32_t> indices;
-    for(const auto& i: attributes_order_info.read()){
-        if(i.active)
-            indices.push_back(i.attribut_index);
+std::vector<std::string_view> parallel_coordinates_workbench::get_active_ordered_attributes() const{
+    std::vector<std::string_view> attributes;
+    for(const auto& i: attribute_order_infos.read()){
+        if(i.active->read())
+            attributes.emplace_back(i.attribute_id);
     }
-    return indices;
+    return attributes;
 }
 
 bool parallel_coordinates_workbench::all_registrators_updated() const{
@@ -1005,59 +1054,10 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
     }
     if(!any_drawlist_affected)
         return;
+
+    _update_attribute_order_infos();
     
-    // getting the updated interesction of all dataset attributes
-    std::vector<std::string> new_attributes;
-    bool first_dl{true};
-    for(const auto& dl: drawlist_infos.read()){
-        int intersect_index{-1};
-        for(size_t i: util::size_range(dl.drawlist_read().dataset_read().attributes)){
-            if(first_dl && i >= new_attributes.size())
-                new_attributes.push_back(dl.drawlist_read().dataset_read().attributes[i].id);
-
-            if(!first_dl && (i >= new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
-                intersect_index = static_cast<int>(i);
-                break;
-            }
-        }
-        // removing attributes which are not supported
-        if(intersect_index >= 0)
-            new_attributes.erase(new_attributes.begin() + intersect_index, new_attributes.end());
-
-        first_dl = false;
-    }
-
-    if(logger.logging_level >= logging::level::l_5)
-        logger << logging::info_prefix << " parallel_coordinates_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
-
-    attributes().clear();
-    for(size_t i: util::size_range(new_attributes)){
-        attributes().emplace_back(drawlist_infos.read().front().drawlist_read().dataset_read().attributes[i]);
-        for(const auto& dl: drawlist_infos.read()){
-            const auto& ds_bounds = dl.drawlist_read().dataset_read().attributes[i].bounds.read();
-            const auto& dl_bounds = attributes.read().back().bounds.read();
-            if(ds_bounds.min < dl_bounds.min)
-                attributes().back().bounds().min = ds_bounds.min;
-            if(ds_bounds.max > dl_bounds.max)
-                attributes().back().bounds().max = ds_bounds.max;
-        }
-        if(attributes.read()[i].bounds.read().min == attributes.read()[i].bounds.read().max){
-            float diff = (std::abs(attributes.read()[i].bounds.read().max) + .1f) * .01f;
-            attributes()[i].bounds().min -= diff;
-            attributes()[i].bounds().max += diff;
-        }
-    }
-    // deleting all removed attributes in sorting order
-    for(size_t i: util::rev_size_range(attributes_order_info.read())){
-        if(attributes_order_info.read()[i].attribut_index >= attributes.read().size())
-            attributes_order_info().erase(attributes_order_info().begin() + i);
-    }
-    // adding new attribute references
-    for(size_t i: util::i_range(attributes.read().size() - attributes_order_info.read().size())){
-        uint32_t cur_index = static_cast<uint32_t>(attributes_order_info.read().size());
-        attributes_order_info().push_back({cur_index});
-    }
-    _request_registered_histograms_update = true;
+    //_request_registered_histograms_update = true; should be obsolete
 }
 
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){
@@ -1084,39 +1084,12 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
             continue;
 
         auto& dl = globals::drawlists.write().at(drawlist_id).write();
-        auto& ds = dl.dataset_read();
-        if(drawlist_infos.read().empty()){
-            // setting up the internal states
-            attributes = ds.attributes;
-            for(auto& attribute: attributes()){
-                if(attribute.bounds.read().min == attribute.bounds.read().max){
-                    float diff = (std::abs(attribute.bounds.read().max) + .1f) * .01f;
-                    attribute.bounds().min -= diff;
-                    attribute.bounds().max += diff;
-                }
-            }
-            attributes_order_info().resize(attributes.read().size());
-            for(size_t i: util::size_range(attributes_order_info.read()))
-                attributes_order_info.write()[i].attribut_index = static_cast<uint32_t>(i);
-        }
-        // check attribute consistency
-        for(size_t var: util::size_range(attributes.read()))
-            if(attributes.read()[var].id != ds.attributes[var].id)
-                throw std::runtime_error{"parallel_coordinates_workbench::addDrawlist() Inconsistent attributes for the new drawlist"};
-
-        // combining min max with new attributes
-        for(size_t var: util::size_range(attributes.read())){
-            if(attributes.read()[var].bounds.read().min > ds.attributes[var].bounds.read().min)
-                attributes()[var].bounds().min = ds.attributes[var].bounds.read().min;
-            if(attributes.read()[var].bounds.read().max < ds.attributes[var].bounds.read().max)
-                attributes()[var].bounds().max = ds.attributes[var].bounds.read().max;
-        }
-
         drawlist_infos.write().push_back(drawlist_info{drawlist_id, true, dl.appearance_drawlist, dl.median_typ});
 
         // checking histogram (large vis/axis histograms) rendering or standard rendering
-        _request_registered_histograms_update = true;
+        //_request_registered_histograms_update = true;
     }
+    _update_attribute_order_infos();
 }
 
 void parallel_coordinates_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info) {
