@@ -188,12 +188,14 @@ void data_workbench::show()
         if(ImGui::Button("Attribute colors"))
             globals::workbench_index.at(globals::load_color_wb_id).active = true;
 
-        if(ImGui::BeginTable("Attributes", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
+        if(ImGui::BeginTable("Attributes", 5, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
             ImGui::PushID("att_table");
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
             ImGui::TableSetupColumn("Color");
+            ImGui::TableSetupColumn("Min");
+            ImGui::TableSetupColumn("Max");
 
             // top row
             ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
@@ -203,6 +205,10 @@ void data_workbench::show()
             ImGui::TableHeader("Active");
             ImGui::TableNextColumn();
             ImGui::TableHeader("Color");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Min");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Max");
             
             for(const auto& [att_id, att]: globals::attributes.read()){
                 util::imgui::scoped_id attribute_id(att_id.data());
@@ -253,6 +259,24 @@ void data_workbench::show()
                             globals::attributes()[att]().color = globals::attributes.read().at(att_id).read().color.read();
                     else
                         globals::attributes()[att_id]().color();
+                }
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(70);
+                if(ImGui::DragFloat("##mi", &att_no_track.bounds.ref_no_track().min, (att_no_track.bounds.read().max - att_no_track.bounds.read().min) / 200, 0.f, 0.f, "%.3g")){
+                    if(globals::selected_attributes.size() && selected)
+                        for(std::string_view att: globals::selected_attributes)
+                            globals::attributes()[att]().bounds().min = att_no_track.bounds.read().min;
+                    else
+                        globals::attributes()[att_id]().bounds();
+                }
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(70);
+                if(ImGui::DragFloat("##ma", &att_no_track.bounds.ref_no_track().max, (att_no_track.bounds.read().max - att_no_track.bounds.read().min) / 200, 0.f, 0.f, "%.3g")){
+                    if(globals::selected_attributes.size() && selected)
+                        for(std::string_view att: globals::selected_attributes)
+                            globals::attributes()[att]().bounds().max = att_no_track.bounds.read().max;
+                    else
+                        globals::attributes()[att_id]().bounds();
                 }
             }
             ImGui::PopID();
