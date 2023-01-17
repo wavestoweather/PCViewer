@@ -57,7 +57,7 @@ inline void categories_convert_to_float(const std::set<std::string_view>& catego
     attribute.ordered_categories.shrink_to_fit();
 
     data.resize(strings.size());
-    for(size_t i: util::size_range(categories))
+    for(size_t i: util::size_range(strings))
         data[i] = static_cast<T>(attribute.categories[std::string(strings[i])]);
 };
 
@@ -109,6 +109,7 @@ load_result<T> open_netcdf_t(std::string_view filename, memory_view<structures::
         else
             std::tie(data, fill_value) = netcdf.read_variable<T>(static_cast<int>(var));
         ret.data.columns.push_back(std::move(data));
+        ret.data.column_transforms.emplace_back(structures::scale_offset<float>{variables[var].scale, variables[var].offset});
         ret.fill_values.push_back(fill_value);
         for(float f: ret.data.columns.back()){
             if(ret.attributes.back().bounds.read().min > f)
@@ -177,26 +178,27 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
 
     // parsing the data
     load_result<T> ret{};
-    std::vector<std::set<std::string_view>> categories_set;
-    std::vector<robin_hood::unordered_map<size_t, std::string>> categories_at_index; // stored in a set to allow categories mixed with numbers
+    std::vector<robin_hood::unordered_map<size_t, std::string>> categories_at_index(variable_names.size()); // stored in a set to allow categories mixed with numbers
     ret.data.columns.resize(variable_names.size());
     ret.attributes.resize(variable_names.size());
     for(std::string_view line; getline(input_view, line);){
         int var = 0;
         for(std::string_view element; getline(line, element, ','); ++var){
-            trim_inplace(element);
-
-            if(element[0] == '\"'){
-                if(element.back() != '\"'){
-                    auto start = element.data();
-                    getline(line, element, '\"');
-                    std::string_view tmp; getline(line, tmp, ',');      // skipping things until komma
-                    element = std::string_view(start + 1, element.data() + element.size() - start);
-                }
-                else
-                    element = std::string_view(element.data() + 1, element.size() - 2);
-
+            if(element.size()){
                 trim_inplace(element);
+
+                if(element.size() && element[0] == '\"'){
+                    if(element.back() != '\"'){
+                        auto start = element.data();
+                        getline(line, element, '\"');
+                        std::string_view tmp; getline(line, tmp, ',');      // skipping things until komma
+                        element = std::string_view(start + 1, element.data() + element.size() - start);
+                    }
+                    else
+                        element = std::string_view(element.data() + 1, element.size() - 2);
+
+                    trim_inplace(element);
+                }
             }
             
             if(query_attributes.size() && !query_attributes[var].is_active)
@@ -207,11 +209,8 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
             float val{};
             if(element.size()){
                 auto parse_res = fast_float::from_chars(element.data(), element.data() + element.size(), val);
-                if(parse_res.ec != std::errc{}){    // parsing error -> exchange for category
-                    std::string el(element);
-                    categories_set[var].emplace(el);
-                    categories_at_index[var][ret.data.columns[var].size()] = std::move(el);
-                }
+                if(parse_res.ec != std::errc{})    // parsing error -> exchange for category
+                    categories_at_index[var][ret.data.columns[var].size()] = std::string(element);
             }
 
             if(val > ret.attributes[var].bounds.read().max)
@@ -221,22 +220,27 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
             ret.data.columns[var].push_back(val);
         }
     }
-    for(size_t var: util::size_range(categories_set)){
-        if(categories_set[var].empty())
+    for(size_t var: util::size_range(categories_at_index)){
+        if(categories_at_index[var].empty())
             continue;
-        // creating the vector of categories for later conversion
-        std::vector<std::string_view> categories;
-        for(size_t i: util::size_range(ret.data.columns[var])){
+        std::vector<std::string_view>   categories;
+        std::set<std::string_view>      categories_set;
+
+        // convert numerical values to string values for missing strings
+        for(size_t i: util::size_range(ret.data.columns[var]))
             if(!categories_at_index[var].contains(i))
                 categories_at_index[var][i] = std::to_string(static_cast<double>(ret.data.columns[var][i]));
-            categories.push_back(categories_at_index[var][i]);
-            categories_set[var].insert(categories_at_index[var][i]);
-            categories_convert_to_float(categories_set[var], categories, ret.attributes[var], ret.data.columns[var]);
-            categories_set[var] = {};
-            categories_at_index[var] = {};
-            const auto [min, max] = std::minmax_element(ret.data.columns[var].begin(), ret.data.columns[var].end());
-            ret.attributes[var].bounds = structures::min_max<float>{static_cast<float>(*min), static_cast<float>(*max)};
+        
+        // create set of values and array of values (is done after completing categories_at_index as otherwise the string_views are not valid due to rallocation of the set memory)
+        for(size_t i: util::size_range(ret.data.columns[var])){
+            std::string_view v(categories_at_index[var][i]);
+            categories.emplace_back(v);
+            categories_set.emplace(v);
         }
+        categories_convert_to_float(categories_set, categories, ret.attributes[var], ret.data.columns[var]);
+        categories_at_index[var] = {};
+        const auto [min, max] = std::minmax_element(ret.data.columns[var].begin(), ret.data.columns[var].end());
+        ret.attributes[var].bounds = structures::min_max<float>{static_cast<float>(*min), static_cast<float>(*max)};
     }
     stopwatch.lap();
     if(logger.logging_level >= logging::level::l_5)

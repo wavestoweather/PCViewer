@@ -19,6 +19,11 @@ struct attribute{
     std::map<std::string, float>    categories{};
     std::vector<std::string_view>   ordered_categories{};                   // ordered by mapped value
     bool operator==(const attribute& o) const {return id == o.id && bounds.read() == o.bounds.read();}
+    attribute() = default;
+    attribute(const std::string& id, const std::string& display_name): id(id), display_name(display_name) {}
+    attribute(const std::string& id, const std::string& display_name, const change_tracker<min_max<float>>& bounds): id(id), display_name(display_name), bounds(bounds) {}
+    attribute(const attribute& o): id(o.id), display_name(o.display_name), bounds(o.bounds), categories(o.categories){ for(std::string_view cat: o.ordered_categories) ordered_categories.emplace_back(categories.find(std::string(cat))->first);}
+    attribute& operator=(const attribute& o) {id = o.id; display_name = o.display_name; bounds = o.bounds; categories = o.categories; for(std::string_view cat: o.ordered_categories) ordered_categories.emplace_back(categories.find(std::string(cat))->first); return *this;}
 };
 
 struct query_attribute{
@@ -42,7 +47,7 @@ struct global_attribute: public attribute{
     change_tracker<ImVec4>  color{ImVec4{1.f, 1.f, 1.f, 1.f}};
 
     uint32_t                usage_count{}; // usage count is increased when a datasets is loaded and contains this atttribute and is decreased when a dataset is destroyed. When the usage_count of an attribute reaches 0, it will be destroyed.
-    
+
     global_attribute() = default;
     global_attribute(const attribute& a, bool active, ImVec4 color): attribute(a), active(active), color(color) {}
 };

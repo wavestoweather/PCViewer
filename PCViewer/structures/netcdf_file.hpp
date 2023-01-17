@@ -16,9 +16,11 @@ public:
     int ngatts{};
     int unlimited_dimension{};
     struct var_info{
-        std::string         name;
-        std::vector<int>    dependant_dimensions;
-        nc_type             variable_type;
+        std::string         name{};
+        std::vector<int>    dependant_dimensions{};
+        nc_type             variable_type{};
+        float               offset{};
+        float               scale{1.f};
     };
     struct dim_info{
         std::string name;
@@ -58,6 +60,27 @@ public:
             if(res)
                 throw std::runtime_error("netcdf_file::get_variable_infos() Failed to get variable dimensions");
             _variable_infos[i].variable_type = var_type(i);
+            nc_type att_type;
+            res = nc_inq_att(_file_handle, i, "scale_factor", &att_type, {});
+            if(res == NC_NOERR){
+                switch(att_type){
+                    case NC_FLOAT: nc_get_att_float(_file_handle, i, "scale_factor", &_variable_infos[i].scale); break;
+                    case NC_DOUBLE: {double v; if(nc_get_att_double(_file_handle, i, "scale_factor", &v)) break; _variable_infos[i].scale = static_cast<float>(v); break;}
+                    case NC_SHORT: {int16_t v; if(nc_get_att_short(_file_handle, i, "scale_factor", &v)) break; _variable_infos[i].scale = static_cast<float>(v); break;}
+                    default:
+                        ::logger << logging::warning_prefix << " Attribute type to parse scale_factor not implemented" << logging::endl;
+                }
+            }
+            res = nc_inq_att(_file_handle, i, "add_offset", &att_type, {});
+            if(res == NC_NOERR){
+                switch(att_type){
+                    case NC_FLOAT: nc_get_att_float(_file_handle, i, "add_offset", &_variable_infos[i].offset); break;
+                    case NC_DOUBLE: {double v; if(nc_get_att_double(_file_handle, i, "add_offset", &v)) break; _variable_infos[i].offset = static_cast<float>(v); break;}
+                    case NC_SHORT: {int16_t v; if(nc_get_att_short(_file_handle, i, "add_offset", &v)) break; _variable_infos[i].offset = static_cast<float>(v); break;}
+                    default:
+                        ::logger << logging::warning_prefix << " Attribute type to parse add_offset not implemented" << logging::endl;
+                }
+            }
         }
         return _variable_infos;
     }

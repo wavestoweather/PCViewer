@@ -44,6 +44,7 @@ void parallel_coordinates_workbench::_draw_setting_list(){
     ImGui::MenuItem("Enable axis lines", {}, &setting.read().enable_axis_lines);
     ImGui::MenuItem("Enable min max labels", {}, &setting.read().min_max_labes);
     ImGui::MenuItem("Enable axis tick lables", {}, &setting.read().axis_tick_label);
+    ImGui::MenuItem("Enable category labels", {}, &setting.read().enable_category_labels);
     ImGui::InputText("Tick format", &setting.read().axis_tick_fmt);
     ImGui::InputInt("Axis tick count", &setting.read().axis_tick_count);
 }
@@ -343,12 +344,49 @@ void parallel_coordinates_workbench::show(){
             ImGui::GetWindowDrawList()->AddLine({x + 1, y1}, {x + 1, y2}, col);
             ImGui::GetWindowDrawList()->AddLine({x, y1    }, {x, y2    }, line_col);
         }
-        if(setting.read().axis_tick_label){
-            ImGui::PushFontShadow(col);
-            int att_pos = 0;
+        if(setting.read().enable_category_labels){
+            int att_pos{};
+            const float label_height = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y * 2;
             for(const auto& att_ref: attributes_order_info.read()){
                 if(!att_ref.active)
                     continue;
+                if(attributes.read()[att_ref.attribut_index].categories.empty()){
+                    ++att_pos;
+                    continue;
+                }
+                float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
+                const auto& attribute = attributes.read()[att_ref.attribut_index];
+                float min_val = attribute.bounds.read().min;
+                float max_val = attribute.bounds.read().max;
+                // going through the ordered categories and drawing a label if the distance to the previous label is large enough
+                const double max_label_count = (attribute.categories.at(std::string(attribute.ordered_categories.back())) - attribute.categories.at(std::string(attribute.ordered_categories.front()))) / (max_val - min_val) * pic_size.y / label_height;
+                const size_t label_step = std::max(size_t(1), static_cast<size_t>(std::ceil(attribute.ordered_categories.size() / std::abs(max_label_count))));
+                size_t step = static_cast<size_t>(std::exp2(std::ceil(std::log2(label_step))));
+                for(auto c: util::i_range(size_t(0), attribute.ordered_categories.size(), step)){
+                    auto cat = attribute.ordered_categories[c];
+                    float p = util::normalize_val_for_range(attribute.categories.at(std::string(cat)), min_val, max_val);
+                    if(p < 0 || p > 1)
+                        continue;
+                    p = util::unnormalize_val_for_range(p, pic_pos.y + pic_size.y, pic_pos.y);
+                    ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
+                    ImGui::SetNextWindowPos({x, p - label_height / 2.f});
+                    ImGui::Begin(cat.data(), {}, flags);
+                    ImGui::Text("%s", cat.data());
+                    ImGui::End();
+                }
+                ++att_pos;
+            }
+        }
+        if(setting.read().axis_tick_label){
+            ImGui::PushFontShadow(col);
+            int att_pos{};
+            for(const auto& att_ref: attributes_order_info.read()){
+                if(!att_ref.active)
+                    continue;
+                if(attributes.read()[att_ref.attribut_index].categories.size()){
+                    ++att_pos;
+                    continue;
+                }
 
                 float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
                 const auto& attribute = attributes.read()[att_ref.attribut_index];
@@ -432,7 +470,7 @@ void parallel_coordinates_workbench::show(){
             if(place_of_ind.count(brush.axis) == 0)
                 continue;   // attribute not active
             
-            float x = brush_gap * place_of_ind[brush.axis] + pic_pos.x - setting.read().brush_box_width / 2;
+            float x = brush_gap * place_of_ind[brush.axis] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
 
             float y = util::normalize_val_for_range(brush.max, attributes.read()[brush.axis].bounds.read().max, attributes.read()[brush.axis].bounds.read().min) * pic_size.y + pic_pos.y;
             float height = (brush.max - brush.min) / (attributes.read()[brush.axis].bounds.read().max - attributes.read()[brush.axis].bounds.read().min) * pic_size.y;
@@ -594,7 +632,7 @@ void parallel_coordinates_workbench::show(){
         for(const auto& attr_ref: attributes_order_info.read()){
             if(!attr_ref.active)
                 continue;
-            float x = gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - setting.read().brush_box_width / 2;
+            float x = gap * place_of_ind[attr_ref.attribut_index] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
             bool axis_hover = util::point_in_box(ImGui::GetMousePos(), {x, pic_pos.y}, {x + float(setting.read().brush_box_width), b.y});
             if(axis_hover){
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -610,7 +648,7 @@ void parallel_coordinates_workbench::show(){
                         dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
                         dl.drawlist_write().delayed_ops.priority_sorting_done = false;
                         dl.drawlist_write().delayed_ops.delayed_ops_done = false;
-                        dl.appearance->write().color.w = .9;
+                        dl.appearance->write().color.w = .9f;
                         dl.priority_render = true;
                         if(_select_priority_center_single)
                             break;
@@ -703,10 +741,10 @@ void parallel_coordinates_workbench::show(){
                 }
                 ImGui::TableNextColumn();
                 if(ImGui::ArrowButton(("##u" + dl_string).c_str(), ImGuiDir_Up))
-                    up_index = dl_index;
+                    up_index = static_cast<int>(dl_index);
                 ImGui::TableNextColumn();
                 if(ImGui::ArrowButton(("##d" + dl_string).c_str(), ImGuiDir_Down))
-                    down_index = dl_index;
+                    down_index = static_cast<int>(dl_index);
                 ImGui::TableNextColumn();
                 if(ImGui::Button(("X##x" + dl_string).c_str()))
                     delete_drawlist = dl.drawlist_id;
@@ -756,7 +794,7 @@ void parallel_coordinates_workbench::show(){
                 else
                     axis_values[range.axis] = structures::min_max<float>{range.min, range.max};
             }
-            for(int i: util::size_range(attributes.read())){
+            for(size_t i: util::size_range(attributes.read())){
                 if(axis_values[i])
                     attributes()[i].bounds = *axis_values[i];
             }
@@ -928,12 +966,12 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
     bool first_dl{true};
     for(const auto& dl: drawlist_infos.read()){
         int intersect_index{-1};
-        for(int i: util::size_range(dl.drawlist_read().dataset_read().attributes)){
+        for(size_t i: util::size_range(dl.drawlist_read().dataset_read().attributes)){
             if(first_dl && i >= new_attributes.size())
                 new_attributes.push_back(dl.drawlist_read().dataset_read().attributes[i].id);
 
             if(!first_dl && (i >= new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
-                intersect_index = i;
+                intersect_index = static_cast<int>(i);
                 break;
             }
         }
@@ -948,8 +986,8 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
         logger << logging::info_prefix << " parallel_coordinates_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
 
     attributes().clear();
-    for(int i: util::size_range(new_attributes)){
-        attributes().push_back(structures::attribute{new_attributes[i], drawlist_infos.read().front().drawlist_read().dataset_read().attributes[i].display_name});
+    for(size_t i: util::size_range(new_attributes)){
+        attributes().emplace_back(drawlist_infos.read().front().drawlist_read().dataset_read().attributes[i]);
         for(const auto& dl: drawlist_infos.read()){
             const auto& ds_bounds = dl.drawlist_read().dataset_read().attributes[i].bounds.read();
             const auto& dl_bounds = attributes.read().back().bounds.read();
@@ -958,6 +996,11 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
             if(ds_bounds.max > dl_bounds.max)
                 attributes().back().bounds().max = ds_bounds.max;
         }
+        if(attributes.read()[i].bounds.read().min == attributes.read()[i].bounds.read().max){
+            float diff = (std::abs(attributes.read()[i].bounds.read().max) + .1f) * .01f;
+            attributes()[i].bounds().min -= diff;
+            attributes()[i].bounds().max += diff;
+        }
     }
     // deleting all removed attributes in sorting order
     for(size_t i: util::rev_size_range(attributes_order_info.read())){
@@ -965,8 +1008,8 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
             attributes_order_info().erase(attributes_order_info().begin() + i);
     }
     // adding new attribute references
-    for(int i: util::i_range(attributes.read().size() - attributes_order_info.read().size())){
-        uint32_t cur_index = attributes_order_info.read().size();
+    for(size_t i: util::i_range(attributes.read().size() - attributes_order_info.read().size())){
+        uint32_t cur_index = static_cast<uint32_t>(attributes_order_info.read().size());
         attributes_order_info().push_back({cur_index});
     }
     _request_registered_histograms_update = true;
@@ -975,7 +1018,7 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){
     // going through the drawlists and check if they have to be removed
     std::vector<std::string_view> drawlists_to_remove;
-    for(int i: util::size_range(drawlist_infos.read())){
+    for(size_t i: util::size_range(drawlist_infos.read())){
         if(dataset_ids.contains(drawlist_infos.read()[i].drawlist_read().parent_dataset))
             drawlists_to_remove.push_back(drawlist_infos.read()[i].drawlist_id);
     }
@@ -1008,16 +1051,16 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
                 }
             }
             attributes_order_info().resize(attributes.read().size());
-            for(int i: util::size_range(attributes_order_info.read()))
-                attributes_order_info.write()[i].attribut_index = i;
+            for(size_t i: util::size_range(attributes_order_info.read()))
+                attributes_order_info.write()[i].attribut_index = static_cast<uint32_t>(i);
         }
         // check attribute consistency
-        for(int var: util::size_range(attributes.read()))
+        for(size_t var: util::size_range(attributes.read()))
             if(attributes.read()[var].id != ds.attributes[var].id)
                 throw std::runtime_error{"parallel_coordinates_workbench::addDrawlist() Inconsistent attributes for the new drawlist"};
 
         // combining min max with new attributes
-        for(int var: util::size_range(attributes.read())){
+        for(size_t var: util::size_range(attributes.read())){
             if(attributes.read()[var].bounds.read().min > ds.attributes[var].bounds.read().min)
                 attributes()[var].bounds().min = ds.attributes[var].bounds.read().min;
             if(attributes.read()[var].bounds.read().max < ds.attributes[var].bounds.read().max)
@@ -1062,6 +1105,7 @@ parallel_coordinates_workbench::settings_t::settings_t(const crude_json::value& 
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, enable_axis_lines);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, min_max_labes);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, axis_tick_label);
+    JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, enable_category_labels);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT(json, t, axis_tick_fmt);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, axis_tick_count, double);
     JSON_ASSIGN_JSON_FIELD_TO_STRUCT_CAST(json, t, render_batch_size, double);
@@ -1088,6 +1132,7 @@ parallel_coordinates_workbench::settings_t::operator crude_json::value() const{
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, enable_axis_lines);
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, min_max_labes);
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, axis_tick_label);
+    JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, enable_category_labels);
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON(json, t, axis_tick_fmt);
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, axis_tick_count, double);
     JSON_ASSIGN_STRUCT_FIELD_TO_JSON_CAST(json, t, render_batch_size, double);
@@ -1113,6 +1158,7 @@ bool parallel_coordinates_workbench::settings_t::operator==(const settings_t& o)
     COMP_EQ_OTHER(o, enable_axis_lines);
     COMP_EQ_OTHER(o, min_max_labes);
     COMP_EQ_OTHER(o, axis_tick_label);
+    COMP_EQ_OTHER(o, enable_category_labels);
     COMP_EQ_OTHER(o, axis_tick_fmt);
     COMP_EQ_OTHER(o, axis_tick_count);
     COMP_EQ_OTHER(o, render_batch_size);

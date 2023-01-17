@@ -227,8 +227,8 @@ void scatterplot_renderer::render(const render_info& info){
         auto render_info = util::vk::initializers::renderPassBeginInfo(framebuffer.render_pass, framebuffer.framebuffer, {0, 0, fb_key.width, fb_key.width}, clear_value);
         vkCmdBeginRenderPass(_render_commands.back(), &render_info, {});
         VkViewport viewport{};
-        viewport.width = fb_key.width;
-        viewport.height = fb_key.width;
+        viewport.width = static_cast<float>(fb_key.width);
+        viewport.height = static_cast<float>(fb_key.width);
         viewport.maxDepth = 1;
         vkCmdSetViewport(_render_commands.back(), 0, 1, &viewport);
         VkRect2D scissor{};

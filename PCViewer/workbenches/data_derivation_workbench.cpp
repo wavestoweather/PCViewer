@@ -167,7 +167,7 @@ void data_derivation_workbench::show(){
                 if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                     pin_name = std::to_string(node_pins.inputIds.size());
                     auto& ds = globals::datasets()[ds_output->datasetId]();
-                    ds.attributes.push_back(structures::attribute{pin_name, pin_name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}, {}});
+                    ds.attributes.push_back(structures::attribute{pin_name, pin_name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}});
                     ds.attributes.back().bounds.changed = true;
                     std::visit([](auto&& data){
                         data.columns.push_back({0});

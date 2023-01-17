@@ -46,6 +46,7 @@ public:
         mutable bool        enable_axis_lines{true};
         mutable bool        min_max_labes{false};
         mutable bool        axis_tick_label{true};
+        mutable bool        enable_category_labels{true};
         mutable std::string axis_tick_fmt{"%6.4g"};
         mutable int         axis_tick_count{5};
         mutable size_t      render_batch_size{};
