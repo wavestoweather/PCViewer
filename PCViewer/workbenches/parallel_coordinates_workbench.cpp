@@ -667,11 +667,24 @@ void parallel_coordinates_workbench::show(){
     // -------------------------------------------------------------------------------
     std::string_view delete_drawlist{};
 
-    ImGui::BeginHorizontal("Settings");
+    if(ImGui::BeginTable("Settings", 3, ImGuiTableFlags_Hideable | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings)){
+        ImGui::TableSetupScrollFreeze(1, 0);
+        ImGui::TableSetupColumn("General settings");
+        ImGui::TableSetupColumn("Attributes");
+        ImGui::TableSetupColumn("Drawlists");
+
+        ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+        ImGui::TableNextColumn();
+        ImGui::TableHeader("General settings");
+        ImGui::TableNextColumn();
+        ImGui::TableHeader("Attributes");
+        ImGui::TableNextColumn();
+        ImGui::TableHeader("Drawlists");
+        
 
         // general settings
-        ImGui::BeginVertical("GeneralSettings");
-        ImGui::BeginChild("testwarpp",{400, 0});
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
         // activating the attributes
         struct attr_ref_t{
             std::string_view name; bool* active;
@@ -686,15 +699,48 @@ void parallel_coordinates_workbench::show(){
                 _request_registered_histograms_update = true;
             }
         }
-        if(ImGui::TreeNode("General settings")){
-            _draw_setting_list();
-            ImGui::TreePop();
+        _draw_setting_list();
+
+        // attribute settings
+        ImGui::TableNextColumn();
+        if(ImGui::BeginTable("Attributes", 5, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
+            ImGui::TableSetupScrollFreeze(1, 0);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Up");
+            ImGui::TableSetupColumn("Down");
+            ImGui::TableSetupColumn("Active");
+            ImGui::TableSetupColumn("Color");
+
+            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Name");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Up");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Down");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Active");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Color");
+
+            for(const auto& a: attributes_order_info.read()){
+                auto& att_no_track = attributes.ref_no_track()[a.attribut_index];
+                util::imgui::scoped_id attribute_id(att_no_track.id.c_str());
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool selected = globals::selected_attributes | util::contains(att_no_track.id);
+                if(ImGui::Selectable(att_no_track.display_name.c_str(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
+
+                }
+                ImGui::TableNextColumn();
+
+            }
+            ImGui::EndTable();
         }
-        ImGui::EndChild();
-        ImGui::EndVertical();
+
 
         // drawlist settings
-        ImGui::BeginVertical("DrawlistSettings");
+        ImGui::TableNextColumn();
         if(ImGui::BeginTable("Drawlist settings", 7, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Drawlist", ImGuiTableColumnFlags_WidthStretch);
@@ -771,9 +817,8 @@ void parallel_coordinates_workbench::show(){
 
             ImGui::EndTable();
         }
-        ImGui::EndVertical();
-
-    ImGui::EndHorizontal();
+        ImGui::EndTable();
+    }
 
     // popups ----------------------------------------------------------------
     pc_menu_open = !brush_menu_open && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ImGui::IsWindowHovered() && util::point_in_box(ImGui::GetMousePos(), pic_pos, {pic_pos.x + pic_size.x, pic_pos.y + pic_size.y});
