@@ -11,6 +11,7 @@
 #include <stager.hpp>
 #include <robin_hood.h>
 #include <util.hpp>
+#include <data_util.hpp>
 
 namespace util{
 namespace brushes{
@@ -23,27 +24,28 @@ struct gpu_brush{
 using range_brush_refs = std::vector<const structures::range_brush*>;
 using lasso_brush_refs = std::vector<const structures::lasso_brush*>;
 
-inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const range_brush_refs& range_brushes, const lasso_brush_refs& lasso_brushes){
+inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const range_brush_refs& range_brushes, const lasso_brush_refs& lasso_brushes, util::memory_view<const structures::attribute> attributes){
+    const auto attribute_to_index = util::data::attribute_to_index(attributes);
     // creating an attribute major storage for the range_brushes to be able to convert the data more easily
     std::vector<std::map<uint32_t, std::vector<structures::min_max<float>>>> axis_brushes(range_brushes.size());
-    uint32_t dynamic_size{static_cast<uint32_t>(range_brushes.size())};   // brush_offsets 
+    uint32_t dynamic_size{static_cast<uint32_t>(range_brushes.size())};// brush_offsets 
     for(size_t i: size_range(range_brushes)){
         auto& b = axis_brushes[i];
         for(const auto& range: *range_brushes[i])
-            b[range.axis].push_back({range.min, range.max});
-        dynamic_size += 1;                          // nAxisMaps
-        dynamic_size += static_cast<uint32_t>(b.size());                   // axisOffsets
+            b[attribute_to_index.at(range.attr)].push_back({range.min, range.max});
+        dynamic_size += 1;                                              // nAxisMaps
+        dynamic_size += static_cast<uint32_t>(b.size());                // axisOffsets
         for(const auto& [axis, ranges]: b){
-            dynamic_size += 1;                      // nRanges
-            dynamic_size += 1;                      // axis
-            dynamic_size += static_cast<uint32_t>(ranges.size() * 2);      // ranges
+            dynamic_size += 1;                                          // nRanges
+            dynamic_size += 1;                                          // axis
+            dynamic_size += static_cast<uint32_t>(ranges.size() * 2);   // ranges
         }
     }
-    dynamic_size += static_cast<uint32_t>(lasso_brushes.size());           // brush_offsets
+    dynamic_size += static_cast<uint32_t>(lasso_brushes.size());        // brush_offsets
     for(size_t i: size_range(lasso_brushes)){
         const auto& lasso_brush = *lasso_brushes[i];
         dynamic_size += 1;                          // nPolygons
-        dynamic_size += static_cast<uint32_t>(lasso_brush.size());         // polygonOffsets
+        dynamic_size += static_cast<uint32_t>(lasso_brush.size());      // polygonOffsets
         for(const auto& polygon: lasso_brush){
             dynamic_size += 2;                      // attr1, attr2
             dynamic_size += 1;                      // nBorderPoints
@@ -95,8 +97,8 @@ inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const 
         cur_offset += static_cast<uint32_t>(lasso_brush.size());           // skipping the polygon_offsets
         for(const auto& polygon: lasso_brush){
             gpu_data[polygon_offsets++] = float(cur_offset);               // polygon_offsets
-            gpu_data[cur_offset++] = float(polygon.attr1);                 // attr1
-            gpu_data[cur_offset++] = float(polygon.attr2);                 // attr2
+            gpu_data[cur_offset++] = float(attribute_to_index.at(polygon.attr1));                 // attr1
+            gpu_data[cur_offset++] = float(attribute_to_index.at(polygon.attr2));                 // attr2
             gpu_data[cur_offset++] = float(polygon.borderPoints.size());   // nBorderPoints
             for(const auto& b: polygon.borderPoints){
                 gpu_data[cur_offset++] = b.x;                       // p1
@@ -111,41 +113,49 @@ inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const 
 // uploads changed local and global brushes
 inline void upload_changed_brushes(){
     // global brushes
-    structures::dynamic_struct<gpu_brush, float> global_brush_data;
-    bool wait_stager = false;
+    std::vector<structures::dynamic_struct<gpu_brush, float>> brush_datas;
     if(globals::global_brushes.changed){
-        range_brush_refs range_brushes;
-        lasso_brush_refs lasso_brushes;
-        for(const auto& brush: globals::global_brushes.read()){
-            if(!brush.read().active)
-                continue;
-            range_brushes.push_back(&brush.read().ranges);
-            lasso_brushes.push_back(&brush.read().lassos);
+        size_t global_brush_byte_size{};
+        std::vector<std::string_view> ds_order{};
+        // for each dataset a global_brush_data is needded, as different datasets have different memory layouts
+        for(const auto& [ds_id, ds]: globals::datasets.read()){
+            range_brush_refs range_brushes;
+            lasso_brush_refs lasso_brushes;
+            for(const auto& brush: globals::global_brushes.read()){
+                if(!brush.read().active)
+                    continue;
+                range_brushes.push_back(&brush.read().ranges);
+                lasso_brushes.push_back(&brush.read().lassos);
+            }
+            brush_datas.emplace_back(create_gpu_brush_data(range_brushes, lasso_brushes, ds.read().attributes));
+            globals::global_brushes.dataset_brush_info_offsets[ds_id] = global_brush_byte_size;
+            global_brush_byte_size += brush_datas.back().byte_size();
+            ds_order.emplace_back(ds_id);
         }
-        global_brush_data = create_gpu_brush_data(range_brushes, lasso_brushes);
-        if(global_brush_data.byte_size() > globals::global_brushes.brushes_gpu.size){
+        if(global_brush_byte_size > globals::global_brushes.brushes_gpu.size){
             util::vk::destroy_buffer(globals::global_brushes.brushes_gpu);
-            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, global_brush_data.byte_size());
+            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, global_brush_byte_size);
             auto alloc_info = util::vma::initializers::allocationCreateInfo();
             globals::global_brushes.brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);
         }
-        structures::stager::staging_buffer_info staging_info{};
-        staging_info.dst_buffer = globals::global_brushes.brushes_gpu.buffer;
-        staging_info.data_upload = global_brush_data.data();
-        globals::stager.add_staging_task(staging_info);
-        wait_stager = true;
+        for(const auto& [brush_data, i]: util::enumerate(brush_datas)){
+            structures::stager::staging_buffer_info staging_info{};
+            staging_info.dst_buffer = globals::global_brushes.brushes_gpu.buffer;
+            staging_info.dst_buffer_offset = globals::global_brushes.dataset_brush_info_offsets[ds_order[i]];
+            staging_info.data_upload = brush_data.data();
+            globals::stager.add_staging_task(staging_info);
+        }
     }
 
     // local brushes
-    std::vector<structures::dynamic_struct<gpu_brush, float>> local_brush_data;
     if(globals::drawlists.changed){
         for(const auto& [id, dl]: globals::drawlists.read()){
             if(!dl.changed || !dl.read().local_brushes.changed)
                 continue;
             range_brush_refs range_brushes{&dl.read().local_brushes.read().ranges};
             lasso_brush_refs lasso_brushes{&dl.read().local_brushes.read().lassos};
-            local_brush_data.push_back(create_gpu_brush_data(range_brushes, lasso_brushes));
-            auto& brush_data = local_brush_data.back();
+            brush_datas.emplace_back(create_gpu_brush_data(range_brushes, lasso_brushes, dl.read().dataset_read().attributes));
+            auto& brush_data = brush_datas.back();
 
             if(brush_data.byte_size() > dl.read().local_brushes_gpu.size){
                 util::vk::destroy_buffer(globals::drawlists.ref_no_track()[id].ref_no_track().local_brushes_gpu);
@@ -158,13 +168,10 @@ inline void upload_changed_brushes(){
             staging_info.dst_buffer = dl.read().local_brushes_gpu.buffer;
             staging_info.data_upload = brush_data.data();
             globals::stager.add_staging_task(staging_info);
-            wait_stager = true;
         }
-        //if(local_brush_data.size())
-        //    logger << logging::info_prefix << " uploaded local brushes: " << util::memory_view<const float>(local_brush_data.back().data()) << logging::endl;
     }
 
-    if(wait_stager)
+    if(brush_datas.size())
         globals::stager.wait_for_completion();
 }
 

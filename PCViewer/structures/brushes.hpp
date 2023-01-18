@@ -5,6 +5,7 @@
 #include <change_tracker.hpp>
 #include <buffer_info.hpp>
 #include <robin_hood.h>
+#include <vk_util.hpp>
 
 namespace structures{
 typedef uint32_t range_id;
@@ -48,6 +49,8 @@ using tracked_brushes = change_tracker<std::vector<tracked_brush>>;
 
 struct global_brushes: public tracked_brushes{
     buffer_info brushes_gpu{};
+    std::map<std::string_view, size_t> dataset_brush_info_offsets{};
+    VkDeviceAddress get_brush_info_address(std::string_view dataset) const {return util::vk::get_buffer_address(brushes_gpu)  + dataset_brush_info_offsets.at(dataset);}
 };
 
 struct brush_edit_data{

@@ -121,8 +121,8 @@ namespace scatterplot_wb{
     };
 
     struct attribute_pair{
-        int a;
-        int b;
+        std::string_view a;
+        std::string_view b;
 
         bool operator==(const attribute_pair& o) const {return a == o.a && b == o.b;}
         bool operator!=(const attribute_pair& o) const {return a != o.a || b != o.b;}

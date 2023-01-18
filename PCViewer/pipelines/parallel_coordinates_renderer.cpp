@@ -293,7 +293,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         uint32_t     data_flags;
     };
 
-    std::vector<std::string_view> active_ordered_attributes = info.workbench.get_active_ordered_attributes();     // these inlcude the order
+    const auto active_ordered_attributes = info.workbench.get_active_ordered_attributes();     // these inlcude the order
     //std::vector<std::string_view> active_attribute_indices = info.workbench.get_active_ordered_indices();     // these inlcude the order
 
     const auto& drawlists = globals::drawlists.read();
@@ -302,13 +302,13 @@ void parallel_coordinates_renderer::render(const render_info& info){
     size_t infos_byte_size{};
     for(const auto& dl_ref: info.workbench.drawlist_infos.read()){
         const auto& ds = dl_ref.dataset_read();
-        const auto active_attribute_indices = util::data::active_attributes_to_indices(active_ordered_attributes, ds.attributes);
+        const auto active_attribute_indices = util::data::active_attribute_refs_to_indices(active_ordered_attributes, ds.attributes);
         structures::dynamic_struct<attribute_infos_t, ImVec4> attribute_info(active_ordered_attributes.size());
         attribute_info->data_flags = {};
         for(int active_attribute_index: util::size_range(active_attribute_indices)){
             uint32_t cur_attribute_index = active_attribute_indices[active_attribute_index];
             attribute_info[active_attribute_index].x = float(cur_attribute_index);
-            const auto& att_ref = (info.workbench.attribute_order_infos | util::try_find_if<const structures::attribute_info>([&](auto a){return a.attribute_id == ds.attributes[cur_attribute_index].id;}))->get();
+            const auto& att_ref = (info.workbench.attribute_order_infos.read() | util::try_find_if<const structures::attribute_info>([&](auto a){return a.attribute_id == ds.attributes[cur_attribute_index].id;}))->get();
             attribute_info[active_attribute_index].y = att_ref.bounds->read().min;
             attribute_info[active_attribute_index].z = att_ref.bounds->read().max;
         }
@@ -397,14 +397,14 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 break;
             }
             case structures::parallel_coordinates_renderer::render_type::large_vis_lines:{
-                auto indices = util::data::active_attributes_to_indices(active_ordered_attributes, ds.attributes);
+                auto indices = util::data::active_attribute_refs_to_indices(active_ordered_attributes, ds.attributes);
                 int height = info.workbench.plot_data.read().height;
                 std::vector<int> bin_sizes = info.workbench.setting.read().render_splines ? std::vector<int>{config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res}: std::vector<int>{height, height};
                 size_t lines_amt = 1;
                 for(uint32_t s: bin_sizes)
                     lines_amt *= s;
 
-                for(int i: util::i_range(indices.size() - 1)){
+                for(size_t i: util::i_range(indices.size() - 1)){
                     std::vector<uint32_t> hist_indices;
                     std::vector<std::string_view> attribute_names;
                     std::vector<structures::min_max<float>> attribute_bounds; 
@@ -412,9 +412,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     push_constants_large_vis pc{};
                     pc.attribute_info_address = util::vk::get_buffer_address(attribute_infos_gpu) + ds_attribute_info_offsets[ds.id];
                     if(info.workbench.setting.read().render_splines){
-                        hist_indices = {indices[std::max<int>(int(i - 1), 0)], indices[i], indices[i + 1], indices[std::min<uint32_t>(i + 2, indices.size() - 1)]};
-                        attribute_names = {active_ordered_attributes[std::max<int>(int(i - 1), 0)], active_ordered_attributes[i], active_ordered_attributes[i + 1], active_ordered_attributes[std::min<uint32_t>(i + 2, indices.size() - 1)]};
-                        attribute_bounds = {info.workbench.get_attribute_order_info(attribute_names[0]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[1]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[2]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[3]).bounds->read()};
+                        hist_indices = {indices[std::max<int>(i - 1, size_t(0))], indices[i], indices[i + 1], indices[std::min(i + 2, indices.size() - 1)]};
+                        attribute_bounds = {active_ordered_attributes[std::max(i - 1, size_t(0))].get().bounds->read(), active_ordered_attributes[i].get().bounds->read(), active_ordered_attributes[i + 1].get().bounds->read(), active_ordered_attributes[std::min(i + 2, indices.size() - 1)].get().bounds->read()};
                         std::vector<uint32_t> ordering(hist_indices.size());
                         std::iota(ordering.begin(), ordering.end(), 0);
                         std::sort(ordering.begin(), ordering.end(), [&](uint32_t a, uint32_t b){return hist_indices[a] < hist_indices[b];});
@@ -430,8 +429,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     }
                     else{
                         hist_indices = {indices[i], indices[i + 1]};
-                        attribute_names = {active_ordered_attributes[i], active_ordered_attributes[i + 1]};
-                        attribute_bounds = {info.workbench.get_attribute_order_info(attribute_names[0]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[1]).bounds->read()};
+                        attribute_bounds = {active_ordered_attributes[i].get().bounds->read(), active_ordered_attributes[i + 1].get().bounds->read()};
                         pc.a_axis = indices[i] < indices[i + 1] ? i + 1 : i;
                         pc.b_axis = indices[i] < indices[i + 1] ? i : i + 1;
                         pc.a_size = bin_sizes[0];
@@ -506,7 +504,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 continue;
 
             const auto& ds = dl_info.dataset_read();
-            const auto active_indices = util::data::active_attributes_to_indices(active_ordered_attributes, ds.attributes);
+            const auto active_indices = util::data::active_attribute_refs_to_indices(active_ordered_attributes, ds.attributes);
             push_constants_hist_frag pc_frag{};
             pc_frag.bin_count = info.workbench.plot_data.read().height;
             pc_frag.blur_radius = info.workbench.setting.read().histogram_blur_width;
@@ -517,7 +515,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
                 uint32_t index = active_indices[i];
                 int bin_size = info.workbench.plot_data.read().height;
-                std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, info.workbench.get_attribute_order_info(active_ordered_attributes[i]).bounds->read(), false, false);
+                std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, active_ordered_attributes[i].get().bounds->read(), false, false);
                 {
                     auto hist_access = dl_info.drawlist_read().histogram_registry.const_access();
                     if(!hist_access->name_to_registry_key.contains(hist_id) || !hist_access->gpu_buffers.contains(hist_id)){

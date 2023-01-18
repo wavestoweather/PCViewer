@@ -67,14 +67,18 @@ extern structures::names_group      attribute_groups;
 namespace structures{
 using activation_tracker = change_tracker<bool>;
 using bounds_tracker = change_tracker<min_max<float>>;
+using color_tracker = change_tracker<ImVec4>;
 struct attribute_info{
     std::string_view                        attribute_id{};
     bool                                    linked_with_attribute{true};
     util::memory_view<activation_tracker>   active{};
     util::memory_view<bounds_tracker>       bounds{};
-    bool any_change() const {return active->changed || bounds->changed;}
-    void clear_change()     {active->changed = false; bounds->changed = false;}
+    util::memory_view<color_tracker>        color{};
+    bool any_change() const {return active->changed || bounds->changed || color->changed;}
+    void clear_change()     {active->changed = false; bounds->changed = false; color->changed = false;}
     DECL_ATTRIBUTE_READ(attribute_id);
     DECL_ATTRIBUTE_WRITE(attribute_id);
+
+    bool operator==(const attribute_info& o) const {return attribute_id == o.attribute_id && linked_with_attribute == o.linked_with_attribute && active == o.active && bounds == o.bounds;}
 };
 }

@@ -16,12 +16,15 @@ void scatterplot_workbench::_update_registered_histograms(){
         return;
 
     std::array<int, 2> bucket_sizes{int(settings.read().plot_width), int(settings.read().plot_width)};
-    auto active_indices = get_active_ordered_indices();
+    const auto active_attributes = get_active_ordered_attributes();
     for(const auto& dl: drawlist_infos.read()){
         if(dl.templatelist_read().data_size < settings.read().large_vis_threshold){
             _registered_histograms.erase(dl.drawlist_id);
             continue;
         }
+
+        const auto& ds = dl.dataset_read();
+        const auto active_indices = util::data::active_attribute_refs_to_indices(active_attributes, ds.attributes);
         
         // setting up the bin sizes
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
@@ -34,10 +37,10 @@ void scatterplot_workbench::_update_registered_histograms(){
 
             break;
         case plot_type_t::matrix:
-            for(size_t i: util::i_range(active_indices.size() - 1)){
-                for(size_t j: util::i_range(i + 1, active_indices.size())){
+            for(size_t i: util::i_range(active_attributes.size() - 1)){
+                for(size_t j: util::i_range(i + 1, active_attributes.size())){
                     indices = {active_indices[i], active_indices[j]};
-                    bounds = {attributes.read()[indices[0]].bounds.read(), attributes.read()[indices[1]].bounds.read()};
+                    bounds = {active_attributes[i].get().bounds->read(), active_attributes[j].get().bounds->read()};
                     auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, false);
                     size_t registrator_index = util::memory_view(_registered_histograms[dl.drawlist_id]).index_of([&registrator_id](const registered_histogram& h){return registrator_id == h.registry_id;});
                     if(registrator_index != util::memory_view<>::n_pos)
@@ -77,7 +80,6 @@ void scatterplot_workbench::_update_registered_histograms(){
 
 void scatterplot_workbench::_update_plot_images(){
     constexpr VkImageUsageFlags image_usage{VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT};
-    auto active_indices = get_active_ordered_indices();
     // waiting for the device to finish all command buffers using the image before statring to destroy/create plot images
     {
         for(auto& m: globals::vk_context.mutex_storage)
@@ -129,13 +131,13 @@ void scatterplot_workbench::_update_plot_images(){
 }
 
 void scatterplot_workbench::_update_plot_list(){
-    auto active_indices = get_active_ordered_indices();
+    auto active_attributes = get_active_ordered_attributes();
     plot_list().clear();
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
-        for(size_t i: util::i_range(size_t(1), active_indices.size())){
+        for(size_t i: util::i_range(size_t(1), active_attributes.size())){
             for(size_t j: util::i_range(i))
-                plot_list().emplace_back(attribute_pair{int(active_indices[i]), int(active_indices[j])});
+                plot_list().emplace_back(attribute_pair{active_attributes[i].get().attribute_id, active_attributes[j].get().attribute_id});
         }
         break;
     case plot_type_t::list:
@@ -161,7 +163,6 @@ void scatterplot_workbench::_render_plot(){
     drawlist_infos.changed = false;
     attribute_order_infos.changed = false;
     settings.changed = false;
-    attributes.changed = false;
     for(auto& [dl, registrators]: _registered_histograms){
         auto registry_lock = globals::drawlists.read().at(dl).read().histogram_registry.const_access();
         for(auto& registrator: registrators)
@@ -211,11 +212,15 @@ void scatterplot_workbench::show()
         return;
 
     // checking for setting updates and updating the rendering if necessary
+    _request_registrators_update |= attribute_order_infos.changed && std::any_of(attribute_order_infos.read().begin(), attribute_order_infos.read().end(), [](const auto& info){return info.active->changed;});
+
+    if(_request_registrators_update)
+        _update_registered_histograms();
+
     bool local_change{false};
     bool request_render{false};
     local_change |= drawlist_infos.changed;
     request_render |= local_change;
-    request_render |= attributes.changed;
     request_render |= attribute_order_infos.changed;
     if(attribute_order_infos.changed) _update_plot_list();
     request_render |= settings.changed;
@@ -225,30 +230,26 @@ void scatterplot_workbench::show()
             request_render |= globals::drawlists.read().at(dl.drawlist_id).changed;
     }
 
-    _request_registrators_update |= attributes.changed;
-
     if(request_render)
         _render_plot();
 
-    if(_request_registrators_update)
-        _update_registered_histograms();
 
     ImGui::Begin(id.data(), &active, ImGuiWindowFlags_HorizontalScrollbar);
 
-    const auto active_indices = get_active_ordered_indices();
-    if(_plot_x_vals.size() < active_indices.size()) _plot_x_vals.resize(active_indices.size());
+    const auto active_attributes = get_active_ordered_attributes();
+    if(_plot_x_vals.size() < active_attributes.size()) _plot_x_vals.resize(active_attributes.size());
     // plot views ------------------------------------------------------
-    attribute_pair  hovered_pair{-1, -1};
+    attribute_pair  hovered_pair{};
     ImVec4          hovered_rect{};
     switch(settings.read().plot_type){
     case plot_type_t::matrix:
         // matrix should be displayed as a left lower triangular matrix
-        for(size_t i: util::i_range(size_t(1), active_indices.size())){
+        for(size_t i: util::i_range(size_t(1), active_attributes.size())){
             ImVec2 text_pos = ImGui::GetCursorScreenPos(); text_pos.y += settings.read().plot_width / 2;
-            util::imgui::AddTextVertical(attributes.read()[active_indices[i]].display_name.c_str(), text_pos, .5f);
+            util::imgui::AddTextVertical(active_attributes[i].get().attribute_read().display_name.c_str(), text_pos, .5f);
             ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x + ImGui::GetTextLineHeightWithSpacing(), ImGui::GetCursorScreenPos().y});
             for(size_t j: util::i_range(i)){
-                attribute_pair p = {int(active_indices[i]), int(active_indices[j])};
+                attribute_pair p = {active_attributes[i].get().attribute_id, active_attributes[j].get().attribute_id};
                 if(!plot_datas.contains(p))
                     continue;
                 if(j != 0)  
@@ -277,7 +278,7 @@ void scatterplot_workbench::show()
                 _plot_x_vals[j] = c_pos.x;
             }
         }
-        for(int i: util::i_range(int(active_indices.size()) - 1)){
+        for(int i: util::i_range(int(active_attributes.size()) - 1)){
             if(i) ImGui::SameLine();
             float width = ImGui::CalcTextSize(attributes.read()[active_indices[i]].display_name.c_str()).x;
             ImGui::SetCursorScreenPos({_plot_x_vals[i] + settings.read().plot_width / 2.f - width / 2.f, ImGui::GetCursorScreenPos().y});
@@ -631,13 +632,13 @@ void scatterplot_workbench::signal_drawlist_update(const util::memory_view<std::
         _drawlists_updated = true;  // has to be done delayed as current plot imageas might be still in use and might have to be recreated
 }
 
-std::vector<uint32_t> scatterplot_workbench::get_active_ordered_indices(){
-    std::vector<uint32_t> indices;
+std::vector<scatterplot_workbench::const_attribute_info_ref> scatterplot_workbench::get_active_ordered_attributes() const{
+    std::vector<const_attribute_info_ref> attributes;
     for(const auto& i: attribute_order_infos.read()){
-        if(i.active)
-            indices.emplace_back(i.attribut_index);
+        if(i.active->read())
+            attributes.emplace_back(i);
     }
-    return indices;
+    return attributes;
 }
 
 bool scatterplot_workbench::all_registrators_updated() const{
@@ -649,5 +650,8 @@ bool scatterplot_workbench::all_registrators_updated() const{
         }
     }
     return true;
+}
+const scatterplot_workbench::attribute_order_info& scatterplot_workbench::get_attribute_order_info(std::string_view attribute) const{
+    return (attribute_order_infos.read() | util::try_find_if<const attribute_order_info>([&attribute](auto a){return a.attribute_id == attribute;}))->get();
 }
 }

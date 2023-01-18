@@ -84,13 +84,33 @@ inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(con
     return packed_header;
 }
 
-inline std::vector<uint32_t> active_attributes_to_indices(util::memory_view<std::string_view> active_attributes, util::memory_view<const structures::attribute> dataset_attributes){
+inline std::vector<uint32_t> active_attributes_to_indices(util::memory_view<const std::string_view> active_attributes, util::memory_view<const structures::attribute> dataset_attributes){
     std::vector<uint32_t> active_indices(active_attributes.size());
     for(auto&& [att, i]: util::enumerate(active_attributes)){
         auto at = att;
         active_indices[i] = static_cast<uint32_t>(dataset_attributes.index_of([at](const structures::attribute& a){return at == a.id;}));
     }
     return active_indices;
+}
+
+inline std::vector<uint32_t> active_attribute_refs_to_indices(util::memory_view<const std::reference_wrapper<const structures::attribute_info>> active_attributes, util::memory_view<const structures::attribute> dataset_attributes){
+    std::vector<uint32_t> active_indices(active_attributes.size());
+    for(auto&& [att, i]: util::enumerate(active_attributes)){
+        auto at = att;
+        active_indices[i] = static_cast<uint32_t>(dataset_attributes.index_of([at](const structures::attribute& a){return at.get().attribute_id == a.id;}));
+    }
+    return active_indices;
+}
+
+inline std::map<std::string_view, uint32_t> attribute_to_index(util::memory_view<const structures::attribute> attributes){
+    std::map<std::string_view, uint32_t> ret;
+    for(const auto& [att, i]: util::enumerate(attributes))
+        ret[att.id] = static_cast<uint32_t>(i);
+    return ret;
+}
+
+inline uint32_t attribute_to_index_single(const std::string_view attribute, util::memory_view<const structures::attribute> attributes){
+    return static_cast<uint32_t>(attributes.index_of([&attribute](const structures::attribute& a){return attribute == a.id;}));
 }
 }
 }

@@ -1171,6 +1171,9 @@ void check_dataset_deletion(){
                     globals::attributes().erase(att.id);
             }
 
+            // delete global brush infos offset to avoid empty string views
+            globals::global_brushes.dataset_brush_info_offsets.erase(ds);
+
             globals::datasets()[ds]().destroy_local_gpu_buffer();
             globals::datasets().erase(ds);
         }

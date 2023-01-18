@@ -241,7 +241,7 @@ return_t<iter> sort(iter begin, iter end, iter tmp_begin, transformer_t t = {}){
 template<int radix_size_pref = -1, typename T>
 void sort(std::vector<T>& v){
 	std::vector<T> tmp(v.size());
-	auto [b, e] = sort<radix_size_pref>(v.begin(), v.end());
+	auto [b, e] = sort<radix_size_pref>(v.begin(), v.end(), tmp.begin());
 	if(&*b != &*v.begin())	// result lies in tmp
 		v = std::move(tmp);
 }
@@ -282,8 +282,8 @@ return_t<iter> sort_indirect(iter begin, iter end, iter tmp_begin, user_functor 
 	if(all_one_bin)
 		return {begin, end};
 
-	int start_pass = std::find(sorted.begin(), sorted.end(), false) - sorted.begin();
-	int last_pass = (sorted.rend() - std::find(sorted.rbegin(), sorted.rend(), false)) - 1;
+	int start_pass = static_cast<int>(std::find(sorted.begin(), sorted.end(), false) - sorted.begin());
+	int last_pass = static_cast<int>((sorted.rend() - std::find(sorted.rbegin(), sorted.rend(), false)) - 1);
 	assert(start_pass <= last_pass);
 
 	iter from = begin;

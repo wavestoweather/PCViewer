@@ -1,4 +1,4 @@
-#pragma ocne
+#pragma once
 #include <memory_view.hpp>
 #include <vk_context.hpp>
 #include <robin_hood.h>

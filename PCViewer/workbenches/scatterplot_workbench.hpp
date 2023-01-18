@@ -11,9 +11,10 @@ public:
     using drawlist_info = structures::scatterplot_wb::drawlist_info;
     using plot_data_t = structures::scatterplot_wb::plot_data_t;
     using plot_additional_data_t = structures::scatterplot_wb::plot_additional_data_t;
-    using attribute_order_info = structures::attribute_order_info;
+    using attribute_order_info = structures::attribute_info;
     using attribute_pair = structures::scatterplot_wb::attribute_pair;
     template<typename T> using changing_vector = structures::change_tracker<std::vector<T>>;
+    using const_attribute_info_ref = std::reference_wrapper<const attribute_order_info>;
 private:
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
@@ -41,7 +42,6 @@ public:
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};
     robin_hood::unordered_map<attribute_pair, plot_data_t>  plot_datas{};
     robin_hood::unordered_map<attribute_pair, plot_additional_data_t> plot_additional_datas{};
-    changing_vector<structures::attribute>                  attributes{};
     changing_vector<attribute_order_info>                   attribute_order_infos{};
     changing_vector<attribute_pair>                         plot_list{};    // is used when plot_type is switched to list mode
 
@@ -64,7 +64,8 @@ public:
     void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
     void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
 
-    std::vector<uint32_t>   get_active_ordered_indices();
-    bool                    all_registrators_updated() const;
+    std::vector<const_attribute_info_ref> get_active_ordered_attributes() const;
+    bool                        all_registrators_updated() const;
+    const attribute_order_info& get_attribute_order_info(std::string_view attribute) const;
 };
 }

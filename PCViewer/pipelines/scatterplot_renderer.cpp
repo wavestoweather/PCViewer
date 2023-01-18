@@ -3,6 +3,7 @@
 #include <global_descriptor_set_util.hpp>
 #include <scatterplot_workbench.hpp>
 #include <histogram_registry_util.hpp>
+#include <data_util.hpp>
 
 namespace pipelines{
 scatterplot_renderer::scatterplot_renderer()
@@ -259,12 +260,12 @@ void scatterplot_renderer::render(const render_info& info){
                 push_constants_large_vis pc{};
                 {
                     std::array<int, 2> bin_sizes{int(p_key.width), int(p_key.width)};
-                    std::array<structures::min_max<float>, 2> min_max{info.workbench.attributes.read()[axis_pair.a].bounds.read(), info.workbench.attributes.read()[axis_pair.b].bounds.read()};
+                    std::array<structures::min_max<float>, 2> min_max{info.workbench.get_attribute_order_info(axis_pair.a).bounds->read(), info.workbench.get_attribute_order_info(axis_pair.b).bounds->read()};
                     auto hist_access = dl.drawlist_read().histogram_registry.const_access();
                     std::string histogram_id = util::histogram_registry::get_id_string(util::memory_view(&axis_pair.a, 2), bin_sizes, min_max, false, false);
                     if(!hist_access->name_to_registry_key.contains(histogram_id)){
                         if(logger.logging_level > logging::level::l_4)
-                            logger << logging::warning_prefix << " scatterplot_renderer::render() Missing histogram for attributes " << info.workbench.attributes.read()[axis_pair.a].display_name << "|" << info.workbench.attributes.read()[axis_pair.b].display_name << " for drawwlist " << dl.drawlist_id << logging::endl;
+                            logger << logging::warning_prefix << " scatterplot_renderer::render() Missing histogram for attributes " << axis_pair.a << "|" << axis_pair.b << " for drawwlist " << dl.drawlist_id << logging::endl;
                         continue;
                     }
                     pc.flip_axes = axis_pair.a > axis_pair.b;
@@ -281,12 +282,12 @@ void scatterplot_renderer::render(const render_info& info){
                 pc.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
                 pc.index_buffer_address = util::vk::get_buffer_address(dl.templatelist_read().gpu_indices);
                 pc.activation_bitset_address = util::vk::get_buffer_address(dl.drawlist_read().active_indices_bitset_gpu);
-                pc.attribute_a = axis_pair.a;
-                pc.attribute_b = axis_pair.b;
-                pc.a_min = info.workbench.attributes.read()[axis_pair.a].bounds.read().min;
-                pc.a_max = info.workbench.attributes.read()[axis_pair.a].bounds.read().max;
-                pc.b_min = info.workbench.attributes.read()[axis_pair.b].bounds.read().min;
-                pc.b_max = info.workbench.attributes.read()[axis_pair.b].bounds.read().max;
+                pc.attribute_a = util::data::attribute_to_index_single(axis_pair.a, dl.dataset_read().attributes);
+                pc.attribute_b = util::data::attribute_to_index_single(axis_pair.b, dl.dataset_read().attributes);
+                pc.a_min = info.workbench.get_attribute_order_info(axis_pair.a).bounds->read().min;
+                pc.a_max = info.workbench.get_attribute_order_info(axis_pair.a).bounds->read().max;
+                pc.b_min = info.workbench.get_attribute_order_info(axis_pair.b).bounds->read().min;
+                pc.b_max = info.workbench.get_attribute_order_info(axis_pair.b).bounds->read().max;
                 pc.flip_axes = 1;   // always flip, as major axis is y axis
                 pc.form = static_cast<uint32_t>(dl.scatter_appearance.read().splat);
                 pc.radius = dl.scatter_appearance.read().radius;

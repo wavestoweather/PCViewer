@@ -10,14 +10,15 @@ class flat_set{
 
 public:
     flat_set() = default;
-    flat_set(std::vector<T>&& e): _elements(std::move(e)) {if(_elements.size() > 1) radix::sort(_elements);}
-    flat_set(const std::vector<T>& e): _elements(e) {if(_elements.size() > 1) radix::sort(_elements);}
+    flat_set(size_t size): _elements(size) {}
+    flat_set(std::vector<T>&& e): _elements(std::move(e)) {if(_elements.size() > 1){if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
+    flat_set(const std::vector<T>& e): _elements(e) {if(_elements.size() > 1) {if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
     template<typename U>
-    flat_set(U begin, U end): _elements(begin, end) {if(_elements.size() > 1) radix::sort(_elements);}
+    flat_set(U begin, U end): _elements(begin, end) {if(_elements.size() > 1) {if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
 
     size_t size() const             {return _elements.size();}
-    std::vector<T>::iterator begin(){return _elements.begin();}
-    std::vector<T>::iterator end()  {return _elements.end();}
+    decltype(_elements.begin()) begin(){return _elements.begin();}
+    decltype(_elements.end())   end()  {return _elements.end();}
     bool contains(const T& v) const {return std::binary_search(_elements.begin(), _elements.end(), v);}
 
     flat_set<T>& operator&=(const flat_set<T>& o) {std::vector<T> res(_elements.size() + o._elements.size()); auto it = std::set_intersection(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res.begin()); res.resize(it - res.begin()); _elements = std::move(res); return *this;}

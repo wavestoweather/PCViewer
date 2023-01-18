@@ -6,7 +6,7 @@
 namespace structures{
 namespace violins{
 using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
-using attribute_order_info = structures::attribute_order_info;
+using attribute_order_info = structures::attribute_info;
 
 struct drawlist_attribute{
     std::string_view dl;
@@ -72,10 +72,9 @@ struct violin_appearance_t{
 };
 
 struct session_common{
-    std::vector<attribute>                      attributes{};
-    std::vector<attribute_order_info>           attribute_order_infos{};
-    mutable std::vector<violin_appearance_t>    attribute_violin_appearances{};
-    std::vector<uint8_t>                        attribute_log{};
+    std::vector<attribute_order_info>                       attribute_order_infos{};
+    mutable std::map<std::string_view, violin_appearance_t> attribute_violin_appearances{};
+    std::map<std::string_view ,uint8_t>                     attribute_log{};
 };
 struct drawlist_session_state_t: public session_common{
     std::map<std::string_view, drawlist_info>   drawlists{};

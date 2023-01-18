@@ -12,6 +12,7 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     using drawlist_info = structures::parallel_coordinates_renderer::drawlist_info;
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
     using attribute_order_info_t = structures::attribute_info;
+    using const_attribute_info_ref = std::reference_wrapper<const attribute_order_info_t>;
 
     // both are unique_ptrs to avoid issues with the memory_views when data elements are deleted in the vector
     std::vector<std::unique_ptr<appearance_tracker>>        _storage_appearance;
@@ -105,7 +106,7 @@ public:
     parallel_coordinates_workbench(const std::string_view id);
 
     void                        render_plot();
-    std::vector<std::string_view> get_active_ordered_attributes() const;
+    std::vector<const_attribute_info_ref> get_active_ordered_attributes() const;
     const attribute_order_info_t& get_attribute_order_info(std::string_view attribute) const;
     bool                        all_registrators_updated() const;
 

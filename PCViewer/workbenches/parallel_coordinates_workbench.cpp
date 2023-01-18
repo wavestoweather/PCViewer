@@ -79,7 +79,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
     for(const auto& dl: drawlist_infos.read()){
         // active indices can only be calculated for a dataset as the attribute ordering in meory has to be considered
         const auto& attributes = dl.dataset_read().attributes;
-        const auto active_indices = util::data::active_attributes_to_indices(active_attributes, attributes);
+        const auto active_indices = util::data::active_attribute_refs_to_indices(active_attributes, attributes);
         // setting the flag for resorting priority rendering
         if(dl.priority_render){
             dl.drawlist_write().delayed_ops.delayed_ops_done = false;
@@ -100,12 +100,12 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             int height = plot_data.read().height;
             if(setting.read().render_splines){
                 indices = {active_indices[std::max(static_cast<uint32_t>(i) - 1, 0u)], active_indices[i], active_indices[i + 1], active_indices[std::min(static_cast<uint32_t>(i) + 2, static_cast<uint32_t>(active_indices.size()) - 1)]};
-                bounds = {attributes[indices[0]].bounds.read(), attributes[indices[1]].bounds.read(), attributes[indices[2]].bounds.read(), attributes[indices[3]].bounds.read()};
+                bounds = {active_attributes[std::max(i - 1, size_t(0))].get().bounds->read(), active_attributes[i].get().bounds->read(), active_attributes[i + 1].get().bounds->read(), active_attributes[std::min(i, active_attributes.size() - 1)].get().bounds->read()};
                 bucket_sizes = {config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res};
             }
             else{
                 indices = {active_indices[i], active_indices[i + 1]};
-                bounds = {attributes[indices[0]].bounds.read(), attributes[indices[1]].bounds.read()};
+                bounds = {active_attributes[i].get().bounds->read(), active_attributes[i].get().bounds->read()};
                 bucket_sizes = {height, height};
             }
             bool max_needed = dl.priority_render;
@@ -150,7 +150,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         }
 
         const auto& attributes = dl.dataset_read().attributes;
-        const auto active_indices = util::data::active_attributes_to_indices(active_attributes, attributes);
+        const auto active_indices = util::data::active_attribute_refs_to_indices(active_attributes, attributes);
 
         std::vector<bool> registrator_needed(_registered_axis_histograms[dl.drawlist_id].size(), false);
         for(uint32_t i: active_indices){
@@ -213,7 +213,7 @@ void parallel_coordinates_workbench::_update_attribute_order_infos(){
     auto attributes_to_add = new_attributes / old_attributes;
     
     // deleting all removed attributes in sorting order
-    for(size_t i: util::rev_size_range(attribute_order_infos)){
+    for(size_t i: util::rev_size_range(attribute_order_infos.read())){
         if(!new_attributes.contains(attribute_order_infos.read()[i].attribute_id)){
             if(!attribute_order_infos.read()[i].linked_with_attribute)
                 bool todo = true;
@@ -223,7 +223,7 @@ void parallel_coordinates_workbench::_update_attribute_order_infos(){
     // adding new attribute references
     for(std::string_view att: attributes_to_add){
         auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
-        attribute_order_infos().emplace_back(attribute_order_info_t{att, true, {attribute.active}, {attribute.bounds}});
+        attribute_order_infos().emplace_back(attribute_order_info_t{att, true, attribute.active, attribute.bounds});
     }
 }
 
@@ -516,7 +516,7 @@ void parallel_coordinates_workbench::show(){
             if(place_of_attribute.count(brush.attr) == 0)
                 continue;   // attribute not active
 
-            const auto& att_ref = (attribute_order_infos | util::try_find_if<const attribute_order_info_t>([&brush](auto& i){return i.attribute_id == brush.attr;}))->get();
+            const auto& att_ref = (attribute_order_infos.read() | util::try_find_if<const attribute_order_info_t>([&brush](auto& i){return i.attribute_id == brush.attr;}))->get();
             
             float x = brush_gap * place_of_attribute[brush.attr] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
 
@@ -1019,16 +1019,16 @@ void parallel_coordinates_workbench::render_plot()
     }
 }
 
-std::vector<std::string_view> parallel_coordinates_workbench::get_active_ordered_attributes() const{
-    std::vector<std::string_view> attributes;
+std::vector<parallel_coordinates_workbench::const_attribute_info_ref> parallel_coordinates_workbench::get_active_ordered_attributes() const{
+    std::vector<const_attribute_info_ref> attributes;
     for(const auto& i: attribute_order_infos.read()){
         if(i.active->read())
-            attributes.emplace_back(i.attribute_id);
+            attributes.emplace_back(i);
     }
     return attributes;
 }
 const parallel_coordinates_workbench::attribute_order_info_t& parallel_coordinates_workbench::get_attribute_order_info(std::string_view attribute) const{
-    return (attribute_order_infos | util::try_find_if<const attribute_order_info_t>([&attribute](auto a){return a.attribute_id == attribute;}))->get();
+    return (attribute_order_infos.read() | util::try_find_if<const attribute_order_info_t>([&attribute](auto a){return a.attribute_id == attribute;}))->get();
 }
 
 bool parallel_coordinates_workbench::all_registrators_updated() const{
