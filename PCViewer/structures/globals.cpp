@@ -826,6 +826,7 @@ void histogram_counter::_task_thread_function(){
             stop_watch.start();
         }
         auto& dl = globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track();
+        const auto& ds = dl.dataset_read();
         size_t dataset_size = dl.dataset_read().gpu_stream_infos ? dl.dataset_read().gpu_stream_infos->cur_block_size: dl.const_templatelist().data_size;
         
         // calulate priority distances if requested
@@ -844,7 +845,7 @@ void histogram_counter::_task_thread_function(){
             distance_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
             distance_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
             distance_info.distances_address = util::vk::get_buffer_address(dl.priority_colors_gpu);
-            distance_info.priority_attribute = globals::priority_center_attribute_id;
+            distance_info.priority_attribute = util::memory_view(ds.attributes).index_of([](const auto& a){return a.id == globals::priority_center_attribute_id;});
             distance_info.priority_center = globals::priority_center_vealue;
             distance_info.priority_distance = globals::priority_center_distance;
             pipelines::distance_calculator::instance().calculate(distance_info);
@@ -1041,6 +1042,7 @@ void priority_sorter::_task_thread_function(){
             std::string standard_string(globals::priority_drawlist_standard_order);
             // calculating priority colors and ordering the indices
             const auto& tl = dl.const_templatelist();
+            const auto& ds = dl.dataset_read();
             const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
             const auto& dl_read = globals::drawlists.read().at(cur->dl_id).read();
             std::vector<uint8_t> color_index(tl.data_size);

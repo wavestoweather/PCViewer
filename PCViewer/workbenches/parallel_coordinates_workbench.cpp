@@ -1027,6 +1027,9 @@ std::vector<std::string_view> parallel_coordinates_workbench::get_active_ordered
     }
     return attributes;
 }
+const parallel_coordinates_workbench::attribute_order_info_t& parallel_coordinates_workbench::get_attribute_order_info(std::string_view attribute) const{
+    return (attribute_order_infos | util::try_find_if<const attribute_order_info_t>([&attribute](auto a){return a.attribute_id == attribute;}))->get();
+}
 
 bool parallel_coordinates_workbench::all_registrators_updated() const{
     // if histogram rendering requested and not yet finished delay rendering

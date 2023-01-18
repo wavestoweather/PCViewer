@@ -8,6 +8,7 @@
 #include <min_max.hpp>
 #include <group.hpp>
 #include <imgui.h>
+#include <memory_view.hpp>
 
 #define DECL_ATTRIBUTE_READ(att_id)   const structures::attribute&  attribute_read() const  {return globals::attributes.read().at(att_id).read();}
 #define DECL_ATTRIBUTE_WRITE(att_id)        structures::attribute&  attribute_write()       {return globals::attributes()[att_id]();}

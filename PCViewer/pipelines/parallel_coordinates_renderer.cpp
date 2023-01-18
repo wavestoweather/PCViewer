@@ -11,6 +11,7 @@
 #include <histogram_registry_util.hpp>
 #include <splines.hpp>
 #include <priority_globals.hpp>
+#include <data_util.hpp>
 
 namespace pipelines
 {
@@ -286,32 +287,52 @@ parallel_coordinates_renderer& parallel_coordinates_renderer::instance(){
 }
 
 void parallel_coordinates_renderer::render(const render_info& info){
-    struct attribute_infos{
+    struct attribute_infos_t{
         uint32_t     attribute_count;                // amount of active attributes
         uint32_t     _t, __t;
         uint32_t     data_flags;
     };
 
-    std::vector<std::string_view> active_attributes = info.workbench.get_active_ordered_attributes();     // these inlcude the order
-    std::vector<std::string_view> active_attribute_indices = info.workbench.get_active_ordered_indices();     // these inlcude the order
+    std::vector<std::string_view> active_ordered_attributes = info.workbench.get_active_ordered_attributes();     // these inlcude the order
+    //std::vector<std::string_view> active_attribute_indices = info.workbench.get_active_ordered_indices();     // these inlcude the order
 
     const auto& drawlists = globals::drawlists.read();
 
-    structures::dynamic_struct<attribute_infos, ImVec4> attribute_infos(active_attribute_indices.size());
-    attribute_infos->attribute_count = active_attribute_indices.size();
-    attribute_infos->data_flags = {};
-    for(int active_attribute_index: util::size_range(active_attribute_indices)){
-        uint32_t cur_attribute_index = active_attribute_indices[active_attribute_index];
-        attribute_infos[active_attribute_index].x = float(cur_attribute_index);
-        attribute_infos[active_attribute_index].y = info.workbench.attributes.read()[cur_attribute_index].bounds.read().min;
-        attribute_infos[active_attribute_index].z = info.workbench.attributes.read()[cur_attribute_index].bounds.read().max;
+    std::map<std::string_view, structures::dynamic_struct<attribute_infos_t, ImVec4>> attribute_infos;
+    size_t infos_byte_size{};
+    for(const auto& dl_ref: info.workbench.drawlist_infos.read()){
+        const auto& ds = dl_ref.dataset_read();
+        const auto active_attribute_indices = util::data::active_attributes_to_indices(active_ordered_attributes, ds.attributes);
+        structures::dynamic_struct<attribute_infos_t, ImVec4> attribute_info(active_ordered_attributes.size());
+        attribute_info->data_flags = {};
+        for(int active_attribute_index: util::size_range(active_attribute_indices)){
+            uint32_t cur_attribute_index = active_attribute_indices[active_attribute_index];
+            attribute_info[active_attribute_index].x = float(cur_attribute_index);
+            const auto& att_ref = (info.workbench.attribute_order_infos | util::try_find_if<const structures::attribute_info>([&](auto a){return a.attribute_id == ds.attributes[cur_attribute_index].id;}))->get();
+            attribute_info[active_attribute_index].y = att_ref.bounds->read().min;
+            attribute_info[active_attribute_index].z = att_ref.bounds->read().max;
+        }
+        infos_byte_size += attribute_info.byte_size();
+        attribute_infos.insert({std::string_view(ds.id), std::move(attribute_info)});
     }
-    auto attribute_infos_gpu = get_or_resize_info_buffer(attribute_infos.data().byte_size());
+
+    // creating contiguos upload data
+    std::map<std::string_view, size_t> ds_attribute_info_offsets;
+    std::vector<uint8_t> info_bytes(infos_byte_size);
+    size_t infos_byte_offset{};
+    for(const auto& [ds, att_info]: attribute_infos){
+        ds_attribute_info_offsets[ds] = infos_byte_offset;
+        std::copy(att_info.data().begin(), att_info.data().end(), info_bytes.begin() + infos_byte_offset);
+        infos_byte_offset += att_info.byte_size();
+    }
+    assert(infos_byte_offset == info_bytes.size());
 
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);  // wait indefenitely for prev rendering
     vkResetFences(globals::vk_context.device, 1, &_render_fence);
 
-    util::vma::upload_data(attribute_infos.data(), attribute_infos_gpu);
+    auto attribute_infos_gpu = get_or_resize_info_buffer(infos_byte_size);
+
+    util::vma::upload_data(info_bytes, attribute_infos_gpu);
     if(_render_commands.size())
         vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
     _render_commands.resize(1);
@@ -361,7 +382,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
             switch(out_specs.render_typ){
             case structures::parallel_coordinates_renderer::render_type::polyline_spline:{
                 push_constants pc{};
-                pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
+                pc.attribute_info_address = util::vk::get_buffer_address(attribute_infos_gpu) + ds_attribute_info_offsets[ds.id];
                 pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
                 if(dl.priority_render)
                     pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
@@ -369,14 +390,14 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 if(dl.priority_render)
                     pc.index_order_address = util::vk::get_buffer_address(drawlist.priority_indices.at(std::string(globals::priority_drawlist_standard_order)));
                 pc.activation_bitset_address = util::vk::get_buffer_address(drawlist.active_indices_bitset_gpu);
-                pc.vertex_count_per_line = (active_attribute_indices.size() - 1) * (info.workbench.setting.read().render_splines ? _spline_resolution: 1) + 1;
+                pc.vertex_count_per_line = (active_ordered_attributes.size() - 1) * (info.workbench.setting.read().render_splines ? _spline_resolution: 1) + 1;
                 pc.color = dl.appearance->read().color;
                 vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
                 vkCmdDraw(_render_commands.back(), pc.vertex_count_per_line, cur_batch_size, 0, cur_offset);
                 break;
             }
             case structures::parallel_coordinates_renderer::render_type::large_vis_lines:{
-                auto indices = info.workbench.get_active_ordered_indices();
+                auto indices = util::data::active_attributes_to_indices(active_ordered_attributes, ds.attributes);
                 int height = info.workbench.plot_data.read().height;
                 std::vector<int> bin_sizes = info.workbench.setting.read().render_splines ? std::vector<int>{config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res}: std::vector<int>{height, height};
                 size_t lines_amt = 1;
@@ -385,13 +406,15 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
                 for(int i: util::i_range(indices.size() - 1)){
                     std::vector<uint32_t> hist_indices;
+                    std::vector<std::string_view> attribute_names;
                     std::vector<structures::min_max<float>> attribute_bounds; 
 
                     push_constants_large_vis pc{};
-                    pc.attribute_info_address = util::vk::get_buffer_address(_attribute_info_buffer);
+                    pc.attribute_info_address = util::vk::get_buffer_address(attribute_infos_gpu) + ds_attribute_info_offsets[ds.id];
                     if(info.workbench.setting.read().render_splines){
                         hist_indices = {indices[std::max<int>(int(i - 1), 0)], indices[i], indices[i + 1], indices[std::min<uint32_t>(i + 2, indices.size() - 1)]};
-                        attribute_bounds = {info.workbench.attributes.read()[hist_indices[0]].bounds.read(), info.workbench.attributes.read()[hist_indices[1]].bounds.read(), info.workbench.attributes.read()[hist_indices[2]].bounds.read(), info.workbench.attributes.read()[hist_indices[3]].bounds.read()};
+                        attribute_names = {active_ordered_attributes[std::max<int>(int(i - 1), 0)], active_ordered_attributes[i], active_ordered_attributes[i + 1], active_ordered_attributes[std::min<uint32_t>(i + 2, indices.size() - 1)]};
+                        attribute_bounds = {info.workbench.get_attribute_order_info(attribute_names[0]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[1]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[2]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[3]).bounds->read()};
                         std::vector<uint32_t> ordering(hist_indices.size());
                         std::iota(ordering.begin(), ordering.end(), 0);
                         std::sort(ordering.begin(), ordering.end(), [&](uint32_t a, uint32_t b){return hist_indices[a] < hist_indices[b];});
@@ -407,7 +430,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     }
                     else{
                         hist_indices = {indices[i], indices[i + 1]};
-                        attribute_bounds = {info.workbench.attributes.read()[hist_indices[0]].bounds.read(), info.workbench.attributes.read()[hist_indices[1]].bounds.read()};
+                        attribute_names = {active_ordered_attributes[i], active_ordered_attributes[i + 1]};
+                        attribute_bounds = {info.workbench.get_attribute_order_info(attribute_names[0]).bounds->read(), info.workbench.get_attribute_order_info(attribute_names[1]).bounds->read()};
                         pc.a_axis = indices[i] < indices[i + 1] ? i + 1 : i;
                         pc.b_axis = indices[i] < indices[i + 1] ? i : i + 1;
                         pc.a_size = bin_sizes[0];
@@ -460,7 +484,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
             if(dl.appearance->read().show_histogram)
                 ++active_histogram_count;
         }
-        float histogram_distance = (2. - info.workbench.setting.read().histogram_width) / (active_attribute_indices.size() - 1);
+        float histogram_distance = (2. - info.workbench.setting.read().histogram_width) / (active_ordered_attributes.size() - 1);
         float drawlist_histogram_width = info.workbench.setting.read().histogram_width / active_histogram_count;
         output_specs out_specs{
             info.workbench.plot_data.read().image_view,
@@ -481,17 +505,19 @@ void parallel_coordinates_renderer::render(const render_info& info){
             if(!dl_info.appearance->read().show_histogram)
                 continue;
 
+            const auto& ds = dl_info.dataset_read();
+            const auto active_indices = util::data::active_attributes_to_indices(active_ordered_attributes, ds.attributes);
             push_constants_hist_frag pc_frag{};
             pc_frag.bin_count = info.workbench.plot_data.read().height;
             pc_frag.blur_radius = info.workbench.setting.read().histogram_blur_width;
             pc_frag.color = dl_info.appearance->read().color;
             pc_frag.mapping_type = static_cast<uint32_t>(info.workbench.setting.read().hist_type);
-            for(int i: util::size_range(active_attribute_indices)){
+            for(int i: util::size_range(active_indices)){
                 float x_base = -1. + i * histogram_distance + histogram_offset;
 
-                uint32_t index = active_attribute_indices[i];
+                uint32_t index = active_indices[i];
                 int bin_size = info.workbench.plot_data.read().height;
-                std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, info.workbench.attributes.read()[index].bounds.read(), false, false);
+                std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, info.workbench.get_attribute_order_info(active_ordered_attributes[i]).bounds->read(), false, false);
                 {
                     auto hist_access = dl_info.drawlist_read().histogram_registry.const_access();
                     if(!hist_access->name_to_registry_key.contains(hist_id) || !hist_access->gpu_buffers.contains(hist_id)){
