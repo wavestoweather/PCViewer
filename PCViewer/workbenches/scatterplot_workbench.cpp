@@ -366,7 +366,7 @@ void scatterplot_workbench::show()
     }
     if(ImGui::IsMouseDown(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none &&
         util::distance(_last_lasso_point, ImGui::GetMousePos()) > globals::brush_edit_data.drag_threshold &&
-        _started_lasso_attributes == hovered_pair){
+        _started_lasso_attributes && _started_lasso_attributes == hovered_pair){
         auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.a && e.attr2 == hovered_pair.b;});
         if(polygon.borderPoints.empty())
             polygon.borderPoints.emplace_back(get_attr_pos(_last_lasso_point));
@@ -567,8 +567,8 @@ void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_vi
     _update_attribute_order_infos();
     //_update_plot_list();
 
-    //// checking histogram (large vis/axis histograms) rendering or standard rendering
-    //_update_registered_histograms();
+    // checking histogram (large vis/axis histograms) rendering or standard rendering
+    _update_registered_histograms();
 }
 
 void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info){

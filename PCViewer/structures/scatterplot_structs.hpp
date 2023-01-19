@@ -126,6 +126,7 @@ namespace scatterplot_wb{
 
         bool operator==(const attribute_pair& o) const {return a == o.a && b == o.b;}
         bool operator!=(const attribute_pair& o) const {return a != o.a || b != o.b;}
+        operator bool() const {return a.size() && b.size();}
     };
 
     struct pipeline_data{
