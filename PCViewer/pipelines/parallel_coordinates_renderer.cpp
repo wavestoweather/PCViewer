@@ -375,10 +375,10 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 push_constants pc{};
                 pc.attribute_info_address = util::vk::get_buffer_address(attribute_infos_gpu) + ds_attribute_info_offsets[ds.id];
                 pc.data_header_address = util::vk::get_buffer_address(ds.gpu_data.header);
-                if(dl.priority_render)
+                if(dl.priority_render.read())
                     pc.priorities_address = util::vk::get_buffer_address(drawlist.priority_colors_gpu);
                 pc.index_buffer_address = util::vk::get_buffer_address(drawlist.const_templatelist().gpu_indices);
-                if(dl.priority_render)
+                if(dl.priority_render.read())
                     pc.index_order_address = util::vk::get_buffer_address(drawlist.priority_indices.at(std::string(globals::priority_drawlist_standard_order)));
                 pc.activation_bitset_address = util::vk::get_buffer_address(drawlist.active_indices_bitset_gpu);
                 pc.vertex_count_per_line = (active_ordered_attributes.size() - 1) * (info.workbench.setting.read().render_splines ? _spline_resolution: 1) + 1;
@@ -428,8 +428,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
                         pc.line_verts = 2;
                     }
                     // getting the correct hist information
-                    bool is_max_hist = dl.priority_render;
-                    pc.priority_rendering = dl.priority_render;
+                    bool is_max_hist = dl.priority_render.read();
+                    pc.priority_rendering = dl.priority_render.read();
                     std::string id = util::histogram_registry::get_id_string(hist_indices, bin_sizes, attribute_bounds, false, is_max_hist);
                     {
                         auto hist_access = drawlist.histogram_registry.const_access();

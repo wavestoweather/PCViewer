@@ -22,8 +22,6 @@ class parallel_coordinates_workbench: public structures::workbench, public struc
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_axis_histograms;
     bool                                                     _select_priority_center_single{false};
     bool                                                     _select_priority_center_all{false};
-    bool                                                     _request_registered_histograms_update{false};      // should be obsolete
-    bool                                                     _request_registered_histograms_update_var{false};  // should be obsolete
 
     void _update_plot_image();
     void _draw_setting_list();

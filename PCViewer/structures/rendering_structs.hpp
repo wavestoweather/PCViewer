@@ -78,7 +78,7 @@ namespace parallel_coordinates_renderer{
         bool                                    linked_with_drawlist;
         util::memory_view<appearance_tracker>   appearance;
         util::memory_view<median_tracker>       median;
-        bool                                    priority_render;
+        change_tracker<bool>                    priority_render;
 
         bool any_change() const {return appearance->changed || median->changed;}
         void clear_change()     {appearance->changed = false; median->changed = false;}

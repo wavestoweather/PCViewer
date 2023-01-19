@@ -81,7 +81,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         const auto& attributes = dl.dataset_read().attributes;
         const auto active_indices = util::data::active_attribute_refs_to_indices(active_attributes, attributes);
         // setting the flag for resorting priority rendering
-        if(dl.priority_render){
+        if(dl.priority_render.read()){
             dl.drawlist_write().delayed_ops.delayed_ops_done = false;
             dl.drawlist_write().delayed_ops.priority_sorting_done = false;
             dl.drawlist_write().delayed_ops.priority_rendering_sorting_started = false;
@@ -105,10 +105,10 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             }
             else{
                 indices = {active_indices[i], active_indices[i + 1]};
-                bounds = {active_attributes[i].get().bounds->read(), active_attributes[i].get().bounds->read()};
+                bounds = {active_attributes[i].get().bounds->read(), active_attributes[i + 1].get().bounds->read()};
                 bucket_sizes = {height, height};
             }
-            bool max_needed = dl.priority_render;
+            bool max_needed = dl.priority_render.read();
             auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, max_needed);
             int registrator_index{-1};
             for(size_t j: util::size_range(_registered_histograms[dl.drawlist_id])){
@@ -167,7 +167,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
                 registrator_needed[registrator_index] = true;
             else{
                 auto& drawlist = dl.drawlist_write();
-                _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, attributes[i].bounds.read(), false, false, false));
+                _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, active_attributes[i].get().bounds->read(), false, false, false));
                 registrator_needed.push_back(true);
             }
         }
@@ -187,8 +187,11 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             registry_lock->request_change_all();
         }
     }
-    _request_registered_histograms_update = false;
-    _request_registered_histograms_update_var = false;
+    for(auto& att: attribute_order_infos())
+        att.clear_change();
+    attribute_order_infos.changed = false;
+    for(auto& dl: drawlist_infos.ref_no_track())
+        dl.priority_render.changed = false;
 }
 
 void parallel_coordinates_workbench::_update_attribute_order_infos(){
@@ -249,6 +252,8 @@ void parallel_coordinates_workbench::show(){
     bool any_drawlist_change{false};
     bool local_change{false};
     bool request_render{false};
+    bool request_registered_histograms_update{false};
+    bool request_registered_histograms_update_var{false};
     for(const auto& dl_info: drawlist_infos.read()){
         const auto& dl = globals::drawlists.read().at(dl_info.drawlist_id);
         if(!dl.changed && !dl_info.linked_with_drawlist)
@@ -266,8 +271,15 @@ void parallel_coordinates_workbench::show(){
     for(auto&& [att, i]: util::enumerate(attribute_order_infos.read()))
         if(att.any_change())
             attribute_order_infos();
+    request_registered_histograms_update |= attribute_order_infos.changed;
     request_render |= attribute_order_infos.changed;
     request_render |= setting.changed;
+
+    // checking for priority change
+    for(const auto& dl: drawlist_infos.read())
+        request_registered_histograms_update |= dl.priority_render.changed;
+
+    request_registered_histograms_update |= setting.changed;
 
     // checking for changed image
     if(plot_data.changed){
@@ -277,12 +289,12 @@ void parallel_coordinates_workbench::show(){
         request_render |= true;
 
         // updating requested histograms
-        _request_registered_histograms_update = true;
+        request_registered_histograms_update = true;
     }
 
     // check for requested registered histogram update
-    if(_request_registered_histograms_update)
-        _update_registered_histograms(_request_registered_histograms_update_var);
+    if(request_registered_histograms_update)
+        _update_registered_histograms(request_registered_histograms_update_var);
 
     request_render &= !any_drawlist_change;
 
@@ -710,8 +722,8 @@ void parallel_coordinates_workbench::show(){
                             break;
                     }
                     _select_priority_center_all = _select_priority_center_single = false;
-                    _request_registered_histograms_update = true;
-                    _request_registered_histograms_update_var = true;
+                    //_request_registered_histograms_update = true;
+                    //_request_registered_histograms_update_var = true;
                 }
             }
         }
@@ -911,7 +923,7 @@ void parallel_coordinates_workbench::show(){
         if(ImGui::ColorEdit4("Plot background", &setting.ref_no_track().plot_background.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
             setting();
         if(ImGui::MenuItem("Render splines", {}, &setting.ref_no_track().render_splines)){
-            _request_registered_histograms_update = true;
+            //_request_registered_histograms_update = true;
             setting();
         }
         if(ImGui::BeginMenu("Axis histograms")){
@@ -919,7 +931,7 @@ void parallel_coordinates_workbench::show(){
                 for(auto type: structures::enum_iteration<histogram_type>()){
                     if(ImGui::MenuItem(histogram_type_names[type].data())){
                         setting().hist_type = type;
-                        _request_registered_histograms_update = true;
+                        //_request_registered_histograms_update = true;
                     }
                 }
                 ImGui::EndCombo();
@@ -933,13 +945,13 @@ void parallel_coordinates_workbench::show(){
         if(ImGui::BeginMenu("Priority rendering")){
             if(ImGui::MenuItem("Priority rendering off")){
                 for(auto& dl: drawlist_infos()){
-                    if(!dl.priority_render)
+                    if(!dl.priority_render.read())
                         continue;
                     dl.priority_render = false;
                     dl.drawlist_write().delayed_ops.priority_rendering_requested = false;
                     dl.drawlist_write().delayed_ops.priority_sorting_done = true;
                 }
-                _request_registered_histograms_update = true;
+                //_request_registered_histograms_update = true;
             }
             if(ImGui::MenuItem("Set priority center"))
                 _select_priority_center_single = true;
@@ -995,7 +1007,7 @@ void parallel_coordinates_workbench::show(){
 void parallel_coordinates_workbench::render_plot()
 {
     // if histogram rendering requested and not yet finished delay rendering
-    if(!all_registrators_updated())
+    if(!all_registrators_updated() || attribute_order_infos.changed)
         return;
 
     if(logger.logging_level >= logging::level::l_5)
@@ -1126,6 +1138,7 @@ void parallel_coordinates_workbench::remove_drawlists(const util::memory_view<st
             drawlist_infos().erase(drawlist_infos().begin() + i);
         }
     }
+    _update_attribute_order_infos();
 }
 
 // settings conversions
