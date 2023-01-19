@@ -13,7 +13,7 @@ class i_range {
 public:
     constexpr i_range(T end): _begin(0), _end(end < 0 ? 0: end), _step(1){}; // single element constructor 
     constexpr i_range(T begin, T end, T step = T(1)):
-     _begin(begin), _end((end - begin + step - std::sign(step)) / step * step), _step(step){
+     _begin(begin), _end((end - begin + step - std::sign(step)) / step * step + begin), _step(step){
         assert(step != 0 && "step of 0 is invalid");
         if((begin > end && step > 0) || (begin < end && step < 0))
             _begin = _end;

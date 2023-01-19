@@ -117,6 +117,12 @@ const std::map<std::tuple<violin_base_pos_t, violin_dir_t, bool>, std::string_vi
     {{violin_base_pos_t::right, violin_dir_t::left, true}, "right full"},
     {{violin_base_pos_t::right, violin_dir_t::left, false}, "right half"}
 };
+
+struct local_storage{
+    activation_tracker  active;
+    bounds_tracker      bounds;
+    color_tracker       color;
+};
 }
 }
 

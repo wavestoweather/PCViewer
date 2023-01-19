@@ -199,7 +199,7 @@ inline violin_position_order_t get_violin_pos_order(const std::map<std::string_v
     // assign the colors to the attributes and creating the order array
     std::vector<std::string_view> attribute_order(attribute_count);
     for(auto [a, i]: util::enumerate(util::rev_iter(placed_attributes))){
-        attribute_order[i] = {};
+        attribute_order[i] = active_attributes[a];
     }
 
     return {std::move(violin_positions), std::move(attribute_order)};

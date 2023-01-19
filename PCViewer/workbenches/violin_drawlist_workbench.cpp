@@ -76,6 +76,9 @@ void violin_drawlist_workbench::_update_registered_histograms(){
             logger << logging::endl;
         }
     }
+    for(auto& att: session_state.ref_no_track().attribute_order_infos)
+        if(!att.linked_with_attribute)
+            att.bounds->changed = false;
 }
 
 void violin_drawlist_workbench::_update_attribute_positioning(bool update_direct){
@@ -98,7 +101,7 @@ void violin_drawlist_workbench::_update_attribute_positioning(bool update_direct
 
     std::vector<std::string_view> attributes;
     for(const auto& i: session_state.read().attribute_order_infos)
-        if(i.active)
+        if(i.active->read())
             attributes.emplace_back(i.attribute_id);
     auto [appearances, order] = util::violins::get_violin_pos_order(per_attribute_histograms, attributes);
     for(const auto& [att, app]: appearances)
@@ -106,7 +109,7 @@ void violin_drawlist_workbench::_update_attribute_positioning(bool update_direct
     std::map<std::string_view, int> attribute_pos;
     for(auto&& [att, i]: util::enumerate(order))
         attribute_pos[att] = static_cast<int>(i + 1);
-    std::sort(session_state().attribute_order_infos.begin(), session_state().attribute_order_infos.end(), [&attribute_pos](auto& a, auto&b){return !attribute_pos.count(a.attribute_id) && attribute_pos.count(b.attribute_id) || !attribute_pos.count(a.attribute_id) && !attribute_pos.count(b.attribute_id) && a.attribute_id < b.attribute_id || attribute_pos[a.attribute_id] < attribute_pos[b.attribute_id];});
+    std::sort(session_state().attribute_order_infos.begin(), session_state().attribute_order_infos.end(), [&attribute_pos](auto& a, auto&b){return attribute_pos[a.attribute_id] < attribute_pos[b.attribute_id];});
 }
 
 void violin_drawlist_workbench::_update_attribute_order_infos(){
@@ -164,6 +167,13 @@ void violin_drawlist_workbench::show(){
         return;
 
     // checking updates
+    bool request_register_update{};
+    for(const auto& att: session_state.read().attribute_order_infos)
+        request_register_update |= att.bounds->changed;
+
+    if(request_register_update)
+        _update_registered_histograms();
+
     if(session_state.changed || settings.changed)
         _update_attribute_histograms();
 
@@ -223,6 +233,9 @@ void violin_drawlist_workbench::show(){
                 continue;
             
             auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[att.attribute_id];
+            violin_app.color.x = att.color->read().x;
+            violin_app.color.y = att.color->read().y;
+            violin_app.color.z = att.color->read().z;
             violin_app.color.w = settings.read().area_alpha;
             const auto& histogram = _drawlist_attribute_histograms[{dl_id, att.attribute_id}];
             const float hist_normalization_fac = violin_app.scale == structures::violins::violin_scale_t::self ? histogram.max_val: violin_app.scale == structures::violins::violin_scale_t::per_attribute ? _per_attribute_max[att.attribute_id]: _global_max;
@@ -234,6 +247,9 @@ void violin_drawlist_workbench::show(){
                 continue;
             
             auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[att.attribute_id];
+            violin_app.color.x = att.color->read().x;
+            violin_app.color.y = att.color->read().y;
+            violin_app.color.z = att.color->read().z;
             violin_app.color.w = settings.read().line_alpha;
             const auto& histogram = _drawlist_attribute_histograms[{dl_id, att.attribute_id}];
             const float hist_normalization_fac = violin_app.scale == structures::violins::violin_scale_t::self ? histogram.max_val: violin_app.scale == structures::violins::violin_scale_t::per_attribute ? _per_attribute_max[att.attribute_id]: _global_max;
@@ -284,7 +300,7 @@ void violin_drawlist_workbench::show(){
         ImGui::DragFloat("Plot padding", &settings.read().plot_padding, 1, 0, 100);
         ImGui::Separator();
         ImGui::Text("Attrribute coloring");
-        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x / 4);
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 4);
         if(ImGui::BeginCombo("Palette type", settings.read().attribute_color_palette_type.c_str())){
             for(const auto& [name, palette]: brew_palette_types())
                 if(ImGui::MenuItem(name.data()))
@@ -292,13 +308,13 @@ void violin_drawlist_workbench::show(){
             ImGui::EndCombo();
         }
         ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 4);
         if(ImGui::BeginCombo("Color Scheme", settings.read().attribute_color_palette.c_str())){
             for(const auto& palette: brew_palette_types().at(settings.read().attribute_color_palette_type))
                 if(ImGui::MenuItem(palette.data()))
                     settings.read().attribute_color_palette = palette;
             ImGui::EndCombo();
         }
-        ImGui::PopItemWidth();
         ImGui::Checkbox("Auto-repositon attributes", &settings.read().reposition_attributes_on_update);
         if(ImGui::Button("Reposition/recolor attributes"))
             _update_attribute_positioning(true);
@@ -352,13 +368,13 @@ void violin_drawlist_workbench::show(){
                 ImGui::EndDisabled();
                 ImGui::TableNextColumn();
                 if(ImGui::Checkbox("##en", &session_state.ref_no_track().attribute_order_infos[i].active->ref_no_track())){
-                    _update_registered_histograms();
-                    session_state();
+                    //_update_registered_histograms();
+                    session_state().attribute_order_infos[i].active->write();
                 }
                 ImGui::TableNextColumn();
                 ImGui::ColorEdit4("##col", &session_state.ref_no_track().attribute_order_infos[i].color->ref_no_track().x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
                 ImGui::TableNextColumn();
-                ImGui::PushItemWidth(70);
+                ImGui::SetNextItemWidth(70);
                 if(ImGui::BeginCombo("##pos", structures::violins::violin_positions.at({att_app.base_pos, att_app.dir, att_app.span_full}).data())){
                     for(const auto& [pos, name]: structures::violins::violin_positions)
                         if(ImGui::MenuItem(name.data()))
@@ -366,13 +382,13 @@ void violin_drawlist_workbench::show(){
                     ImGui::EndCombo();
                 }
                 ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(70);
                 if(ImGui::BeginCombo("##scale", structures::violins::violin_scale_names[att_app.scale].data())){
                     for(const auto scale: structures::enum_iteration<structures::violins::violin_scale_t>{})
                         if(ImGui::MenuItem(structures::violins::violin_scale_names[scale].data()))
                             att_app.scale = scale;
                     ImGui::EndCombo();
                 }
-                ImGui::PopItemWidth();
                 ImGui::TableNextColumn();
                 if(ImGui::Checkbox("##log", &session_state.ref_no_track().attribute_log[att.attribute_id]))
                     session_state();
@@ -462,6 +478,7 @@ void violin_drawlist_workbench::signal_dataset_update(const util::memory_view<st
 }
 
 void violin_drawlist_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
+    bool first_dl = session_state.read().drawlists.empty();
     for(const auto& dl_id: drawlist_ids){
         // checking for already contained drawlists and attribute consistency
         if(session_state.read().drawlists.count(dl_id))
@@ -469,10 +486,27 @@ void violin_drawlist_workbench::add_drawlists(const util::memory_view<std::strin
 
         auto&       dl = globals::drawlists()[dl_id]();
         session_state().drawlists[dl_id] = {dl_id, true, dl.appearance_drawlist};
+
+        // adding the drawlist to the first free matrix field
+        for(size_t i: util::size_range(session_state.read().matrix_elements)){
+            if(session_state.read().matrix_elements[i].empty()){
+                session_state().matrix_elements[i] = dl.id;
+                break;
+            }
+        }
+    }
+    _update_attribute_order_infos();
+    // copy colors and disconnect from global state
+    for(auto& att: session_state().attribute_order_infos){
+        att.linked_with_attribute = false;
+        _local_storage.emplace_back(std::make_unique<structures::violins::local_storage>(structures::violins::local_storage{att.active->read(), att.bounds->read(), att.color->read()}));
+        att.active = _local_storage.back()->active;
+        att.bounds = _local_storage.back()->bounds;
+        att.color = _local_storage.back()->color;
     }
 
-    _update_attribute_order_infos();
-    //_update_registered_histograms();
+    if(first_dl)
+        _update_registered_histograms();
 }
 
 void violin_drawlist_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -490,13 +524,14 @@ void violin_drawlist_workbench::remove_drawlists(const util::memory_view<std::st
 }
 
 void violin_drawlist_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
-    _update_attribute_histograms();
+    //_update_attribute_histograms();
+    session_state();
 }
 
 std::vector<violin_drawlist_workbench::drawlist_attribute> violin_drawlist_workbench::get_active_ordered_drawlist_attributes() const{
     std::vector<drawlist_attribute> ret;
     for(const auto& i: session_state.read().attribute_order_infos){
-        if(!i.active)
+        if(!i.active->read())
             continue;
         for(const auto& [dl_info, dl]: session_state.read().drawlists){
             if(!dl.appearance->read().show)
@@ -510,7 +545,7 @@ std::vector<violin_drawlist_workbench::drawlist_attribute> violin_drawlist_workb
 std::vector<structures::const_attribute_info_ref> violin_drawlist_workbench::get_active_ordered_attributes() const{
     std::vector<structures::const_attribute_info_ref> ret;
     for(const auto& i: session_state.read().attribute_order_infos)
-        if(i.active)
+        if(i.active->read())
             ret.emplace_back(i);
     return ret;
 }
