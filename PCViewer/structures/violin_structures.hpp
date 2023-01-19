@@ -62,7 +62,7 @@ enum class violin_scale_t{
 const structures::enum_names<violin_scale_t> violin_scale_names{
     "self",
     "per attribute",
-    "all attrigbutes"
+    "all attributes"
 };
 struct violin_appearance_t{
     violin_base_pos_t   base_pos{violin_base_pos_t::middle};

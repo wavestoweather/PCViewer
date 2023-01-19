@@ -12,9 +12,11 @@ private:
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
     using registered_histogram_map = robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>>;
     using appearance_storage_t = std::vector<std::unique_ptr<appearance_tracker>>;
+    using local_storage_t = std::vector<std::unique_ptr<structures::violins::local_storage>>;
     using drawlist_attribute_histograms_t = robin_hood::unordered_map<drawlist_attribute, structures::violins::histogram>; 
 
     appearance_storage_t        _appearance_storage; // used for unlinked drawlists
+    local_storage_t             _local_storage;
     registered_histogram_map    _registered_histograms;
     drawlist_attribute_histograms_t _drawlist_attribute_histograms;
     std::map<std::string_view, float> _per_attribute_max{};

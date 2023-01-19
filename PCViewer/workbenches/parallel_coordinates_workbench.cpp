@@ -20,6 +20,7 @@ namespace workbenches{
 parallel_coordinates_workbench::parallel_coordinates_workbench(const std::string_view id):
     workbench(id)
 {
+    plot_data.ref_no_track().height = static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y * .66f);
     _update_plot_image();
 }
 
@@ -395,7 +396,7 @@ void parallel_coordinates_workbench::show(){
     }
 
     auto pic_pos = ImGui::GetCursorScreenPos();
-    auto pic_size = ImVec2{content_size.x - 10, content_size.y * .7f};
+    auto pic_size = ImVec2{content_size.x - 10, static_cast<float>(plot_data.read().height)};
     ImGui::Image(plot_data.read().image_descriptor, pic_size);
 
     if(setting.read().enable_axis_lines){

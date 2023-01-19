@@ -478,7 +478,6 @@ void violin_drawlist_workbench::signal_dataset_update(const util::memory_view<st
 }
 
 void violin_drawlist_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
-    bool first_dl = session_state.read().drawlists.empty();
     for(const auto& dl_id: drawlist_ids){
         // checking for already contained drawlists and attribute consistency
         if(session_state.read().drawlists.count(dl_id))
@@ -505,8 +504,7 @@ void violin_drawlist_workbench::add_drawlists(const util::memory_view<std::strin
         att.color = _local_storage.back()->color;
     }
 
-    if(first_dl)
-        _update_registered_histograms();
+    _update_registered_histograms();
 }
 
 void violin_drawlist_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -521,6 +519,7 @@ void violin_drawlist_workbench::remove_drawlists(const util::memory_view<std::st
         _registered_histograms.erase(delete_dl);
         session_state().drawlists.erase(delete_dl);
     }
+    _update_attribute_order_infos();
 }
 
 void violin_drawlist_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){

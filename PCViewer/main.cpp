@@ -153,6 +153,7 @@ int main(int argc, char* argv[]){
     ImGui::GetStyle().FrameRounding = 3.f;
     ImGui::GetStyle().WindowRounding = 8.f;
     ImGui::GetStyle().PopupRounding = 3.f;
+    ImGui::GetIO().DisplaySize = {static_cast<float>(w), static_cast<float>(h)};
     std::vector<float> font_sizes{10.f, 15.f, 25.f};
     util::imgui::load_fonts("fonts/", font_sizes);
     if(ImGui::GetIO().Fonts->Fonts.size() > 1)
