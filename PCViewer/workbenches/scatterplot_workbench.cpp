@@ -8,6 +8,7 @@
 #include <brush_util.hpp>
 #include <util.hpp>
 #include <descriptor_set_storage.hpp>
+#include <flat_set.hpp>
 
 namespace workbenches
 {
@@ -170,10 +171,47 @@ void scatterplot_workbench::_render_plot(){
     }
 }
 
+void scatterplot_workbench::_update_attribute_order_infos(){
+
+}
+
 scatterplot_workbench::scatterplot_workbench(std::string_view id):
     workbench(id)
 {
+    // calculating the intersection of all drawlist attributes
+    structures::flat_set<std::string_view> new_attributes;
+    for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
+        structures::flat_set<std::string_view> n;
+        for(const auto& att: dl.dataset_read().attributes)
+            n |= att.id;
+        if(first)
+            new_attributes = std::move(n);
+        else
+            new_attributes &= n;
+    }
+
+    if(logger.logging_flags.additional_info)
+        logger << logging::info_prefix << " violin_attribute_workbench::_update_attribute_order_infos() New attributes will be: " << util::memory_view(new_attributes.data(), new_attributes.size()) << logging::endl;
     
+    structures::flat_set<std::string_view> old_attributes;
+    for(const auto& att_info: attribute_order_infos.read())
+        old_attributes |= att_info.attribute_id;
+    auto attributes_to_add = new_attributes / old_attributes;
+
+    // deleting all unused attributes in reverse order to avoid length problems
+    for(size_t i: util::rev_size_range(attribute_order_infos.read())){
+        std::string_view cur_att = attribute_order_infos.read()[i].attribute_id;
+        if(!new_attributes.contains(cur_att)){
+            if(!attribute_order_infos.read()[i].linked_with_attribute)
+                bool todo = true;
+            attribute_order_infos().erase(attribute_order_infos.read().begin() + i);
+        }
+    }
+    // adding new attribute references
+    for(std::string_view att: attributes_to_add){
+        auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
+        attribute_order_infos().emplace_back(structures::attribute_info{att, true, attribute.active, attribute.bounds, attribute.color});
+    }
 }
 
 void draw_lassos(scatterplot_workbench::attribute_pair p, float plot_width, ImVec4 min_max, ImU32 color = util::brushes::get_brush_color(), float thickness = globals::brush_edit_data.brush_line_width, const ImVec2& base_pos = ImGui::GetCursorScreenPos()){
@@ -212,7 +250,7 @@ void scatterplot_workbench::show()
         return;
 
     // checking for setting updates and updating the rendering if necessary
-    _request_registrators_update |= attribute_order_infos.changed && std::any_of(attribute_order_infos.read().begin(), attribute_order_infos.read().end(), [](const auto& info){return info.active->changed;});
+    _request_registrators_update |= attribute_order_infos.changed && std::any_of(attribute_order_infos.read().begin(), attribute_order_infos.read().end(), [](const auto& info){return info.active->changed.load();});
 
     if(_request_registrators_update)
         _update_registered_histograms();
@@ -237,6 +275,9 @@ void scatterplot_workbench::show()
     ImGui::Begin(id.data(), &active, ImGuiWindowFlags_HorizontalScrollbar);
 
     const auto active_attributes = get_active_ordered_attributes();
+    robin_hood::unordered_map<std::string_view, const_attribute_info_ref> att_id_to_attribute;
+    for(const auto& att: active_attributes)
+        att_id_to_attribute.insert({att.get().attribute_id, att});
     if(_plot_x_vals.size() < active_attributes.size()) _plot_x_vals.resize(active_attributes.size());
     // plot views ------------------------------------------------------
     attribute_pair  hovered_pair{};
@@ -274,15 +315,15 @@ void scatterplot_workbench::show()
                         plot_additional_datas[p].background_image = *reinterpret_cast<const std::string_view*>(payload->Data);
                     ImGui::EndDragDropTarget();
                 }
-                draw_lassos(p, settings.read().plot_width, {attributes.read()[p.b].bounds.read().min, attributes.read()[p.a].bounds.read().min, attributes.read()[p.b].bounds.read().max, attributes.read()[p.a].bounds.read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
+                draw_lassos(p, settings.read().plot_width, {active_attributes[j].get().bounds->read().min, active_attributes[i].get().bounds->read().min, active_attributes[i].get().bounds->read().max, active_attributes[j].get().bounds->read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
                 _plot_x_vals[j] = c_pos.x;
             }
         }
         for(int i: util::i_range(int(active_attributes.size()) - 1)){
             if(i) ImGui::SameLine();
-            float width = ImGui::CalcTextSize(attributes.read()[active_indices[i]].display_name.c_str()).x;
+            float width = ImGui::CalcTextSize(active_attributes[i].get().attribute_read().display_name.c_str()).x;
             ImGui::SetCursorScreenPos({_plot_x_vals[i] + settings.read().plot_width / 2.f - width / 2.f, ImGui::GetCursorScreenPos().y});
-            ImGui::Text("%s", attributes.read()[active_indices[i]].display_name.c_str());
+            ImGui::Text("%s", active_attributes[i].get().attribute_read().display_name.c_str());
         }
         break;
     case plot_type_t::list:
@@ -296,7 +337,7 @@ void scatterplot_workbench::show()
                 ImGui::OpenPopup(plot_menu_id.data());
             if(ImGui::IsItemHovered())
                 hovered_pair = p;
-            draw_lassos(p, settings.read().plot_width, {attributes.read()[p.a].bounds.read().min, attributes.read()[p.b].bounds.read().min, attributes.read()[p.a].bounds.read().max, attributes.read()[p.b].bounds.read().max});
+            draw_lassos(p, settings.read().plot_width, {att_id_to_attribute.at(p.a).get().bounds->read().min, att_id_to_attribute.at(p.b).get().bounds->read().min, att_id_to_attribute.at(p.a).get().bounds->read().max, att_id_to_attribute.at(p.b).get().bounds->read().max});
         }
         break;
     }
@@ -308,17 +349,17 @@ void scatterplot_workbench::show()
     auto get_attr_pos = [&](const ImVec2& pos = ImGui::GetMousePos()){
         ImVec2 mouse_norm{util::normalize_val_for_range(pos.x, hovered_rect[0], hovered_rect[1]), util::normalize_val_for_range(pos.y, hovered_rect[2], hovered_rect[3])};
         mouse_norm.y = 1 - mouse_norm.y;
-        ImVec2 attr_pos{util::unnormalize_val_for_range(mouse_norm.x, attributes.read()[hovered_pair.a].bounds.read().min, attributes.read()[hovered_pair.a].bounds.read().max), util::unnormalize_val_for_range(mouse_norm.y, attributes.read()[hovered_pair.b].bounds.read().min, attributes.read()[hovered_pair.b].bounds.read().max)};
+        ImVec2 attr_pos{util::unnormalize_val_for_range(mouse_norm.x, att_id_to_attribute.at(hovered_pair.a).get().bounds->read().min, att_id_to_attribute.at(hovered_pair.a).get().bounds->read().max), util::unnormalize_val_for_range(mouse_norm.y, att_id_to_attribute.at(hovered_pair.b).get().bounds->read().min, att_id_to_attribute.at(hovered_pair.b).get().bounds->read().max)};
         return attr_pos;
     };
-    if(hovered_pair != attribute_pair{-1, -1} && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none)
+    if(hovered_pair != attribute_pair{} && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none && hovered_pair != attribute_pair{-1, -1}){
+    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none && hovered_pair != attribute_pair{}){
         try{
             auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.a && e.attr2 == hovered_pair.b;});
             polygon.borderPoints.clear();
         } catch(std::exception e){
-            util::brushes::get_selected_lasso_brush().emplace_back(structures::polygon{int(hovered_pair.a), int(hovered_pair.b), {}});
+            util::brushes::get_selected_lasso_brush().emplace_back(structures::polygon{hovered_pair.a, hovered_pair.b, {}});
         }
         _last_lasso_point = ImGui::GetMousePos();
         _started_lasso_attributes = hovered_pair;
@@ -361,18 +402,18 @@ void scatterplot_workbench::show()
             switch(settings.read().plot_type){
             case plot_type_t::matrix:
                 ImGui::PushID("s_wb_att_set");
-                for(auto& attribute: attribute_order_infos.ref_no_track()){
-                    if(ImGui::Checkbox(attributes.read()[attribute.attribut_index].id.data(), &attribute.active))
-                        attribute_order_infos();
+                for(auto&& [att, i]: util::enumerate(attribute_order_infos.ref_no_track())){
+                    if(ImGui::Checkbox(att.attribute_read().display_name.c_str(), &att.active->ref_no_track()))
+                        attribute_order_infos()[i].active->write();
                 }
                 ImGui::PopID();
                 break;
             case plot_type_t::list:
-                for(size_t i: util::i_range(size_t(1), attributes.read().size())){
+                for(size_t i: util::i_range(size_t(1), attribute_order_infos.read().size())){
                     for(size_t j: util::i_range(i)){
                         //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
-                        if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{int(i), int(j)}) && ImGui::MenuItem((attributes.read()[i].display_name + "|" + attributes.read()[j].display_name).c_str()))
-                            plot_list().emplace_back(attribute_pair{int(i), int(j)});
+                        if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{attribute_order_infos.read()[i].attribute_id, attribute_order_infos.read()[j].attribute_id}) && ImGui::MenuItem((attribute_order_infos.read()[i].attribute_read().display_name + "|" + attribute_order_infos.read()[j].attribute_read().display_name).c_str()))
+                            plot_list().emplace_back(attribute_pair{attribute_order_infos.read()[i].attribute_id, attribute_order_infos.read()[j].attribute_id});
                     }
                 }
                 break;
@@ -473,6 +514,8 @@ void scatterplot_workbench::show()
 
     // popups
     if(ImGui::BeginPopup(plot_menu_id.data())){
+        auto& att_a = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.a;}))->get();
+        auto& att_b = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.b;}))->get();
         ImGui::PushItemWidth(100);
         ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
         ImGui::BeginDisabled(!plot_additional_datas.contains(_popup_attributes));
@@ -484,16 +527,16 @@ void scatterplot_workbench::show()
             _request_registrators_update |= true;
         }
         ImGui::Separator();
-        float diff = attributes.read()[_popup_attributes.a].bounds.read().max - attributes.read()[_popup_attributes.a].bounds.read().min;
-        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.a].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.a].bounds.ref_no_track().data(), diff * 1e-3f))
-            attributes()[_popup_attributes.a].bounds();
-        diff = attributes.read()[_popup_attributes.b].bounds.read().max - attributes.read()[_popup_attributes.b].bounds.read().min;
-        if(ImGui::DragFloat2(attributes.read()[_popup_attributes.b].display_name.c_str(), attributes.ref_no_track()[_popup_attributes.b].bounds.ref_no_track().data(), diff * 1e-3f))
-            attributes()[_popup_attributes.b].bounds();
-        if(ImGui::MenuItem(("Swap " + attributes.read()[_popup_attributes.a].display_name + " bounds").c_str()))
-            std::swap(attributes()[_popup_attributes.a].bounds().min, attributes()[_popup_attributes.a].bounds().max);
-        if(ImGui::MenuItem(("Swap " + attributes.read()[_popup_attributes.b].display_name + " bounds").c_str()))
-            std::swap(attributes()[_popup_attributes.b].bounds().min, attributes()[_popup_attributes.b].bounds().max);
+        float diff = att_a.bounds->read().max - att_a.bounds->read().min;
+        if(ImGui::DragFloat2(att_a.attribute_read().display_name.c_str(), att_a.bounds->ref_no_track().data(), diff * 1e-3f))
+            attribute_order_infos(), att_a.bounds->write();
+        diff = att_b.bounds->read().max - att_b.bounds->read().min;
+        if(ImGui::DragFloat2(att_b.attribute_read().display_name.c_str(), att_b.bounds->ref_no_track().data(), diff * 1e-3f))
+            attribute_order_infos(), att_b.bounds->write();
+        if(ImGui::MenuItem(("Swap " + att_a.attribute_read().display_name + " bounds").c_str()))
+            std::swap(att_a.bounds->write().min, att_a.bounds->write().max);
+        if(ImGui::MenuItem(("Swap " + att_b.attribute_read().display_name + " bounds").c_str()))
+            std::swap(att_b.bounds->write().min, att_b.bounds->write().max);
         ImGui::Separator();
         if(ImGui::DragFloat("Uniform radius", &settings.read().uniform_radius, 1, 1, 100))
             for(auto& dl: drawlist_infos())
@@ -506,13 +549,6 @@ void scatterplot_workbench::show()
 }
 
 void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
-    if(drawlist_infos.read().empty()){
-        attributes = globals::drawlists.read().at(drawlist_ids.front()).read().dataset_read().attributes;
-        attribute_order_infos().clear();
-        for(uint32_t i: util::size_range(attributes.read()))
-            attribute_order_infos().emplace_back(attribute_order_info{i, true});
-    }
-
     for(const auto& dl_id: drawlist_ids){
         // check for already added drawlists
         bool exists = false;
@@ -526,27 +562,13 @@ void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_vi
             continue;
 
         auto& dl = globals::drawlists.write().at(dl_id).write();
-        auto& ds = dl.dataset_read();
-        // check attribute consistency
-        for(int var: util::size_range(attributes.read()))
-            if(attributes.read()[var].id != ds.attributes[var].id)
-                throw std::runtime_error{"parallel_coordinates_workbench::addDrawlist() Inconsistent attributes for the new drawlist"};
-
-        // combining min max with new attributes
-        for(int var: util::size_range(attributes.read())){
-            if(attributes.read()[var].bounds.read().min > ds.attributes[var].bounds.read().min)
-                attributes()[var].bounds().min = ds.attributes[var].bounds.read().min;
-            if(attributes.read()[var].bounds.read().max < ds.attributes[var].bounds.read().max)
-                attributes()[var].bounds().max = ds.attributes[var].bounds.read().max;
-        }
-
         drawlist_infos.write().emplace_back(drawlist_info{dl_id, true, dl.appearance_drawlist});
-
-        _update_plot_list();
-
-        // checking histogram (large vis/axis histograms) rendering or standard rendering
-        _update_registered_histograms();
     }
+    _update_attribute_order_infos();
+    //_update_plot_list();
+
+    //// checking histogram (large vis/axis histograms) rendering or standard rendering
+    //_update_registered_histograms();
 }
 
 void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info){
@@ -560,52 +582,9 @@ void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::s
     if(!any_dl_affected)    
         return;
     
-    // creating intersection of the new attributes
-    std::vector<std::string> new_attributes;
-    for(const auto& [dl, pos]: util::pos_iter(drawlist_infos.read())){
-        int intersection_index{-1};
-        for(int i: util::size_range(dl.dataset_read().attributes)){
-            if(pos == util::iterator_pos::first && i >= new_attributes.size())
-                new_attributes.emplace_back(dl.dataset_read().attributes[i].id);
-            
-            if(pos != util::iterator_pos::first && (i < new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
-                intersection_index = i;
-                break;
-            }
-        }
-        // removing attributes wich are not in the intersectoin set
-        if(intersection_index > 0)
-            new_attributes.erase(new_attributes.begin() + intersection_index, new_attributes.end());
-    }
-
-    if(logger.logging_level >= logging::level::l_5)
-        logger << logging::info_prefix << " scatterplot_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
-
-    attributes().clear();
-    for(size_t i: util::size_range(new_attributes)){
-        attributes().emplace_back(structures::attribute{new_attributes[i], drawlist_infos.read().front().drawlist_read().dataset_read().attributes[i].display_name});
-        for(const auto& dl: drawlist_infos.read()){
-            const auto& ds_bounds = dl.dataset_read().attributes[i].bounds.read();
-            const auto& dl_bounds = attributes.read().back().bounds.read();
-            if(ds_bounds.min < dl_bounds.min)
-                attributes().back().bounds().min = ds_bounds.min;
-            if(ds_bounds.max > dl_bounds.max)
-                attributes().back().bounds().max = ds_bounds.max;
-        }
-    }
-
-    // deleting all removed attributes in sorting order
-    for(size_t i: util::rev_size_range(attribute_order_infos.read())){
-        if(attribute_order_infos.read()[i].attribut_index >= attributes.read().size())
-            attribute_order_infos().erase(attribute_order_infos().begin() + i);
-    }
-    // adding new attribute references
-    for(size_t i: util::i_range(attributes.read().size() - attribute_order_infos.read().size())){
-        uint32_t cur_index = attribute_order_infos.read().size();
-        attribute_order_infos().emplace_back(attribute_order_info{cur_index});
-    }
-    _update_plot_list();
-    _update_registered_histograms();
+    _update_attribute_order_infos();
+    //_update_plot_list();
+    //_update_registered_histograms();
 }
 
 void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -651,6 +630,7 @@ bool scatterplot_workbench::all_registrators_updated() const{
     }
     return true;
 }
+
 const scatterplot_workbench::attribute_order_info& scatterplot_workbench::get_attribute_order_info(std::string_view attribute) const{
     return (attribute_order_infos.read() | util::try_find_if<const attribute_order_info>([&attribute](auto a){return a.attribute_id == attribute;}))->get();
 }

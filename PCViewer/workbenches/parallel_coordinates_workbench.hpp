@@ -105,10 +105,10 @@ public:
 
     parallel_coordinates_workbench(const std::string_view id);
 
-    void                        render_plot();
+    void                            render_plot();
     std::vector<const_attribute_info_ref> get_active_ordered_attributes() const;
-    const attribute_order_info_t& get_attribute_order_info(std::string_view attribute) const;
-    bool                        all_registrators_updated() const;
+    const attribute_order_info_t&   get_attribute_order_info(std::string_view attribute) const;
+    bool                            all_registrators_updated() const;
 
     // overriden methods
     void show() override;

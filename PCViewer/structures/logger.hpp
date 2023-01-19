@@ -31,6 +31,14 @@ const structures::enum_names<level> level_names{
     "+ per frame info", 
     "all", 
 };
+
+struct flags{
+    bool errors: 1;
+    bool vulkan_validation: 1;
+    bool warnings: 1;
+    bool additional_info: 1;
+    bool per_frame_info: 1;
+};
 }
 
 namespace structures{
@@ -47,6 +55,7 @@ public:
     bool                        write_to_cout{true};
     bool                        prepare_full_lines_string{false};
     logging::level              logging_level{logging::level::l_4};
+    logging::flags              logging_flags{true, true, true, true, false};
     bool                        scroll_bottom{};
 
     static constexpr uint32_t   buffer_size{buffered_lines};

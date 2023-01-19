@@ -9,6 +9,7 @@ create_test_sourcelist(Tests
 file(GLOB src
     "../imgui_nodes/crude_json.cpp"
     "../workbenches/parallel_coordinates_workbench.cpp"
+    "../workbenches/scatterplot_workbench.cpp"
     "../imgui/*.cpp"
     "../structures/globals.cpp"
     "../pipelines/*.cpp"

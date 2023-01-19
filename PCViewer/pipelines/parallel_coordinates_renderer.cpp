@@ -298,34 +298,25 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
     const auto& drawlists = globals::drawlists.read();
 
-    std::map<std::string_view, structures::dynamic_struct<attribute_infos_t, ImVec4>> attribute_infos;
+    std::map<std::string_view, size_t> ds_attribute_info_offsets;
+    std::vector<uint8_t> info_bytes;
     size_t infos_byte_size{};
     for(const auto& dl_ref: info.workbench.drawlist_infos.read()){
         const auto& ds = dl_ref.dataset_read();
         const auto active_attribute_indices = util::data::active_attribute_refs_to_indices(active_ordered_attributes, ds.attributes);
         structures::dynamic_struct<attribute_infos_t, ImVec4> attribute_info(active_ordered_attributes.size());
+        attribute_info->attribute_count = active_ordered_attributes.size();
         attribute_info->data_flags = {};
         for(int active_attribute_index: util::size_range(active_attribute_indices)){
             uint32_t cur_attribute_index = active_attribute_indices[active_attribute_index];
             attribute_info[active_attribute_index].x = float(cur_attribute_index);
-            const auto& att_ref = (info.workbench.attribute_order_infos.read() | util::try_find_if<const structures::attribute_info>([&](auto a){return a.attribute_id == ds.attributes[cur_attribute_index].id;}))->get();
-            attribute_info[active_attribute_index].y = att_ref.bounds->read().min;
-            attribute_info[active_attribute_index].z = att_ref.bounds->read().max;
+            attribute_info[active_attribute_index].y = active_ordered_attributes[active_attribute_index].get().bounds->read().min;
+            attribute_info[active_attribute_index].z = active_ordered_attributes[active_attribute_index].get().bounds->read().max;
         }
+        ds_attribute_info_offsets[ds.id] = infos_byte_size;
         infos_byte_size += attribute_info.byte_size();
-        attribute_infos.insert({std::string_view(ds.id), std::move(attribute_info)});
+        info_bytes.insert(info_bytes.end(), attribute_info.data().begin(), attribute_info.data().end());
     }
-
-    // creating contiguos upload data
-    std::map<std::string_view, size_t> ds_attribute_info_offsets;
-    std::vector<uint8_t> info_bytes(infos_byte_size);
-    size_t infos_byte_offset{};
-    for(const auto& [ds, att_info]: attribute_infos){
-        ds_attribute_info_offsets[ds] = infos_byte_offset;
-        std::copy(att_info.data().begin(), att_info.data().end(), info_bytes.begin() + infos_byte_offset);
-        infos_byte_offset += att_info.byte_size();
-    }
-    assert(infos_byte_offset == info_bytes.size());
 
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);  // wait indefenitely for prev rendering
     vkResetFences(globals::vk_context.device, 1, &_render_fence);

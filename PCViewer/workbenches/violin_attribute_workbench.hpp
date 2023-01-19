@@ -5,25 +5,29 @@
 
 namespace workbenches{
 class violin_attribute_workbench: public structures::workbench, public structures::drawlist_dataset_dependency{
+public:
+    using drawlist_attribute = structures::violins::drawlist_attribute;
+private:
     using appearance_tracker = structures::change_tracker<structures::drawlist::appearance>;
     using registered_histogram = structures::histogram_registry::scoped_registrator_t;
     using registered_histogram_map = robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>>;
     using appearance_storage_t = std::vector<std::unique_ptr<appearance_tracker>>;
-    using drawlist_attribute_histograms_t = robin_hood::unordered_map<structures::violins::drawlist_attribute, structures::violins::histogram>; 
+    using drawlist_attribute_histograms_t = robin_hood::unordered_map<drawlist_attribute, structures::violins::histogram>; 
 
     appearance_storage_t        _appearance_storage; // used for unlinked drawlists
     registered_histogram_map    _registered_histograms;
     drawlist_attribute_histograms_t _drawlist_attribute_histograms;
-    std::vector<float>          _per_attribute_max{};
+    std::map<std::string_view, float> _per_attribute_max{};
     float                       _global_max{};
-    std::tuple<std::string_view, int> _hovered_dl_attribute{};
+    drawlist_attribute          _hovered_dl_attribute{};
 
     void _update_attribute_histograms();
     void _update_registered_histograms();
+    void _update_attribute_order_infos();
 public:
     using attribute_settings_t = structures::change_tracker<structures::violins::attribute_settings_t>;
     using attribute_session_state_t = structures::change_tracker<structures::violins::attribute_session_state_t>;
-    using drawlist_attribute = structures::violins::drawlist_attribute;
+    using const_attribute_info_ref = std::reference_wrapper<const structures::attribute_info>;
     attribute_settings_t        settings{};
     attribute_session_state_t   session_state{};
 
@@ -45,8 +49,8 @@ public:
     void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
     void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
 
-    std::vector<drawlist_attribute> get_active_drawlist_attributes() const;
-    std::vector<uint32_t> get_active_indices() const;
-    std::vector<structures::min_max<float>> get_attribute_min_max() const;
+    std::vector<drawlist_attribute> get_active_ordered_drawlist_attributes() const;
+    std::vector<const_attribute_info_ref> get_active_ordered_attributes() const;
+    std::map<std::string_view, structures::min_max<float>>  get_active_attribute_bounds() const;
 };
 }

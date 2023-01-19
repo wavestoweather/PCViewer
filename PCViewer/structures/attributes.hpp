@@ -74,11 +74,12 @@ struct attribute_info{
     util::memory_view<activation_tracker>   active{};
     util::memory_view<bounds_tracker>       bounds{};
     util::memory_view<color_tracker>        color{};
-    bool any_change() const {return active->changed || bounds->changed || color->changed;}
+    bool any_change() const {return active && active->changed || bounds && bounds->changed || color && color->changed;}
     void clear_change()     {active->changed = false; bounds->changed = false; color->changed = false;}
     DECL_ATTRIBUTE_READ(attribute_id);
     DECL_ATTRIBUTE_WRITE(attribute_id);
 
     bool operator==(const attribute_info& o) const {return attribute_id == o.attribute_id && linked_with_attribute == o.linked_with_attribute && active == o.active && bounds == o.bounds;}
 };
+using const_attribute_info_ref = std::reference_wrapper<const attribute_info>;
 }

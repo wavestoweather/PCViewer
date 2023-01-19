@@ -1,6 +1,7 @@
 #include "violin_attribute_workbench.hpp"
 #include <violin_util.hpp>
 #include <imgui_util.hpp>
+#include <flat_set.hpp>
 
 namespace workbenches{
 void violin_attribute_workbench::_update_attribute_histograms(){
@@ -14,9 +15,9 @@ void violin_attribute_workbench::_update_attribute_histograms(){
     }
 
     // blending the histogram values according to the settings ---------------------------------------------
-    const auto active_drawlist_attributes = get_active_drawlist_attributes();
-    const auto attribute_bounds = get_attribute_min_max();
-    std::tie(_global_max, _per_attribute_max, _drawlist_attribute_histograms) = util::violins::update_histograms(active_drawlist_attributes, attribute_bounds, settings.read().smoothing_std_dev, settings.read().histogram_bin_count, static_cast<int>(session_state.read().attributes.size()), settings.read().ignore_zero_bins, session_state.read().attribute_log);
+    const auto active_drawlist_attributes = get_active_ordered_drawlist_attributes();
+    const auto attribute_bounds = get_active_attribute_bounds();
+    std::tie(_global_max, _per_attribute_max, _drawlist_attribute_histograms) = util::violins::update_histograms(active_drawlist_attributes, attribute_bounds, settings.read().smoothing_std_dev, settings.read().histogram_bin_count, static_cast<int>(attribute_bounds.size()), settings.read().ignore_zero_bins, session_state.read().attribute_log);
 
     settings.changed = false;
     session_state.changed = false;
@@ -29,13 +30,14 @@ void violin_attribute_workbench::_update_attribute_histograms(){
 }
 
 void violin_attribute_workbench::_update_registered_histograms(){
-    auto active_drawlist_attributes = get_active_drawlist_attributes();
-    auto active_attribute_indices = get_active_indices();
+    const auto active_drawlist_attributes = get_active_ordered_drawlist_attributes();
+    const auto active_attributes = get_active_ordered_attributes();
     for(const auto& dl: session_state.read().drawlists){
+        const auto active_attribute_indices = util::data::active_attribute_refs_to_indices(active_attributes, dl.dataset_read().attributes);
 
         std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
-        for(auto a: active_attribute_indices){
-            auto registrator_id = util::histogram_registry::get_id_string(a, settings.read().histogram_bin_count, session_state.read().attributes[a].bounds.read(), false, false);
+        for(auto&& [att, i]: util::enumerate(active_attributes)){
+            auto registrator_id = util::histogram_registry::get_id_string(active_attribute_indices[i], settings.read().histogram_bin_count, att.get().bounds->read(), false, false);
             int registrator_index{-1};
             for(size_t j: util::size_range(_registered_histograms[dl.drawlist_id])){
                 if(_registered_histograms[dl.drawlist_id][j].registry_id == registrator_id){
@@ -48,7 +50,7 @@ void violin_attribute_workbench::_update_registered_histograms(){
             else{
                 // adding the new histogram
                 auto& drawlist = dl.drawlist_write();
-                _registered_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(a, settings.read().histogram_bin_count, session_state.read().attributes[a].bounds.read(), false, false, true));
+                _registered_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(active_attribute_indices[i], settings.read().histogram_bin_count, att.get().bounds->read(), false, false, true));
                 registrator_needed.push_back(true);
             }
         }
@@ -66,6 +68,47 @@ void violin_attribute_workbench::_update_registered_histograms(){
                 logger << val.hist_id << " ";
             logger << logging::endl;
         }
+    }
+}
+
+void violin_attribute_workbench::_update_attribute_order_infos(){
+    // calculating the intersection of all drawlist attributes
+    structures::flat_set<std::string_view> new_attributes;
+    for(const auto& [dl, first]: util::first_iter(session_state.read().drawlists)){
+        structures::flat_set<std::string_view> n;
+        for(const auto& att: dl.dataset_read().attributes)
+            n |= att.id;
+        if(first)
+            new_attributes = std::move(n);
+        else
+            new_attributes &= n;
+    }
+
+    if(logger.logging_flags.additional_info)
+        logger << logging::info_prefix << " violin_attribute_workbench::_update_attribute_order_infos() New attributes will be: " << util::memory_view(new_attributes.data(), new_attributes.size()) << logging::endl;
+    
+    structures::flat_set<std::string_view> old_attributes;
+    for(const auto& att_info: session_state.read().attribute_order_infos)
+        old_attributes |= att_info.attribute_id;
+    auto attributes_to_add = new_attributes / old_attributes;
+
+    // deleting all unused attributes in reverse order to avoid length problems
+    for(size_t i: util::rev_size_range(session_state.read().attribute_order_infos)){
+        std::string_view cur_att = session_state.read().attribute_order_infos[i].attribute_id;
+        if(!new_attributes.contains(cur_att)){
+            if(!session_state.read().attribute_order_infos[i].linked_with_attribute)
+                bool todo = true;
+            session_state().attribute_log.erase(cur_att);
+            session_state().attribute_violin_appearances.erase(cur_att);
+            session_state().attribute_order_infos.erase(session_state().attribute_order_infos.begin() + i);
+        }
+    }
+    // adding new attribute references
+    for(std::string_view att: attributes_to_add){
+        auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
+        session_state().attribute_order_infos.emplace_back(structures::attribute_info{att, true, attribute.active, attribute.bounds, attribute.color});
+        session_state().attribute_log[att] = {};
+        session_state().attribute_violin_appearances[att] = {};
     }
 }
 
@@ -94,12 +137,11 @@ void violin_attribute_workbench::show(){
     const float plot_width = plot_width_padded - settings.read().plot_padding;
     const float plot_height_padded = settings.read().plot_height + ImGui::GetTextLineHeightWithSpacing();
     int i{};
-    for(const auto& attr_ord: session_state.read().attribute_order_infos){
-        if(!attr_ord.active)
+    for(const auto& att: session_state.read().attribute_order_infos){
+        if(!att.active)
             continue;
 
-        const auto& attribute = session_state.read().attributes[attr_ord.attribut_index];
-        util::imgui::scoped_id imgui_id(attribute.id.size() ? attribute.id.data(): "def");
+        util::imgui::scoped_id imgui_id(att.attribute_id.data());
 
         const ImVec2 violin_min{base_pos.x + i * plot_width_padded, base_pos.y};
         const ImVec2 plot_min{violin_min.x, violin_min.y + ImGui::GetTextLineHeightWithSpacing()};
@@ -107,7 +149,7 @@ void violin_attribute_workbench::show(){
         
         // drawing the label and background
         ImGui::SetCursorScreenPos(violin_min);
-        ImGui::Text("%s", attribute.display_name.empty() ? "": attribute.display_name.data());
+        ImGui::Text("%s", att.attribute_read().display_name.empty() ? "": att.attribute_read().display_name.data());
         ImGui::GetWindowDrawList()->AddRectFilled(plot_min, plot_max, ImGui::ColorConvertFloat4ToU32(settings.read().plot_background), 4);
         
         // drag drop stuff
@@ -125,36 +167,36 @@ void violin_attribute_workbench::show(){
         if(ImGui::BeginDragDropSource()){
             int current_index = i;
             ImGui::SetDragDropPayload(drag_type_attribute.data(), &current_index, sizeof(current_index));
-            ImGui::Text("%s", attribute.display_name.data());
+            ImGui::Text("%s", att.attribute_read().display_name.data());
             ImGui::EndDragDropSource();
         }
 
         // infill drawing
         for(const auto& dl: util::rev_iter(session_state.read().drawlists)){
-            if(!active || !_drawlist_attribute_histograms.contains({dl.drawlist_id, attr_ord.attribut_index}))
+            if(!active || !_drawlist_attribute_histograms.contains({dl.drawlist_id, att.attribute_id}))
                 continue;
             
-            auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[attr_ord.attribut_index];
+            auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[att.attribute_id];
             violin_app.color = dl.appearance->read().color;
             violin_app.color.w = settings.read().area_alpha;
-            const auto& histogram = _drawlist_attribute_histograms[{dl.drawlist_id, attr_ord.attribut_index}];
+            const auto& histogram = _drawlist_attribute_histograms[{dl.drawlist_id, att.attribute_id}];
             // TODO adjust max val
             const float hist_normalization_fac = histogram.max_val;
             util::violins::imgui_violin_infill(plot_min, plot_max, histogram.smoothed_values, hist_normalization_fac, violin_app);
         }
         // border drawing
         for(const auto& dl: util::rev_iter(session_state.read().drawlists)){
-            if(!active || !_drawlist_attribute_histograms.contains({dl.drawlist_id, attr_ord.attribut_index}))
+            if(!active || !_drawlist_attribute_histograms.contains({dl.drawlist_id, att.attribute_id}))
                 continue;
             
-            auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[attr_ord.attribut_index];
+            auto& violin_app = session_state.ref_no_track().attribute_violin_appearances[att.attribute_id];
             violin_app.color = dl.appearance->read().color;
             violin_app.color.w = settings.read().line_alpha;
-            const auto& histogram = _drawlist_attribute_histograms[{dl.drawlist_id, attr_ord.attribut_index}];
+            const auto& histogram = _drawlist_attribute_histograms[{dl.drawlist_id, att.attribute_id}];
             // TODO adjust max val
             const float hist_normalization_fac = histogram.max_val;
             float line_thickness = settings.read().line_thickness;
-            const bool hovered_plot = _hovered_dl_attribute == std::tuple{dl.drawlist_id, attr_ord.attribut_index};
+            const bool hovered_plot = _hovered_dl_attribute == drawlist_attribute{dl.drawlist_id, att.attribute_id};
             if(hovered_plot)
                 line_thickness *= 2;
             float hover_val = util::violins::imgui_violin_border(plot_min, plot_max, histogram.smoothed_values, hist_normalization_fac, violin_app, line_thickness);
@@ -163,7 +205,7 @@ void violin_attribute_workbench::show(){
                     _hovered_dl_attribute = {};
                 continue;
             }
-            _hovered_dl_attribute = {dl.drawlist_id, attr_ord.attribut_index};
+            _hovered_dl_attribute = {dl.drawlist_id, att.attribute_id};
         }
         ++i;
     }
@@ -224,13 +266,12 @@ void violin_attribute_workbench::show(){
 
             int up_index{-1}, down_index{-1};
             for(auto&& [att, i]: util::enumerate(session_state.read().attribute_order_infos)){
-                const auto& attribute = session_state.read().attributes[att.attribut_index];
-                auto& att_app = session_state.read().attribute_violin_appearances[att.attribut_index];
-                util::imgui::scoped_id imgui_id(attribute.id.c_str());
+                auto& att_app = session_state.read().attribute_violin_appearances[att.attribute_id];
+                util::imgui::scoped_id imgui_id(att.attribute_id.data());
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::Text("%s", attribute.display_name.c_str());
+                ImGui::Text("%s", att.attribute_read().display_name.c_str());
                 ImGui::TableNextColumn();
                 ImGui::BeginDisabled(i == 0);
                 if(ImGui::ArrowButton("##up", ImGuiDir_Up))
@@ -242,9 +283,9 @@ void violin_attribute_workbench::show(){
                     down_index = static_cast<int>(i);
                 ImGui::EndDisabled();
                 ImGui::TableNextColumn();
-                if(ImGui::Checkbox("##en", &session_state.ref_no_track().attribute_order_infos[i].active)){
-                    _update_registered_histograms();
-                    session_state();
+                if(ImGui::Checkbox("##en", &session_state.ref_no_track().attribute_order_infos[i].active->ref_no_track())){
+                    //_update_registered_histograms();
+                    session_state().attribute_order_infos[i].active->write();
                 }
                 ImGui::TableNextColumn();
                 ImGui::PushItemWidth(70);
@@ -256,8 +297,9 @@ void violin_attribute_workbench::show(){
                 }
                 ImGui::PopItemWidth();
                 ImGui::TableNextColumn();
-                if(ImGui::Checkbox("##log", (bool*)&session_state.read().attribute_log[att.attribut_index]))
-                    _update_attribute_histograms();
+                if(ImGui::Checkbox("##log", &session_state.ref_no_track().attribute_log[att.attribute_id]))
+                    session_state();
+                    //_update_attribute_histograms();
             }
             if(up_index >= 0)
                 std::swap(session_state.ref_no_track().attribute_order_infos[up_index], session_state.ref_no_track().attribute_order_infos[up_index - 1]);
@@ -341,100 +383,24 @@ void violin_attribute_workbench::signal_dataset_update(const util::memory_view<s
     }
     if(!any_affected)
         return;
-    
-    // checking intersection of the new attributes
-    std::vector<std::string> new_attributes;
-    for(const auto& [dl, pos]: util::pos_iter(session_state.read().drawlists)){
-        int intersection_index{-1};
-        for(size_t i: util::size_range(dl.dataset_read().attributes)){
-            if(pos == util::iterator_pos::first && i >= new_attributes.size())
-                new_attributes.emplace_back(dl.dataset_read().attributes[i].id);
-            
-            if(pos != util::iterator_pos::first && (i < new_attributes.size() || dl.drawlist_read().dataset_read().attributes[i].id != new_attributes[i])){
-                intersection_index = static_cast<int>(i);
-                break;
-            }
-        }
-        // removing attributes wich are not in the intersectoin set
-        if(intersection_index > 0)
-            new_attributes.erase(new_attributes.begin() + intersection_index, new_attributes.end());
-    }
 
-    if(logger.logging_level >= logging::level::l_5)
-        logger << logging::info_prefix << " violin_drawlist_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
+    _update_attribute_order_infos();
 
-    session_state().attributes.clear();
-    for(size_t i: util::size_range(new_attributes)){
-        session_state().attributes.emplace_back(structures::attribute{new_attributes[i], session_state().drawlists.begin()->dataset_read().attributes[i].display_name});
-        for(const auto& dl: session_state().drawlists){
-            const auto& ds_bounds = dl.dataset_read().attributes[i].bounds.read();
-            const auto& dl_bounds = session_state().attributes.back().bounds.read();
-            if(ds_bounds.min < dl_bounds.min)
-                session_state().attributes.back().bounds().min = ds_bounds.min;
-            if(ds_bounds.max > dl_bounds.max)
-                session_state().attributes.back().bounds().max = ds_bounds.max;
-        }
-    }
-
-    // deleting all removed attributes in sorting order
-    for(size_t i: util::rev_size_range(session_state().attribute_order_infos)){
-        if(session_state().attribute_order_infos[i].attribut_index >= session_state().attributes.size())
-            session_state().attribute_order_infos.erase(session_state().attribute_order_infos.begin() + i);
-    }
-    // adding new attribute references
-    for(size_t i: util::i_range(session_state().attributes.size() - session_state().attribute_order_infos.size()))
-        session_state().attribute_order_infos.emplace_back(structures::attribute_order_info{static_cast<uint32_t>(session_state().attribute_order_infos.size())});
-
-    _update_registered_histograms();
+    //_update_registered_histograms();
 }
 
-void violin_attribute_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
-    if(session_state.read().drawlists.empty()){
-        session_state().attributes = globals::drawlists.read().at(drawlist_ids.front()).read().dataset_read().attributes;
-        const auto attribute_count = session_state().attributes.size();
-        session_state().attribute_log.resize(attribute_count, false);
-        session_state().attribute_order_infos.clear();
-        for(size_t i: util::size_range(session_state.read().attributes))
-            session_state().attribute_order_infos.emplace_back(structures::attribute_order_info{static_cast<uint32_t>(i), true});
-        session_state().attribute_violin_appearances.resize(attribute_count);
-    }
-    
+void violin_attribute_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){ 
     for(const auto& dl_id: drawlist_ids){
         // checking for already contained drawlists and attribute consistency
         if(session_state.read().drawlists | util::contains_if<structures::violins::drawlist_info>([&dl_id](const structures::violins::drawlist_info& i){return i.drawlist_id == dl_id;}))
             continue;
 
-        auto&       dl = globals::drawlists()[dl_id]();
-        const auto& ds = dl.dataset_read();
-
-        size_t merge_index{};
-        for(size_t var: util::size_range(session_state.read().attributes)){
-            if(session_state.read().attributes[var].id != ds.attributes[var].id)
-                break;
-            merge_index = var + 1;
-        }
-
-        if(merge_index < session_state.read().attributes.size()){
-            session_state().attributes.resize(merge_index);
-            session_state().attribute_log.resize(merge_index);
-            session_state().attribute_order_infos.clear();
-            for(size_t i: util::size_range(session_state.read().attributes))
-                session_state().attribute_order_infos.emplace_back(structures::attribute_order_info{static_cast<uint32_t>(i), true});
-            session_state().attribute_violin_appearances.resize(merge_index);
-        }
-
-        // combining min max values
-        for(auto&& [attribute, i]: util::enumerate(session_state().attributes)){
-            if(attribute.bounds.read().min > ds.attributes[i].bounds.read().min)
-                attribute.bounds().min = ds.attributes[i].bounds.read().min;
-            if(attribute.bounds.read().max < ds.attributes[i].bounds.read().max)
-                attribute.bounds().max = ds.attributes[i].bounds.read().max;
-        }
-
+        auto&       dl = globals::drawlists.ref_no_track()[dl_id].ref_no_track();
         session_state().drawlists.emplace_back(structures::violins::drawlist_info{dl_id, true, dl.appearance_drawlist});
 
-        _update_registered_histograms();
+        //_update_registered_histograms();
     }
+    _update_attribute_order_infos();
 }
 
 void violin_attribute_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -451,13 +417,14 @@ void violin_attribute_workbench::remove_drawlists(const util::memory_view<std::s
             }
         }
     }
+    _update_attribute_order_infos();
 }
 
 void violin_attribute_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
     _update_attribute_histograms();
 }
 
-std::vector<violin_attribute_workbench::drawlist_attribute> violin_attribute_workbench::get_active_drawlist_attributes() const{
+std::vector<violin_attribute_workbench::drawlist_attribute> violin_attribute_workbench::get_active_ordered_drawlist_attributes() const{
     std::vector<drawlist_attribute> ret;
     for(const auto& i: session_state.read().attribute_order_infos){
         if(!i.active)
@@ -465,24 +432,25 @@ std::vector<violin_attribute_workbench::drawlist_attribute> violin_attribute_wor
         for(const auto& dl: session_state.read().drawlists){
             if(!dl.appearance->read().show)
                 continue;
-            ret.emplace_back(drawlist_attribute{dl.drawlist_id, i.attribut_index});
+            ret.emplace_back(drawlist_attribute{dl.drawlist_id, i.attribute_id});
         }
     }
     return ret;
 }
 
-std::vector<uint32_t> violin_attribute_workbench::get_active_indices() const{
-    std::vector<uint32_t> ret;
+std::vector<violin_attribute_workbench::const_attribute_info_ref> violin_attribute_workbench::get_active_ordered_attributes() const{
+    std::vector<const_attribute_info_ref> ret;
     for(const auto& i: session_state.read().attribute_order_infos)
         if(i.active)
-            ret.emplace_back(i.attribut_index);
+            ret.emplace_back(i);
     return ret;
 }
 
-std::vector<structures::min_max<float>> violin_attribute_workbench::get_attribute_min_max() const{
-    std::vector<structures::min_max<float>> bounds;
-    for(const auto& a: session_state.read().attributes)
-        bounds.emplace_back(a.bounds.read());
+std::map<std::string_view, structures::min_max<float>>  violin_attribute_workbench::get_active_attribute_bounds() const{
+    std::map<std::string_view, structures::min_max<float>> bounds;
+    for(const auto& i: session_state.read().attribute_order_infos)
+        if(i.active)
+            bounds[i.attribute_id] = i.bounds->read();
     return bounds;
 }
 }

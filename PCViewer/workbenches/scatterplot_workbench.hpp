@@ -37,6 +37,7 @@ private:
     void _update_plot_images();
     void _update_plot_list();
     void _render_plot();
+    void _update_attribute_order_infos();
 public:
     structures::change_tracker<settings_t>                  settings{};
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};

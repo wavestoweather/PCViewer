@@ -58,8 +58,8 @@ structures::attributes_t        attributes{};
 std::vector<std::string_view>   selected_attributes{};
 structures::names_group         attribute_groups{};
 
-structures::global_brushes global_brushes{};
-structures::brush_edit_data brush_edit_data{};
+structures::global_brushes      global_brushes{};
+structures::brush_edit_data     brush_edit_data{};
 std::atomic<structures::brush_id> cur_global_brush_id{1};
 std::atomic<structures::range_id> cur_brush_range_id{1};
 
@@ -100,7 +100,7 @@ structures::priority_sorter priority_sorter{};
 
 std::atomic<float> priority_center_vealue{};
 std::atomic<float> priority_center_distance{};
-std::atomic<std::string_view> priority_center_attribute_id{};
+std::string_view   priority_center_attribute_id{};
 const std::string_view priority_drawlist_standard_order{"standard"};
 
 structures::globals_settings_t  settings{};
@@ -845,7 +845,7 @@ void histogram_counter::_task_thread_function(){
             distance_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
             distance_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
             distance_info.distances_address = util::vk::get_buffer_address(dl.priority_colors_gpu);
-            distance_info.priority_attribute = util::memory_view<const attribute>(ds.attributes).index_of([](const auto& a){return a.id == globals::priority_center_attribute_id.load();});
+            distance_info.priority_attribute = util::memory_view<const attribute>(ds.attributes).index_of([](const auto& a){return a.id == globals::priority_center_attribute_id;});
             distance_info.priority_center = globals::priority_center_vealue;
             distance_info.priority_distance = globals::priority_center_distance;
             pipelines::distance_calculator::instance().calculate(distance_info);
@@ -1045,7 +1045,7 @@ void priority_sorter::_task_thread_function(){
             const auto& ds = dl.dataset_read();
             const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
             const auto& dl_read = globals::drawlists.read().at(cur->dl_id).read();
-            const uint32_t priority_attriubute_index = util::memory_view<const attribute>(ds.attributes).index_of([](const attribute& a){return a.id == globals::priority_center_attribute_id.load();});
+            const uint32_t priority_attriubute_index = util::memory_view<const attribute>(ds.attributes).index_of([](const attribute& a){return a.id == globals::priority_center_attribute_id;});
             std::vector<uint8_t> color_index(tl.data_size);
             if(tl.flags.identity_indices){
                 for(size_t i: util::size_range(color_index))

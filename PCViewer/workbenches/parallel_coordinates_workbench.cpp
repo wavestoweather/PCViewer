@@ -196,8 +196,8 @@ void parallel_coordinates_workbench::_update_attribute_order_infos(){
     structures::flat_set<std::string_view> new_attributes;
     for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
         structures::flat_set<std::string_view> n;
-            for(const auto& att: dl.dataset_read().attributes)
-                n |= structures::flat_set<std::string_view>{{att.id}};
+        for(const auto& att: dl.dataset_read().attributes)
+            n |= structures::flat_set<std::string_view>{{att.id}};
         if(first)
             new_attributes = std::move(n);
         else
@@ -205,7 +205,7 @@ void parallel_coordinates_workbench::_update_attribute_order_infos(){
     }
 
     if(logger.logging_level >= logging::level::l_5)
-        logger << logging::info_prefix << " parallel_coordinates_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes) << logging::endl;
+        logger << logging::info_prefix << " parallel_coordinates_workbench::signal_dataset_update() New attributes will be: " << util::memory_view(new_attributes.data(), new_attributes.size()) << logging::endl;
 
     structures::flat_set<std::string_view> old_attributes;
     for(const auto& att_info: attribute_order_infos.read())
@@ -221,9 +221,17 @@ void parallel_coordinates_workbench::_update_attribute_order_infos(){
         }
     }
     // adding new attribute references
-    for(std::string_view att: attributes_to_add){
-        auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
-        attribute_order_infos().emplace_back(attribute_order_info_t{att, true, attribute.active, attribute.bounds});
+    if(attribute_order_infos.read().empty() && drawlist_infos.read().size()){
+        for(auto& att: drawlist_infos.read()[0].dataset_read().attributes){
+            auto& attribute = globals::attributes.ref_no_track()[att.id].ref_no_track();
+            attribute_order_infos().emplace_back(attribute_order_info_t{att.id, true, attribute.active, attribute.bounds});
+        }
+    }
+    else{
+        for(std::string_view att: attributes_to_add){
+            auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
+            attribute_order_infos().emplace_back(attribute_order_info_t{att, true, attribute.active, attribute.bounds});
+        }
     }
 }
 
@@ -290,7 +298,7 @@ void parallel_coordinates_workbench::show(){
 
     uint32_t labels_count{};
     for(const auto& att_ref: attribute_order_infos.read())
-        if(att_ref.active)
+        if(att_ref.active->read())
             ++labels_count;
 
     constexpr float tick_width = 10;
@@ -303,7 +311,7 @@ void parallel_coordinates_workbench::show(){
     ImGui::Dummy({1, 1});
     // attribute labels
     for(const auto& att_ref: attribute_order_infos.read()){
-        if(!att_ref.active)
+        if(!att_ref.active->read())
             continue;
         
         ImGui::SameLine(cur_offset);
@@ -357,7 +365,7 @@ void parallel_coordinates_workbench::show(){
     cur_offset = 0;
     for(const auto& [att_ref, i]: util::enumerate(attribute_order_infos.read())){
         util::imgui::scoped_id att_id(att_ref.attribute_id.data());
-        if(!att_ref.active)
+        if(!att_ref.active->read())
             continue;
         
         ImGui::SetNextItemWidth(button_size.x);
@@ -394,7 +402,7 @@ void parallel_coordinates_workbench::show(){
             int att_pos{};
             const float label_height = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y * 2;
             for(const auto& att_ref: attribute_order_infos.read()){
-                if(!att_ref.active)
+                if(!att_ref.active->read())
                     continue;
                 if(att_ref.attribute_read().categories.empty()){
                     ++att_pos;
@@ -427,7 +435,7 @@ void parallel_coordinates_workbench::show(){
             ImGui::PushFontShadow(col);
             int att_pos{};
             for(const auto& att_ref: attribute_order_infos.read()){
-                if(!att_ref.active)
+                if(!att_ref.active->read())
                     continue;
                 if(att_ref.attribute_read().categories.size()){
                     ++att_pos;
@@ -478,7 +486,7 @@ void parallel_coordinates_workbench::show(){
     cur_offset = 0;
     for(const auto& [att_ref, i]: util::enumerate(attribute_order_infos.read())){
         util::imgui::scoped_id att_id(att_ref.attribute_id.data());
-        if(!att_ref.active)
+        if(!att_ref.active->read())
             continue;
         
         ImGui::SetNextItemWidth(button_size.x);
@@ -500,7 +508,7 @@ void parallel_coordinates_workbench::show(){
     if(globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none || _select_priority_center_single || _select_priority_center_all){
         uint32_t place = 0;
         for(const auto& att_ref: attribute_order_infos.read())
-            if(att_ref.active)
+            if(att_ref.active->read())
                 place_of_attribute[att_ref.attribute_id] = place++;
     }
 
@@ -637,7 +645,7 @@ void parallel_coordinates_workbench::show(){
         // brush creation
         bool new_brush{false};
         for(const auto& att_ref: attribute_order_infos.read()){
-            if(!att_ref.active)
+            if(!att_ref.active->read())
                 continue;
             float x = static_cast<float>(brush_gap * place_of_attribute[att_ref.attribute_id] + pic_pos.x - setting.read().brush_box_width / 2);
             bool axis_hover = util::point_in_box(mouse_pos, {x, pic_pos.y}, {x + float(setting.read().brush_box_width), pic_pos.y + pic_size.y}) && ImGui::IsWindowHovered();
@@ -678,7 +686,7 @@ void parallel_coordinates_workbench::show(){
             _select_priority_center_all = _select_priority_center_single = false;
 
         for(const auto& att_ref: attribute_order_infos.read()){
-            if(!att_ref.active)
+            if(!att_ref.active->read())
                 continue;
             float x = gap * place_of_attribute[att_ref.attribute_id] + pic_pos.x - static_cast<float>(setting.read().brush_box_width / 2.);
             bool axis_hover = util::point_in_box(ImGui::GetMousePos(), {x, pic_pos.y}, {x + float(setting.read().brush_box_width), b.y});

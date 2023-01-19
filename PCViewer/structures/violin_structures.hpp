@@ -10,11 +10,12 @@ using attribute_order_info = structures::attribute_info;
 
 struct drawlist_attribute{
     std::string_view dl;
-    uint32_t         attribute;
+    std::string_view att;
 
-    bool operator==(const drawlist_attribute& da) const {return dl == da.dl && attribute == da.attribute;}
+    bool operator==(const drawlist_attribute& da) const {return dl == da.dl && att == da.att;}
 
-    DECL_DRAWLIST_READ(dl)
+    DECL_DRAWLIST_READ(dl);
+    DECL_DATASET_READ(drawlist_read().parent_dataset);
 };
 
 struct histogram{
@@ -74,7 +75,7 @@ struct violin_appearance_t{
 struct session_common{
     std::vector<attribute_order_info>                       attribute_order_infos{};
     mutable std::map<std::string_view, violin_appearance_t> attribute_violin_appearances{};
-    std::map<std::string_view ,uint8_t>                     attribute_log{};
+    std::map<std::string_view, bool>                        attribute_log{};
 };
 struct drawlist_session_state_t: public session_common{
     std::map<std::string_view, drawlist_info>   drawlists{};
@@ -122,6 +123,6 @@ const std::map<std::tuple<violin_base_pos_t, violin_dir_t, bool>, std::string_vi
 template<> struct std::hash<structures::violins::drawlist_attribute>{
     inline size_t operator()(const structures::violins::drawlist_attribute& da) const{
         size_t hash = std::hash<std::string_view>{}(da.dl);
-        return std::hash_combine(hash, da.attribute);
+        return std::hash_combine(hash, da.att);
     }
 };

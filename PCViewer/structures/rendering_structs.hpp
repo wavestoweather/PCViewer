@@ -86,6 +86,7 @@ namespace parallel_coordinates_renderer{
         DECL_DRAWLIST_WRITE(drawlist_id)
         DECL_DATASET_READ(drawlist_read().parent_dataset)
         DECL_DATASET_WRITE(drawlist_read().parent_dataset)
+        DECL_DATASET_NO_TRACK(drawlist_read().parent_dataset)
     };
 }
 

@@ -16,6 +16,7 @@ public:
     template<typename U>
     flat_set(U begin, U end): _elements(begin, end) {if(_elements.size() > 1) {if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
 
+    const T* data() const           {return _elements.data();}
     size_t size() const             {return _elements.size();}
     decltype(_elements.begin()) begin(){return _elements.begin();}
     decltype(_elements.end())   end()  {return _elements.end();}
@@ -25,6 +26,8 @@ public:
     flat_set<T>& operator|=(const flat_set<T>& o) {std::vector<T> res(_elements.size() + o._elements.size()); auto it = std::set_union(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res.begin()); res.resize(it - res.begin()); _elements = std::move(res); return *this;}
     flat_set<T>& operator/=(const flat_set<T>& o) {std::vector<T> res(_elements.size() + o._elements.size()); auto it = std::set_difference(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res.begin()); res.resize(it - res.begin()); _elements = std::move(res); return *this;}
     flat_set<T>& operator^=(const flat_set<T>& o) {std::vector<T> res(_elements.size() + o._elements.size()); auto it = std::set_symmetric_difference(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res.begin()); res.resize(it - res.begin()); _elements = std::move(res); return *this;}
+
+    flat_set<T>& operator|=(const T& o) {std::vector<T> res(_elements.size() + 1); auto it = std::set_union(_elements.begin(), _elements.end(), &o, (&o) + 1, res.begin()); res.resize(it - res.begin()); _elements = std::move(res); return *this;}
 
     flat_set<T> operator&(const flat_set<T>& o) const {flat_set<T> res(_elements.size() + o._elements.size()); auto it = std::set_intersection(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res._elements.begin()); res._elements.resize(it - res.begin()); return res;}
     flat_set<T> operator|(const flat_set<T>& o) const {flat_set<T> res(_elements.size() + o._elements.size()); auto it = std::set_union(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res._elements.begin()); res._elements.resize(it - res.begin()); return res;}
