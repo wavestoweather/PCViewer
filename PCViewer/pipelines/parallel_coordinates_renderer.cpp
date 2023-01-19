@@ -404,7 +404,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     pc.attribute_info_address = util::vk::get_buffer_address(attribute_infos_gpu) + ds_attribute_info_offsets[ds.id];
                     if(info.workbench.setting.read().render_splines){
                         hist_indices = {indices[std::max<int>(i - 1, size_t(0))], indices[i], indices[i + 1], indices[std::min(i + 2, indices.size() - 1)]};
-                        attribute_bounds = {active_ordered_attributes[std::max(i - 1, size_t(0))].get().bounds->read(), active_ordered_attributes[i].get().bounds->read(), active_ordered_attributes[i + 1].get().bounds->read(), active_ordered_attributes[std::min(i + 2, indices.size() - 1)].get().bounds->read()};
+                        attribute_bounds = {active_ordered_attributes[std::max(int(i) - 1, 0)].get().bounds->read(), active_ordered_attributes[i].get().bounds->read(), active_ordered_attributes[i + 1].get().bounds->read(), active_ordered_attributes[std::min(i + 2, indices.size() - 1)].get().bounds->read()};
                         std::vector<uint32_t> ordering(hist_indices.size());
                         std::iota(ordering.begin(), ordering.end(), 0);
                         std::sort(ordering.begin(), ordering.end(), [&](uint32_t a, uint32_t b){return hist_indices[a] < hist_indices[b];});

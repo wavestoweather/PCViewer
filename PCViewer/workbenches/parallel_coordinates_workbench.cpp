@@ -99,8 +99,8 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
             std::vector<structures::min_max<float>> bounds;
             int height = plot_data.read().height;
             if(setting.read().render_splines){
-                indices = {active_indices[std::max(static_cast<uint32_t>(i) - 1, 0u)], active_indices[i], active_indices[i + 1], active_indices[std::min(static_cast<uint32_t>(i) + 2, static_cast<uint32_t>(active_indices.size()) - 1)]};
-                bounds = {active_attributes[std::max(i - 1, size_t(0))].get().bounds->read(), active_attributes[i].get().bounds->read(), active_attributes[i + 1].get().bounds->read(), active_attributes[std::min(i, active_attributes.size() - 1)].get().bounds->read()};
+                indices = {active_indices[std::max(static_cast<int>(i) - 1, 0)], active_indices[i], active_indices[i + 1], active_indices[std::min(static_cast<uint32_t>(i) + 2, static_cast<uint32_t>(active_indices.size()) - 1)]};
+                bounds = {active_attributes[std::max(static_cast<int>(i) - 1, 0)].get().bounds->read(), active_attributes[i].get().bounds->read(), active_attributes[i + 1].get().bounds->read(), active_attributes[std::min(i + 2, active_attributes.size() - 1)].get().bounds->read()};
                 bucket_sizes = {config::histogram_splines_hidden_res, height, height, config::histogram_splines_hidden_res};
             }
             else{
