@@ -56,12 +56,14 @@ struct global_attribute: public attribute{
 };
 using tracked_global_attribute_t = unique_tracker<global_attribute>;
 using attributes_t = change_tracker<std::map<std::string_view, tracked_global_attribute_t>>;
+using attribute_renames = std::vector<std::pair<std::string, std::string>>;
 }
 
 namespace globals{
 extern std::vector<std::string_view> selected_attributes;
 extern structures::attributes_t     attributes;
 extern structures::names_group      attribute_groups;
+extern structures::attribute_renames attribute_renames;
 }
 
 namespace structures{

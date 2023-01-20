@@ -28,6 +28,7 @@
 #include <stopwatch.hpp>
 #include <descriptor_set_storage.hpp>
 #include <imgui_util.hpp>
+#include <imgui_stdlib.h>
 #include <global_settings.hpp>
 #include <load_colors_workbench.hpp>
 #include <radix.hpp>
@@ -693,6 +694,13 @@ structures::dataset_t open_dataset(std::string_view filename, memory_view<struct
     dataset().cpu_data.changed = false;
     dataset().original_attribute_size = static_cast<uint32_t>(dataset.read().attributes.size());
 
+    // renaming attributes if necessary
+    for(auto& att: dataset().attributes){
+        auto rename = globals::attribute_renames | util::try_find_if<const std::pair<std::string, std::string>>([&att](const auto& re){return re.first == att.id;});
+        if(rename)
+            att.display_name = att.id = rename->get().second;
+    }
+
     globals::stager.wait_for_completion();    // wait for uploadsd, then continue
 
     return std::move(dataset);
@@ -954,6 +962,25 @@ void check_datasets_to_open(){
     }
 
     if(ImGui::BeginPopupModal(open_dataset_popup_name.data(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)){
+        if(ImGui::CollapsingHeader("Automatic Attribute renaming")){
+            int del{-1};
+            ImGui::PushItemWidth(100);
+            for(auto&& [att_rename, i]: util::enumerate(globals::attribute_renames)){
+                util::imgui::scoped_id rename_id{int(i)};
+                ImGui::InputText("from", &att_rename.first);
+                ImGui::SameLine();
+                ImGui::InputText("to", &att_rename.second);
+                ImGui::SameLine();
+                if(ImGui::Button("X##ren"))
+                    del = int(i);
+            }
+            ImGui::PopItemWidth();
+            if(ImGui::Button("+"))
+                globals::attribute_renames.emplace_back();
+            if(del >= 0)
+                globals::attribute_renames.erase(globals::attribute_renames.begin() + del);
+        }
+
         if(ImGui::CollapsingHeader("Variables/Dimensions settings")){
             if(ImGui::Button("Activate all")){
                 for(auto& q: globals::attribute_query){
