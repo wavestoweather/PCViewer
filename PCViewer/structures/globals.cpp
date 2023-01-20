@@ -614,7 +614,7 @@ void stager::_task_thread_function(){
             image_copy.imageOffset.z += cur_span.min / cur.image_extent.width / cur.image_extent.height / cur.bytes_per_pixel;
             image_copy.imageOffset.y += cur_span.min * cur.bytes_per_pixel % (cur.image_extent.width * cur.image_extent.height) / cur.image_extent.width;
             image_copy.imageExtent = cur.image_extent;
-            image_copy.imageExtent.height = copy_size / cur.image_extent.width / cur.bytes_per_pixel;
+            image_copy.imageExtent.height = copy_size / cur.image_extent.width / cur.bytes_per_pixel;   // TODO fix for 3d images, missing division by depth i think
             image_copy.imageExtent.depth = 1;
 
             if(cur.transfer_dir == transfer_direction::upload){

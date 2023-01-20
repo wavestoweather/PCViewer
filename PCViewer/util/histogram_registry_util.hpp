@@ -11,6 +11,7 @@ namespace util{
 namespace histogram_registry{
 
 inline std::string get_id_string(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, util::memory_view<const structures::min_max<float>> attribute_bounds, bool is_min_hist, bool is_max_hist){
+    assert(attribute_indices.size() == bin_sizes.size() && bin_sizes.size() == attribute_bounds.size() && "All sizes must match.");
     std::vector<uint32_t> sorted(attribute_indices.size()); std::iota(sorted.begin(), sorted.end(), 0);
     std::sort(sorted.begin(), sorted.end(), [&](uint32_t l, uint32_t r){return attribute_indices[l] < attribute_indices[r];});
     std::string id;

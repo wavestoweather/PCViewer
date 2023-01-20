@@ -172,7 +172,40 @@ void scatterplot_workbench::_render_plot(){
 }
 
 void scatterplot_workbench::_update_attribute_order_infos(){
+    // calculating the intersection of all drawlist attributes
+    structures::flat_set<std::string_view> new_attributes;
+    for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
+        structures::flat_set<std::string_view> n;
+        for(const auto& att: dl.dataset_read().attributes)
+            n |= att.id;
+        if(first)
+            new_attributes = std::move(n);
+        else
+            new_attributes &= n;
+    }
 
+    if(logger.logging_flags.additional_info)
+        logger << logging::info_prefix << " violin_drawlist_workbench::_update_attribute_order_infos() New attributes will be: " << util::memory_view(new_attributes.data(), new_attributes.size()) << logging::endl;
+    
+    structures::flat_set<std::string_view> old_attributes;
+    for(const auto& att_info: attribute_order_infos.read())
+        old_attributes |= att_info.attribute_id;
+    auto attributes_to_add = new_attributes / old_attributes;
+
+    // deleting all unused attributes in reverse order to avoid length problems
+    for(size_t i: util::rev_size_range(attribute_order_infos.read())){
+        std::string_view cur_att = attribute_order_infos.read()[i].attribute_id;
+        if(!new_attributes.contains(cur_att)){
+            if(!attribute_order_infos.read()[i].linked_with_attribute)
+                bool todo = true;
+            attribute_order_infos().erase(attribute_order_infos.read().begin() + i);
+        }
+    }
+    // adding new attribute references
+    for(std::string_view att: attributes_to_add){
+        auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
+        attribute_order_infos().emplace_back(structures::attribute_info{att, true, attribute.active, attribute.bounds, attribute.color});
+    }
 }
 
 scatterplot_workbench::scatterplot_workbench(std::string_view id):
@@ -214,19 +247,19 @@ scatterplot_workbench::scatterplot_workbench(std::string_view id):
     }
 }
 
-void draw_lassos(scatterplot_workbench::attribute_pair p, float plot_width, ImVec4 min_max, ImU32 color = util::brushes::get_brush_color(), float thickness = globals::brush_edit_data.brush_line_width, const ImVec2& base_pos = ImGui::GetCursorScreenPos()){
+void draw_lassos(scatterplot_workbench::attribute_pair p, util::memory_view<const uint32_t> p_indices, float plot_width, ImVec4 min_max, ImU32 color = util::brushes::get_brush_color(), float thickness = globals::brush_edit_data.brush_line_width, const ImVec2& base_pos = ImGui::GetCursorScreenPos()){
     if(globals::brush_edit_data.brush_type == structures::brush_edit_data::brush_type::none)
         return;
     
-    bool swap{p.a > p.b};
+    bool swap{p_indices[0] > p_indices[1]};
     if(swap)
         std::swap(p.a, p.b);
     const auto& lassos = util::brushes::get_selected_lasso_brush_const();
-    try{
-        auto& lasso = util::memory_view<const structures::polygon>(lassos).find([&](const structures::polygon& e){return e.attr1 == p.a && e.attr2 == p.b;});
-        if(lasso.borderPoints.empty()) return;
-        ImVec2 const* last_p = &lasso.borderPoints.back();
-        for(const ImVec2& cur_p: lasso.borderPoints){
+    auto lasso = lassos | util::try_find_if<const structures::polygon>([&](const structures::polygon& e){return e.attr1 == p.a && e.attr2 == p.b;});
+    if(lasso){
+        if(lasso->get().borderPoints.empty()) return;
+        ImVec2 const* last_p = &lasso->get().borderPoints.back();
+        for(const ImVec2& cur_p: lasso->get().borderPoints){
             ImVec2 normalized_start{util::normalize_val_for_range(last_p->x, min_max[0], min_max[2]), util::normalize_val_for_range(last_p->y, min_max[1], min_max[3])};
             ImVec2 normalized_end{util::normalize_val_for_range(cur_p.x, min_max[0], min_max[2]), util::normalize_val_for_range(cur_p.y, min_max[1], min_max[3])};
             normalized_start.y = 1 - normalized_start.y;
@@ -239,7 +272,6 @@ void draw_lassos(scatterplot_workbench::attribute_pair p, float plot_width, ImVe
             last_p = &cur_p;
         }
     }
-    catch(std::exception& e){}
 }
     
 void scatterplot_workbench::show() 
@@ -260,7 +292,8 @@ void scatterplot_workbench::show()
     local_change |= drawlist_infos.changed;
     request_render |= local_change;
     request_render |= attribute_order_infos.changed;
-    if(attribute_order_infos.changed) _update_plot_list();
+    if(attribute_order_infos.changed) 
+        _update_plot_list();
     request_render |= settings.changed;
     request_render |= _drawlists_updated;
     if(globals::drawlists.changed){
@@ -315,7 +348,8 @@ void scatterplot_workbench::show()
                         plot_additional_datas[p].background_image = *reinterpret_cast<const std::string_view*>(payload->Data);
                     ImGui::EndDragDropTarget();
                 }
-                draw_lassos(p, settings.read().plot_width, {active_attributes[j].get().bounds->read().min, active_attributes[i].get().bounds->read().min, active_attributes[i].get().bounds->read().max, active_attributes[j].get().bounds->read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
+                std::array<uint32_t, 2> indices{uint32_t(i), uint32_t(j)};
+                draw_lassos(p, indices, settings.read().plot_width, {active_attributes[j].get().bounds->read().min, active_attributes[i].get().bounds->read().min, active_attributes[j].get().bounds->read().max, active_attributes[i].get().bounds->read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
                 _plot_x_vals[j] = c_pos.x;
             }
         }
@@ -337,7 +371,8 @@ void scatterplot_workbench::show()
                 ImGui::OpenPopup(plot_menu_id.data());
             if(ImGui::IsItemHovered())
                 hovered_pair = p;
-            draw_lassos(p, settings.read().plot_width, {att_id_to_attribute.at(p.a).get().bounds->read().min, att_id_to_attribute.at(p.b).get().bounds->read().min, att_id_to_attribute.at(p.a).get().bounds->read().max, att_id_to_attribute.at(p.b).get().bounds->read().max});
+            std::array<uint32_t, 2> indices{uint32_t(0), uint32_t(0)};  // todo exchange
+            draw_lassos(p, indices, settings.read().plot_width, {att_id_to_attribute.at(p.a).get().bounds->read().min, att_id_to_attribute.at(p.b).get().bounds->read().min, att_id_to_attribute.at(p.a).get().bounds->read().max, att_id_to_attribute.at(p.b).get().bounds->read().max});
         }
         break;
     }

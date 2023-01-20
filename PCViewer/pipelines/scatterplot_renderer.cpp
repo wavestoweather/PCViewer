@@ -221,6 +221,7 @@ void scatterplot_renderer::render(const render_info& info){
 
     // renderng all plots with all datasets
     for(const auto& [axis_pair, iter_pos]: util::pos_iter(info.workbench.plot_list.read())){
+        const auto a_pair = axis_pair;
         const auto& plot_data = info.workbench.plot_datas.at(axis_pair);
 
         _render_commands.emplace_back(util::vk::create_begin_command_buffer(_command_pool));
@@ -259,10 +260,13 @@ void scatterplot_renderer::render(const render_info& info){
             if(histogram_render){
                 push_constants_large_vis pc{};
                 {
+                    const auto& a_ref = info.workbench.get_attribute_order_info(axis_pair.a);
+                    const auto& b_ref = info.workbench.get_attribute_order_info(axis_pair.b);
                     std::array<int, 2> bin_sizes{int(p_key.width), int(p_key.width)};
-                    std::array<structures::min_max<float>, 2> min_max{info.workbench.get_attribute_order_info(axis_pair.a).bounds->read(), info.workbench.get_attribute_order_info(axis_pair.b).bounds->read()};
+                    std::array<uint32_t, 2> attribute_indices{uint32_t(util::memory_view<const structures::attribute>(dl.dataset_read().attributes).index_of([&a_pair](const auto& a){return a.id == a_pair.a;})), uint32_t(util::memory_view<const structures::attribute>(dl.dataset_read().attributes).index_of([&a_pair](const auto& a){return a.id == a_pair.b;}))};
+                    std::array<structures::min_max<float>, 2> min_max{a_ref.bounds->read(), b_ref.bounds->read()};
                     auto hist_access = dl.drawlist_read().histogram_registry.const_access();
-                    std::string histogram_id = util::histogram_registry::get_id_string(util::memory_view(&axis_pair.a, 2), bin_sizes, min_max, false, false);
+                    std::string histogram_id = util::histogram_registry::get_id_string(attribute_indices, bin_sizes, min_max, false, false);
                     if(!hist_access->name_to_registry_key.contains(histogram_id)){
                         if(logger.logging_level > logging::level::l_4)
                             logger << logging::warning_prefix << " scatterplot_renderer::render() Missing histogram for attributes " << axis_pair.a << "|" << axis_pair.b << " for drawwlist " << dl.drawlist_id << logging::endl;

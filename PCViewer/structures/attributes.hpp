@@ -75,7 +75,7 @@ struct attribute_info{
     util::memory_view<bounds_tracker>       bounds{};
     util::memory_view<color_tracker>        color{};
     bool any_change() const {return active && active->changed || bounds && bounds->changed || color && color->changed;}
-    void clear_change()     {if(active->changed) active->changed = false; if(active->changed) bounds->changed = false; if(active->changed) color->changed = false;}
+    void clear_change()     {if(active) active->changed = false; if(bounds) bounds->changed = false; if(color) color->changed = false;}
     DECL_ATTRIBUTE_READ(attribute_id);
     DECL_ATTRIBUTE_WRITE(attribute_id);
 

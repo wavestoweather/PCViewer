@@ -280,7 +280,8 @@ void parallel_coordinates_workbench::show(){
     for(const auto& dl: drawlist_infos.read())
         request_registered_histograms_update |= dl.priority_render.changed;
 
-    request_registered_histograms_update |= setting.changed;
+    request_registered_histograms_update |= setting.changed | _dl_added;
+    _dl_added = false;
 
     // checking for changed image
     if(plot_data.changed){
@@ -296,8 +297,6 @@ void parallel_coordinates_workbench::show(){
     // check for requested registered histogram update
     if(request_registered_histograms_update)
         _update_registered_histograms(request_registered_histograms_update_var);
-
-    request_render &= !any_drawlist_change;
 
     if(request_render)
         render_plot();
@@ -1109,9 +1108,7 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
 
         auto& dl = globals::drawlists.write().at(drawlist_id).write();
         drawlist_infos.write().push_back(drawlist_info{drawlist_id, true, dl.appearance_drawlist, dl.median_typ});
-
-        // checking histogram (large vis/axis histograms) rendering or standard rendering
-        //_request_registered_histograms_update = true;
+        _dl_added = true;
     }
     _update_attribute_order_infos();
 }
@@ -1125,7 +1122,7 @@ void parallel_coordinates_workbench::signal_drawlist_update(const util::memory_v
         }
     }
     if(request_render)
-        render_plot();
+        drawlist_infos();
 }
 
 void parallel_coordinates_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){

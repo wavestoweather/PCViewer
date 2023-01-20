@@ -80,8 +80,8 @@ namespace parallel_coordinates_renderer{
         util::memory_view<median_tracker>       median;
         change_tracker<bool>                    priority_render;
 
-        bool any_change() const {return appearance->changed || median->changed;}
-        void clear_change()     {appearance->changed = false; median->changed = false;}
+        bool any_change() const {return appearance->changed || median->changed || priority_render.changed;}
+        void clear_change()     {appearance->changed = false; median->changed = false; priority_render.changed = false;}
         DECL_DRAWLIST_READ(drawlist_id)
         DECL_DRAWLIST_WRITE(drawlist_id)
         DECL_DATASET_READ(drawlist_read().parent_dataset)
