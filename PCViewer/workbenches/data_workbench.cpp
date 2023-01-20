@@ -21,6 +21,7 @@ void data_workbench::show()
     const static std::string_view popup_add_tl{"Add templatelist"};
     const static std::string_view popup_delete_ds{"Delete dataset"};
     const static std::string_view popup_add_empty_ds{"Add empty dataset"};
+    const static std::string_view popup_convert_dl_to_global_brush{"Convert dl to global brush"};
 
     bool popup_open_tl_to_brush{false};
     bool popup_open_tl_to_dltl{false};
@@ -29,6 +30,7 @@ void data_workbench::show()
     bool popup_open_delete_ds{false};
     bool popup_open_delete_tl{false};
     bool popup_open_add_empty_ds{false};
+    bool popup_open_dl_to_gbrush{false};
 
     ImGui::Begin(id.c_str(), {}, ImGuiWindowFlags_NoScrollbar);
     // 3 column layout with the following layout
@@ -440,7 +442,7 @@ void data_workbench::show()
         // c3
         ImGui::TableNextColumn();
 
-        if(ImGui::BeginTable("global_brush_table", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
+        if(ImGui::BeginTable("global brushes", 3, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImGui::GetContentRegionAvail())){
             ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Active");
@@ -500,6 +502,13 @@ void data_workbench::show()
             }
 
             ImGui::EndTable();
+        }
+        if(ImGui::BeginDragDropTarget()){
+            if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("drawlists")){
+                _popup_dl_id = *reinterpret_cast<const std::string_view*>(payload->Data);
+                popup_open_dl_to_gbrush = true;
+            }
+            ImGui::EndDragDropTarget();
         }
 
         ImGui::EndTable();
@@ -722,6 +731,30 @@ void data_workbench::show()
 
     if(ImGui::BeginPopupModal(popup_add_empty_ds.data())){
         // TODO: implemnet
+        ImGui::EndPopup();
+    }
+
+    if(popup_open_dl_to_gbrush)
+        ImGui::OpenPopup(popup_convert_dl_to_global_brush.data());
+    if(ImGui::BeginPopupModal(popup_convert_dl_to_global_brush.data())){
+        ImGui::Text("Do you want to convert local brush to global brush? (More options will come in the future)");
+        if(ImGui::Button("Confirm")){
+            structures::tracked_brush new_brush{};
+            auto cur_id = globals::cur_global_brush_id++;
+            new_brush().id = cur_id;
+            new_brush().name = "Global brush " + std::to_string(cur_id);
+            new_brush().lassos = globals::drawlists.read().at(_popup_dl_id).read().local_brushes.read().lassos;
+            new_brush().ranges = globals::drawlists.read().at(_popup_dl_id).read().local_brushes.read().ranges;
+            globals::global_brushes().push_back(new_brush);
+            // selecting the last brush
+            globals::selected_drawlists.clear();
+            globals::brush_edit_data.brush_type = structures::brush_edit_data::brush_type::global;
+            globals::brush_edit_data.global_brush_id =  cur_id;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Cancel"))
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 }

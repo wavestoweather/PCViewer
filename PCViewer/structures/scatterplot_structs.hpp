@@ -161,6 +161,12 @@ namespace scatterplot_wb{
         VkRenderPass render_pass{};
         VkFramebuffer framebuffer{};
     };
+
+    struct local_attribute_storage{
+        activation_tracker  active;
+        bounds_tracker      bounds;
+        color_tracker       color;
+    };
 }
 }
 

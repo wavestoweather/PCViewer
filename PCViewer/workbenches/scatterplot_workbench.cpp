@@ -76,6 +76,7 @@ void scatterplot_workbench::_update_registered_histograms(){
     // setting update singal flags
     for(const auto& dl: drawlist_infos.read())
         dl.drawlist_write().histogram_registry.access()->request_change_all();
+    attribute_order_infos.changed = false;
     _request_registrators_update = false;
 }
 
@@ -208,6 +209,29 @@ void scatterplot_workbench::_update_attribute_order_infos(){
     }
 }
 
+void scatterplot_workbench::_show_general_settings(){
+    ImGui::BeginDisabled();
+    if(ImGui::BeginCombo("plot type(coming soon)", plot_type_names[settings.read().plot_type].data())){
+        for(auto t: structures::enum_iteration<plot_type_t>()){
+            if(ImGui::MenuItem(plot_type_names[t].data())){
+                settings().plot_type = t;
+                _update_plot_list();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::EndDisabled();
+    ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+    if(ImGui::InputScalar("Plot width", ImGuiDataType_U32, &settings.ref_no_track().plot_width, {}, {}, {}, ImGuiInputTextFlags_EnterReturnsTrue)){
+        settings().plot_width = std::clamp(settings.read().plot_width, 50u, 10000u);
+        _request_registrators_update |= true;
+    }
+    if(ImGui::DragFloat("Uniform radius", &settings.read().uniform_radius, 1, 1, 100))
+        for(auto& dl: drawlist_infos())
+            dl.scatter_appearance().radius = settings.read().uniform_radius;
+    ImGui::InputDouble("plot padding", &settings.read().plot_padding);
+}
+
 scatterplot_workbench::scatterplot_workbench(std::string_view id):
     workbench(id)
 {
@@ -282,20 +306,19 @@ void scatterplot_workbench::show()
         return;
 
     // checking for setting updates and updating the rendering if necessary
-    _request_registrators_update |= attribute_order_infos.changed && std::any_of(attribute_order_infos.read().begin(), attribute_order_infos.read().end(), [](const auto& info){return info.active->changed.load();});
+    _request_registrators_update |= attribute_order_infos.changed;// && std::any_of(attribute_order_infos.read().begin(), attribute_order_infos.read().end(), [](const auto& info){return info.active->changed || info.bounds->changed;});
 
-    if(_request_registrators_update)
+    if(_request_registrators_update){
+        _update_plot_list();
         _update_registered_histograms();
+    }
 
     bool local_change{false};
     bool request_render{false};
     local_change |= drawlist_infos.changed;
     request_render |= local_change;
     request_render |= attribute_order_infos.changed;
-    if(attribute_order_infos.changed) 
-        _update_plot_list();
     request_render |= settings.changed;
-    request_render |= _drawlists_updated;
     if(globals::drawlists.changed){
         for(const auto& dl: drawlist_infos.read())
             request_render |= globals::drawlists.read().at(dl.drawlist_id).changed;
@@ -410,59 +433,116 @@ void scatterplot_workbench::show()
     }
 
     // settings ---------------------------------------------------------
-    if(ImGui::BeginTable("scatterplot_setting", 2, ImGuiTableFlags_Resizable)){
+    std::string_view delete_drawlist{};
+    if(ImGui::BeginTable("scatterplot_setting", 3, ImGuiTableFlags_Resizable)){
         // column setup
         ImGui::TableSetupScrollFreeze(0, 1);    // make top row always visible
         ImGui::TableSetupColumn("Settings");
+        ImGui::TableSetupColumn("Attributes");
         ImGui::TableSetupColumn("Drawlists");
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         ImGui::TableNextColumn();
         ImGui::TableHeader("Settings");
+        ImGui::TableNextColumn();
+        ImGui::TableHeader("Attributes");
         ImGui::TableNextColumn();
         ImGui::TableHeader("Drawlists");
 
         // settings
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        if(ImGui::BeginCombo("plot type", plot_type_names[settings.read().plot_type].data())){
-            for(auto t: structures::enum_iteration<plot_type_t>()){
-                if(ImGui::MenuItem(plot_type_names[t].data())){
-                    settings().plot_type = t;
-                    _update_plot_list();
+        //if(ImGui::TreeNodeEx("Attribute Settings", ImGuiTreeNodeFlags_Framed)){
+        //    switch(settings.read().plot_type){
+        //    case plot_type_t::matrix:
+        //        ImGui::PushID("s_wb_att_set");
+        //        for(auto&& [att, i]: util::enumerate(attribute_order_infos.ref_no_track())){
+        //            if(ImGui::Checkbox(att.attribute_read().display_name.c_str(), &att.active->ref_no_track()))
+        //                attribute_order_infos()[i].active->write();
+        //        }
+        //        ImGui::PopID();
+        //        break;
+        //    case plot_type_t::list:
+        //        for(size_t i: util::i_range(size_t(1), attribute_order_infos.read().size())){
+        //            for(size_t j: util::i_range(i)){
+        //                //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
+        //                if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{attribute_order_infos.read()[i].attribute_id, attribute_order_infos.read()[j].attribute_id}) && ImGui::MenuItem((attribute_order_infos.read()[i].attribute_read().display_name + "|" + attribute_order_infos.read()[j].attribute_read().display_name).c_str()))
+        //                    plot_list().emplace_back(attribute_pair{attribute_order_infos.read()[i].attribute_id, attribute_order_infos.read()[j].attribute_id});
+        //            }
+        //        }
+        //        break;
+        //    }
+        //    ImGui::TreePop();
+        //}
+        _show_general_settings();
+
+        // attributes
+        ImGui::TableNextColumn();
+        if(ImGui::BeginTable("Attributes", 6, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_Hideable)){
+            ImGui::TableSetupScrollFreeze(1, 0);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Up");
+            ImGui::TableSetupColumn("Down");
+            ImGui::TableSetupColumn("Active");
+            ImGui::TableSetupColumn("Min");
+            ImGui::TableSetupColumn("Max");
+
+            ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Name");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Up");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Down");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Active");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Min");
+            ImGui::TableNextColumn();
+            ImGui::TableHeader("Max");
+
+            int up_index{-1}, down_index{-1};
+            for(auto&& [att_ref, i]: util::enumerate(attribute_order_infos.read())){
+                auto& att_no_track = attribute_order_infos.ref_no_track()[i];
+                util::imgui::scoped_id attribute_id(att_no_track.attribute_id.data());
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool selected = globals::selected_attributes | util::contains(att_ref.attribute_id);
+                if(ImGui::Selectable(att_ref.attribute_id.data(), selected, ImGuiSelectableFlags_NoPadWithHalfSpacing, {0, ImGui::GetTextLineHeightWithSpacing()})){
+
                 }
+                ImGui::TableNextColumn();
+                ImGui::BeginDisabled(i == 0);
+                if(ImGui::ArrowButton("##up", ImGuiDir_Up))
+                    up_index = static_cast<int>(i);
+                ImGui::EndDisabled();
+                ImGui::TableNextColumn();
+                ImGui::BeginDisabled(i == attribute_order_infos.read().size() - 1);
+                if(ImGui::ArrowButton("##do", ImGuiDir_Down))
+                    down_index = static_cast<int>(i);
+                ImGui::EndDisabled();
+                ImGui::TableNextColumn();
+                if(ImGui::Checkbox("##a", &att_no_track.active->ref_no_track())){
+                    //if(globals::selected_attributes.size() && selected)
+                    //    for(std::string_view att: globals::selected_attributes)
+                    attribute_order_infos();
+                }
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(70);
+                if(ImGui::DragFloat("##mi", &att_no_track.bounds->ref_no_track().min, (att_no_track.bounds->read().max - att_no_track.bounds->read().min) / 200, 0.f, 0.f, "%.3g"))
+                    attribute_order_infos()[i].bounds->write();
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(70);
+                if(ImGui::DragFloat("##ma", &att_no_track.bounds->ref_no_track().max, (att_no_track.bounds->read().max - att_no_track.bounds->read().min) / 200, 0.f, 0.f, "%.3g"))
+                    attribute_order_infos()[i].bounds->write();
             }
-            ImGui::EndCombo();
-        }
-        if(ImGui::TreeNodeEx("Attribute Settings", ImGuiTreeNodeFlags_Framed)){
-            switch(settings.read().plot_type){
-            case plot_type_t::matrix:
-                ImGui::PushID("s_wb_att_set");
-                for(auto&& [att, i]: util::enumerate(attribute_order_infos.ref_no_track())){
-                    if(ImGui::Checkbox(att.attribute_read().display_name.c_str(), &att.active->ref_no_track()))
-                        attribute_order_infos()[i].active->write();
-                }
-                ImGui::PopID();
-                break;
-            case plot_type_t::list:
-                for(size_t i: util::i_range(size_t(1), attribute_order_infos.read().size())){
-                    for(size_t j: util::i_range(i)){
-                        //bool active = util::memory_view(plot_list.read()).contains([&](const attribute_pair& p) {return p.a == i && p.b == j;});
-                        if(!util::memory_view<const attribute_pair>(plot_list.read()).contains(attribute_pair{attribute_order_infos.read()[i].attribute_id, attribute_order_infos.read()[j].attribute_id}) && ImGui::MenuItem((attribute_order_infos.read()[i].attribute_read().display_name + "|" + attribute_order_infos.read()[j].attribute_read().display_name).c_str()))
-                            plot_list().emplace_back(attribute_pair{attribute_order_infos.read()[i].attribute_id, attribute_order_infos.read()[j].attribute_id});
-                    }
-                }
-                break;
-            }
-            ImGui::TreePop();
-        }
-        if(ImGui::TreeNodeEx("General Settings", ImGuiTreeNodeFlags_Framed)){
-            ImGui::InputDouble("plot padding", &settings.read().plot_padding);
-            ImGui::ColorEdit4("##cols", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-            ImGui::TreePop();
+            if(up_index >= 0)
+                std::swap(attribute_order_infos()[up_index], attribute_order_infos()[up_index - 1]);
+            if(down_index >= 0)
+                std::swap(attribute_order_infos()[down_index], attribute_order_infos()[down_index + 1]);
+            ImGui::EndTable();
         }
 
         // drawlists
-        std::string_view delete_drawlist{};
         ImGui::TableNextColumn();
         if(ImGui::BeginTable("drawlists", 8, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)){
             ImGui::TableSetupScrollFreeze(0, 1);
@@ -552,16 +632,12 @@ void scatterplot_workbench::show()
         auto& att_a = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.a;}))->get();
         auto& att_b = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.b;}))->get();
         ImGui::PushItemWidth(100);
-        ImGui::ColorEdit4("Plot background", &settings.read().plot_background_color.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+        _show_general_settings();
+        ImGui::Separator();
         ImGui::BeginDisabled(!plot_additional_datas.contains(_popup_attributes));
         if(ImGui::MenuItem("Remove background image"))
             plot_additional_datas.erase(_popup_attributes);
         ImGui::EndDisabled();
-        if(ImGui::InputScalar("Plot width", ImGuiDataType_U32, &settings.ref_no_track().plot_width, {}, {}, {}, ImGuiInputTextFlags_EnterReturnsTrue)){
-            settings().plot_width = std::clamp(settings.read().plot_width, 50u, 10000u);
-            _request_registrators_update |= true;
-        }
-        ImGui::Separator();
         float diff = att_a.bounds->read().max - att_a.bounds->read().min;
         if(ImGui::DragFloat2(att_a.attribute_read().display_name.c_str(), att_a.bounds->ref_no_track().data(), diff * 1e-3f))
             attribute_order_infos(), att_a.bounds->write();
@@ -569,18 +645,19 @@ void scatterplot_workbench::show()
         if(ImGui::DragFloat2(att_b.attribute_read().display_name.c_str(), att_b.bounds->ref_no_track().data(), diff * 1e-3f))
             attribute_order_infos(), att_b.bounds->write();
         if(ImGui::MenuItem(("Swap " + att_a.attribute_read().display_name + " bounds").c_str()))
-            std::swap(att_a.bounds->write().min, att_a.bounds->write().max);
+            std::swap(att_a.bounds->write().min, att_a.bounds->write().max), attribute_order_infos();
         if(ImGui::MenuItem(("Swap " + att_b.attribute_read().display_name + " bounds").c_str()))
-            std::swap(att_b.bounds->write().min, att_b.bounds->write().max);
-        ImGui::Separator();
-        if(ImGui::DragFloat("Uniform radius", &settings.read().uniform_radius, 1, 1, 100))
-            for(auto& dl: drawlist_infos())
-                dl.scatter_appearance().radius = settings.read().uniform_radius;
+            std::swap(att_b.bounds->write().min, att_b.bounds->write().max), attribute_order_infos();
         ImGui::PopItemWidth();
         ImGui::EndPopup();
     }
 
     ImGui::End();
+
+    // deleting local drawlist
+    if(delete_drawlist.size()){
+        remove_drawlists(delete_drawlist);
+    }
 }
 
 void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -600,10 +677,16 @@ void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_vi
         drawlist_infos.write().emplace_back(drawlist_info{dl_id, true, dl.appearance_drawlist});
     }
     _update_attribute_order_infos();
-    //_update_plot_list();
+    // copying global attribute settings and disconnecting them from global state
+    for(auto& att: attribute_order_infos()){
+        att.linked_with_attribute = false;
+        _local_attribute_storage.emplace(att.attribute_id, std::make_unique<structures::scatterplot_wb::local_attribute_storage>(structures::scatterplot_wb::local_attribute_storage{att.active->read(), att.bounds->read()}));
+        att.active = _local_attribute_storage[att.attribute_id]->active;
+        att.bounds = _local_attribute_storage[att.attribute_id]->bounds;
+    }
 
     // checking histogram (large vis/axis histograms) rendering or standard rendering
-    _update_registered_histograms();
+    //_update_registered_histograms();
 }
 
 void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const structures::gpu_sync_info& sync_info){
@@ -617,7 +700,8 @@ void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::s
     if(!any_dl_affected)    
         return;
     
-    _update_attribute_order_infos();
+    attribute_order_infos();
+    //_update_attribute_order_infos();
     //_update_plot_list();
     //_update_registered_histograms();
 }
@@ -643,7 +727,7 @@ void scatterplot_workbench::signal_drawlist_update(const util::memory_view<std::
         }
     }
     if(request_render)
-        _drawlists_updated = true;  // has to be done delayed as current plot imageas might be still in use and might have to be recreated
+        drawlist_infos();  // has to be done delayed as current plot imageas might be still in use and might have to be recreated
 }
 
 std::vector<scatterplot_workbench::const_attribute_info_ref> scatterplot_workbench::get_active_ordered_attributes() const{

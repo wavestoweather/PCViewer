@@ -22,8 +22,10 @@ private:
     const structures::enum_names<plot_type_t>& plot_type_names = structures::scatterplot_wb::plot_type_names;
     using splat_form_t = structures::scatterplot_wb::splat_form;
     const structures::enum_names<splat_form_t>& splat_form_names = structures::scatterplot_wb::splat_form_names;
+    using local_attribute_storage = std::unique_ptr<structures::scatterplot_wb::local_attribute_storage>;
 
     std::vector<std::unique_ptr<appearance_tracker>>    _appearance_storage; // used for unlinked drawlists
+    robin_hood::unordered_map<std::string_view, local_attribute_storage> _local_attribute_storage; 
     robin_hood::unordered_map<std::string_view, std::vector<registered_histogram>> _registered_histograms;
 
     bool                _drawlists_updated{};
@@ -38,6 +40,7 @@ private:
     void _update_plot_list();
     void _render_plot();
     void _update_attribute_order_infos();
+    void _show_general_settings();
 public:
     structures::change_tracker<settings_t>                  settings{};
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};

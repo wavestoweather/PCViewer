@@ -21,7 +21,6 @@ foreach(shader IN LISTS shaders)
 endforeach()
 
 add_custom_target(compile_shaders DEPENDS ${spriv_binary_files})
-add_dependencies(PCViewer_new compile_shaders)
 
 ### copy shaders
 
@@ -45,5 +44,6 @@ foreach(shader IN LISTS compiled_shaders)
     list(APPEND compiled_shaders_depend ${current_output_path})
 endforeach()
 
-add_custom_target(copy_shaders DEPENDS ${compiled_shaders_depend} compile_shaders)
+add_custom_target(copy_shaders DEPENDS ${compiled_shaders_depend})
+add_dependencies(copy_shaders compile_shaders)
 add_dependencies(PCViewer_new copy_shaders)
