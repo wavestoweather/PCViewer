@@ -210,6 +210,9 @@ void scatterplot_renderer::render(const render_info& info){
     };
     const auto& framebuffer = _get_or_create_framebuffer(fb_key);
 
+    if(std::all_of(info.workbench.plot_list.read().begin(), info.workbench.plot_list.read().end(), [](auto& p){return p.a.empty() || p.b.empty();}))
+        return;
+
     if(!info.workbench.plot_list.read().empty()){
         auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
         vkResetFences(globals::vk_context.device, 1, &_render_fence);
@@ -221,6 +224,8 @@ void scatterplot_renderer::render(const render_info& info){
 
     // renderng all plots with all datasets
     for(const auto& [axis_pair, iter_pos]: util::pos_iter(info.workbench.plot_list.read())){
+        if(axis_pair.a.empty() || axis_pair.b.empty())
+            continue;
         const auto a_pair = axis_pair;
         const auto& plot_data = info.workbench.plot_datas.at(axis_pair);
 

@@ -35,6 +35,10 @@ private:
     attribute_pair      _popup_attributes{};
     bool                _request_registrators_update{};
 
+    std::string         _att_pair_regex{};
+    bool                _regex_error{};
+    std::vector<attribute_pair> _matrix_scatterplots{};
+
     void _update_registered_histograms();
     void _update_plot_images();
     void _update_plot_list();
@@ -47,7 +51,7 @@ public:
     robin_hood::unordered_map<attribute_pair, plot_data_t>  plot_datas{};
     robin_hood::unordered_map<attribute_pair, plot_additional_data_t> plot_additional_datas{};
     changing_vector<attribute_order_info>                   attribute_order_infos{};
-    changing_vector<attribute_pair>                         plot_list{};    // is used when plot_type is switched to list mode
+    changing_vector<attribute_pair>                         plot_list{};    // only contains the needed attribute pairs
 
     scatterplot_workbench(std::string_view id);
 
