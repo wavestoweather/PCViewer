@@ -179,12 +179,6 @@ add_subdirectory(shader_new)
 
 add_subdirectory(test)
 
-message (" Copying shaders")
-file(GLOB MY_PUBLIC_HEADERS
-"${CMAKE_CURRENT_SOURCE_DIR}/shader/*.spv"
-)
-file(COPY ${MY_PUBLIC_HEADERS} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
-
 message (" Copying fonts")
 file(GLOB FONTS
 "${CMAKE_CURRENT_SOURCE_DIR}/fonts/*.ttf"
