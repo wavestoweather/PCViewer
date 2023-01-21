@@ -15,70 +15,76 @@
 namespace workbenches
 {
 void scatterplot_workbench::_update_registered_histograms(){
-    if(!all_registrators_updated())
+    if(!all_registrators_updated(true)) // also waits for rendering to avoid updating before visualization has updated
         return;
 
-    std::array<int, 2> bucket_sizes{int(settings.read().plot_width), int(settings.read().plot_width)};
-    const auto active_attributes = get_active_ordered_attributes();
-    for(const auto& dl: drawlist_infos.read()){
-        if(dl.templatelist_read().data_size < settings.read().large_vis_threshold){
-            _registered_histograms.erase(dl.drawlist_id);
-            continue;
-        }
+    robin_hood::unordered_map<std::string_view, std::vector<bool>> drawlist_registator_needed;
+    std::array<int, 2> bucket_sizes{static_cast<int>(settings.read().plot_width), static_cast<int>(settings.read().plot_width)};
+    std::array<uint32_t, 2> indices;
+    std::array<structures::min_max<float>, 2> bounds;
+    std::vector<const_attribute_info_ref> attributes; for(const auto& att: attribute_order_infos.read()) attributes.emplace_back(att);
+    for(const auto& [atts, dls]: plot_list.read()){
+        const auto p = atts;
+        size_t att_a_index = attributes | util::index_of_if<const_attribute_info_ref>([&p](auto& r){return r.get().attribute_id == p.a;});
+        size_t att_b_index = attributes | util::index_of_if<const_attribute_info_ref>([&p](auto& r){return r.get().attribute_id == p.b;});
+        assert(att_a_index != util::n_pos && att_b_index != util::n_pos);
+        for(auto dl: dls){
+            if(DRAWLIST_READ(dl).const_templatelist().data_size < settings.read().large_vis_threshold)
+                continue;
+            
+            if(!drawlist_registator_needed.contains(dl))
+                drawlist_registator_needed[dl].resize(_registered_histograms[dl].size());
 
-        const auto& ds = dl.dataset_read();
-        const auto active_indices = util::data::active_attribute_refs_to_indices(active_attributes, ds.attributes);
-        
-        // setting up the bin sizes
-        std::vector<bool> registrator_needed(_registered_histograms[dl.drawlist_id].size(), false);
-        std::array<uint32_t, 2> indices;
-        std::array<structures::min_max<float>, 2> bounds;
-
-        // creating the new registratros and flag the used registrators as true -------------------------
-        switch(settings.read().plot_type){
-        case plot_type_t::list:
-
-            break;
-        case plot_type_t::matrix:
-            for(size_t i: util::i_range(active_attributes.size() - 1)){
-                for(size_t j: util::i_range(i + 1, active_attributes.size())){
-                    indices = {active_indices[i], active_indices[j]};
-                    bounds = {active_attributes[i].get().bounds->read(), active_attributes[j].get().bounds->read()};
-                    auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, false);
-                    size_t registrator_index = util::memory_view(_registered_histograms[dl.drawlist_id]).index_of([&registrator_id](const registered_histogram& h){return registrator_id == h.registry_id;});
-                    if(registrator_index != util::memory_view<>::n_pos)
-                        registrator_needed[registrator_index] = true;
-                    else{
-                        // adding new histogram
-                        auto& drawlist = dl.drawlist_write();
-                        _registered_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(indices, bucket_sizes, bounds, false, false, false));
-                        registrator_needed.emplace_back(true);
-                    }
-                }
+            const auto& ds = DRAWLIST_READ(dl).dataset_read();
+            const auto attribute_indices = util::data::active_attribute_refs_to_indices(attributes, ds.attributes); // if the dataset does not have the attribute its index will be util::memory_view<>::npos
+            indices = {attribute_indices[att_a_index], attribute_indices[att_b_index]};
+            bounds = {attributes[att_a_index].get().bounds->read(), attributes[att_b_index].get().bounds->read()};
+            auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, false);
+            size_t registrator_index = util::memory_view(_registered_histograms[dl]).index_of([&registrator_id](const registered_histogram& h){return registrator_id == h.registry_id;});
+            if(registrator_index != util::memory_view<>::n_pos)
+                drawlist_registator_needed[dl][registrator_index] = true;
+            else{
+                // adding new histogram
+                _registered_histograms[dl].emplace_back(DRAWLIST_WRITE(dl).histogram_registry.access()->scoped_registrator(indices, bucket_sizes, bounds, false, false, false));
+                drawlist_registator_needed[dl].emplace_back(true);
             }
-            break;
-        default:
-            throw std::runtime_error{"scatterplot_workbench() Unimplemented plot type"};
-        }
-
-        // removing unused registrators -----------------------------------------------------------------
-        auto registry_lock = dl.drawlist_read().histogram_registry.const_access();
-        for(size_t i: util::rev_size_range(_registered_histograms[dl.drawlist_id])){
-            if(!registrator_needed[i])
-                _registered_histograms[dl.drawlist_id].erase(_registered_histograms[dl.drawlist_id].begin() + i);
-        }
-        // printing out the registrators
-        if(logger.logging_level >= logging::level::l_5){
-            logger << logging::info_prefix << " scatterplot_workbenche (" << active_indices.size() << " attributes, " << registry_lock->registry.size() << " registrators, " << registry_lock->name_to_registry_key.size() << " name to registry entries), registered histograms: ";
-            for(const auto& [key, val]: registry_lock->registry)
-                logger << val.hist_id << " ";
-            logger << logging::endl;
         }
     }
+
+    // removing unused registrators --------------------------------------------------
+    std::vector<std::string_view> removed_dls;
+    for(auto& [dl, registrators]: _registered_histograms){
+        if(!drawlist_registator_needed.contains(dl)){
+            removed_dls.emplace_back(dl);
+            continue;
+        }
+        // acquire registry lock and erase registrators
+        auto lock = DRAWLIST_READ(dl).histogram_registry.const_access();
+        for(size_t i: util::rev_size_range(registrators)){
+            if(!drawlist_registator_needed[dl][i])
+                registrators.erase(registrators.begin() + i);
+        }
+    }
+    if(removed_dls.size()){
+        for(const auto& dl: removed_dls){
+            auto lock = DRAWLIST_READ(dl).histogram_registry.const_access();
+            _registered_histograms.erase(dl);
+        }
+    }
+    if(logger.logging_level >= logging::level::l_5){
+        size_t registrator_sum{};
+        for(const auto& [dl, registrators]: _registered_histograms){
+            logger << logging::info_prefix << " scatterplot_workbench::_update_registered_histograms() For " << dl << " " << registrators.size() << " histograms are registered" << logging::endl;
+            registrator_sum += registrators.size();
+        }
+        logger << logging::info_prefix << "scatterplot_workbench::_update_registered_histograms() Registrators update done, overall need " << registrator_sum << " registrators" << logging::endl;
+    }
+
     // setting update singal flags
     for(const auto& dl: drawlist_infos.read())
         dl.drawlist_write().histogram_registry.access()->request_change_all();
     attribute_order_infos.changed = false;
+    plot_list.changed = false;
     _request_registrators_update = false;
 }
 
@@ -93,17 +99,17 @@ void scatterplot_workbench::_update_plot_images(){
             m->unlock();
     }
     
-    robin_hood::unordered_set<attribute_pair> used_attribute_pairs;
+    robin_hood::unordered_set<att_pair_dls> used_attribute_pairs;
     std::vector<VkImageMemoryBarrier> image_barriers;
     // creating new pairs / recreating images if size changed
-    auto destroy_image=[&](const attribute_pair& p) {
+    auto destroy_image=[&](const att_pair_dls& p) {
         auto& plot_data = plot_datas[p];
         util::vk::destroy_image(plot_data.image);
         util::vk::destroy_image_view(plot_data.image_view);
         util::imgui::free_image_descriptor_set(plot_data.image_descriptor);
     };
-    auto register_image = [&](const attribute_pair& p) {
-        if(p.a.empty() || p.b.empty())
+    auto register_image = [&](const att_pair_dls& p) {
+        if(!p)
             return;
         // destruction of old image if necessary
         if(plot_datas.contains(p) && (plot_datas[p].image_width != settings.read().plot_width || plot_datas[p].image_format != settings.read().plot_format))
@@ -128,7 +134,7 @@ void scatterplot_workbench::_update_plot_images(){
     util::vk::convert_image_layouts_execute(image_barriers);
 
     // removing all unused images
-    robin_hood::unordered_set<attribute_pair> unused_attribute_pairs;
+    robin_hood::unordered_set<att_pair_dls> unused_attribute_pairs;
     for(const auto& [pair, image_data]: plot_datas) if(!used_attribute_pairs.contains(pair)) unused_attribute_pairs.insert(pair);
     for(const auto& pair: unused_attribute_pairs){
         destroy_image(pair);
@@ -140,17 +146,19 @@ void scatterplot_workbench::_update_plot_list(){
     auto active_attributes = get_active_ordered_attributes();
     plot_list().clear();
     switch(settings.read().plot_type){
-    case plot_type_t::matrix:
+    case plot_type_t::matrix:{
+        std::vector<std::string_view> dls; for(const auto& dl: drawlist_infos.read()) dls.emplace_back(dl.drawlist_id);
         for(size_t i: util::i_range(size_t(1), active_attributes.size())){
             for(size_t j: util::i_range(i))
-                plot_list().emplace_back(attribute_pair{active_attributes[i].get().attribute_id, active_attributes[j].get().attribute_id});
+                plot_list().emplace_back(att_pair_dls{active_attributes[i].get().attribute_id, active_attributes[j].get().attribute_id, dls});
         }
         break;
+    }
     case plot_type_t::list:
-        robin_hood::unordered_set<attribute_pair> added_pairs;
+        robin_hood::unordered_set<att_pair_dls> added_pairs;
         for(const auto& p: _matrix_scatterplots){
             if(p && !added_pairs.contains(p)){
-                plot_list.ref_no_track().emplace_back(p);
+                plot_list().emplace_back(p);
                 added_pairs.insert(p);
             }
         }
@@ -231,7 +239,7 @@ void scatterplot_workbench::_show_general_settings(){
         ImGui::EndCombo();
     }
     if(settings.read().plot_type == plot_type_t::list){
-        if(ImGui::DragInt2("Scatterplot matrix size", settings.ref_no_track().plot_matrix.data(), 1.0f, 1, 100)){
+        if(ImGui::DragInt2("Scatterplot matrix size", settings.ref_no_track().plot_matrix.data(), .1f, 1, 100)){
             _matrix_scatterplots.resize(settings.read().plot_matrix[0] * settings.read().plot_matrix[1]);
             _update_plot_list();
         }
@@ -289,6 +297,7 @@ void scatterplot_workbench::show()
 
     // checking for setting updates and updating the rendering if necessary
     _request_registrators_update |= attribute_order_infos.changed;// && std::any_of(attribute_order_infos.read().begin(), attribute_order_infos.read().end(), [](const auto& info){return info.active->changed || info.bounds->changed;});
+    _request_registrators_update |= plot_list.changed;
 
     if(_request_registrators_update){
         _update_plot_list();
@@ -318,17 +327,18 @@ void scatterplot_workbench::show()
         att_id_to_attribute.insert({att.get().attribute_id, att});
     if(_plot_x_vals.size() < active_attributes.size()) _plot_x_vals.resize(active_attributes.size());
     // plot views ------------------------------------------------------
-    attribute_pair  hovered_pair{};
+    att_pair_dls    hovered_pair{};
     ImVec4          hovered_rect{};
     switch(settings.read().plot_type){
-    case plot_type_t::matrix:
+    case plot_type_t::matrix:{
+        structures::flat_set<std::string_view> dls; for(const auto& dl: drawlist_infos.read()) dls |= dl.drawlist_id;
         // matrix should be displayed as a left lower triangular matrix
         for(size_t i: util::i_range(size_t(1), active_attributes.size())){
             ImVec2 text_pos = ImGui::GetCursorScreenPos(); text_pos.y += settings.read().plot_width / 2;
             util::imgui::AddTextVertical(active_attributes[i].get().attribute_read().display_name.c_str(), text_pos, .5f);
             ImGui::SetCursorScreenPos({ImGui::GetCursorScreenPos().x + ImGui::GetTextLineHeightWithSpacing(), ImGui::GetCursorScreenPos().y});
             for(size_t j: util::i_range(i)){
-                attribute_pair p = {active_attributes[i].get().attribute_id, active_attributes[j].get().attribute_id};
+                att_pair_dls p = {active_attributes[i].get().attribute_id, active_attributes[j].get().attribute_id, dls};
                 if(!plot_datas.contains(p))
                     continue;
                 if(j != 0)  
@@ -354,7 +364,7 @@ void scatterplot_workbench::show()
                     ImGui::EndDragDropTarget();
                 }
                 std::array<uint32_t, 2> indices{uint32_t(i), uint32_t(j)};
-                draw_lassos(p, indices, settings.read().plot_width, {active_attributes[j].get().bounds->read().min, active_attributes[i].get().bounds->read().min, active_attributes[j].get().bounds->read().max, active_attributes[i].get().bounds->read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
+                draw_lassos(p.atts, indices, settings.read().plot_width, {active_attributes[j].get().bounds->read().min, active_attributes[i].get().bounds->read().min, active_attributes[j].get().bounds->read().max, active_attributes[i].get().bounds->read().max}, util::brushes::get_brush_color(), globals::brush_edit_data.brush_line_width, c_pos);
                 _plot_x_vals[j] = c_pos.x;
             }
         }
@@ -364,11 +374,12 @@ void scatterplot_workbench::show()
             ImGui::SetCursorScreenPos({_plot_x_vals[i] + settings.read().plot_width / 2.f - width / 2.f, ImGui::GetCursorScreenPos().y});
             ImGui::Text("%s", active_attributes[i].get().attribute_read().display_name.c_str());
         }
+        }
         break;
     case plot_type_t::list:
         for(const auto& [p, i]: util::enumerate(_matrix_scatterplots)){
             util::imgui::scoped_id list_id{int(i)};
-            bool first = i % settings.read().plot_matrix[1] == 0;
+            const bool first = i % settings.read().plot_matrix[1] == 0;
             if(!first) ImGui::SameLine();
             // background
             auto c_pos = ImGui::GetCursorScreenPos();
@@ -410,23 +421,23 @@ void scatterplot_workbench::show()
     }
     // lasso brushes ----------------------------------------------------
     // cleearing old points if fresh button press
-    if(hovered_pair.a > hovered_pair.b)
-        std::swap(hovered_pair.a, hovered_pair.b);
+    if(hovered_pair && &att_id_to_attribute.at(hovered_pair.atts.a).get() > &att_id_to_attribute.at(hovered_pair.atts.b).get())
+        std::swap(hovered_pair.atts.a, hovered_pair.atts.b);
 
     auto get_attr_pos = [&](const ImVec2& pos = ImGui::GetMousePos()){
         ImVec2 mouse_norm{util::normalize_val_for_range(pos.x, hovered_rect[0], hovered_rect[1]), util::normalize_val_for_range(pos.y, hovered_rect[2], hovered_rect[3])};
         mouse_norm.y = 1 - mouse_norm.y;
-        ImVec2 attr_pos{util::unnormalize_val_for_range(mouse_norm.x, att_id_to_attribute.at(hovered_pair.a).get().bounds->read().min, att_id_to_attribute.at(hovered_pair.a).get().bounds->read().max), util::unnormalize_val_for_range(mouse_norm.y, att_id_to_attribute.at(hovered_pair.b).get().bounds->read().min, att_id_to_attribute.at(hovered_pair.b).get().bounds->read().max)};
+        ImVec2 attr_pos{util::unnormalize_val_for_range(mouse_norm.x, att_id_to_attribute.at(hovered_pair.atts.a).get().bounds->read().min, att_id_to_attribute.at(hovered_pair.atts.a).get().bounds->read().max), util::unnormalize_val_for_range(mouse_norm.y, att_id_to_attribute.at(hovered_pair.atts.b).get().bounds->read().min, att_id_to_attribute.at(hovered_pair.atts.b).get().bounds->read().max)};
         return attr_pos;
     };
     if(hovered_pair != attribute_pair{} && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     if(ImGui::IsMouseClicked(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none && hovered_pair != attribute_pair{}){
         try{
-            auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.a && e.attr2 == hovered_pair.b;});
+            auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.atts.a && e.attr2 == hovered_pair.atts.b;});
             polygon.borderPoints.clear();
         } catch(std::exception e){
-            util::brushes::get_selected_lasso_brush().emplace_back(structures::polygon{hovered_pair.a, hovered_pair.b, {}});
+            util::brushes::get_selected_lasso_brush().emplace_back(structures::polygon{hovered_pair.atts.a, hovered_pair.atts.b, {}});
         }
         _last_lasso_point = ImGui::GetMousePos();
         _started_lasso_attributes = hovered_pair;
@@ -434,7 +445,7 @@ void scatterplot_workbench::show()
     if(ImGui::IsMouseDown(ImGuiMouseButton_Left) && globals::brush_edit_data.brush_type != structures::brush_edit_data::brush_type::none &&
         util::distance(_last_lasso_point, ImGui::GetMousePos()) > globals::brush_edit_data.drag_threshold &&
         _started_lasso_attributes && _started_lasso_attributes == hovered_pair){
-        auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.a && e.attr2 == hovered_pair.b;});
+        auto& polygon = util::memory_view(util::brushes::get_selected_lasso_brush()).find([&hovered_pair](const structures::polygon& e){return e.attr1 == hovered_pair.atts.a && e.attr2 == hovered_pair.atts.b;});
         if(polygon.borderPoints.empty())
             polygon.borderPoints.emplace_back(get_attr_pos(_last_lasso_point));
         polygon.borderPoints.emplace_back(get_attr_pos());
@@ -646,8 +657,8 @@ void scatterplot_workbench::show()
 
     // popups
     if(ImGui::BeginPopup(plot_menu_id.data())){
-        auto& att_a = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.a;}))->get();
-        auto& att_b = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.b;}))->get();
+        auto& att_a = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.atts.a;}))->get();
+        auto& att_b = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.atts.b;}))->get();
         ImGui::PushItemWidth(100);
         _show_general_settings();
         ImGui::Separator();
@@ -756,11 +767,13 @@ std::vector<scatterplot_workbench::const_attribute_info_ref> scatterplot_workben
     return attributes;
 }
 
-bool scatterplot_workbench::all_registrators_updated() const{
+bool scatterplot_workbench::all_registrators_updated(bool rendered) const{
     for(const auto& dl: drawlist_infos.read()){
         if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms.at(dl.drawlist_id).size()){
             auto access = dl.drawlist_read().histogram_registry.const_access();
             if(!access->dataset_update_done)    
+                return false;
+            if(rendered && !access->registrators_done)
                 return false;
         }
     }

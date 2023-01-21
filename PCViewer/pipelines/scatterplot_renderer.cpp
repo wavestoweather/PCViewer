@@ -210,7 +210,7 @@ void scatterplot_renderer::render(const render_info& info){
     };
     const auto& framebuffer = _get_or_create_framebuffer(fb_key);
 
-    if(std::all_of(info.workbench.plot_list.read().begin(), info.workbench.plot_list.read().end(), [](auto& p){return p.a.empty() || p.b.empty();}))
+    if(std::all_of(info.workbench.plot_list.read().begin(), info.workbench.plot_list.read().end(), [](auto& p){return !p;}))
         return;
 
     if(!info.workbench.plot_list.read().empty()){
@@ -224,9 +224,9 @@ void scatterplot_renderer::render(const render_info& info){
 
     // renderng all plots with all datasets
     for(const auto& [axis_pair, iter_pos]: util::pos_iter(info.workbench.plot_list.read())){
-        if(axis_pair.a.empty() || axis_pair.b.empty())
+        if(!axis_pair)
             continue;
-        const auto a_pair = axis_pair;
+        const auto a_pair = axis_pair.atts;
         const auto& plot_data = info.workbench.plot_datas.at(axis_pair);
 
         _render_commands.emplace_back(util::vk::create_begin_command_buffer(_command_pool));
@@ -265,19 +265,24 @@ void scatterplot_renderer::render(const render_info& info){
             if(histogram_render){
                 push_constants_large_vis pc{};
                 {
-                    const auto& a_ref = info.workbench.get_attribute_order_info(axis_pair.a);
-                    const auto& b_ref = info.workbench.get_attribute_order_info(axis_pair.b);
+                    const auto& a_ref = info.workbench.get_attribute_order_info(axis_pair.atts.a);
+                    const auto& b_ref = info.workbench.get_attribute_order_info(axis_pair.atts.b);
                     std::array<int, 2> bin_sizes{int(p_key.width), int(p_key.width)};
                     std::array<uint32_t, 2> attribute_indices{uint32_t(util::memory_view<const structures::attribute>(dl.dataset_read().attributes).index_of([&a_pair](const auto& a){return a.id == a_pair.a;})), uint32_t(util::memory_view<const structures::attribute>(dl.dataset_read().attributes).index_of([&a_pair](const auto& a){return a.id == a_pair.b;}))};
                     std::array<structures::min_max<float>, 2> min_max{a_ref.bounds->read(), b_ref.bounds->read()};
-                    auto hist_access = dl.drawlist_read().histogram_registry.const_access();
                     std::string histogram_id = util::histogram_registry::get_id_string(attribute_indices, bin_sizes, min_max, false, false);
-                    if(!hist_access->name_to_registry_key.contains(histogram_id)){
-                        if(logger.logging_level > logging::level::l_4)
-                            logger << logging::warning_prefix << " scatterplot_renderer::render() Missing histogram for attributes " << axis_pair.a << "|" << axis_pair.b << " for drawwlist " << dl.drawlist_id << logging::endl;
+                    auto sorted_hist_id = util::histogram_registry::get_indices_bins(histogram_id);
+                    auto hist_access = dl.drawlist_read().histogram_registry.const_access();
+                    auto histogram_key = hist_access->registry_key_by_indices_sizes(std::get<0>(sorted_hist_id), std::get<1>(sorted_hist_id));
+                    if(!histogram_key){
+                        if(logger.logging_level >= logging::level::l_4)
+                            logger << logging::warning_prefix << " scatterplot_renderer::render() Missing histogram for attributes " << axis_pair.atts.a << "|" << axis_pair.atts.b << " for drawwlist " << dl.drawlist_id << logging::endl;
                         continue;
                     }
-                    pc.flip_axes = axis_pair.a > axis_pair.b;
+                    // check for correct histogram, overwrite histogram_id if perfect histogram can not be found
+                    if(!hist_access->name_to_registry_key.contains(histogram_id))
+                        histogram_id = hist_access->registry.at(*histogram_key).hist_id;
+                    pc.flip_axes = attribute_indices[0] > attribute_indices[1];
                     pc.bin_size = p_key.width;
                     pc.form = static_cast<uint32_t>(dl.scatter_appearance.read().splat);
                     pc.radius = dl.scatter_appearance.read().radius;
@@ -291,12 +296,12 @@ void scatterplot_renderer::render(const render_info& info){
                 pc.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
                 pc.index_buffer_address = util::vk::get_buffer_address(dl.templatelist_read().gpu_indices);
                 pc.activation_bitset_address = util::vk::get_buffer_address(dl.drawlist_read().active_indices_bitset_gpu);
-                pc.attribute_a = util::data::attribute_to_index_single(axis_pair.a, dl.dataset_read().attributes);
-                pc.attribute_b = util::data::attribute_to_index_single(axis_pair.b, dl.dataset_read().attributes);
-                pc.a_min = info.workbench.get_attribute_order_info(axis_pair.a).bounds->read().min;
-                pc.a_max = info.workbench.get_attribute_order_info(axis_pair.a).bounds->read().max;
-                pc.b_min = info.workbench.get_attribute_order_info(axis_pair.b).bounds->read().min;
-                pc.b_max = info.workbench.get_attribute_order_info(axis_pair.b).bounds->read().max;
+                pc.attribute_a = util::data::attribute_to_index_single(axis_pair.atts.a, dl.dataset_read().attributes);
+                pc.attribute_b = util::data::attribute_to_index_single(axis_pair.atts.b, dl.dataset_read().attributes);
+                pc.a_min = info.workbench.get_attribute_order_info(axis_pair.atts.a).bounds->read().min;
+                pc.a_max = info.workbench.get_attribute_order_info(axis_pair.atts.a).bounds->read().max;
+                pc.b_min = info.workbench.get_attribute_order_info(axis_pair.atts.b).bounds->read().min;
+                pc.b_max = info.workbench.get_attribute_order_info(axis_pair.atts.b).bounds->read().max;
                 pc.flip_axes = 1;   // always flip, as major axis is y axis
                 pc.form = static_cast<uint32_t>(dl.scatter_appearance.read().splat);
                 pc.radius = dl.scatter_appearance.read().radius;

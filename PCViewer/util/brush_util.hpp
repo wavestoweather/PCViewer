@@ -220,7 +220,7 @@ inline void update_drawlist_active_indices(){
     }
 
     globals::global_brushes.changed = false;
-    //pipelines::brusher::instance().wait_for_fence();
+    pipelines::brusher::instance().wait_for_fence();
 }
 
 inline const structures::range_brush& get_selected_range_brush_const(){

@@ -7,6 +7,7 @@
 #include <default_hash.hpp>
 #include <data_type.hpp>
 #include <default_struct_equal.hpp>
+#include <flat_set.hpp>
 #include "../imgui_nodes/crude_json.h"
 
 namespace structures{
@@ -130,6 +131,15 @@ namespace scatterplot_wb{
         operator bool() const {return a.size() && b.size();}
     };
 
+    struct att_pair_dls{
+        attribute_pair              atts;
+        flat_set<std::string_view>  dls;
+
+        bool operator==(const att_pair_dls& o) const {return atts == o.atts && dls == o.dls;}
+        bool operator!=(const att_pair_dls& o) const {return *this != o;}
+        operator bool() const {return atts && dls.size();}
+    };
+
     struct pipeline_data{
         VkPipeline          pipeline{};
         VkPipelineLayout    pipeline_layout{};
@@ -174,3 +184,9 @@ namespace scatterplot_wb{
 DEFAULT_HASH(structures::scatterplot_wb::attribute_pair);
 DEFAULT_HASH(structures::scatterplot_wb::output_specs);
 DEFAULT_HASH(structures::scatterplot_wb::framebuffer_key);
+template<> struct std::hash<structures::scatterplot_wb::att_pair_dls>{
+    size_t operator()(const structures::scatterplot_wb::att_pair_dls& o) const{
+        size_t seed = hash<structures::scatterplot_wb::attribute_pair>{}(o.atts);
+        return hash_combine(seed, util::memory_view<const std::string_view>(o.dls.data(), o.dls.size()).data_hash());
+    }
+};

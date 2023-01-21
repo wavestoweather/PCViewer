@@ -101,3 +101,6 @@ extern std::set<std::string_view> drawlists_to_delete;
                         globals::brush_edit_data.local_brush_id = drawlist_id;\
                     }\
                 }
+
+#define DRAWLIST_READ(dl_id)  globals::drawlists.read().at(dl_id).read()
+#define DRAWLIST_WRITE(dl_id) globals::drawlists()[dl_id]()

@@ -56,6 +56,14 @@ struct histogram_registry{
         return &registry.at(key);
     }
 
+    const histogram_registry_key* registry_key_by_indices_sizes(util::memory_view<const uint32_t> indices, util::memory_view<const int> sizes) const{
+        for(const auto& [key, _]: registry){
+            if(indices.equal_data(key.attribute_indices) && sizes.equal_data(key.bin_sizes))
+                return &key;
+        }
+        return {};
+    }
+
     // the preferred way of registering and unregistering is by using a scoped_registrator_t object which can be retrieved via scoped_registrator(...)
     std::string_view register_histogram(util::memory_view<const uint32_t> attribute_indices, util::memory_view<const int> bin_sizes, util::memory_view<const structures::min_max<float>> min_max, registrator_id_t registrator_id,  bool is_min_hist, bool is_max_hist, bool cpu_hist_needed){
         histogram_registry_key key{is_min_hist, is_max_hist, std::vector<uint32_t>(attribute_indices.size()), std::vector<int>(bin_sizes.size()), std::vector<structures::min_max<float>>(min_max.size())};

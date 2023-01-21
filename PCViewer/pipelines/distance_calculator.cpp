@@ -44,7 +44,7 @@ void distance_calculator::calculate(const distance_info& info){
     pc.data_header_address = info.data_header_address;
     pc.priority_distance_address = info.distances_address;
     pc.index_buffer_address = info.index_buffer_address;
-    pc.data_size = info.data_size;
+    pc.data_size = static_cast<uint32_t>(info.data_size);
     pc.priority_attribute = info.priority_attribute;
     pc.priority_center = info.priority_center;
     pc.priority_distance = info.priority_distance;
@@ -58,7 +58,7 @@ void distance_calculator::calculate(const distance_info& info){
 
     vkCmdPushConstants(_command_buffer, pipeline_data.pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
     vkCmdBindPipeline(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_data.pipeline);
-    vkCmdDispatch(_command_buffer, (info.data_size + 255) / 256, 1, 1);
+    vkCmdDispatch(_command_buffer, uint32_t(info.data_size + 255) / 256, 1, 1);
 
     std::scoped_lock lock(*globals::vk_context.compute_mutex);
     util::vk::end_commit_command_buffer(_command_buffer, globals::vk_context.compute_queue, info.gpu_sync_info.wait_semaphores, info.gpu_sync_info.wait_masks, info.gpu_sync_info.signal_semaphores, _calculator_fence);

@@ -13,6 +13,7 @@ public:
     using plot_additional_data_t = structures::scatterplot_wb::plot_additional_data_t;
     using attribute_order_info = structures::attribute_info;
     using attribute_pair = structures::scatterplot_wb::attribute_pair;
+    using att_pair_dls = structures::scatterplot_wb::att_pair_dls;
     template<typename T> using changing_vector = structures::change_tracker<std::vector<T>>;
     using const_attribute_info_ref = std::reference_wrapper<const attribute_order_info>;
 private:
@@ -30,14 +31,14 @@ private:
 
     bool                _drawlists_updated{};
     std::vector<float>  _plot_x_vals{};
-    attribute_pair      _started_lasso_attributes{};
+    att_pair_dls        _started_lasso_attributes{};
     ImVec2              _last_lasso_point{};
-    attribute_pair      _popup_attributes{};
+    att_pair_dls        _popup_attributes{};
     bool                _request_registrators_update{};
 
     std::string         _att_pair_regex{};
     bool                _regex_error{};
-    std::vector<attribute_pair> _matrix_scatterplots{};
+    std::vector<att_pair_dls> _matrix_scatterplots{};
 
     void _update_registered_histograms();
     void _update_plot_images();
@@ -48,10 +49,10 @@ private:
 public:
     structures::change_tracker<settings_t>                  settings{};
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};
-    robin_hood::unordered_map<attribute_pair, plot_data_t>  plot_datas{};
-    robin_hood::unordered_map<attribute_pair, plot_additional_data_t> plot_additional_datas{};
+    robin_hood::unordered_map<att_pair_dls, plot_data_t>    plot_datas{};
+    robin_hood::unordered_map<att_pair_dls, plot_additional_data_t> plot_additional_datas{};
     changing_vector<attribute_order_info>                   attribute_order_infos{};
-    changing_vector<attribute_pair>                         plot_list{};    // only contains the needed attribute pairs
+    changing_vector<att_pair_dls>                           plot_list{};    // only contains the needed attribute pairs
 
     scatterplot_workbench(std::string_view id);
 
@@ -73,7 +74,7 @@ public:
     void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info = {}) override;
 
     std::vector<const_attribute_info_ref> get_active_ordered_attributes() const;
-    bool                        all_registrators_updated() const;
+    bool                        all_registrators_updated(bool rendered = false) const;
     const attribute_order_info& get_attribute_order_info(std::string_view attribute) const;
 };
 }

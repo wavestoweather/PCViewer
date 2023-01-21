@@ -319,5 +319,35 @@ std::optional<U> operator|(const T& range, const try_pick_if<U>& e){
     return {};
 }
 
+constexpr size_t n_pos{size_t(-1)};
+template<typename T>
+class index_of{
+    std::optional<T> _storage;
+public:
+    const T& e;
+    constexpr index_of(const T& e): e(e) {}
+    constexpr index_of(T&& e): _storage(std::move(e)), e(*_storage) {}
+};
+template<typename T>
+size_t operator|(const T& range, const index_of<T>& e){
+    for(auto&& [el, i]: enumerate(range))
+        if(e.e == el)
+            return i;
+    return n_pos;
+}
+
+template<typename T>
+class index_of_if{
+public:
+    std::function<bool(const T&)> f;
+    constexpr index_of_if(std::function<bool(const T&)> f): f(f) {}
+};
+template<typename T, typename U>
+size_t operator|(const T& range, const index_of_if<U>& e){
+    for(auto&& [el, i]: enumerate(range))
+        if(e.f(el))
+            return i;
+    return n_pos;
+}
 }
 
