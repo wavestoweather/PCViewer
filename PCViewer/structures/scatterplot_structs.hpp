@@ -33,8 +33,8 @@ namespace scatterplot_wb{
         VkFormat    plot_format{VK_FORMAT_R16G16B16A16_UNORM};
         mutable double plot_padding{5};   // padding inbeteween the scatter plot images
         mutable ImVec4 plot_background_color{0, 0, 0, 1};
-        plot_type_t plot_type{plot_type_t::matrix};
-        std::array<int, 2> plot_matrix{2, 5};
+        plot_type_t plot_type{plot_type_t::list};
+        std::array<int, 2> plot_matrix{1, 2};
         size_t      large_vis_threshold{500000};
         mutable float uniform_radius{1.f};
 

@@ -242,7 +242,7 @@ void scatterplot_renderer::render(const render_info& info){
         scissor.extent = {fb_key.width, fb_key.width};
         vkCmdSetScissor(_render_commands.back(), 0, 1, &scissor);
         for(const auto& [dl, dl_pos]: util::pos_iter(info.workbench.drawlist_infos.read())){
-            if(dl_pos == util::iterator_pos::first){
+            if(dl_pos.first){
                 VkClearAttachment clear_value{};
                 clear_value.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 VkClearRect clear_rect{};
@@ -328,7 +328,7 @@ void scatterplot_renderer::render(const render_info& info){
         vkCmdPipelineBarrier(_render_commands.back(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, {}, 0, {}, 1, &plot_image_barrier);
 
         std::scoped_lock queue_lock(*globals::vk_context.graphics_mutex);
-        util::vk::end_commit_command_buffer(_render_commands.back(), globals::vk_context.graphics_queue, {}, {}, {}, iter_pos == util::iterator_pos::last ? _render_fence: VkFence{});
+        util::vk::end_commit_command_buffer(_render_commands.back(), globals::vk_context.graphics_queue, {}, {}, {}, iter_pos.last ? _render_fence: VkFence{});
     }
     if(!info.workbench.plot_list.read().empty()){
         auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);

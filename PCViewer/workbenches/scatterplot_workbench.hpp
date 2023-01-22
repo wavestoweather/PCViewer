@@ -4,6 +4,9 @@
 #include <scatterplot_structs.hpp>
 #include <robin_hood.h>
 
+// For the scatterplot workbench the scatterplot drawings are always assumed that the primary attribute (att.a)
+// corresponds to the y axis, while the b attribute is rendered on  the x axis
+// For the rendering this has to be taken into account...
 namespace workbenches{
 class scatterplot_workbench: public structures::workbench, public structures::drawlist_dataset_dependency{
 public:

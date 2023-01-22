@@ -12,6 +12,8 @@
 
 #define DECL_ATTRIBUTE_READ(att_id)   const structures::attribute&  attribute_read() const  {return globals::attributes.read().at(att_id).read();}
 #define DECL_ATTRIBUTE_WRITE(att_id)        structures::attribute&  attribute_write()       {return globals::attributes()[att_id]();}
+#define ATTRIBUTE_READ(att_id)  globals::attributes.read().at(att_id).read()
+#define ATTRIBUTE_WRITE(att_id) globals::attributes().at(att_id)()
 
 namespace structures{
 // attribute that is stored in datasets

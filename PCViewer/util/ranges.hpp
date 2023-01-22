@@ -158,10 +158,10 @@ public:
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
 
-enum class iterator_pos{
-    first,
-    last,
-    between
+struct iterator_pos{
+    bool first: 1;
+    bool last: 1;
+    bool between: 1;
 };
 template<typename T>
 class pos_iter {
@@ -172,7 +172,7 @@ public:
     public:
         using iter_type = decltype(std::begin(iterable_));
         using deref_iter_type = decltype(*std::begin(iterable_));
-        std::pair<deref_iter_type&, iterator_pos> operator*() {return {*_i, _i == std::begin(iter_) ? iterator_pos::first : _i == --std::end(iter_) ? iterator_pos::last : iterator_pos::between};}
+        std::pair<deref_iter_type&, iterator_pos> operator*() {return {*_i, {_i == std::begin(iter_), _i == --std::end(iter_), _i != std::begin(iter_) && _i != --std::end(iter_)}};}
         const iterator& operator++() { ++_i; return *this;}
         iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
         bool operator==(const iterator& o) const{return _i == o._i;}
