@@ -295,6 +295,8 @@ void scatterplot_workbench::show()
 {
     const std::string_view plot_menu_id{"plot_menu"};
 
+    bool plot_menu_open{};
+
     if(!active) 
         return;
 
@@ -353,8 +355,8 @@ void scatterplot_workbench::show()
                     ImGui::SetCursorScreenPos(c_pos);
                 }
                 ImGui::Image(plot_datas[p].image_descriptor, {float(settings.read().plot_width), float(settings.read().plot_width)});
-                if(ImGui::IsItemClicked(ImGuiMouseButton_Right)){
-                    ImGui::OpenPopup(plot_menu_id.data());
+                if(ImGui::IsItemClicked(ImGuiMouseButton_Right) && p){
+                    plot_menu_open = true;
                     _popup_attributes = p;
                 }
                 if(ImGui::IsItemHovered()){
@@ -408,10 +410,10 @@ void scatterplot_workbench::show()
                     
                     if(plot_datas.contains(q))
                         ImGui::GetWindowDrawList()->AddImageQuad(plot_datas.at(q).image_descriptor, c_pos, {c_pos.x + float(settings.read().plot_width), c_pos.y}, {c_pos.x, c_pos.y + float(settings.read().plot_width)}, {c_pos.x + float(settings.read().plot_width), c_pos.y + float(settings.read().plot_width)}, {1, 1}, {1, 0}, {0, 1}, {0, 0});
-                    ImGui::InvisibleButton("plot_alt", {float(settings.read().plot_width), float(settings.read().plot_width)});
+                    ImGui::Dummy({float(settings.read().plot_width), float(settings.read().plot_width)});
                 }
-                if(ImGui::IsItemClicked(ImGuiMouseButton_Right)){
-                    ImGui::OpenPopup(plot_menu_id.data());
+                if(ImGui::IsItemClicked(ImGuiMouseButton_Right) && p){
+                    plot_menu_open = true;
                     _popup_attributes = p;
                 }
                 if(ImGui::IsItemHovered()){
@@ -706,6 +708,8 @@ void scatterplot_workbench::show()
     }
 
     // popups
+    if(plot_menu_open)
+        ImGui::OpenPopup(plot_menu_id.data());
     if(ImGui::BeginPopup(plot_menu_id.data())){
         auto& att_a = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.atts.a;}))->get();
         auto& att_b = (attribute_order_infos.ref_no_track() | util::try_find_if<attribute_order_info>([this](auto a){return a.attribute_id == _popup_attributes.atts.b;}))->get();
