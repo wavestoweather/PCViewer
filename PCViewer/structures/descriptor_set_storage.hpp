@@ -1,5 +1,5 @@
 #pragma once
-#include <map>
+#include <robin_hood.h>
 #include <memory>
 #include <string>
 #include <vulkan/vulkan.h>
@@ -32,5 +32,5 @@ using unique_descriptor_info = std::unique_ptr<descriptor_info>;
 }
 
 namespace globals{
-extern std::map<std::string_view, structures::unique_descriptor_info> descriptor_sets;
+extern robin_hood::unordered_map<std::string_view, structures::unique_descriptor_info> descriptor_sets;
 }

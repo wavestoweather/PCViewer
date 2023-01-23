@@ -302,7 +302,7 @@ void violin_drawlist_workbench::show(){
         ImGui::Text("Attrribute coloring");
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 4);
         if(ImGui::BeginCombo("Palette type", settings.read().attribute_color_palette_type.c_str())){
-            for(const auto& [name, palette]: brew_palette_types())
+            for(const auto& [name, palette]: brew_palette_types)
                 if(ImGui::MenuItem(name.data()))
                     settings.read().attribute_color_palette_type = name;
             ImGui::EndCombo();
@@ -310,7 +310,7 @@ void violin_drawlist_workbench::show(){
         ImGui::SameLine();
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 4);
         if(ImGui::BeginCombo("Color Scheme", settings.read().attribute_color_palette.c_str())){
-            for(const auto& palette: brew_palette_types().at(settings.read().attribute_color_palette_type))
+            for(const auto& palette: brew_palette_types.at(settings.read().attribute_color_palette_type))
                 if(ImGui::MenuItem(palette.data()))
                     settings.read().attribute_color_palette = palette;
             ImGui::EndCombo();

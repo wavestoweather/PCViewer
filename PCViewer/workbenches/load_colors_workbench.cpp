@@ -17,17 +17,17 @@ void load_colors_workbench::_imgui_color_selection(std::string& color_palette_na
             ImGui::GetWindowDrawList()->AddRect(min, max, IM_COL32(80, 80, 255, 255), 0, 0, 2);
         }
     }
-    const auto& palette_infos = brew_palette_infos();
+    const auto& palette_infos = brew_palette_infos;
 
     if(ImGui::BeginCombo("Palette type", color_palette_type.c_str())){
-        for(const auto& [type, palettes]: brew_palette_types())
+        for(const auto& [type, palettes]: brew_palette_types)
             if(ImGui::MenuItem(type.data()))
                 color_palette_type = type;
         ImGui::EndCombo();
     }
     ImGui::SameLine();
     if(ImGui::BeginCombo("Palette color", color_palette_name.c_str())){
-        for(const auto& palette: brew_palette_types().at(color_palette_type)){
+        for(const auto& palette: brew_palette_types.at(color_palette_type)){
             if(ImGui::MenuItem(palette.data())){
                 const auto& palette_info = (palette_infos | util::try_find_if<const palette_info_t>([&](auto i){return i.name == palette;}))->get();
                 color_palette_name = palette;

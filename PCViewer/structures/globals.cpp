@@ -72,7 +72,7 @@ robin_hood::unordered_map<std::string, structures::texture> textures{};
 
 structures::persistent_samplers persistent_samplers{};
 
-std::map<std::string_view, structures::unique_descriptor_info> descriptor_sets{};
+robin_hood::unordered_map<std::string_view, structures::unique_descriptor_info> descriptor_sets{};
 
 structures::load_behaviour load_behaviour{};
 structures::drawlist_creation_behaviour drawlist_creation_behaviour{};
@@ -462,7 +462,10 @@ bool settings_manager::delete_setting(std::string_view id)
 
 settings_manager::setting& settings_manager::get_setting(std::string_view id)
 {
-    std::string sid;
+    static crude_json::value none{};
+    std::string sid(id);
+    if(!settings.contains(sid))
+        return none;
     return settings[sid];
 }
 

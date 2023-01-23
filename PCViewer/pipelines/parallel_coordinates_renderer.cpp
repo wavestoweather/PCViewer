@@ -45,8 +45,8 @@ void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer command
     vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_data.pipeline);
     vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_data.pipeline_layout, 0, 1, &globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->descriptor_set, 0, {});
     VkViewport viewport{};
-    viewport.width = output_specs.width;
-    viewport.height = output_specs.height;
+    viewport.width = static_cast<float>(output_specs.width);
+    viewport.height = static_cast<float>(output_specs.height);
     viewport.maxDepth = 1;
     vkCmdSetViewport(commands, 0, 1, &viewport);
     VkRect2D scissor{};
@@ -305,7 +305,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         const auto& ds = dl_ref.dataset_read();
         const auto active_attribute_indices = util::data::active_attribute_refs_to_indices(active_ordered_attributes, ds.attributes);
         structures::dynamic_struct<attribute_infos_t, ImVec4> attribute_info(active_ordered_attributes.size());
-        attribute_info->attribute_count = active_ordered_attributes.size();
+        attribute_info->attribute_count = static_cast<uint32_t>(active_ordered_attributes.size());
         attribute_info->data_flags = {};
         for(int active_attribute_index: util::size_range(active_attribute_indices)){
             uint32_t cur_attribute_index = active_attribute_indices[active_attribute_index];
