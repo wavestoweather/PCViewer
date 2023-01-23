@@ -1091,13 +1091,13 @@ void check_datasets_to_open(){
                             gb_att.bounds().max = std::max(gb_att.bounds.read().max, attribute.bounds.read().max);
                         }
                         else{
-                            auto& gb_att = globals::attributes()[attribute.id];
-                            gb_att = structures::tracked_global_attribute_t(attribute, true, reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_attribute_imcolor().Value);
-                            if(gb_att.read().bounds.read().min == gb_att.read().bounds.read().max){
-                                float d = std::abs(gb_att.read().bounds.read().min) * .01f + .1f;
-                                gb_att().bounds().min -= d;
-                                gb_att().bounds().max += d;
+                            structures::tracked_global_attribute_t att(attribute, true, reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_attribute_imcolor().Value);
+                            if(att.read().bounds.read().min == att.read().bounds.read().max){
+                                float d = std::abs(att.read().bounds.read().min) * .01f + .1f;
+                                att().bounds().min -= d;
+                                att().bounds().max += d;
                             }
+                            globals::attributes().insert({att.read().id, std::move(att)});
                         }
                         globals::attributes.ref_no_track()[attribute.id].ref_no_track().usage_count++;
                     }

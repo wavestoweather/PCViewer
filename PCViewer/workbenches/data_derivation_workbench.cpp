@@ -6,6 +6,7 @@
 #include <imgui_stdlib.h>
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <imgui_internal.h>
+#include <load_colors_workbench.hpp>
 
 namespace workbenches{
 namespace nodes = ax::NodeEditor;
@@ -97,8 +98,10 @@ void data_derivation_workbench::show(){
                         bool empty = node->inputNames[i] == "##";
                         if(empty) node->inputNames[i] = "";
                         if(ImGui::InputText(("##ns" + std::to_string(i)).c_str(), &node->inputNames[i])){
-                            if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get()))
+                            if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                                 globals::datasets()[ds_output->datasetId]().attributes[i].display_name = node->inputNames[i]; 
+                                globals::attributes()[globals::datasets()[ds_output->datasetId]().attributes[i].id]().display_name = node->inputNames[i];
+                            }
                         }
                         if(node->inputNames[i].empty()) node->inputNames[i] = "##";
                     }
@@ -166,6 +169,9 @@ void data_derivation_workbench::show(){
                 std::string pin_name{};
                 if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
                     pin_name = std::to_string(node_pins.inputIds.size());
+                    // checking if the name is available
+                    while(globals::attributes.read().count(pin_name) > 0)
+                        pin_name += " ";
                     auto& ds = globals::datasets()[ds_output->datasetId]();
                     ds.attributes.push_back(structures::attribute{pin_name, pin_name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}});
                     ds.attributes.back().bounds.changed = true;
@@ -173,6 +179,13 @@ void data_derivation_workbench::show(){
                         data.columns.push_back({0});
                         data.column_dimensions.push_back({});
                     }, ds.cpu_data());
+                    structures::tracked_global_attribute_t new_att{};
+                    new_att().bounds = ds.attributes.back().bounds.read();
+                    new_att().color = reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_attribute_imcolor().Value;
+                    new_att().id = pin_name;
+                    new_att().display_name = pin_name;
+                    new_att().usage_count = 1;
+                    globals::attributes().insert({new_att.read().id, std::move(new_att)});
                 }
                 _execution_graphs[std::string(main_execution_graph_id)]->addPin(_cur_id, id, pin_name, deriveData::FloatType::create(), true);
             }

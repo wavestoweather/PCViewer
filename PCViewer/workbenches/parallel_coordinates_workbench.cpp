@@ -228,13 +228,13 @@ void parallel_coordinates_workbench::_update_attribute_order_infos(){
     if(attribute_order_infos.read().empty() && drawlist_infos.read().size()){
         for(auto& att: drawlist_infos.read()[0].dataset_read().attributes){
             auto& attribute = globals::attributes.ref_no_track()[att.id].ref_no_track();
-            attribute_order_infos().emplace_back(attribute_order_info_t{att.id, true, attribute.active, attribute.bounds});
+            attribute_order_infos().emplace_back(attribute_order_info_t{attribute.id, true, attribute.active, attribute.bounds});
         }
     }
     else{
         for(std::string_view att: attributes_to_add){
             auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
-            attribute_order_infos().emplace_back(attribute_order_info_t{att, true, attribute.active, attribute.bounds});
+            attribute_order_infos().emplace_back(attribute_order_info_t{attribute.id, true, attribute.active, attribute.bounds});
         }
     }
 }
@@ -342,7 +342,7 @@ void parallel_coordinates_workbench::show(){
             }
             name = cur_substr + "##" + name;
         }
-        ImGui::Button(name.c_str(), button_size);
+        ImGui::Button(name.size() ? name.c_str(): "##place", button_size);
         if (name != global_attribute.display_name && ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::Text("%s", global_attribute.display_name.c_str());
