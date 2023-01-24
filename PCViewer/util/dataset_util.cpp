@@ -1257,6 +1257,7 @@ void check_dataset_gpu_stream(){
 
 void check_dataset_data_update(){
     if(globals::datasets.changed){
+        std::vector<structures::dynamic_struct<util::data::gpu_header, uint32_t>> header_bytes;
         for(const auto& [ds_id, ds]: globals::datasets.read()){
             if(!ds.read().cpu_data.changed)
                 continue;
@@ -1307,16 +1308,15 @@ void check_dataset_data_update(){
                 globals::datasets()[ds_id]().gpu_data.header = util::vk::create_buffer(buffer_info, alloc_info);
             }
             auto& column_buffers = ds.read().gpu_data.columns;
-            structures::dynamic_struct<util::data::gpu_header, uint32_t> header_bytes = std::visit([&column_buffers](auto&& data){return util::data::create_packed_header(data, column_buffers);}, ds.read().cpu_data.read());
+            header_bytes.emplace_back(std::visit([&column_buffers](auto&& data){return util::data::create_packed_header(data, column_buffers);}, ds.read().cpu_data.read()));
             structures::stager::staging_buffer_info staging_info{};
             staging_info.dst_buffer = ds.read().gpu_data.header.buffer;
-            staging_info.data_upload = header_bytes.data();
+            staging_info.data_upload = header_bytes.back().data();
             globals::stager.add_staging_task(staging_info);
 
-            globals::stager.wait_for_completion();    // wait for uploadsd, then continue
-            
             globals::datasets()[ds_id]().cpu_data.changed = false;
         }
+        globals::stager.wait_for_completion();    // wait for uploadsd, then continue
     }
 }
 

@@ -105,7 +105,7 @@ public:
     const std::string middle_input_id = "middle_inputs";
     const std::string input_input_id = "input_inputs";  // this should always be an array
     const crude_json::value dimension_selector = crude_json::object{{"type", "dim_sel"}, {"selected_dim", "Select"}};
-    const crude_json::value drawlist_templatelist_selector = crude_json::object{{"tpye", "dl_tl_sel"}, {"selected_dl_tl", "Select"}};
+    const crude_json::value drawlist_templatelist_selector = crude_json::object{{"type", "dl_tl_sel"}, {"selected_dl_tl", "Select"}};
 
     std::vector<std::unique_ptr<Type>> inputTypes;
     std::vector<std::string> inputNames;

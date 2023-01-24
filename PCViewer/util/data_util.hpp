@@ -74,6 +74,7 @@ inline structures::dynamic_struct<gpu_header, uint32_t> create_packed_header(con
 
     // transform data
     if(data.column_transforms.size()){
+        assert(data.column_transforms.size() == data.columns.size());
         packed_header->data_transform_offset = cur_offset;
         for(const auto& transform: data.column_transforms){
             packed_header[cur_offset++] = reinterpret_cast<const uint32_t&>(transform.scale);

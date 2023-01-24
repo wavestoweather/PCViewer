@@ -7,6 +7,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <imgui_internal.h>
 #include <load_colors_workbench.hpp>
+#include <drawlists.hpp>
 
 namespace workbenches{
 namespace nodes = ax::NodeEditor;
@@ -176,8 +177,10 @@ void data_derivation_workbench::show(){
                     ds.attributes.push_back(structures::attribute{pin_name, pin_name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}});
                     ds.attributes.back().bounds.changed = true;
                     std::visit([](auto&& data){
-                        data.columns.push_back({0});
-                        data.column_dimensions.push_back({});
+                        data.columns.emplace_back(1, 0.f);    // emplace vector with 1 element which is 0
+                        data.column_dimensions.emplace_back();// emplace empty (signals constant)
+                        if(data.column_transforms.size())
+                            data.column_transforms.emplace_back(structures::scale_offset<float>{1.f, 0.f});
                     }, ds.cpu_data());
                     structures::tracked_global_attribute_t new_att{};
                     new_att().bounds = ds.attributes.back().bounds.read();
@@ -510,11 +513,25 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     assert(inputDataSize != -1 || nodes[node].inputIds.empty());
     // handling vector cration nodes
     if(dynamic_cast<deriveData::Nodes::DataCreation*>(nodes[node].node.get())){
-        inputDataSize = inputData[0](0, 0);
-        static uint32_t dimsIndex{0};
-        create_vector_sizes.emplace_back(std::make_unique<uint32_t>(inputDataSize));
-        outputLayout.dimensionSizes = deriveData::memory_view<uint32_t>(*create_vector_sizes.back());
-        outputLayout.columnDimensionIndices = deriveData::memory_view<uint32_t>(dimsIndex);
+        if(dynamic_cast<deriveData::Nodes::Active_Indices*>(nodes[node].node.get())){
+            std::string& selected = nodes[node].node->input_elements[nodes[node].node->middle_input_id]["Drawlist/Templatelist"]["selected_dl_tl"].get<std::string>();
+            bool dl_selected = globals::drawlists.read() | util::contains_if<decltype(*globals::drawlists.read().begin())>([&selected](const auto& dl){return dl.first == selected;});
+            bool tl_selected{}; 
+            for(const auto& [ds_id, ds]: globals::datasets.read())
+                tl_selected |= ds.read().templatelists | util::contains_if<decltype(*ds.read().templatelists.begin())>([&selected](const auto& tl){return tl->name == selected;});
+            if(!dl_selected && !tl_selected)
+                throw std::runtime_error{"Active Indices node: Selection " + selected + " is not an available drawlist or templatelist"};
+            if(dl_selected){
+                //auto dl = globals::drawlists.ref_no_track() | util::try_find_if<decltype(*globals::drawlists.ref_no_track().begin())>()
+            }
+        }
+        else{
+            inputDataSize = inputData[0](0, 0);
+            static uint32_t dimsIndex{0};
+            create_vector_sizes.emplace_back(std::make_unique<uint32_t>(inputDataSize));
+            outputLayout.dimensionSizes = deriveData::memory_view<uint32_t>(*create_vector_sizes.back());
+            outputLayout.columnDimensionIndices = deriveData::memory_view<uint32_t>(dimsIndex);
+        }
     }
 
     // handling reduction nodes to take the indices buffer
@@ -618,26 +635,43 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
                     std::string(n->datasetId) + " for attribute " + n->inputNames[i] + " does not match the output of the previous node. Aborting...");
             
             // searching the vector which contains the data and move to dataset data
+            bool data_in_data_storage{};
             for(auto& d: data_storage){
                 if(d.data() == inputData[i].cols[0].data()){
                     if(std::count(inplaceIndices.begin(), inplaceIndices.end(), i))
                         ds_data.columns[i] = std::move(d);
                     else
                         ds_data.columns[i] = d;
-                    ds_data.column_dimensions[i] = std::vector<uint32_t>(inputData[i].columnDimensionIndices.begin(), inputData[i].columnDimensionIndices.end());
+                    data_in_data_storage = true;
                 }
             }
+            if(!data_in_data_storage) // copy data from input view
+                ds_data.columns[i] = std::vector(inputData[i].cols[0].begin(), inputData[i].cols[0].end());
+            
+            ds_data.column_dimensions[i] = std::vector<uint32_t>(inputData[i].columnDimensionIndices.begin(), inputData[i].columnDimensionIndices.end());
+            
 
-            // updating min and max of the attributes
+            // updating min and max of the dataset attributes
             dataset.attributes[i].bounds().min = std::numeric_limits<float>::max();
             dataset.attributes[i].bounds().max = -std::numeric_limits<float>::max();
             for(float f: ds_data.columns[i]){
                 dataset.attributes[i].bounds().min = std::min(f, dataset.attributes[i].bounds.read().min);
                 dataset.attributes[i].bounds().max = std::max(f, dataset.attributes[i].bounds.read().max);
             }
-            if(dataset.attributes[i].bounds.read().min == dataset.attributes[i].bounds.read().max){
-                dataset.attributes[i].bounds().max += .1f;
-                dataset.attributes[i].bounds().min -= .1f;
+
+            // updating global attribute min max
+            std::string_view att_id = dataset.attributes[i].id;
+            auto& gb_att = ATTRIBUTE_WRITE(att_id); gb_att.bounds() = {};
+            for(const auto& [ds_id, ds]: globals::datasets.read()){
+                size_t att_index = ds.read().attributes | util::index_of_if<const structures::attribute>([att_id](const auto& a){return a.id == att_id;});
+                if(att_index != util::n_pos){
+                    gb_att.bounds().min = std::min(ds.read().attributes[att_index].bounds.read().min, gb_att.bounds.read().min);
+                    gb_att.bounds().max = std::max(ds.read().attributes[att_index].bounds.read().max, gb_att.bounds.read().max);
+                }
+            }
+            if(gb_att.bounds.read().min == gb_att.bounds.read().max){
+                gb_att.bounds().max += .1f;
+                gb_att.bounds().min -= .1f;
             }
         }
     }
