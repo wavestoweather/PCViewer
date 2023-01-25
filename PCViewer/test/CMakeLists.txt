@@ -4,6 +4,7 @@ create_test_sourcelist(Tests
     struct_to_json_tests.cpp
     iterator_test.cpp
     ranges_test.cpp
+    kd_tree_test.cpp
 )
 
 file(GLOB src

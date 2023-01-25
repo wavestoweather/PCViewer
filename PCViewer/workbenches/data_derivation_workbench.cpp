@@ -8,6 +8,7 @@
 #include <imgui_internal.h>
 #include <load_colors_workbench.hpp>
 #include <drawlists.hpp>
+#include <drawlist_util.hpp>
 
 namespace workbenches{
 namespace nodes = ax::NodeEditor;
@@ -521,8 +522,36 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
                 tl_selected |= ds.read().templatelists | util::contains_if<decltype(*ds.read().templatelists.begin())>([&selected](const auto& tl){return tl->name == selected;});
             if(!dl_selected && !tl_selected)
                 throw std::runtime_error{"Active Indices node: Selection " + selected + " is not an available drawlist or templatelist"};
+            static std::vector<uint32_t> iota_vec = util::i_range(uint32_t(40)) | util::to<std::vector<uint32_t>>();
             if(dl_selected){
-                //auto dl = globals::drawlists.ref_no_track() | util::try_find_if<decltype(*globals::drawlists.ref_no_track().begin())>()
+                auto dl_en = globals::drawlists.ref_no_track() | util::try_find_if<std::remove_reference_t<decltype(*globals::drawlists.ref_no_track().begin())>>([&selected](const auto& dl){return dl.first == selected;});
+                auto& dl = dl_en->get().second.ref_no_track();
+                // dowloading the activatio into the activation bitset and adding the view to the bitset as well as the indices to the input views
+                util::drawlist::download_activation(dl);
+                create_vector_sizes.emplace_back(std::make_unique<uint32_t>(dl.const_templatelist().data_size));
+                deriveData::column_memory_view<float> view;
+                view.dimensionSizes = std::visit([](auto&& d){return d.dimension_sizes;}, dl.dataset_read().cpu_data.read());
+                view.columnDimensionIndices = deriveData::memory_view<uint32_t>(iota_vec.data(), std::visit([](auto&& d){return d.dimension_sizes.size();}, dl.dataset_read().cpu_data.read()));
+                view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(dl.active_indices_bitset.data()), dl.active_indices_bitset.num_blocks()));
+                assert(dl.const_templatelist().indices.empty() && !dl.const_templatelist().flags.identity_indices && "If indices are empty the templatelist has to be the identity indexlist, otherwise it is empty which is forbidden!");
+                view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(const_cast<uint32_t*>(dl.const_templatelist().indices.data())), dl.const_templatelist().indices.size()));
+                inputData.emplace_back(std::move(view));
+            }
+            else{
+                const structures::templatelist* tl;
+                const structures::dataset*      ds;
+                for(const auto& [ds_id, ds_]: globals::datasets.read()){
+                    if(auto tl_pair = ds_.read().templatelist_index | util::try_find_if<std::remove_reference_t<decltype(*ds_.read().templatelist_index.begin())>>([&selected](const auto& t){return t.first == selected;})){
+                        tl = tl_pair->get().second;
+                        ds = &ds_.read();
+                        break;
+                    }
+                }
+                deriveData::column_memory_view<float> view;
+                view.dimensionSizes = std::visit([](auto&& d){return d.dimension_sizes;}, ds->cpu_data.read());
+                view.columnDimensionIndices = deriveData::memory_view<uint32_t>(iota_vec.data(), std::visit([](auto&& d){return d.dimension_sizes.size();}, ds->cpu_data.read()));
+                view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(const_cast<uint32_t*>(tl->indices.data())), tl->indices.size()));
+                inputData.emplace_back(std::move(view));
             }
         }
         else{
@@ -534,7 +563,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         }
     }
 
-    // handling reduction nodes to take the indices buffer
+    // For the reduction nodes the output data layout equals the index layout which sits at index 0 of the inputData views
     bool reduction_node = dynamic_cast<deriveData::Nodes::Reduction*>(nodes[node].node.get());
     if(reduction_node)
         outputLayout = inputData[0];

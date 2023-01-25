@@ -349,5 +349,27 @@ size_t operator|(const T& range, const index_of_if<U>& e){
             return i;
     return n_pos;
 }
+
+
+template<typename T, typename = void>
+struct is_resizable: std::false_type{};
+template<typename T>
+struct is_resizable<T, decltype(std::declval<T>().resize(0), void())> : std::true_type {};
+template<typename T, typename = void>
+struct is_sizeable: std::false_type{};
+template<typename T>
+struct is_sizeable<T, decltype(std::declval<T>().size(0), void())> : std::true_type {};
+template<typename T>
+class to{
+};
+template<typename T, typename U>
+U operator|(const T& range, const to<U>& to){
+    U ret;
+    if constexpr(is_resizable<U>::value && is_sizeable<T>::value)
+        ret.resize(range.size());
+    for(auto&& e: range)
+        ret.emplace_back(e);
+    return ret;
+}
 }
 

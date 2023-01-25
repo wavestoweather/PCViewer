@@ -473,8 +473,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
             if(dl.appearance->read().show_histogram)
                 ++active_histogram_count;
         }
-        float histogram_distance = (2. - info.workbench.setting.read().histogram_width) / (active_ordered_attributes.size() - 1);
-        float drawlist_histogram_width = info.workbench.setting.read().histogram_width / active_histogram_count;
+        float histogram_distance = static_cast<float>((2. - info.workbench.setting.read().histogram_width) / (active_ordered_attributes.size() - 1));
+        float drawlist_histogram_width = static_cast<float>(info.workbench.setting.read().histogram_width / active_histogram_count);
         output_specs out_specs{
             info.workbench.plot_data.read().image_view,
             info.workbench.plot_data.read().image_format, 
@@ -498,11 +498,11 @@ void parallel_coordinates_renderer::render(const render_info& info){
             const auto active_indices = util::data::active_attribute_refs_to_indices(active_ordered_attributes, ds.attributes);
             push_constants_hist_frag pc_frag{};
             pc_frag.bin_count = info.workbench.plot_data.read().height;
-            pc_frag.blur_radius = info.workbench.setting.read().histogram_blur_width;
+            pc_frag.blur_radius = static_cast<float>(info.workbench.setting.read().histogram_blur_width);
             pc_frag.color = dl_info.appearance->read().color;
             pc_frag.mapping_type = static_cast<uint32_t>(info.workbench.setting.read().hist_type);
-            for(int i: util::size_range(active_indices)){
-                float x_base = -1. + i * histogram_distance + histogram_offset;
+            for(size_t i: util::size_range(active_indices)){
+                float x_base = -1.f + i * histogram_distance + histogram_offset;
 
                 uint32_t index = active_indices[i];
                 int bin_size = info.workbench.plot_data.read().height;

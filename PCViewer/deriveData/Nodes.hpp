@@ -17,6 +17,8 @@
 #include <robin_hood.h>
 #include <radix.hpp>
 #include <sstream>
+#include <kd_tree.hpp>
+#include <flat_set.hpp>
 #include "k_means.hpp"
 #include "db_scan.hpp"
 
@@ -247,7 +249,39 @@ public:
     }
 
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        // nothing to do, everything has to be done outside, as more complex info is needed
+        switch(input[0].cols.size()){
+        case 1:{
+            if(input[0].cols[0].empty())
+                std::fill(output[0].cols[0].begin(), output[0].cols[0].end(), 1.f);
+            else{
+                memory_view<const uint32_t> indices{reinterpret_cast<const uint32_t*>(input[0].cols[0].data()), input[0].cols[0].size()};
+                std::fill(output[0].cols[0].begin(), output[0].cols[0].end(), .0f);
+                for(uint32_t i: indices)
+                    output[0].cols[0][i] = 1.f;
+            }
+            break;}
+        case 2:{
+            memory_view<const uint32_t> activations{reinterpret_cast<const uint32_t*>(input[0].cols[0].data()), input[0].cols[0].size()};
+            memory_view<const uint32_t> indices{reinterpret_cast<const uint32_t*>(input[0].cols[1].data()), input[0].cols[1].size()};
+            if(indices.empty()){
+                for(size_t i: util::i_range(input[0].size())){
+                    if(activations[i / 32] >> (i % 32)) 
+                        output[0].cols[0][i] = 1.f;
+                    else
+                        output[0].cols[0][i] = 0.f;
+                }
+            }
+            else{
+                std::fill(output[0].cols[0].begin(), output[0].cols[0].end(), .0f);
+                for(size_t i: util::size_range(input[0].cols[1])){
+                    if(activations[i / 32] >> (i % 32))
+                        output[0].cols[0][indices[i]] = 1.f;
+                }
+            }
+            break;}
+        default:
+            throw std::runtime_error{"deriveData::Nodes::Active_Indices() Unsupported amount of input elements"};
+        }
     };
 };
 
@@ -546,6 +580,33 @@ public:
         settings.min_points = static_cast<int>(input_elements[middle_input_id]["Min Points"].get<double>());
 
         db_scan::run(input, output, settings);
+    }
+};
+
+class Group_Distance: public Node, public VariableInput, public Creatable<Group_Distance>{
+public:
+    Group_Distance():
+        Node(createFilledVec<IndexType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Group Distance"),
+        VariableInput(false, 2)
+    {
+        inputTypes[1] = std::make_unique<FloatType>();
+    }
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        // creating the KDtree for fast data lookup
+        std::vector<uint32_t> indices;
+        for(size_t i: util::size_range(input[0].cols[0])) if(input[0].cols[0][i] > 0) indices.emplace_back(static_cast<uint32_t>(i));
+        const auto data_input = std::vector<column_memory_view<float>>(input.begin() + 1, input.end());
+        const structures::kd_tree tree(data_input, indices);
+        const structures::flat_set<uint32_t> indices_set(std::move(indices), true);
+        for(size_t i: util::size_range(input[0].cols[0])){
+            if(indices_set.contains(i))
+                output[0].cols[0][i] = 0;
+            else{
+                auto [n, dist] = tree.nearest_neighbour(i);
+                output[0].cols[0][i] = dist;
+            }
+        }
     }
 };
 
@@ -1026,7 +1087,7 @@ public:
 };
 
 
-class Derivation: public Binary<FloatType>, public Creatable<Derivation>{
+class Derivative: public Binary<FloatType>, public Creatable<Derivative>{
     enum class difference_t: uint32_t{
         forward,
         backward,
@@ -1039,7 +1100,7 @@ class Derivation: public Binary<FloatType>, public Creatable<Derivation>{
         "central"
     };
 public:
-    Derivation(): Binary("Derivation", "") 
+    Derivative(): Binary("Derivative", "") 
     {
         inputNames[0] = "h";
         inputTypes[0]->data()(0,0) = 1.f;
@@ -1055,7 +1116,7 @@ public:
         std::string dimension = input_elements[middle_input_id]["Dimension"]["selected_dim"].get<std::string>();
         auto dim_ptr = std::find(input[1].dimensionNames.begin(), input[1].dimensionNames.end(), dimension);
         if(dim_ptr == input[1].dimensionNames.end())    
-            throw std::runtime_error{"Derivation::applyOperationCpu() Dimension " + dimension + " not available with current data input. Reselect dimension"};
+            throw std::runtime_error{"Derivative::applyOperationCpu() Dimension " + dimension + " not available with current data input. Reselect dimension"};
         uint32_t dim{uint32_t(dim_ptr - input[1].dimensionNames.begin())};
         switch(util::json::get_enum_val<difference_t>(input_elements[middle_input_id]["Difference Method"])){
         case difference_t::forward:

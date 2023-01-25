@@ -14,6 +14,8 @@ inline size_t drawlist_index(const std::string_view& dl_id){
     return index;
 }
 
+void download_activation(structures::drawlist& dl);
+
 void check_drawlist_deletion();
 
 void check_drawlist_update();

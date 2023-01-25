@@ -11,10 +11,10 @@ class flat_set{
 public:
     flat_set() = default;
     flat_set(size_t size): _elements(size) {}
-    flat_set(std::vector<T>&& e): _elements(std::move(e)) {if(_elements.size() > 1){if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
-    flat_set(const std::vector<T>& e): _elements(e) {if(_elements.size() > 1) {if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
+    flat_set(std::vector<T>&& e, bool sorted = false): _elements(std::move(e))  {if(_elements.size() > 1 && !sorted){if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
+    flat_set(const std::vector<T>& e, bool sorted = false): _elements(e)        {if(_elements.size() > 1 && !sorted) {if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
     template<typename U>
-    flat_set(U begin, U end): _elements(begin, end) {if(_elements.size() > 1) {if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
+    flat_set(U begin, U end, bool sorted = false): _elements(begin, end)        {if(_elements.size() > 1 && !sorted) {if constexpr (!std::is_arithmetic_v<T>) std::sort(_elements.begin(), _elements.end()); else radix::sort(_elements);};}
 
     const T* data() const           {return _elements.data();}
     size_t size() const             {return _elements.size();}

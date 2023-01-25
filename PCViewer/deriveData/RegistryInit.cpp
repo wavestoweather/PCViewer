@@ -50,7 +50,7 @@ REGISTER(Sum_Reduction);
 REGISTER(Mul_Reduction);
 REGISTER(Average_Reduction);
 REGISTER(StdDev_Reduction);
-REGISTER(Derivation);
+REGISTER(Derivative);
 //REGISTER(PlusVec2);
 //REGISTER(MinusVec2);
 //REGISTER(MultiplicationVec2);
