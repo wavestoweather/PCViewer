@@ -530,7 +530,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
                 util::drawlist::download_activation(dl);
                 create_vector_sizes.emplace_back(std::make_unique<uint32_t>(dl.const_templatelist().data_size));
                 deriveData::column_memory_view<float> view;
-                view.dimensionSizes = std::visit([](auto&& d){return d.dimension_sizes;}, dl.dataset_read().cpu_data.read());
+                view.dimensionSizes = std::visit([](auto&& d){return deriveData::memory_view<uint32_t>(const_cast<std::vector<uint32_t>&>(d.dimension_sizes));}, dl.dataset_read().cpu_data.read());
                 view.columnDimensionIndices = deriveData::memory_view<uint32_t>(iota_vec.data(), std::visit([](auto&& d){return d.dimension_sizes.size();}, dl.dataset_read().cpu_data.read()));
                 view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(dl.active_indices_bitset.data()), dl.active_indices_bitset.num_blocks()));
                 assert(dl.const_templatelist().indices.empty() && !dl.const_templatelist().flags.identity_indices && "If indices are empty the templatelist has to be the identity indexlist, otherwise it is empty which is forbidden!");
@@ -548,7 +548,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
                     }
                 }
                 deriveData::column_memory_view<float> view;
-                view.dimensionSizes = std::visit([](auto&& d){return d.dimension_sizes;}, ds->cpu_data.read());
+                view.dimensionSizes = std::visit([](auto&& d){return deriveData::memory_view<uint32_t>(const_cast<std::vector<uint32_t>&>(d.dimension_sizes));}, ds->cpu_data.read());
                 view.columnDimensionIndices = deriveData::memory_view<uint32_t>(iota_vec.data(), std::visit([](auto&& d){return d.dimension_sizes.size();}, ds->cpu_data.read()));
                 view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(const_cast<uint32_t*>(tl->indices.data())), tl->indices.size()));
                 inputData.emplace_back(std::move(view));

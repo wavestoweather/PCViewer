@@ -3,6 +3,7 @@
 #include <numeric>
 #include <radix.hpp>
 #include <memory_view.hpp>
+#include <limits>
 #include "../deriveData/MemoryView.hpp"
 
 namespace structures{
@@ -58,12 +59,20 @@ protected:
         }
         //sorting the current indices
         radix::return_t<std::vector<size_t>::iterator> r;
-        if(same_layout)
-            r = radix::sort_indirect(begin, end, tmp.begin(), [&](size_t index){return points[level].cols[0][index];});
-        else
-            r = radix::sort_indirect(begin, end, tmp.begin(), [&](size_t index){return points[level](index, 0);});
-        if(&*r.begin != &*begin)
-            std::copy(r.begin, r.end, begin);
+        if(end - begin > 1 << 5){
+            if(same_layout)
+                r = radix::sort_indirect(begin, end, tmp.begin(), [&](size_t index){return points[level].cols[0][index];});
+            else
+                r = radix::sort_indirect(begin, end, tmp.begin(), [&](size_t index){return points[level](index, 0);});
+            if(&*r.begin != &*begin)
+                std::copy(r.begin, r.end, begin);
+        }
+        else{
+            if(same_layout)
+                std::sort(begin, end, [&](size_t a, size_t b){return points[level].cols[0][a] < points[level].cols[0][b];});
+            else
+                std::sort(begin, end, [&](size_t a, size_t b){return points[level](a, 0) < points[level](b, 0);});
+        }
         
         auto lbegin = begin;
         auto lend = begin + (end - begin) / 2;

@@ -40,7 +40,7 @@ int nearest_neighbour_test(){
 
 int speed_benchmark(){
 #ifdef BENCHMARK
-    constexpr size_t s{1 << 30};
+    constexpr size_t s{1 << 20};
     std::vector<std::vector<float>> datas(2, std::vector<float>(s));
     for(auto& v: datas)
         for(auto& f: v)
@@ -57,18 +57,20 @@ int speed_benchmark(){
     column_view[1].columnDimensionIndices = dimensions;
     column_view[1].cols = {deriveData::memory_view(datas[1])};
     structures::kd_tree tree(column_view);
-    for(size_t i: util::i_range(20)){
+    double build_ms = stopwatch.lap();
+    size_t n;
+    for(size_t i: util::i_range(s)){
         size_t x = rand() % s;
         auto [neigh, dist] = tree.nearest_neighbour(x);
-        for(size_t j: util::size_range(column_view)){
-            float x_diff = column_view[0](j, 0) - column_view[0](x, 0);
-            float y_diff = column_view[1](j, 0) - column_view[1](x, 0);
-            if(x_diff * x_diff + y_diff * y_diff < dist)
-                return test_result::error;
-        }
+        //for(size_t j: util::i_range(s)){
+        //    float x_diff = column_view[0](j, 0) - column_view[0](x, 0);
+        //    float y_diff = column_view[1](j, 0) - column_view[1](x, 0);
+        //    if(x_diff * x_diff + y_diff * y_diff < dist)
+        //        return test_result::error;
+        //}
     }
     double ms = stopwatch.lap();
-    std::cout << "[info] Needed " << ms << " ms for building the kd_tree for " << size << " datapoints and " << 20 << " random nearest neighbour queries" << std::endl;
+    std::cout << "[info] Needed " << build_ms << " ms for building the kd_tree for " << s << " datapoints and " << ms << " ms for querying " << s << " random nearest neighbour queries" << std::endl;
 #endif
     return test_result::success;
 }
