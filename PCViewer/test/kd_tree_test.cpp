@@ -26,11 +26,11 @@ int nearest_neighbour_test(){
     column_view[1].cols = {deriveData::memory_view(datas[1])};
     structures::kd_tree tree(column_view);
     for(size_t i: util::i_range(20)){
-        size_t x = rand() % column_view.size();
+        size_t x = rand() % datas[0].size();
         auto [neigh, dist] = tree.nearest_neighbour(x);
         for(size_t j: util::size_range(column_view)){
-            float x_diff = column_view[0](0, j) - column_view[0](0, x);
-            float y_diff = column_view[1](0, j) - column_view[1](0, x);
+            float x_diff = column_view[0](j, 0) - column_view[0](x, 0);
+            float y_diff = column_view[1](j, 0) - column_view[1](x, 0);
             if(x_diff * x_diff + y_diff * y_diff < dist)
                 return test_result::error;
         }
@@ -58,11 +58,11 @@ int speed_benchmark(){
     column_view[1].cols = {deriveData::memory_view(datas[1])};
     structures::kd_tree tree(column_view);
     for(size_t i: util::i_range(20)){
-        size_t x = rand() % column_view.size();
+        size_t x = rand() % s;
         auto [neigh, dist] = tree.nearest_neighbour(x);
         for(size_t j: util::size_range(column_view)){
-            float x_diff = column_view[0](0, j) - column_view[0](0, x);
-            float y_diff = column_view[1](0, j) - column_view[1](0, x);
+            float x_diff = column_view[0](j, 0) - column_view[0](x, 0);
+            float y_diff = column_view[1](j, 0) - column_view[1](x, 0);
             if(x_diff * x_diff + y_diff * y_diff < dist)
                 return test_result::error;
         }
