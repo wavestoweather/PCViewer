@@ -4,6 +4,7 @@
 #include <scatterplot_workbench.hpp>
 #include <histogram_registry_util.hpp>
 #include <data_util.hpp>
+#include <priority_globals.hpp>
 
 namespace pipelines{
 scatterplot_renderer::scatterplot_renderer()
@@ -61,7 +62,7 @@ const scatterplot_renderer::pipeline_data& scatterplot_renderer::_get_or_create_
             // pipeline layout creation
             auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants), 0);
             assert(globals::descriptor_sets.count(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
-            auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo({}, util::memory_view(push_constant_range));
+            auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout, util::memory_view(push_constant_range));
             pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
             auto vertex_module = util::vk::create_scoped_shader_module(vertex_shader_path);
@@ -90,7 +91,7 @@ const scatterplot_renderer::pipeline_data& scatterplot_renderer::_get_or_create_
             // pipeline layout creation
             auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(push_constants_large_vis), 0);
             assert(globals::descriptor_sets.count(util::global_descriptors::heatmap_descriptor_id));      // the iron map has to be already created before the pipeliens are created
-            auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo({}, util::memory_view(push_constant_range));
+            auto layout_create = util::vk::initializers::pipelineLayoutCreateInfo(globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->layout, util::memory_view(push_constant_range));
             pipe_data.pipeline_layout = util::vk::create_pipeline_layout(layout_create);
 
             auto vertex_module = util::vk::create_scoped_shader_module(large_vis_vertex_shader_path);
@@ -270,7 +271,8 @@ void scatterplot_renderer::render(const render_info& info){
                     std::array<int, 2> bin_sizes{int(p_key.width), int(p_key.width)};
                     std::array<uint32_t, 2> attribute_indices{uint32_t(util::memory_view<const structures::attribute>(dl.dataset_read().attributes).index_of([&a_pair](const auto& a){return a.id == a_pair.a;})), uint32_t(util::memory_view<const structures::attribute>(dl.dataset_read().attributes).index_of([&a_pair](const auto& a){return a.id == a_pair.b;}))};
                     std::array<structures::min_max<float>, 2> min_max{a_ref.bounds->read(), b_ref.bounds->read()};
-                    std::string histogram_id = util::histogram_registry::get_id_string(attribute_indices, bin_sizes, min_max, false, false);
+                    pc.priority_rendering = dl.priority_render.read();
+                    std::string histogram_id = util::histogram_registry::get_id_string(attribute_indices, bin_sizes, min_max, false, dl.priority_render.read());
                     auto sorted_hist_id = util::histogram_registry::get_indices_bins(histogram_id);
                     auto hist_access = dl.drawlist_read().histogram_registry.const_access();
                     auto histogram_key = hist_access->registry_key_by_indices_sizes(std::get<0>(sorted_hist_id), std::get<1>(sorted_hist_id));
@@ -288,6 +290,8 @@ void scatterplot_renderer::render(const render_info& info){
                     pc.radius = dl.scatter_appearance.read().radius;
                     pc.color = dl.appearance->read().color;
                     pc.counts_address = util::vk::get_buffer_address(hist_access->gpu_buffers.at(histogram_id));
+                    if(dl.drawlist_read().priority_indices.contains(histogram_id))
+                        pc.ordering_address = util::vk::get_buffer_address(dl.drawlist_read().priority_indices.at(histogram_id));
                 }
                 vkCmdPushConstants(_render_commands.back(), pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
             }
@@ -296,6 +300,10 @@ void scatterplot_renderer::render(const render_info& info){
                 pc.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
                 pc.index_buffer_address = util::vk::get_buffer_address(dl.templatelist_read().gpu_indices);
                 pc.activation_bitset_address = util::vk::get_buffer_address(dl.drawlist_read().active_indices_bitset_gpu);
+                if(dl.priority_render.read()){
+                    pc.priorities_address = util::vk::get_buffer_address(dl.drawlist_read().priority_colors_gpu);
+                    pc.index_order_address = util::vk::get_buffer_address(dl.drawlist_read().priority_indices.at(std::string(globals::priority_drawlist_standard_order)));
+                }
                 pc.attribute_a = util::data::attribute_to_index_single(axis_pair.atts.a, dl.dataset_read().attributes);
                 pc.attribute_b = util::data::attribute_to_index_single(axis_pair.atts.b, dl.dataset_read().attributes);
                 pc.a_min = info.workbench.get_attribute_order_info(axis_pair.atts.a).bounds->read().min;
@@ -305,10 +313,12 @@ void scatterplot_renderer::render(const render_info& info){
                 pc.flip_axes = 1;   // always flip, as major axis is y axis
                 pc.form = static_cast<uint32_t>(dl.scatter_appearance.read().splat);
                 pc.radius = dl.scatter_appearance.read().radius;
+                pc.priority_rendering = dl.priority_render.read();
                 pc.color = dl.appearance->read().color;
                 vkCmdPushConstants(_render_commands.back(), pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
             }
             vkCmdBindPipeline(_render_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
+            vkCmdBindDescriptorSets(_render_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline_layout, 0, 1, &globals::descriptor_sets[util::global_descriptors::heatmap_descriptor_id]->descriptor_set, 0, {});
             vkCmdDraw(_render_commands.back(), histogram_render? fb_key.width * fb_key.width: static_cast<uint32_t>(dl.templatelist_read().data_size), 1, 0, 0);
         }
         vkCmdEndRenderPass(_render_commands.back());

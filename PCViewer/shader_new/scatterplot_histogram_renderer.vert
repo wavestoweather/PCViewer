@@ -15,13 +15,17 @@
 #include "standard_buffer_refs.glsl"
 #include "scatterplot_forms.glsl"
 
+layout(set = 0, binding = 0) uniform sampler2D color_transfer_texture;
+
 layout(push_constant) uniform PC{
     uint64_t        counts_address;
+    uint64_t        ordering_address;
     uint            flip_axes;
     uint            bin_size;
     uint            form;
     float           radius;
-    uint            fi,ll;
+    uint            priority_rendering;
+    uint            f,i,ll;
     vec4            color;
 };
 
@@ -29,14 +33,21 @@ layout(location = 0) out vec4 out_color;
 layout(location = 1) out uint out_form;
 
 void main(){
+    uint hist_index = gl_VertexIndex;
+
+    if(ordering_address != 0){
+        uvec o = uvec(ordering_address);
+        hist_index = o.data[hist_index];
+    }
+
     uvec counts = uvec(counts_address);
-    uint count = counts.data[gl_VertexIndex];
+    uint count = counts.data[hist_index];
     if(count == 0){
         gl_Position = vec4(-2);
         return;
     }
-    float a = (float(gl_VertexIndex / bin_size) + .5) / bin_size;
-    float b = (float(gl_VertexIndex % bin_size) + .5) / bin_size;
+    float a = (float(hist_index / bin_size) + .5) / bin_size;
+    float b = (float(hist_index % bin_size) + .5) / bin_size;
     a = a * 2 - 1;
     b = b * 2 - 1;
 
@@ -48,5 +59,11 @@ void main(){
 
     gl_PointSize = radius;
     out_form = form;
-    out_color = vec4(color.xyz,  1. - pow(1. - color.a, count));
+    if(priority_rendering > 0){
+        float norm = float(count) / 255.f;
+        out_color.xyz = texture(color_transfer_texture, vec2(norm, .5f)).xyz;
+        out_color.w = color.w;
+    }
+    else
+        out_color = vec4(color.xyz,  1. - pow(1. - color.a, count));
 }

@@ -28,7 +28,7 @@ namespace scatterplot_wb{
     };
 
     struct settings_t{
-        uint32_t    plot_width{150};   // width of 1 subplot
+        uint32_t    plot_width{400};   // width of 1 subplot
         uint32_t    sample_count{1};
         VkFormat    plot_format{VK_FORMAT_R16G16B16A16_UNORM};
         mutable double plot_padding{5};   // padding inbeteween the scatter plot images
@@ -36,7 +36,7 @@ namespace scatterplot_wb{
         plot_type_t plot_type{plot_type_t::list};
         std::array<int, 2> plot_matrix{1, 2};
         size_t      large_vis_threshold{500000};
-        mutable float uniform_radius{1.f};
+        mutable float uniform_radius{5.f};
 
         bool operator==(const settings_t& o) const{
             COMP_EQ_OTHER(o, plot_width);
@@ -88,7 +88,7 @@ namespace scatterplot_wb{
 
     struct scatterplot_dl_appearance{
         splat_form splat{};
-        float      radius{1.f};
+        float      radius{5.f};
     };
     using tracked_dl_appearance = change_tracker<scatterplot_dl_appearance>;
     using appearance_tracker = change_tracker<drawlist::appearance>;
@@ -97,6 +97,7 @@ namespace scatterplot_wb{
         bool                                linked_with_drawlist;
         util::memory_view<appearance_tracker> appearance;
         tracked_dl_appearance               scatter_appearance;
+        change_tracker<bool>                priority_render;
 
         bool any_change() const             {return appearance->changed;}
         void clear_changes()                {appearance->changed = false;}

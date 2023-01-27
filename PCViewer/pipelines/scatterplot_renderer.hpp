@@ -20,6 +20,8 @@ class scatterplot_renderer{
         VkDeviceAddress data_header_address;
         VkDeviceAddress index_buffer_address;
         VkDeviceAddress activation_bitset_address;
+        VkDeviceAddress priorities_address;
+        VkDeviceAddress index_order_address;
         uint32_t        attribute_a;
         uint32_t        attribute_b;
         float           a_min;
@@ -29,16 +31,18 @@ class scatterplot_renderer{
         uint32_t        flip_axes;
         uint32_t        form;
         float           radius;
-        uint32_t        fill;
+        uint32_t        priority_rendering;
         ImVec4          color;
     };
     struct push_constants_large_vis{
         VkDeviceAddress counts_address;
+        VkDeviceAddress ordering_address;
         uint32_t        flip_axes;
         uint32_t        bin_size;
         uint32_t        form;
         float           radius;
-        uint32_t        fi,ll;
+        uint32_t        priority_rendering;
+        uint32_t        f,i,ll;
         ImVec4          color;
     };
 

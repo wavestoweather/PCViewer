@@ -9,3 +9,9 @@ layout(buffer_reference, scalar) buffer uvec{
 layout(buffer_reference, scalar) buffer ivec{
     int[] data;
 };
+
+#ifdef UINT8_DEFINED
+layout(buffer_reference, scalar) buffer uchar_vec{
+    uint8_t[] data;
+};
+#endif

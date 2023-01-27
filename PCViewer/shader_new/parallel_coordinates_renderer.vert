@@ -128,7 +128,8 @@ void main() {
     out_color = color;
     if(priorities_address != 0){
         PriorityValues priorities = PriorityValues(priorities_address);
-        uint i = gl_VertexIndex / attr_infos.attribute_count;
-        out_color.xyz = texture(color_transfer_texture, vec2(1. - (float(priorities.vals[data_index]) / 255.f),.5f)).xyz;
+        vec4 c = texture(color_transfer_texture, vec2(1. - (float(priorities.vals[data_index]) / 255.f),.5f));
+        out_color.xyz = c.xyz;
+        out_color.w *= c.w;
     }
 }

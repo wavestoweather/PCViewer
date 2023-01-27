@@ -11,6 +11,7 @@
 #include <descriptor_set_storage.hpp>
 #include <flat_set.hpp>
 #include <regex>
+#include <priority_globals.hpp>
 
 namespace workbenches
 {
@@ -29,8 +30,16 @@ void scatterplot_workbench::_update_registered_histograms(){
         size_t att_b_index = attributes | util::index_of_if<const_attribute_info_ref>([&p](auto& r){return r.get().attribute_id == p.b;});
         assert(att_a_index != util::n_pos && att_b_index != util::n_pos);
         for(auto dl: dls){
+            auto dl_info = drawlist_infos.read() | util::try_find_if<const drawlist_info>([&dl](auto&& d){return d.drawlist_id == dl;});
+            bool prio = dl_info->get().priority_render.read();
+            if(prio){
+                DRAWLIST_WRITE(dl).delayed_ops.priority_rendering_requested = true;
+                DRAWLIST_WRITE(dl).delayed_ops.priority_sorting_done = false;
+                DRAWLIST_WRITE(dl).delayed_ops.delayed_ops_done = false;
+            }
             if(DRAWLIST_READ(dl).const_templatelist().data_size < settings.read().large_vis_threshold)
                 continue;
+
             
             if(!drawlist_registator_needed.contains(dl))
                 drawlist_registator_needed[dl].resize(_registered_histograms[dl].size());
@@ -39,13 +48,13 @@ void scatterplot_workbench::_update_registered_histograms(){
             const auto attribute_indices = util::data::active_attribute_refs_to_indices(attributes, ds.attributes); // if the dataset does not have the attribute its index will be util::memory_view<>::npos
             indices = {attribute_indices[att_a_index], attribute_indices[att_b_index]};
             bounds = {attributes[att_a_index].get().bounds->read(), attributes[att_b_index].get().bounds->read()};
-            auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, false);
+            auto registrator_id = util::histogram_registry::get_id_string(indices, bucket_sizes, bounds, false, prio);
             size_t registrator_index = util::memory_view(_registered_histograms[dl]).index_of([&registrator_id](const registered_histogram& h){return registrator_id == h.registry_id;});
             if(registrator_index != util::memory_view<>::n_pos)
                 drawlist_registator_needed[dl][registrator_index] = true;
             else{
                 // adding new histogram
-                _registered_histograms[dl].emplace_back(DRAWLIST_WRITE(dl).histogram_registry.access()->scoped_registrator(indices, bucket_sizes, bounds, false, false, false));
+                _registered_histograms[dl].emplace_back(DRAWLIST_WRITE(dl).histogram_registry.access()->scoped_registrator(indices, bucket_sizes, bounds, false, prio, false));
                 drawlist_registator_needed[dl].emplace_back(true);
             }
         }
@@ -81,8 +90,10 @@ void scatterplot_workbench::_update_registered_histograms(){
     }
 
     // setting update singal flags
-    for(const auto& dl: drawlist_infos.read())
+    for(auto& dl: drawlist_infos.ref_no_track()){
+        dl.priority_render.changed = false;
         dl.drawlist_write().histogram_registry.access()->request_change_all();
+    }
     attribute_order_infos.changed = false;
     plot_list.changed = false;
     _request_registrators_update = false;
@@ -227,10 +238,60 @@ void scatterplot_workbench::_update_attribute_order_infos(){
         auto& attribute = globals::attributes.ref_no_track()[att].ref_no_track();
         attribute_order_infos().emplace_back(structures::attribute_info{att, true, attribute.active, attribute.bounds, attribute.color});
     }
+    // erasing all matrix elements containing the attributes
+    for(auto& e: _matrix_scatterplots){
+        if(!new_attributes.contains(e.atts.a) || !new_attributes.contains(e.atts.b))
+            e = {};
+    }
 }
 
 void scatterplot_workbench::_show_general_settings(){
-    if(ImGui::BeginCombo("plot type(coming soon)", plot_type_names[settings.read().plot_type].data())){
+    if(ImGui::BeginMenu("Priority rendering")){
+        if(ImGui::MenuItem("Priority rendering off")){
+            for(auto& dl: drawlist_infos()){
+                if(!dl.priority_render.read())
+                    continue;
+                dl.priority_render = false;
+                dl.drawlist_write().delayed_ops.priority_rendering_requested = false;
+                dl.drawlist_write().delayed_ops.priority_sorting_done = true;
+            }
+            _request_registrators_update |= true;
+        }
+        std::string_view selected_att{};
+        bool set_priority_all{};
+        if(ImGui::BeginCombo("Set priority center", "Select")){
+            for(const auto& att: attribute_order_infos.read())
+                if(ImGui::MenuItem(att.attribute_id.data()))
+                    selected_att = att.attribute_id;
+            ImGui::EndCombo();
+        }
+        if(ImGui::IsItemHovered())
+            ImGui::SetTooltip("Set priority centerfor the selected drwalist/top most drawlist");
+        if(ImGui::BeginCombo("Set priority center all", "Select")){
+            set_priority_all = true;
+            for(const auto& att: attribute_order_infos.read())
+                if(ImGui::MenuItem(att.attribute_id.data()))
+                    selected_att = att.attribute_id;
+            ImGui::EndCombo();
+        }
+        if(selected_att.size()){
+            globals::priority_center_attribute_id = selected_att;
+            globals::priority_center_vealue = globals::attributes.read().at(selected_att).read().bounds.read().max;
+            globals::priority_center_distance = globals::priority_center_vealue - globals::attributes.read().at(selected_att).read().bounds.read().min;
+            for(auto& dl: drawlist_infos()){
+                if(!set_priority_all && !(globals::selected_drawlists | util::contains(dl.drawlist_id)) && !globals::selected_drawlists.empty())
+                    continue;
+                dl.appearance->write().color.w = .9f;
+                dl.priority_render = true;
+                if(!set_priority_all)
+                    break;
+            }
+            _request_registrators_update |= true;
+        }
+        ImGui::EndMenu();
+    }
+    ImGui::Separator();
+    if(ImGui::BeginCombo("plot type", plot_type_names[settings.read().plot_type].data())){
         for(auto t: structures::enum_iteration<plot_type_t>()){
             if(ImGui::MenuItem(plot_type_names[t].data())){
                 settings().plot_type = t;
@@ -795,9 +856,7 @@ void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::s
         return;
     
     attribute_order_infos();
-    //_update_attribute_order_infos();
-    //_update_plot_list();
-    //_update_registered_histograms();
+    _update_attribute_order_infos();
 }
 
 void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -810,6 +869,11 @@ void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string
             drawlist_infos().erase(drawlist_infos().begin() + i);
         }
     }
+    for(auto& e: _matrix_scatterplots){
+        for(auto dl: drawlist_ids)
+            e.dls.erase(dl);
+    }
+    _update_attribute_order_infos();
 }
 
 void scatterplot_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){
@@ -842,6 +906,8 @@ bool scatterplot_workbench::all_registrators_updated(bool rendered) const{
             if(rendered && !access->registrators_done)
                 return false;
         }
+        if(!dl.drawlist_read().delayed_ops.delayed_ops_done)
+            return false;
     }
     return true;
 }

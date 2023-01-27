@@ -23,6 +23,7 @@ public:
     decltype(_elements.cbegin()) begin() const {return _elements.cbegin();}
     decltype(_elements.cend())   end() const {return _elements.cend();}
     bool contains(const T& v) const {return std::binary_search(_elements.begin(), _elements.end(), v);}
+    void erase(const T& v)          {if(contains(v)) _elements.erase(std::find(_elements.begin(), _elements.end(), v));}
 
     flat_set<T>& operator&=(const flat_set<T>& o) {std::vector<T> res(_elements.size() + o._elements.size()); auto it = std::set_intersection(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res.begin()); res.resize(it - res.begin()); _elements = std::move(res); return *this;}
     flat_set<T>& operator|=(const flat_set<T>& o) {std::vector<T> res(_elements.size() + o._elements.size()); auto it = std::set_union(_elements.begin(), _elements.end(), o._elements.begin(), o._elements.end(), res.begin()); res.resize(it - res.begin()); _elements = std::move(res); return *this;}

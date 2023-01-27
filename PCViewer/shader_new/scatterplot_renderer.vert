@@ -12,12 +12,18 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
 #extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
 
+#define UINT8_DEFINED
+
 #include "scatterplot_forms.glsl"
+
+layout(set = 0, binding = 0) uniform sampler2D color_transfer_texture;
 
 layout(push_constant) uniform PC{
     uint64_t        data_header_address;
     uint64_t        index_buffer_address;
     uint64_t        activation_bitset_address;
+    uint64_t        priorities_address;
+    uint64_t        index_order_address;
     uint            attribute_a;
     uint            attribute_b;
     float           a_min;
@@ -27,7 +33,7 @@ layout(push_constant) uniform PC{
     uint            flip_axes;
     uint            form;
     float           radius;
-    uint            fill;
+    uint            priority_rendering;
     vec4            color;
 };
 
@@ -40,9 +46,9 @@ layout(location = 1) out uint out_form;
 void main(){
     uint data_index = gl_VertexIndex;
 
-    if(index_buffer_address != 0){
-        uvec index_buffer = uvec(index_buffer_address);
-        data_index = index_buffer.data[data_index];
+    if(index_order_address != 0){
+        uvec order = uvec(index_order_address);
+        data_index = order.data[data_index];
     }
 
     uvec activation_bitset = uvec(activation_bitset_address);
@@ -50,6 +56,11 @@ void main(){
     if(!act){
         gl_Position = vec4(-2);
         return;
+    }
+
+    if(index_buffer_address != 0){
+        uvec index_buffer = uvec(index_buffer_address);
+        data_index = index_buffer.data[data_index];
     }
 
     float a = (get_packed_data(data_index, attribute_a) - a_min) / (a_max - a_min);
@@ -65,4 +76,10 @@ void main(){
     out_color = color;
     out_form = form;
     gl_PointSize = radius;
+    if(priority_rendering > 0){
+        uchar_vec priorities = uchar_vec(priorities_address);
+        vec4 c = texture(color_transfer_texture, vec2(1. - (float(priorities.data[data_index]) / 255.f),.5f));
+        out_color.xyz = c.xyz;
+        out_color.w *= c.w;
+    }
 }
