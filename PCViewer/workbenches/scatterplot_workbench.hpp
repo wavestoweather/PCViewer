@@ -54,6 +54,7 @@ public:
     structures::change_tracker<std::vector<drawlist_info>>  drawlist_infos{};
     robin_hood::unordered_map<att_pair_dls, plot_data_t>    plot_datas{};
     robin_hood::unordered_map<att_pair_dls, plot_additional_data_t> plot_additional_datas{};
+    std::vector<plot_additional_data_t>                     plot_additional_datas_matrix{};     // needed as for matrix elements without attributes and drawlists no background can exist
     changing_vector<attribute_order_info>                   attribute_order_infos{};
     changing_vector<att_pair_dls>                           plot_list{};    // only contains the needed attribute pairs
 

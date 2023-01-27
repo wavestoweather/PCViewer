@@ -399,8 +399,13 @@ void scatterplot_workbench::show()
             }
             ImGui::GetWindowDrawList()->AddRectFilled(c_pos, {c_pos.x + settings.read().plot_width, c_pos.y + settings.read().plot_width}, ImColor(settings.read().plot_background_color));
             if(p){
-                if(plot_additional_datas.contains(p) && globals::descriptor_sets.count(plot_additional_datas[p].background_image)){
-                    ImGui::Image(globals::descriptor_sets[plot_additional_datas[p].background_image]->descriptor_set, {float(settings.read().plot_width), float(settings.read().plot_width)});
+                std::string_view background_image{};
+                if(plot_additional_datas.contains(p) && globals::descriptor_sets.count(plot_additional_datas[p].background_image))
+                    background_image = plot_additional_datas[p].background_image;
+                else if(plot_additional_datas_matrix.size() > i && globals::descriptor_sets.count(plot_additional_datas_matrix[i].background_image))
+                    background_image = plot_additional_datas_matrix[i].background_image;
+                if(background_image.size()){
+                    ImGui::Image(globals::descriptor_sets[background_image]->descriptor_set, {float(settings.read().plot_width), float(settings.read().plot_width)});
                     ImGui::SetCursorScreenPos(c_pos);
                 }
                 if(plot_datas.contains(p))
@@ -427,11 +432,18 @@ void scatterplot_workbench::show()
                 }
             }
             else{
+                if(plot_additional_datas_matrix.size() > i && globals::descriptor_sets.count(plot_additional_datas_matrix[i].background_image)){
+                    ImGui::Image(globals::descriptor_sets[plot_additional_datas_matrix[i].background_image]->descriptor_set, {float(settings.read().plot_width), float(settings.read().plot_width)});
+                    ImGui::SetCursorScreenPos(c_pos);
+                }
                 ImGui::InvisibleButton("plot_alt", {float(settings.read().plot_width), float(settings.read().plot_width)});
             }
             if(ImGui::BeginDragDropTarget()){
                 if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("image")){
-                    plot_additional_datas[p].background_image = *reinterpret_cast<const std::string_view*>(payload->Data);
+                    if(plot_additional_datas_matrix.size() <= i) plot_additional_datas_matrix.resize(i + 1);
+                    plot_additional_datas_matrix[i].background_image = *reinterpret_cast<const std::string_view*>(payload->Data);
+                    if(p)
+                        plot_additional_datas[p].background_image = *reinterpret_cast<const std::string_view*>(payload->Data);
                     plot_list();
                 }
                 ImGui::EndDragDropTarget();
