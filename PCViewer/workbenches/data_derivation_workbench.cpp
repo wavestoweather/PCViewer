@@ -66,6 +66,13 @@ void data_derivation_workbench::show(){
     const ImVec4    header_color{.1,.1,.1,1};
     const float     pin_icon_size = 15;
 
+    std::vector<std::string_view> dls, tls;
+    for(const auto& [dl_id, dl]: globals::drawlists.read())
+        dls.emplace_back(dl_id);
+    for(const auto& [ds_id, ds]: globals::datasets.read())
+        for(const auto& [tl_id, tl]: ds.read().templatelist_index)
+            tls.emplace_back(tl_id);
+
     auto& [nodes, pin_to_nodes, links, link_to_connection, pin_to_links] = *_execution_graphs[std::string(main_execution_graph_id)];
 
     nodes::Utilities::BlueprintNodeBuilder builder;
@@ -242,7 +249,7 @@ void data_derivation_workbench::show(){
             ImGui::PopItemWidth();
         }
         ImGui::Spring(1, 0);
-        node->imguiMiddleElements(std::vector<std::string_view>(_cur_dimensions.begin(), _cur_dimensions.end()));
+        node->imguiMiddleElements(std::vector<std::string_view>(_cur_dimensions.begin(), _cur_dimensions.end()), dls, tls);
         ImGui::Spring(1, 0);
 
         // outputs
@@ -533,7 +540,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
                 view.dimensionSizes = std::visit([](auto&& d){return deriveData::memory_view<uint32_t>(const_cast<std::vector<uint32_t>&>(d.dimension_sizes));}, dl.dataset_read().cpu_data.read());
                 view.columnDimensionIndices = deriveData::memory_view<uint32_t>(iota_vec.data(), std::visit([](auto&& d){return d.dimension_sizes.size();}, dl.dataset_read().cpu_data.read()));
                 view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(dl.active_indices_bitset.data()), dl.active_indices_bitset.num_blocks()));
-                assert(dl.const_templatelist().indices.empty() && !dl.const_templatelist().flags.identity_indices && "If indices are empty the templatelist has to be the identity indexlist, otherwise it is empty which is forbidden!");
+                assert(!dl.const_templatelist().indices.empty() || dl.const_templatelist().flags.identity_indices && "If indices are empty the templatelist has to be the identity indexlist, otherwise it is empty which is forbidden!");
                 view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(const_cast<uint32_t*>(dl.const_templatelist().indices.data())), dl.const_templatelist().indices.size()));
                 inputData.emplace_back(std::move(view));
             }
@@ -553,6 +560,8 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
                 view.cols.emplace_back(deriveData::memory_view<float>(reinterpret_cast<float*>(const_cast<uint32_t*>(tl->indices.data())), tl->indices.size()));
                 inputData.emplace_back(std::move(view));
             }
+            outputLayout.dimensionSizes = inputData.back().dimensionSizes;
+            outputLayout.columnDimensionIndices = inputData.back().columnDimensionIndices;
         }
         else{
             inputDataSize = inputData[0](0, 0);
@@ -611,7 +620,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         if(memoryViewPool.size() < nodes[node].node->outputChannels()){
             int storageSize = data_storage.size();
             int missingBuffer = nodes[node].node->outputChannels() - memoryViewPool.size();
-            data_storage.insert(data_storage.end(), missingBuffer, std::vector<float>(inputDataSize));
+            data_storage.insert(data_storage.end(), missingBuffer, std::vector<float>(outputLayout.columnSize()));
             for(int i: irange(storageSize, data_storage.size()))
                 memoryViewPool.push_back(data_storage[i]);
         }

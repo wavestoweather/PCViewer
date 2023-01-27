@@ -726,7 +726,7 @@ void convert_templatelist(const structures::templatelist_convert_data& convert_d
         auto median_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, (ds.read().attributes.size() + 2) * sizeof(float));
         auto alloc_info = util::vma::initializers::allocationCreateInfo();
         drawlist().median_buffer = util::vk::create_buffer(median_buffer_info, alloc_info);
-        auto bitmap_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, drawlist.read().active_indices_bitset.num_blocks() * sizeof(*drawlist.read().active_indices_bitset.data()));
+        auto bitmap_buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, drawlist.read().active_indices_bitset.num_blocks() * sizeof(*drawlist.read().active_indices_bitset.data()));
         drawlist().active_indices_bitset_gpu = util::vk::create_buffer(bitmap_buffer_info, alloc_info);
         if(ds.read().registry)
             drawlist().dataset_registrator = ds.ref_no_track().registry->access()->scoped_registrator();

@@ -14,10 +14,11 @@ public:
     bool same_layout{true};
     size_t data_size{};
 
-    kd_tree(const float_column_view& points, util::memory_view<const uint32_t> indices = {}): points(points){
+    kd_tree(const float_column_view& points, util::memory_view<const uint32_t> indices = {}, bool indices_equal_layout = true): points(points){
         for(size_t i: util::i_range(size_t(1), points.size() - 1))
             same_layout &= points[i - 1].equalDataLayout(points[i]);
-            
+        same_layout &= indices_equal_layout;
+        
         data_size = indices ? indices.size(): same_layout ? points[0].cols[0].size() : points[0].size();
         std::vector<size_t> ind;
         if(indices)
@@ -37,6 +38,10 @@ public:
 
     std::tuple<size_t, float> nearest_neighbour(size_t p) const noexcept{
         return nearest_neighbour_rec(root, p, 0);
+    }
+
+    bool contains(size_t p) const{
+        return contains_rec(root, p, 0);
     }
 protected:
     struct KdNode{
@@ -167,6 +172,19 @@ protected:
             return {cur_node_data_index, dist};
         else
             return {best, best_dist};
+    }
+
+    bool contains_rec(size_t node, size_t p, int level) const {
+        if(node == noChild)
+            return false;
+        const auto& cur_node = nodes[node];
+        const auto cur_node_data_index = cur_node.dataIndex;
+        if(cur_node_data_index == p)
+            return true;
+        if(points[level].cols[0][p] < points[level].cols[0][cur_node_data_index])
+            return contains_rec(cur_node.left, p, (level + 1) % points.size());
+        else
+            return contains_rec(cur_node.right, p, (level + 1) % points.size());
     }
 };
 }

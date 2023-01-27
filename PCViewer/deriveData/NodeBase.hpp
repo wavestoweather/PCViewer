@@ -159,7 +159,19 @@ public:
                     }
                 }
                 if(util::json::is_drawlist_templatelist_selection(val)){
-                    
+                    std::string tl_dl = val["selected_dl_tl"].get<std::string>();
+                    if(!(drawlists | util::contains(std::string_view(tl_dl))) && !(templatelists | util::contains(std::string_view(tl_dl))))
+                        val["selected_dl_tl"] = std::string("Select");
+                    if(ax::NodeEditor::BeginNodeCombo("Drawlist/Templatelist", tl_dl.c_str())){
+                        for(auto dl: drawlists)
+                            if(ImGui::MenuItem(dl.data()))
+                                val["selected_dl_tl"] = std::string(dl);
+                        ImGui::Separator();
+                        for(auto tl: templatelists)
+                            if(ImGui::MenuItem(tl.data()))
+                                val["selected_dl_tl"] = std::string(tl);
+                        ax::NodeEditor::EndNodeCombo();
+                    }
                 }
                 if(util::json::is_enumeration(val)){
                     int ind = int(val["chosen"].get<double>());

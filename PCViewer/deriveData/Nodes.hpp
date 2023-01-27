@@ -265,7 +265,7 @@ public:
             memory_view<const uint32_t> indices{reinterpret_cast<const uint32_t*>(input[0].cols[1].data()), input[0].cols[1].size()};
             if(indices.empty()){
                 for(size_t i: util::i_range(input[0].size())){
-                    if(activations[i / 32] >> (i % 32)) 
+                    if((activations[i / 32] >> (i % 32)) & 1) 
                         output[0].cols[0][i] = 1.f;
                     else
                         output[0].cols[0][i] = 0.f;
@@ -274,7 +274,7 @@ public:
             else{
                 std::fill(output[0].cols[0].begin(), output[0].cols[0].end(), .0f);
                 for(size_t i: util::size_range(input[0].cols[1])){
-                    if(activations[i / 32] >> (i % 32))
+                    if((activations[i / 32] >> (i % 32)) & 1)
                         output[0].cols[0][indices[i]] = 1.f;
                 }
             }
@@ -597,15 +597,11 @@ public:
         std::vector<uint32_t> indices;
         for(size_t i: util::size_range(input[0].cols[0])) if(input[0].cols[0][i] > 0) indices.emplace_back(static_cast<uint32_t>(i));
         const auto data_input = std::vector<column_memory_view<float>>(input.begin() + 1, input.end());
-        const structures::kd_tree tree(data_input, indices);
-        const structures::flat_set<uint32_t> indices_set(std::move(indices), true);
+        const structures::kd_tree tree(data_input, indices, input[0].equalDataLayout(input[1]));
         for(size_t i: util::size_range(input[0].cols[0])){
-            if(indices_set.contains(i))
-                output[0].cols[0][i] = 0;
-            else{
-                auto [n, dist] = tree.nearest_neighbour(i);
-                output[0].cols[0][i] = dist;
-            }
+            //size_t col_ind = 
+            auto [n, dist] = tree.nearest_neighbour(i);
+            output[0].cols[0][i] = std::sqrt(dist);
         }
     }
 };

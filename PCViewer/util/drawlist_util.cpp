@@ -8,6 +8,7 @@ namespace drawlist{
 void download_activation(structures::drawlist& dl){
     auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
     structures::stager::staging_buffer_info staging_info;
+    staging_info.transfer_dir = structures::stager::transfer_direction::download;
     staging_info.data_download = util::memory_view{dl.active_indices_bitset.data(), dl.active_indices_bitset.num_blocks()};
     staging_info.dst_buffer = dl.active_indices_bitset_gpu.buffer;
     globals::stager.add_staging_task(staging_info);
