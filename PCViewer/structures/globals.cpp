@@ -57,7 +57,7 @@ std::set<std::string_view>      drawlists_to_delete{};
 structures::attributes_t        attributes{};
 std::vector<std::string_view>   selected_attributes{};
 structures::names_group         attribute_groups{};
-structures::attribute_renames   attribute_renames{{"longitude", "lon"}, {"latitude", "lat"}, {"level", "lev"}};
+structures::attribute_renames   attribute_renames{};
 
 structures::global_brushes      global_brushes{};
 structures::brush_edit_data     brush_edit_data{};

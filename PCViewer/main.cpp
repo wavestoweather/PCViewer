@@ -29,7 +29,7 @@
 #include <histogram_counter_executor.hpp>
 #include <drawlist_util.hpp>
 #include <main_window_util.hpp>
-#include <settings_manager.hpp>
+#include <attribute_util.hpp>
 
 #ifdef min
 #undef min
@@ -191,6 +191,9 @@ int main(int argc, char* argv[]){
     // workbenches setup
     util::workbench::setup_default_workbenches();
     util::global_descriptors::setup_default_descriptors();
+
+    // attribute renames
+    util::attribute::load_attribute_renames();
     }
 
     // main loop ---------------------------------------------------------------------

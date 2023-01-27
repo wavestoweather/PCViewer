@@ -32,6 +32,7 @@
 #include <global_settings.hpp>
 #include <load_colors_workbench.hpp>
 #include <radix.hpp>
+#include <attribute_util.hpp>
 #include "../cimg/CImg.h"
 #include "../vulkan/vk_format_util.hpp"
 
@@ -965,11 +966,12 @@ void check_datasets_to_open(){
         if(ImGui::CollapsingHeader("Automatic Attribute renaming")){
             int del{-1};
             ImGui::PushItemWidth(100);
+            bool any_change{};
             for(auto&& [att_rename, i]: util::enumerate(globals::attribute_renames)){
                 util::imgui::scoped_id rename_id{int(i)};
-                ImGui::InputText("from", &att_rename.first);
+                any_change |= ImGui::InputText("from", &att_rename.first);
                 ImGui::SameLine();
-                ImGui::InputText("to", &att_rename.second);
+                any_change |= ImGui::InputText("to", &att_rename.second);
                 ImGui::SameLine();
                 if(ImGui::Button("X##ren"))
                     del = int(i);
@@ -979,6 +981,9 @@ void check_datasets_to_open(){
                 globals::attribute_renames.emplace_back();
             if(del >= 0)
                 globals::attribute_renames.erase(globals::attribute_renames.begin() + del);
+            any_change |= del >= 0;
+            if(any_change)
+                util::attribute::store_attribute_renames();
         }
 
         if(ImGui::CollapsingHeader("Variables/Dimensions settings")){
