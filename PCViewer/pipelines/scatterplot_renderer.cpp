@@ -242,7 +242,9 @@ void scatterplot_renderer::render(const render_info& info){
         VkRect2D scissor{};
         scissor.extent = {fb_key.width, fb_key.width};
         vkCmdSetScissor(_render_commands.back(), 0, 1, &scissor);
-        for(const auto& [dl, dl_pos]: util::pos_iter(info.workbench.drawlist_infos.read())){
+        for(const auto& [dl_id, dl_pos]: util::pos_iter(axis_pair.dls)){
+            const auto d_c = dl_id;
+            const auto& dl = (info.workbench.drawlist_infos.read() | util::try_find_if<const drawlist_info>([&d_c](auto&& dl){return dl.drawlist_id == d_c;}))->get();
             if(dl_pos.first){
                 VkClearAttachment clear_value{};
                 clear_value.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
