@@ -259,15 +259,15 @@ void scatterplot_workbench::_show_general_settings(){
         }
         std::string_view selected_att{};
         bool set_priority_all{};
-        if(ImGui::BeginCombo("Set priority center", "Select")){
+        if(ImGui::BeginCombo("Set priority attribute", "Select")){
             for(const auto& att: attribute_order_infos.read())
                 if(ImGui::MenuItem(att.attribute_id.data()))
                     selected_att = att.attribute_id;
             ImGui::EndCombo();
         }
         if(ImGui::IsItemHovered())
-            ImGui::SetTooltip("Set priority centerfor the selected drwalist/top most drawlist");
-        if(ImGui::BeginCombo("Set priority center all", "Select")){
+            ImGui::SetTooltip("Set priority attribute for the selected drwalist/top most drawlist");
+        if(ImGui::BeginCombo("Set priority attribute all", "Select")){
             set_priority_all = true;
             for(const auto& att: attribute_order_infos.read())
                 if(ImGui::MenuItem(att.attribute_id.data()))
@@ -804,6 +804,20 @@ void scatterplot_workbench::show()
         if(ImGui::MenuItem(("Swap " + att_b.attribute_read().display_name + " bounds").c_str()))
             std::swap(att_b.bounds->write().min, att_b.bounds->write().max), attribute_order_infos();
         ImGui::PopItemWidth();
+        ImGui::Separator();
+        std::string_view del{};
+        for(auto dl: _popup_attributes.dls){
+            ImGui::Text(dl.data());
+            ImGui::SameLine(200);
+            if(ImGui::Button("X"))
+                del = dl;
+        }
+        if(del.size()){
+            (_matrix_scatterplots | util::try_find(_popup_attributes))->get().dls.erase(del);
+            _popup_attributes.dls.erase(del);
+            plot_list();
+        }
+            
         ImGui::EndPopup();
     }
 
