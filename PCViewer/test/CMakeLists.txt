@@ -5,6 +5,7 @@ create_test_sourcelist(Tests
     iterator_test.cpp
     ranges_test.cpp
     kd_tree_test.cpp
+    shader_test.cpp
 )
 
 file(GLOB src
@@ -14,10 +15,11 @@ file(GLOB src
     "../imgui/*.cpp"
     "../structures/globals.cpp"
     "../pipelines/*.cpp"
+    "../util/shader_compiler.cpp"
 )
 
 add_executable(CommonCppTests ${Tests} ${src})
-target_link_libraries(CommonCppTests Vulkan::Vulkan ${SDL2_LIBRARIES})
+target_link_libraries(CommonCppTests Vulkan::Vulkan Vulkan::glslang ${SDL2_LIBRARIES})
 
 set(TestsToRun ${Tests})
 remove(TestsToRun CommonCppTests.cpp)
