@@ -73,7 +73,7 @@ void parallel_coordinates_workbench::_swap_attributes(const attribute_order_info
 }
 
 void parallel_coordinates_workbench::_update_registered_histograms(bool request_update){
-    if(!all_registrators_updated())
+    if(!all_registrators_updated(true))
         return;
     // updating registered histograms (iterating through indices pairs and checking for registered histogram)
     const auto active_attributes = get_active_ordered_attributes();
@@ -1007,7 +1007,7 @@ void parallel_coordinates_workbench::show(){
 void parallel_coordinates_workbench::render_plot()
 {
     // if histogram rendering requested and not yet finished delay rendering
-    if(!all_registrators_updated() || attribute_order_infos.changed)
+    if(!all_registrators_updated())// || attribute_order_infos.changed)
         return;
 
     if(logger.logging_level >= logging::level::l_5)
@@ -1051,7 +1051,7 @@ const parallel_coordinates_workbench::attribute_order_info_t& parallel_coordinat
     return (attribute_order_infos.read() | util::try_find_if<const attribute_order_info_t>([&attribute](auto a){return a.attribute_id == attribute;}))->get();
 }
 
-bool parallel_coordinates_workbench::all_registrators_updated() const{
+bool parallel_coordinates_workbench::all_registrators_updated(bool rendered) const{
     // if histogram rendering requested and not yet finished delay rendering
     for(const auto& dl: drawlist_infos.read()){
         if(_registered_histograms.contains(dl.drawlist_id) && _registered_histograms.at(dl.drawlist_id).size() ||
@@ -1059,6 +1059,8 @@ bool parallel_coordinates_workbench::all_registrators_updated() const{
             const auto access = dl.drawlist_read().histogram_registry.const_access();
             if(!access->dataset_update_done)
                 return false;     // a registered histogram is being currently updated, no rendering possible
+            if(rendered && !access->registrators_done)
+                return false;
         }
         if(!dl.drawlist_read().delayed_ops.delayed_ops_done)
             return false;
@@ -1114,15 +1116,12 @@ void parallel_coordinates_workbench::add_drawlists(const util::memory_view<std::
 }
 
 void parallel_coordinates_workbench::signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info) {
-    bool request_render{false};
     for(auto drawlist_id: drawlist_ids){
         if(globals::drawlists.read().at(drawlist_id).changed){
-            request_render = true;
+            drawlist_infos();
             break;
         }
     }
-    if(request_render)
-        drawlist_infos();
 }
 
 void parallel_coordinates_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){

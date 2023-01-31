@@ -587,7 +587,7 @@ class Group_Distance: public Node, public VariableInput, public Creatable<Group_
 public:
     Group_Distance():
         Node(createFilledVec<IndexType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Group Distance"),
-        VariableInput(false, 2)
+        VariableInput(false, 1)
     {
         inputTypes[1] = std::make_unique<FloatType>();
     }

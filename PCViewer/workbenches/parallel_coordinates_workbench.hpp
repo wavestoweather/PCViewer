@@ -107,7 +107,7 @@ public:
     void                            render_plot();
     std::vector<const_attribute_info_ref> get_active_ordered_attributes() const;
     const attribute_order_info_t&   get_attribute_order_info(std::string_view attribute) const;
-    bool                            all_registrators_updated() const;
+    bool                            all_registrators_updated(bool rendered = false) const;
 
     // overriden methods
     void show() override;

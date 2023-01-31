@@ -432,12 +432,16 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     pc.priority_rendering = dl.priority_render.read();
                     std::string id = util::histogram_registry::get_id_string(hist_indices, bin_sizes, attribute_bounds, false, is_max_hist);
                     {
+                        auto sorted_hist_id = util::histogram_registry::get_indices_bins(id);
                         auto hist_access = drawlist.histogram_registry.const_access();
-                        if(!hist_access->name_to_registry_key.contains(id) || !hist_access->gpu_buffers.contains(id)){
+                        auto histogram_key = hist_access->registry_key_by_indices_sizes(std::get<0>(sorted_hist_id), std::get<1>(sorted_hist_id));
+                        if(!histogram_key){
                             if(logger.logging_level >= logging::level::l_4)
                                 logger << logging::warning_prefix << " Missing histogram (" << id << "). Nothing rendered for subplot " << indices[i] << "|" << indices[i + 1] << logging::endl;
                             continue;
                         }
+                        if(!hist_access->name_to_registry_key.contains(id))
+                            id = hist_access->registry.at(*histogram_key).hist_id;
                         pc.histogram_address = util::vk::get_buffer_address(hist_access->gpu_buffers.at(id));
                     }
                     if(dl.drawlist_read().priority_indices.contains(id))
@@ -508,12 +512,16 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 int bin_size = info.workbench.plot_data.read().height;
                 std::string hist_id = util::histogram_registry::get_id_string(index, bin_size, active_ordered_attributes[i].get().bounds->read(), false, false);
                 {
+                    auto sorted_hist_id = util::histogram_registry::get_indices_bins(hist_id);
                     auto hist_access = dl_info.drawlist_read().histogram_registry.const_access();
-                    if(!hist_access->name_to_registry_key.contains(hist_id) || !hist_access->gpu_buffers.contains(hist_id)){
+                    auto histogram_key = hist_access->registry_key_by_indices_sizes(std::get<0>(sorted_hist_id), std::get<1>(sorted_hist_id));
+                    if(!histogram_key){
                         if(logger.logging_level >= logging::level::l_4)
                             logger << logging::warning_prefix << " Missing histogram (" << hist_id << "). No histogram for drawlist " << dl_info.drawlist_id << " on " << dl_info.drawlist_read().dataset_read().attributes[index].display_name << logging::endl;
                         continue;
                     }
+                    if(!hist_access->name_to_registry_key.contains(hist_id))
+                        hist_id = hist_access->registry.at(*histogram_key).hist_id;
                     pc_frag.histogram_address = util::vk::get_buffer_address(hist_access->gpu_buffers.at(hist_id));
                 }
                 push_constants_hist_vert pc_vert{};
