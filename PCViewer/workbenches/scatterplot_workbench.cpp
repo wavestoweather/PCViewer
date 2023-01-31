@@ -358,8 +358,12 @@ void scatterplot_workbench::show()
 
     bool plot_menu_open{};
 
-    if(!active) 
+    if(!active){
+        for(auto& [dl, regs]: _registered_histograms)
+            for(auto& reg: regs)
+                reg.signal_registry_used();
         return;
+    }
 
     // checking for setting updates and updating the rendering if necessary
     _request_registrators_update |= attribute_order_infos.changed;// && std::any_of(attribute_order_infos.read().begin(), attribute_order_infos.read().end(), [](const auto& info){return info.active->changed || info.bounds->changed;});

@@ -121,8 +121,12 @@ violin_attribute_workbench::violin_attribute_workbench(std::string_view id): wor
 void violin_attribute_workbench::show(){
     const std::string_view drag_type_attribute{"attribute_drag"};
 
-    if(!active)
+    if(!active){
+        for(auto& [dl, regs]: _registered_histograms)
+            for(auto& reg: regs)
+                reg.signal_registry_used();
         return;
+    }
 
     // checking updates
     // checking updates

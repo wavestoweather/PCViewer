@@ -240,8 +240,12 @@ void parallel_coordinates_workbench::_update_attribute_order_infos(){
 }
 
 void parallel_coordinates_workbench::show(){
-    if(!active)
+    if(!active){
+        for(auto& [dl, regs]: _registered_histograms)
+            for(auto& reg: regs)
+                reg.signal_registry_used();
         return;
+    }
     const static std::string_view brush_menu_id{"brush menu"};
     const static std::string_view pc_menu_id{"parallel coordinates menu"};
 

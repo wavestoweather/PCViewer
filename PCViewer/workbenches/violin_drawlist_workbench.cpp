@@ -163,8 +163,12 @@ void violin_drawlist_workbench::show(){
 
     bool open_matrix_popup{};
 
-    if(!active)
+    if(!active){
+        for(auto& [dl, regs]: _registered_histograms)
+            for(auto& reg: regs)
+                reg.signal_registry_used();
         return;
+    }
 
     // checking updates
     bool request_register_update{};
