@@ -46,9 +46,9 @@ void violin_drawlist_workbench::_update_registered_histograms(){
         for(auto&& [att, i]: util::enumerate(active_attributes)){
             auto registrator_id = util::histogram_registry::get_id_string(active_attribute_indices[i], settings.read().histogram_bin_count, att.get().bounds->read(), false, false);
             int registrator_index{-1};
-            for(int j: util::size_range(_registered_histograms[dl.drawlist_id])){
+            for(size_t j: util::size_range(_registered_histograms[dl.drawlist_id])){
                 if(_registered_histograms[dl.drawlist_id][j].registry_id == registrator_id){
-                    registrator_index = j;
+                    registrator_index = static_cast<int>(j);
                     break;
                 }
             }
@@ -193,8 +193,8 @@ void violin_drawlist_workbench::show(){
     for(auto&& [dl_id, i]: util::enumerate(session_state.read().matrix_elements)){
         util::imgui::scoped_id imgui_id(dl_id.size() ? dl_id.data(): "def");
         
-        const int x = i / settings.read().matrix_dimensions[1];
-        const int y = i % settings.read().matrix_dimensions[1];
+        const int x = static_cast<int>(i / settings.read().matrix_dimensions[1]);
+        const int y = static_cast<int>(i % settings.read().matrix_dimensions[1]);
 
         const ImVec2 violin_min{base_pos.x + y * plot_width_padded, base_pos.y + x * plot_height_padded};
         const ImVec2 plot_min{violin_min.x, violin_min.y + ImGui::GetTextLineHeightWithSpacing()};
@@ -222,7 +222,7 @@ void violin_drawlist_workbench::show(){
             ImGui::EndDragDropSource();
         }
         if(ImGui::IsItemClicked(ImGuiMouseButton_Right)){
-            _popup_matrix_element = i;
+            _popup_matrix_element = static_cast<int>(i);
             open_matrix_popup = true;
         }
 
@@ -292,8 +292,8 @@ void violin_drawlist_workbench::show(){
         ImGui::ColorEdit4("Plot background", &settings.read().plot_background.x, ImGuiColorEditFlags_NoInputs);
         ImGui::DragFloat("Line thickness", &settings.read().line_thickness, .1f, 1, 100);
         ImGui::DragFloat("Line hover distance", &settings.read().line_hover_dist, 1, 1, 200);
-        ImGui::DragFloat("Line alpha", &settings.read().line_alpha, .05, 0, 1);
-        ImGui::DragFloat("Area alpha", &settings.read().area_alpha, .05, 0, 1);
+        ImGui::DragFloat("Line alpha", &settings.read().line_alpha, .05f, 0, 1);
+        ImGui::DragFloat("Area alpha", &settings.read().area_alpha, .05f, 0, 1);
         if(ImGui::InputInt("Bin count", &settings.ref_no_track().histogram_bin_count, 1, 100, ImGuiInputTextFlags_EnterReturnsTrue))
             settings();
         if(ImGui::DragFloat("Smoothing std dev", &settings.ref_no_track().smoothing_std_dev, .1f, -1, 500))
@@ -363,12 +363,12 @@ void violin_drawlist_workbench::show(){
                 ImGui::TableNextColumn();
                 ImGui::BeginDisabled(i == 0);
                 if(ImGui::ArrowButton("##up", ImGuiDir_Up))
-                    up_index = i;
+                    up_index = static_cast<int>(i);
                 ImGui::EndDisabled();
                 ImGui::TableNextColumn();
                 ImGui::BeginDisabled(i == session_state.read().attribute_order_infos.size() - 1);
                 if(ImGui::ArrowButton("##do", ImGuiDir_Down))
-                    down_index = i;
+                    down_index = static_cast<int>(i);
                 ImGui::EndDisabled();
                 ImGui::TableNextColumn();
                 if(ImGui::Checkbox("##en", &session_state.ref_no_track().attribute_order_infos[i].active->ref_no_track())){

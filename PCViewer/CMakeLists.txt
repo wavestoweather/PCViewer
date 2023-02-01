@@ -55,7 +55,7 @@ if(NOT DEFINED Vulkan_FOUND)
     PATHS ${lib_path})
 endif()
 
-find_package(Vulkan COMPONENTS glslang glslc REQUIRED)
+find_package(Vulkan COMPONENTS shaderc_combined REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(netCDF CONFIG REQUIRED)
 find_package(PNG REQUIRED)
@@ -163,6 +163,8 @@ file(GLOB util_SRC
 file(GLOB addditional_vulkan_SRC
     "vulkan/*.cpp"
 )
+
+message("wo samma den do?: ${Vulkan_shaderc_combined_LIBRARY}")
 include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR}; ${structures_INCLUDE_DIR})
 add_executable (PCViewer ${pcviewer_SRC} ${util_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC} ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC} ${addditional_vulkan_SRC})
 add_executable (PCViewer_new main.cpp ${util_SRC} ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC} ${addditional_vulkan_SRC})
@@ -171,8 +173,8 @@ if(WIN32)
 set(netCDF_LIBRARIES netCDF::netcdf)
 endif()
 
-target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan Vulkan::glslang ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
-target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan Vulkan::glslang ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan Vulkan::shaderc_combined ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan Vulkan::shaderc_combined ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
 
 add_subdirectory(shader_new)
 

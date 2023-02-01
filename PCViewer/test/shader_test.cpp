@@ -7,7 +7,7 @@ struct test_result{
 };
 
 int test_basic_shader(){
-    std::string_view shader_code = R"(
+    std::string shader_code = R"(
         #version 450
 
         layout(local_size_x = 32) in;
