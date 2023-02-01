@@ -11,6 +11,7 @@
 #include <regex>
 #include <load_colors_workbench.hpp>
 #include <imgui_util.hpp>
+#include <gpu_execution.hpp>
 
 namespace workbenches
 {

@@ -141,7 +141,7 @@ public:
     public:
         using iter_type = decltype(std::begin(iterable_));
         using deref_iter_type = decltype(*std::begin(iterable_));
-        std::pair<deref_iter_type&, bool> operator*() {return {*_i, _i == --std::end(iter_)};}
+        std::pair<deref_iter_type&, bool> operator*() {return {*_i, _i == std::end(iter_) - 1};}
         const iterator& operator++() { ++_i; return *this;}
         iterator& operator++(int) {iterator copy(*this); ++_i; return copy;}
         bool operator==(const iterator& o) const{return _i == o._i;}

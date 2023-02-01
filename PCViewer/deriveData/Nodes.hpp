@@ -21,6 +21,7 @@
 #include <flat_set.hpp>
 #include "k_means.hpp"
 #include "db_scan.hpp"
+#include "gpu_instructions.hpp"
 
 namespace deriveData{
 namespace Nodes{
