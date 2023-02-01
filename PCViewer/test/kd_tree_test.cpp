@@ -3,7 +3,7 @@
 #include <random>
 #include <stopwatch.hpp>
 
-#define BENCHMARK
+//#define BENCHMARK
 
 struct test_result{
     static const int success = 0;

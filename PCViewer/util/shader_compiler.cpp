@@ -145,7 +145,7 @@ const TBuiltInResource DefaultTBuiltInResource = {
         /* .generalConstantMatrixVectorIndexing = */ 1,
 }};
 
-std::vector<uint32_t> compile(std::string_view code, const robin_hood::unordered_map<std::string, std::string>& defines){
+std::vector<uint32_t> compile(const std::string& code, const robin_hood::unordered_map<std::string, std::string>& defines){
     const glslang_input_t input = {
         .language = GLSLANG_SOURCE_GLSL,
         .stage = GLSLANG_STAGE_COMPUTE,
