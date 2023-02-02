@@ -91,13 +91,22 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             body << "storage[" << output_indices[0] << "] = 0;\n";
             break;
         case op_codes::rand_vec:
-            body << "storage[" << output_indices[0] << "] = 0;\n";
+            body << "storage[" << output_indices[0] << "] = random_float();\n";
             break;
         case op_codes::iota_vec:
+            body << "storage[" << output_indices[0] << "] = float(gl_GlobalInvocationId.x);\n";
             break;
         case op_codes::copy:
+            body << "storage[" << output_indices[0] << "] = storage[" << input_indices[0] << "];\n";
             break;
         case op_codes::sum:
+            // TODO additional data, such as pre factors
+            body << "storage[" << output_indices[0] << "] = ";
+            for(auto&& [e, last]: util::last_iter(input_indices)){
+                body << "storage[" << e << "]";
+                if(!last) body << " + ";
+            }
+            body << ";\n";
             break;
         default:
             assert(false && "Unimplemented operation");
