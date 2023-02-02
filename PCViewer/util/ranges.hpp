@@ -353,27 +353,25 @@ size_t operator|(const T& range, const index_of_if<U>& e){
 class max{
 };
 template<typename T>
-decltype(*std::declval<T>().begin()) operator|(T range, const max&){
-    using return_type = decltype(*std::declval<T>().begin());
-    return_type m{};
+typename T::value_type operator|(T range, const max&){
+    typename T::value_type m{};
     for(auto&& [e, first]: first_iter(range)){
         if(first) m = e;
         else m = std::max(m, e);
     }
-    return e;
+    return m;
 }
 
 class min{
 };
 template<typename T>
-decltype(*std::declval<T>().begin()) operator|(T range, const min&){
-    using return_type = decltype(*std::declval<T>().begin());
-    return_type m{};
+typename T::value_type operator|(T range, const min&){
+    typename T::value_type m{};
     for(auto&& [e, first]: first_iter(range)){
         if(first) m = e;
         else m = std::min(m, e);
     }
-    return e;
+    return m;
 }
 
 template<typename T, typename = void>
