@@ -350,6 +350,31 @@ size_t operator|(const T& range, const index_of_if<U>& e){
     return n_pos;
 }
 
+class max{
+};
+template<typename T>
+decltype(*std::declval<T>().begin()) operator|(T range, const max&){
+    using return_type = decltype(*std::declval<T>().begin());
+    return_type m{};
+    for(auto&& [e, first]: first_iter(range)){
+        if(first) m = e;
+        else m = std::max(m, e);
+    }
+    return e;
+}
+
+class min{
+};
+template<typename T>
+decltype(*std::declval<T>().begin()) operator|(T range, const min&){
+    using return_type = decltype(*std::declval<T>().begin());
+    return_type m{};
+    for(auto&& [e, first]: first_iter(range)){
+        if(first) m = e;
+        else m = std::min(m, e);
+    }
+    return e;
+}
 
 template<typename T, typename = void>
 struct is_resizable: std::false_type{};

@@ -14,6 +14,8 @@ namespace deriveData{
 
 enum op_codes: uint32_t{
     none,                // used eg. by print vector nodes as they only download the data and print it
+    load,
+    store,
     pipeline_barrier,
     one_vec,
     zero_vec,
@@ -28,6 +30,9 @@ static std::ostream& operator<<(std::ostream& s, op_codes o){
 static std::istream& operator>>(std::istream& s, op_codes& o){
     return s >> reinterpret_cast<uint32_t&>(o);
 }
+//static std::stringstream& operator>>(std::stringstream& s, op_codes& o){
+//    return s >> reinterpret_cast<uint32_t&>(o);
+//}
 
 using float_column_views = std::vector<column_memory_view<float>>;
 inline void add_operation(std::stringstream& operations, op_codes op_code, const float_column_views& inputs, const float_column_views& outputs){
