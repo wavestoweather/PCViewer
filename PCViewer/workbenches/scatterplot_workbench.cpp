@@ -811,7 +811,7 @@ void scatterplot_workbench::show()
         ImGui::Separator();
         std::string_view del{};
         for(auto dl: _popup_attributes.dls){
-            ImGui::Text(dl.data());
+            ImGui::Text("%s", dl.data());
             ImGui::SameLine(200);
             if(ImGui::Button("X"))
                 del = dl;

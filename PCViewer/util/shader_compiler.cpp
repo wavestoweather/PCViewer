@@ -5,7 +5,6 @@
 #include <shaderc/shaderc.hpp>
 #else
 #include <glslang/Include/glslang_c_interface.h>
-#include <glslang/Public/ResourceLimits.h>
 #endif
 
 namespace util{
@@ -29,7 +28,7 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
     return {module.cbegin(), module.cend()};
 }
 #else
-const TBuiltInResource DefaultTBuiltInResource = {
+const glslang_resource_t DefaultTBuiltInResource = {
     /* .MaxLights = */ 32,
     /* .MaxClipPlanes = */ 6,
     /* .MaxTextureUnits = */ 32,
@@ -159,7 +158,7 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
 		.force_default_version_and_profile = false,
 		.forward_compatible = false,
 		.messages = GLSLANG_MSG_DEFAULT_BIT,
-		.resource = reinterpret_cast<const glslang_resource_t*>(&DefaultTBuiltInResource),
+		.resource = &DefaultTBuiltInResource
     };
 
     glslang_initialize_process();

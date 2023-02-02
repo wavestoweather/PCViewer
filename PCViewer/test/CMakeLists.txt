@@ -19,7 +19,16 @@ file(GLOB src
 )
 
 add_executable(CommonCppTests ${Tests} ${src})
-target_link_libraries(CommonCppTests Vulkan::Vulkan Vulkan::glslang Vulkan::shaderc_combined ${SDL2_LIBRARIES})
+target_link_libraries(CommonCppTests PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES})
+if(DEFINED Vulkan_glslang_FOUND)
+    target_link_libraries(CommonCppTests PRIVATE Vulkan::glslang)
+endif()
+if(DEFINED Vulkan_shaderc_combined_FOUND)
+    target_link_libraries(CommonCppTests PRIVATE Vulkan::shaderc_combined)
+endif()
+if(DEFINED glslang_FOUND)
+    target_link_libraries(CommonCppTests PRIVATE glslang::glslang ${glslang_LIBRARIES})
+endif()
 
 set(TestsToRun ${Tests})
 remove(TestsToRun CommonCppTests.cpp)

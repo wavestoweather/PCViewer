@@ -55,7 +55,13 @@ if(NOT DEFINED Vulkan_FOUND)
     PATHS ${lib_path})
 endif()
 
-find_package(Vulkan COMPONENTS shaderc_combined glslang REQUIRED)
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined glslang)
+if (NOT DEFINED glslang_FOUND)
+    find_package(pcviewer_glslang CONFIG PATHS ${CMAKE_SOURCE_DIR}/PCViewer/cmake/)
+endif()
+#if(NOT DEFINED Vulkan_glslang_FOUND)
+#    find_package(glslang REQUIRED)
+#endif()
 find_package(SDL2 REQUIRED)
 find_package(netCDF CONFIG REQUIRED)
 find_package(PNG REQUIRED)
@@ -172,8 +178,20 @@ if(WIN32)
 set(netCDF_LIBRARIES netCDF::netcdf)
 endif()
 
-target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan  Vulkan::shaderc_combined Vulkan::glslang ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
-target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan Vulkan::shaderc_combined Vulkan::glslang ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+if(DEFINED Vulkan_glslang_FOUND)
+    target_link_libraries(PCViewer PRIVATE Vulkan::glslang)
+    target_link_libraries(PCViewer_new PRIVATE Vulkan::glslang)
+endif()
+if(DEFINED Vulkan_shaderc_combined_FOUND)
+    target_link_libraries(PCViewer PRIVATE Vulkan::shaderc_combined)
+    target_link_libraries(PCViewer_new PRIVATE Vulkan::shaderc_combined)
+endif()
+if(DEFINED glslang_FOUND)
+    target_link_libraries(PCViewer PRIVATE glslang::glslang ${glslang_LIBRARIES})
+    target_link_libraries(PCViewer_new PRIVATE glslang::glslang  ${glslang_LIBRARIES})
+endif()
 
 add_subdirectory(shader_new)
 
