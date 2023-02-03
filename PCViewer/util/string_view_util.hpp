@@ -3,8 +3,10 @@
 
 namespace util{
 inline bool getline(std::string_view& input, std::string_view& element, char delimiter = '\n'){
-    if(input.empty())
+    if(input.empty()){
+        element = {};
         return false;
+    }
     
     size_t delimiter_pos = input.find(delimiter);
     size_t start = delimiter_pos + 1;
@@ -29,5 +31,48 @@ inline std::string_view trim(const std::string_view& str){
     std::string_view v = str;
     trim_inplace(v);
     return v;
+}
+
+struct slice{
+    char c;
+    constexpr slice(char c): c(c) {}
+};
+template<typename T = char>
+class sliced_string{
+    std::optional<std::string> storage;
+    T                slice;
+    std::string_view string;
+public:
+    class iterator{
+        friend class sliced_string;
+        std::string_view rest{};
+        std::string_view cur{};
+        T                slice{};
+    public:
+        std::string_view operator*() const{return cur;};
+        std::string_view& operator*() {return cur;};
+        const iterator& operator++() {getline(rest, cur, slice); return *this;}
+        iterator operator++(int) {iterator copy(*this); getline(rest, cur, slice); return copy;}
+        
+        bool operator==(const iterator& o) const {return rest == o.rest && cur == o.cur;}
+        bool operator!=(const iterator& o) const {return rest != o.rest || cur != o.cur;}
+    protected:
+        constexpr iterator() = default;
+        constexpr iterator(std::string_view string, T slice): rest(string), slice(slice) {getline(rest, cur, slice);}
+    };
+    iterator begin() const {return iterator(string, slice);}
+    iterator end() const {return iterator();}
+
+    constexpr sliced_string(std::string_view data, T slice = {'\n'}): slice(slice), string(data){}
+    constexpr sliced_string(std::string&& data, T slice = {'\n'}): storage(std::move(data)), slice(slice), string(storage.value()){}
+};
+static sliced_string<char> operator|(std::string_view string, slice s){
+    return sliced_string<char>(string, s.c);
+}
+static sliced_string<char> operator|(const char* string, slice s){
+    return sliced_string<char>(std::string_view(string), s.c);
+}
+static sliced_string<char> operator|(std::string&& string, slice s){
+    return sliced_string<char>(std::move(string), s.c);
 }
 }

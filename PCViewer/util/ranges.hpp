@@ -7,6 +7,7 @@
 #include <std_util.hpp>
 
 namespace util{
+constexpr size_t n_pos{size_t(-1)};
 // ranges with integer values
 template<typename T>
 class i_range {
@@ -214,7 +215,7 @@ public:
     constexpr explicit enumerate(T& iterable) : iterable_(iterable) {}
     constexpr explicit enumerate(T&& iterable) : _storage(std::move(iterable)), iterable_(*_storage) {}
     iterator begin() const {return iterator(0, std::begin(iterable_));}
-    iterator end() const {return iterator(iterable_.size(), std::end(iterable_));}
+    iterator end() const {return iterator(n_pos, std::end(iterable_));}
 };
 
 template<typename T>
@@ -319,7 +320,6 @@ std::optional<U> operator|(const T& range, const try_pick_if<U>& e){
     return {};
 }
 
-constexpr size_t n_pos{size_t(-1)};
 template<typename T>
 class index_of{
     std::optional<T> _storage;
