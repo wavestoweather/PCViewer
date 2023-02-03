@@ -5,6 +5,8 @@
 #include <sstream>
 #include <charconv>
 #include <robin_hood.h>
+#include <variant>
+#include <fast_float.h>
 #include "gpu_instructions.hpp"
 
 namespace deriveData{
@@ -13,19 +15,37 @@ struct pipeline_info{
     VkPipelineLayout    layout;
     // maybe additional info
 };
-inline std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> extract_input_output_indices(std::string_view line){
-    std::vector<uint32_t> input_indices; 
-    std::vector<uint32_t> output_indices;
+using data_storage = std::variant<uint32_t, size_t, float>;
+inline data_storage extract_data_storage(std::string_view address){
+    data_storage ret;
+    switch(address[0]){
+    case 'l':
+        ret = uint32_t{};
+        std::from_chars(&*(address.begin() + 1), &*address.end(), std::get<uint32_t>(ret));
+        break;
+    case 'g':
+        ret = size_t{};
+        std::from_chars(&*(address.begin() + 1), &*address.end(), std::get<size_t>(ret));
+        break;
+    case 'c':
+        ret = float{};
+        fast_float::from_chars(&*(address.begin() + 1), &*address.end(), std::get<float>(ret));
+        break;
+    }
+    return ret;
+}
+
+inline std::tuple<std::vector<data_storage>, std::vector<data_storage>> extract_input_output_indices(std::string_view line){
+    std::vector<data_storage> input_indices; 
+    std::vector<data_storage> output_indices;
     std::string_view inputs; util::getline(line, inputs, ' '); util::getline(line, inputs, ' '); inputs = inputs.substr(inputs.find('[')); inputs = inputs.substr(0, inputs.find(']'));
     std::string_view element;
     while(util::getline(inputs, element, ',')){
-        input_indices.emplace_back();
-        std::from_chars(&*element.begin(), &*element.end(), input_indices.back());
+        input_indices.emplace_back(extract_data_storage(element));
     }
     std::string_view outputs; util::getline(line, outputs, ' '); outputs = outputs.substr(outputs.find('[')); outputs = outputs.substr(0, outputs.find(']'));
     while(util::getline(outputs, element, ',')){
-        output_indices.emplace_back();
-        std::from_chars(&*element.begin(), &*element.end(), output_indices.back());
+        output_indices.emplace_back(extract_data_storage(element));
     }
     return {std::move(input_indices), std::move(output_indices)};
 }
@@ -47,7 +67,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
     std::vector<pipeline_info>  pipelines;
     std::stringstream           header;
     std::stringstream           body;
-    uint32_t                    storage_size{};
+    size_t                      storage_size{};
     std::string_view            line;
     while(util::getline(instructions, line)){
         // hader
@@ -76,14 +96,17 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         line_stream >> operation;
         // decode storage fields
         auto [input_indices, output_indices] = extract_input_output_indices(line);
-        storage_size = std::max(storage_size, input_indices | util::max());
-        storage_size = std::max(storage_size, output_indices | util::max());
+        storage_size = std::max(storage_size, input_indices.size());
+        storage_size = std::max(storage_size, output_indices.size());
         switch(operation){
         case op_codes::none:
             break;
         case op_codes::load:
+            body << "vec array = vec(uint64_t(" << std::get<size_t>(input_indices[0]) << "));";
             break;
         case op_codes::store:
+            body << "vec array = vec(uint64_t(" << std::get<size_t>(output_indices[0]) << "));\n";
+            body << "array[gl_GlobalInvocationID.x} = storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
             break;
         case op_codes::pipeline_barrier:
             body << "}\n";
@@ -92,25 +115,25 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             header.clear(); body.clear();
             break;
         case op_codes::one_vec:
-            body << "storage[" << output_indices[0] << "] = 1;\n";
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 1;\n";
             break;
         case op_codes::zero_vec:
-            body << "storage[" << output_indices[0] << "] = 0;\n";
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 0;\n";
             break;
         case op_codes::rand_vec:
-            body << "storage[" << output_indices[0] << "] = random_float();\n";
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = random_float();\n";
             break;
         case op_codes::iota_vec:
-            body << "storage[" << output_indices[0] << "] = float(gl_GlobalInvocationId.x);\n";
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = float(gl_GlobalInvocationId.x);\n";
             break;
         case op_codes::copy:
-            body << "storage[" << output_indices[0] << "] = storage[" << input_indices[0] << "];\n";
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
             break;
         case op_codes::sum:
             // TODO additional data, such as pre factors
-            body << "storage[" << output_indices[0] << "] = ";
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = ";
             for(auto&& [e, last]: util::last_iter(input_indices)){
-                body << "storage[" << e << "]";
+                body << "storage[" << std::get<uint32_t>(e) << "]";
                 if(!last) body << " + ";
             }
             body << ";\n";
