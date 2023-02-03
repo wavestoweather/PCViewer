@@ -53,6 +53,7 @@ public:
         std::string_view& operator*() {return cur;};
         const iterator& operator++() {getline(rest, cur, slice); return *this;}
         iterator operator++(int) {iterator copy(*this); getline(rest, cur, slice); return copy;}
+        iterator operator+(int a) {iterator copy(*this); for(auto i: i_range(a)) ++copy; return copy;}
         
         bool operator==(const iterator& o) const {return rest == o.rest && cur == o.cur;}
         bool operator!=(const iterator& o) const {return rest != o.rest || cur != o.cur;}
@@ -62,6 +63,7 @@ public:
     };
     iterator begin() const {return iterator(string, slice);}
     iterator end() const {return iterator();}
+    std::string_view operator[](size_t i){return *(begin() + i);}
 
     constexpr sliced_string(std::string_view data, T slice = {'\n'}): slice(slice), string(data){}
     constexpr sliced_string(std::string&& data, T slice = {'\n'}): storage(std::move(data)), slice(slice), string(storage.value()){}

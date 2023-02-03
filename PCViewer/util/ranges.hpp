@@ -244,6 +244,16 @@ public:
     iterator end() const {return iterator(iterable_, std::end(iterable_));}
 };
 
+template<typename T>
+class subrange{
+    T b;
+    T e;
+public:
+    T begin() const {return b;}
+    T end() const {return e;}
+    subrange(T begin, T end): b(begin), e(end) {}
+};
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // reanges operators for easier range querying. 
 // For example usage see test/ranges_test.cpp 

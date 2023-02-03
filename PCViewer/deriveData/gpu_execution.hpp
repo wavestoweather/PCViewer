@@ -49,6 +49,26 @@ inline std::tuple<std::vector<data_storage>, std::vector<data_storage>> extract_
     }
     return {std::move(input_indices), std::move(output_indices)};
 }
+inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> extract_input_output_dimensions(std::string_view line){
+    std::string_view dimension_info = (line | util::slice('('))[1];
+    std::vector<uint32_t> dimension_sizes;
+    std::vector<std::vector<uint32_t>> dimension_indices_v;
+    std::string_view dimensions = (dimension_info.substr(1) | util::slice(']'))[0];
+    for(auto size: dimensions | util::slice(',')){
+        dimension_sizes.emplace_back();
+        std::from_chars(&*size.begin(), &*size.end(), dimension_sizes.back());
+    }
+    auto tmp = dimension_info | util::slice('[');
+    for(auto dimension_indices: util::subrange(tmp.begin() + 4, tmp.end())){
+        dimension_indices_v.emplace_back();
+        auto dim_inds = (dimension_indices | util::slice(']'))[0];
+        for(auto ind: dim_inds | util::slice(',')){
+            dimension_indices_v.back().emplace_back();
+            std::from_chars(&*ind.begin(), &*ind.end(), dimension_indices_v.back().back());
+        }
+    }
+    return {std::move(dimension_sizes), std::move(dimension_indices_v)};
+}
 inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instructions){
     auto create_pipeline = [](const std::string& code){
         if(logger.logging_level >= logging::level::l_5)
@@ -59,8 +79,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
 
     struct data_state_t{
         std::vector<uint32_t> cur_dimension_sizes;          // if the dimensionsizes are getting bigger -> store, barrier and reload, if the dimensionsize are getting smaller -> reduction store (atomic store) and reload,
-        robin_hood::unordered_set<uint64_t> loaded_data;
-        std::vector<uint64_t> storage_data_pointers;
+        std::vector<uint32_t> cur_dimension_indices;        // dimension indices // hold information about the 
     } data_state;
 
     // creating shader codes and converting them to pipeliens
@@ -95,6 +114,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         op_codes operation;
         line_stream >> operation;
         // decode storage fields
+        auto [dim_sizes, dim_indices] = extract_input_output_dimensions(line);
         auto [input_indices, output_indices] = extract_input_output_indices(line);
         storage_size = std::max(storage_size, input_indices.size());
         storage_size = std::max(storage_size, output_indices.size());
