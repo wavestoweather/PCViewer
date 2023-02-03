@@ -4,6 +4,7 @@
 #include <logger.hpp>
 #include <sstream>
 #include <charconv>
+#include <robin_hood.h>
 #include "gpu_instructions.hpp"
 
 namespace deriveData{
@@ -35,6 +36,12 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         auto spir_v = util::shader_compiler::compile(code);
         return pipeline_info{};
     };
+
+    struct data_state_t{
+        std::vector<uint32_t> cur_dimension_sizes;          // if the dimensionsizes are getting bigger -> store, barrier and reload, if the dimensionsize are getting smaller -> reduction store (atomic store) and reload,
+        robin_hood::unordered_set<uint64_t> loaded_data;
+        std::vector<uint64_t> storage_data_pointers;
+    } data_state;
 
     // creating shader codes and converting them to pipeliens
     std::vector<pipeline_info>  pipelines;
