@@ -14,6 +14,7 @@ struct pipeline_info{
     VkPipeline          pipeline;
     VkPipelineLayout    layout;
     // maybe additional info
+    size_t              amt_of_threads;
 };
 using data_storage = std::variant<uint32_t, size_t, float>;
 inline data_storage extract_data_storage(std::string_view address){
@@ -80,6 +81,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
     struct data_state_t{
         std::vector<uint32_t> cur_dimension_sizes;          // if the dimensionsizes are getting bigger -> store, barrier and reload, if the dimensionsize are getting smaller -> reduction store (atomic store) and reload,
         std::vector<uint32_t> cur_dimension_indices;        // dimension indices // hold information about the 
+        bool                  all_same_data_layout{true};   // indicates that all data inputs have the same data layout (useful for easier readout)
     } data_state;
 
     // creating shader codes and converting them to pipeliens
@@ -87,8 +89,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
     std::stringstream           header;
     std::stringstream           body;
     size_t                      storage_size{};
-    std::string_view            line;
-    while(util::getline(instructions, line)){
+    for(std::string_view line: instructions | util::slice('\n')){
         // hader
         if(header.str().empty()){
             header << R"(
@@ -101,8 +102,12 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                 layout(local_size_x = 128) in;
             )";
             body << R"(
+                uint _random_state = gl_GlobalInvocationID.x;
                 float random_float(){
-                    return .0f; // TODO
+                    _random_state ^= _random_state << 21;
+                    _random_state ^= _random_state >> 35;
+                    _random_state ^= _random_state << 4;
+                    return float(_random_state) / float(0xffffffff);
                 }
 
                 void main(){
@@ -113,20 +118,57 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         std::stringstream line_stream{std::string(line.substr(0, line.find(' ')))};
         op_codes operation;
         line_stream >> operation;
-        // decode storage fields
-        auto [dim_sizes, dim_indices] = extract_input_output_dimensions(line);
-        auto [input_indices, output_indices] = extract_input_output_indices(line);
+        const auto [dim_sizes, dim_indices] = extract_input_output_dimensions(line);
+        const auto [input_indices, output_indices] = extract_input_output_indices(line);
         storage_size = std::max(storage_size, input_indices.size());
         storage_size = std::max(storage_size, output_indices.size());
+        // check dimension consistency
+        for(const auto& i: dim_indices){
+            for(uint32_t dim: i){
+                if(!(data_state.cur_dimension_indices | util::contains(dim)))
+                    data_state.cur_dimension_indices.emplace_back(dim);
+            }
+        }
+        const bool same_before = data_state.all_same_data_layout;
+        for(uint32_t i: util::i_range(dim_indices.size() - 1))
+            data_state.all_same_data_layout &= dim_indices[i] == dim_indices[i + 1];
+        assert(!same_before || same_before == data_state.all_same_data_layout);
+        assert(data_state.cur_dimension_sizes.empty() || data_state.cur_dimension_sizes == dim_sizes);
+        data_state.cur_dimension_sizes = dim_sizes;
+        
+        // decode storage fields
         switch(operation){
         case op_codes::none:
             break;
         case op_codes::load:
-            body << "vec array = vec(uint64_t(" << std::get<size_t>(input_indices[0]) << "));";
+            for(auto&& [input_index, i]: util::enumerate(input_indices))
+                body << "vec array"<< i <<" = vec(uint64_t(" << std::get<size_t>(input_index) << "));";
+            if(data_state.all_same_data_layout){
+                for(auto&& [out_index, i]: util::enumerate(output_indices))
+                    body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << "[gl_GlobalInvocationID.x];\n";
+            }
+            else{
+                body << "float dimension_indices["<< data_state.cur_dimension_sizes.size() <<"]; uint i = gl_GlobalInvocationID.x;\n";
+                for(size_t i: util::rev_size_range(data_state.cur_dimension_sizes))
+                    body << "dimension_indices[" << i << "] = i % " << data_state.cur_dimension_sizes[i] << "; i /= " << data_state.cur_dimension_sizes[i] << ";\n";
+                body << "uint dim_mult;\n";
+                for(auto&& [out_index, i]: util::enumerate(output_indices)){
+                    std::string input_index_var("in" + std::to_string(i));
+                    body << "uint " << input_index_var << " = 0; dim_mult = 1;\n";
+                    for(size_t j: util::rev_size_range(dim_indices[i])){
+                        body << input_index_var << " += dim_mult * dimension_indices[" << dim_indices[i][j] << "];";
+                        if(j > 0)
+                            body << "dim_mult *= " << dim_sizes[dim_indices[i][j]] << ";\n";
+                    }
+                    body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << "[" << input_index_var << "];\n";
+                }
+            }
             break;
         case op_codes::store:
-            body << "vec array = vec(uint64_t(" << std::get<size_t>(output_indices[0]) << "));\n";
-            body << "array[gl_GlobalInvocationID.x} = storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            for(auto&& [out_index, i]: util::enumerate(output_indices)){
+                body << "vec array" << i << " = vec(uint64_t(" << std::get<size_t>(out_index) << "));\n";
+                body << "array" << i << "[gl_GlobalInvocationID.x] = storage[" << std::get<uint32_t>(out_index) << "];\n";
+            }
             break;
         case op_codes::pipeline_barrier:
             body << "}\n";
@@ -162,6 +204,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             assert(false && "Unimplemented operation");
         }
     }
+    if(storage_size)
     body << "}\n";
     header << "float storage[" << storage_size << "];" << body.str();
     pipelines.emplace_back(create_pipeline(header.str()));

@@ -6,7 +6,7 @@
 
 namespace deriveData{
 // intermediate representation of the calculation code has the following layout:
-//      op_code [add1, ..., addn] [add_out_1, ..., add_out_n] ([dim_size1, ..., dim_sizen] [[add1 dim_1, add1 ... dim_n], ..., [addn_dim_1, ... addn_dim_n]])
+//      op_code [add1, ..., addn] [add_out_1, ..., add_out_n] ([dim_size1, ..., dim_sizen] [[add1 dim_1, add1 ... dim_n], ..., [addn_dim_1, ... addn_dim_n]]) {json with user defined data}
 // for equal layouts/direct column operations the column size is given by dim_size_1 = -col.size
 // the (...) part is optional and has to be checked for
 
