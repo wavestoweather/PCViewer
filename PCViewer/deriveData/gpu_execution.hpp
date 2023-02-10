@@ -70,6 +70,9 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
     }
     return {std::move(dimension_sizes), std::move(dimension_indices_v)};
 }
+struct create_gpu_pipelines_result{
+    std::vector<pipeline_info> pipelines;
+};
 inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instructions){
     auto create_pipeline = [](const std::string& code){
         if(logger.logging_level >= logging::level::l_5)

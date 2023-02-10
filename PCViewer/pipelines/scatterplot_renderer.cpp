@@ -223,7 +223,7 @@ void scatterplot_renderer::render(const render_info& info){
         _render_commands.clear();
     }
 
-    // renderng all plots with all datasets
+    // rendering all plots with all datasets
     for(const auto& [axis_pair, iter_pos]: util::pos_iter(info.workbench.plot_list.read())){
         if(!axis_pair)
             continue;
@@ -291,6 +291,9 @@ void scatterplot_renderer::render(const render_info& info){
                     pc.form = static_cast<uint32_t>(dl.scatter_appearance.read().splat);
                     pc.radius = dl.scatter_appearance.read().radius;
                     pc.color = dl.appearance->read().color;
+                    // auto adjusting the alpha a bit to account for different vis size...
+                    pc.color.w *= 500.f / pc.radius / pc.radius;
+                    pc.color.w = std::clamp(pc.color.w, 0.f, 1.f);
                     pc.counts_address = util::vk::get_buffer_address(hist_access->gpu_buffers.at(histogram_id));
                     if(dl.drawlist_read().priority_indices.contains(histogram_id))
                         pc.ordering_address = util::vk::get_buffer_address(dl.drawlist_read().priority_indices.at(histogram_id));
@@ -317,6 +320,9 @@ void scatterplot_renderer::render(const render_info& info){
                 pc.radius = dl.scatter_appearance.read().radius;
                 pc.priority_rendering = dl.priority_render.read();
                 pc.color = dl.appearance->read().color;
+                // auto adjusting the alpha a bit to account for different vis size...
+                pc.color.w *= 500.f / pc.radius / pc.radius;
+                pc.color.w = std::clamp(pc.color.w, 0.f, 1.f);
                 vkCmdPushConstants(_render_commands.back(), pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
             }
             vkCmdBindPipeline(_render_commands.back(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);

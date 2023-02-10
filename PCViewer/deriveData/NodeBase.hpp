@@ -136,6 +136,7 @@ public:
 
     virtual int outputChannels() const { int count{}; for(const auto& t: outputTypes) count += static_cast<int>(t->data().cols.size()); return count;};
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;
+    virtual void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const{};
     virtual void imguiMiddleElements(const std::vector<std::string_view>& attributes = {}, const std::vector<std::string_view>& drawlists = {}, const std::vector<std::string_view>& templatelists = {}) { 
         if(middleText.size()) ImGui::TextUnformatted(middleText.c_str());
         ImGui::PushItemWidth(70);

@@ -212,6 +212,10 @@ public:
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyNonaryFunction(input, output, 0, [](){return 0;});
     };
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::zero_vec, input, output);
+    }
 };
 
 class Vector_One: public DataCreation, public Creatable<Vector_One>{
@@ -221,6 +225,10 @@ public:
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyNonaryFunction(input, output, 0, [](){return 1;});
     };
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::one_vec, input, output);
+    }
 };
 
 class Vector_Random: public DataCreation, public Creatable<Vector_Random>{
@@ -230,6 +238,10 @@ public:
     void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyNonaryFunction(input, output, 0, [](){return double(rand()) / RAND_MAX;});
     };
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::rand_vec, input, output);
+    }
 };
 
 class Vector_Iota: public DataCreation, public Creatable<Vector_Iota>{
@@ -240,6 +252,10 @@ public:
         size_t cur_index{};
         applyNonaryFunction(input, output, 0, [&cur_index](){return cur_index++;});
     };
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::iota_vec, input, output);
+    }
 };
 
 class Active_Indices: public DataCreation, public Creatable<Active_Indices>{

@@ -408,8 +408,9 @@ void parallel_coordinates_workbench::show(){
         float y2 = y1 + pic_size.y - 1;
         ImVec4 inv_color{(1 - setting.read().plot_background.x), (1 - setting.read().plot_background.y), (1 - setting.read().plot_background.z), 1.f};
         auto line_col = IM_COL32(inv_color.x * 255, inv_color.y * 255, inv_color.z * 255, 255);
+        float hist_width = setting.read().hist_type == histogram_type::none? .0f: float(setting.read().histogram_width) * pic_size.x / 2.f;
         for(int i: util::i_range(labels_count)){
-            float x = pic_pos.x + (pic_size.x - 1) * i / (labels_count - 1);
+            float x = pic_pos.x + (pic_size.x - 1 - hist_width) * i / (labels_count - 1) + hist_width / 2.f;
             ImGui::GetWindowDrawList()->AddLine({x - 1, y1}, {x - 1, y2}, col);
             ImGui::GetWindowDrawList()->AddLine({x + 1, y1}, {x + 1, y2}, col);
             ImGui::GetWindowDrawList()->AddLine({x, y1    }, {x, y2    }, line_col);
@@ -424,7 +425,7 @@ void parallel_coordinates_workbench::show(){
                     ++att_pos;
                     continue;
                 }
-                float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
+                float x = pic_pos.x + (pic_size.x - 1 - hist_width) * att_pos / (labels_count - 1) + hist_width / 2.f;
                 const auto& attribute = att_ref.attribute_read();
                 float min_val = attribute.bounds.read().min;
                 float max_val = attribute.bounds.read().max;
@@ -458,7 +459,7 @@ void parallel_coordinates_workbench::show(){
                     continue;
                 }
 
-                float x = pic_pos.x + (pic_size.x - 1) * att_pos / (labels_count - 1);
+                float x = pic_pos.x + (pic_size.x - 1 - hist_width) * att_pos / (labels_count - 1) + hist_width / 2.f;
                 const auto& attribute = att_ref.attribute_read();
                 float min_tick = attribute.bounds.read().min;
                 float max_tick = attribute.bounds.read().max;
