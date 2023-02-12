@@ -105,8 +105,9 @@ inline std::vector<uint32_t> active_attribute_refs_to_indices(util::memory_view<
 
 inline std::map<std::string_view, uint32_t> attribute_to_index(util::memory_view<const structures::attribute> attributes){
     std::map<std::string_view, uint32_t> ret;
-    for(const auto& [att, i]: util::enumerate(attributes))
-        ret[att.id] = static_cast<uint32_t>(i);
+    uint32_t i{0};
+    for(const auto& att: attributes)
+        ret[att.id] = i++;
     return ret;
 }
 
