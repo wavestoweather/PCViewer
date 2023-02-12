@@ -9,6 +9,10 @@
 #include <load_colors_workbench.hpp>
 #include <drawlists.hpp>
 #include <drawlist_util.hpp>
+#include <gpu_execution.hpp>
+#include <vma_initializers.hpp>
+#include <regex>
+#include <stager.hpp>
 
 namespace workbenches{
 namespace nodes = ax::NodeEditor;
@@ -58,6 +62,15 @@ void data_derivation_workbench::show(){
         catch(const std::runtime_error& e){
             logger << logging::error_prefix << " " << e.what() << logging::endl;
         }
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    if(ImGui::BeginCombo("Execution backend", structures::data_derivation::execution_names[_settings.execution_backend].data())){
+        for(auto e: structures::enum_iteration<structures::data_derivation::execution>())
+            if(ImGui::MenuItem(structures::data_derivation::execution_names[e].data()))
+                _settings.execution_backend = e;
+        
+        ImGui::EndCombo();
     }
     nodes::SetCurrentEditor(_editor_context);
     nodes::Begin("Derivation workbench");
@@ -468,7 +481,7 @@ std::set<int64_t> data_derivation_workbench::_get_active_links_recursive(int64_t
 
 void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_data& data){
     auto& [nodes, pin_to_nodes, links, link_to_connection, pin_to_links] = *_execution_graphs[std::string(main_execution_graph_id)];
-    auto& [active_links, data_storage, node_infos, create_vector_sizes] = data;
+    auto& [active_links, data_storage, node_infos, create_vector_sizes, op_codes_list, print_infos] = data;
 
     // check cache for previous nodes, if not generated, generate
     for(int i: irange(nodes[node].inputIds)){
@@ -519,7 +532,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         inputDataSize = std::max<long>(inputDataSize, inputData.back().size());
     }
     assert(inputDataSize != -1 || nodes[node].inputIds.empty());
-    // handling vector cration nodes
+    // handling vector creation nodes
     if(dynamic_cast<deriveData::Nodes::DataCreation*>(nodes[node].node.get())){
         if(dynamic_cast<deriveData::Nodes::Active_Indices*>(nodes[node].node.get())){
             std::string& selected = nodes[node].node->input_elements[nodes[node].node->middle_input_id]["Drawlist/Templatelist"]["selected_dl_tl"].get<std::string>();
@@ -533,7 +546,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
             if(dl_selected){
                 auto dl_en = globals::drawlists.ref_no_track() | util::try_find_if<std::remove_reference_t<decltype(*globals::drawlists.ref_no_track().begin())>>([&selected](const auto& dl){return dl.first == selected;});
                 auto& dl = dl_en->get().second.ref_no_track();
-                // dowloading the activatio into the activation bitset and adding the view to the bitset as well as the indices to the input views
+                // downloading the activation into the activation bitset and adding the view to the bitset as well as the indices to the input views
                 util::drawlist::download_activation(dl);
                 create_vector_sizes.emplace_back(std::make_unique<uint32_t>(dl.const_templatelist().data_size));
                 deriveData::column_memory_view<float> view;
@@ -635,10 +648,18 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     }
 
     if(deriveData::Nodes::Serialization* s = dynamic_cast<deriveData::Nodes::Serialization*>(nodes[node].node.get()))
-        logger << logging::info_prefix << " " << s->serialize(inputData) << logging::endl;
+        print_infos.emplace_back(recursion_data::print_info{nodes[node].node.get(), inputData});
+        //logger << logging::info_prefix << " " << s->serialize(inputData) << logging::endl;
 
-    // executing the node/serializing teh data
-    nodes[node].node->applyOperationCpu(inputData, outputData);
+    // executing the node
+    switch(_settings.execution_backend){
+    case structures::data_derivation::execution::Cpu:
+        nodes[node].node->applyOperationCpu(inputData, outputData);
+        break;
+    case structures::data_derivation::execution::Gpu:
+        nodes[node].node->applyOperationGpu(op_codes_list, inputData, outputData);
+        break;
+    }
 
     // saving the cache and setting up the counts for the current data
     node_infos[node].output_counts.resize(nodes[node].outputIds.size());
@@ -719,7 +740,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
     std::string id_string(id);
     auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = *_execution_graphs[id_string];
 
-    // checkfor output nodes
+    // check for output nodes
     std::set<long> outputNodes{};
     for(auto& [id, nodePins]: nodes){
         if(dynamic_cast<deriveData::Nodes::Output*>(nodePins.node.get()))
@@ -740,7 +761,45 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
     for(auto node: outputNodes)
         _build_cache_recursive(node, data);
 
-    // wiht the execution of all output nodes all changes are already applied
+    if(_settings.execution_backend == structures::data_derivation::execution::Gpu){
+        // creating all gpu storage data buffer and exchanging the addresses in the gpu code
+        auto memory_info = util::vma::initializers::allocationCreateInfo();
+        std::vector<structures::buffer_info> gpu_buffers;           // these also have to be destroyed in order to not leak gpu memory
+        std::vector<std::vector<VkBuffer>>   print_infos_buffers(data.print_infos.size());   // gpu buffers containing the data for the print nodes
+        std::string code_list = data.op_codes_list.str();
+        for(const auto& s: data.data_storage){
+            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, s.size() * sizeof(s[0]));
+            gpu_buffers.emplace_back(util::vk::create_buffer(buffer_info, memory_info));
+            std::stringstream  gpu_address; gpu_address << util::vk::get_buffer_address(gpu_buffers.back());
+            std::stringstream  cpu_address; cpu_address << s.data();
+            std::regex_replace(code_list, std::regex("g" + cpu_address.str()), gpu_address.str());
+
+            size_t print_index = data.print_infos | util::index_of_if<recursion_data::print_info>([&s](auto& info){return info.data | util::contains_if<deriveData::column_memory_view<float>>([&s](auto& mem_view){return mem_view.cols[0].data() == s.data();});});
+            if(print_index != util::n_pos)
+                print_infos_buffers[print_index] = {gpu_buffers.back().buffer};
+        }
+        auto pipelines = deriveData::create_gpu_pipelines(code_list);    // lets see i guess
+
+        // downloading print data
+        for(auto&& [print_info, i]: util::enumerate(data.print_infos)){
+            structures::stager::staging_buffer_info buffer_staging{};
+            buffer_staging.transfer_dir == structures::stager::transfer_direction::download;
+            buffer_staging.dst_buffer = print_infos_buffers[i][0];
+            buffer_staging.data_download = util::memory_view(print_info.data[0].cols[0].data(), print_info.data[0].cols[0].size());
+            globals::stager.add_staging_task(buffer_staging);
+        }
+        globals::stager.wait_for_completion();
+        for(const auto& [node, d]: data.print_infos)
+            logger << logging::info_prefix << " " << dynamic_cast<deriveData::Nodes::Serialization*>(node)->serialize(d) << logging::endl;
+
+        for(auto& gpu_buffer: gpu_buffers)
+            util::vk::destroy_buffer(gpu_buffer);
+    }
+    else
+        for(const auto& [node, d]: data.print_infos)
+            logger << logging::info_prefix << " " << dynamic_cast<deriveData::Nodes::Serialization*>(node)->serialize(d) << logging::endl;
+
+    // with the execution of all output nodes all changes are already applied
     logger << logging::info_prefix << " data_derivation_workbench::_execute_graph() Amount of data allocations: " << data.data_storage.size() << logging::endl;
 }
 }

@@ -77,4 +77,41 @@ static sliced_string<char> operator|(const char* string, slice s){
 static sliced_string<char> operator|(std::string&& string, slice s){
     return sliced_string<char>(std::move(string), s.c);
 }
+
+//struct occurrences{
+//    std::string_view c;
+//    constexpr occurrences(std::string_view c): c(c) {}
+//};
+//template<typename T = char>
+//class occurrence_pos{
+//    std::optional<std::string> storage;
+//    std::string_view occ;
+//    std::string_view string;
+//public:
+//    class iterator{
+//        friend class sliced_string;
+//        std::string_view string{};
+//        std::string_view occ{};
+//        size_t           pos{};
+//    public:
+//        std::string_view operator*() const{return cur;};
+//        std::string_view& operator*() {return cur;};
+//        const iterator& operator++() {getline(rest, cur, slice); return *this;}
+//        iterator operator++(int) {iterator copy(*this); getline(rest, cur, slice); return copy;}
+//        iterator operator+(int a) {iterator copy(*this); for(auto i: i_range(a)) ++copy; return copy;}
+//        
+//        bool operator==(const iterator& o) const {return rest == o.rest && cur == o.cur;}
+//        bool operator!=(const iterator& o) const {return rest != o.rest || cur != o.cur;}
+//    protected:
+//        constexpr iterator() = default;
+//        constexpr iterator(std::string_view string, T slice): rest(string), slice(slice) {getline(rest, cur, slice);}
+//    };
+//    iterator begin() const {return iterator(string, slice);}
+//    iterator end() const {return iterator();}
+//    std::string_view operator[](size_t i){return *(begin() + i);}
+//
+//    constexpr sliced_string(std::string_view data, T slice = {'\n'}): slice(slice), string(data){}
+//    constexpr sliced_string(std::string&& data, T slice = {'\n'}): storage(std::move(data)), slice(slice), string(storage.value()){}
+//};
+
 }

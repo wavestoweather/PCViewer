@@ -87,19 +87,19 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         bool                  all_same_data_layout{true};   // indicates that all data inputs have the same data layout (useful for easier readout)
     } data_state;
 
-    // creating shader codes and converting them to pipeliens
+    // creating shader codes and converting them to pipelines
     std::vector<pipeline_info>  pipelines;
     std::stringstream           header;
     std::stringstream           body;
     size_t                      storage_size{};
     for(std::string_view line: instructions | util::slice('\n')){
-        // hader
+        // header
         if(header.str().empty()){
             header << R"(
                 #version 450
 
                 layout(push_constant) uniform PCs{
-                    uint32_t rand_seed;
+                    uint rand_seed;
                 };
 
                 layout(local_size_x = 128) in;
@@ -117,7 +117,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             )";
         }
 
-        // instrucction decoding
+        // instruction decoding
         std::stringstream line_stream{std::string(line.substr(0, line.find(' ')))};
         op_codes operation;
         line_stream >> operation;
@@ -189,7 +189,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = random_float();\n";
             break;
         case op_codes::iota_vec:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = float(gl_GlobalInvocationId.x);\n";
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = float(gl_GlobalInvocationID.x);\n";
             break;
         case op_codes::copy:
             body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";

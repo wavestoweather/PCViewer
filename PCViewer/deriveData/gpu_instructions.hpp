@@ -54,19 +54,14 @@ inline void add_operation(std::stringstream& operations, op_codes op_code, const
         if(!last) operations << ",";
     }
     operations << "] ";
-    bool same_layout{true};
-    if(inputs.size() > 1)
-        for(size_t i: util::i_range(inputs.size() - 1))
-            same_layout &= inputs[i].equalDataLayout(inputs[i + 1]);
-
-    if(same_layout){
-        operations << "\n";
-        return;
-    }
 
     // dimension infos
     operations << "([";
-    for(auto&& [dim, last]: util::last_iter(inputs[0].dimensionSizes)){
+    deriveData::memory_view<uint32_t> dimensions;
+    if(inputs[0].dimensionSizes.empty())dimensions = outputs[0].dimensionSizes;
+    else                                dimensions = inputs[0].dimensionSizes;
+    
+    for(auto&& [dim, last]: util::last_iter(dimensions)){
         operations << dim;
         if(!last) operations << ",";
     }
@@ -81,6 +76,15 @@ inline void add_operation(std::stringstream& operations, op_codes op_code, const
         }
         operations << "]";
         if(!last) operations << " ";
+    }
+    for(auto& output: outputs){
+        operations << " [";
+        for(auto&& [dim_index, last]: util::last_iter(output.columnDimensionIndices)){
+            operations << dim_index;
+            if(!last)
+                operations << ",";
+        }
+        operations << "]";
     }
     operations << "])\n";
 }

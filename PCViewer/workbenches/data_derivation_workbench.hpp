@@ -6,20 +6,11 @@
 #include <memory>
 #include <enum_names.hpp>
 #include <ExecutionGraph.hpp>
+#include <data_derivation_structures.hpp>
 
 namespace workbenches{
 class data_derivation_workbench: public structures::workbench, public structures::dataset_dependency{
 public:
-    enum class execution: uint32_t{
-        Cpu,
-        Gpu,
-        COUNT
-    };
-    structures::enum_names<execution> execution_names{
-        "Cpu",
-        "Gpu"
-    };
-
     const std::string_view main_execution_graph_id{"main"};
 
     data_derivation_workbench(std::string_view id);
@@ -33,6 +24,7 @@ public:
 
 private:
     using unique_execution_graph_map = std::map<std::string, std::unique_ptr<ExecutionGraph>>;
+    using workbench_settings = structures::data_derivation::workbench_settings;
     ax::NodeEditor::EditorContext*  _editor_context{};
     unique_execution_graph_map      _execution_graphs{};    // each execution graph describes a function and can be called, main graph is called "main"
 
@@ -46,6 +38,8 @@ private:
 
     bool                            _create_new_node{false};
 
+    workbench_settings              _settings;
+
     bool _is_input_pin(int64_t pin_id);
     std::set<int64_t> _get_active_links_recursive(int64_t node);
     void _execute_graph(std::string_view id);
@@ -55,10 +49,16 @@ private:
             deriveData::float_column_views  output_views;
             std::vector<int>                output_counts;
         };
-        std::set<int64_t> active_links{};
-        std::vector<std::vector<float>> data_storage{};
-        std::map<int64_t, node_info> node_infos{};
-        std::vector<std::unique_ptr<uint32_t>> create_vector_sizes; 
+        struct print_info{
+            deriveData::Nodes::Node*       serialization_node;
+            deriveData::float_column_views data;
+        };
+        std::set<int64_t>                       active_links{};
+        std::vector<std::vector<float>>         data_storage{};
+        std::map<int64_t, node_info>            node_infos{};
+        std::vector<std::unique_ptr<uint32_t>>  create_vector_sizes{};
+        std::stringstream                       op_codes_list{};
+        std::vector<print_info>                 print_infos{};
     };
     void _build_cache_recursive(int64_t node, recursion_data& data);
 };
