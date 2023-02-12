@@ -20,7 +20,7 @@ namespace workbenches{
 parallel_coordinates_workbench::parallel_coordinates_workbench(const std::string_view id):
     workbench(id)
 {
-    plot_data.ref_no_track().height = static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y * .66f);
+    plot_data.ref_no_track().height = static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y * .5f);
     _update_plot_image();
 }
 

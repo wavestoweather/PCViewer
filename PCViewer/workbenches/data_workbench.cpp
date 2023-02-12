@@ -175,7 +175,7 @@ void data_workbench::show()
             }
         }
         if(alpha_count) _uniform_attribute_alpha /= alpha_count;
-        if(ImGui::DragFloat("Uniform alpha##at", &_uniform_attribute_alpha, _uniform_attribute_alpha / 200.f, std::max(1e-20f, _uniform_attribute_alpha * .5f), std::min(1.f, _uniform_attribute_alpha * 2.f), "%.3g")){
+        if(ImGui::DragFloat("Uniform alpha##at", &_uniform_attribute_alpha, _uniform_attribute_alpha / 200.f, std::max(1e-20f, _uniform_attribute_alpha * .125f), std::min(1.f, _uniform_attribute_alpha * 8.f), "%.3g")){
             if(globals::selected_attributes.size()){
                 for(auto at: globals::selected_attributes)
                     globals::attributes()[at]().color().w = _uniform_attribute_alpha;

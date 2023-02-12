@@ -885,6 +885,7 @@ void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string
             auto registry_lock = globals::drawlists.read().at(dl).read().histogram_registry.const_access();
             _registered_histograms.erase(dl);
             drawlist_infos().erase(drawlist_infos().begin() + i);
+            plot_list();
         }
     }
     for(auto& e: _matrix_scatterplots){

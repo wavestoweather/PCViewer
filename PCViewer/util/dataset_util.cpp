@@ -832,6 +832,7 @@ void split_templatelist(const structures::templatelist_split_data& split_data){
                     i = tl.indices[i];
                 float v = std::visit([&i, &split_data](auto&& data){return float(data(static_cast<uint32_t>(i), split_data.attribute));}, ds.cpu_data.read());
                 int index = int(((v - attribute_min) / diff) * (arg.split_count - 1) + .5f);
+                index = std::clamp(index, 0, arg.split_count - 1);
                 index_lists[index].push_back(static_cast<uint32_t>(i));
             }
         }
