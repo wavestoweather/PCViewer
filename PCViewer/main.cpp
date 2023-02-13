@@ -128,8 +128,9 @@ int main(int argc, char* argv[]){
         logger << "[error] SDL_Vulkan_CreateSurface() Failed to create Vulkan surface." << logging::endl;
         return -1;
     }
-    int w, h; 
-    SDL_GetWindowSize(window, &w, &h);
+    SDL_DisplayMode DM;
+    SDL_GetCurrentDisplayMode(0, &DM);
+    int w = DM.w, h = DM.h; 
     VkBool32 supported; vkGetPhysicalDeviceSurfaceSupportKHR(globals::vk_context.physical_device, globals::vk_context.graphics_queue_family_index, imgui_window_data.Surface, &supported);
     if(!supported){
         logger<< "[error] vkGetPhysicalDeviceSurfaceSupportKHR WSI not suported on this physical device." << logging::endl;
