@@ -92,7 +92,7 @@ int main(int argc, char* argv[]){
     }
 
     // vulkan init
-    std::vector<const char*> device_extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE3_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
+    std::vector<const char*> device_extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE3_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, /*VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME*/ VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
     VkPhysicalDeviceVulkan12Features vk_12_features = util::vk::initializers::physicalDeviceVulkan12Features();
     vk_12_features.bufferDeviceAddress = VK_TRUE;
     VkPhysicalDevice16BitStorageFeatures vk_16bit_features = util::vk::initializers::physicalDevice16BitStorageFeatures();

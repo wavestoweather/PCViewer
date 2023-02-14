@@ -24,7 +24,6 @@ ENDIF()
 IF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mavx512f -mavx512dq -mavx512bw -mavx512vbmi -mavx512vbmi2 -mavx512vl")
 ENDIF()
-message("${CMAKE_CXX_FLAGS}")
 
 # enable jpeg and png support for CImg library
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_png")
