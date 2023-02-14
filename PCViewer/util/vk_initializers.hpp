@@ -643,7 +643,7 @@ inline VkWriteDescriptorSetAccelerationStructureKHR writeDescriptorSetAccelerati
     return writeDescriptorSetAccelerationStructureKHR;
 }
 
-inline VkShaderModuleCreateInfo shaderModuleCreateInfo(const util::memory_view<uint32_t> shader_bytes, VkShaderModuleCreateFlags create_flags = {}){
+inline VkShaderModuleCreateInfo shaderModuleCreateInfo(const util::memory_view<const uint32_t> shader_bytes, VkShaderModuleCreateFlags create_flags = {}){
     VkShaderModuleCreateInfo shaderModuleCreateInfo{};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.codeSize = shader_bytes.byte_size();

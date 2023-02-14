@@ -40,6 +40,9 @@ private:
 
     workbench_settings              _settings;
 
+    VkCommandPool                   _compute_command_pool{};
+    VkFence                         _compute_fence{};
+
     bool _is_input_pin(int64_t pin_id);
     std::set<int64_t> _get_active_links_recursive(int64_t node);
     void _execute_graph(std::string_view id);

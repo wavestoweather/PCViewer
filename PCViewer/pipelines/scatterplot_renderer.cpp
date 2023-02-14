@@ -349,8 +349,7 @@ void scatterplot_renderer::render(const render_info& info){
         plot_image_barrier = util::vk::initializers::imageMemoryBarrier(plot_image.image, subresource_range, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         vkCmdPipelineBarrier(_render_commands.back(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, {}, 0, {}, 1, &plot_image_barrier);
 
-        std::scoped_lock queue_lock(*globals::vk_context.graphics_mutex);
-        util::vk::end_commit_command_buffer(_render_commands.back(), globals::vk_context.graphics_queue, {}, {}, {}, iter_pos.last ? _render_fence: VkFence{});
+        util::vk::end_commit_command_buffer(_render_commands.back(), globals::vk_context.graphics_queue.const_access().get(), {}, {}, {}, iter_pos.last ? _render_fence: VkFence{});
     }
     if(!info.workbench.plot_list.read().empty()){
         auto res = vkWaitForFences(globals::vk_context.device, 1, &_render_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);

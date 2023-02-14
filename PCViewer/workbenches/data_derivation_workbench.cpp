@@ -36,6 +36,10 @@ data_derivation_workbench::data_derivation_workbench(std::string_view id):
 {
     _execution_graphs.emplace("main", std::make_unique<ExecutionGraph>());
     nodes::SetCurrentEditor(_editor_context);
+    auto pool_info = util::vk::initializers::commandPoolCreateInfo(globals::vk_context.compute_queue_family_index);
+    _compute_command_pool = util::vk::create_command_pool(pool_info);
+    auto fence_info = util::vk::initializers::fenceCreateInfo();
+    _compute_fence = util::vk::create_fence(fence_info);
 }
 
 data_derivation_workbench::~data_derivation_workbench(){
@@ -778,12 +782,23 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
             if(print_index != util::n_pos)
                 print_infos_buffers[print_index] = {gpu_buffers.back().buffer};
         }
-        auto pipelines = deriveData::create_gpu_pipelines(code_list);    // lets see i guess
+
+        // getting the pipelines and executing them
+        auto pipelines = deriveData::create_gpu_pipelines(code_list);
+        auto command_buffer = util::vk::create_begin_command_buffer(_compute_command_pool);
+        vkResetFences(globals::vk_context.device, 1, &_compute_fence);
+        for(const auto& pipeline: pipelines){
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
+            vkCmdDispatch(command_buffer, (pipeline.amt_of_threads + workgroup_size - 1) / workgroup_size, 1, 1);
+        }
+        util::vk::end_commit_command_buffer(command_buffer, globals::vk_context.compute_queue.const_access().get(), {}, {}, {}, _compute_fence);
+        auto res = vkWaitForFences(globals::vk_context.device, 1, &_compute_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
+        vkFreeCommandBuffers(globals::vk_context.device, _compute_command_pool, 1, &command_buffer);
 
         // downloading print data
         for(auto&& [print_info, i]: util::enumerate(data.print_infos)){
             structures::stager::staging_buffer_info buffer_staging{};
-            buffer_staging.transfer_dir == structures::stager::transfer_direction::download;
+            buffer_staging.transfer_dir = structures::stager::transfer_direction::download;
             buffer_staging.dst_buffer = print_infos_buffers[i][0];
             buffer_staging.data_download = util::memory_view(print_info.data[0].cols[0].data(), print_info.data[0].cols[0].size());
             globals::stager.add_staging_task(buffer_staging);

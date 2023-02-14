@@ -60,8 +60,7 @@ void distance_calculator::calculate(const distance_info& info){
     vkCmdBindPipeline(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_data.pipeline);
     vkCmdDispatch(_command_buffer, uint32_t(info.data_size + 255) / 256, 1, 1);
 
-    std::scoped_lock lock(*globals::vk_context.compute_mutex);
-    util::vk::end_commit_command_buffer(_command_buffer, globals::vk_context.compute_queue, info.gpu_sync_info.wait_semaphores, info.gpu_sync_info.wait_masks, info.gpu_sync_info.signal_semaphores, _calculator_fence);
+    util::vk::end_commit_command_buffer(_command_buffer, globals::vk_context.compute_queue.const_access().get(), info.gpu_sync_info.wait_semaphores, info.gpu_sync_info.wait_masks, info.gpu_sync_info.signal_semaphores, _calculator_fence);
 }
 
 void distance_calculator::wait_for_fence(uint64_t timeout){

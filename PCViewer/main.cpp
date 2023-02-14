@@ -169,7 +169,7 @@ int main(int argc, char* argv[]){
     init_info.PhysicalDevice = globals::vk_context.physical_device;
     init_info.Device = globals::vk_context.device;
     init_info.QueueFamily = globals::vk_context.graphics_queue_family_index;
-    init_info.Queue = globals::vk_context.graphics_queue;
+    init_info.Queue = globals::vk_context.graphics_queue.const_access().get();
     init_info.PipelineCache = {};
     init_info.DescriptorPool = util::imgui::create_desriptor_pool();;
     init_info.Allocator = globals::vk_context.allocation_callbacks;
@@ -183,7 +183,7 @@ int main(int argc, char* argv[]){
     auto setup_commands = util::vk::create_begin_command_buffer(setup_command_pool);
     auto setup_fence = util::vk::create_fence(util::vk::initializers::fenceCreateInfo());
     ImGui_ImplVulkan_CreateFontsTexture(setup_commands);
-    util::vk::end_commit_command_buffer(setup_commands, globals::vk_context.graphics_queue, {}, {}, {}, setup_fence);
+    util::vk::end_commit_command_buffer(setup_commands, globals::vk_context.graphics_queue.const_access().get(), {}, {}, {}, setup_fence);
     auto res = vkWaitForFences(globals::vk_context.device, 1, &setup_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
     util::vk::destroy_fence(setup_fence);
     util::vk::destroy_command_pool(setup_command_pool);
@@ -366,12 +366,12 @@ int main(int argc, char* argv[]){
         ImDrawData* draw_data = ImGui::GetDrawData();
         const bool minimized = draw_data->DisplaySize.x <= 0 || draw_data->DisplaySize.y <= 0;
         {   // rendering scope
-            std::scoped_lock lock(*globals::vk_context.graphics_mutex);
             if(!minimized)
                 util::imgui::frame_render(&imgui_window_data, draw_data);
 
             if(io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable){
                 ImGui::UpdatePlatformWindows();
+                auto queue_lock = globals::vk_context.graphics_queue.const_access();
                 ImGui::RenderPlatformWindowsDefault();
             }
 

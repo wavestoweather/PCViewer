@@ -57,8 +57,7 @@ void parallel_coordinates_renderer::_pre_render_commands(VkCommandBuffer command
 void parallel_coordinates_renderer::_post_render_commands(VkCommandBuffer commands, VkFence fence, util::memory_view<VkSemaphore> wait_semaphores, util::memory_view<VkSemaphore> signal_semaphores)
 {
     std::vector<VkPipelineStageFlags> stage_flags(wait_semaphores.size(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
-    std::scoped_lock lock(*globals::vk_context.graphics_mutex);
-    util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue, wait_semaphores, stage_flags, signal_semaphores, fence);
+    util::vk::end_commit_command_buffer(commands, globals::vk_context.graphics_queue.const_access().get(), wait_semaphores, stage_flags, signal_semaphores, fence);
 }
 
 const parallel_coordinates_renderer::pipeline_data& parallel_coordinates_renderer::get_or_create_pipeline(const output_specs& output_specs){

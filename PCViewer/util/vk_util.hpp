@@ -321,13 +321,17 @@ inline void setup_debug_report_callback(PFN_vkDebugUtilsMessengerCallbackEXT cal
 // Create helper functions with bundled functionality. No registering in the context going on
 // ----------------------------------------------------------------------------------------------------------------
 
-inline VkShaderModule create_shader_module(std::string_view filename){
+inline VkShaderModule create_shader_module(util::memory_view<const uint32_t> bytes){
     VkShaderModule module;
-    auto bytes = util::read_file(filename);
     auto module_info = util::vk::initializers::shaderModuleCreateInfo(bytes);
     auto res = vkCreateShaderModule(globals::vk_context.device, &module_info, globals::vk_context.allocation_callbacks, &module); 
     util::check_vk_result(res);
     return module;
+}
+
+inline VkShaderModule create_shader_module(std::string_view filename){
+    auto bytes = util::read_file(filename);
+    return create_shader_module(util::memory_view<const uint32_t>(bytes));
 }
 
 struct module_deleter{
@@ -341,6 +345,12 @@ using scoped_shader_module = std::unique_ptr<VkShaderModule, module_deleter>;
 inline scoped_shader_module create_scoped_shader_module(std::string_view filename){
     scoped_shader_module module(new VkShaderModule, module_deleter());
     *module = create_shader_module(filename);
+    return module;
+}
+
+inline scoped_shader_module create_scoped_shader_module(util::memory_view<const uint32_t> bytes){
+    scoped_shader_module module(new VkShaderModule, module_deleter());
+    *module = create_shader_module(bytes);
     return module;
 }
 
@@ -395,11 +405,10 @@ inline VkDeviceAddress get_buffer_address(const structures::buffer_info& buffer)
 }
 
 inline void convert_image_layouts_execute(util::memory_view<VkImageMemoryBarrier> image_barriers){
-    std::scoped_lock lock(*globals::vk_context.graphics_mutex);
     auto commands = create_begin_command_buffer(globals::vk_context.general_graphics_command_pool);
     vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, {}, 0, {}, 0, {}, static_cast<uint32_t>(image_barriers.size()), image_barriers.data());
     auto fence = create_fence(initializers::fenceCreateInfo());
-    end_commit_command_buffer(commands, globals::vk_context.graphics_queue, {}, {}, {}, fence);
+    end_commit_command_buffer(commands, globals::vk_context.graphics_queue.const_access().get(), {}, {}, {}, fence);
     auto res = vkWaitForFences(globals::vk_context.device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
     destroy_fence(fence);
     vkFreeCommandBuffers(globals::vk_context.device, globals::vk_context.general_graphics_command_pool, 1, &commands);

@@ -288,12 +288,12 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     graphics_queue_family_index = g_queue_family;
     compute_queue_family_index = c_queue_family;
     transfer_queue_family_index = t_queue_family;
-    vkGetDeviceQueue(device, g_queue_family, 0, &graphics_queue);
-    vkGetDeviceQueue(device, c_queue_family, 0, &compute_queue);
-    vkGetDeviceQueue(device, t_queue_family, 0, &transfer_queue);
-    graphics_mutex = distinct_mutexes[g_queue_family].get();
-    compute_mutex = distinct_mutexes[c_queue_family].get();
-    transfer_mutex = distinct_mutexes[t_queue_family].get();
+    vkGetDeviceQueue(device, g_queue_family, 0, &graphics_queue.access().get());
+    vkGetDeviceQueue(device, c_queue_family, 0, &compute_queue.access().get());
+    vkGetDeviceQueue(device, t_queue_family, 0, &transfer_queue.access().get());
+    graphics_queue.set_mutex(distinct_mutexes[g_queue_family].get());
+    compute_queue.set_mutex(distinct_mutexes[c_queue_family].get());
+    transfer_queue.set_mutex(distinct_mutexes[t_queue_family].get());
     for(auto& [queue, mutex]: distinct_mutexes)
         mutex_storage.push_back(std::move(mutex));
 
@@ -569,8 +569,7 @@ void stager::_task_thread_function(){
             auto wait_semaphores = cur_span.min < buffer_size ? cur.wait_semaphores: util::memory_view<VkSemaphore>{};
             auto wait_flags = cur_span.min < buffer_size ? cur.wait_flags : util::memory_view<const uint32_t>{};
             auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
-            std::scoped_lock lock(*globals::vk_context.transfer_mutex);
-            util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
+            util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue.const_access().get(), wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
 
             if(cur.transfer_dir == transfer_direction::download){
                 res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
@@ -634,8 +633,7 @@ void stager::_task_thread_function(){
             auto wait_semaphores = cur_span.min < buffer_size ? cur.wait_semaphores: util::memory_view<VkSemaphore>{};
             auto wait_flags = cur_span.min < buffer_size ? cur.wait_flags : util::memory_view<const uint32_t>{};
             auto signal_semaphores = cur_span.min + buffer_size >= data_size ? cur.signal_semaphores : util::memory_view<VkSemaphore>{};
-            std::scoped_lock lock(*globals::vk_context.transfer_mutex);
-            util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue, wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
+            util::vk::end_commit_command_buffer(_command_buffers[_fence_index], globals::vk_context.transfer_queue.const_access().get(), wait_semaphores, wait_flags, signal_semaphores, _task_fences[_fence_index]);
 
             if(cur.transfer_dir == transfer_direction::download){
                 res = vkWaitForFences(globals::vk_context.device, 1, &_task_fences[_fence_index], VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);

@@ -119,7 +119,7 @@ inline void frame_render(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data){
 
         res = vkEndCommandBuffer(fd->CommandBuffer);
         check_vk_result(res);
-        res = vkQueueSubmit(globals::vk_context.graphics_queue, 1, &info, fd->Fence);
+        res = vkQueueSubmit(globals::vk_context.graphics_queue.const_access().get(), 1, &info, fd->Fence);
         check_vk_result(res);
     }
 }
@@ -134,7 +134,7 @@ inline std::tuple<bool, int, int> frame_present(ImGui_ImplVulkanH_Window* wd, SD
     info.swapchainCount = 1;
     info.pSwapchains = &wd->Swapchain;
     info.pImageIndices = &wd->FrameIndex;
-    VkResult res = vkQueuePresentKHR(globals::vk_context.graphics_queue, &info);
+    VkResult res = vkQueuePresentKHR(globals::vk_context.graphics_queue.const_access().get(), &info);
     if (res == VK_ERROR_OUT_OF_DATE_KHR)
     {
         int w, h;

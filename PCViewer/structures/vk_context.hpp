@@ -9,6 +9,7 @@
 #include <std_util.hpp>
 #include <buffer_info.hpp>
 #include <image_info.hpp>
+#include <thread_safe_struct.hpp>
 
 namespace std{
     template<> struct hash<structures::buffer_info>{
@@ -45,27 +46,16 @@ struct VkContextInitReturnInfo{
 };
 
 struct vk_context{
-    struct consume_semaphore{
-        VkSemaphore     semaphore{};
-        bool            consumed{};
-    };
-
     VkInstance          instance{};
     VkPhysicalDevice    physical_device{};
     VkDevice            device{};
-    VkQueue             graphics_queue{}; // Note: use semaphores for queue sync
-    VkQueue             compute_queue{};  // Note: use semaphores for queue sync
-    VkQueue             transfer_queue{}; // Note: use semaphores for queue sync
-    std::mutex*         graphics_mutex{};
-    std::mutex*         compute_mutex{};
-    std::mutex*         transfer_mutex{};
+    thread_safe<VkQueue> graphics_queue{};
+    thread_safe<VkQueue> compute_queue{};
+    thread_safe<VkQueue> transfer_queue{};
     std::vector<std::unique_ptr<std::mutex>> mutex_storage{};   // holds the mutexes which can be ealily accessed via transfer/graphics/compute_mutex
     uint32_t            graphics_queue_family_index{};
     uint32_t            compute_queue_family_index{};
     uint32_t            transfer_queue_family_index{};
-    //std::vector<consume_semaphore> graphics_semaphores{};  // semaphore queue of the graphics pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
-    //std::vector<consume_semaphore> compute_semaphore{};    // semaphore queue of the compute pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
-    //std::vector<consume_semaphore> transfer_semaphore{};   // semaphore queue of the transfer pipelines between a frame (should be cleared after rendering with wait_and_clear_semaphores())
 
     VmaAllocator        allocator{};
 

@@ -9,7 +9,12 @@
 #include <fast_float.h>
 #include "gpu_instructions.hpp"
 
+#define workgroup_size 128
+#define STR_IND(s) STR(s)
+#define STR(s) #s
+
 namespace deriveData{
+
 struct pipeline_info{
     VkPipeline          pipeline;
     VkPipelineLayout    layout;
@@ -74,18 +79,39 @@ struct create_gpu_pipelines_result{
     std::vector<pipeline_info> pipelines;
 };
 inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instructions){
-    auto create_pipeline = [](const std::string& code){
-        if(logger.logging_level >= logging::level::l_5)
-            logger << "deriveData()::create_gpu_pipelines() New pipeline created with code:\n" << code << logging::endl;
-        auto spir_v = util::shader_compiler::compile(code);
-        return pipeline_info{};
-    };
-
     struct data_state_t{
         std::vector<uint32_t> cur_dimension_sizes;          // if the dimensionsizes are getting bigger -> store, barrier and reload, if the dimensionsize are getting smaller -> reduction store (atomic store) and reload,
         std::vector<uint32_t> cur_dimension_indices;        // dimension indices // hold information about the 
         bool                  all_same_data_layout{true};   // indicates that all data inputs have the same data layout (useful for easier readout)
     } data_state;
+
+    auto calc_thread_amt = [](const data_state_t& data_state){
+        size_t size = 1;
+        if(data_state.all_same_data_layout){
+            for(auto i: data_state.cur_dimension_indices)
+                size *= data_state.cur_dimension_sizes[i];
+        }
+        else{
+            for(auto s: data_state.cur_dimension_sizes)
+                size *= s;
+        }
+        return size;
+    };
+    auto create_pipeline = [](const std::string& code, size_t thread_amt){
+        if(logger.logging_level >= logging::level::l_5)
+            logger << "deriveData()::create_gpu_pipelines() New pipeline created with code:\n" << code << logging::endl;
+        auto spir_v = util::shader_compiler::compile(code);
+        pipeline_info ret{};
+        ret.amt_of_threads = thread_amt;
+        auto pipeline_layout_info = util::vk::initializers::pipelineLayoutCreateInfo();
+        ret.layout = util::vk::create_pipeline_layout(pipeline_layout_info);
+        auto shader_module = util::vk::create_scoped_shader_module(util::memory_view<const uint32_t>(spir_v));
+        auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+        auto pipeline_info = util::vk::initializers::computePipelineCreateInfo(ret.layout, shader_stage_info);
+        ret.pipeline = util::vk::create_compute_pipeline(pipeline_info);
+        return ret;
+    };
+
 
     // creating shader codes and converting them to pipelines
     std::vector<pipeline_info>  pipelines;
@@ -93,31 +119,6 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
     std::stringstream           body;
     size_t                      storage_size{};
     for(std::string_view line: instructions | util::slice('\n')){
-        // header
-        if(header.str().empty()){
-            header << R"(
-                #version 450
-
-                layout(push_constant) uniform PCs{
-                    uint rand_seed;
-                };
-
-                layout(local_size_x = 128) in;
-            )";
-            body << R"(
-                uint _random_state = gl_GlobalInvocationID.x;
-                float random_float(){
-                    _random_state ^= _random_state << 21;
-                    _random_state ^= _random_state >> 35;
-                    _random_state ^= _random_state << 4;
-                    return float(_random_state) / float(0xffffffff);
-                }
-
-                void main(){
-            )";
-        }
-
-        // instruction decoding
         std::stringstream line_stream{std::string(line.substr(0, line.find(' ')))};
         op_codes operation;
         line_stream >> operation;
@@ -138,8 +139,32 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         assert(!same_before || same_before == data_state.all_same_data_layout);
         assert(data_state.cur_dimension_sizes.empty() || data_state.cur_dimension_sizes == dim_sizes);
         data_state.cur_dimension_sizes = dim_sizes;
-        
-        // decode storage fields
+
+        // header
+        if(header.str().empty()){
+            header << R"(
+                #version 450
+
+                layout(push_constant) uniform PCs{
+                    uint rand_seed;
+                };
+
+                layout(local_size_x = )" STR_IND(workgroup_size) R"() in;
+            )";
+            body << R"(
+                uint _random_state = gl_GlobalInvocationID.x;
+                float random_float(){
+                    _random_state ^= _random_state << 21;
+                    _random_state ^= _random_state >> 35;
+                    _random_state ^= _random_state << 4;
+                    return float(_random_state) / float(0xffffffff);
+                }
+
+                void main(){
+            )";
+        }
+
+        // instruction decoding
         switch(operation){
         case op_codes::none:
             break;
@@ -176,8 +201,8 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         case op_codes::pipeline_barrier:
             body << "}\n";
             header << "float storage[" << storage_size << "];" << body.str();
-            pipelines.emplace_back(create_pipeline(header.str()));
-            header.clear(); body.clear();
+            pipelines.emplace_back(create_pipeline(header.str(), calc_thread_amt(data_state)));
+            header.clear(); body.clear(); storage_size = 0;
             break;
         case op_codes::one_vec:
             body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 1;\n";
@@ -207,10 +232,11 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             assert(false && "Unimplemented operation");
         }
     }
-    if(storage_size)
-    body << "}\n";
-    header << "float storage[" << storage_size << "];" << body.str();
-    pipelines.emplace_back(create_pipeline(header.str()));
+    if(storage_size){
+        body << "}\n";
+        header << "float storage[" << storage_size << "];" << body.str();
+        pipelines.emplace_back(create_pipeline(header.str(), calc_thread_amt(data_state)));
+    }
     return pipelines;
 }
 }
