@@ -151,7 +151,7 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
         .client = GLSLANG_CLIENT_VULKAN,
         .client_version = GLSLANG_TARGET_VULKAN_1_2,
         .target_language = GLSLANG_TARGET_SPV,
-		.target_language_version = GLSLANG_TARGET_SPV_1_3,
+		.target_language_version = GLSLANG_TARGET_SPV_1_4,
 		.code = code.data(),
 		.default_version = 400,
 		.default_profile = GLSLANG_NO_PROFILE,
@@ -162,6 +162,7 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
     };
 
     glslang_initialize_process();
+
 
     glslang_shader_t* shader = glslang_shader_create( &input );
 

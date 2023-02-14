@@ -12,6 +12,7 @@ REGISTER(Print_Vector);
 REGISTER(Print_Indices);
 REGISTER(DatasetOutput);
 REGISTER(Sum);
+REGISTER(Product);
 REGISTER(Lp_Norm);
 REGISTER(PCA_Projection);
 REGISTER(TSNE_Projection);

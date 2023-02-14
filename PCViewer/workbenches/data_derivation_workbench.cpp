@@ -772,11 +772,11 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         std::vector<std::vector<VkBuffer>>   print_infos_buffers(data.print_infos.size());   // gpu buffers containing the data for the print nodes
         std::string code_list = data.op_codes_list.str();
         for(const auto& s: data.data_storage){
-            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, s.size() * sizeof(s[0]));
+            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, s.size() * sizeof(s[0]));
             gpu_buffers.emplace_back(util::vk::create_buffer(buffer_info, memory_info));
-            std::stringstream  gpu_address; gpu_address << util::vk::get_buffer_address(gpu_buffers.back());
-            std::stringstream  cpu_address; cpu_address << s.data();
-            code_list = std::regex_replace(code_list, std::regex("g" + cpu_address.str()), gpu_address.str());
+            std::stringstream  gpu_address; gpu_address << 'g' << util::vk::get_buffer_address(gpu_buffers.back());
+            std::stringstream  cpu_address; cpu_address << 'g' << s.data();
+            code_list = std::regex_replace(code_list, std::regex(cpu_address.str()), gpu_address.str());
 
             size_t print_index = data.print_infos | util::index_of_if<recursion_data::print_info>([&s](auto& info){return info.data | util::contains_if<deriveData::column_memory_view<float>>([&s](auto& mem_view){return mem_view.cols[0].data() == s.data();});});
             if(print_index != util::n_pos)
@@ -784,6 +784,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         }
 
         // getting the pipelines and executing them
+        code_list = deriveData::optimize_operations(code_list);
         auto pipelines = deriveData::create_gpu_pipelines(code_list);
         auto command_buffer = util::vk::create_begin_command_buffer(_compute_command_pool);
         vkResetFences(globals::vk_context.device, 1, &_compute_fence);
