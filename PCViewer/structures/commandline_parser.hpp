@@ -91,12 +91,12 @@ struct commandline_parser{
         if (value != "") {
             char* numConvPtr;
             int32_t intVal = strtol(value.c_str(), &numConvPtr, 10);
-            return (intVal > 0) ? intVal : defaultValue;
+            return (*numConvPtr == '\0') ? intVal : defaultValue;
         } else {
             return defaultValue;
         }
         return int32_t();
-    }
+    } 
 };
 }
 
