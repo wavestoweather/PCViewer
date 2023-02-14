@@ -2,6 +2,7 @@
 #include <string_view>
 #include <sstream>
 #include <ranges.hpp>
+#include "../imgui_nodes/crude_json.h"
 #include "MemoryView.hpp"
 
 namespace deriveData{
@@ -23,6 +24,20 @@ enum op_codes: uint32_t{
     iota_vec,
     copy,
     sum,
+    product,
+    lp_norm,
+    inverse,
+    negate,
+    abs,
+    square,
+    sqrt,
+    exp,
+    log,
+    plus,
+    minus,
+    multiplication,
+    division,
+    pow,
 };
 static std::ostream& operator<<(std::ostream& s, op_codes o){
     return s << static_cast<uint32_t>(o);
@@ -35,7 +50,7 @@ static std::istream& operator>>(std::istream& s, op_codes& o){
 //}
 
 using float_column_views = std::vector<column_memory_view<float>>;
-inline void add_operation(std::stringstream& operations, op_codes op_code, const float_column_views& inputs, const float_column_views& outputs){
+inline void add_operation(std::stringstream& operations, op_codes op_code, const float_column_views& inputs, const float_column_views& outputs, const crude_json::value& additional_data = {}){
     operations << op_code;
     if(inputs.empty() && outputs.empty()){
         operations << "\n";
@@ -92,6 +107,11 @@ inline void add_operation(std::stringstream& operations, op_codes op_code, const
         }
         operations << "]";
     }
-    operations << "])\n";
+    operations << "])";
+
+    if(!additional_data.is_null())
+        operations << ' ' << additional_data.dump();
+
+    operations << '\n';
 }
 }

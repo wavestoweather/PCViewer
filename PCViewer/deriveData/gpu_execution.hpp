@@ -215,7 +215,9 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                     if(gl_GlobalInvocationID.x >= )" << calc_thread_amt(data_state) << ") return;\n";
         }
 
-        // loading the data
+        crude_json::value additional_data{};
+        if(line.find('{'))
+            additional_data = crude_json::value::parse(std::string(line.substr(line.find('{'))));
 
         // instruction decoding
         switch(operation){
@@ -285,6 +287,15 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
             break;
         case op_codes::sum:
+            // TODO additional data, such as pre factors
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = ";
+            for(auto&& [e, last]: util::last_iter(input_indices)){
+                body << "storage[" << std::get<uint32_t>(e) << "]";
+                if(!last) body << " + ";
+            }
+            body << ";\n";
+            break;
+        case op_codes::product:
             // TODO additional data, such as pre factors
             body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = ";
             for(auto&& [e, last]: util::last_iter(input_indices)){

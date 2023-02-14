@@ -436,6 +436,40 @@ public:
         );
     }
 
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::sum, input, output, input_elements[input_input_id]);
+    }
+
+    void pinAddAction() override {input_elements[input_input_id].get<crude_json::array>().push_back(1.);}
+    void pinRemoveAction(int i) override {input_elements[input_input_id].get<crude_json::array>().erase(input_elements[input_input_id].get<crude_json::array>().begin() + i);}
+};
+
+class Product: public Node, public VariableInput, public Creatable<Sum>{
+public:
+    Product(): 
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Sum"),
+        VariableInput(false, 1)
+    {
+        input_elements[input_input_id] = crude_json::array{1., 1.};
+    }
+
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        auto& exponents = input_elements[input_input_id].get<crude_json::array>();
+        assert(exponents.size() == input.size());
+        applyNAryFunction(input, output, 
+            [&exponents](const std::vector<float>& v) {
+                double res{1.};
+                for(size_t i: util::size_range(v))
+                    res *= std::pow(v[i], exponents[i].get<double>());
+                return float(res);
+            }
+        );
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::product, input, output, input_elements[input_input_id]);
+    }
+
     void pinAddAction() override {input_elements[input_input_id].get<crude_json::array>().push_back(1.);}
     void pinRemoveAction(int i) override {input_elements[input_input_id].get<crude_json::array>().erase(input_elements[input_input_id].get<crude_json::array>().begin() + i);}
 };
@@ -459,6 +493,10 @@ public:
                 return std::pow(res, 1./exp);
             }
         );
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::lp_norm, input, output, input_elements[middle_input_id]);
     }
 };
 
@@ -644,6 +682,11 @@ public:
         for(size_t i: util::size_range(input[0].cols[0]))
             output[0].cols[0][i] = input[0].cols[0][i];
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        if(input[0].cols[0] != output[0].cols[0])
+            add_operation(operations, op_codes::copy, input, output);
+    }
 };
 
 class Cast_to_Index: public Unary<FloatType, IndexType>, public Creatable<Cast_to_Index>{
@@ -654,6 +697,11 @@ public:
         for(size_t i: util::size_range(input[0].cols[0]))
             output[0].cols[0][i] = std::floor(input[0].cols[0][i]);
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        if(input[0].cols[0] != output[0].cols[0])
+            add_operation(operations, op_codes::copy, input, output);
+    }
 };
 
 class Inverse: public Unary<FloatType>, public Creatable<Inverse>{
@@ -663,6 +711,10 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{     
         applyUnaryFunction(input, output, 0, [](float in){return 1. / in;});
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::inverse, input, output);
+    }
 };
 
 class Negate: public Unary<FloatType>, public Creatable<Negate>{
@@ -671,6 +723,9 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{        
         applyUnaryFunction(input, output, 0, [](float in){return -in;});
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::negate, input, output);
     }
 };
 
@@ -703,6 +758,9 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::abs(in);});
     }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::abs, input, output);
+    }
 };
 
 class Square: public Unary<FloatType>, public Creatable<Square>{
@@ -711,6 +769,9 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return in * in;});
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::square, input, output);
     }
 };
 
@@ -721,6 +782,9 @@ public:
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::sqrt(in);});
     }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::sqrt, input, output);
+    }
 };
 
 class Exponential: public Unary<FloatType>, public Creatable<Exponential>{
@@ -730,6 +794,9 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::exp(in);});
     }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::exp, input, output);
+    }
 };
 
 class Logarithm: public Unary<FloatType>, public Creatable<Logarithm>{
@@ -738,6 +805,9 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::log(in);});
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::log, input, output);
     }
 };
 
@@ -988,6 +1058,9 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a + b;});
     }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::plus, input, output);
+    }
 };
 
 class Minus: public Binary<FloatType>, public Creatable<Minus>{
@@ -996,6 +1069,9 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a - b;});
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::minus, input, output);
     }
 };
 
@@ -1006,6 +1082,9 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a * b;});
     }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::multiplication, input, output);
+    }
 };
 
 class Division: public Binary<FloatType>, public Creatable<Division>{
@@ -1015,6 +1094,9 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a / b;});
     }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::division, input, output);
+    }
 };
 
 class Pow: public Binary<FloatType>, public Creatable<Pow>{
@@ -1023,6 +1105,9 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return std::pow(a, b);});
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::pow, input, output);
     }
 };
 
