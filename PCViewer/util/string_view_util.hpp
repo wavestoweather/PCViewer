@@ -57,6 +57,8 @@ public:
         
         bool operator==(const iterator& o) const {return rest == o.rest && cur == o.cur;}
         bool operator!=(const iterator& o) const {return rest != o.rest || cur != o.cur;}
+        
+        std::string_view get_rest() const {return rest;}
     protected:
         constexpr iterator() = default;
         constexpr iterator(std::string_view string, T slice): rest(string), slice(slice) {getline(rest, cur, slice);}

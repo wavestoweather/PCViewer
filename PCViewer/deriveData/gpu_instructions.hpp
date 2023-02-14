@@ -44,13 +44,19 @@ inline void add_operation(std::stringstream& operations, op_codes op_code, const
     // input addresses
     operations << " [";
     for(auto&& [in, last]: util::last_iter(inputs)){
-        operations << in.cols[0].data();
+        if(in.is_constant())
+            operations << "c" << in.cols[0][0];
+        else
+            operations << "g" << in.cols[0].data();
         if(!last) operations << ",";
     }
     operations << "] [";
     // output addresses
     for(auto&& [in, last]: util::last_iter(outputs)){
-        operations << in.cols[0].data();
+        if(in.is_constant())
+            operations << "c" << in.cols[0][0];
+        else
+            operations << "g" << in.cols[0].data();
         if(!last) operations << ",";
     }
     operations << "] ";

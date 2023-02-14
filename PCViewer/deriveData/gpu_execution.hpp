@@ -44,12 +44,12 @@ inline data_storage extract_data_storage(std::string_view address){
 inline std::tuple<std::vector<data_storage>, std::vector<data_storage>> extract_input_output_indices(std::string_view line){
     std::vector<data_storage> input_indices; 
     std::vector<data_storage> output_indices;
-    std::string_view inputs; util::getline(line, inputs, ' '); util::getline(line, inputs, ' '); inputs = inputs.substr(inputs.find('[')); inputs = inputs.substr(0, inputs.find(']'));
+    std::string_view inputs; util::getline(line, inputs, ' '); util::getline(line, inputs, ' '); inputs = inputs.substr(inputs.find('[') + 1); inputs = inputs.substr(0, inputs.find(']'));
     std::string_view element;
     while(util::getline(inputs, element, ',')){
         input_indices.emplace_back(extract_data_storage(element));
     }
-    std::string_view outputs; util::getline(line, outputs, ' '); outputs = outputs.substr(outputs.find('[')); outputs = outputs.substr(0, outputs.find(']'));
+    std::string_view outputs; util::getline(line, outputs, ' '); outputs = outputs.substr(outputs.find('[') + 1); outputs = outputs.substr(0, outputs.find(']'));
     while(util::getline(outputs, element, ',')){
         output_indices.emplace_back(extract_data_storage(element));
     }
@@ -75,6 +75,50 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
     }
     return {std::move(dimension_sizes), std::move(dimension_indices_v)};
 }
+
+// adds all the load store operations in a possibly optimal manner
+// this also means, that the mapping from global to local address space is done here
+// an example would be:
+// op_vec_iota a b
+// ->
+// op_load a 0
+// op_vec_iota 0
+// op_store 0 b
+// where a and b are global addresses, and 0 is the index into the local storage
+inline std::string optimize_operations(const std::string& input){
+    std::stringstream result_stream;
+    for(std::string_view line: input | util::slice('\n')){
+        const auto [input_indices, output_indices] = extract_input_output_indices(line);
+        auto slice = (line | util::slice(' ')).begin();
+        std::string_view op_code = *slice++;
+        std::string_view input = *slice++, output = *slice, rest = slice.get_rest();
+        std::stringstream internal_pos, internal_out_pos;
+        internal_pos << '[';
+        for(size_t i: util::size_range(input_indices)){
+            internal_pos << 'l' << i;
+            if(i != input_indices.size() - 1)
+                internal_pos << ',';
+        }
+        internal_pos << "]";
+        internal_out_pos << '[';
+        for(size_t i: util::size_range(output_indices)){
+            internal_out_pos << 'l' << i;
+            if(i != input_indices.size() - 1)
+                internal_out_pos << ',';
+        }
+        internal_out_pos << "]";
+        // load
+        result_stream << op_codes::load << ' ' << input << ' ' << internal_pos.str() << ' ' << rest << '\n';
+
+        // main operation
+        result_stream << op_code << ' ' << internal_pos.str() << ' ' << internal_out_pos.str() << ' ' << rest << '\n';
+
+        // store operation
+        result_stream << op_codes::store << ' ' << internal_out_pos.str() << ' ' << output << ' ' << rest << '\n';
+    }
+    return result_stream.str();
+}
+
 struct create_gpu_pipelines_result{
     std::vector<pipeline_info> pipelines;
 };
@@ -144,6 +188,13 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         if(header.str().empty()){
             header << R"(
                 #version 450
+                #extension GL_EXT_buffer_reference2: require
+                #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+                #extension GL_EXT_scalar_block_layout: require
+
+                layout(buffer_reference, scalar) buffer vec{
+                    float data[];
+                };
 
                 layout(push_constant) uniform PCs{
                     uint rand_seed;
@@ -152,28 +203,36 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                 layout(local_size_x = )" STR_IND(workgroup_size) R"() in;
             )";
             body << R"(
-                uint _random_state = gl_GlobalInvocationID.x;
+                uint _random_state = gl_GlobalInvocationID.x * 12 + (1 << 17) - 1;
                 float random_float(){
                     _random_state ^= _random_state << 21;
                     _random_state ^= _random_state >> 35;
                     _random_state ^= _random_state << 4;
-                    return float(_random_state) / float(0xffffffff);
+                    return float(_random_state) / float(uint(0xffffffff));
                 }
 
                 void main(){
-            )";
+                    if(gl_GlobalInvocationID.x >= )" << calc_thread_amt(data_state) << ") return;\n";
         }
+
+        // loading the data
 
         // instruction decoding
         switch(operation){
         case op_codes::none:
             break;
         case op_codes::load:
+
             for(auto&& [input_index, i]: util::enumerate(input_indices))
-                body << "vec array"<< i <<" = vec(uint64_t(" << std::get<size_t>(input_index) << "));";
+                if(std::holds_alternative<size_t>(input_index))
+                    body << "vec array"<< i <<" = vec(" << std::get<size_t>(input_index) << "ul);";
             if(data_state.all_same_data_layout){
-                for(auto&& [out_index, i]: util::enumerate(output_indices))
-                    body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << "[gl_GlobalInvocationID.x];\n";
+                for(auto&& [out_index, i]: util::enumerate(output_indices)){
+                    if(std::holds_alternative<float>(input_indices[i]))
+                        body << "storage[" << std::get<uint32_t>(out_index) << "] = " << std::get<float>(input_indices[i]) << ";\n";
+                    else
+                        body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << ".data[gl_GlobalInvocationID.x];\n";
+                }
             }
             else{
                 body << "float dimension_indices["<< data_state.cur_dimension_sizes.size() <<"]; uint i = gl_GlobalInvocationID.x;\n";
@@ -181,6 +240,10 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                     body << "dimension_indices[" << i << "] = i % " << data_state.cur_dimension_sizes[i] << "; i /= " << data_state.cur_dimension_sizes[i] << ";\n";
                 body << "uint dim_mult;\n";
                 for(auto&& [out_index, i]: util::enumerate(output_indices)){
+                    if(std::holds_alternative<float>(input_indices[i])){
+                        body << "storage[" << std::get<uint32_t>(out_index) << "] = " << std::get<float>(input_indices[i]) << ";\n";
+                        continue;
+                    }
                     std::string input_index_var("in" + std::to_string(i));
                     body << "uint " << input_index_var << " = 0; dim_mult = 1;\n";
                     for(size_t j: util::rev_size_range(dim_indices[i])){
@@ -188,14 +251,16 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                         if(j > 0)
                             body << "dim_mult *= " << dim_sizes[dim_indices[i][j]] << ";\n";
                     }
-                    body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << "[" << input_index_var << "];\n";
+                    body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << ".data[" << input_index_var << "];\n";
                 }
             }
             break;
         case op_codes::store:
             for(auto&& [out_index, i]: util::enumerate(output_indices)){
-                body << "vec array" << i << " = vec(uint64_t(" << std::get<size_t>(out_index) << "));\n";
-                body << "array" << i << "[gl_GlobalInvocationID.x] = storage[" << std::get<uint32_t>(out_index) << "];\n";
+                if(!std::holds_alternative<size_t>(out_index))
+                    continue;
+                body << "vec array" << i << " = vec(" << std::get<size_t>(out_index) << "ul);\n";
+                body << "array" << i << ".data[gl_GlobalInvocationID.x] = storage[" << std::get<uint32_t>(input_indices[i]) << "];\n";
             }
             break;
         case op_codes::pipeline_barrier:

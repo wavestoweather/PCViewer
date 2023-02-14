@@ -99,6 +99,9 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
     bool full() const{
         return size() == cols[0].size();
     }
+    bool is_constant() const{
+        return dimensionSizes.size() == 0;
+    }
 
     bool operator==(const column_memory_view& o) const{
         return dimensionSizes == o.dimensionSizes && columnDimensionIndices == o.columnDimensionIndices && cols == o.cols;
