@@ -27,15 +27,15 @@ inline data_storage extract_data_storage(std::string_view address){
     switch(address[0]){
     case 'l':
         ret = uint32_t{};
-        std::from_chars(&*(address.begin() + 1), &*address.end(), std::get<uint32_t>(ret));
+        std::from_chars(address.data() + 1,  address.data() + address.size(), std::get<uint32_t>(ret));
         break;
     case 'g':
         ret = size_t{};
-        std::from_chars(&*(address.begin() + 1), &*address.end(), std::get<size_t>(ret));
+        std::from_chars(address.data() + 1,  address.data() + address.size(), std::get<size_t>(ret));
         break;
     case 'c':
         ret = float{};
-        fast_float::from_chars(&*(address.begin() + 1), &*address.end(), std::get<float>(ret));
+        fast_float::from_chars(address.data() + 1,  address.data() + address.size(), std::get<float>(ret));
         break;
     }
     return ret;
@@ -62,7 +62,7 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
     std::string_view dimensions = (dimension_info.substr(1) | util::slice(']'))[0];
     for(auto size: dimensions | util::slice(',')){
         dimension_sizes.emplace_back();
-        std::from_chars(&*size.begin(), &*size.end(), dimension_sizes.back());
+        std::from_chars(size.data(), size.data() + size.size(), dimension_sizes.back());
     }
     auto tmp = dimension_info | util::slice('[');
     for(auto dimension_indices: util::subrange(tmp.begin() + 4, tmp.end())){
@@ -70,7 +70,7 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
         auto dim_inds = (dimension_indices | util::slice(']'))[0];
         for(auto ind: dim_inds | util::slice(',')){
             dimension_indices_v.back().emplace_back();
-            std::from_chars(&*ind.begin(), &*ind.end(), dimension_indices_v.back().back());
+            std::from_chars(ind.data(), ind.data() + ind.size(), dimension_indices_v.back().back());
         }
     }
     return {std::move(dimension_sizes), std::move(dimension_indices_v)};
@@ -216,7 +216,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         }
 
         crude_json::value additional_data{};
-        if(line.find('{'))
+        if(line.find('{') != std::string_view::npos)
             additional_data = crude_json::value::parse(std::string(line.substr(line.find('{'))));
 
         // instruction decoding
