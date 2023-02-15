@@ -115,6 +115,7 @@ inline std::string optimize_operations(const std::string& input){
 
         // store operation
         result_stream << op_codes::store << ' ' << internal_out_pos.str() << ' ' << output << ' ' << rest << '\n';
+        result_stream << op_codes::pipeline_barrier << " [] [] ([])\n";
     }
     return result_stream.str();
 }
@@ -142,8 +143,22 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         return size;
     };
     auto create_pipeline = [](const std::string& code, size_t thread_amt){
-        if(logger.logging_level >= logging::level::l_5)
-            logger << "deriveData()::create_gpu_pipelines() New pipeline created with code:\n" << code << logging::endl;
+        if(logger.logging_level >= logging::level::l_5){
+            std::stringstream formatted_code;
+            int cur_indent{};
+            int line_number{};
+            for(std::string_view line: code | util::slice('\n')){
+                size_t trim_pos =  line.find_first_not_of(" ");
+                if(trim_pos != std::string_view::npos) line = line.substr(trim_pos);
+                formatted_code << line_number++ << ':';
+                cur_indent -= int(std::count(line.begin(), line.end(), '}'));
+                cur_indent = std::max(cur_indent, 0);
+                for(int i: util::i_range(cur_indent * 4)) formatted_code << ' ';
+                formatted_code << line << '\n';
+                cur_indent += int(std::count(line.begin(), line.end(), '{'));
+            }
+            logger << "deriveData()::create_gpu_pipelines() New pipeline created with code:\n" << formatted_code.str() << logging::endl;
+        }
         auto spir_v = util::shader_compiler::compile(code);
         pipeline_info ret{};
         ret.amt_of_threads = thread_amt;
@@ -178,11 +193,13 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             }
         }
         const bool same_before = data_state.all_same_data_layout;
-        for(uint32_t i: util::i_range(dim_indices.size() - 1))
-            data_state.all_same_data_layout &= dim_indices[i] == dim_indices[i + 1];
+        if(dim_indices.size())
+            for(uint32_t i: util::i_range(dim_indices.size() - 1))
+                data_state.all_same_data_layout &= dim_indices[i] == dim_indices[i + 1] || dim_indices[i].empty() || dim_indices[i + 1].empty();
         assert(!same_before || same_before == data_state.all_same_data_layout);
-        assert(data_state.cur_dimension_sizes.empty() || data_state.cur_dimension_sizes == dim_sizes);
-        data_state.cur_dimension_sizes = dim_sizes;
+        assert(operation == op_codes::pipeline_barrier || data_state.cur_dimension_sizes.empty() || data_state.cur_dimension_sizes == dim_sizes);
+        if(operation != op_codes::pipeline_barrier)
+            data_state.cur_dimension_sizes = dim_sizes;
 
         // header
         if(header.str().empty()){
@@ -261,15 +278,15 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             for(auto&& [out_index, i]: util::enumerate(output_indices)){
                 if(!std::holds_alternative<size_t>(out_index))
                     continue;
-                body << "vec array" << i << " = vec(" << std::get<size_t>(out_index) << "ul);\n";
-                body << "array" << i << ".data[gl_GlobalInvocationID.x] = storage[" << std::get<uint32_t>(input_indices[i]) << "];\n";
+                body << "vec array_out" << i << " = vec(" << std::get<size_t>(out_index) << "ul);\n";
+                body << "array_out" << i << ".data[gl_GlobalInvocationID.x] = storage[" << std::get<uint32_t>(input_indices[i]) << "];\n";
             }
             break;
         case op_codes::pipeline_barrier:
             body << "}\n";
             header << "float storage[" << storage_size << "];" << body.str();
             pipelines.emplace_back(create_pipeline(header.str(), calc_thread_amt(data_state)));
-            header.clear(); body.clear(); storage_size = 0;
+            header.str({}); body.str({}); storage_size = 0;
             break;
         case op_codes::one_vec:
             body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 1;\n";
@@ -300,12 +317,57 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = ";
             for(auto&& [e, last]: util::last_iter(input_indices)){
                 body << "storage[" << std::get<uint32_t>(e) << "]";
-                if(!last) body << " + ";
+                if(!last) body << " * ";
             }
             body << ";\n";
             break;
+        case op_codes::lp_norm:
+            // TODO: get norm from additional data
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = sqrt(";
+            for(auto&& [e, last]: util::last_iter(input_indices)){
+                body << "storage[" << std::get<uint32_t>(e) << "] * storage[" << std::get<uint32_t>(e) << "]";
+                if(!last) body << " + ";
+            }
+            body << ");\n";
+            break;
+        case op_codes::inverse:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 1. / storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            break;
+        case op_codes::negate:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = -storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            break;
+        case op_codes::abs:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = abs(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            break;
+        case op_codes::square:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] * storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            break;
+        case op_codes::sqrt:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = sqrt(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            break;
+        case op_codes::exp:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = exp(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            break;
+        case op_codes::log:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = log(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            break;
+        case op_codes::plus:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] + storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            break;
+        case op_codes::minus:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] - storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            break;
+        case op_codes::multiplication:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] * storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            break;
+        case op_codes::division:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] / storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            break;
+        case op_codes::pow:
+            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = pow(storage[" << std::get<uint32_t>(input_indices[0]) << "], storage[" << std::get<uint32_t>(input_indices[1]) << "]);\n";
+            break;
         default:
-            assert(false && "Unimplemented operation");
+            throw std::runtime_error{"Unsupported op_code for operation line: " + std::string(line) + ". Use Cpu execution for this execution graph."};
         }
     }
     if(storage_size){

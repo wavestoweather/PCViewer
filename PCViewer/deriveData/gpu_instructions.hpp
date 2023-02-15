@@ -11,7 +11,7 @@ namespace deriveData{
 // for equal layouts/direct column operations the column size is given by dim_size_1 = -col.size
 // the (...) part is optional and has to be checked for
 
-// handling different data layouts by adding an optional divison array which is used for dimension index calculation, followed by the dimension indices needed for index calculation
+// handling different data layouts by adding an optional division array which is used for dimension index calculation, followed by the dimension indices needed for index calculation
 
 enum op_codes: uint32_t{
     none,                // used eg. by print vector nodes as they only download the data and print it

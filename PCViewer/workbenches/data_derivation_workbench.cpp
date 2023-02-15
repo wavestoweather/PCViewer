@@ -791,6 +791,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         for(const auto& pipeline: pipelines){
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
             vkCmdDispatch(command_buffer, (uint32_t(pipeline.amt_of_threads) + workgroup_size - 1) / workgroup_size, 1, 1);
+            vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {}, 0, {}, 0, {}, 0, {});
         }
         util::vk::end_commit_command_buffer(command_buffer, globals::vk_context.compute_queue.const_access().get(), {}, {}, {}, _compute_fence);
         auto res = vkWaitForFences(globals::vk_context.device, 1, &_compute_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);
