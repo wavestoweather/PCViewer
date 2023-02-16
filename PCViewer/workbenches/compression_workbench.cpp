@@ -9,6 +9,7 @@
 #include <fstream>
 #include <json_util.hpp>
 #include <util.hpp>
+#include <as_cast.hpp>
 
 static std::vector<std::string> get_data_filenames(const std::string_view& path, util::memory_view<const std::string> includes, util::memory_view<const std::string> ignores){
     // searching all files in the given directory (also in the subdirectories) and append all found netCdf files to the _files variable
@@ -77,13 +78,13 @@ void compression_workbench::_analyse(std::vector<std::string> files, file_versio
             else if(extension == ".nc")
                 load_result = util::dataset::open_internals::open_netcdf<float>(std::string_view(file));
 
-            _analysis_progress = double(fc++) / files.size() / 2;
+            _analysis_progress = float(fc++) / files.size() / 2;
 
             // attribute consistency check
             if(analysed_data.attributes.empty())
                 analysed_data.attributes = load_result.attributes;
             else{
-                for(int a: util::size_range(load_result.attributes)){
+                for(size_t a: util::size_range(load_result.attributes)){
                     if(analysed_data.attributes.size() - 1 < a || analysed_data.attributes[a].id != load_result.attributes[a].id){
                         _analysis_running = false;
                         throw std::runtime_error{"compression_workbench::_analyse() Attributes inconsistent for file " + file};
@@ -91,8 +92,8 @@ void compression_workbench::_analyse(std::vector<std::string> files, file_versio
                 }
             }
 
-            // analysing min/max
-            for(int a: util::size_range(load_result.data.columns)){
+            // analyzing min/max
+            for(size_t a: util::size_range(load_result.data.columns)){
                 for(float f: load_result.data.columns[a]){
                     if(_analysis_cancel){
                         _analysis_cancel = false;
@@ -109,7 +110,7 @@ void compression_workbench::_analyse(std::vector<std::string> files, file_versio
 
             analysed_data.data_size += load_result.data.size();
 
-            _analysis_progress = double(fc++) / files.size() / 2;
+            _analysis_progress = float(fc++) / files.size() / 2;
         }
     }
     catch(std::exception e){
@@ -162,7 +163,7 @@ void compression_workbench::_compress(std::vector<std::string> files, std::strin
         // loading file
         auto data = util::dataset::open_data<float>(file);
 
-        for(int a: util::size_range(data.columns)){
+        for(size_t a: util::size_range(data.columns)){
             for(int64_t i: util::i_range(data.size())){
                 if(_compression_cancel){
                     _compression_cancel = false;
@@ -170,20 +171,20 @@ void compression_workbench::_compress(std::vector<std::string> files, std::strin
                     return;
                 }
 
-                float axis_val = data(i, a);
+                float axis_val = data(as<uint32_t>(i), as<uint32_t>(a));
                 axis_val = util::normalize_val_for_range(axis_val, analysed_data.attributes[a].bounds.read().min, analysed_data.attributes[a].bounds.read().max);
 
                 if(compress_info.half_column_data || compress_info.compressed_column_data){
                     column_data[a].push_back(axis_val);
                     if(column_data[a].size() >= compress_info.comression_block_size_shift)
-                        append_to_column_file(a);
+                        append_to_column_file(as<int>(a));
                 }
                 // TODO other compression stuff
             }
         }
 
         offset += data.size();
-        _compression_progress = double(offset) / analysed_data.data_size;
+        _compression_progress = float(offset) / analysed_data.data_size;
 
         if(logger.logging_level >= logging::level::l_5)
             logger << logging::info_prefix << " compression_workbench::_compress() File " << file << " progressed" << logging::endl;
@@ -203,7 +204,7 @@ void compression_workbench::_compress(std::vector<std::string> files, std::strin
         info[c]["block_size"] = double(compress_info.comression_block_size_shift);
     }
 
-    for(int a: util::size_range(analysed_data.attributes)){
+    for(size_t a: util::size_range(analysed_data.attributes)){
         info["attributes"][a]["name"] = analysed_data.attributes[a].id;
         info["attributes"][a]["min"] = analysed_data.attributes[a].bounds.read().min;
         info["attributes"][a]["max"] = analysed_data.attributes[a].bounds.read().max;
@@ -223,13 +224,13 @@ compression_workbench::compression_workbench(std::string_view id):
 compression_workbench::~compression_workbench(){
     // cancelling the worker threads if they are doing work
     if(_analysis_thread.joinable()){
-        if(logger.logging_level >= logging::level::l_4);
+        if(logger.logging_level >= logging::level::l_4)
             logger << logging::warning_prefix << " ~compression_workbench() Interrupting analysis thread" << logging::endl;
         _analysis_cancel = true;
         _analysis_thread.join();
     }
     if(_compression_thread.joinable()){
-        if(logger.logging_level >= logging::level::l_4);
+        if(logger.logging_level >= logging::level::l_4)
             logger << logging::warning_prefix << " ~compression_workbench() Interrupting compression thread. This might lead to corrupt intermediate file." << logging::endl;
         _compression_cancel = true;
         _compression_thread.join();
@@ -293,7 +294,7 @@ void compression_workbench::show()
     }
 
     if(ImGui::CollapsingHeader(("Available files(" + std::to_string(_current_files.size()) + ")").c_str())){
-        for(int i: util::size_range(_current_files))
+        for(size_t i: util::size_range(_current_files))
             ImGui::Checkbox(_current_files[i].c_str(), reinterpret_cast<bool*>(_current_files_active.data() + i));
     }
 
@@ -305,7 +306,7 @@ void compression_workbench::show()
     ImGui::BeginDisabled(disable_analysis_button);
     if(ImGui::Button("Analyse")){
         std::vector<std::string> files;
-        for(int i: util::size_range(_current_files)){
+        for(size_t i: util::size_range(_current_files)){
             if(_current_files_active[i])
                 files.push_back(_current_files[i]);
         }
@@ -335,14 +336,14 @@ void compression_workbench::show()
     ImGui::Checkbox("Compressed column data", &_compress_info.compressed_column_data);
 
     if(_analysed_data.const_access()->files_version != _input_files_version)
-        ImGui::TextColored({1, .1, .1, 1}, "Filelist changed, first run analysis.");
+        ImGui::TextColored({1.f, .1f, .1f, 1.f}, "Filelist changed, first run analysis.");
     ImGui::ProgressBar(_compression_progress);
     ImGui::SameLine(); ImGui::Text("progress");
     bool disable_compression_button = _compression_running || _analysis_progress != 1 || _analysed_data.const_access()->files_version != _input_files_version;
     ImGui::BeginDisabled(disable_compression_button);
     if(ImGui::Button("Compress")){
         std::vector<std::string> files;
-        for(int i: util::size_range(_current_files)){
+        for(size_t i: util::size_range(_current_files)){
             if(_current_files_active[i])
                 files.push_back(_current_files[i]);
         }

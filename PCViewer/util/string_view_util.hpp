@@ -65,7 +65,8 @@ public:
     };
     iterator begin() const {return iterator(string, slice);}
     iterator end() const {return iterator();}
-    std::string_view operator[](size_t i){return *(begin() + i);}
+    std::string_view operator[](size_t i) const {return *(begin() + i);}
+    std::string_view operator[](int i) const {return *(begin() + i);}
 
     constexpr sliced_string(std::string_view data, T slice = {'\n'}): slice(slice), string(data){}
     constexpr sliced_string(std::string&& data, T slice = {'\n'}): storage(std::move(data)), slice(slice), string(storage.value()){}

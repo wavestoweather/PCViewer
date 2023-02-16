@@ -13,11 +13,11 @@ bool expandCluster(int cur_cluster_index ,size_t index, db_scan::float_column_vi
         return false;
     }
     else{
-        if(kd_tree.same_layout) output[0].cols[0][index] = cur_cluster_index;
-        else                    output[0](index, 0) = cur_cluster_index;
+        if(kd_tree.same_layout) output[0].cols[0][index] = as<float>(cur_cluster_index);
+        else                    output[0](index, 0) = as<float>(cur_cluster_index);
         for(size_t n: neighbours){
-            if(kd_tree.same_layout) output[0].cols[0][n] = cur_cluster_index;
-            else                    output[0](n, 0) = cur_cluster_index;
+            if(kd_tree.same_layout) output[0].cols[0][n] = as<float>(cur_cluster_index);
+            else                    output[0](n, 0) = as<float>(cur_cluster_index);
         }
 
         while(neighbours.size()){
@@ -27,11 +27,11 @@ bool expandCluster(int cur_cluster_index ,size_t index, db_scan::float_column_vi
             if(neigh.size() > settings.min_points){
                 for(size_t n2: neigh){
                     if(kd_tree.same_layout && output[0].cols[0][n2] <= cluster_unclassified){
-                        output[0].cols[0][n2] = cur_cluster_index;
+                        output[0].cols[0][n2] = as<float>(cur_cluster_index);
                         neighbours.push_back(n2);
                     }
                     if(!kd_tree.same_layout && output[0](n2, 0) <= cluster_unclassified){
-                        output[0](n2, 0) = cur_cluster_index;
+                        output[0](n2, 0) = as<float>(cur_cluster_index);
                         neighbours.push_back(n2);
                     }
                 }

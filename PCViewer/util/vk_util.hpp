@@ -73,9 +73,9 @@ inline bool all_features_available(const T& available, const T& required){
     const VkBool32* bool_end_avail = reinterpret_cast<const VkBool32*>(&available) + sizeof(T) / sizeof(VkBool32);
     const VkBool32* bool_start_req = reinterpret_cast<const VkBool32*>(&required.pNext) + sizeof(required.pNext) / sizeof(VkBool32);
 
-    int bool_count = bool_end_avail - bool_start_avail;
+    int64_t bool_count = bool_end_avail - bool_start_avail;
     assert(bool_count > 0 && bool_count < 150);
-    for(int i: i_range(bool_count)){
+    for(int64_t i: i_range(bool_count)){
         if(bool_start_req[i] && !bool_start_avail[i])
             return false;
     }

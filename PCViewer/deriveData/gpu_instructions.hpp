@@ -110,7 +110,7 @@ inline void add_operation(std::stringstream& operations, op_codes op_code, const
     operations << "])";
 
     if(!additional_data.is_null())
-        operations << ' ' << additional_data.dump();
+        operations << " {" << additional_data.dump() << '}';
 
     operations << '\n';
 }

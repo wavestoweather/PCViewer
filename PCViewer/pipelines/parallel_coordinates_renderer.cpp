@@ -12,6 +12,7 @@
 #include <splines.hpp>
 #include <priority_globals.hpp>
 #include <data_util.hpp>
+#include <as_cast.hpp>
 
 namespace pipelines
 {
@@ -306,7 +307,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
         structures::dynamic_struct<attribute_infos_t, ImVec4> attribute_info(active_ordered_attributes.size());
         attribute_info->attribute_count = static_cast<uint32_t>(active_ordered_attributes.size());
         attribute_info->data_flags = {};
-        for(int active_attribute_index: util::size_range(active_attribute_indices)){
+        for(size_t active_attribute_index: util::size_range(active_attribute_indices)){
             uint32_t cur_attribute_index = active_attribute_indices[active_attribute_index];
             attribute_info[active_attribute_index].x = float(cur_attribute_index);
             attribute_info[active_attribute_index].y = active_ordered_attributes[active_attribute_index].get().bounds->read().min;
@@ -324,7 +325,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
 
     util::vma::upload_data(info_bytes, attribute_infos_gpu);
     if(_render_commands.size())
-        vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
+        vkFreeCommandBuffers(globals::vk_context.device, _command_pool, static_cast<uint32_t>(_render_commands.size()), _render_commands.data());
     _render_commands.resize(1);
     _render_commands[0] = util::vk::create_begin_command_buffer(_command_pool);
 
@@ -380,10 +381,10 @@ void parallel_coordinates_renderer::render(const render_info& info){
                 if(dl.priority_render.read())
                     pc.index_order_address = util::vk::get_buffer_address(drawlist.priority_indices.at(std::string(globals::priority_drawlist_standard_order)));
                 pc.activation_bitset_address = util::vk::get_buffer_address(drawlist.active_indices_bitset_gpu);
-                pc.vertex_count_per_line = (active_ordered_attributes.size() - 1) * (info.workbench.setting.read().render_splines ? _spline_resolution: 1) + 1;
+                pc.vertex_count_per_line = as<uint32_t>((active_ordered_attributes.size() - 1) * (info.workbench.setting.read().render_splines ? _spline_resolution: 1) + 1);
                 pc.color = dl.appearance->read().color;
                 vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-                vkCmdDraw(_render_commands.back(), pc.vertex_count_per_line, cur_batch_size, 0, cur_offset);
+                vkCmdDraw(_render_commands.back(), pc.vertex_count_per_line, as<uint32_t>(cur_batch_size), 0, as<uint32_t>(cur_offset));
                 break;
             }
             case structures::parallel_coordinates_renderer::render_type::large_vis_lines:{
@@ -402,15 +403,15 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     push_constants_large_vis pc{};
                     pc.attribute_info_address = util::vk::get_buffer_address(attribute_infos_gpu) + ds_attribute_info_offsets[ds.id];
                     if(info.workbench.setting.read().render_splines){
-                        hist_indices = {indices[std::max<int>(i - 1, size_t(0))], indices[i], indices[i + 1], indices[std::min(i + 2, indices.size() - 1)]};
+                        hist_indices = {indices[std::max(i - 1, size_t(0))], indices[i], indices[i + 1], indices[std::min(i + 2, indices.size() - 1)]};
                         attribute_bounds = {active_ordered_attributes[std::max(int(i) - 1, 0)].get().bounds->read(), active_ordered_attributes[i].get().bounds->read(), active_ordered_attributes[i + 1].get().bounds->read(), active_ordered_attributes[std::min(i + 2, indices.size() - 1)].get().bounds->read()};
                         std::vector<uint32_t> ordering(hist_indices.size());
                         std::iota(ordering.begin(), ordering.end(), 0);
                         std::sort(ordering.begin(), ordering.end(), [&](uint32_t a, uint32_t b){return hist_indices[a] < hist_indices[b];});
-                        pc.a_axis = i - 1 + ordering[0];
-                        pc.b_axis = i - 1 + ordering[1];
-                        pc.c_axis = i - 1 + ordering[2];
-                        pc.d_axis = i - 1 + ordering[3];
+                        pc.a_axis = as<int>(i - 1 + ordering[0]);
+                        pc.b_axis = as<int>(i - 1 + ordering[1]);
+                        pc.c_axis = as<int>(i - 1 + ordering[2]);
+                        pc.d_axis = as<int>(i - 1 + ordering[3]);
                         pc.a_size = bin_sizes[ordering[0]];
                         pc.b_size = bin_sizes[ordering[1]];
                         pc.c_size = bin_sizes[ordering[2]];
@@ -420,8 +421,8 @@ void parallel_coordinates_renderer::render(const render_info& info){
                     else{
                         hist_indices = {indices[i], indices[i + 1]};
                         attribute_bounds = {active_ordered_attributes[i].get().bounds->read(), active_ordered_attributes[i + 1].get().bounds->read()};
-                        pc.a_axis = indices[i] < indices[i + 1] ? i + 1 : i;
-                        pc.b_axis = indices[i] < indices[i + 1] ? i : i + 1;
+                        pc.a_axis = as<int>(indices[i] < indices[i + 1] ? i + 1 : i);
+                        pc.b_axis = as<int>(indices[i] < indices[i + 1] ? i : i + 1);
                         pc.a_size = bin_sizes[0];
                         pc.b_size = bin_sizes[1];
                         pc.line_verts = 2;
@@ -447,7 +448,7 @@ void parallel_coordinates_renderer::render(const render_info& info){
                         pc.ordering_address = util::vk::get_buffer_address(dl.drawlist_read().priority_indices.at(id));
                     pc.color = dl.appearance->read().color;
                     vkCmdPushConstants(_render_commands.back(), pipeline_info.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-                    vkCmdDraw(_render_commands.back(), lines_amt * (pc.line_verts - 1) * 2, 1, 0, 0);
+                    vkCmdDraw(_render_commands.back(), as<uint32_t>(lines_amt) * (pc.line_verts - 1) * 2, 1, 0, 0);
                 }
                 break;
             }

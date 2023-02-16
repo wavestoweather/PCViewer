@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cassert>
 #include <functional>
+#include <as_cast.hpp>
 
 #define PREFETCH 0
 #if PREFETCH
@@ -179,11 +180,11 @@ return_t<iter> sort(iter begin, iter end, iter tmp_begin, transformer_t t = {}){
 	if(all_one_bin)
 		return {begin, end};
 
-	int start_pass = std::find(sorted.begin(), sorted.end(), false) - sorted.begin();
-	int last_pass = (sorted.rend() - std::find(sorted.rbegin(), sorted.rend(), false)) - 1;
+	int start_pass = as<int>(std::find(sorted.begin(), sorted.end(), false) - sorted.begin());
+	int last_pass = as<int>((sorted.rend() - std::find(sorted.rbegin(), sorted.rend(), false)) - 1);
 	assert(start_pass <= last_pass);
 
-	// check for single sort pass -> instantly safe the orignial numbers sorted and return sorted array
+	// check for single sort pass -> instantly safe the original numbers sorted and return sorted array
 	if(start_pass == last_pass){
 		auto j = tmp_begin;
 		for(iter i = begin; i != end; ++i){

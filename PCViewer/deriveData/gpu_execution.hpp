@@ -64,6 +64,7 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
         dimension_sizes.emplace_back();
         std::from_chars(size.data(), size.data() + size.size(), dimension_sizes.back());
     }
+    dimension_info = dimension_info.substr(0, dimension_info.find('{'));
     auto tmp = dimension_info | util::slice('[');
     for(auto dimension_indices: util::subrange(tmp.begin() + 4, tmp.end())){
         dimension_indices_v.emplace_back();
@@ -144,10 +145,11 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
     };
     auto create_pipeline = [](const std::string& code, size_t thread_amt){
         if(logger.logging_level >= logging::level::l_5){
+            std::string_view c = std::string_view(code).substr(code.find('\n') + 1);
             std::stringstream formatted_code;
             int cur_indent{};
             int line_number{};
-            for(std::string_view line: code | util::slice('\n')){
+            for(std::string_view line: c | util::slice('\n')){
                 size_t trim_pos =  line.find_first_not_of(" ");
                 if(trim_pos != std::string_view::npos) line = line.substr(trim_pos);
                 formatted_code << line_number++ << ':';
@@ -194,7 +196,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         }
         const bool same_before = data_state.all_same_data_layout;
         if(dim_indices.size())
-            for(uint32_t i: util::i_range(dim_indices.size() - 1))
+            for(size_t i: util::i_range(dim_indices.size() - 1))
                 data_state.all_same_data_layout &= dim_indices[i] == dim_indices[i + 1] || dim_indices[i].empty() || dim_indices[i + 1].empty();
         assert(!same_before || same_before == data_state.all_same_data_layout);
         assert(operation == op_codes::pipeline_barrier || data_state.cur_dimension_sizes.empty() || data_state.cur_dimension_sizes == dim_sizes);
@@ -232,9 +234,11 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                     if(gl_GlobalInvocationID.x >= )" << calc_thread_amt(data_state) << ") return;\n";
         }
 
-        crude_json::value additional_data{};
-        if(line.find('{') != std::string_view::npos)
-            additional_data = crude_json::value::parse(std::string(line.substr(line.find('{'))));
+        crude_json::value additional_data{}; auto start = line.find('{');
+        if(start != std::string_view::npos){
+            auto end = line.find_last_of("}");
+            additional_data = crude_json::value::parse(std::string(line.substr(start, end - start - 1)));
+        }
 
         // instruction decoding
         switch(operation){

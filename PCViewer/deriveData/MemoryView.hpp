@@ -178,7 +178,7 @@ private:
             for(int i = d + 1; i < columnDimensionIndices.size(); ++i){
                 factor *= dimensionSizes[columnDimensionIndices[i]];
             }
-            columnIndex += factor * dimensionIndices[columnDimensionIndices[d]];
+            columnIndex += as<uint32_t>(factor * dimensionIndices[columnDimensionIndices[d]]);
         }
         return columnIndex;
     }

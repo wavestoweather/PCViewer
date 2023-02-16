@@ -447,7 +447,7 @@ public:
 class Product: public Node, public VariableInput, public Creatable<Sum>{
 public:
     Product(): 
-        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Sum"),
+        Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Product"),
         VariableInput(false, 1)
     {
         input_elements[input_input_id] = crude_json::array{1., 1.};

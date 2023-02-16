@@ -121,9 +121,9 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     app_info.pApplicationName = info.application_name.data();
 
     VkInstanceCreateInfo create_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-    create_info.enabledExtensionCount = info.enabled_instance_extensions.size();
+    create_info.enabledExtensionCount = as<uint32_t>(info.enabled_instance_extensions.size());
     create_info.ppEnabledExtensionNames = info.enabled_instance_extensions.data();
-    create_info.enabledLayerCount = info.enabled_instance_layers.size();
+    create_info.enabledLayerCount = as<uint32_t>(info.enabled_instance_layers.size());
     create_info.ppEnabledLayerNames = info.enabled_instance_layers.data();
     create_info.pApplicationInfo = &app_info;
 
@@ -269,7 +269,7 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     std::vector<uint32_t> distinct_families_v(distinct_queue_families.begin(), distinct_queue_families.end());
     std::vector<VkDeviceQueueCreateInfo> queue_info(distinct_queue_families.size());
     const float queue_priority[] = { 1.0f };
-    for(int i: util::size_range(distinct_families_v)){
+    for(size_t i: util::size_range(distinct_families_v)){
         queue_info[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queue_info[i].queueFamilyIndex = distinct_families_v[i];
         queue_info[i].queueCount = 1;
@@ -279,9 +279,9 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     VkDeviceCreateInfo device_create_info{};
     device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_create_info.pNext = &available_device_features.feature;
-    device_create_info.queueCreateInfoCount = queue_info.size();
+    device_create_info.queueCreateInfoCount = as<uint32_t>(queue_info.size());
     device_create_info.pQueueCreateInfos = queue_info.data();
-    device_create_info.enabledExtensionCount = info.enabled_device_extensions.size();
+    device_create_info.enabledExtensionCount = as<uint32_t>(info.enabled_device_extensions.size());
     device_create_info.ppEnabledExtensionNames = info.enabled_device_extensions.data();
     res = vkCreateDevice(physical_device, &device_create_info, allocation_callbacks, &device);
     util::check_vk_result(res);
@@ -587,7 +587,7 @@ void stager::_task_thread_function(){
         if(data_size > buffer_size / 2){
             // get max number of rows
             uint32_t row_size = cur.image_extent.width * cur.bytes_per_pixel;
-            uint32_t max_rows = buffer_size / 2 / row_size;
+            uint32_t max_rows = as<uint32_t>(buffer_size / 2 / row_size);
             upload_size = max_rows * row_size;
         }
         for(structures::min_max<size_t> cur_span{0, upload_size}; cur_span.min < data_size && !_thread_finish; cur_span.min = cur_span.max, cur_span.max += upload_size, _fence_index = (++_fence_index) % _task_fences.size()){
@@ -614,10 +614,10 @@ void stager::_task_thread_function(){
             image_copy.bufferOffset = _fence_index * (buffer_size / 2);
             image_copy.imageSubresource = cur.subresource_layers;
             image_copy.imageOffset = cur.image_offset;
-            image_copy.imageOffset.z += cur_span.min / cur.image_extent.width / cur.image_extent.height / cur.bytes_per_pixel;
+            image_copy.imageOffset.z += as<uint32_t>(cur_span.min / cur.image_extent.width / cur.image_extent.height / cur.bytes_per_pixel);
             image_copy.imageOffset.y += cur_span.min * cur.bytes_per_pixel % (cur.image_extent.width * cur.image_extent.height) / cur.image_extent.width;
             image_copy.imageExtent = cur.image_extent;
-            image_copy.imageExtent.height = copy_size / cur.image_extent.width / cur.bytes_per_pixel;   // TODO fix for 3d images, missing division by depth i think
+            image_copy.imageExtent.height = as<uint32_t>(copy_size / cur.image_extent.width / cur.bytes_per_pixel);   // TODO fix for 3d images, missing division by depth i think
             image_copy.imageExtent.depth = 1;
 
             if(cur.transfer_dir == transfer_direction::upload){
@@ -751,7 +751,7 @@ void file_loader::_task_thread_function(){
         // loading the data
         c_file file(cur->src, "rb");
         if(cur->src_offset)
-            file.seek(cur->src_offset);
+            file.seek(as<long>(cur->src_offset));
         auto read_bytes = file.read(cur->dst);
         if(read_bytes != cur->dst.byte_size())
             ::logger << logging::warning_prefix << " file_loader::_task_thread_function() Not all bytes for loading task were loaded. Loaded " << float(read_bytes) / (1<<20) << "MBytes from " << float(cur->dst.byte_size()) / (1<<20) << "MBytes requested." << logging::endl;
@@ -847,7 +847,7 @@ void histogram_counter::_task_thread_function(){
             distance_info.data_header_address = util::vk::get_buffer_address(dl.dataset_read().gpu_data.header);
             distance_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
             distance_info.distances_address = util::vk::get_buffer_address(dl.priority_colors_gpu);
-            distance_info.priority_attribute = util::memory_view<const attribute>(ds.attributes).index_of([](const auto& a){return a.id == globals::priority_center_attribute_id;});
+            distance_info.priority_attribute = as<uint32_t>(util::memory_view<const attribute>(ds.attributes).index_of([](const auto& a){return a.id == globals::priority_center_attribute_id;}));
             distance_info.priority_center = globals::priority_center_vealue;
             distance_info.priority_distance = globals::priority_center_distance;
             pipelines::distance_calculator::instance().calculate(distance_info);
@@ -1047,7 +1047,7 @@ void priority_sorter::_task_thread_function(){
             const auto& ds = dl.dataset_read();
             const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
             const auto& dl_read = globals::drawlists.read().at(cur->dl_id).read();
-            const uint32_t priority_attriubute_index = util::memory_view<const attribute>(ds.attributes).index_of([](const attribute& a){return a.id == globals::priority_center_attribute_id;});
+            const uint32_t priority_attriubute_index = as<uint32_t>(util::memory_view<const attribute>(ds.attributes).index_of([](const attribute& a){return a.id == globals::priority_center_attribute_id;}));
             std::vector<uint8_t> color_index(tl.data_size);
             if(tl.flags.identity_indices){
                 for(size_t i: util::size_range(color_index))

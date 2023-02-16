@@ -4,6 +4,7 @@
 #include <radix.hpp>
 #include <memory_view.hpp>
 #include <limits>
+#include <as_cast.hpp>
 #include "../deriveData/MemoryView.hpp"
 
 namespace structures{
@@ -98,13 +99,13 @@ protected:
     double square_distance(size_t a, size_t b) const {
         double d{};
         if(same_layout){
-            for(int i: util::size_range(points)){
+            for(size_t i: util::size_range(points)){
                 float v = points[i].cols[0][a] - points[i].cols[0][b];
                 d += v * v;
             } 
         }
         else{
-            for(int i: util::size_range(points)){
+            for(size_t i: util::size_range(points)){
                 float v = points[i](a, 0) - points[i](b, 0);
                 d += v * v;
             }
@@ -121,7 +122,7 @@ protected:
 
         float d, dx, dx2;
 
-        d = square_distance(curNode.dataIndex, p);
+        d = as<float>(square_distance(curNode.dataIndex, p));
         if(same_layout)
             dx = points[level].cols[0][curNode.dataIndex] - points[level].cols[0][p];
         else    
@@ -160,7 +161,7 @@ protected:
             return {0, std::numeric_limits<float>::max()};
         const auto& cur_node = nodes[node];
         const auto cur_node_data_index = cur_node.dataIndex;
-        float dist = square_distance(cur_node_data_index, p);
+        float dist = as<float>(square_distance(cur_node_data_index, p));
         size_t best;
         float best_dist;
         if(points[level].cols[0][p] < points[level].cols[0][cur_node_data_index])
