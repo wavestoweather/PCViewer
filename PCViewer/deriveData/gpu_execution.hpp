@@ -85,9 +85,10 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
 // op_load a 0
 // op_vec_iota 0
 // op_store 0 b
-// where a and b are global addresses, and 0 is the index into the local storage
+// where a and b are global addresses, and 0 is the index in the local storage
 inline std::string optimize_operations(const std::string& input){
     std::stringstream result_stream;
+    std::vector<uint64_t> local_storage_addresses;
     for(std::string_view line: input | util::slice('\n')){
         const auto [input_indices, output_indices] = extract_input_output_indices(line);
         auto slice = (line | util::slice(' ')).begin();
@@ -248,7 +249,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
 
             for(auto&& [input_index, i]: util::enumerate(input_indices))
                 if(std::holds_alternative<size_t>(input_index))
-                    body << "vec array"<< i <<" = vec(" << std::get<size_t>(input_index) << "ul);";
+                    body << "vec array"<< i <<" = vec(" << std::get<size_t>(input_index) << "ul);\n";
             if(data_state.all_same_data_layout){
                 for(auto&& [out_index, i]: util::enumerate(output_indices)){
                     if(std::holds_alternative<float>(input_indices[i]))

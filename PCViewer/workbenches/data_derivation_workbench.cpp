@@ -13,6 +13,7 @@
 #include <vma_initializers.hpp>
 #include <regex>
 #include <stager.hpp>
+#include <stopwatch.hpp>
 
 namespace workbenches{
 namespace nodes = ax::NodeEditor;
@@ -80,7 +81,7 @@ void data_derivation_workbench::show(){
     nodes::Begin("Derivation workbench");
 
     auto&           editor_style = nodes::GetStyle();
-    const ImVec4    header_color{.1,.1,.1,1};
+    const ImVec4    header_color{.1f,.1f,.1f,1.f};
     const float     pin_icon_size = 15;
 
     std::vector<std::string_view> dls, tls;
@@ -270,7 +271,7 @@ void data_derivation_workbench::show(){
         ImGui::Spring(1, 0);
 
         // outputs
-        for(int i: util::size_range(node->outputTypes)){
+        for(size_t i: util::size_range(node->outputTypes)){
             builder.Output(node_pins.outputIds[i]);
             auto alpha = ImGui::GetStyle().Alpha;
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
@@ -313,7 +314,7 @@ void data_derivation_workbench::show(){
             if(nodes::QueryNewLink(&a, &b)){
                 if(a && b){
                     auto& node_a_inputs = nodes[pin_to_nodes[a.Get()]].inputIds;
-                    bool change = std::count_if(node_a_inputs.begin(), node_a_inputs.end(), [&a](int i){return i == a.Get();}) > 0;
+                    bool change = std::count_if(node_a_inputs.begin(), node_a_inputs.end(), [&a](auto i){return i == a.Get();}) > 0;
                     if(change)
                         std::swap(a, b);
                     std::string main_string(main_execution_graph_id);
@@ -325,7 +326,7 @@ void data_derivation_workbench::show(){
                     connection.nodeAAttribute = std::find(nodeAOutput.begin(), nodeAOutput.end(), a.Get()) - nodeAOutput.begin();
                     connection.nodeBAttribute = std::find(nodeBInput.begin(), nodeBInput.end(), b.Get()) - nodeBInput.begin();
 
-                    bool wrongType = connection.nodeAAttribute < nodeAOutput.size() && connection.nodeBAttribute < nodeBInput.size() && typeid(*nodes[pin_to_nodes[a.Get()]].node->outputTypes[connection.nodeAAttribute]) != typeid(*nodes[pin_to_nodes[b.Get()]].node->inputTypes[connection.nodeBAttribute]);
+                    bool wrongType = connection.nodeAAttribute < as<int64_t>(nodeAOutput.size()) && connection.nodeBAttribute < as<int64_t>(nodeBInput.size()) && typeid(*nodes[pin_to_nodes[a.Get()]].node->outputTypes[connection.nodeAAttribute]) != typeid(*nodes[pin_to_nodes[b.Get()]].node->inputTypes[connection.nodeBAttribute]);
 
                     bool inputToOutput = _is_input_pin(a.Get()) ^ _is_input_pin(b.Get());
 
@@ -418,8 +419,8 @@ void data_derivation_workbench::show(){
             Link::Connection connection{};
             connection.nodeAId = _execution_graphs[main_string]->pinToNodes[_new_link_pin_id];
             auto& node_a_output = nodes[pin_to_nodes[_new_link_pin_id]].outputIds;
-            connection.nodeAAttribute = std::find_if(node_a_output.begin(), node_a_output.end(), [&](int i){return i == _new_link_pin_id;}) - node_a_output.begin();
-            if(connection.nodeAAttribute < node_a_output.size())
+            connection.nodeAAttribute = std::find_if(node_a_output.begin(), node_a_output.end(), [&](auto i){return i == _new_link_pin_id;}) - node_a_output.begin();
+            if(connection.nodeAAttribute < as<int64_t>(node_a_output.size()))
                 prev_type = nodes[connection.nodeAId].node->outputTypes[connection.nodeAAttribute].get();
         }
 
@@ -472,10 +473,10 @@ std::set<int64_t> data_derivation_workbench::_get_active_links_recursive(int64_t
 {
     std::set<int64_t> output;
     auto& [nodes, pin_to_nodes, links, link_to_connection, pin_to_links] = *_execution_graphs[std::string(main_execution_graph_id)];
-    for(int i: nodes[node].inputIds){
+    for(auto i: nodes[node].inputIds){
         if(pin_to_links.count(i) && pin_to_links[i].size()){
             output.insert(pin_to_links[i][0]);    // there can only be a single input linked
-            long prefNode = link_to_connection[pin_to_links[i][0]].nodeAId;
+            auto prefNode = link_to_connection[pin_to_links[i][0]].nodeAId;
             auto prefSet = _get_active_links_recursive(prefNode);
             output.insert(prefSet.begin(), prefSet.end());
         }
@@ -491,8 +492,8 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     for(int i: irange(nodes[node].inputIds)){
         if(pin_to_links.count(nodes[node].inputIds[i]) == 0 || pin_to_links[nodes[node].inputIds[i]].empty())   // pin not connected, use inserted value
             continue;
-        long linkId = pin_to_links[nodes[node].inputIds[i]][0];
-        long prevNodeId = link_to_connection[linkId].nodeAId;
+        auto linkId = pin_to_links[nodes[node].inputIds[i]][0];
+        auto prevNodeId = link_to_connection[linkId].nodeAId;
         if(node_infos.count(prevNodeId) == 0)
             _build_cache_recursive(prevNodeId, data);
     }
@@ -500,19 +501,19 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     // merging the data views for data processing
     // input data
     deriveData::float_column_views inputData;
-    long inputDataSize{-1};
+    int64_t inputDataSize{-1};
     bool equalDataLayout = true;
     deriveData::column_memory_view<float> curDataLayout{};
     deriveData::column_memory_view<float> outputLayout{};
     std::vector<int> inplaceIndices;
-    for(long i: irange(nodes[node].inputIds)){
+    for(auto i: irange(nodes[node].inputIds)){
         if(pin_to_links.count(nodes[node].inputIds[i]) == 0 || pin_to_links[nodes[node].inputIds[i]].empty()){   // pin not connected, use inserted value
             inputData.push_back(nodes[node].node->inputTypes[i]->data());
         }
         else{   // pin connected
-            long linkId = pin_to_links[nodes[node].inputIds[i]][0];
-            long prevNodeId = link_to_connection[linkId].nodeAId;
-            long prevNodeOutInd = link_to_connection[linkId].nodeAAttribute;
+            auto linkId = pin_to_links[nodes[node].inputIds[i]][0];
+            auto prevNodeId = link_to_connection[linkId].nodeAId;
+            auto prevNodeOutInd = link_to_connection[linkId].nodeAAttribute;
             // add input data and check for integrity
             inputData.push_back(node_infos[prevNodeId].output_views[prevNodeOutInd]);
             if(inputDataSize > 1 && inputDataSize != inputData.back().size())
@@ -533,7 +534,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
             if(!outputLayout || inputData.back().dimensionSizes.size() > outputLayout.dimensionSizes.size())
                 outputLayout = inputData.back();
         }
-        inputDataSize = std::max<long>(inputDataSize, inputData.back().size());
+        inputDataSize = std::max(inputDataSize, as<int64_t>(inputData.back().size()));
     }
     assert(inputDataSize != -1 || nodes[node].inputIds.empty());
     // handling vector creation nodes
@@ -552,7 +553,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
                 auto& dl = dl_en->get().second.ref_no_track();
                 // downloading the activation into the activation bitset and adding the view to the bitset as well as the indices to the input views
                 util::drawlist::download_activation(dl);
-                create_vector_sizes.emplace_back(std::make_unique<uint32_t>(dl.const_templatelist().data_size));
+                create_vector_sizes.emplace_back(std::make_unique<uint32_t>(as<uint32_t>(dl.const_templatelist().data_size)));
                 deriveData::column_memory_view<float> view;
                 view.dimensionSizes = std::visit([](auto&& d){return deriveData::memory_view<uint32_t>(const_cast<std::vector<uint32_t>&>(d.dimension_sizes));}, dl.dataset_read().cpu_data.read());
                 view.columnDimensionIndices = deriveData::memory_view<uint32_t>(iota_vec.data(), std::visit([](auto&& d){return d.dimension_sizes.size();}, dl.dataset_read().cpu_data.read()));
@@ -581,9 +582,9 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
             outputLayout.columnDimensionIndices = inputData.back().columnDimensionIndices;
         }
         else{
-            inputDataSize = inputData[0](0, 0);
+            inputDataSize = as<int64_t>(inputData[0](0, 0));
             static uint32_t dimsIndex{0};
-            create_vector_sizes.emplace_back(std::make_unique<uint32_t>(inputDataSize));
+            create_vector_sizes.emplace_back(std::make_unique<uint32_t>(as<uint32_t>(inputDataSize)));
             outputLayout.dimensionSizes = deriveData::memory_view<uint32_t>(*create_vector_sizes.back());
             outputLayout.columnDimensionIndices = deriveData::memory_view<uint32_t>(dimsIndex);
         }
@@ -635,10 +636,10 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
             }
         }
         if(memoryViewPool.size() < nodes[node].node->outputChannels()){
-            int storageSize = data_storage.size();
-            int missingBuffer = nodes[node].node->outputChannels() - memoryViewPool.size();
+            int storageSize = as<int>(data_storage.size());
+            int missingBuffer = as<int>(nodes[node].node->outputChannels() - memoryViewPool.size());
             data_storage.insert(data_storage.end(), missingBuffer, std::vector<float>(outputLayout.columnSize()));
-            for(int i: irange(storageSize, data_storage.size()))
+            for(auto i: irange(storageSize, as<unsigned long>(data_storage.size())))
                 memoryViewPool.push_back(data_storage[i]);
         }
         for(int i: irange(nodes[node].outputIds)){
@@ -668,7 +669,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
     // saving the cache and setting up the counts for the current data
     node_infos[node].output_counts.resize(nodes[node].outputIds.size());
     for(int i: irange(nodes[node].outputIds)){
-        for(const long link: pin_to_links[nodes[node].outputIds[i]]){
+        for(const auto link: pin_to_links[nodes[node].outputIds[i]]){
             if(active_links.count(link) > 0)
                 ++node_infos[node].output_counts[i];
         }
@@ -745,7 +746,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
     auto& [nodes, pinToNodes, links, linkToConnection, pinToLinks] = *_execution_graphs[id_string];
 
     // check for output nodes
-    std::set<long> outputNodes{};
+    std::set<int64_t> outputNodes{};
     for(auto& [id, nodePins]: nodes){
         if(dynamic_cast<deriveData::Nodes::Output*>(nodePins.node.get()))
             outputNodes.insert(id);
@@ -762,6 +763,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         auto active_links = _get_active_links_recursive(node);
         data.active_links.insert(active_links.begin(), active_links.end());
     }
+    structures::stopwatch stopwatch; stopwatch.start();
     for(auto node: outputNodes)
         _build_cache_recursive(node, data);
 
@@ -822,6 +824,6 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
             logger << logging::info_prefix << " " << dynamic_cast<deriveData::Nodes::Serialization*>(node)->serialize(d) << logging::endl;
 
     // with the execution of all output nodes all changes are already applied
-    logger << logging::info_prefix << " data_derivation_workbench::_execute_graph() Amount of data allocations: " << data.data_storage.size() << logging::endl;
+    logger << logging::info_prefix << " data_derivation_workbench::_execute_graph() " << stopwatch.lap() <<"ms passed. Amount of data allocations: " << data.data_storage.size() << logging::endl;
 }
 }

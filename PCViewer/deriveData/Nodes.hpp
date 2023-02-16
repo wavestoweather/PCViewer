@@ -444,7 +444,7 @@ public:
     void pinRemoveAction(int i) override {input_elements[input_input_id].get<crude_json::array>().erase(input_elements[input_input_id].get<crude_json::array>().begin() + i);}
 };
 
-class Product: public Node, public VariableInput, public Creatable<Sum>{
+class Product: public Node, public VariableInput, public Creatable<Product>{
 public:
     Product(): 
         Node(createFilledVec<FloatType, Type>(2), {"", ""}, createFilledVec<FloatType, Type>(1), {""}, "Product"),
@@ -1175,10 +1175,10 @@ public:
         auto average_f = [](float a, size_t c){return double(a) / c;};
         // use stddev = sqrt(expectation(vals^2) - expectation(vals)^2))
         // calc expectation(vals) and copy to temporary array
-        applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return double(a) + b;}, average_f);
+        applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return as<float>(double(a) + b);}, average_f);
         std::vector<float> expect(output[0].cols[0].begin(), output[0].cols[0].end());
         // calc expectation(vals^2)
-        applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return a + double(b) * b;}, average_f);
+        applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return as<float>(a + double(b) * b);}, average_f);
         for(size_t i: util::size_range(output[0].cols[0]))
             output[0].cols[0][i] = std::sqrt(output[0].cols[0][i] - expect[i] * expect[i]);
     }
