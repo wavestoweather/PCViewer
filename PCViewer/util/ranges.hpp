@@ -338,8 +338,8 @@ public:
     constexpr index_of(const T& e): e(e) {}
     constexpr index_of(T&& e): _storage(std::move(e)), e(*_storage) {}
 };
-template<typename T>
-size_t operator|(const T& range, const index_of<T>& e){
+template<typename T, typename U>
+size_t operator|(const T& range, const index_of<U>& e){
     for(auto&& [el, i]: enumerate(range))
         if(e.e == el)
             return i;

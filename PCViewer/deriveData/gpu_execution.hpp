@@ -7,6 +7,7 @@
 #include <robin_hood.h>
 #include <variant>
 #include <fast_float.h>
+#include <ranges.hpp>
 #include "gpu_instructions.hpp"
 
 #define workgroup_size 128
@@ -66,7 +67,7 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
     }
     dimension_info = dimension_info.substr(0, dimension_info.find('{'));
     auto tmp = dimension_info | util::slice('[');
-    for(auto dimension_indices: util::subrange(tmp.begin() + 4, tmp.end())){
+    for(auto dimension_indices: util::subrange(tmp.begin() + 3, tmp.end())){
         dimension_indices_v.emplace_back();
         auto dim_inds = (dimension_indices | util::slice(']'))[0];
         for(auto ind: dim_inds | util::slice(',')){
@@ -75,6 +76,54 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
         }
     }
     return {std::move(dimension_sizes), std::move(dimension_indices_v)};
+}
+inline std::stringstream get_add_local_addresses(std::vector<std::variant<uint64_t, float>>& local_addresses, const std::vector<data_storage>& indices){
+    std::stringstream local_adds; local_adds << '[';
+    for(auto&& [in, last]: util::last_iter(indices)){
+        size_t storage_pos{util::n_pos};
+        if(std::holds_alternative<uint64_t>(in)) storage_pos = local_addresses | util::index_of(std::variant<uint64_t, float>(std::get<uint64_t>(in))); 
+        if(storage_pos == util::n_pos && std::holds_alternative<uint64_t>(in))
+            local_addresses.emplace_back(std::get<uint64_t>(in));
+        else if(storage_pos == util::n_pos)
+            local_addresses.emplace_back(std::get<float>(in));
+        if(storage_pos == util::n_pos) local_adds << 'l' << local_addresses.size() - 1;
+        else local_adds << 'l' << storage_pos;
+        if(!last) local_adds << ',';
+    }
+    local_adds << ']';
+    return local_adds;
+}
+inline void flush_locals(const std::vector<std::variant<uint64_t, float>>& local_storage_addresses, const std::vector<uint32_t>& dim_sizes, const std::vector<std::vector<uint32_t>>& local_storage_dim_indices, std::stringstream& result_stream){
+    std::stringstream storage_out_pos, internal_out_pos;
+    storage_out_pos << '['; internal_out_pos << "[";
+    for(auto&& [add, i]: util::enumerate(local_storage_addresses)){
+        if(std::holds_alternative<float>(add)) continue;
+        if(storage_out_pos.str().size() > 1) {storage_out_pos << ','; internal_out_pos << ',';}
+        storage_out_pos << 'g' << std::get<uint64_t>(add);
+        internal_out_pos << 'l' << i;
+    }
+    storage_out_pos << ']'; internal_out_pos << ']';
+    result_stream << op_codes::store << ' ' << internal_out_pos.str() << ' ' << storage_out_pos.str() << " ([";
+    for(auto&& [dim_size, last]: util::last_iter(dim_sizes)){
+        result_stream << dim_size;
+        if(!last) result_stream << ',';
+    }
+    result_stream << "] [";
+    bool first_print{};
+    for(const auto& dim_indices: local_storage_dim_indices){
+        if(dim_indices.empty()) continue;
+        if(!first_print) result_stream << ' ';
+        result_stream << '[';
+        for(auto&& [dim_ind, last]: util::last_iter(dim_indices)){
+            result_stream << dim_ind;
+            if(!last) result_stream << ',';
+        }
+        result_stream << ']';
+        first_print = false;
+    }
+    result_stream << "])\n";
+
+    result_stream << op_codes::pipeline_barrier << " [] [] ([])\n";
 }
 
 // adds all the load store operations in a possibly optimal manner
@@ -88,37 +137,68 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
 // where a and b are global addresses, and 0 is the index in the local storage
 inline std::string optimize_operations(const std::string& input){
     std::stringstream result_stream;
-    std::vector<uint64_t> local_storage_addresses;
+    std::vector<std::variant<uint64_t, float>> local_storage_addresses;                  // 0 indicates constant address which has no 
+    std::vector<std::vector<uint32_t>> local_storage_dim_indices;
+    std::vector<uint32_t> cur_dim_sizes;
+    std::vector<uint32_t> cur_dim_indices;
+    std::vector<uint32_t> merged_dims_storage;
+    std::string_view rest;
     for(std::string_view line: input | util::slice('\n')){
-        const auto [input_indices, output_indices] = extract_input_output_indices(line);
         auto slice = (line | util::slice(' ')).begin();
         std::string_view op_code = *slice++;
         std::string_view input = *slice++, output = *slice, rest = slice.get_rest();
-        std::stringstream internal_pos, internal_out_pos;
-        internal_pos << '[';
-        for(size_t i: util::size_range(input_indices)){
-            internal_pos << 'l' << i;
-            if(i != input_indices.size() - 1)
-                internal_pos << ',';
+        const auto [dim_sizes, dim_indices] = extract_input_output_dimensions(line);
+        const auto [input_indices, output_indices] = extract_input_output_indices(line);
+        for(const auto& dim_index: dim_indices){
+            if(dim_index.empty()) continue;
+            if(merged_dims_storage.empty()) merged_dims_storage = dim_index;
+            else if(merged_dims_storage != dim_index){merged_dims_storage = util::size_range(dim_sizes) | util::to<std::vector<uint32_t>>();}
         }
-        internal_pos << "]";
-        internal_out_pos << '[';
-        for(size_t i: util::size_range(output_indices)){
-            internal_out_pos << 'l' << i;
-            if(i != input_indices.size() - 1)
-                internal_out_pos << ',';
+        if(cur_dim_sizes.size() && (cur_dim_sizes != dim_sizes || cur_dim_indices != merged_dims_storage)){
+            // storing
+            flush_locals(local_storage_addresses, cur_dim_sizes, local_storage_dim_indices, result_stream);
+            local_storage_addresses.clear(); cur_dim_sizes.clear(); cur_dim_indices.clear();
         }
-        internal_out_pos << "]";
-        // load
-        result_stream << op_codes::load << ' ' << input << ' ' << internal_pos.str() << ' ' << rest << '\n';
+        cur_dim_sizes = dim_sizes;
+        cur_dim_indices = merged_dims_storage;
+
+        size_t prev_storage_size = local_storage_addresses.size();
+        auto input_local_addresses = get_add_local_addresses(local_storage_addresses, input_indices);
+        if(prev_storage_size < local_storage_addresses.size()){
+            // load missing values
+            result_stream << op_codes::load << " [";
+            for(size_t i: util::i_range(prev_storage_size, local_storage_addresses.size())){
+                if(std::holds_alternative<float>(local_storage_addresses[i])) result_stream << 'c' << std::get<float>(local_storage_addresses[i]);
+                else result_stream << 'g' << std::get<uint64_t>(local_storage_addresses[i]);
+            }
+            result_stream << "] [";
+            for(size_t i: util::i_range(prev_storage_size, local_storage_addresses.size())){
+                result_stream << 'l' << i;
+                if(i != local_storage_addresses.size() -  1) result_stream << ",";
+            }
+            result_stream << "] " << rest << '\n';
+        }
+        auto output_local_addresses = get_add_local_addresses(local_storage_addresses, output_indices);
+        if(local_storage_addresses.size() != local_storage_dim_indices.size()){
+            for(size_t i: util::i_range(local_storage_dim_indices.size(), local_storage_addresses.size())){
+                local_storage_dim_indices.emplace_back();
+                if(std::holds_alternative<float>(local_storage_addresses[i])) continue;
+                size_t ind = input_indices | util::index_of(data_storage(std::get<uint64_t>(local_storage_addresses[i])));
+                if(ind == util::n_pos)
+                    ind = input_indices.size() + (output_indices | util::index_of(data_storage(std::get<uint64_t>(local_storage_addresses[i]))));
+                assert(ind != util::n_pos);
+                local_storage_dim_indices.back() = dim_indices[ind];
+            }
+        }
 
         // main operation
-        result_stream << op_code << ' ' << internal_pos.str() << ' ' << internal_out_pos.str() << ' ' << rest << '\n';
-
-        // store operation
-        result_stream << op_codes::store << ' ' << internal_out_pos.str() << ' ' << output << ' ' << rest << '\n';
-        result_stream << op_codes::pipeline_barrier << " [] [] ([])\n";
+        result_stream << op_code << ' ' << input_local_addresses.str() << ' ' << output_local_addresses.str() << ' ' << rest << '\n';
     }
+    if(cur_dim_sizes.size())
+        flush_locals(local_storage_addresses, cur_dim_sizes, local_storage_dim_indices, result_stream);
+
+    if(logger.logging_level >= logging::level::l_5)
+        logger << logging::info_prefix << ' ' << result_stream.str();
     return result_stream.str();
 }
 
@@ -179,15 +259,15 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
     std::vector<pipeline_info>  pipelines;
     std::stringstream           header;
     std::stringstream           body;
-    size_t                      storage_size{};
+    uint32_t                    storage_size{};
     for(std::string_view line: instructions | util::slice('\n')){
         std::stringstream line_stream{std::string(line.substr(0, line.find(' ')))};
         op_codes operation;
         line_stream >> operation;
         const auto [dim_sizes, dim_indices] = extract_input_output_dimensions(line);
         const auto [input_indices, output_indices] = extract_input_output_indices(line);
-        storage_size = std::max(storage_size, input_indices.size());
-        storage_size = std::max(storage_size, output_indices.size());
+        for(auto in: input_indices) if(std::holds_alternative<uint32_t>(in)) storage_size = std::max(storage_size, std::get<uint32_t>(in)) + 1;
+        for(auto out: output_indices) if(std::holds_alternative<uint32_t>(out)) storage_size = std::max(storage_size, std::get<uint32_t>(out) + 1);
         // check dimension consistency
         for(const auto& i: dim_indices){
             for(uint32_t dim: i){

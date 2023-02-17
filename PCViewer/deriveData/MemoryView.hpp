@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <string_view>
+#include <as_cast.hpp>
 #include "../range.hpp"
 
 namespace deriveData{

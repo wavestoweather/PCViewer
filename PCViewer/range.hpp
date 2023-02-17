@@ -16,7 +16,7 @@ class irange {
 
     template<class T> 
     irange(const std::vector<T>& v):                            // direct conversion from vector to index iterable range
-    _begin(0), _end(unsigned long(v.size())), _step(1){};
+    _begin(0), _end((unsigned long)(v.size())), _step(1){};
 
    class iterator {
       friend class irange;
