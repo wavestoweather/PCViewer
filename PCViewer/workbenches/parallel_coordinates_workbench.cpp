@@ -1028,7 +1028,7 @@ void parallel_coordinates_workbench::render_plot()
         if(att_ref.bounds->changed)
             att_ref.bounds->changed = false;
     }
-    attribute_order_infos.changed = false;
+    //attribute_order_infos.changed = false;
     setting.changed = false;
     // signaling all registrators
     for(auto& [dl, registrators]: _registered_histograms){

@@ -145,6 +145,8 @@ void data_derivation_workbench::show(){
                         std::visit([i](auto&&  data){
                             data.columns.erase(data.columns.begin() + i);
                             data.column_dimensions.erase(data.column_dimensions.begin() + i);
+                            if(data.column_transforms.size())
+                                data.column_transforms.erase(data.column_transforms.begin() + i);
                             }, ds.cpu_data());
                     }
                     _execution_graphs[std::string(main_execution_graph_id)]->removePin(node_pins.inputIds[i], true);
