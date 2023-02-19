@@ -70,7 +70,8 @@ inline float unaryReductionFunction(const float_column_views& input, uint32_t co
 inline void applyUnaryReductionFunction(const float_column_views& input, float init_value, column_memory_view<float>& result, std::function<float(float, float)> combine_f, std::function<float(float, size_t)> finish_f = [](float a, size_t){return a;}){
     // init values
     struct per_group_data{float combine_val; size_t count;};
-    std::map<size_t, per_group_data> reduction_data;
+    //std::map<size_t, per_group_data> reduction_data;
+    robin_hood::unordered_map<size_t, per_group_data> reduction_data;
     if(input[1].equalDataLayout(input[0])){
         for(size_t i: util::size_range(input[1].cols[0])){
             size_t group_index = size_t(input[0].cols[0][i]);

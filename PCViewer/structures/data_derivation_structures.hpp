@@ -14,7 +14,8 @@ static const enum_names<execution> execution_names{
 };
 
 struct workbench_settings{
-    execution execution_backend{execution::Cpu};
+    execution   execution_backend{execution::Cpu};
+    float       spline_curviness{100.f};
 };
 }
 }

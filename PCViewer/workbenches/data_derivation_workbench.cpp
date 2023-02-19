@@ -79,6 +79,7 @@ void data_derivation_workbench::show(){
     }
     nodes::SetCurrentEditor(_editor_context);
     nodes::Begin("Derivation workbench");
+    nodes::PushStyleVar(ax::NodeEditor::StyleVar::StyleVar_LinkStrength, _settings.spline_curviness);
 
     auto&           editor_style = nodes::GetStyle();
     const ImVec4    header_color{.1f,.1f,.1f,1.f};
@@ -403,6 +404,7 @@ void data_derivation_workbench::show(){
         ImGui::Separator();
         if(ImGui::MenuItem("Delete"))
             nodes::DeleteLink(_context_link_id);
+        ImGui::DragFloat("Spline curviness", &_settings.spline_curviness, 0.f, 0.f, 1e6);
         ImGui::EndPopup();
     }
 
@@ -452,6 +454,7 @@ void data_derivation_workbench::show(){
     if(this_frame_create)
         _popup_pos = ImGui::GetMousePos();
 
+    nodes::PopStyleVar();
     nodes::End();
 
     ImGui::End();
