@@ -25,8 +25,8 @@ struct attribute{
     std::vector<std::string_view>   ordered_categories{};                   // ordered by mapped value
     bool operator==(const attribute& o) const {return id == o.id && bounds.read() == o.bounds.read();}
     attribute() = default;
-    attribute(const std::string& id, const std::string& display_name): id(id), display_name(display_name) {}
-    attribute(const std::string& id, const std::string& display_name, const change_tracker<min_max<float>>& bounds): id(id), display_name(display_name), bounds(bounds) {}
+    attribute(std::string_view id, std::string_view display_name): id(id), display_name(display_name) {}
+    attribute(std::string_view id, std::string_view display_name, const change_tracker<min_max<float>>& bounds): id(id), display_name(display_name), bounds(bounds) {}
     attribute(const attribute& o): id(o.id), display_name(o.display_name), bounds(o.bounds), categories(o.categories){ for(std::string_view cat: o.ordered_categories) ordered_categories.emplace_back(categories.find(std::string(cat))->first);}
     attribute& operator=(const attribute& o) {id = o.id; display_name = o.display_name; bounds = o.bounds; categories = o.categories; for(std::string_view cat: o.ordered_categories) ordered_categories.emplace_back(categories.find(std::string(cat))->first); return *this;}
 };

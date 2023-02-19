@@ -1086,8 +1086,7 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
         return;
 
     _update_attribute_order_infos();
-    
-    //_request_registered_histograms_update = true; should be obsolete
+    _update_registered_histograms();
 }
 
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){

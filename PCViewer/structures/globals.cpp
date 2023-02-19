@@ -49,6 +49,8 @@ structures::vk_context vk_context{};
 
 structures::datasets_t datasets{};
 std::set<std::string_view> datasets_to_delete{};
+structures::dataset_attributes_t dataset_attribute_creations{};
+structures::dataset_attributes_t dataset_attribute_deletions{};
 
 structures::drawlists_t         drawlists{};
 std::vector<std::string_view>   selected_drawlists{};

@@ -1089,24 +1089,9 @@ void check_datasets_to_open(){
                     if(logger.logging_level >= logging::level::l_4)
                         logger << logging::info_prefix << " Loaded dataset with size " << ds->second.read().data_size << logging::endl;
 
-                    // adding the attributes to the global attribute state
-                    for(const auto& attribute: ds->second.read().attributes){
-                        if(globals::attributes.read().count(attribute.id)){
-                            auto& gb_att = globals::attributes()[attribute.id]();
-                            gb_att.bounds().min = std::min(gb_att.bounds.read().min, attribute.bounds.read().min);
-                            gb_att.bounds().max = std::max(gb_att.bounds.read().max, attribute.bounds.read().max);
-                        }
-                        else{
-                            structures::tracked_global_attribute_t att(attribute, true, reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_attribute_imcolor().Value);
-                            if(att.read().bounds.read().min == att.read().bounds.read().max){
-                                float d = std::abs(att.read().bounds.read().min) * .01f + .1f;
-                                att().bounds().min -= d;
-                                att().bounds().max += d;
-                            }
-                            globals::attributes().insert({att.read().id, std::move(att)});
-                        }
-                        globals::attributes.ref_no_track()[attribute.id].ref_no_track().usage_count++;
-                    }
+                    // adding the attributes to the global attribute state(also updates the min and max values)
+                    for(const auto& attribute: ds->second.read().attributes) globals::dataset_attribute_creations.emplace_back(std::pair<std::string_view, std::string>{ds->first, attribute.id});
+                    check_dataset_attributes();
 
                     execute_laod_behaviour(ds->second);
                 }
@@ -1186,6 +1171,52 @@ void check_datasets_to_open(){
 }
 }
 
+void check_dataset_attributes(){
+    if(globals::dataset_attribute_creations.size()){
+        for(const auto& [ds_id, att]: globals::dataset_attribute_creations){
+            std::string_view att_id = att;
+            if(!globals::attributes.read().count(att_id)){
+                structures::tracked_global_attribute_t new_att(structures::attribute(att_id, att_id), true, reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_attribute_imcolor().Value);
+                globals::attributes().insert({new_att.read().id, std::move(new_att)});
+            }
+            globals::attributes.ref_no_track()[att_id].ref_no_track().usage_count++;
+
+            size_t att_ind = DATASET_READ(ds_id).attributes | index_of_if<const structures::attribute>([&att_id](auto&& a){return a.id == att_id;});
+            if(att_ind == n_pos){
+                auto& ds = DATASET_WRITE(ds_id);
+                att_ind = ds.attributes.size();
+                ds.attributes.emplace_back(structures::attribute(att, att));
+                ds.attributes.back().bounds().min = 0;
+                ds.attributes.back().bounds().max = 0;
+            }
+            auto& gb_att = ATTRIBUTE_WRITE(att_id);
+            const auto& attribute = DATASET_READ(ds_id).attributes[att_ind];
+            gb_att.bounds().min = std::min(gb_att.bounds.read().min, attribute.bounds.read().min);
+            gb_att.bounds().max = std::max(gb_att.bounds.read().max, attribute.bounds.read().max);
+            if(gb_att.bounds.read().min == gb_att.bounds.read().max){
+                float d = std::abs(gb_att.bounds.read().min) * .01f + .1f;
+                gb_att.bounds().min -= d;
+                gb_att.bounds().max += d;
+            }
+        }
+        globals::dataset_attribute_creations.clear();
+    }
+    if(globals::dataset_attribute_deletions.size()){
+        for(const auto& [ds_id, att]: globals::dataset_attribute_deletions){
+            std::string_view att_id = att;
+            --ATTRIBUTE_WRITE(att_id).usage_count;
+            if(ATTRIBUTE_READ(att_id).usage_count == 0)
+                globals::attributes().erase(att_id);
+            
+            auto& ds = DATASET_WRITE(ds_id);
+            size_t attribute_index = ds.attributes | util::index_of_if<structures::attribute>([&att_id](auto&& a){return a.id == att_id;});
+            assert(attribute_index != util::n_pos);
+            ds.attributes.erase(ds.attributes.begin() + attribute_index);
+        }
+        globals::dataset_attribute_deletions.clear();
+    }
+}
+
 void check_dataset_deletion(){
     if(globals::datasets_to_delete.size()){
         // signaling all dependant workbenches
@@ -1202,12 +1233,9 @@ void check_dataset_deletion(){
         // deleting the datasets
         bool prev_dataset_state = globals::datasets.changed;
         for(auto& ds: globals::datasets_to_delete){
-            // decrementing the global attribute usage count and deleting the attribute
-            for(const auto& att: globals::datasets.read().at(ds).read().attributes){
-                --globals::attributes()[att.id]().usage_count;
-                if(globals::attributes.read().at(att.id).read().usage_count == 0)
-                    globals::attributes().erase(att.id);
-            }
+            // deleting all global attributes
+            for(const auto& att: globals::datasets.read().at(ds).read().attributes) globals::dataset_attribute_deletions.emplace_back(std::pair<std::string_view, std::string>{ds, att.id});
+            check_dataset_attributes();
 
             // delete global brush infos offset to avoid empty string views
             globals::global_brushes.dataset_brush_info_offsets.erase(ds);

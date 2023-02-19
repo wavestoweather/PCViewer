@@ -77,6 +77,9 @@ inline void fill_query_attributes(){
 
 void check_datasets_to_open();
 
+// does not create or destroy data arrays. Only adds attributes in the dataset as well as check for global registration
+void check_dataset_attributes();
+
 void check_dataset_deletion();
 
 void check_dataset_gpu_stream();

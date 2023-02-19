@@ -408,8 +408,7 @@ void violin_attribute_workbench::signal_dataset_update(const util::memory_view<s
         return;
 
     _update_attribute_order_infos();
-
-    //_update_registered_histograms();
+    _update_registered_histograms();
 }
 
 void violin_attribute_workbench::add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){ 

@@ -229,7 +229,8 @@ void scatterplot_workbench::_update_attribute_order_infos(){
         std::string_view cur_att = attribute_order_infos.read()[i].attribute_id;
         if(!new_attributes.contains(cur_att)){
             if(!attribute_order_infos.read()[i].linked_with_attribute)
-                bool todo = true;
+                _local_attribute_storage.erase(cur_att);
+            
             attribute_order_infos().erase(attribute_order_infos.read().begin() + i);
         }
     }
@@ -242,6 +243,15 @@ void scatterplot_workbench::_update_attribute_order_infos(){
     for(auto& e: _matrix_scatterplots){
         if(!new_attributes.contains(e.atts.a) || !new_attributes.contains(e.atts.b))
             e = {};
+    }
+
+    // copying global attribute settings and disconnecting them from global state
+    for(auto& att: attribute_order_infos()){
+        if(!att.linked_with_attribute) continue;
+        att.linked_with_attribute = false;
+        _local_attribute_storage.emplace(att.attribute_id, std::make_unique<structures::scatterplot_wb::local_attribute_storage>(structures::scatterplot_wb::local_attribute_storage{att.active->read(), att.bounds->read()}));
+        att.active = _local_attribute_storage[att.attribute_id]->active;
+        att.bounds = _local_attribute_storage[att.attribute_id]->bounds;
     }
 }
 
@@ -850,13 +860,6 @@ void scatterplot_workbench::add_drawlists(const util::memory_view<std::string_vi
         drawlist_infos.write().emplace_back(drawlist_info{dl_id, true, dl.appearance_drawlist});
     }
     _update_attribute_order_infos();
-    // copying global attribute settings and disconnecting them from global state
-    for(auto& att: attribute_order_infos()){
-        att.linked_with_attribute = false;
-        _local_attribute_storage.emplace(att.attribute_id, std::make_unique<structures::scatterplot_wb::local_attribute_storage>(structures::scatterplot_wb::local_attribute_storage{att.active->read(), att.bounds->read()}));
-        att.active = _local_attribute_storage[att.attribute_id]->active;
-        att.bounds = _local_attribute_storage[att.attribute_id]->bounds;
-    }
 
     // checking histogram (large vis/axis histograms) rendering or standard rendering
     //_update_registered_histograms();
@@ -875,6 +878,8 @@ void scatterplot_workbench::signal_dataset_update(const util::memory_view<std::s
     
     attribute_order_infos();
     _update_attribute_order_infos();
+    _update_plot_list();
+    _update_registered_histograms();
 }
 
 void scatterplot_workbench::remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const structures::gpu_sync_info& sync_info){

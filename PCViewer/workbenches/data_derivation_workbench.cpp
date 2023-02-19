@@ -140,14 +140,14 @@ void data_derivation_workbench::show(){
                 if(i > variable_input->minNodes && ImGui::Button(("X##p" + std::to_string(node_pins.inputIds[i])).c_str())){
                     variable_input->pinRemoveAction(i);
                     if(deriveData::Nodes::DatasetOutput* ds_output = dynamic_cast<deriveData::Nodes::DatasetOutput*>(node.get())){
-                        auto& ds = globals::datasets()[ds_output->datasetId]();
-                        ds.attributes.erase(ds.attributes.begin() + i);
+                        auto& ds = globals::datasets.ref_no_track()[ds_output->datasetId].ref_no_track();
                         std::visit([i](auto&&  data){
                             data.columns.erase(data.columns.begin() + i);
                             data.column_dimensions.erase(data.column_dimensions.begin() + i);
                             if(data.column_transforms.size())
                                 data.column_transforms.erase(data.column_transforms.begin() + i);
                             }, ds.cpu_data());
+                        globals::dataset_attribute_deletions.emplace_back(std::pair<std::string_view, std::string>{ds.id, ds.attributes[i].id});
                     }
                     _execution_graphs[std::string(main_execution_graph_id)]->removePin(node_pins.inputIds[i], true);
                     ImGui::PopStyleVar();
@@ -201,22 +201,14 @@ void data_derivation_workbench::show(){
                     // checking if the name is available
                     while(globals::attributes.read().count(pin_name) > 0)
                         pin_name += " ";
-                    auto& ds = globals::datasets()[ds_output->datasetId]();
-                    ds.attributes.push_back(structures::attribute{pin_name, pin_name, structures::change_tracker<structures::min_max<float>>{structures::min_max<float>{-.1f, .1f}}});
-                    ds.attributes.back().bounds.changed = true;
+                    auto& ds = globals::datasets.ref_no_track()[ds_output->datasetId]();
                     std::visit([](auto&& data){
                         data.columns.emplace_back(1, 0.f);    // emplace vector with 1 element which is 0
                         data.column_dimensions.emplace_back();// emplace empty (signals constant)
                         if(data.column_transforms.size())
                             data.column_transforms.emplace_back(structures::scale_offset<float>{1.f, 0.f});
                     }, ds.cpu_data());
-                    structures::tracked_global_attribute_t new_att{};
-                    new_att().bounds = ds.attributes.back().bounds.read();
-                    new_att().color = reinterpret_cast<workbenches::load_colors_workbench&>(globals::workbench_index.at(globals::load_color_wb_id)).get_next_attribute_imcolor().Value;
-                    new_att().id = pin_name;
-                    new_att().display_name = pin_name;
-                    new_att().usage_count = 1;
-                    globals::attributes().insert({new_att.read().id, std::move(new_att)});
+                    globals::dataset_attribute_creations.emplace_back(std::pair<std::string_view, std::string>{ds.id, pin_name});
                 }
                 _execution_graphs[std::string(main_execution_graph_id)]->addPin(_cur_id, id, pin_name, deriveData::FloatType::create(), true);
             }

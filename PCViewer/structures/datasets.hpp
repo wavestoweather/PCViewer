@@ -89,14 +89,20 @@ struct dataset{
 
 using dataset_t = unique_tracker<dataset>;
 using datasets_t = change_tracker<std::map<std::string_view, dataset_t>>;
+using dataset_attributes_t = std::vector<std::pair<std::string_view, std::string>>;
 }
 
 namespace globals{
 extern structures::datasets_t datasets;
 extern std::set<std::string_view> datasets_to_delete;   // is emptied in the main thread, only add delete tasks
+extern structures::dataset_attributes_t dataset_attribute_creations;
+extern structures::dataset_attributes_t dataset_attribute_deletions;
 }
 
 #define DECL_DATASET_READ(ds_id)     const structures::dataset&      dataset_read()  const {return globals::datasets.read().at(ds_id).read();}
 #define DECL_DATASET_WRITE(ds_id)          structures::dataset&      dataset_write() const {return globals::datasets()[ds_id]();}
 #define DECL_DATASET_NO_TRACK(ds_id)       structures::dataset&      dataset_no_track() const {return globals::datasets.ref_no_track()[ds_id].ref_no_track();}
 #define DECL_TEMPLATELIST_READ(tl_id)const structures::templatelist& dataset_read()  const {return globals::datasets.read().at(ds_id).read().templatelist_index.at(tl_id);}
+
+#define DATASET_READ(ds_id) globals::datasets.read().at(ds_id).read()
+#define DATASET_WRITE(ds_id) globals::datasets()[ds_id]()

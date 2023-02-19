@@ -347,6 +347,7 @@ int main(int argc, char* argv[]){
         // updating the query attributes if they are not updated to files which should be opened, showing the open dialogue and handling loading
         util::dataset::check_datasets_to_open();
         util::dataset::check_dataset_deletion();
+        util::dataset::check_dataset_attributes();
         util::dataset::check_dataset_gpu_stream();
         util::dataset::check_dataset_update();
 
