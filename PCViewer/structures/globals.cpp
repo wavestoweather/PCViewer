@@ -101,7 +101,7 @@ structures::histogram_counter histogram_counter{};
 
 structures::priority_sorter priority_sorter{};
 
-std::atomic<float> priority_center_vealue{};
+std::atomic<float> priority_center_value{};
 std::atomic<float> priority_center_distance{};
 std::string_view   priority_center_attribute_id{};
 const std::string_view priority_drawlist_standard_order{"standard"};
@@ -850,7 +850,7 @@ void histogram_counter::_task_thread_function(){
             distance_info.index_buffer_address = util::vk::get_buffer_address(dl.const_templatelist().gpu_indices);
             distance_info.distances_address = util::vk::get_buffer_address(dl.priority_colors_gpu);
             distance_info.priority_attribute = as<uint32_t>(util::memory_view<const attribute>(ds.attributes).index_of([](const auto& a){return a.id == globals::priority_center_attribute_id;}));
-            distance_info.priority_center = globals::priority_center_vealue;
+            distance_info.priority_center = globals::priority_center_value;
             distance_info.priority_distance = globals::priority_center_distance;
             pipelines::distance_calculator::instance().calculate(distance_info);
             pipelines::distance_calculator::instance().wait_for_fence();
@@ -1053,11 +1053,11 @@ void priority_sorter::_task_thread_function(){
             std::vector<uint8_t> color_index(tl.data_size);
             if(tl.flags.identity_indices){
                 for(size_t i: util::size_range(color_index))
-                    color_index[i] = static_cast<uint8_t>(std::abs(data(static_cast<uint32_t>(i), priority_attriubute_index) - globals::priority_center_vealue) / globals::priority_center_distance * 255 + .5f);
+                    color_index[i] = static_cast<uint8_t>(std::abs(data(static_cast<uint32_t>(i), priority_attriubute_index) - globals::priority_center_value) / globals::priority_center_distance * 255 + .5f);
             }
             else{
                 for(size_t i: util::size_range(color_index))
-                    color_index[i] = static_cast<uint8_t>(std::abs(data(tl.indices[i], priority_attriubute_index) - globals::priority_center_vealue) / globals::priority_center_distance * 255 + .5f);
+                    color_index[i] = static_cast<uint8_t>(std::abs(data(tl.indices[i], priority_attriubute_index) - globals::priority_center_value) / globals::priority_center_distance * 255 + .5f);
             }
             // uploading the colors
             if(!dl_read.priority_colors_gpu){

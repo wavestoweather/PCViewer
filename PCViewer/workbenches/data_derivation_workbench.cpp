@@ -649,9 +649,14 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         }
     }
 
-    if(deriveData::Nodes::Serialization* s = dynamic_cast<deriveData::Nodes::Serialization*>(nodes[node].node.get()))
-        print_infos.emplace_back(recursion_data::print_info{nodes[node].node.get(), inputData});
-        //logger << logging::info_prefix << " " << s->serialize(inputData) << logging::endl;
+    if(deriveData::Nodes::Serialization* s = dynamic_cast<deriveData::Nodes::Serialization*>(nodes[node].node.get())){
+        outputData = inputData;
+        if(inplaceIndices.empty()){
+            data_storage.emplace_back(inputData[0].cols[0].begin(), inputData[0].cols[0].end());
+            outputData[0].cols[0] = deriveData::memory_view(data_storage.back());
+        }
+        print_infos.emplace_back(recursion_data::print_info{nodes[node].node.get(), outputData});
+    }
 
     // executing the node
     switch(_settings.execution_backend){

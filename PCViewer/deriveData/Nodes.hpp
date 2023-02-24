@@ -356,6 +356,10 @@ public:
         out << "] (size: " << input[0].size() << ", column size: " << input[0].columnSize() << ")";
         return out.str();
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::copy, input, output);
+    }
 };
 
 class Print_Vector: public Output, public Serialization, public Creatable<Print_Vector>{
@@ -1125,6 +1129,10 @@ public:
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, std::numeric_limits<float>::max(), output[0], [](float a, float b){return std::min(a, b);});
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::min_red, input, output);
+    }
 };
 
 class Max_Reduction: public Reduction, public Creatable<Max_Reduction>{
@@ -1134,6 +1142,10 @@ public:
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, std::numeric_limits<float>::lowest(), output[0], [](float a, float b){return std::max(a, b);});
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::max_red, input, output);
     }
 };
 
@@ -1145,6 +1157,10 @@ public:
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return a + b;});
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::sum_red, input, output);
+    }
 };
 
 class Mul_Reduction: public Reduction, public Creatable<Mul_Reduction>{
@@ -1155,6 +1171,10 @@ public:
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, 1, output[0], [](float a, float b){return a * b;});
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::mul_red, input, output);
+    }
 };
 
 class Average_Reduction: public Reduction, public Creatable<Average_Reduction>{
@@ -1164,6 +1184,10 @@ public:
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return a + b;}, [](float a, size_t c){return double(a) / c;});
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+        add_operation(operations, op_codes::avg_red, input, output);
     }
 };
 

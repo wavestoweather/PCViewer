@@ -286,8 +286,8 @@ void scatterplot_workbench::_show_general_settings(){
         }
         if(selected_att.size()){
             globals::priority_center_attribute_id = selected_att;
-            globals::priority_center_vealue = globals::attributes.read().at(selected_att).read().bounds.read().max;
-            globals::priority_center_distance = globals::priority_center_vealue - globals::attributes.read().at(selected_att).read().bounds.read().min;
+            globals::priority_center_value = globals::attributes.read().at(selected_att).read().bounds.read().max;
+            globals::priority_center_distance = globals::priority_center_value - globals::attributes.read().at(selected_att).read().bounds.read().min;
             for(auto& dl: drawlist_infos()){
                 if(!set_priority_all && !(globals::selected_drawlists | util::contains(dl.drawlist_id)) && !globals::selected_drawlists.empty())
                     continue;
