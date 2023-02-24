@@ -720,19 +720,17 @@ void parallel_coordinates_workbench::show(){
                             continue;
                         dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
                         dl.drawlist_write().delayed_ops.priority_sorting_done = false;
-                        dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+                        dl.drawlist_write().delayed_ops.delayed_ops_done = true;
                         dl.appearance->write().color.w = .9f;
                         dl.priority_render = true;
                         if(_select_priority_center_single)
                             break;
                     }
                     _select_priority_center_all = _select_priority_center_single = false;
-                    //_request_registered_histograms_update = true;
-                    //_request_registered_histograms_update_var = true;
+                    _update_registered_histograms(true);
                 }
             }
         }
-        
     }
 
     // -------------------------------------------------------------------------------
