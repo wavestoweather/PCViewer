@@ -483,7 +483,7 @@ std::set<int64_t> data_derivation_workbench::_get_active_links_recursive(int64_t
 
 void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_data& data){
     auto& [nodes, pin_to_nodes, links, link_to_connection, pin_to_links] = *_execution_graphs[std::string(main_execution_graph_id)];
-    auto& [active_links, data_storage, node_infos, create_vector_sizes, op_codes_list, print_infos] = data;
+    auto& [active_links, data_storage, node_infos, create_vector_sizes, op_codes_list, print_infos, buffer_init_values] = data;
 
     // check cache for previous nodes, if not generated, generate
     for(int i: irange(nodes[node].inputIds)){
@@ -664,7 +664,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         nodes[node].node->applyOperationCpu(inputData, outputData);
         break;
     case structures::data_derivation::execution::Gpu:
-        nodes[node].node->applyOperationGpu(op_codes_list, inputData, outputData);
+        nodes[node].node->applyOperationGpu(op_codes_list, inputData, outputData, buffer_init_values);
         break;
     }
 
@@ -776,7 +776,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         std::vector<std::vector<VkBuffer>>   print_infos_buffers(data.print_infos.size());   // gpu buffers containing the data for the print nodes
         std::string code_list = data.op_codes_list.str();
         for(const auto& s: data.data_storage){
-            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, s.size() * sizeof(s[0]));
+            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, s.size() * sizeof(s[0]));
             gpu_buffers.emplace_back(util::vk::create_buffer(buffer_info, memory_info));
             std::stringstream  gpu_address; gpu_address << 'g' << util::vk::get_buffer_address(gpu_buffers.back());
             std::stringstream  cpu_address; cpu_address << 'g' << s.data();
@@ -791,6 +791,12 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         code_list = deriveData::optimize_operations(code_list);
         auto pipelines = deriveData::create_gpu_pipelines(code_list);
         auto command_buffer = util::vk::create_begin_command_buffer(_compute_command_pool);
+        // fill buffers with init values
+        for(const auto& init_val: data.buffer_init_values){
+            size_t buffer_index = data.data_storage | util::index_of_if<std::vector<float>>([&init_val](auto&& v){return v.data() == init_val.vector;});
+            assert(buffer_index != util::n_pos);
+            vkCmdFillBuffer(command_buffer, gpu_buffers[buffer_index].buffer, 0, gpu_buffers[buffer_index].size, 0);
+        }
         vkResetFences(globals::vk_context.device, 1, &_compute_fence);
         for(const auto& pipeline: pipelines){
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);

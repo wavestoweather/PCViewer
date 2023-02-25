@@ -180,6 +180,11 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
                 cur_available = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(cur_required)->pNext;
             break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT:
+                all_features_avail &= util::vk::all_features_available<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT>(*static_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT*>(cur_available), *static_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT*>(cur_required));
+                cur_available = static_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT*>(cur_available)->pNext;
+                cur_required = static_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT*>(cur_required)->pNext;
+            break;
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
                 all_features_avail &= util::vk::all_features_available<VkPhysicalDevice16BitStorageFeatures>(*static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_available), *static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_required));
                 cur_available = static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_available)->pNext;

@@ -327,6 +327,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
                 #extension GL_EXT_scalar_block_layout: require
                 #extension GL_EXT_shader_atomic_float: require
+                //#extension GL_EXT_shader_atomic_float2: require
 
                 layout(buffer_reference, scalar) buffer vec{
                     float data[];
@@ -493,9 +494,25 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
         case op_codes::pow:
             body << "storage" << std::get<uint32_t>(output_indices[0]) << " = pow(storage" << std::get<uint32_t>(input_indices[0]) << ", storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
             break;
+        case op_codes::min_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicMin(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::max_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicMax(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
         case op_codes::sum_red:
             body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
             body << "atomicAdd(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::mul_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicMul(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::avg_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicAdd(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) << ")], storage" << std::get<uint32_t>(input_indices[1]) << " / float(" << calc_thread_amt(data_state) << "));\n";
             break;
         default:
             throw std::runtime_error{"Unsupported op_code for operation line: " + std::string(line) + ". Use Cpu execution for this execution graph."};

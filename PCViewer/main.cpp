@@ -100,10 +100,13 @@ int main(int argc, char* argv[]){
     VkPhysicalDeviceShaderAtomicFloatFeaturesEXT float_feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
     float_feat.shaderBufferFloat32AtomicAdd = VK_TRUE;
     float_feat.shaderBufferFloat64AtomicAdd = VK_TRUE;
+    //VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT float2_feat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT};
+    //float2_feat.shaderBufferFloat32AtomicMinMax = VK_TRUE;
     VkPhysicalDeviceFeatures2 device_features = util::vk::initializers::physicalDeviceFeatures2();
     device_features.pNext = &vk_12_features;
     vk_12_features.pNext = &vk_16bit_features;
     vk_16bit_features.pNext = &float_feat;
+    //float_feat.pNext = &float2_feat;
     int physical_device_index = globals::commandline_parser.getValueAsInt("gpuselection", -1);
     structures::VkContextInitInfo vk_init{
         physical_device_index,
