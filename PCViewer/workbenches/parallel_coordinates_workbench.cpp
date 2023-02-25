@@ -1083,8 +1083,9 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
     if(!any_drawlist_affected)
         return;
 
-    _update_attribute_order_infos();
+    _update_attribute_order_infos();    // is done directly here and not in show, as the histograms have to be instantly updated to avoid counting start with wrong histograms
     _update_registered_histograms();
+    drawlist_infos();                   // requests rendering update
 }
 
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){
