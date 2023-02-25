@@ -35,6 +35,8 @@ private:
     int64_t                         _context_link_id{};
     ImVec2                          _popup_pos{};
     std::vector<std::string>        _cur_dimensions{};
+    std::string                     _create_node_regex{};
+    bool                            _attribute_regex_error{};
 
     bool                            _create_new_node{false};
 

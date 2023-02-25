@@ -420,9 +420,31 @@ void data_derivation_workbench::show(){
                 prev_type = nodes[connection.nodeAId].node->outputTypes[connection.nodeAAttribute].get();
         }
 
+        // regex search
+        ImGui::SetNextItemWidth(100);
+        if(_attribute_regex_error)
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, {1.f, 0.f, 0.f, .5f});
+        ImGui::InputText("Search node", &_create_node_regex);
+        if(_attribute_regex_error)
+            ImGui::PopStyleColor();
+        std::string lowercase; lowercase.resize(_create_node_regex.size());
+        std::transform(_create_node_regex.begin(), _create_node_regex.end(), lowercase.begin(), ::tolower);
+        std::regex reg;
+        try{
+            reg = std::regex(lowercase);
+            _attribute_regex_error = false;
+        }
+        catch(std::regex_error e){
+            _attribute_regex_error = true;
+        }
+
         std::unique_ptr<deriveData::Nodes::Node> node{};
         for(const auto& [name, entry]: deriveData::Nodes::Registry::nodes){
             if(prev_type && (entry.prototype->inputTypes.empty() || typeid(*prev_type) != typeid(*entry.prototype->inputTypes[0])))
+                continue;
+            std::string lowercase_node; lowercase_node.resize(name.size());
+            std::transform(name.begin(), name.end(), lowercase_node.begin(), ::tolower);
+            if(!std::regex_search(lowercase_node, reg))
                 continue;
             if(ImGui::MenuItem(name.c_str()))
                 node = entry.create();
@@ -448,6 +470,7 @@ void data_derivation_workbench::show(){
     else{
         _create_new_node = false;
         _new_link_pin_id = {};
+        _create_node_regex.clear();
     }
     ImGui::PopStyleVar();
     nodes::Resume();
