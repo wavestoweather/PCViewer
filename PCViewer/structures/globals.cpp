@@ -1055,6 +1055,13 @@ void priority_sorter::_task_thread_function(){
             const auto& data = std::get<structures::data<float>>(dl.dataset_read().cpu_data.read());
             const auto& dl_read = globals::drawlists.read().at(cur->dl_id).read();
             const uint32_t priority_attriubute_index = as<uint32_t>(util::memory_view<const attribute>(ds.attributes).index_of([](const attribute& a){return a.id == globals::priority_center_attribute_id;}));
+            if(priority_attriubute_index == util::n_pos){
+                if(::logger.logging_level >= logging::level::l_5)
+                    ::logger << logging::info_prefix << " priority_sorter::_task_thread_function() priority sorting stopped, attribute not available for the data" << logging::endl;
+                DRAWLIST_WRITE(cur->dl_id).delayed_ops.priority_rendering_requested = false;
+                DRAWLIST_WRITE(cur->dl_id).delayed_ops.priority_sorting_done = true;
+                continue;
+            }
             std::vector<uint8_t> color_index(tl.data_size);
             if(tl.flags.identity_indices){
                 for(size_t i: util::size_range(color_index))

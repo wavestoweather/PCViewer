@@ -364,6 +364,7 @@ void data_derivation_workbench::show(){
     nodes::NodeId n{};
     nodes::PinId p{};
     nodes::LinkId l{};
+    bool focus_text_input{};
     if(nodes::ShowNodeContextMenu(&n)){
         ImGui::OpenPopup(node_context_name.data());
         _context_node_id = n.Get();
@@ -424,6 +425,8 @@ void data_derivation_workbench::show(){
         ImGui::SetNextItemWidth(100);
         if(_attribute_regex_error)
             ImGui::PushStyleColor(ImGuiCol_FrameBg, {1.f, 0.f, 0.f, .5f});
+        if(!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemFocused() && !ImGui::IsAnyItemHovered() && !ImGui::IsMouseClicked(0))
+            ImGui::SetKeyboardFocusHere();
         ImGui::InputText("Search node", &_create_node_regex);
         if(_attribute_regex_error)
             ImGui::PopStyleColor();
