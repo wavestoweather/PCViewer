@@ -5,20 +5,20 @@
 #include <as_cast.hpp>
 
 
-using center_t = std::vector<std::vector<float>>;
+using center_t = std::vector<std::vector<double>>;
 
-float distance(const k_means::float_column_views& input, size_t i, const std::vector<float>& center, k_means::distance_method_t mean, bool euqal_layout){
+float distance(const k_means::float_column_views& input, size_t i, const std::vector<double>& center, k_means::distance_method_t mean, bool equal_layout){
     float s{};
     switch(mean){
-    case k_means::distance_method_t::norm:          for(size_t d: util::size_range(input)){float diff = (euqal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += diff * diff;} return std::sqrt(s);
-    case k_means::distance_method_t::squared_norm:  for(size_t d: util::size_range(input)){float diff = (euqal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += diff * diff;} return s;
-    case k_means::distance_method_t::l1_norm:       for(size_t d: util::size_range(input)){float diff = (euqal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += std::abs(diff);} return s;
+    case k_means::distance_method_t::norm:          for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += diff * diff;} return std::sqrt(s);
+    case k_means::distance_method_t::squared_norm:  for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += diff * diff;} return s;
+    case k_means::distance_method_t::l1_norm:       for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += std::abs(diff);} return s;
     }
     return 0;
 }
 
 void calc_center_pos(const k_means::float_column_views& input, const k_means::float_column_views& indices, center_t& centers, bool equal_data, size_t data_size){
-    for(auto& c: centers) for(float& f: c) f = 0;
+    for(auto& c: centers) for(auto& f: c) f = 0;
     std::vector<size_t> cluster_counts(centers.size(), 0);
     for(size_t d: util::size_range(input)){
         for(size_t i: util::i_range(data_size)){
@@ -29,14 +29,16 @@ void calc_center_pos(const k_means::float_column_views& input, const k_means::fl
         }
     }
     for(size_t i: util::size_range(centers)){
-        for(float& v: centers[i]) v /= float(cluster_counts[i]);
+        for(auto& v: centers[i]) v /= double(cluster_counts[i]);
     }
 }
 
 bool assign_data_to_cluster(const k_means::float_column_views& input, k_means::float_column_views& indices, const center_t& centers, bool equal_data, size_t data_size, k_means::distance_method_t dist){
     bool change{};
     for(size_t i: util::i_range(data_size)){
-        int64_t c = std::min_element(centers.begin(), centers.end(), [&](const std::vector<float>& a, const std::vector<float>& b){return distance(input, i, a, dist, equal_data) < distance(input, i, b, dist, equal_data);}) - centers.begin();
+        //int64_t c = std::min_element(centers.begin(), centers.end(), [&](const std::vector<float>& a, const std::vector<float>& b){return distance(input, i, a, dist, equal_data) < distance(input, i, b, dist, equal_data);}) - centers.begin();
+        float min_dist = std::numeric_limits<float>::max(); size_t c;
+        for(size_t center: util::size_range(centers)){float cur_dist = distance(input, i, centers[center], dist, equal_data); if(cur_dist < min_dist){min_dist = cur_dist; c = center;}} 
         if(equal_data){
             change |= c != int(indices[0].cols[0][i]);
             indices[0].cols[0][i] = float(c);
@@ -58,7 +60,7 @@ void k_means::run(const float_column_views& input, float_column_views& output, c
         equal_layout &= input[i].equalDataLayout(input[i + 1]);
     size_t data_size = equal_layout ? input[0].cols[0].size() : input[0].size();
 
-    center_t cluster_centers(settings.cluster_count, std::vector<float>(input.size(), 0));
+    center_t cluster_centers(settings.cluster_count, std::vector<double>(input.size(), 0));
     
     // initialisation -----------------------------------------------------------------------
     std::default_random_engine random_engine{std::random_device{}()};
