@@ -247,7 +247,10 @@ void scatterplot_workbench::_update_attribute_order_infos(){
 
     // copying global attribute settings and disconnecting them from global state
     for(auto& att: attribute_order_infos()){
-        if(!att.linked_with_attribute) continue;
+        if(!att.linked_with_attribute) {    // attribute already added, only update attribute bounds
+            *att.bounds = att.attribute_read().bounds;
+            continue;
+        }
         att.linked_with_attribute = false;
         _local_attribute_storage.emplace(att.attribute_id, std::make_unique<structures::scatterplot_wb::local_attribute_storage>(structures::scatterplot_wb::local_attribute_storage{att.active->read(), att.bounds->read()}));
         att.active = _local_attribute_storage[att.attribute_id]->active;

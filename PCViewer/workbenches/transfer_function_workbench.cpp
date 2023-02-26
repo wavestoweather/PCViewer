@@ -59,7 +59,7 @@ workbenches::transfer_function_workbench::transfer_function_workbench(std::strin
     structures::workbench(id), 
     descriptor_set_layout(desc_set_layout)
 {
-    // setup default transfer functions(for each color brewer set create tf with alpha = 1)
+    // setup default transfer functions(for each color brewer set create tf with alpha = 1 + the default heatmap)
     structures::unique_tracker<transfer_function_t> transfer_func{};
     transfer_func().name = util::global_descriptors::heatmap_descriptor_id;
     transfer_func().editable = false;
@@ -69,7 +69,7 @@ workbenches::transfer_function_workbench::transfer_function_workbench(std::strin
     transfer_functions.emplace_back(std::move(transfer_func));
     transfer_function_index.insert({transfer_functions.back().read().name, transfer_functions.back().ref_no_track()});
     for(const auto& info: brew_palette_infos){
-        // always gets the larges palette off a type and creates a transferfunction from it
+        // always gets the larges palette off a type and creates a transfer function from it
         auto colors = util::color_brewer::brew_u32(info.name, info.max_colors);
         _create_tf_function(info.name, colors);
     }

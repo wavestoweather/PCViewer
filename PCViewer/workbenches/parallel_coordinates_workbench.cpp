@@ -196,12 +196,12 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
 }
 
 void parallel_coordinates_workbench::_update_attribute_order_infos(){
-    // getting the updated interesction of all dataset attributes
+    // getting the updated intersection of all dataset attributes
     structures::flat_set<std::string_view> new_attributes;
     for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
         structures::flat_set<std::string_view> n;
         for(const auto& att: dl.dataset_read().attributes)
-            n |= structures::flat_set<std::string_view>{{att.id}};
+            n |= ATTRIBUTE_READ(att.id).id;
         if(first)
             new_attributes = std::move(n);
         else

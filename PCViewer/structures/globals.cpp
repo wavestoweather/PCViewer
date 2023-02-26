@@ -112,7 +112,7 @@ structures::globals_settings_t  settings{};
 namespace structures{
 VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
     if(physical_device)
-        throw std::runtime_error("vk_context::init() Context was already initailized. Missing call vk_context::cleanup()");
+        throw std::runtime_error("vk_context::init() Context was already initialized. Missing call vk_context::cleanup()");
     
     VkResult res;
     VkContextInitReturnInfo ret{};
@@ -1060,6 +1060,8 @@ void priority_sorter::_task_thread_function(){
                     ::logger << logging::info_prefix << " priority_sorter::_task_thread_function() priority sorting stopped, attribute not available for the data" << logging::endl;
                 DRAWLIST_WRITE(cur->dl_id).delayed_ops.priority_rendering_requested = false;
                 DRAWLIST_WRITE(cur->dl_id).delayed_ops.priority_sorting_done = true;
+                for(auto& signal: cur->cpu_signal_flags) *signal = true;
+                for(auto& signal: cur->cpu_unsignal_flags) *signal = false;
                 continue;
             }
             std::vector<uint8_t> color_index(tl.data_size);
