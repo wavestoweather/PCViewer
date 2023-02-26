@@ -209,7 +209,7 @@ void scatterplot_workbench::_update_attribute_order_infos(){
     for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
         structures::flat_set<std::string_view> n;
         for(const auto& att: dl.dataset_read().attributes)
-            n |= att.id;
+            n |= ATTRIBUTE_READ(att.id).id; // reading the global id, as it is persistent (dataset attribute ids might be moved due to vector resize)
         if(first)
             new_attributes = std::move(n);
         else
