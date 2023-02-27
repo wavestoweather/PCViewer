@@ -154,7 +154,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
         const auto active_indices = util::data::active_attribute_refs_to_indices(active_attributes, attributes);
 
         std::vector<bool> registrator_needed(_registered_axis_histograms[dl.drawlist_id].size(), false);
-        for(uint32_t i: active_indices){
+        for(auto&& [i, att_index]: util::enumerate(active_indices)){
             int height = plot_data.read().height;
             auto registrator_id = util::histogram_registry::get_id_string(i, height, attributes[i].bounds.read(), false, false);
             int registrator_index{-1};
@@ -168,7 +168,7 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
                 registrator_needed[registrator_index] = true;
             else{
                 auto& drawlist = dl.drawlist_write();
-                _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, active_attributes[i].get().bounds->read(), false, false, false));
+                _registered_axis_histograms[dl.drawlist_id].emplace_back(drawlist.histogram_registry.access()->scoped_registrator(i, height, active_attributes[att_index].get().bounds->read(), false, false, false));
                 registrator_needed.push_back(true);
             }
         }
