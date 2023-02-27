@@ -196,12 +196,12 @@ void parallel_coordinates_workbench::_update_registered_histograms(bool request_
 }
 
 void parallel_coordinates_workbench::_update_attribute_order_infos(){
-    // getting the updated interesction of all dataset attributes
+    // getting the updated intersection of all dataset attributes
     structures::flat_set<std::string_view> new_attributes;
     for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
         structures::flat_set<std::string_view> n;
         for(const auto& att: dl.dataset_read().attributes)
-            n |= structures::flat_set<std::string_view>{{att.id}};
+            n |= ATTRIBUTE_READ(att.id).id;
         if(first)
             new_attributes = std::move(n);
         else
@@ -712,27 +712,25 @@ void parallel_coordinates_workbench::show(){
                 if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
                     const auto& bounds = att_ref.bounds->read();
                     globals::priority_center_attribute_id = att_ref.attribute_id;
-                    globals::priority_center_vealue = util::unnormalize_val_for_range(util::normalize_val_for_range(ImGui::GetMousePos().y, b.y, pic_pos.y), bounds.min, bounds.max);
-                    globals::priority_center_distance = std::max(globals::priority_center_vealue - bounds.min, bounds.max - globals::priority_center_vealue);
-                    logger << logging::info_prefix << " priority attribute: " <<att_ref.attribute_read().display_name << ", priority center: " << globals::priority_center_vealue << ", priority distance " << globals::priority_center_distance << logging::endl;
+                    globals::priority_center_value = util::unnormalize_val_for_range(util::normalize_val_for_range(ImGui::GetMousePos().y, b.y, pic_pos.y), bounds.min, bounds.max);
+                    globals::priority_center_distance = std::max(globals::priority_center_value - bounds.min, bounds.max - globals::priority_center_value);
+                    logger << logging::info_prefix << " priority attribute: " <<att_ref.attribute_read().display_name << ", priority center: " << globals::priority_center_value << ", priority distance " << globals::priority_center_distance << logging::endl;
                     for(auto& dl: drawlist_infos.ref_no_track()){
                         if(_select_priority_center_single && !util::memory_view(globals::selected_drawlists).contains(dl.drawlist_id) && !globals::selected_drawlists.empty())
                             continue;
                         dl.drawlist_write().delayed_ops.priority_rendering_requested = true;
                         dl.drawlist_write().delayed_ops.priority_sorting_done = false;
-                        dl.drawlist_write().delayed_ops.delayed_ops_done = false;
+                        dl.drawlist_write().delayed_ops.delayed_ops_done = true;
                         dl.appearance->write().color.w = .9f;
                         dl.priority_render = true;
                         if(_select_priority_center_single)
                             break;
                     }
                     _select_priority_center_all = _select_priority_center_single = false;
-                    //_request_registered_histograms_update = true;
-                    //_request_registered_histograms_update_var = true;
+                    _update_registered_histograms(true);
                 }
             }
         }
-        
     }
 
     // -------------------------------------------------------------------------------
@@ -1085,8 +1083,9 @@ void parallel_coordinates_workbench::signal_dataset_update(const util::memory_vi
     if(!any_drawlist_affected)
         return;
 
-    _update_attribute_order_infos();
+    _update_attribute_order_infos();    // is done directly here and not in show, as the histograms have to be instantly updated to avoid counting start with wrong histograms
     _update_registered_histograms();
+    drawlist_infos();                   // requests rendering update
 }
 
 void parallel_coordinates_workbench::remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const structures::gpu_sync_info& sync_info){

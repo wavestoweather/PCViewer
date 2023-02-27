@@ -45,16 +45,26 @@ layout(local_size_x = local_size) in;
 
 shared uint act[local_size];
 void write_activations(uint iteration, bool a){
+    const uint base_index = iteration * gl_NumSubgroups + gl_SubgroupID;
     // creating 32 bit words via subgroup ballot. Only works with 32 or 64 bit sized ballots
     uvec4 ballot = subgroupBallot(a);
-    if(gl_SubgroupSize == 32){
+    switch(gl_SubgroupSize){
+    case 16:   //intel
         if(subgroupElect())
-            act[iteration * gl_NumSubgroups + gl_SubgroupID] = ballot[0];
-    }
-    if(gl_SubgroupSize == 64){
-        if(gl_SubgroupInvocationID < 2){
-            act[2 * (iteration * gl_NumSubgroups + gl_SubgroupID) + gl_SubgroupInvocationID] = ballot[gl_SubgroupInvocationID];
-        }
+            atomicOr(act[base_index / 2], (ballot[0] & 0xffff) << (16 * (base_index & 1)));
+        break;
+    case 32:    //nvidia
+        if(subgroupElect())
+            act[base_index] = ballot[0];
+        break;
+    case 64:    //amd
+        if(gl_SubgroupInvocationID < 2)
+            act[2 * base_index + gl_SubgroupInvocationID] = ballot[gl_SubgroupInvocationID];
+        break;
+    case 128:   //?
+        if(gl_SubgroupInvocationID < 4)
+            act[4 * base_index + gl_SubgroupInvocationID] = ballot[gl_SubgroupInvocationID];
+        break;
     }
 }
 

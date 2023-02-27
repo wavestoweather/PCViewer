@@ -87,7 +87,7 @@ struct vk_context{
     VkPhysicalDeviceMemoryProperties            memory_properties{};
     size_t                                      gpu_mem_size{};
 
-    // initializes this vulkan context. Init function as global object has no well defined lifetime
+    // initializes this vulkan context. Init function needed because global object has no well defined lifetime
     VkContextInitReturnInfo init(const VkContextInitInfo& info);
 
     // cleanup this vulkan context. Cleanup function needed as global object has no well defined lifetime

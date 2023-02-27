@@ -77,6 +77,17 @@ inline std::tuple<std::vector<uint32_t>, std::vector<std::vector<uint32_t>>> ext
     }
     return {std::move(dimension_sizes), std::move(dimension_indices_v)};
 }
+inline std::stringstream addresses_to_stringstream(const std::vector<data_storage>& addresses){
+    std::stringstream adds; adds << '[';
+    for(auto&& [in, last]: util::last_iter(addresses)){
+        if(std::holds_alternative<uint64_t>(in)) adds << 'g' << std::get<uint64_t>(in);
+        if(std::holds_alternative<uint32_t>(in)) adds << 'l' << std::get<uint32_t>(in);
+        if(std::holds_alternative<float>(in)) adds << 'c' << std::get<float>(in);
+        if(!last) adds << ',';
+    }
+    adds << ']';
+    return adds;
+}
 inline std::stringstream get_add_local_addresses(std::vector<std::variant<uint64_t, float>>& local_addresses, const std::vector<data_storage>& indices){
     std::stringstream local_adds; local_adds << '[';
     for(auto&& [in, last]: util::last_iter(indices)){
@@ -126,6 +137,21 @@ inline void flush_locals(const std::vector<std::variant<uint64_t, float>>& local
     result_stream << op_codes::pipeline_barrier << " [] [] ([])\n";
 }
 
+// checks if all input/output indices are the same, ignores constants (indices which are empty)
+inline bool equal_data_layout(const std::vector<std::vector<uint32_t>>& input_output_indices){
+    size_t ref{};
+    for(size_t i: util::i_range(size_t(1), input_output_indices.size())){
+        if(input_output_indices[i].empty()) continue;
+        if(input_output_indices[ref].empty()) ref = i;
+        else{
+            if(input_output_indices[ref].size() != input_output_indices[i].size()) return false;
+            for(size_t j: util::size_range(input_output_indices[i]))
+                if(input_output_indices[ref][j] != input_output_indices[i][j]) return false;
+        }
+    }
+    return true;
+}
+
 // adds all the load store operations in a possibly optimal manner
 // this also means, that the mapping from global to local address space is done here
 // an example would be:
@@ -149,6 +175,7 @@ inline std::string optimize_operations(const std::string& input){
         std::string_view input = *slice++, output = *slice, rest = slice.get_rest();
         const auto [dim_sizes, dim_indices] = extract_input_output_dimensions(line);
         const auto [input_indices, output_indices] = extract_input_output_indices(line);
+        const bool equal_dim_indices = equal_data_layout(dim_indices) && dim_indices[input_indices.size()].size();
         for(const auto& dim_index: dim_indices){
             if(dim_index.empty()) continue;
             if(merged_dims_storage.empty()) merged_dims_storage = dim_index;
@@ -178,16 +205,27 @@ inline std::string optimize_operations(const std::string& input){
             }
             result_stream << "] " << rest << '\n';
         }
-        auto output_local_addresses = get_add_local_addresses(local_storage_addresses, output_indices);
-        if(local_storage_addresses.size() != local_storage_dim_indices.size()){
-            for(size_t i: util::i_range(local_storage_dim_indices.size(), local_storage_addresses.size())){
-                local_storage_dim_indices.emplace_back();
-                if(std::holds_alternative<float>(local_storage_addresses[i])) continue;
-                size_t ind = input_indices | util::index_of(data_storage(std::get<uint64_t>(local_storage_addresses[i])));
-                if(ind == util::n_pos)
-                    ind = input_indices.size() + (output_indices | util::index_of(data_storage(std::get<uint64_t>(local_storage_addresses[i]))));
-                assert(ind != util::n_pos);
-                local_storage_dim_indices.back() = dim_indices[ind];
+        std::stringstream output_local_addresses;
+        if(equal_dim_indices){
+            output_local_addresses = get_add_local_addresses(local_storage_addresses, output_indices);
+            if(local_storage_addresses.size() != local_storage_dim_indices.size()){
+                for(size_t i: util::i_range(local_storage_dim_indices.size(), local_storage_addresses.size())){
+                    local_storage_dim_indices.emplace_back();
+                    if(std::holds_alternative<float>(local_storage_addresses[i])) continue;
+                    size_t ind = input_indices | util::index_of(data_storage(std::get<uint64_t>(local_storage_addresses[i])));
+                    if(ind == util::n_pos)
+                        ind = input_indices.size() + (output_indices | util::index_of(data_storage(std::get<uint64_t>(local_storage_addresses[i]))));
+                    assert(ind != util::n_pos);
+                    local_storage_dim_indices.back() = dim_indices[ind];
+                }
+            }
+        }
+        else{
+            output_local_addresses = addresses_to_stringstream(output_indices);
+            for(const auto& input: input_indices){
+                if(std::holds_alternative<float>(input) || std::holds_alternative<uint32_t>(input)) continue;
+                auto storage_address = local_storage_addresses | util::try_find(std::variant<uint64_t, float>{std::get<uint64_t>(input)});
+                storage_address->get() = .0f;
             }
         }
 
@@ -233,7 +271,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             for(std::string_view line: c | util::slice('\n')){
                 size_t trim_pos =  line.find_first_not_of(" ");
                 if(trim_pos != std::string_view::npos) line = line.substr(trim_pos);
-                formatted_code << line_number++ << ':';
+                formatted_code << ++line_number << ':';
                 cur_indent -= int(std::count(line.begin(), line.end(), '}'));
                 cur_indent = std::max(cur_indent, 0);
                 for(int i: util::i_range(cur_indent * 4)) formatted_code << ' ';
@@ -257,17 +295,14 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
 
     // creating shader codes and converting them to pipelines
     std::vector<pipeline_info>  pipelines;
-    std::stringstream           header;
     std::stringstream           body;
-    uint32_t                    storage_size{};
+    robin_hood::unordered_set<uint32_t> declared_locals;
     for(std::string_view line: instructions | util::slice('\n')){
         std::stringstream line_stream{std::string(line.substr(0, line.find(' ')))};
         op_codes operation;
         line_stream >> operation;
         const auto [dim_sizes, dim_indices] = extract_input_output_dimensions(line);
         const auto [input_indices, output_indices] = extract_input_output_indices(line);
-        for(auto in: input_indices) if(std::holds_alternative<uint32_t>(in)) storage_size = std::max(storage_size, std::get<uint32_t>(in)) + 1;
-        for(auto out: output_indices) if(std::holds_alternative<uint32_t>(out)) storage_size = std::max(storage_size, std::get<uint32_t>(out) + 1);
         // check dimension consistency
         for(const auto& i: dim_indices){
             for(uint32_t dim: i){
@@ -280,17 +315,19 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             for(size_t i: util::i_range(dim_indices.size() - 1))
                 data_state.all_same_data_layout &= dim_indices[i] == dim_indices[i + 1] || dim_indices[i].empty() || dim_indices[i + 1].empty();
         assert(!same_before || same_before == data_state.all_same_data_layout);
-        assert(operation == op_codes::pipeline_barrier || data_state.cur_dimension_sizes.empty() || data_state.cur_dimension_sizes == dim_sizes);
+        assert(operation == op_codes::pipeline_barrier || data_state.cur_dimension_sizes.empty() || dim_sizes.empty() || data_state.cur_dimension_sizes == dim_sizes);
         if(operation != op_codes::pipeline_barrier)
             data_state.cur_dimension_sizes = dim_sizes;
 
         // header
-        if(header.str().empty()){
-            header << R"(
+        if(body.str().empty()){
+            body << R"(
                 #version 450
                 #extension GL_EXT_buffer_reference2: require
                 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
                 #extension GL_EXT_scalar_block_layout: require
+                #extension GL_EXT_shader_atomic_float: require
+                //#extension GL_EXT_shader_atomic_float2: require
 
                 layout(buffer_reference, scalar) buffer vec{
                     float data[];
@@ -301,8 +338,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                 };
 
                 layout(local_size_x = )" STR_IND(workgroup_size) R"() in;
-            )";
-            body << R"(
+
                 uint _random_state = gl_GlobalInvocationID.x * 12 + (1 << 17) - 1;
                 float random_float(){
                     _random_state ^= _random_state << 21;
@@ -321,6 +357,13 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             additional_data = crude_json::value::parse(std::string(line.substr(start, end - start - 1)));
         }
 
+        // locals declaration
+        for(auto input: output_indices){
+            if(std::holds_alternative<uint32_t>(input) && !declared_locals.contains(std::get<uint32_t>(input))){
+                body << "float storage" << std::get<uint32_t>(input) << ";\n";
+                declared_locals.insert(std::get<uint32_t>(input));
+            }
+        }
         // instruction decoding
         switch(operation){
         case op_codes::none:
@@ -333,9 +376,9 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
             if(data_state.all_same_data_layout){
                 for(auto&& [out_index, i]: util::enumerate(output_indices)){
                     if(std::holds_alternative<float>(input_indices[i]))
-                        body << "storage[" << std::get<uint32_t>(out_index) << "] = " << std::get<float>(input_indices[i]) << ";\n";
+                        body << "storage" << std::get<uint32_t>(out_index) << " = " << std::get<float>(input_indices[i]) << ";\n";
                     else
-                        body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << ".data[gl_GlobalInvocationID.x];\n";
+                        body << "storage" << std::get<uint32_t>(out_index) << " = array" << i << ".data[gl_GlobalInvocationID.x];\n";
                 }
             }
             else{
@@ -345,7 +388,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                 body << "uint dim_mult;\n";
                 for(auto&& [out_index, i]: util::enumerate(output_indices)){
                     if(std::holds_alternative<float>(input_indices[i])){
-                        body << "storage[" << std::get<uint32_t>(out_index) << "] = " << std::get<float>(input_indices[i]) << ";\n";
+                        body << "storage" << std::get<uint32_t>(out_index) << " = " << std::get<float>(input_indices[i]) << ";\n";
                         continue;
                     }
                     std::string input_index_var("in" + std::to_string(i));
@@ -355,7 +398,7 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                         if(j > 0)
                             body << "dim_mult *= " << dim_sizes[dim_indices[i][j]] << ";\n";
                     }
-                    body << "storage[" << std::get<uint32_t>(out_index) << "] = array" << i << ".data[" << input_index_var << "];\n";
+                    body << "storage" << std::get<uint32_t>(out_index) << " = array" << i << ".data[" << input_index_var << "];\n";
                 }
             }
             break;
@@ -364,101 +407,120 @@ inline std::vector<pipeline_info> create_gpu_pipelines(std::string_view instruct
                 if(!std::holds_alternative<size_t>(out_index))
                     continue;
                 body << "vec array_out" << i << " = vec(" << std::get<size_t>(out_index) << "ul);\n";
-                body << "array_out" << i << ".data[gl_GlobalInvocationID.x] = storage[" << std::get<uint32_t>(input_indices[i]) << "];\n";
+                body << "array_out" << i << ".data[gl_GlobalInvocationID.x] = storage" << std::get<uint32_t>(input_indices[i]) << ";\n";
             }
             break;
         case op_codes::pipeline_barrier:
             body << "}\n";
-            header << "float storage[" << storage_size << "];" << body.str();
-            pipelines.emplace_back(create_pipeline(header.str(), calc_thread_amt(data_state)));
-            header.str({}); body.str({}); storage_size = 0;
+            pipelines.emplace_back(create_pipeline(body.str(), calc_thread_amt(data_state)));
+            body.str({}); declared_locals.clear(); data_state = {};
             break;
         case op_codes::one_vec:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 1;\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = 1;\n";
             break;
         case op_codes::zero_vec:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 0;\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = 0;\n";
             break;
         case op_codes::rand_vec:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = random_float();\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = random_float();\n";
             break;
         case op_codes::iota_vec:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = float(gl_GlobalInvocationID.x);\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = float(gl_GlobalInvocationID.x);\n";
             break;
         case op_codes::copy:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            if(output_indices[0] != input_indices[0] && dim_sizes.size())
+                body << "storage" << std::get<uint32_t>(output_indices[0]) << " = storage" << std::get<uint32_t>(input_indices[0]) << ";\n";
             break;
         case op_codes::sum:
             // TODO additional data, such as pre factors
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = ";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = ";
             for(auto&& [e, last]: util::last_iter(input_indices)){
-                body << "storage[" << std::get<uint32_t>(e) << "]";
+                body << "storage" << std::get<uint32_t>(e);
                 if(!last) body << " + ";
             }
             body << ";\n";
             break;
         case op_codes::product:
             // TODO additional data, such as pre factors
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = ";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = ";
             for(auto&& [e, last]: util::last_iter(input_indices)){
-                body << "storage[" << std::get<uint32_t>(e) << "]";
+                body << "storage" << std::get<uint32_t>(e);
                 if(!last) body << " * ";
             }
             body << ";\n";
             break;
         case op_codes::lp_norm:
             // TODO: get norm from additional data
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = sqrt(";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = sqrt(";
             for(auto&& [e, last]: util::last_iter(input_indices)){
-                body << "storage[" << std::get<uint32_t>(e) << "] * storage[" << std::get<uint32_t>(e) << "]";
+                body << "storage" << std::get<uint32_t>(e) << " * storage" << std::get<uint32_t>(e);
                 if(!last) body << " + ";
             }
             body << ");\n";
             break;
         case op_codes::inverse:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = 1. / storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = 1. / storage" << std::get<uint32_t>(input_indices[0]) << ";\n";
             break;
         case op_codes::negate:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = -storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = -storage" << std::get<uint32_t>(input_indices[0]) << ";\n";
             break;
         case op_codes::abs:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = abs(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = abs(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
             break;
         case op_codes::square:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] * storage[" << std::get<uint32_t>(input_indices[0]) << "];\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = storage" << std::get<uint32_t>(input_indices[0]) << " * storage" << std::get<uint32_t>(input_indices[0]) << ";\n";
             break;
         case op_codes::sqrt:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = sqrt(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = sqrt(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
             break;
         case op_codes::exp:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = exp(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = exp(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
             break;
         case op_codes::log:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = log(storage[" << std::get<uint32_t>(input_indices[0]) << "]);\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = log(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
             break;
         case op_codes::plus:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] + storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = storage" << std::get<uint32_t>(input_indices[0]) << " + storage" << std::get<uint32_t>(input_indices[1]) << ";\n";
             break;
         case op_codes::minus:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] - storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = storage" << std::get<uint32_t>(input_indices[0]) << " - storage" << std::get<uint32_t>(input_indices[1]) << ";\n";
             break;
         case op_codes::multiplication:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] * storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = storage" << std::get<uint32_t>(input_indices[0]) << " * storage" << std::get<uint32_t>(input_indices[1]) << ";\n";
             break;
         case op_codes::division:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = storage[" << std::get<uint32_t>(input_indices[0]) << "] / storage[" << std::get<uint32_t>(input_indices[1]) << "];\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = storage" << std::get<uint32_t>(input_indices[0]) << " / storage" << std::get<uint32_t>(input_indices[1]) << ";\n";
             break;
         case op_codes::pow:
-            body << "storage[" << std::get<uint32_t>(output_indices[0]) << "] = pow(storage[" << std::get<uint32_t>(input_indices[0]) << "], storage[" << std::get<uint32_t>(input_indices[1]) << "]);\n";
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = pow(storage" << std::get<uint32_t>(input_indices[0]) << ", storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::min_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicMin(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::max_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicMax(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::sum_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicAdd(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::mul_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicMul(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::avg_red:
+            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
+            body << "atomicAdd(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) << ")], storage" << std::get<uint32_t>(input_indices[1]) << " / float(" << calc_thread_amt(data_state) << "));\n";
             break;
         default:
             throw std::runtime_error{"Unsupported op_code for operation line: " + std::string(line) + ". Use Cpu execution for this execution graph."};
         }
     }
-    if(storage_size){
+    if(declared_locals.size()){
         body << "}\n";
-        header << "float storage[" << storage_size << "];" << body.str();
-        pipelines.emplace_back(create_pipeline(header.str(), calc_thread_amt(data_state)));
+        pipelines.emplace_back(create_pipeline(body.str(), calc_thread_amt(data_state)));
     }
     return pipelines;
 }

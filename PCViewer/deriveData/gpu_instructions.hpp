@@ -38,6 +38,12 @@ enum op_codes: uint32_t{
     multiplication,
     division,
     pow,
+    min_red,
+    max_red,
+    sum_red,
+    mul_red,
+    avg_red,
+    stddev_red,
 };
 static std::ostream& operator<<(std::ostream& s, op_codes o){
     return s << static_cast<uint32_t>(o);
@@ -50,7 +56,8 @@ static std::istream& operator>>(std::istream& s, op_codes& o){
 //}
 
 using float_column_views = std::vector<column_memory_view<float>>;
-inline void add_operation(std::stringstream& operations, op_codes op_code, const float_column_views& inputs, const float_column_views& outputs, const crude_json::value& additional_data = {}){
+struct add_flags{bool force_input_global_address:1; bool force_output_global_address:1;};
+inline void add_operation(std::stringstream& operations, op_codes op_code, const float_column_views& inputs, const float_column_views& outputs, const crude_json::value& additional_data = {}, add_flags flags = {}){
     operations << op_code;
     if(inputs.empty() && outputs.empty()){
         operations << "\n";
@@ -68,7 +75,7 @@ inline void add_operation(std::stringstream& operations, op_codes op_code, const
     operations << "] [";
     // output addresses
     for(auto&& [in, last]: util::last_iter(outputs)){
-        if(in.is_constant())
+        if(in.is_constant() && (op_code < op_codes::min_red || op_code > op_codes::stddev_red) && !flags.force_output_global_address)
             operations << "c" << in.cols[0][0];
         else
             operations << "g" << in.cols[0].data();
@@ -79,8 +86,11 @@ inline void add_operation(std::stringstream& operations, op_codes op_code, const
     // dimension infos
     operations << "([";
     deriveData::memory_view<uint32_t> dimensions;
-    if(inputs[0].dimensionSizes.empty())dimensions = outputs[0].dimensionSizes;
-    else                                dimensions = inputs[0].dimensionSizes;
+    for(size_t i: util::size_range(inputs))
+        if(!inputs[i].dimensionSizes.empty()) dimensions = inputs[i].dimensionSizes;
+    if(dimensions.empty())
+        for(size_t i: util::size_range(outputs))
+            if(!outputs[i].dimensionSizes.empty()) dimensions = outputs[i].dimensionSizes;
     
     for(auto&& [dim, last]: util::last_iter(dimensions)){
         operations << dim;

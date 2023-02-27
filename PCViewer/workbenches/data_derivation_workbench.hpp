@@ -35,6 +35,8 @@ private:
     int64_t                         _context_link_id{};
     ImVec2                          _popup_pos{};
     std::vector<std::string>        _cur_dimensions{};
+    std::string                     _create_node_regex{};
+    bool                            _attribute_regex_error{};
 
     bool                            _create_new_node{false};
 
@@ -62,6 +64,7 @@ private:
         std::vector<std::unique_ptr<uint32_t>>  create_vector_sizes{};
         std::stringstream                       op_codes_list{};
         std::vector<print_info>                 print_infos{};
+        std::vector<deriveData::init_value>     buffer_init_values{};
     };
     void _build_cache_recursive(int64_t node, recursion_data& data);
 };

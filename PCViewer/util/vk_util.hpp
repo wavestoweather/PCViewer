@@ -57,6 +57,9 @@ inline feature_wrapper<VkPhysicalDeviceFeatures2> copy_features(const VkPhysical
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT:
                 internal::fill_next<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>(curNext, curStorage);
                 break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT:
+                internal::fill_next<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT>(curNext, curStorage);
+                break;
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
                 internal::fill_next<VkPhysicalDevice16BitStorageFeatures>(curNext, curStorage);
                 break;

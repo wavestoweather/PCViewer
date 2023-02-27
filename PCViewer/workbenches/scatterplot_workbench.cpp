@@ -209,7 +209,7 @@ void scatterplot_workbench::_update_attribute_order_infos(){
     for(const auto& [dl, first]: util::first_iter(drawlist_infos.read())){
         structures::flat_set<std::string_view> n;
         for(const auto& att: dl.dataset_read().attributes)
-            n |= att.id;
+            n |= ATTRIBUTE_READ(att.id).id; // reading the global id, as it is persistent (dataset attribute ids might be moved due to vector resize)
         if(first)
             new_attributes = std::move(n);
         else
@@ -247,7 +247,10 @@ void scatterplot_workbench::_update_attribute_order_infos(){
 
     // copying global attribute settings and disconnecting them from global state
     for(auto& att: attribute_order_infos()){
-        if(!att.linked_with_attribute) continue;
+        if(!att.linked_with_attribute) {    // attribute already added, only update attribute bounds
+            *att.bounds = att.attribute_read().bounds;
+            continue;
+        }
         att.linked_with_attribute = false;
         _local_attribute_storage.emplace(att.attribute_id, std::make_unique<structures::scatterplot_wb::local_attribute_storage>(structures::scatterplot_wb::local_attribute_storage{att.active->read(), att.bounds->read()}));
         att.active = _local_attribute_storage[att.attribute_id]->active;
@@ -286,8 +289,8 @@ void scatterplot_workbench::_show_general_settings(){
         }
         if(selected_att.size()){
             globals::priority_center_attribute_id = selected_att;
-            globals::priority_center_vealue = globals::attributes.read().at(selected_att).read().bounds.read().max;
-            globals::priority_center_distance = globals::priority_center_vealue - globals::attributes.read().at(selected_att).read().bounds.read().min;
+            globals::priority_center_value = globals::attributes.read().at(selected_att).read().bounds.read().max;
+            globals::priority_center_distance = globals::priority_center_value - globals::attributes.read().at(selected_att).read().bounds.read().min;
             for(auto& dl: drawlist_infos()){
                 if(!set_priority_all && !(globals::selected_drawlists | util::contains(dl.drawlist_id)) && !globals::selected_drawlists.empty())
                     continue;

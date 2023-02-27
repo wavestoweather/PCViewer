@@ -364,6 +364,7 @@ void data_derivation_workbench::show(){
     nodes::NodeId n{};
     nodes::PinId p{};
     nodes::LinkId l{};
+    bool focus_text_input{};
     if(nodes::ShowNodeContextMenu(&n)){
         ImGui::OpenPopup(node_context_name.data());
         _context_node_id = n.Get();
@@ -420,9 +421,33 @@ void data_derivation_workbench::show(){
                 prev_type = nodes[connection.nodeAId].node->outputTypes[connection.nodeAAttribute].get();
         }
 
+        // regex search
+        ImGui::SetNextItemWidth(100);
+        if(_attribute_regex_error)
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, {1.f, 0.f, 0.f, .5f});
+        if(!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemFocused() && !ImGui::IsAnyItemHovered() && !ImGui::IsMouseClicked(0))
+            ImGui::SetKeyboardFocusHere();
+        ImGui::InputText("Search node", &_create_node_regex);
+        if(_attribute_regex_error)
+            ImGui::PopStyleColor();
+        std::string lowercase; lowercase.resize(_create_node_regex.size());
+        std::transform(_create_node_regex.begin(), _create_node_regex.end(), lowercase.begin(), ::tolower);
+        std::regex reg;
+        try{
+            reg = std::regex(lowercase);
+            _attribute_regex_error = false;
+        }
+        catch(std::regex_error e){
+            _attribute_regex_error = true;
+        }
+
         std::unique_ptr<deriveData::Nodes::Node> node{};
         for(const auto& [name, entry]: deriveData::Nodes::Registry::nodes){
             if(prev_type && (entry.prototype->inputTypes.empty() || typeid(*prev_type) != typeid(*entry.prototype->inputTypes[0])))
+                continue;
+            std::string lowercase_node; lowercase_node.resize(name.size());
+            std::transform(name.begin(), name.end(), lowercase_node.begin(), ::tolower);
+            if(!std::regex_search(lowercase_node, reg))
                 continue;
             if(ImGui::MenuItem(name.c_str()))
                 node = entry.create();
@@ -448,6 +473,7 @@ void data_derivation_workbench::show(){
     else{
         _create_new_node = false;
         _new_link_pin_id = {};
+        _create_node_regex.clear();
     }
     ImGui::PopStyleVar();
     nodes::Resume();
@@ -483,7 +509,7 @@ std::set<int64_t> data_derivation_workbench::_get_active_links_recursive(int64_t
 
 void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_data& data){
     auto& [nodes, pin_to_nodes, links, link_to_connection, pin_to_links] = *_execution_graphs[std::string(main_execution_graph_id)];
-    auto& [active_links, data_storage, node_infos, create_vector_sizes, op_codes_list, print_infos] = data;
+    auto& [active_links, data_storage, node_infos, create_vector_sizes, op_codes_list, print_infos, buffer_init_values] = data;
 
     // check cache for previous nodes, if not generated, generate
     for(int i: irange(nodes[node].inputIds)){
@@ -649,9 +675,14 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         }
     }
 
-    if(deriveData::Nodes::Serialization* s = dynamic_cast<deriveData::Nodes::Serialization*>(nodes[node].node.get()))
-        print_infos.emplace_back(recursion_data::print_info{nodes[node].node.get(), inputData});
-        //logger << logging::info_prefix << " " << s->serialize(inputData) << logging::endl;
+    if(deriveData::Nodes::Serialization* s = dynamic_cast<deriveData::Nodes::Serialization*>(nodes[node].node.get())){
+        outputData = inputData;
+        if(inplaceIndices.empty()){
+            data_storage.emplace_back(inputData[0].cols[0].begin(), inputData[0].cols[0].end());
+            outputData[0].cols[0] = deriveData::memory_view(data_storage.back());
+        }
+        print_infos.emplace_back(recursion_data::print_info{nodes[node].node.get(), outputData});
+    }
 
     // executing the node
     switch(_settings.execution_backend){
@@ -659,7 +690,7 @@ void data_derivation_workbench::_build_cache_recursive(int64_t node, recursion_d
         nodes[node].node->applyOperationCpu(inputData, outputData);
         break;
     case structures::data_derivation::execution::Gpu:
-        nodes[node].node->applyOperationGpu(op_codes_list, inputData, outputData);
+        nodes[node].node->applyOperationGpu(op_codes_list, inputData, outputData, buffer_init_values);
         break;
     }
 
@@ -771,7 +802,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         std::vector<std::vector<VkBuffer>>   print_infos_buffers(data.print_infos.size());   // gpu buffers containing the data for the print nodes
         std::string code_list = data.op_codes_list.str();
         for(const auto& s: data.data_storage){
-            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, s.size() * sizeof(s[0]));
+            auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, s.size() * sizeof(s[0]));
             gpu_buffers.emplace_back(util::vk::create_buffer(buffer_info, memory_info));
             std::stringstream  gpu_address; gpu_address << 'g' << util::vk::get_buffer_address(gpu_buffers.back());
             std::stringstream  cpu_address; cpu_address << 'g' << s.data();
@@ -786,6 +817,12 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         code_list = deriveData::optimize_operations(code_list);
         auto pipelines = deriveData::create_gpu_pipelines(code_list);
         auto command_buffer = util::vk::create_begin_command_buffer(_compute_command_pool);
+        // fill buffers with init values
+        for(const auto& init_val: data.buffer_init_values){
+            size_t buffer_index = data.data_storage | util::index_of_if<std::vector<float>>([&init_val](auto&& v){return v.data() == init_val.vector;});
+            assert(buffer_index != util::n_pos);
+            vkCmdFillBuffer(command_buffer, gpu_buffers[buffer_index].buffer, 0, gpu_buffers[buffer_index].size, 0);
+        }
         vkResetFences(globals::vk_context.device, 1, &_compute_fence);
         for(const auto& pipeline: pipelines){
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);

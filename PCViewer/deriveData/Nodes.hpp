@@ -214,7 +214,7 @@ public:
         applyNonaryFunction(input, output, 0, [](){return 0;});
     };
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::zero_vec, input, output);
     }
 };
@@ -227,7 +227,7 @@ public:
         applyNonaryFunction(input, output, 0, [](){return 1;});
     };
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::one_vec, input, output);
     }
 };
@@ -240,7 +240,7 @@ public:
         applyNonaryFunction(input, output, 0, [](){return double(rand()) / RAND_MAX;});
     };
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::rand_vec, input, output);
     }
 };
@@ -254,7 +254,7 @@ public:
         applyNonaryFunction(input, output, 0, [&cur_index](){return cur_index++;});
     };
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::iota_vec, input, output);
     }
 };
@@ -356,6 +356,10 @@ public:
         out << "] (size: " << input[0].size() << ", column size: " << input[0].columnSize() << ")";
         return out.str();
     }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::copy, input, output);
+    }
 };
 
 class Print_Vector: public Output, public Serialization, public Creatable<Print_Vector>{
@@ -437,7 +441,7 @@ public:
         );
     }
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::sum, input, output, input_elements[input_input_id]);
     }
 
@@ -467,7 +471,7 @@ public:
         );
     }
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::product, input, output, input_elements[input_input_id]);
     }
 
@@ -496,7 +500,7 @@ public:
         );
     }
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::lp_norm, input, output, input_elements[middle_input_id]);
     }
 };
@@ -684,7 +688,7 @@ public:
             output[0].cols[0][i] = input[0].cols[0][i];
     }
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         if(input[0].cols[0] != output[0].cols[0])
             add_operation(operations, op_codes::copy, input, output);
     }
@@ -699,7 +703,7 @@ public:
             output[0].cols[0][i] = std::floor(input[0].cols[0][i]);
     }
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         if(input[0].cols[0] != output[0].cols[0])
             add_operation(operations, op_codes::copy, input, output);
     }
@@ -713,7 +717,7 @@ public:
         applyUnaryFunction(input, output, 0, [](float in){return 1. / in;});
     }
 
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::inverse, input, output);
     }
 };
@@ -725,7 +729,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{        
         applyUnaryFunction(input, output, 0, [](float in){return -in;});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::negate, input, output);
     }
 };
@@ -759,7 +763,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::abs(in);});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::abs, input, output);
     }
 };
@@ -771,7 +775,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return in * in;});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::square, input, output);
     }
 };
@@ -783,7 +787,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::sqrt(in);});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::sqrt, input, output);
     }
 };
@@ -795,7 +799,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::exp(in);});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::exp, input, output);
     }
 };
@@ -807,7 +811,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyUnaryFunction(input, output, 0, [](float in){return std::log(in);});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::log, input, output);
     }
 };
@@ -1059,7 +1063,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a + b;});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::plus, input, output);
     }
 };
@@ -1071,7 +1075,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a - b;});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::minus, input, output);
     }
 };
@@ -1083,7 +1087,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a * b;});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::multiplication, input, output);
     }
 };
@@ -1095,7 +1099,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a / b;});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::division, input, output);
     }
 };
@@ -1107,7 +1111,7 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return std::pow(a, b);});
     }
-    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output) const override{
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::pow, input, output);
     }
 };
@@ -1119,51 +1123,81 @@ public:
 
 class Min_Reduction: public Reduction, public Creatable<Min_Reduction>{
 public:
+    static constexpr float init_val = std::numeric_limits<float>::max();
     Min_Reduction(): Reduction("Min") {}
 
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        applyUnaryReductionFunction(input, std::numeric_limits<float>::max(), output[0], [](float a, float b){return std::min(a, b);});
+        applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return std::min(a, b);});
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::min_red, input, output);
+        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
     }
 };
 
 class Max_Reduction: public Reduction, public Creatable<Max_Reduction>{
 public:
+    static constexpr float init_val = std::numeric_limits<float>::lowest();
     Max_Reduction(): Reduction("Max") {}
 
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        applyUnaryReductionFunction(input, std::numeric_limits<float>::lowest(), output[0], [](float a, float b){return std::max(a, b);});
+        applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return std::max(a, b);});
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::max_red, input, output);
+        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
     }
 };
 
 class Sum_Reduction: public Reduction, public Creatable<Sum_Reduction>{
 public:
+    static constexpr float init_val = 0.f;
     Sum_Reduction(): Reduction("Sum") {}
 
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return a + b;});
+        applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return a + b;});
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::sum_red, input, output);
+        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
     }
 };
 
 class Mul_Reduction: public Reduction, public Creatable<Mul_Reduction>{
 public:
+    static constexpr float init_val = 1.f;
     Mul_Reduction(): Reduction("Multiplication") {}
 
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        applyUnaryReductionFunction(input, 1, output[0], [](float a, float b){return a * b;});
+        applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return a * b;});
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::mul_red, input, output);
+        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
     }
 };
 
 class Average_Reduction: public Reduction, public Creatable<Average_Reduction>{
 public:
+    static constexpr float init_val = 0.f;
     Average_Reduction(): Reduction("Average") {}
 
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
-        applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return a + b;}, [](float a, size_t c){return double(a) / c;});
+        applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return a + b;}, [](float a, size_t c){return double(a) / c;});
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::avg_red, input, output);
+        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
     }
 };
 
