@@ -56,12 +56,16 @@ public:
     const T* end() const {return _data + _size;};
 };
 
+struct min_max_t{
+    float min, max;
+};
 template<class T>
 struct column_memory_view{ // holds one or more columns (done to also be able to hold vectors)
-    std::vector<std::string_view> dimensionNames{};
-    memory_view<uint32_t> dimensionSizes{};
-    memory_view<uint32_t> columnDimensionIndices{};
-    std::vector<memory_view<T>> cols{};
+    std::vector<std::string_view>   dimensionNames{};
+    memory_view<uint32_t>           dimensionSizes{};
+    memory_view<uint32_t>           columnDimensionIndices{};
+    std::vector<memory_view<T>>     cols{};
+    std::vector<min_max_t>          cols_min_max;   // mainly used for index group estimation for gpu reduction operations
 
     column_memory_view() = default;
     column_memory_view(memory_view<uint32_t> sizes, memory_view<uint32_t> indices, std::vector<memory_view<T>> c): dimensionSizes(sizes), columnDimensionIndices(indices), cols(c){}

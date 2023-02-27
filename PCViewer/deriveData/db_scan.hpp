@@ -10,5 +10,6 @@ struct db_scans_settings_t{
 
 using float_column_view = std::vector<deriveData::column_memory_view<float>>;
 // output has to be initialized to 0 to indicate not done clustering
-void run(const float_column_view& input, float_column_view& output, const db_scans_settings_t& settings);
+// returns the amount of clusters created
+int run(const float_column_view& input, float_column_view& output, const db_scans_settings_t& settings);
 }

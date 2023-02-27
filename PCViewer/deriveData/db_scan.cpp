@@ -41,7 +41,7 @@ bool expandCluster(int cur_cluster_index ,size_t index, db_scan::float_column_vi
     return true;
 }
 
-void db_scan::run(const float_column_view& input, float_column_view& output, const db_scans_settings_t& settings){
+int db_scan::run(const float_column_view& input, float_column_view& output, const db_scans_settings_t& settings){
     const structures::kd_tree tree(input);
     int cur_cluster_id{1};
     for(size_t i: util::i_range(tree.data_size)){
@@ -49,5 +49,6 @@ void db_scan::run(const float_column_view& input, float_column_view& output, con
             !tree.same_layout && output[0](i, 0) == cluster_unclassified && expandCluster(cur_cluster_id, i, output, tree, settings))
             ++cur_cluster_id;
     }
+    return cur_cluster_id;
     // thtats it
 }
