@@ -1175,9 +1175,11 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a - b;});
+        output[0].cols_min_max = {min_max_t{input[0].cols_min_max[0].min - input[1].cols_min_max[0].max, input[0].cols_min_max[0].max - input[0].cols_min_max[0].min}};
     }
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::minus, input, output);
+        output[0].cols_min_max = {min_max_t{input[0].cols_min_max[0].min - input[1].cols_min_max[0].max, input[0].cols_min_max[0].max - input[0].cols_min_max[0].min}};
     }
 };
 
@@ -1187,9 +1189,11 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a * b;});
+        output[0].cols_min_max = {min_max_t{input[0].cols_min_max[0].min * input[1].cols_min_max[0].min, input[0].cols_min_max[0].max * input[0].cols_min_max[0].max}};
     }
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::multiplication, input, output);
+        output[0].cols_min_max = {min_max_t{input[0].cols_min_max[0].min * input[1].cols_min_max[0].min, input[0].cols_min_max[0].max * input[0].cols_min_max[0].max}};
     }
 };
 
@@ -1197,11 +1201,15 @@ class Division: public Binary<FloatType>, public Creatable<Division>{
 public:
     Division(): Binary("", "/"){};
 
+    // TODO: proper  min_max
+
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a / b;});
+        output[0].cols_min_max = {min_max_t{input[0].cols_min_max[0].min / input[1].cols_min_max[0].max, input[0].cols_min_max[0].max / input[0].cols_min_max[0].min}};
     }
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::division, input, output);
+        output[0].cols_min_max = {min_max_t{input[0].cols_min_max[0].min / input[1].cols_min_max[0].max, input[0].cols_min_max[0].max / input[0].cols_min_max[0].min}};
     }
 };
 
@@ -1211,6 +1219,7 @@ public:
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return std::pow(a, b);});
+        output[0].cols_min_max = {min_max_t{std::pow(input[0].cols_min_max[0].min, input[1].cols_min_max[0].max), std::pow(input[0].cols_min_max[0].max, input[0].cols_min_max[0].max)}};
     }
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::pow, input, output);
@@ -1230,11 +1239,13 @@ public:
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return std::min(a, b);});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::min_red, input, output);
         init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 };
 
@@ -1246,11 +1257,13 @@ public:
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return std::max(a, b);});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::max_red, input, output);
         init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 };
 
@@ -1262,11 +1275,13 @@ public:
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return a + b;});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::sum_red, input, output);
         init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 };
 
@@ -1294,11 +1309,13 @@ public:
     // input[0] has to contain the data values, input[1] has to contain the indices
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         applyUnaryReductionFunction(input, init_val, output[0], [](float a, float b){return a + b;}, [](float a, size_t c){return double(a) / c;});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::avg_red, input, output);
         init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 };
 
@@ -1317,6 +1334,8 @@ public:
         applyUnaryReductionFunction(input, 0, output[0], [](float a, float b){return as<float>(a + double(b) * b);}, average_f);
         for(size_t i: util::size_range(output[0].cols[0]))
             output[0].cols[0][i] = std::sqrt(output[0].cols[0][i] - expect[i] * expect[i]);
+
+        output[0].cols_min_max = input[1].cols_min_max;
     }
 };
 
