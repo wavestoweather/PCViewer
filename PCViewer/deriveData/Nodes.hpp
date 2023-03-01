@@ -730,7 +730,11 @@ public:
     
     void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
         std::vector<size_t> sizes;
-        size_t cart_size{1}; for(const auto& v: input) {sizes.push_back(v.cols[0].size()); cart_size *= v.cols[0].size()};
+        size_t cart_size{1}; 
+        for(const auto& v: input) {
+            sizes.push_back(v.cols[0].size()); 
+            cart_size *= v.cols[0].size();
+        }
         assert(output[0].cols[0].size() == cart_size);
         size_t c{};
         for(const auto& cart_indices: util::cartesian_product(sizes)){

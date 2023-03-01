@@ -5,9 +5,10 @@
 #include <functional>
 #include <optional>
 #include <std_util.hpp>
-#include <memory_view.hpp>
 
 namespace util{
+template<typename T>
+class memory_view;
 constexpr size_t n_pos{size_t(-1)};
 // ranges with integer values
 template<typename T>
@@ -261,12 +262,13 @@ public:
     using value_type = typename T::value_type;
 private:
     std::optional<std::vector<value_type>> _storage{};
-    ::util::memory_view<value_type> _sizes{};
+    memory_view<const value_type> _sizes{};
 public:
+    using index_type = typename std::remove_const<value_type>::type;
     class iterator{
         friend class cartesian_product;
-        memory_view<value_type> _sizes{};
-        std::vector<std::remove_const<value_type>> _cur{};
+        memory_view<const value_type> _sizes{};
+        std::vector<index_type> _cur{};
 
         void _carry_prop(){
             if(_cur.back() >= _sizes.back()){
@@ -277,17 +279,17 @@ public:
             }
         }
     public:
-        std::vector<std::remove_const<value_type>>& operator*() {return _cur;}
+        std::vector<index_type>& operator*() {return _cur;}
         const iterator& operator++() {++_cur.back(); _carry_prop(); return *this;}
         iterator& operator++(int) {iterator copy(*this); ++_cur.back(); _carry_prop(); return copy;}
         bool operator==(const iterator& o) const {if(o._cur.empty() && _cur.front() >= _sizes.front()) return true; if(_cur.size() != o._cur.size()) return false; for(int c = 0; c < _cur.size(); ++c) if(_cur[c] != o._cur[c]) return false;}
         bool operator!=(const iterator& o) const {return !(*this == o);}
 
         constexpr iterator() = default;
-        constexpr iterator(memory_view<value_type> sizes): _sizes(sizes), _cur(sizes.size(), 0) {}
+        constexpr iterator(memory_view<const value_type> sizes): _sizes(sizes), _cur(sizes.size(), 0) {}
     };
 
-    constexpr cartesian_product(const T& sizes):_sizes(sizes){}
+    constexpr cartesian_product(const T& sizes):_sizes(sizes.data(), sizes.size()){}
     constexpr cartesian_product(T&& sizes):_storage(std::move(sizes)), _sizes(_storage.value()){}
 
     iterator begin() const {return iterator(_sizes);}

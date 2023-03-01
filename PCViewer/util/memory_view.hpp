@@ -14,6 +14,7 @@ class memory_view{
     T* _data{};
     size_t _size{};
 public:
+    using value_type = T;
     static constexpr size_t n_pos{size_t(-1)};
 
     memory_view(){};
