@@ -722,6 +722,29 @@ public:
     }
 };
 
+class Cartesian_Product: public Node, public VariableInput, public Creatable<Cartesian_Product>{
+public:
+    Cartesian_Product():
+        Node(createFilledVec<IndexType, Type>(2), {"", ""}, createFilledVec<IndexType, Type>(1), {""}, "Cartesian Product"),
+        VariableInput(false, 2) {}
+    
+    void applyOperationCpu(const float_column_views& input, float_column_views& output) const override{
+        std::vector<size_t> sizes;
+        size_t cart_size{1}; for(const auto& v: input) {sizes.push_back(v.cols[0].size()); cart_size *= v.cols[0].size()};
+        assert(output[0].cols[0].size() == cart_size);
+        size_t c{};
+        for(const auto& cart_indices: util::cartesian_product(sizes)){
+            output[0].cols[0][c] = 0;
+            for(auto&& [ind, inp]: util::enumerate(cart_indices)){
+                if(inp < input.size() - 1) output[0].cols[0][c] *= sizes[inp];
+                const auto& min_max = input[inp].cols_min_max[0];
+                output[0].cols[0][c] += ((input[inp].cols[0][ind] - min_max.min) / (min_max.max - min_max.min) + .5f) * (sizes[inp] - 1);
+            }
+        }
+        output[0].cols_min_max = {min_max_t{0.f, as<float>(cart_size - 1)}};
+    }
+};
+
 // ------------------------------------------------------------------------------------------
 // unary nodes
 // ------------------------------------------------------------------------------------------
