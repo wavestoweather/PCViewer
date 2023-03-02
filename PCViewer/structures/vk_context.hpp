@@ -86,6 +86,7 @@ struct vk_context{
 
     VkPhysicalDeviceMemoryProperties            memory_properties{};
     size_t                                      gpu_mem_size{};
+    VkPhysicalDeviceSubgroupProperties          subgroup_properties{};
 
     // initializes this vulkan context. Init function needed because global object has no well defined lifetime
     VkContextInitReturnInfo init(const VkContextInitInfo& info);

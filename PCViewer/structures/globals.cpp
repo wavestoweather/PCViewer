@@ -332,6 +332,9 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
             break;
         }
     }
+    VkPhysicalDeviceProperties2 props{};
+    props.pNext = &subgroup_properties;
+    vkGetPhysicalDeviceProperties2(physical_device, &props);
 
     return ret;
 }

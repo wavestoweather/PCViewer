@@ -139,7 +139,7 @@ void data_workbench::show()
         if(_attribute_regex_error)
             ImGui::PushStyleColor(ImGuiCol_FrameBg, {1.f, 0.f, 0.f, .5f});
         ImGui::PushItemWidth(150);
-        bool reselect_all_attributes = ImGui::InputText("Fileter##a", &_attribute_table_filter) && _attribute_table_filter.size();
+        bool reselect_all_attributes = ImGui::InputText("Filter##a", &_attribute_table_filter) && _attribute_table_filter.size();
         ImGui::PopItemWidth();
         if(_regex_error)
             ImGui::PopStyleColor();

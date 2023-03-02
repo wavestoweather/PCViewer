@@ -824,9 +824,9 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
             vkCmdFillBuffer(command_buffer, gpu_buffers[buffer_index].buffer, 0, gpu_buffers[buffer_index].size, 0);
         }
         vkResetFences(globals::vk_context.device, 1, &_compute_fence);
-        for(const auto& pipeline: pipelines){
+        for(const auto& pipeline: pipelines.pipelines){
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
-            vkCmdDispatch(command_buffer, (uint32_t(pipeline.amt_of_threads) + workgroup_size - 1) / workgroup_size, 1, 1);
+            vkCmdDispatch(command_buffer, (uint32_t(pipeline.amt_of_threads[0]) + workgroup_size - 1) / workgroup_size, 1, 1);
             vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {}, 0, {}, 0, {}, 0, {});
         }
         structures::stopwatch gpu_watch; gpu_watch.start();
@@ -851,7 +851,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         // cleanup vulkan resources
         for(auto& gpu_buffer: gpu_buffers)
             util::vk::destroy_buffer(gpu_buffer);
-        for(auto& pipeline: pipelines){
+        for(auto& pipeline: pipelines.pipelines){
             util::vk::destroy_pipeline_layout(pipeline.layout);
             util::vk::destroy_pipeline(pipeline.pipeline);
         }
