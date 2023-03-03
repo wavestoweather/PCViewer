@@ -332,7 +332,8 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
             break;
         }
     }
-    VkPhysicalDeviceProperties2 props{};
+    VkPhysicalDeviceProperties2 props{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    subgroup_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
     props.pNext = &subgroup_properties;
     vkGetPhysicalDeviceProperties2(physical_device, &props);
 

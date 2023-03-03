@@ -10,9 +10,9 @@ using center_t = std::vector<std::vector<double>>;
 float distance(const k_means::float_column_views& input, size_t i, const std::vector<double>& center, k_means::distance_method_t mean, bool equal_layout){
     float s{};
     switch(mean){
-    case k_means::distance_method_t::norm:          for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += diff * diff;} return std::sqrt(s);
-    case k_means::distance_method_t::squared_norm:  for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += diff * diff;} return s;
-    case k_means::distance_method_t::l1_norm:       for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - center[d]; s += std::abs(diff);} return s;
+    case k_means::distance_method_t::norm:          for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - as<float>(center[d]); s += diff * diff;} return std::sqrt(s);
+    case k_means::distance_method_t::squared_norm:  for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - as<float>(center[d]); s += diff * diff;} return s;
+    case k_means::distance_method_t::l1_norm:       for(size_t d: util::size_range(input)){float diff = (equal_layout ? input[d].cols[0][i]: input[d](i, 0)) - as<float>(center[d]); s += std::abs(diff);} return s;
     }
     return 0;
 }

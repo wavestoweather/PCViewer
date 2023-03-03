@@ -272,7 +272,7 @@ public:
 
         void _carry_prop(){
             if(_cur.back() >= _sizes.back()){
-                for(int c = _cur.size() - 1; c > 0 && _cur[c] >= _sizes[c]; --c){
+                for(int c = as<int>(_cur.size()) - 1; c > 0 && _cur[c] >= _sizes[c]; --c){
                     _cur[c] -= _sizes[c];
                     _cur[c - 1]++;
                 }
@@ -443,7 +443,7 @@ U operator|(const T& range, const to<U>& to){
     if constexpr(is_resizable<U>::value && is_sizeable<T>::value)
         ret.resize(range.size());
     for(auto&& e: range)
-        ret.emplace_back(e);
+        ret.emplace_back(as<typedef U::value_type>(e));
     return ret;
 }
 }

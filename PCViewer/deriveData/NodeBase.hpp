@@ -48,16 +48,18 @@ public:
 class FloatType: public Type, public Creatable<FloatType, Type>{
 public:
     ImVec4 color() const override{return {1.f,0.f,0.f,1.f};};
-    column_memory_view<float> data() override {return column_memory_view(memory_view(_d));};
+    column_memory_view<float> data() override {return column_memory_view(memory_view(_d), _min_max);};
 private:
-    float _d;
+    float       _d{};
+    min_max_t   _min_max{};
 };
 
 class IndexType: public Type, public Creatable<IndexType, Type>{
-    float _d{}; // default index is 0
+    float       _d{}; // default index is 0
+    min_max_t   _min_max{};
 public:
     ImVec4 color() const override{return {.1f,.1f,1.f,1.f};}
-    column_memory_view<float> data() override {return column_memory_view(memory_view(_d));}
+    column_memory_view<float> data() override {return column_memory_view(memory_view(_d), _min_max);}
 };
 
 class ConstantFloatType: public Type, public Creatable<ConstantFloatType, Type>{

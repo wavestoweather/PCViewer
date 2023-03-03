@@ -529,20 +529,20 @@ public:
         );
         float res{};
         for(const auto& in: input) res += std::pow(std::abs(in.cols_min_max[0].min), exp);
-        output[0].cols_min_max[0].min = std::pow(res, 1./exp);
+        output[0].cols_min_max[0].min = std::pow(res, 1.f/exp);
         res = {};
         for(const auto& in: input) res += std::pow(std::abs(in.cols_min_max[0].max), exp);
-        output[0].cols_min_max[0].min = std::pow(res, 1./exp);
+        output[0].cols_min_max[0].min = std::pow(res, 1.f/exp);
     }
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::lp_norm, input, output, input_elements[middle_input_id]);
         float res{};
         for(const auto& in: input) res += std::pow(std::abs(in.cols_min_max[0].min), exp);
-        output[0].cols_min_max[0].min = std::pow(res, 1./exp);
+        output[0].cols_min_max[0].min = std::pow(res, 1.f/exp);
         res = {};
         for(const auto& in: input) res += std::pow(std::abs(in.cols_min_max[0].max), exp);
-        output[0].cols_min_max[0].min = std::pow(res, 1./exp);
+        output[0].cols_min_max[0].min = std::pow(res, 1.f/exp);
     }
 };
 

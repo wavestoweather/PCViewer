@@ -12,6 +12,7 @@ struct pipeline_info{
     VkPipelineLayout    layout;
     // maybe additional info
     std::vector<size_t> amt_of_threads; // multiple sizes used to be able to the reductions
+    std::vector<std::vector<uint8_t>> push_constants_data;  // multiple push constants given for each called pipeline one
 };
 using data_storage = std::variant<uint32_t, size_t, float>;
 

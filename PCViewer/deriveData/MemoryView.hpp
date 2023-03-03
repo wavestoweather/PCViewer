@@ -57,7 +57,7 @@ public:
 };
 
 struct min_max_t{
-    float min, max;
+    float min{}, max{};
 };
 template<class T>
 struct column_memory_view{ // holds one or more columns (done to also be able to hold vectors)
@@ -82,6 +82,9 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
                 cols = {data};
             }
         };
+    column_memory_view(memory_view<T> data, const min_max_t& min_max):
+        cols({data}),
+        cols_min_max({min_max}){}
     column_memory_view(std::vector<memory_view<T>> dataVec, memory_view<uint32_t> dimensionSizes = {}, memory_view<uint32_t> columnDimensionIndices = {}):
         dimensionSizes(dimensionSizes),
         columnDimensionIndices(columnDimensionIndices),

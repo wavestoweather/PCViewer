@@ -14,6 +14,9 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
     shaderc::Compiler compiler;
     shaderc::CompileOptions options;
 
+    options.SetTargetSpirv(shaderc_spirv_version_1_4);
+    options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+
     // Like -DMY_DEFINE=1
     for(const auto& [define, val]: defines)
         options.AddMacroDefinition(define, val);
