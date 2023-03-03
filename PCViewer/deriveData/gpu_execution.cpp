@@ -316,8 +316,8 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
     }
     pipeline_code << "; if(gl_GlobalInvocationID.x < channel_length) f = " << src_attribute << ";\n";
 
-    const auto subroup_size = globals::vk_context.subgroup_properties.subgroupSize;
-    for(size_t element_count = workgroup_size; element_count > 0; element_count /= subroup_size){
+    const auto subgroup_size = globals::vk_context.subgroup_properties.subgroupSize;
+    for(size_t element_count = workgroup_size; element_count > 1; element_count /= subgroup_size){
         // adding active counting where needed
         switch(reduction_op){
         case avg_red:
@@ -337,16 +337,16 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
         pipeline_code << ";\n";
         // write to shared, load in new registers
         pipeline_code << "if(subgroupElect()) " << shared_array << "[gl_SubgroupID] = f;\n";
-        pipeline_code << "barrier(); // waiting for all subgroup writes\n";
         if(element_count < workgroup_size) pipeline_code << "}\n";  // if closing bracket
-        if(element_count / subroup_size == 0) break;
-        pipeline_code << "if(gl_LocalInvocationID.x < " << element_count / workgroup_size << "){\n";
+        pipeline_code << "barrier(); // waiting for all subgroup writes\n";
+        if(element_count / subgroup_size == 1) break;
+        pipeline_code << "if(gl_LocalInvocationID.x < " << element_count / subgroup_size << "){\n";
         pipeline_code << "f = " << shared_array << "[gl_LocalInvocationID.x];\n";
         if(reduction_op == avg_red || reduction_op == stddev_red)
             pipeline_code << "active_count = 1;\n";
     }
     // writeout of solution of this reduction
-    pipeline_code << "if(gl_LocalInvocationID.x == 0) " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length];\n";
+    pipeline_code << "if(gl_LocalInvocationID.x == 0) " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length] = f;\n";
     pipeline_code << "}\n"; // end channel for loop
     return pipeline_code.str();
 }
@@ -472,7 +472,10 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
                 #endif
 
                 void main(){
-                    if(gl_GlobalInvocationID.x >= )" << calc_thread_amt(data_state) << ") return;\n";
+                    #ifndef SHARED_REDUCTION_SIZE   // if reduction is performed all threads have to stay active for correct reduction
+                    if(gl_GlobalInvocationID.x >= )" << calc_thread_amt(data_state) << R"() return;
+                    #endif
+                    )";
         }
 
         crude_json::value additional_data{}; auto start = line.find('{');
