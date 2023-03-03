@@ -661,6 +661,10 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
             body << "storage" << std::get<uint32_t>(output_indices[0]) << " = pow(storage" << std::get<uint32_t>(input_indices[0]) << ", storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
             break;
         case op_codes::min_red:
+        case op_codes::max_red:
+        case op_codes::sum_red:
+        case op_codes::mul_red:
+        case op_codes::avg_red:
             {
                 pipeline_defines.insert({"SHARED_REDUCTION_SIZE", std::to_string(globals::vk_context.subgroup_properties.subgroupSize)});
                 body << "const uint channel_length = " << array_sizes[1] << ", top_level_channel_length = " << array_sizes[1] << ";\n";
@@ -669,22 +673,6 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
                 body << "vec " << out_buffer.str() << " = vec(" << dst_buffer << "ul);\n";
                 body << reduction_iterations_code("storage" + std::to_string(std::get<uint32_t>(input_indices[1])), "share", out_buffer.str(), operation, group_count);
             }
-            break;
-        case op_codes::max_red:
-            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
-            body << "atomicMax(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
-            break;
-        case op_codes::sum_red:
-            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
-            body << "atomicAdd(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
-            break;
-        case op_codes::mul_red:
-            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
-            body << "atomicMul(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) <<")], storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
-            break;
-        case op_codes::avg_red:
-            body << "vec array_out" << std::get<uint32_t>(input_indices[0]) << " = vec(" << std::get<size_t>(output_indices[0]) << "ul);\n";
-            body << "atomicAdd(array_out" << std::get<uint32_t>(input_indices[0]) << ".data[uint(storage" << std::get<uint32_t>(input_indices[0]) << ")], storage" << std::get<uint32_t>(input_indices[1]) << " / float(" << calc_thread_amt(data_state) << "));\n";
             break;
         default:
             throw std::runtime_error{"Unsupported op_code for operation line: " + std::string(line) + ". Use Cpu execution for this execution graph."};
