@@ -27,7 +27,6 @@ const std::string_view reduction_header = R"(
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_scalar_block_layout: require
 #extension GL_EXT_shader_atomic_float: require
-#extension GL_EXT_arithmetic_subgroup_operations: require
 #extension GL_KHR_shader_subgroup_basic: require
 #extension GL_KHR_shader_subgroup_arithmetic: require
 
@@ -42,9 +41,9 @@ layout(push_constant) uniform PCs{
 
 layout(local_size_x = )" STR_IND(workgroup_size) R"() in;
 
-shared float share[gl_NumSubgroups];
+shared float share[SHARED_REDUCTION_SIZE];
 
-void main{
+void main(){
 )";
 inline data_storage extract_data_storage(std::string_view address){
     data_storage ret;
@@ -362,12 +361,12 @@ inline std::vector<pipeline_info> create_reduction_pipeline(VkDeviceAddress tmp_
         pipeline_code << "vec src = vec(" << src << "ul);\n";
         pipeline_code << "vec dst = vec(" << dst << "ul);\n";
         pipeline_code << "float src_el = gl_GlobalInvocationID.x < channel_length ? src.data[gl_GlobalInvocationID.x]: 0.f;\n";
-        pipeline_code << reduction_iterations_code("src_el", "shared", "dst", reduction_op, channels);
+        pipeline_code << reduction_iterations_code("src_el", "share", "dst", reduction_op, channels);
         pipeline_code << "}\n"; // closing the main function from the reduction header
         return pipeline_code.str();
     };
     std::vector<size_t> dispatch_sizes;
-    for(size_t cur_size = top_level_length; cur_size > 0; cur_size = (cur_size + workgroup_size - 1) / workgroup_size)
+    for(size_t cur_size = top_level_length; cur_size > 1; cur_size = (cur_size + workgroup_size - 1) / workgroup_size)
         dispatch_sizes.emplace_back(cur_size);
     
     // pipeline for the first reductions inside the tmp buffer
@@ -382,7 +381,7 @@ inline std::vector<pipeline_info> create_reduction_pipeline(VkDeviceAddress tmp_
         }
     }
     // final reduction into the end buffer
-    ret.emplace_back(create_pipeline(create_reduction_code(tmp_buffer, dst_buffer, channels, top_level_length, reduction_op), dispatch_sizes.back(), {}, sizeof(pc)));
+    ret.emplace_back(create_pipeline(create_reduction_code(tmp_buffer, dst_buffer, channels, top_level_length, reduction_op), dispatch_sizes.back(), {{"SHARED_REDUCTION_SIZE", std::to_string(globals::vk_context.subgroup_properties.subgroupSize)}}, sizeof(pc)));
     ret.back().push_constants_data.emplace_back(binary_pc.begin(), binary_pc.end());
     return ret;
 };
@@ -700,7 +699,7 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
         case op_codes::avg_red:
             if(array_sizes[1] > workgroup_size){
                 assert(reduction_vec != util::n_pos);
-                auto reduction_pipes = create_reduction_pipeline(util::vk::get_buffer_address(temp_buffers[reduction_vec]), std::get<size_t>(output_indices[0]), 0, array_sizes[1], reduction_buffer_size / sizeof(float), operation);
+                auto reduction_pipes = create_reduction_pipeline(util::vk::get_buffer_address(temp_buffers[reduction_vec]), std::get<size_t>(output_indices[0]), 0, group_count, reduction_buffer_size / sizeof(float), operation);
                 wait_for_barrier_pipes.insert(wait_for_barrier_pipes.end(), reduction_pipes.begin(), reduction_pipes.end());
             }
             break;

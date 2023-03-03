@@ -826,7 +826,11 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
         vkResetFences(globals::vk_context.device, 1, &_compute_fence);
         for(const auto& pipeline: pipelines.pipelines){
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
-            vkCmdDispatch(command_buffer, (uint32_t(pipeline.amt_of_threads[0]) + workgroup_size - 1) / workgroup_size, 1, 1);
+            for(auto&&  [amt_of_threads, i]: util::enumerate(pipeline.amt_of_threads)){
+                if(pipeline.push_constants_data.size() >= i && pipeline.push_constants_data.size())
+                    vkCmdPushConstants(command_buffer, pipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, as<uint32_t>(pipeline.push_constants_data[i].size()), pipeline.push_constants_data[i].data()); 
+                vkCmdDispatch(command_buffer, (uint32_t(amt_of_threads) + workgroup_size - 1) / workgroup_size, 1, 1);
+            }
             vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {}, 0, {}, 0, {}, 0, {});
         }
         structures::stopwatch gpu_watch; gpu_watch.start();
