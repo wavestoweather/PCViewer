@@ -275,7 +275,7 @@ inline deriveData::pipeline_info create_pipeline(const std::string& code, size_t
         std::string_view c = std::string_view(code).substr(code.find('\n') + 1);
         std::stringstream formatted_code;
         int cur_indent{};
-        int line_number{};
+        int line_number{2};
         for(std::string_view line: c | util::slice('\n')){
             size_t trim_pos =  line.find_first_not_of(" ");
             if(trim_pos != std::string_view::npos) line = line.substr(trim_pos);
@@ -299,7 +299,7 @@ inline deriveData::pipeline_info create_pipeline(const std::string& code, size_t
     ret.pipeline = util::vk::create_compute_pipeline(pipeline_info);
     return ret;
 }
-inline std::string reduction_iterations_code(std::string_view src_attribute, std::string_view shared_array, std::string_view storage_buffer, op_codes reduction_op, size_t channels){
+inline std::string reduction_iterations_code(std::string_view src_attribute, std::string_view shared_array, std::string_view storage_buffer, op_codes reduction_op, size_t channels, std::string_view stddev_attribute = {}){
     std::stringstream pipeline_code;
     pipeline_code << "for(int c = 0; c < " << channels << "; ++c){\n";
     pipeline_code << "float f = ";
@@ -310,10 +310,12 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
     case sum_red: pipeline_code << 0.f; break;
     case mul_red: pipeline_code << 1.f; break;
     case avg_red: pipeline_code << 0.f; break;
-    case stddev_red: pipeline_code << 0.f; break;
+    case stddev_red: pipeline_code << 0.f << "; float f1 = 0.f"; break;
     default: assert(false && "Missing implementation for reduction operation.");
     }
-    pipeline_code << "; if(gl_GlobalInvocationID.x < channel_length) f = " << src_attribute << ";\n";
+    pipeline_code << ";\nif(gl_GlobalInvocationID.x < channel_length) f = " << src_attribute << ";\n";
+    if(reduction_op == stddev_red)
+        pipeline_code << "if(gl_GlobalInvocationID.x < channel_length) f1 = " << stddev_attribute << ";\n";
 
     const auto subgroup_size = globals::vk_context.subgroup_properties.subgroupSize;
     for(size_t element_count = workgroup_size; element_count > 1; element_count /= subgroup_size){
@@ -331,21 +333,34 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
         case sum_red: pipeline_code << "subgroupAdd(f)"; break;
         case mul_red: pipeline_code << "subgroupMul(f)"; break;
         case avg_red: pipeline_code << "subgroupAdd(f);"; break;
-        case stddev_red: pipeline_code << "subgroupAdd(f);"; break;
+        case stddev_red: pipeline_code << "subgroupAdd(f); f1 = subgroupAdd(f1);"; break;
         }
         pipeline_code << ";\n";
         // write to shared, load in new registers
         pipeline_code << "if(subgroupElect()) " << shared_array << "[gl_SubgroupID] = f;\n";
+        if(reduction_op == stddev_red)
+            pipeline_code << "if(subgroupElect()) " << shared_array << "[gl_SubgroupID + SHARED_REDUCTION_SIZE / 2] = f1;\n";
         if(element_count < workgroup_size) pipeline_code << "}\n";  // if closing bracket
         pipeline_code << "barrier(); // waiting for all subgroup writes\n";
         if(element_count / subgroup_size == 1) break;
         pipeline_code << "if(gl_LocalInvocationID.x < " << element_count / subgroup_size << "){\n";
         pipeline_code << "f = " << shared_array << "[gl_LocalInvocationID.x];\n";
+        if(reduction_op == stddev_red)
+            pipeline_code << "f1 = " << shared_array << "[SHARED_REDUCTION_SIZE / 2 + gl_LocalInvocationID.x];\n";
     }
-    if(reduction_op == avg_red || reduction_op == stddev_red)
-        pipeline_code << "f /= min(" << workgroup_size << ", channel_length - (gl_WorkGroupID.x * " << workgroup_size << "));\n";
+    if(reduction_op == avg_red || reduction_op == stddev_red){
+        pipeline_code << "uint active_threads = min(" << workgroup_size << ", channel_length - (gl_WorkGroupID.x * " << workgroup_size << "));\n";
+        pipeline_code << "f /= float(active_threads);\n";
+    }
+    if(reduction_op == stddev_red)
+        pipeline_code << "f1 /= float(active_threads);\n";
     // writeout of solution of this reduction
-    pipeline_code << "if(gl_LocalInvocationID.x == 0) " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length] = f;\n";
+    if(reduction_op == stddev_red){
+        pipeline_code << "if(gl_LocalInvocationID.x == 0 && channel_length < " << workgroup_size << ") " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length] = sqrt(f1 - f * f);\n";
+        pipeline_code << " else if(gl_LocalInvocationID.x == 0){" << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length] = f; " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length + " << channels << " * top_level_channel_length] = f1;}\n";
+    }
+    else
+        pipeline_code << "if(gl_LocalInvocationID.x == 0) " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length] = f;\n";
     pipeline_code << "}\n"; // end channel for loop
     return pipeline_code.str();
 }
@@ -361,7 +376,9 @@ inline std::vector<pipeline_info> create_reduction_pipeline(VkDeviceAddress tmp_
         pipeline_code << "vec src = vec(" << src << "ul);\n";
         pipeline_code << "vec dst = vec(" << dst << "ul);\n";
         pipeline_code << "float src_el = gl_GlobalInvocationID.x < channel_length ? src.data[gl_GlobalInvocationID.x]: 0.f;\n";
-        pipeline_code << reduction_iterations_code("src_el", "share", "dst", reduction_op, channels);
+        if(reduction_op == stddev_red)
+            pipeline_code << "float stddev_el = gl_GlobalInvocationID.x < channel_length ? src.data[gl_GlobalInvocationID.x + " << top_level_length * channels << "]: 0.f;\n";
+        pipeline_code << reduction_iterations_code("src_el", "share", "dst", reduction_op, channels, "stddev_el");
         pipeline_code << "}\n"; // closing the main function from the reduction header
         return pipeline_code.str();
     };
@@ -672,6 +689,17 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
                 size_t dst_buffer = array_sizes[1] <= workgroup_size ? std::get<size_t>(output_indices[0]): util::vk::get_buffer_address(temp_buffers[reduction_vec]);
                 body << "vec " << out_buffer.str() << " = vec(" << dst_buffer << "ul);\n";
                 body << reduction_iterations_code("storage" + std::to_string(std::get<uint32_t>(input_indices[1])), "share", out_buffer.str(), operation, group_count);
+            }
+            break;
+        case op_codes::stddev_red:
+            {
+                pipeline_defines.insert({"SHARED_REDUCTION_SIZE", std::to_string(globals::vk_context.subgroup_properties.subgroupSize * 2)});
+                body << "const uint channel_length = " << array_sizes[1] << ", top_level_channel_length = " << array_sizes[1] << ";\n";
+                std::stringstream out_buffer; out_buffer << "array_out" << std::get<uint32_t>(input_indices[0]);
+                size_t dst_buffer = array_sizes[1] <= workgroup_size ? std::get<size_t>(output_indices[0]): util::vk::get_buffer_address(temp_buffers[reduction_vec]);
+                body << "vec " << out_buffer.str() << " = vec(" << dst_buffer << "ul);\n";
+                body << "float stddev_el = storage" << std::get<uint32_t>(input_indices[1]) << "; stddev_el *= stddev_el;\n";
+                body << reduction_iterations_code("storage" + std::to_string(std::get<uint32_t>(input_indices[1])), "share", out_buffer.str(), operation, group_count, "stddev_el");
             }
             break;
         default:

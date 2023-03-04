@@ -1255,7 +1255,7 @@ public:
 
 class Reduction: public Binary<FloatType>{
 public:
-    Reduction(std::string_view header): Binary(header){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index";}
+    Reduction(std::string_view header): Binary(header){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index"; inplace_possible = false;}
 };
 
 class Min_Reduction: public Reduction, public Creatable<Min_Reduction>{
@@ -1307,7 +1307,6 @@ public:
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::sum_red, input, output);
-        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
         output[0].cols_min_max = input[1].cols_min_max;
     }
 };
@@ -1324,7 +1323,6 @@ public:
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::mul_red, input, output);
-        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
     }
 };
 
@@ -1341,7 +1339,6 @@ public:
 
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::avg_red, input, output);
-        init_values.emplace_back(init_value{output[0].cols[0].data(), init_val});
         output[0].cols_min_max = input[1].cols_min_max;
     }
 };
@@ -1362,6 +1359,11 @@ public:
         for(size_t i: util::size_range(output[0].cols[0]))
             output[0].cols[0][i] = std::sqrt(output[0].cols[0][i] - expect[i] * expect[i]);
 
+        output[0].cols_min_max = input[1].cols_min_max;
+    }
+
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::stddev_red, input, output);
         output[0].cols_min_max = input[1].cols_min_max;
     }
 };
