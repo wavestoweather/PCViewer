@@ -320,7 +320,7 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
         // adding active counting where needed
         switch(reduction_op){
         case avg_red:
-        case stddev_red: pipeline_code << "uint active_count = uint(gl_GlobalInvocationID.x < channel_length); active_count = subgroupAdd(active_count);\n"; break;
+        case stddev_red: break;
         }
         // doing the reduction iterations in shader ----------------------------
         // reduce subroup
@@ -330,8 +330,8 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
         case max_red: pipeline_code << "subgroupMax(f)"; break;
         case sum_red: pipeline_code << "subgroupAdd(f)"; break;
         case mul_red: pipeline_code << "subgroupMul(f)"; break;
-        case avg_red: pipeline_code << "subgroupAdd(f); f /= float(active_count)"; break;
-        case stddev_red: pipeline_code << "subgroupAdd(f)"; break;
+        case avg_red: pipeline_code << "subgroupAdd(f);"; break;
+        case stddev_red: pipeline_code << "subgroupAdd(f);"; break;
         }
         pipeline_code << ";\n";
         // write to shared, load in new registers
@@ -341,9 +341,9 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
         if(element_count / subgroup_size == 1) break;
         pipeline_code << "if(gl_LocalInvocationID.x < " << element_count / subgroup_size << "){\n";
         pipeline_code << "f = " << shared_array << "[gl_LocalInvocationID.x];\n";
-        if(reduction_op == avg_red || reduction_op == stddev_red)
-            pipeline_code << "active_count = 1;\n";
     }
+    if(reduction_op == avg_red || reduction_op == stddev_red)
+        pipeline_code << "f /= min(" << workgroup_size << ", channel_length - (gl_WorkGroupID.x * " << workgroup_size << "));\n";
     // writeout of solution of this reduction
     pipeline_code << "if(gl_LocalInvocationID.x == 0) " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length] = f;\n";
     pipeline_code << "}\n"; // end channel for loop
