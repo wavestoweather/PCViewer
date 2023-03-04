@@ -5,6 +5,7 @@
 #include <functional>
 #include <optional>
 #include <std_util.hpp>
+#include <as_cast.hpp>
 
 namespace util{
 template<typename T>
@@ -443,7 +444,7 @@ U operator|(const T& range, const to<U>& to){
     if constexpr(is_resizable<U>::value && is_sizeable<T>::value)
         ret.resize(range.size());
     for(auto&& e: range)
-        ret.emplace_back(as<typedef U::value_type>(e));
+        ret.emplace_back(as<typename U::value_type>(e));
     return ret;
 }
 }

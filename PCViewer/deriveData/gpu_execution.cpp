@@ -291,7 +291,8 @@ inline deriveData::pipeline_info create_pipeline(const std::string& code, size_t
     auto spir_v = util::shader_compiler::compile(code, defines);
     pipeline_info ret{};
     ret.amt_of_threads = {thread_amt};
-    auto pipeline_layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, pc_size ? util::memory_view(util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, pc_size, 0)): util::memory_view<VkPushConstantRange>{});
+    auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, pc_size, 0);
+    auto pipeline_layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, pc_size ? util::memory_view(push_constant_range): util::memory_view<VkPushConstantRange>{});
     ret.layout = util::vk::create_pipeline_layout(pipeline_layout_info);
     auto shader_module = util::vk::create_scoped_shader_module(util::memory_view<const uint32_t>(spir_v));
     auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
@@ -317,6 +318,12 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
     if(reduction_op == stddev_red)
         pipeline_code << "if(gl_GlobalInvocationID.x < channel_length) f1 = " << stddev_attribute << ";\n";
 
+    if(reduction_op == avg_red || reduction_op == stddev_red){
+        pipeline_code << "uint active_threads = min(" << workgroup_size << ", channel_length - (gl_WorkGroupID.x * " << workgroup_size << "));\n";
+        pipeline_code << "f /= float(active_threads);\n";
+    }
+    if(reduction_op == stddev_red)
+        pipeline_code << "f1 /= float(active_threads);\n";
     const auto subgroup_size = globals::vk_context.subgroup_properties.subgroupSize;
     for(size_t element_count = workgroup_size; element_count > 1; element_count /= subgroup_size){
         // adding active counting where needed
@@ -348,12 +355,6 @@ inline std::string reduction_iterations_code(std::string_view src_attribute, std
         if(reduction_op == stddev_red)
             pipeline_code << "f1 = " << shared_array << "[SHARED_REDUCTION_SIZE / 2 + gl_LocalInvocationID.x];\n";
     }
-    if(reduction_op == avg_red || reduction_op == stddev_red){
-        pipeline_code << "uint active_threads = min(" << workgroup_size << ", channel_length - (gl_WorkGroupID.x * " << workgroup_size << "));\n";
-        pipeline_code << "f /= float(active_threads);\n";
-    }
-    if(reduction_op == stddev_red)
-        pipeline_code << "f1 /= float(active_threads);\n";
     // writeout of solution of this reduction
     if(reduction_op == stddev_red){
         pipeline_code << "if(gl_LocalInvocationID.x == 0 && channel_length < " << workgroup_size << ") " << storage_buffer << ".data[gl_WorkGroupID.x + c * top_level_channel_length] = sqrt(f1 - f * f);\n";

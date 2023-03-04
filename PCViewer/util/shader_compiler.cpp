@@ -1,6 +1,8 @@
 #include "shader_compiler.hpp"
 #include <stdexcept>
 #include <logger.hpp>
+#include <sstream>
+#include <string_view_util.hpp>
 #ifdef _WIN32
 #include <shaderc/shaderc.hpp>
 #else
@@ -147,7 +149,27 @@ const glslang_resource_t DefaultTBuiltInResource = {
         /* .generalConstantMatrixVectorIndexing = */ 1,
 }};
 
+inline bool line_empty(std::string_view line){
+    for(char c: line)
+        if(c != ' ' || c!= '\n')
+            return false;
+    return true;
+}
 std::vector<uint32_t> compile(const std::string& code, const robin_hood::unordered_map<std::string, std::string>& defines){
+    std::stringstream code_including_defines;
+    auto code_by_lines = code | util::slice('\n');
+    auto cur = code_by_lines.begin();
+    for(std::string_view line = *cur; cur != code_by_lines.end(); line = *++cur){
+        code_including_defines << line << '\n';
+        if(line.find("#version") != std::string_view::npos)
+            break;
+    }
+    for(const auto [define, val]: defines)
+        code_including_defines << "#define " << define << ' ' << val << '\n';
+    code_including_defines << cur.get_rest();
+    std::string c = code_including_defines.str();
+    code_including_defines.str({});
+    
     const glslang_input_t input = {
         .language = GLSLANG_SOURCE_GLSL,
         .stage = GLSLANG_STAGE_COMPUTE,
@@ -155,7 +177,7 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
         .client_version = GLSLANG_TARGET_VULKAN_1_2,
         .target_language = GLSLANG_TARGET_SPV,
 		.target_language_version = GLSLANG_TARGET_SPV_1_4,
-		.code = code.data(),
+		.code = c.data(),
 		.default_version = 400,
 		.default_profile = GLSLANG_NO_PROFILE,
 		.force_default_version_and_profile = false,
