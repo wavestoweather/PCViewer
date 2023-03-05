@@ -12,6 +12,7 @@
 
 #pragma once
 #include <vulkan/vulkan.h>
+#include <memory_view.hpp>
 
 namespace util{
 namespace vk{

@@ -5,6 +5,7 @@
 #include <histogram_registry_util.hpp>
 #include <data_util.hpp>
 #include <priority_globals.hpp>
+#include <as_cast.hpp>
 
 namespace pipelines{
 scatterplot_renderer::scatterplot_renderer()
@@ -219,7 +220,7 @@ void scatterplot_renderer::render(const render_info& info){
         vkResetFences(globals::vk_context.device, 1, &_render_fence);
 
         if(_render_commands.size())
-            vkFreeCommandBuffers(globals::vk_context.device, _command_pool, _render_commands.size(), _render_commands.data());
+            vkFreeCommandBuffers(globals::vk_context.device, _command_pool, as<uint32_t>(_render_commands.size()), _render_commands.data());
         _render_commands.clear();
     }
 

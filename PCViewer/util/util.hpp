@@ -1,6 +1,7 @@
 #pragma once
 #include <ranges.hpp>
 #include <cmath>
+#include <imgui.h>
 
 namespace util{
 template<typename T>
