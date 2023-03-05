@@ -1,0 +1,50 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/attr_forces.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t points_address;
+    uint64_t attr_forces_address;
+    uint64_t pij_address;
+    uint64_t pij_row_address;
+    uint64_t pij_col_address;
+    uint points_count;
+};
+
+Vec points      = Vec(points_address);
+Vec attr_forces = Vec(attr_forces_address);
+Vec pij         = Vec(pij_address);
+UVec pij_row    = UVec(pij_row_address);
+UVec pij_col    = UVec(pij_col_address);
+
+void main(){
+    uint TID, i, j, jidx, jidx_end;
+    float ix, iy, jx, jy, dx, dy, pijqij;
+    float acc_x = 0, acc_y = 0;
+    TID = gl_GlobalInvocationID.x;
+
+    if (TID >= points_count)
+        return;
+
+    // Thread ID is point set
+    i = TID;
+    ix = points.d[i];
+    iy = points.d[points_count + i];
+    jidx_end = pij_row.d[TID + 1];
+    for (jidx = pij_row.d[TID]; jidx < jidx_end; jidx++)
+    {
+        j = pij_col.d[jidx];
+        jx = points.d[j];
+        jy = points.d[points_count + j];
+        dx = ix - jx; // X distance
+        dy = iy - jy; // Y distance
+        pijqij = pij.d[jidx] / (1 + dx * dx + dy * dy);
+        acc_x += pijqij * dx;
+        acc_y += pijqij * dy;
+    }
+    attr_forces.d[i] = acc_x;
+    attr_forces.d[points_count + i] = acc_y;
+}

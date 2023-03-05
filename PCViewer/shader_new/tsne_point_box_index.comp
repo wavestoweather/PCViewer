@@ -1,0 +1,48 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/nbodyfft.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t point_box_idx_address;
+    uint64_t x_in_box_address;
+    uint64_t y_in_box_address;
+    uint64_t xs_address;
+    uint64_t ys_address;
+    uint64_t box_lower_bounds_address;
+    float coord_min;
+    float box_width;
+    uint n_boxes;
+    uint n_total_boxes;
+    uint N;
+};
+
+UVec point_box_idx  = UVec(point_box_idx_address);
+Vec x_in_box        = Vec(x_in_box_address);
+Vec y_in_box        = Vec(y_in_box_address);
+Vec xs              = Vec(xs_address);
+Vec ys              = Vec(ys_address);
+Vec box_lower_bounds = Vec(box_lower_bounds_address);
+
+void main(){
+    uint TID = gl_GlobalInvocationID.x;
+    if (TID >= N)
+        return;
+
+    uint x_idx = uint((xs.d[TID] - coord_min) / box_width);
+    uint y_idx = uint((ys.d[TID] - coord_min) / box_width);
+
+    x_idx = max(0, x_idx);
+    x_idx = min(n_boxes - 1, x_idx);
+
+    y_idx = max(0, y_idx);
+    y_idx = min(n_boxes - 1, y_idx);
+
+    uint box_idx = y_idx * n_boxes + x_idx;
+    point_box_idx.d[TID] = box_idx;
+
+    x_in_box.d[TID] = (xs.d[TID] - box_lower_bounds.d[box_idx]) / box_width;
+    y_in_box.d[TID] = (ys.d[TID] - box_lower_bounds.d[n_total_boxes + box_idx]) / box_width;
+}

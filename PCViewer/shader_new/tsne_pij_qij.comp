@@ -1,0 +1,42 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/attr_forces.cu and converted
+// to glsl code for vulkan
+
+#version 450
+#extension GL_EXT_shader_atomic_float: require
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t points_address;
+    uint64_t attr_forces_address;
+    uint64_t pij_address;
+    uint64_t coo_indices_address;
+    uint points_count;
+    uint nonzero_count;
+};
+
+Vec points      = Vec(points_address);
+Vec attr_forces = Vec(attr_forces_address);
+Vec pij         = Vec(pij_address);
+UVec coo_indices= UVec(coo_indices_address);
+
+void main(){
+    uint i,j;
+    float ix, iy, jx, jy, dx, dy, pijqij;
+
+    if (gl_GlobalInvocationID.x >= nonzero_count)
+        return;
+
+    i = coo_indices.d[2 * gl_GlobalInvocationID.x];         // Point A
+    j = coo_indices.d[2 * gl_GlobalInvocationID.x + 1];     // Point B
+
+    ix = points.d[i];                                       // Ax
+    iy = points.d[points_count + i];                        // Ay
+    jx = points.d[j];                                       // Bx
+    jy = points.d[points_count + j];                        // By
+    dx = ix - jx;                                           // X distance
+    dy = iy - jy;                                           // Y distance
+    pijqij = pij.d[gl_GlobalInvocationID.x] / (1 + dx * dx + dy * dy); // Normalizing factor
+    atomicAdd(attr_forces.d[i], pijqij * dx);               // Update with X distances
+    atomicAdd(attr_forces.d[points_count + i], pijqij * dy); // Update with Y distances
+}

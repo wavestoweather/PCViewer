@@ -1,0 +1,44 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/attr_forces.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t points_address;
+    uint64_t pij_address;
+    uint64_t pij_ind_address;
+    uint64_t workspace_x_address;
+    uint64_t workspace_y_address;
+    uint points_count;
+    uint neighbours_count;
+};
+
+Vec points      = Vec(points_address);
+Vec pij         = Vec(pij_address);
+Vec workspace_x = Vec(workspace_x_address);
+Vec workspace_y = Vec(workspace_y_address);
+UVec pij_ind    = UVec(pij_ind_address);
+
+void main(){
+    uint TID, i, j;
+    float ix, iy, jx, jy, dx, dy, pijqij;
+    TID = gl_GlobalInvocationID.x; // This is the location in the pij matrix
+    if (TID >= points_count * neighbours_count)
+        return;
+
+    i = TID / neighbours_count;
+    j = pij_ind.d[TID];
+
+    ix = points.d[i];
+    iy = points.d[points_count + i];
+    jx = points.d[j];
+    jy = points.d[points_count + j];
+    dx = ix - jx; // X distance
+    dy = iy - jy; // Y distance
+    pijqij = pij.d[TID] / (1 + dx * dx + dy * dy);
+
+    workspace_x.d[TID] = pijqij * dx;
+    workspace_y.d[TID] = pijqij * dy;
+}

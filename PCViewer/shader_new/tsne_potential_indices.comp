@@ -1,0 +1,49 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/nbodyfft.cu and converted
+// to glsl code for vulkan
+
+#version 450
+#extension GL_EXT_shader_atomic_float: require
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t potentialsQij_address;
+    uint64_t point_box_indices_address;
+    uint64_t y_tilde_values_address;
+    uint64_t x_interpolated_values_address;
+    uint64_t y_interpolated_values_address;
+    uint N;
+    uint n_interpolation_points;
+    uint n_boxes;
+    uint n_terms;
+};
+
+Vec potentialsQij       = Vec(potentialsQij_address);
+UVec point_box_indices  = UVec(point_box_indices_address);
+Vec y_tilde_values      = Vec(y_tilde_values_address);
+Vec x_interpolated_values = Vec(x_interpolated_values_address);
+Vec y_interpolated_values = Vec(y_interpolated_values_address);
+
+void main(){
+    uint TID, current_term, i, interp_i, interp_j, box_idx, box_i, box_j, idx;
+    TID = gl_GlobalInvocationID.x;
+    if (TID >= n_terms * n_interpolation_points * n_interpolation_points * N)
+        return;
+
+    current_term = TID % n_terms;
+    i = (TID / n_terms) % N;
+    interp_j = ((TID / n_terms) / N) % n_interpolation_points;
+    interp_i = ((TID / n_terms) / N) / n_interpolation_points;
+
+    box_idx = point_box_indices.d[i];
+    box_i = box_idx % n_boxes;
+    box_j = box_idx / n_boxes;
+
+    idx = (box_i * n_interpolation_points + interp_i) * (n_boxes * n_interpolation_points) +
+          (box_j * n_interpolation_points) + interp_j;
+    // interpolated_values[TID] = x_interpolated_values[i + interp_i * N] * y_interpolated_values[i + interp_j * N] * y_tilde_values[idx * n_terms + current_term];
+    // interpolated_indices[TID] = i * n_terms + current_term;
+    atomicAdd(
+        potentialsQij.d[i * n_terms + current_term],
+        x_interpolated_values.d[i + interp_i * N] * y_interpolated_values.d[i + interp_j * N] * y_tilde_values.d[idx * n_terms + current_term]);
+}

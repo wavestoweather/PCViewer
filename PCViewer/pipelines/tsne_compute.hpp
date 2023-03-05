@@ -1,6 +1,7 @@
 #pragma once
 #include <buffer_info.hpp>
 #include <string_view>
+#include <limits>
 
 namespace pipelines{
 class tsne_compute{
@@ -20,7 +21,7 @@ class tsne_compute{
     const std::string_view _repulsive_forces_path{"shader/tsne_repulsive_forces.comp.spv"};
     const std::string_view _charges_qij_path{"shader/tsne_charges_qij.comp.spv"};
     const std::string_view _pij_path{"shader/tsne_pij.comp.spv"};
-    const std::string_view _perplexity_search_path{"shader/tsne_pij.comp.spv"};
+    const std::string_view _perplexity_search_path{"shader/tsne_perplexity_search.comp.spv"};
     const std::string_view _copy_to_fft_input_path{"shader/tsne_copy_to_fft.comp.spv"};
     const std::string_view _copy_from_fft_output_path{"shader/tsne_copy_from_fft.comp.spv"};
     const std::string_view _point_box_index_path{"shader/tsne_point_box_index.comp.spv"};
