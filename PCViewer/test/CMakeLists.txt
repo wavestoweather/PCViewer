@@ -6,6 +6,7 @@ create_test_sourcelist(Tests
     ranges_test.cpp
     kd_tree_test.cpp
     shader_test.cpp
+    gpu_tsne_test.cpp
 )
 
 file(GLOB src

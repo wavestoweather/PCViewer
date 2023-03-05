@@ -30,6 +30,7 @@ foreach(shader IN LISTS compiled_shaders)
     set(current_shader_path ${shader})
     get_filename_component(shader_filename ${current_shader_path} NAME)
     set(current_output_path ${CMAKE_BINARY_DIR}/PCViewer/shader/${shader_filename})
+    set(test_output_path ${CMAKE_BINARY_DIR}/PCViewer/test/shader/${shader_filename})
 
     get_filename_component(current_output_directory ${current_output_path} DIRECTORY)
     file(MAKE_DIRECTORY ${current_output_directory})
@@ -42,6 +43,13 @@ foreach(shader IN LISTS compiled_shaders)
            MAIN_DEPENDENCY ${current_shader_path}
            VERBATIM)
     list(APPEND compiled_shaders_depend ${current_output_path})
+
+    add_custom_command(
+           OUTPUT ${test_output_path}
+           COMMAND ${CMAKE_COMMAND} -E copy ${current_shader_path} ${test_output_path}
+           MAIN_DEPENDENCY ${current_shader_path}
+           VERBATIM)
+    list(APPEND compiled_shaders_depend ${test_output_path})
 endforeach()
 
 add_custom_target(copy_shaders DEPENDS ${compiled_shaders_depend})
