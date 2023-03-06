@@ -399,7 +399,8 @@ inline std::vector<pipeline_info> create_reduction_pipeline(VkDeviceAddress tmp_
         }
     }
     // final reduction into the end buffer
-    ret.emplace_back(create_pipeline(create_reduction_code(tmp_buffer, dst_buffer, channels, top_level_length, reduction_op), dispatch_sizes.back(), {{"SHARED_REDUCTION_SIZE", std::to_string(globals::vk_context.subgroup_properties.subgroupSize)}}, sizeof(pc)));
+    uint32_t shared_reduction_size = globals::vk_context.subgroup_properties.subgroupSize; if(reduction_op == stddev_red) shared_reduction_size *= 2; 
+    ret.emplace_back(create_pipeline(create_reduction_code(tmp_buffer, dst_buffer, channels, top_level_length, reduction_op), dispatch_sizes.back(), {{"SHARED_REDUCTION_SIZE", std::to_string(shared_reduction_size)}}, sizeof(pc)));
     ret.back().push_constants_data.emplace_back(binary_pc.begin(), binary_pc.end());
     return ret;
 };
@@ -685,7 +686,7 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
         case op_codes::avg_red:
             {
                 pipeline_defines.insert({"SHARED_REDUCTION_SIZE", std::to_string(globals::vk_context.subgroup_properties.subgroupSize)});
-                body << "const uint channel_length = " << array_sizes[1] << ", top_level_channel_length = " << array_sizes[1] << ";\n";
+                body << "const uint channel_length = " << array_sizes[1] << ", top_level_channel_length = " << (array_sizes[1] + workgroup_size - 1) / workgroup_size << ";\n";
                 std::stringstream out_buffer; out_buffer << "array_out" << std::get<uint32_t>(input_indices[0]);
                 size_t dst_buffer = array_sizes[1] <= workgroup_size ? std::get<size_t>(output_indices[0]): util::vk::get_buffer_address(temp_buffers[reduction_vec]);
                 body << "vec " << out_buffer.str() << " = vec(" << dst_buffer << "ul);\n";
@@ -695,7 +696,7 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
         case op_codes::stddev_red:
             {
                 pipeline_defines.insert({"SHARED_REDUCTION_SIZE", std::to_string(globals::vk_context.subgroup_properties.subgroupSize * 2)});
-                body << "const uint channel_length = " << array_sizes[1] << ", top_level_channel_length = " << array_sizes[1] << ";\n";
+                body << "const uint channel_length = " << array_sizes[1] << ", top_level_channel_length = " << (array_sizes[1] + workgroup_size - 1) / workgroup_size << ";\n";
                 std::stringstream out_buffer; out_buffer << "array_out" << std::get<uint32_t>(input_indices[0]);
                 size_t dst_buffer = array_sizes[1] <= workgroup_size ? std::get<size_t>(output_indices[0]): util::vk::get_buffer_address(temp_buffers[reduction_vec]);
                 body << "vec " << out_buffer.str() << " = vec(" << dst_buffer << "ul);\n";
@@ -714,9 +715,10 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
         case op_codes::sum_red:
         case op_codes::mul_red:
         case op_codes::avg_red:
+        case op_codes::stddev_red:
             if(array_sizes[1] > workgroup_size){
                 assert(reduction_vec != util::n_pos);
-                auto reduction_pipes = create_reduction_pipeline(util::vk::get_buffer_address(temp_buffers[reduction_vec]), std::get<size_t>(output_indices[0]), 0, group_count, reduction_buffer_size / sizeof(float), operation);
+                auto reduction_pipes = create_reduction_pipeline(util::vk::get_buffer_address(temp_buffers[reduction_vec]), std::get<size_t>(output_indices[0]), 0, group_count, reduction_buffer_size / sizeof(float) / size_mult, operation);
                 wait_for_barrier_pipes.insert(wait_for_barrier_pipes.end(), reduction_pipes.begin(), reduction_pipes.end());
             }
             break;
