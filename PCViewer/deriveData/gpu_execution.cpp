@@ -664,6 +664,39 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
         case op_codes::log:
             body << "storage" << std::get<uint32_t>(output_indices[0]) << " = log(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
             break;
+        case op_codes::sin:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = sin(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::cos:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = cos(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::tan:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = tan(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::asin:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = asin(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::acos:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = acos(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::atan:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = atan(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::ceil:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = ceil(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::floor:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = floor(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::sinh:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = sinh(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::cosh:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = cosh(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
+        case op_codes::tanh:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = tanh(storage" << std::get<uint32_t>(input_indices[0]) << ");\n";
+            break;
         case op_codes::plus:
             body << "storage" << std::get<uint32_t>(output_indices[0]) << " = storage" << std::get<uint32_t>(input_indices[0]) << " + storage" << std::get<uint32_t>(input_indices[1]) << ";\n";
             break;
@@ -678,6 +711,12 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
             break;
         case op_codes::pow:
             body << "storage" << std::get<uint32_t>(output_indices[0]) << " = pow(storage" << std::get<uint32_t>(input_indices[0]) << ", storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::min:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = min(storage" << std::get<uint32_t>(input_indices[0]) << ", storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
+            break;
+        case op_codes::max:
+            body << "storage" << std::get<uint32_t>(output_indices[0]) << " = max(storage" << std::get<uint32_t>(input_indices[0]) << ", storage" << std::get<uint32_t>(input_indices[1]) << ");\n";
             break;
         case op_codes::min_red:
         case op_codes::max_red:

@@ -940,6 +940,160 @@ public:
     }
 };
 
+class Sin: public Unary<FloatType>, public Creatable<Sin>{
+public:
+    Sin(): Unary("", "sin"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::sin(in);});
+        output[0].cols_min_max = {min_max_t{-1.f, 1.f}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::sin, input, output);
+        output[0].cols_min_max = {min_max_t{-1.f, 1.f}};
+    }
+};
+
+class Cos: public Unary<FloatType>, public Creatable<Cos>{
+public:
+    Cos(): Unary("", "cos"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::cos(in);});
+        output[0].cols_min_max = {min_max_t{-1.f, 1.f}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::cos, input, output);
+        output[0].cols_min_max = {min_max_t{-1.f, 1.f}};
+    }
+};
+
+class Tan: public Unary<FloatType>, public Creatable<Tan>{
+public:
+    Tan(): Unary("", "tan"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::tan(in);});
+        output[0].cols_min_max = {min_max_t{-1.f, 1.f}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::tan, input, output);
+        output[0].cols_min_max = {min_max_t{-1.f, 1.f}};
+    }
+};
+
+class ASin: public Unary<FloatType>, public Creatable<ASin>{
+public:
+    ASin(): Unary("", "Asin"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::asin(in);});
+        output[0].cols_min_max = {min_max_t{std::asin(input[0].cols_min_max[0].min), std::asin(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::asin, input, output);
+        output[0].cols_min_max = {min_max_t{std::asin(input[0].cols_min_max[0].min), std::asin(input[0].cols_min_max[0].max)}};
+    }
+};
+
+class ACos: public Unary<FloatType>, public Creatable<ACos>{
+public:
+    ACos(): Unary("", "ACos"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::acos(in);});
+        output[0].cols_min_max = {min_max_t{std::acos(input[0].cols_min_max[0].min), std::acos(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::acos, input, output);
+        output[0].cols_min_max = {min_max_t{std::acos(input[0].cols_min_max[0].min), std::acos(input[0].cols_min_max[0].max)}};
+    }
+};
+
+class ATan: public Unary<FloatType>, public Creatable<ATan>{
+public:
+    ATan(): Unary("", "ATan"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::atan(in);});
+        output[0].cols_min_max = {min_max_t{std::atan(input[0].cols_min_max[0].min), std::atan(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::atan, input, output);
+        output[0].cols_min_max = {min_max_t{std::atan(input[0].cols_min_max[0].min), std::atan(input[0].cols_min_max[0].max)}};
+    }
+};
+
+class Ceil: public Unary<FloatType>, public Creatable<Ceil>{
+public:
+    Ceil(): Unary("", "Ceil"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::ceil(in);});
+        output[0].cols_min_max = {min_max_t{std::ceil(input[0].cols_min_max[0].min), std::ceil(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::ceil, input, output);
+        output[0].cols_min_max = {min_max_t{std::ceil(input[0].cols_min_max[0].min), std::ceil(input[0].cols_min_max[0].max)}};
+    }
+};
+
+class Floor: public Unary<FloatType>, public Creatable<Floor>{
+public:
+    Floor(): Unary("", "Floor"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::floor(in);});
+        output[0].cols_min_max = {min_max_t{std::floor(input[0].cols_min_max[0].min), std::floor(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::floor, input, output);
+        output[0].cols_min_max = {min_max_t{std::floor(input[0].cols_min_max[0].min), std::floor(input[0].cols_min_max[0].max)}};
+    }
+};
+
+class Sinh: public Unary<FloatType>, public Creatable<Sinh>{
+public:
+    Sinh(): Unary("", "Sinh"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::sinh(in);});
+        output[0].cols_min_max = {min_max_t{std::sinh(input[0].cols_min_max[0].min), std::sinh(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::sinh, input, output);
+        output[0].cols_min_max = {min_max_t{std::sinh(input[0].cols_min_max[0].min), std::sinh(input[0].cols_min_max[0].max)}};
+    }
+};
+
+class Cosh: public Unary<FloatType>, public Creatable<Cosh>{
+public:
+    Cosh(): Unary("", "Cosh"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::cosh(in);});
+        output[0].cols_min_max = {min_max_t{std::cosh(input[0].cols_min_max[0].min), std::cosh(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::cosh, input, output);
+        output[0].cols_min_max = {min_max_t{std::cosh(input[0].cols_min_max[0].min), std::cosh(input[0].cols_min_max[0].max)}};
+    }
+};
+
+class Tanh: public Unary<FloatType>, public Creatable<Tanh>{
+public:
+    Tanh(): Unary("", "Tanh"){}
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyUnaryFunction(input, output, 0, [](float in){return std::tanh(in);});
+        output[0].cols_min_max = {min_max_t{std::tanh(input[0].cols_min_max[0].min), std::tanh(input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::tanh, input, output);
+        output[0].cols_min_max = {min_max_t{std::tanh(input[0].cols_min_max[0].min), std::tanh(input[0].cols_min_max[0].max)}};
+    }
+};
+
 class Value_to_Index: public Unary<FloatType, IndexType>, public Creatable<Value_to_Index>{
 public:
     Value_to_Index(): Unary("", "Value to Index") {}
@@ -1253,6 +1407,34 @@ public:
     }
 };
 
+class Min: public Binary<FloatType>, public Creatable<Min>{
+public:
+    Min(): Binary("", "min(element-wise)"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return std::min(a, b);});
+        output[0].cols_min_max = {min_max_t{std::min(input[0].cols_min_max[0].min, input[1].cols_min_max[0].min), std::min(input[0].cols_min_max[0].max, input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::min, input, output);
+        output[0].cols_min_max = {min_max_t{std::min(input[0].cols_min_max[0].min, input[1].cols_min_max[0].min), std::min(input[0].cols_min_max[0].max, input[0].cols_min_max[0].max)}};
+    }
+};
+
+class Max: public Binary<FloatType>, public Creatable<Max>{
+public:
+    Max(): Binary("", "max(element-wise)"){};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return std::max(a, b);});
+        output[0].cols_min_max = {min_max_t{std::max(input[0].cols_min_max[0].min, input[1].cols_min_max[0].min), std::max(input[0].cols_min_max[0].max, input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::max, input, output);
+        output[0].cols_min_max = {min_max_t{std::max(input[0].cols_min_max[0].min, input[1].cols_min_max[0].min), std::max(input[0].cols_min_max[0].max, input[0].cols_min_max[0].max)}};
+    }
+};
+
 class Reduction: public Binary<FloatType>{
 public:
     Reduction(std::string_view header): Binary(header){inputTypes[0] = IndexType::create(); inputNames[0] = "Group index"; inplace_possible = false;}
@@ -1468,6 +1650,31 @@ public:
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         applyBinaryFunction(input, output, 0, [](float a, float b){return a / b;});
         applyBinaryFunction(input, output, 1, [](float a, float b){return a / b;});
+    }
+};
+
+// ------------------------------------------------------------------------------------------
+// ternary nodes
+// ------------------------------------------------------------------------------------------
+
+template<class T>
+class Ternary: public Node{
+public:
+    Ternary(std::string_view header = "", std::string_view body = ""):
+        Node(createFilledVec<T, Type>(3), {std::string(), std::string()}, createFilledVec<T, Type>(1), {std::string()}, header, body){};
+};
+
+class Clamp: public Ternary<FloatType>, public Creatable<Clamp>{
+public:
+    Clamp(): Ternary("", "ckamp(element-wise)"){inputNames[1] = "min"; inputNames[2] = "max";};
+
+    virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
+        applyBinaryFunction(input, output, 0, [](float a, float b){return std::max(a, b);});
+        output[0].cols_min_max = {min_max_t{std::max(input[0].cols_min_max[0].min, input[1].cols_min_max[0].min), std::max(input[0].cols_min_max[0].max, input[0].cols_min_max[0].max)}};
+    }
+    void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
+        add_operation(operations, op_codes::max, input, output);
+        output[0].cols_min_max = {min_max_t{std::max(input[0].cols_min_max[0].min, input[1].cols_min_max[0].min), std::max(input[0].cols_min_max[0].max, input[0].cols_min_max[0].max)}};
     }
 };
 }
