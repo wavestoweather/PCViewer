@@ -43,7 +43,7 @@ void vulkan_default_init(){
 
 int test_pipeline_creation(){
     auto& pipeline = pipelines::tsne_compute::instance();
-    pipeline.record({}, {});
+    //pipeline.record({}, {});
     return test_result::success;
 }
 

@@ -694,6 +694,7 @@ void stager::_task_thread_function(){
             transfer_buffer(*buffer);
         else
             transfer_image(*dynamic_cast<staging_image_info*>(cur.get()));
+        cur->task_executed = true;
 
         if(cur->cpu_semaphore)
             cur->cpu_semaphore->release();

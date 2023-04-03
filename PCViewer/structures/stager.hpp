@@ -18,6 +18,7 @@ public:
         COUNT
     };
     struct task_base{
+        friend class stager;    // needed to grant stager access to task_executed
         transfer_direction                  transfer_dir{transfer_direction::upload};
         util::memory_view<const uint8_t>    data_upload{};
         util::memory_view<uint8_t>          data_download{};
@@ -31,7 +32,10 @@ public:
         task_base() = default;
         task_base(transfer_direction transfer_dir, util::memory_view<const uint8_t> data_upload): transfer_dir(transfer_dir), data_upload(data_upload){}
         task_base(transfer_direction transfer_dir, util::memory_view<uint8_t> data_download): transfer_dir(transfer_dir), data_download(data_download){}
-        virtual ~task_base(){}
+        virtual ~task_base(){if(!task_executed) ::logger << logging::warning_prefix << " A data transfer task was not executed. This might lead to missing data on cpu or gpu.";}
+
+    private:
+        bool                                task_executed{};
     };
     struct staging_buffer_info: public task_base{
         VkBuffer                            dst_buffer{};

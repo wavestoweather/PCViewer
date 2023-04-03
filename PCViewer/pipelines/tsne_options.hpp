@@ -3,7 +3,7 @@
 #include <iostream>
 #include <vk_context.hpp>
 
-namespace pipelines
+namespace structures
 {
     enum TSNE_INIT
     {
@@ -49,6 +49,7 @@ namespace pipelines
         /*NECESSARY*/ float *points = nullptr;
         /*NECESSARY*/ size_t num_points = 0;
         /*NECESSARY*/ size_t num_dims = 0;
+        static constexpr int num_reduced_dims = 2;           // currently constant
 
         // Algorithm options
         float perplexity = 50.0f;

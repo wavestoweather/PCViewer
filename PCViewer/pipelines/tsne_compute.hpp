@@ -5,6 +5,17 @@
 #include <robin_hood.h>
 #include <tsne_options.hpp>
 
+namespace tsne{namespace implementation{
+//struct k_nearest_defaults{
+//    // the follwing can be used to define a custom distance function
+//    static float distance(const float* a, const float* b, int dims) {float s{}; for(int i: util::i_range(dims)) s += a[i] * b[i]; return std::sqrt(s);}
+//};
+// implements k nearest neighbour search with standard linear search (runs in O(n^2))
+// a structure containing specialization functions can be provided
+// for available overwrites see the k_nearest_default struct
+//template<typename Params = k_nearest_defaults>
+std::pair<std::vector<float>, std::vector<int>> static k_nearest_neighbors(util::memory_view<const float> points, int dimensions, int k);
+}}
 namespace pipelines{
 class tsne_compute{
     struct pipeline_data{
@@ -221,34 +232,104 @@ class tsne_compute{
     VkFence             _fence{};
     pipeline_data       _pipeline_data{};
 
+    // constant vulkan data which is calculated on init
+    // the vulkan buffer info is not stored, as it is implicitly stored in the global context
+    VkDeviceAddress     _y_tilde_spacings;
+    VkDeviceAddress     _denominator;
+
     tsne_compute();                                 // private constructor to forbid default construction
 
     const pipeline_data& _get_or_create_pipeline();  // might be changed to include pipeline specs
 public:
+    struct memory_info_t{
+        size_t
+        // definitions in fit_tsne.cu line 160
+        knn_indices_long,
+        pij_indices_device,
+        knn_squared_distances,
+        pij_non_symmetric,
+        pij,
+        pij_workspace,
+        repulsive_forces,
+        attractive_forces,
+        gains,
+        old_forces,
+        normalization_vec,
+        ones,
+        // further resources in fit_tsn.cu line 274
+        point_box_idx,
+        x_in_box,
+        y_in_box,
+        y_tilde_values,
+        x_interpolated_values,
+        y_interpolated_values,
+        potentialsQij,
+        w_coefficients,
+        all_interpolated_values,
+        output_values,
+        all_interpolated_indices,
+        output_indices,
+        chargesQij,
+        box_lower_bounds,
+        box_upper_bounds,
+        kernel_tilde,
+        fft_kernel_tilde,
+        fft_input,
+        fft_w_coefficients,
+        fft_output,
+        size;
+    };
     struct tsne_compute_info{
         VkDeviceAddress dst_address;
         VkDeviceAddress src_address;
         VkDeviceAddress tmp_address;
         uint32_t        datapoint_count;
         uint32_t        dimension_count;
+        memory_info_t   tmp_memory_infos;
     };
-    using memory_info = robin_hood::unordered_map<std::string, size_t>;
+    struct tsne_calculate_info{
+        VkDeviceAddress          dst_address;
+        VkDeviceAddress          src_address;
+        VkDeviceAddress          tmp_address;
+        memory_info_t            memory_info;
+        structures::tsne_options tsne_options;
+    };
+    struct tsne_calculate_direct_info{
+        VkDeviceAddress          dst_address;
+        VkDeviceAddress          src_address;
+        structures::tsne_options tsne_options;
+    };
+    struct tsne_calculate_cpu_info{
+        structures::tsne_options tsne_options;
+    };
 
     tsne_compute(const tsne_compute&) = delete;
     tsne_compute& operator=(const tsne_compute&) = delete;
 
     static tsne_compute& instance();
 
+    static constexpr int num_interpolation_points = 3;
+
     // returns a map with the offsets for each needed storage buffer needed, to be able
     // to allocate a single buffer and use the offsets to get a distinct memory position
     // for each needed buffer
     // The "size" entry always holds the total size needed for the temporary buffer.
-    memory_info compute_memory_size(const tsne_options& options);
+    memory_info_t compute_memory_size(const structures::tsne_options& options);
 
     // direct pipeline recording to a command buffer
-    void record(VkCommandBuffer commands, const tsne_compute_info& info);
+    // all buffers have to be created in advance, contains only gpu code dispatch.
+    // Cpu side implementations (iteration, ...) have to be done manually. See calculate() for
+    // an example implementation
+    void record_init(VkCommandBuffer commands, const tsne_compute_info& info);
+    void record_iteration(VkCommandBuffer commands, const tsne_compute_info& info);
 
-    void calculate(const tsne_compute_info& info);
+    // src buffer has to contain the data, dst and temporary buffer have to be allocated with the correct sizes
+    void calculate(const tsne_calculate_info& info);
+    // src buffer has to contain the data, dst buffer has to be allocated with the correct size
+    void calculate(const tsne_calculate_direct_info& info);
+    // direct calculation from cpu buffers
+    void calculate_cpu(const structures::tsne_options& info);
+
     void wait_for_fence(uint64_t timeout = std::numeric_limits<uint64_t>::max());
 };
 }
