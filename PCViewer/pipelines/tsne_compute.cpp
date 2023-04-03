@@ -162,6 +162,29 @@ tsne_compute& tsne_compute::instance(){
     return singleton;
 }
 
+tsne_compute::memory_info tsne_compute::compute_memory_size(const tsne_options& options){
+    memory_info ret;
+    const size_t num_points = options.num_points;
+    const int num_dims = options.num_dims;
+    const int num_neighbors = options.num_neighbors;
+    size_t full_size{};
+    ret["knn_indices_long"] = full_size; full_size += num_points * num_neighbors * sizeof(uint32_t);
+    ret["pij_indices_device"] = full_size; full_size += num_points * num_neighbors * sizeof(int);
+    ret["knn_squared_distances"] = full_size; full_size += num_points * num_neighbors * sizeof(float);
+    ret["pij_non_symmetric"] = full_size; full_size += num_points * num_neighbors * sizeof(float);
+    ret["pij"] = ret["knn_squared_distances"];  // knn_squared_distances is not needed anymore, so bij takes over the storage
+    ret["pij_workspace"] = ret["pij_non_symmetric"]; full_size += num_points * num_neighbors * sizeof(float); // pij_workspace takes over the workspace of pij_nonsymmetric and requires double the size of it
+    ret["repulsive_forces"] = full_size; full_size += num_points * 2 * sizeof(float);
+    ret["attractive_forces"] = full_size; full_size += num_points * 2 * sizeof(float);
+    ret["gains"] = full_size; full_size += num_points * 2 * sizeof(float);
+    ret["old_forces"] = full_size; full_size += num_points * 2 * sizeof(float);
+    ret["normalization_vec"] = full_size; full_size += num_points * sizeof(float);
+    ret["ones"] = full_size; full_size += num_points * 2 * sizeof(float); // vector for reduce summing, etc.
+    // further resources in fit_tsn.cu line 274
+    ret["size"] = full_size;
+    return ret;
+}
+
 void tsne_compute::record(VkCommandBuffer commands, const tsne_compute_info& info){
     const uint32_t dispatch_x = util::align(info.datapoint_count, _workgroup_size);
     const auto& pipeline_data = _get_or_create_pipeline();

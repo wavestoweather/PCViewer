@@ -2,6 +2,8 @@
 #include <buffer_info.hpp>
 #include <string_view>
 #include <limits>
+#include <robin_hood.h>
+#include <tsne_options.hpp>
 
 namespace pipelines{
 class tsne_compute{
@@ -230,11 +232,18 @@ public:
         uint32_t        datapoint_count;
         uint32_t        dimension_count;
     };
+    using memory_info = robin_hood::unordered_map<std::string, size_t>;
 
     tsne_compute(const tsne_compute&) = delete;
     tsne_compute& operator=(const tsne_compute&) = delete;
 
     static tsne_compute& instance();
+
+    // returns a map with the offsets for each needed storage buffer needed, to be able
+    // to allocate a single buffer and use the offsets to get a distinct memory position
+    // for each needed buffer
+    // The "size" entry always holds the total size needed for the temporary buffer.
+    memory_info compute_memory_size(const tsne_options& options);
 
     // direct pipeline recording to a command buffer
     void record(VkCommandBuffer commands, const tsne_compute_info& info);
