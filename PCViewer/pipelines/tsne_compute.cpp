@@ -6,6 +6,7 @@
 #include <complex>
 #include <stager.hpp>
 #include <thread>
+#include "../gpu_radix_sort/radix_pipeline.hpp"
 
 namespace tsne{namespace implementation{
 inline float l2_squared(const float* a, const float* b, int dims){float r{}; for(int i: util::i_range(dims)) r += a[i] * b[i]; return r;}
@@ -294,7 +295,9 @@ tsne_compute::memory_info_t tsne_compute::compute_memory_size(const structures::
     return ret;
 }
 
-void tsne_compute::record_init(VkCommandBuffer commands, const tsne_compute_info& info){
+void tsne_compute::record(VkCommandBuffer commands, const tsne_compute_info& info){
+    
+
     const uint32_t dispatch_x = util::align(info.datapoint_count, _workgroup_size);
     const auto& pipeline_data = _get_or_create_pipeline();
     //vkCmdPushConstants(commands, pipeline_data.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(info), &info);
@@ -305,11 +308,10 @@ void tsne_compute::record_init(VkCommandBuffer commands, const tsne_compute_info
 
 }
 
-void tsne_compute::record_iteration(VkCommandBuffer commands, const tsne_compute_info& info){
-
-}
-
 void tsne_compute::calculate(const tsne_calculate_info& info){
+    // TODO move nearest neighbour calculation to gpu
+
+
     tsne_compute_info record_info{.dst_address = info.src_address, .src_address = info.dst_address, .tmp_address = info.tmp_address, .datapoint_count = info.tsne_options.num_points, .dimension_count = info.tsne_options.num_dims, .tmp_memory_infos = info.memory_info};
 
     // calculating
@@ -318,13 +320,8 @@ void tsne_compute::calculate(const tsne_calculate_info& info){
     if(_command_buffer)
         vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_command_buffer);
     _command_buffer = util::vk::create_begin_command_buffer(_command_pool);
-    record_init(_command_buffer, record_info);
-    res = vkEndCommandBuffer(_command_buffer); util::check_vk_result(res);
-    // iterating until converged or iteration goal reached
-    while(true){
-
-        util::vk::commit_command_buffer(_command_buffer, globals::vk_context.compute_queue.const_access().get(), {}, {}, {}, _fence);
-    }
+    record(_command_buffer, record_info);
+    util::vk::end_commit_command_buffer(_command_buffer, globals::vk_context.compute_queue.const_access().get(), {}, {}, {}, _fence);
 }
 
 void tsne_compute::calculate(const tsne_calculate_direct_info& info){

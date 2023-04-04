@@ -320,8 +320,7 @@ public:
     // all buffers have to be created in advance, contains only gpu code dispatch.
     // Cpu side implementations (iteration, ...) have to be done manually. See calculate() for
     // an example implementation
-    void record_init(VkCommandBuffer commands, const tsne_compute_info& info);
-    void record_iteration(VkCommandBuffer commands, const tsne_compute_info& info);
+    void record(VkCommandBuffer commands, const tsne_compute_info& info);
 
     // src buffer has to contain the data, dst and temporary buffer have to be allocated with the correct sizes
     void calculate(const tsne_calculate_info& info);
