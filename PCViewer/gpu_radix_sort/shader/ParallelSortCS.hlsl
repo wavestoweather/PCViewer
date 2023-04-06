@@ -22,7 +22,7 @@
 // ParallelSort Shaders/Includes
 //--------------------------------------------------------------------------------------
 #define FFX_HLSL
-#include "FFX-ParallelSort/FFX_ParallelSort.h"
+#include "shader/FFX_ParallelSort.h"
 
 [[vk::binding(0, 0)]] ConstantBuffer<FFX_ParallelSortCB>	CBuffer		: register(b0);					// Constant buffer
 [[vk::binding(0, 1)]] cbuffer SetupIndirectCB							: register(b1)					// Setup Indirect Constant buffer

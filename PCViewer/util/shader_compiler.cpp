@@ -32,6 +32,27 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
 
     return {module.cbegin(), module.cend()};
 }
+
+std::vector<uint32_t> compile_hlsl(const std::string& code, const robin_hood::unordered_map<std::string, std::string>& defines, std::string_view entry_point){
+    shaderc::Compiler compiler;
+    shaderc::CompileOptions options;
+
+    options.SetTargetSpirv(shaderc_spirv_version_1_4);
+    options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+
+    // Like -DMY_DEFINE=1
+    for(const auto& [define, val]: defines)
+        options.AddMacroDefinition(define, val);
+    
+    options.SetOptimizationLevel(shaderc_optimization_level_performance);
+
+    shaderc::SpvCompilationResult module = compiler.CompileHlslToSpv(code, shaderc_compute_shader, "a.comp", options);
+
+    if (module.GetCompilationStatus() != shaderc_compilation_status_success)
+        throw std::runtime_error{module.GetErrorMessage()};
+
+    return {module.cbegin(), module.cend()};
+}
 #else
 const glslang_resource_t DefaultTBuiltInResource = {
     /* .MaxLights = */ 32,
@@ -155,7 +176,7 @@ inline bool line_empty(std::string_view line){
             return false;
     return true;
 }
-std::vector<uint32_t> compile(const std::string& code, const robin_hood::unordered_map<std::string, std::string>& defines){
+std::vector<uint32_t> compile_impl(const std::string& code, const robin_hood::unordered_map<std::string, std::string>& defines, std::string_view entry_point, glslang_source_t source_type){
     std::stringstream code_including_defines;
     auto code_by_lines = code | util::slice('\n');
     auto cur = code_by_lines.begin();
@@ -171,7 +192,7 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
     code_including_defines.str({});
     
     const glslang_input_t input = {
-        .language = GLSLANG_SOURCE_GLSL,
+        .language = source_type,
         .stage = GLSLANG_STAGE_COMPUTE,
         .client = GLSLANG_CLIENT_VULKAN,
         .client_version = GLSLANG_TARGET_VULKAN_1_2,
@@ -223,6 +244,12 @@ std::vector<uint32_t> compile(const std::string& code, const robin_hood::unorder
     glslang_program_delete( program );
     
     return result;
+}
+std::vector<uint32_t> compile(const std::string& code, const robin_hood::unordered_map<std::string, std::string>& defines){
+    return compile_impl(code, defines, "main", GLSLANG_SOURCE_GLSL);
+}
+std::vector<uint32_t> compile_hlsl(const std::string& code, const robin_hood::unordered_map<std::string, std::string>& defines, std::string_view entry_point){
+    return compile_impl(code, defines, entry_point, GLSLANG_SOURCE_HLSL);
 }
 #endif
 }

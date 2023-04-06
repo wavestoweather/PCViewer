@@ -89,8 +89,8 @@
 
 	struct FFX_ParallelSortCB
 	{
-		uint NumKeys;
-		int  NumBlocksPerThreadGroup;
+		uint NumKeys;					// unused, are handed over via push constants
+		int  NumBlocksPerThreadGroup; 	// unused, are handed over via push constants
 		uint NumThreadGroups;
 		uint NumThreadGroupsWithAdditionalBlocks;
 		uint NumReduceThreadgroupPerBin;

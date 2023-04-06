@@ -1,6 +1,7 @@
 ## compile shaders
 file(GLOB shaders "*.comp" "*.vert" "*.frag")
 file(GLOB headers "*.glsl")
+file(GLOB gpu_radix_headers "../gpu_radix_sort/FFX_ParallelSort.h" "../gpu_radix_sort/shader/*.hlsl")
 
 foreach(shader IN LISTS shaders)
     find_program(GLSLC glslc)
@@ -25,6 +26,7 @@ add_custom_target(compile_shaders DEPENDS ${spriv_binary_files})
 ### copy shaders
 
 file(GLOB compiled_shaders "*.spv")
+set(compiled_shaders ${compiled_shaders} ${gpu_radix_headers})
 
 foreach(shader IN LISTS compiled_shaders)
     set(current_shader_path ${shader})
@@ -35,7 +37,7 @@ foreach(shader IN LISTS compiled_shaders)
     get_filename_component(current_output_directory ${current_output_path} DIRECTORY)
     file(MAKE_DIRECTORY ${current_output_directory})
 
-    message("Copying spv: ${current_shader_path} -> ${current_output_path}")
+    message("Copying: ${current_shader_path} -> ${current_output_path}")
 
     add_custom_command(
            OUTPUT ${current_output_path}

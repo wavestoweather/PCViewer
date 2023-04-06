@@ -17,10 +17,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#define FFX_CPP
+#include <cstdint>
 #include "FFX_ParallelSort.h"
 #include "radix_pipeline.hpp"
 #include <shader_compiler.hpp>
 #include <vk_util.hpp>
+#include <c_file.hpp>
+#include <filesystem>
 
 #include <numeric>
 #include <random>
@@ -30,7 +34,7 @@
 // Helper functions for Vulkan
 
 // Transition barrier
-VkBufferMemoryBarrier buffer_transition(VkBuffer buffer, VkAccessFlags before, VkAccessFlags after, uint32_t size)
+inline VkBufferMemoryBarrier buffer_transition(VkBuffer buffer, VkAccessFlags before, VkAccessFlags after, uint32_t size)
 {
     VkBufferMemoryBarrier bufferBarrier = {};
     bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -45,14 +49,14 @@ VkBufferMemoryBarrier buffer_transition(VkBuffer buffer, VkAccessFlags before, V
 }
 
 // Compile specified radix sort shader and create pipeline
-VkPipeline compile_radix_pipeline(const std::string& shader_file, const robin_hood::unordered_map<std::string, std::string>& defines, std::string_view entry_point, const VkPipelineLayout pipeline_layout)
+inline VkPipeline compile_radix_pipeline(const std::string& shader_code, const robin_hood::unordered_map<std::string, std::string>& defines, std::string_view entry_point, const VkPipelineLayout pipeline_layout)
 {
     std::string CompileFlags("-T cs_6_0");
 #ifdef _DEBUG
     CompileFlags += " -Zi -Od";
 #endif // _DEBUG
 
-    auto spir_v = util::shader_compiler::compile(shader_file, defines);
+    auto spir_v = util::shader_compiler::compile_hlsl(shader_code, defines, entry_point);
     auto shader_module = util::vk::create_scoped_shader_module(spir_v);
 
     auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module, {}, {}, entry_point);
@@ -78,205 +82,160 @@ radix_sort::gpu::radix_pipeline::radix_pipeline()
     // Create pipelines for radix sort
     {
         // SetupIndirectParams (indirect only)
+        constexpr std::string_view shader_file_path = "shader/ParallelSortCS.hlsl";
         robin_hood::unordered_map<std::string, std::string> defines{{"VK_Const", "1"}};
-        _FPSIndirectSetupParametersPipeline = compile_radix_pipeline("ParallelSortCS.hlsl", defines, "FPS_SetupIndirectParameters", _SortPipelineLayout);
+        structures::c_file shader_file(shader_file_path, "rb");
+        std::string shader_code(std::filesystem::file_size(shader_file_path), 0);
+        shader_file.read(util::memory_view(shader_code.data(), shader_code.size()));
 
-        _FPSCountPipeline       = compile_radix_pipeline("ParallelSortCS.hlsl", defines, "FPS_Count", _SortPipelineLayout);
-        _FPSCountReducePipeline = compile_radix_pipeline("ParallelSortCS.hlsl", defines, "FPS_CountReduce", _SortPipelineLayout);
-        _FPSScanPipeline        = compile_radix_pipeline("ParallelSortCS.hlsl", defines, "FPS_Scan", _SortPipelineLayout);
-        _FPSScanAddPipeline     = compile_radix_pipeline("ParallelSortCS.hlsl", defines, "FPS_ScanAdd", _SortPipelineLayout);
-        _FPSScatterPipeline     = compile_radix_pipeline("ParallelSortCS.hlsl", defines, "FPS_Scatter", _SortPipelineLayout);
+        _FPSCountPipeline       = compile_radix_pipeline(shader_code, defines, "FPS_Count", _SortPipelineLayout);
+        _FPSCountReducePipeline = compile_radix_pipeline(shader_code, defines, "FPS_CountReduce", _SortPipelineLayout);
+        _FPSScanPipeline        = compile_radix_pipeline(shader_code, defines, "FPS_Scan", _SortPipelineLayout);
+        _FPSScanAddPipeline     = compile_radix_pipeline(shader_code, defines, "FPS_ScanAdd", _SortPipelineLayout);
+        _FPSScatterPipeline     = compile_radix_pipeline(shader_code, defines, "FPS_Scatter", _SortPipelineLayout);
         
         // Radix scatter with payload (key and payload redistribution)
         defines["kRS_ValueCopy"] = "1";
-        _FPSScatterPayloadPipeline = compile_radix_pipeline("ParallelSortCS.hlsl", defines, "FPS_Scatter", _SortPipelineLayout);
+        _FPSScatterPayloadPipeline = compile_radix_pipeline(shader_code, defines, "FPS_Scatter", _SortPipelineLayout);
     }
 }
 
-// Perform Parallel Sort (radix-based sort)
-void FFXParallelSort::Sort(VkCommandBuffer commandList, bool isBenchmarking, float benchmarkTime)
-{
-    bool bIndirectDispatch = m_UIIndirectSort;
+template<typename T, typename P>
+radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info(const sort_info<T, P>& info) const{
+    static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
+    constexpr int sizeof_payload = sizeof(P);
+    size_t size{};
+    tmp_memory_info_t mem_info{};
+    // back buffer must contain a buffer the size of the normal data plus the size of the payload data
+    mem_info.back_buffer = 0;           size += info.element_count * (sizeof(T) + sizeof(P));
+    mem_info.scratch_buffer = size; // TODO: add scratch buffer size
+    mem_info.size = size;
+    return mem_info;
+}
 
-    // To control which descriptor set to use for updating data
-    static uint32_t frameCount = 0;
-    uint32_t frameConstants = (++frameCount) % 3;
+template<typename T, typename P>
+void radix_sort::gpu::radix_pipeline::record_sort(VkCommandBuffer command_buffer, const sort_info<T, P>& info) const{
+    static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
+    constexpr bool has_payload = sizeof(P);
 
-    std::string markerText = "FFXParallelSort";
-    if (bIndirectDispatch) markerText += " Indirect";
-    SetPerfMarkerBegin(commandList, markerText.c_str());
+    uint32_t num_thread_groups;
+    uint32_t num_reduced_thread_groups;
+    FFX_ParallelSortCB constant_buffer_data{};
+    FFX_ParallelSort_SetConstantAndDispatchData(info.element_count, _MaxNumThreadgroups, constant_buffer_data, num_thread_groups, num_reduced_thread_groups);
 
-    // Buffers to ping-pong between when writing out sorted values
-    VkBuffer* ReadBufferInfo(&m_DstKeyBuffers[0]), * WriteBufferInfo(&m_DstKeyBuffers[1]);
-    VkBuffer* ReadPayloadBufferInfo(&m_DstPayloadBuffers[0]), * WritePayloadBufferInfo(&m_DstPayloadBuffers[1]);
-    bool bHasPayload = m_UISortPayload;
+    // setting up indirect constant buffer
+    push_constants pc{};
+    pc.num_keys_index = info.element_count;
+    pc.max_number_threadgroups = 0;//TODO
+    pc.scratch_buffer_address = info.scratch_buffer;
 
-    // Setup barriers for the run
-    VkBufferMemoryBarrier Barriers[3];
-    FFX_ParallelSortCB  constantBufferData = { 0 };
+    for(int shift: util::i_range(0, as<int>(sizeof(T)) * 8, FFX_PARALLELSORT_SORT_BITS_PER_PASS)){
+        const bool even_iter = (shift / FFX_PARALLELSORT_SORT_BIN_COUNT) & 1 ^ 1;
+        pc.bit_shift = shift;
+        pc.src_values = even_iter ? info.src_buffer: info.back_buffer;
+        pc.dst_values = even_iter ? info.back_buffer: info.src_buffer;
+        pc.src_payload = even_iter ? info.payload_src_buffer: info.payload_back_buffer;
+        pc.dst_payload = even_iter ? info.payload_back_buffer: info.payload_src_buffer;
+        vkCmdPushConstants(command_buffer, _SortPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constants), &pc);
 
-    // Fill in the constant buffer data structure (this will be done by a shader in the indirect version)
-    uint32_t NumThreadgroupsToRun;
-    uint32_t NumReducedThreadgroupsToRun;
-    if (!bIndirectDispatch)
-    {
-        uint32_t NumberOfKeys = NumKeys[m_UIResolutionSize];
-        FFX_ParallelSort_SetConstantAndDispatchData(NumberOfKeys, m_MaxNumThreadgroups, constantBufferData, NumThreadgroupsToRun, NumReducedThreadgroupsToRun);
-    }
-    else
-    {
-        struct SetupIndirectCB
+        // sort count
         {
-            uint32_t NumKeysIndex;
-            uint32_t MaxThreadGroups;
-        };
-        SetupIndirectCB IndirectSetupCB;
-        IndirectSetupCB.NumKeysIndex = m_UIResolutionSize;
-        IndirectSetupCB.MaxThreadGroups = m_MaxNumThreadgroups;
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _FPSCountPipeline);
+            vkCmdDispatch(command_buffer, num_thread_groups, 1, 1);
             
-        // Copy the data into the constant buffer
-        VkDescriptorBufferInfo constantBuffer = m_pConstantBufferRing->AllocConstantBuffer(sizeof(SetupIndirectCB), (void*)&IndirectSetupCB);
-        BindConstantBuffer(constantBuffer, m_SortDescriptorSetConstantsIndirect[frameConstants]);
-            
-        // Dispatch
-        vkCmdBindDescriptorSets(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_SortPipelineLayout, 1, 1, &m_SortDescriptorSetConstantsIndirect[frameConstants], 0, nullptr);
-        vkCmdBindDescriptorSets(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_SortPipelineLayout, 5, 1, &m_SortDescriptorSetIndirect, 0, nullptr);
-        vkCmdBindPipeline(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_FPSIndirectSetupParametersPipeline);
-        vkCmdDispatch(commandList, 1, 1, 1);
-            
-        // When done, transition the args buffers to INDIRECT_ARGUMENT, and the constant buffer UAV to Constant buffer
-        VkBufferMemoryBarrier barriers[5];
-        barriers[0] = BufferTransition(m_IndirectCountScatterArgs, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, sizeof(uint32_t) * 3);
-        barriers[1] = BufferTransition(m_IndirectReduceScanArgs, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, sizeof(uint32_t) * 3);
-        barriers[2] = BufferTransition(m_IndirectConstantBuffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, sizeof(FFX_ParallelSortCB));
-        barriers[3] = BufferTransition(m_IndirectCountScatterArgs, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT, sizeof(uint32_t) * 3);
-        barriers[4] = BufferTransition(m_IndirectReduceScanArgs, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT, sizeof(uint32_t) * 3);
-        vkCmdPipelineBarrier(commandList, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 5, barriers, 0, nullptr);
-    }
+            auto buffer = std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.scratch_buffer;});
+            auto barrier = buffer_transition(buffer->buffer.buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, buffer->buffer.size);
+            vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
+        }
 
-    // Bind the scratch descriptor sets
-    vkCmdBindDescriptorSets(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_SortPipelineLayout, 4, 1, &m_SortDescriptorSetScratch, 0, nullptr);
-
-    // Copy the data into the constant buffer and bind
-    if (bIndirectDispatch)
-    {
-        //constantBuffer = m_IndirectConstantBuffer.GetResource()->GetGPUVirtualAddress();
-        VkDescriptorBufferInfo constantBuffer;
-        constantBuffer.buffer = m_IndirectConstantBuffer;
-        constantBuffer.offset = 0;
-        constantBuffer.range = VK_WHOLE_SIZE;
-        BindConstantBuffer(constantBuffer, m_SortDescriptorSetConstants[frameConstants]);
-    }
-    else
-    {
-        VkDescriptorBufferInfo constantBuffer = m_pConstantBufferRing->AllocConstantBuffer(sizeof(FFX_ParallelSortCB), (void*)&constantBufferData);
-        BindConstantBuffer(constantBuffer, m_SortDescriptorSetConstants[frameConstants]);
-    }
-    // Bind constants
-    vkCmdBindDescriptorSets(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_SortPipelineLayout, 0, 1, &m_SortDescriptorSetConstants[frameConstants], 0, nullptr);
+        // sort reduce
+        {
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _FPSCountReducePipeline);
+            vkCmdDispatch(command_buffer, num_reduced_thread_groups, 1, 1);
         
-    // Perform Radix Sort (currently only support 32-bit key/payload sorting
-    uint32_t inputSet = 0;
-    for (uint32_t Shift = 0; Shift < 32u; Shift += FFX_PARALLELSORT_SORT_BITS_PER_PASS)
-    {
-        // Update the bit shift
-        vkCmdPushConstants(commandList, m_SortPipelineLayout, VK_SHADER_STAGE_ALL, 0, 4, &Shift);
-
-        // Bind input/output for this pass
-        vkCmdBindDescriptorSets(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_SortPipelineLayout, 2, 1, &m_SortDescriptorSetInputOutput[inputSet], 0, nullptr);
-
-        // Sort Count
-        {
-            vkCmdBindPipeline(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_FPSCountPipeline);
-
-            if (bIndirectDispatch)
-                vkCmdDispatchIndirect(commandList, m_IndirectCountScatterArgs, 0);                  
-            else
-                vkCmdDispatch(commandList, NumThreadgroupsToRun, 1, 1);
+            auto buffer = std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.reduced_scratch_buffer;});
+            auto barrier = buffer_transition(buffer->buffer.buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, buffer->buffer.size);
+            vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
         }
 
-        // UAV barrier on the sum table
-        Barriers[0] = BufferTransition(m_FPSScratchBuffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, m_ScratchBufferSize);
-        vkCmdPipelineBarrier(commandList, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, Barriers, 0, nullptr);
-            
-        // Sort Reduce
+        // sort scan
         {
-            vkCmdBindPipeline(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_FPSCountReducePipeline);
-                
-            if (bIndirectDispatch)
-                vkCmdDispatchIndirect(commandList, m_IndirectReduceScanArgs, 0);
-            else
-                vkCmdDispatch(commandList, NumReducedThreadgroupsToRun, 1, 1);
-                    
-            // UAV barrier on the reduced sum table
-            Barriers[0] = BufferTransition(m_FPSReducedScratchBuffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, m_ReducedScratchBufferSize);
-            vkCmdPipelineBarrier(commandList, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, Barriers, 0, nullptr);
+            // scan prefix of reduced values
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _FPSScanPipeline);
+            vkCmdDispatch(command_buffer, 1, 1, 1);
+
+            auto buffer = std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.reduced_scratch_buffer;});
+            auto barrier = buffer_transition(buffer->buffer.buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, buffer->buffer.size);
+            vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
+            
+            // scan prefix on the histogram with partial sums that were just now done
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _FPSScanAddPipeline);
+            vkCmdDispatch(command_buffer, num_reduced_thread_groups, 1, 1);
+
+            buffer = std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.scratch_buffer;});
+            barrier = buffer_transition(buffer->buffer.buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, buffer->buffer.size);
+            vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
         }
 
-        // Sort Scan
+        // sort scatter
         {
-            // First do scan prefix of reduced values
-            vkCmdBindDescriptorSets(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_SortPipelineLayout, 3, 1, &m_SortDescriptorSetScanSets[0], 0, nullptr);
-            vkCmdBindPipeline(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_FPSScanPipeline);
-
-            if (!bIndirectDispatch)
-            {
-                assert(NumReducedThreadgroupsToRun < FFX_PARALLELSORT_ELEMENTS_PER_THREAD * FFX_PARALLELSORT_THREADGROUP_SIZE && "Need to account for bigger reduced histogram scan");
-            }
-            vkCmdDispatch(commandList, 1, 1, 1);
-
-            // UAV barrier on the reduced sum table
-            Barriers[0] = BufferTransition(m_FPSReducedScratchBuffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, m_ReducedScratchBufferSize);
-            vkCmdPipelineBarrier(commandList, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, Barriers, 0, nullptr);
-                
-            // Next do scan prefix on the histogram with partial sums that we just did
-            vkCmdBindDescriptorSets(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_SortPipelineLayout, 3, 1, &m_SortDescriptorSetScanSets[1], 0, nullptr);
-                
-            vkCmdBindPipeline(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, m_FPSScanAddPipeline);
-            if (bIndirectDispatch)
-                vkCmdDispatchIndirect(commandList, m_IndirectReduceScanArgs, 0);
-            else
-                vkCmdDispatch(commandList, NumReducedThreadgroupsToRun, 1, 1);
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, has_payload ? _FPSScatterPayloadPipeline: _FPSScatterPipeline);
+            vkCmdDispatch(command_buffer, num_thread_groups, 1, 1);
         }
 
-        // UAV barrier on the sum table
-        Barriers[0] = BufferTransition(m_FPSScratchBuffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, m_ScratchBufferSize);
-        vkCmdPipelineBarrier(commandList, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, Barriers, 0, nullptr);
-            
-        // Sort Scatter
-        {
-            vkCmdBindPipeline(commandList, VK_PIPELINE_BIND_POINT_COMPUTE, bHasPayload ? m_FPSScatterPayloadPipeline : m_FPSScatterPipeline);
-
-            if (bIndirectDispatch)
-                vkCmdDispatchIndirect(commandList, m_IndirectCountScatterArgs, 0);
-            else
-                vkCmdDispatch(commandList, NumThreadgroupsToRun, 1, 1);
+        // finishing everything with barriers
+        std::array<VkBufferMemoryBarrier, 2> memory_barriers;
+        int barrier_count{};
+        auto buffer = even_iter ?
+                        std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.back_buffer;}):
+                        std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.src_buffer;});
+        memory_barriers[barrier_count++] = buffer_transition(buffer->buffer.buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, buffer->buffer.size);
+        if constexpr (has_payload){
+            auto payload_buffer = even_iter ?
+                                    std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.payload_back_buffer;}):
+                                    std::find_if(info.storage_buffers.begin(), info.storage_buffers.end(), [](const auto& b){return b.payload_src_buffer;});
+            if(payload_buffer != buffer)
+                memory_barriers[barrier_count++] = buffer_transition(payload_buffer->buffer.buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, payload_buffer->buffer.size);
         }
-            
-        // Finish doing everything and barrier for the next pass
-        int numBarriers = 0;
-        Barriers[numBarriers++] = BufferTransition(*WriteBufferInfo, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, sizeof(uint32_t) * NumKeys[2]);
-        if (bHasPayload)
-            Barriers[numBarriers++] = BufferTransition(*WritePayloadBufferInfo, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, sizeof(uint32_t) * NumKeys[2]);
-        vkCmdPipelineBarrier(commandList, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, numBarriers, Barriers, 0, nullptr);
-            
-        // Swap read/write sources
-        std::swap(ReadBufferInfo, WriteBufferInfo);
-        if (bHasPayload)
-            std::swap(ReadPayloadBufferInfo, WritePayloadBufferInfo);
-        inputSet = !inputSet;
+        vkCmdPipelineBarrier(command_buffer,  VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, barrier_count, memory_barriers.data(), 0, nullptr);
     }
-
-    // When we are all done, transition indirect buffers back to UAV for the next frame (if doing indirect dispatch)
-    if (bIndirectDispatch)
-    {
-        VkBufferMemoryBarrier barriers[3];
-        barriers[0] = BufferTransition(m_IndirectConstantBuffer, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, sizeof(FFX_ParallelSortCB));
-        barriers[1] = BufferTransition(m_IndirectCountScatterArgs, VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, sizeof(uint32_t) * 3);
-        barriers[2] = BufferTransition(m_IndirectReduceScanArgs, VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, sizeof(uint32_t) * 3);
-        vkCmdPipelineBarrier(commandList, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 3, barriers, 0, nullptr);
-    }
-
-    // Close out the perf capture
-    SetPerfMarkerEnd(commandList);
 }
+
+template<typename T, typename P>
+void radix_sort::gpu::radix_pipeline::sort(const sort_info<T, P>& info){
+    static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
+
+}
+
+template<typename T, typename P>
+void radix_sort::gpu::radix_pipeline::sort(const sort_info_cpu<T, P>& info){
+    static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
+
+}
+
+void radix_sort::gpu::radix_pipeline::wait_for_fence(uint64_t timeout){
+    auto res = vkWaitForFences(globals::vk_context.device, 1, &_fence, VK_TRUE, timeout);
+    util::check_vk_result(res);
+}
+
+
+// explicit instantiation of template functions
+template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<int>(const sort_info<int>& info) const;
+template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<uint32_t>(const sort_info<uint32_t>& info) const;
+template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<float>(const sort_info<float>& info) const;
+template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<float, int>(const sort_info<float, int>& info) const;
+
+template void radix_sort::gpu::radix_pipeline::record_sort<int>(VkCommandBuffer command_buffer, const sort_info<int>& info) const;
+template void radix_sort::gpu::radix_pipeline::record_sort<uint32_t>(VkCommandBuffer command_buffer, const sort_info<uint32_t>& info) const;
+template void radix_sort::gpu::radix_pipeline::record_sort<float>(VkCommandBuffer command_buffer, const sort_info<float>& info) const;
+template void radix_sort::gpu::radix_pipeline::record_sort<float, int>(VkCommandBuffer command_buffer, const sort_info<float, int>& info) const;
+
+template void radix_sort::gpu::radix_pipeline::sort<int>(const sort_info<int>& info);
+template void radix_sort::gpu::radix_pipeline::sort<uint32_t>(const sort_info<uint32_t>& info);
+template void radix_sort::gpu::radix_pipeline::sort<float>(const sort_info<float>& info);
+template void radix_sort::gpu::radix_pipeline::sort<float, int>(const sort_info<float, int>& info);
+
+template void radix_sort::gpu::radix_pipeline::sort<int>(const sort_info_cpu<int>& info);
+template void radix_sort::gpu::radix_pipeline::sort<uint32_t>(const sort_info_cpu<uint32_t>& info);
+template void radix_sort::gpu::radix_pipeline::sort<float>(const sort_info_cpu<float>& info);
+template void radix_sort::gpu::radix_pipeline::sort<float, int>(const sort_info_cpu<float, int>& info);
