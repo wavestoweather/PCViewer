@@ -17,9 +17,9 @@ void main(){
     uint thread_block_start = (block_size * num_blocks_per_threadgroup * gl_WorkgroupID.x);
     uint NumBlocksToProcess = num_blocks_per_threadgroup;
 
-    if (groupID >= max_number_threadgroups - CBuffer.NumThreadGroupsWithAdditionalBlocks)
+    if (groupID >= max_number_threadgroups - NumThreadGroupsWithAdditionalBlocks)
     {
-        thread_block_start += (groupID - max_number_threadgroups - CBuffer.NumThreadGroupsWithAdditionalBlocks)) * block_size;
+        thread_block_start += (groupID - max_number_threadgroups - NumThreadGroupsWithAdditionalBlocks) * block_size;
         NumBlocksToProcess++;
     }
 
@@ -34,32 +34,32 @@ void main(){
         // Pre-load the key values in order to hide some of the read latency
         uint srcKeys[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
         srcKeys[0] = SrcBuffer[DataIndex];
-        srcKeys[1] = SrcBuffer[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
-        srcKeys[2] = SrcBuffer[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
-        srcKeys[3] = SrcBuffer[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
+        srcKeys[1] = SrcBuffer[DataIndex + local_size];
+        srcKeys[2] = SrcBuffer[DataIndex + (local_size * 2)];
+        srcKeys[3] = SrcBuffer[DataIndex + (local_size * 3)];
 
         for (uint i = 0; i < FFX_PARALLELSORT_ELEMENTS_PER_THREAD; i++)
         {
             if (DataIndex < CBuffer.NumKeys)
             {
-                uint localKey = (srcKeys[i] >> ShiftBit) & 0xf;
-                InterlockedAdd(gs_FFX_PARALLELSORT_Histogram[(localKey * FFX_PARALLELSORT_THREADGROUP_SIZE) + localID], 1);
-                DataIndex += FFX_PARALLELSORT_THREADGROUP_SIZE;
+                uint localKey = get_local_key(srcKeys[i]);
+                atomicAdd(histogram[(localKey * local_size) + localID], 1);
+                DataIndex += local_size;
             }
         }
     }
 
     // Even though our LDS layout guarantees no collisions, our thread group size is greater than a wave
     // so we need to make sure all thread groups are done counting before we start tallying up the results
-    GroupMemoryBarrierWithGroupSync();
+    barrier();
 
     if (localID < FFX_PARALLELSORT_SORT_BIN_COUNT)
     {
         uint sum = 0;
-        for (int i = 0; i < FFX_PARALLELSORT_THREADGROUP_SIZE; i++)
+        for (int i = 0; i < local_size; i++)
         {
-            sum += gs_FFX_PARALLELSORT_Histogram[localID * FFX_PARALLELSORT_THREADGROUP_SIZE + i];
+            sum += histogram[localID * local_size + i];
         }
-        SumTable[localID * CBuffer.NumThreadGroups + groupID] = sum;
+        SumTable[localID * NumThreadGroups + groupID] = sum;
     }
 }

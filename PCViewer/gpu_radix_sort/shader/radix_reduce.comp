@@ -3,6 +3,75 @@
 
 #include "radix_common.glsl"
 
-void main(){
+shared uint gs_FFX_PARALLELSORT_LDSSums[FFX_PARALLELSORT_THREADGROUP_SIZE];
+uint FFX_ParallelSort_ThreadgroupReduce(uint localSum, uint localID){
+    // Do wave local reduce
+	uint waveReduced = subgroupAdd(localSum);
+	// First lane in a wave writes out wave reduction to LDS (this accounts for num waves per group greater than HW wave size)
+	// Note that some hardware with very small HW wave sizes (i.e. <= 8) may exhibit issues with this algorithm, and have not been tested.
+	uint waveID = localID / gl_SubgroupSize;
+	if (subgroupElect())
+		gs_FFX_PARALLELSORT_LDSSums[waveID] = waveReduced;
+	// Wait for everyone to catch up
+	barrier();
+	// First wave worth of threads sum up wave reductions
+	if (!bool(waveID))
+		waveReduced = subgroupAdd( (localID < FFX_PARALLELSORT_THREADGROUP_SIZE / gl_SubgroupSize) ? gs_FFX_PARALLELSORT_LDSSums[localID] : 0);
 
+    // Returned the reduced sum
+	return waveReduced;
+}
+
+uint FFX_ParallelSort_BlockScanPrefix(uint localSum, uint localID)
+{
+    // Do wave local scan-prefix
+    uint wavePrefixed = WavePrefixSum(localSum);
+
+    // Since we are dealing with thread group sizes greater than HW wave size, we need to account for what wave we are in.
+    uint waveID = localID / WaveGetLaneCount();
+    uint laneID = WaveGetLaneIndex();
+
+    // Last element in a wave writes out partial sum to LDS
+    if (laneID == WaveGetLaneCount() - 1)
+        gs_FFX_PARALLELSORT_LDSSums[waveID] = wavePrefixed + localSum;
+
+    // Wait for everyone to catch up
+    GroupMemoryBarrierWithGroupSync();
+
+    // First wave prefixes partial sums
+    if (!waveID)
+        gs_FFX_PARALLELSORT_LDSSums[localID] = WavePrefixSum(gs_FFX_PARALLELSORT_LDSSums[localID]);
+
+    // Wait for everyone to catch up
+    GroupMemoryBarrierWithGroupSync();
+
+    // Add the partial sums back to each wave prefix
+    wavePrefixed += gs_FFX_PARALLELSORT_LDSSums[waveID];
+
+    return wavePrefixed;
+}
+
+void main()
+{
+// Figure out what bin data we are reducing
+    uint BinID = groupID / CBuffer.NumReduceThreadgroupPerBin;
+    uint BinOffset = BinID * CBuffer.NumThreadGroups;
+
+    // Get the base index for this thread group
+    uint BaseIndex = (groupID % CBuffer.NumReduceThreadgroupPerBin) * FFX_PARALLELSORT_ELEMENTS_PER_THREAD * FFX_PARALLELSORT_THREADGROUP_SIZE;
+
+    // Calculate partial sums for entries this thread reads in
+    uint threadgroupSum = 0;
+    for (uint i = 0; i < FFX_PARALLELSORT_ELEMENTS_PER_THREAD; ++i)
+    {
+        uint DataIndex = BaseIndex + (i * FFX_PARALLELSORT_THREADGROUP_SIZE) + localID;
+        threadgroupSum += (DataIndex < CBuffer.NumThreadGroups) ? SumTable[BinOffset + DataIndex] : 0;
+    }
+
+    // Reduce across the entirety of the thread group
+    threadgroupSum = FFX_ParallelSort_ThreadgroupReduce(threadgroupSum, localID);
+
+    // First thread of the group writes out the reduced sum for the bin
+    if (!localID)
+        ReduceTable[groupID] = threadgroupSum;
 }
