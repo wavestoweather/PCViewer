@@ -14,7 +14,7 @@ foreach(shader IN LISTS shaders)
     # custom command for compilation
     add_custom_command(
         OUTPUT ${current_shader_out_path}
-        COMMAND ${GLSLC} --target-spv=spv1.4 -o ${current_shader_out_path} ${current_shader_path}
+        COMMAND ${GLSLC} -O --target-env=vulkan1.2 -o ${current_shader_out_path} ${current_shader_path}
         DEPENDS ${current_shader_path} ${headers}
         IMPLICIT_DEPENDS CXX ${current_shader_path}
         VERBATIM)

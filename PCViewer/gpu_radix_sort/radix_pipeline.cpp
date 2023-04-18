@@ -30,6 +30,8 @@
 #include <random>
 #include <vector>
 
+#include "shaders.h"
+
 //////////////////////////////////////////////////////////////////////////
 // Helper functions for Vulkan
 
@@ -48,25 +50,89 @@ inline VkBufferMemoryBarrier buffer_transition(VkBuffer buffer, VkAccessFlags be
     return bufferBarrier;
 }
 
+template<typename T, typename P = radix_sort::gpu::payload_none>
+std::string_view get_shader_code_count() {return {};}
+template<> std::string_view get_shader_code_count<int>(){return ShaderBinaries::radix_count_int;}
+template<> std::string_view get_shader_code_count<uint32_t>(){return ShaderBinaries::radix_count_uint;}
+template<> std::string_view get_shader_code_count<float>(){return ShaderBinaries::radix_count_float;}
+template<> std::string_view get_shader_code_count<float, int>(){return ShaderBinaries::radix_count_float_int;}
+template<> std::string_view get_shader_code_count<float, uint32_t>(){return ShaderBinaries::radix_count_float_uint;}
+
+template<typename T, typename P = radix_sort::gpu::payload_none>
+std::string_view get_shader_code_reduce() {return {};}
+template<> std::string_view get_shader_code_reduce<int>(){return ShaderBinaries::radix_reduce_int;}
+template<> std::string_view get_shader_code_reduce<uint32_t>(){return ShaderBinaries::radix_reduce_uint;}
+template<> std::string_view get_shader_code_reduce<float>(){return ShaderBinaries::radix_reduce_float;}
+template<> std::string_view get_shader_code_reduce<float, int>(){return ShaderBinaries::radix_reduce_float_int;}
+template<> std::string_view get_shader_code_reduce<float, uint32_t>(){return ShaderBinaries::radix_reduce_float_uint;}
+
+template<typename T, typename P = radix_sort::gpu::payload_none>
+std::string_view get_shader_code_scan() {return {};}
+template<> std::string_view get_shader_code_scan<int>(){return ShaderBinaries::radix_scan_int;}
+template<> std::string_view get_shader_code_scan<uint32_t>(){return ShaderBinaries::radix_scan_uint;}
+template<> std::string_view get_shader_code_scan<float>(){return ShaderBinaries::radix_scan_float;}
+template<> std::string_view get_shader_code_scan<float, int>(){return ShaderBinaries::radix_scan_float_int;}
+template<> std::string_view get_shader_code_scan<float, uint32_t>(){return ShaderBinaries::radix_scan_float_uint;}
+
+template<typename T, typename P = radix_sort::gpu::payload_none>
+std::string_view get_shader_code_scan_add() {return {};}
+template<> std::string_view get_shader_code_scan_add<int>(){return ShaderBinaries::radix_scan_add_int;}
+template<> std::string_view get_shader_code_scan_add<uint32_t>(){return ShaderBinaries::radix_scan_add_uint;}
+template<> std::string_view get_shader_code_scan_add<float>(){return ShaderBinaries::radix_scan_add_float;}
+template<> std::string_view get_shader_code_scan_add<float, int>(){return ShaderBinaries::radix_scan_add_float_int;}
+template<> std::string_view get_shader_code_scan_add<float, uint32_t>(){return ShaderBinaries::radix_scan_add_float_uint;}
+
+template<typename T, typename P = radix_sort::gpu::payload_none>
+std::string_view get_shader_code_scatter() {return {};}
+template<> std::string_view get_shader_code_scatter<int>(){return ShaderBinaries::radix_scatter_int;}
+template<> std::string_view get_shader_code_scatter<uint32_t>(){return ShaderBinaries::radix_sctter_uint;}
+template<> std::string_view get_shader_code_scatter<float>(){return ShaderBinaries::radix_scatter_float;}
+template<> std::string_view get_shader_code_scatter<float, int>(){return ShaderBinaries::radix_scatter_float_int;}
+template<> std::string_view get_shader_code_scatter<float, uint32_t>(){return ShaderBinaries::radix_scatter_float_uint;}
+
 // Compile specified radix sort shader and create pipeline
-inline VkPipeline compile_radix_pipeline(const std::string& shader_code, const robin_hood::unordered_map<std::string, std::string>& defines, std::string_view entry_point, const VkPipelineLayout pipeline_layout)
+template<typename T, typename P>
+inline std::tuple<VkPipeline, VkPipeline, VkPipeline, VkPipeline, VkPipeline> create_radix_pipelines(const VkPipelineLayout pipeline_layout)
 {
-    std::string CompileFlags("-T cs_6_0");
-#ifdef _DEBUG
-    CompileFlags += " -Zi -Od";
-#endif // _DEBUG
+    VkPipeline count, reduce, scan, scan_add, scatter;
 
-    auto spir_v = util::shader_compiler::compile_hlsl(shader_code, defines, entry_point);
-    auto shader_module = util::vk::create_scoped_shader_module(spir_v);
-
-    auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module, {}, {}, entry_point);
+    auto spir_v = get_shader_code_count<T, P>();
+    auto shader_module = util::vk::create_scoped_shader_module(util::memory_view<const char>(spir_v.data(), spir_v.size()));
+    auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
     auto pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
-    return util::vk::create_compute_pipeline(pipeline_info);
+    count = util::vk::create_compute_pipeline(pipeline_info);
+
+    spir_v = get_shader_code_reduce<T, P>();
+    shader_module = util::vk::create_scoped_shader_module(util::memory_view<const char>(spir_v.data(), spir_v.size()));
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
+    reduce = util::vk::create_compute_pipeline(pipeline_info);
+    
+    spir_v = get_shader_code_scan<T, P>();
+    shader_module = util::vk::create_scoped_shader_module(util::memory_view<const char>(spir_v.data(), spir_v.size()));
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
+    scan = util::vk::create_compute_pipeline(pipeline_info);
+    
+    spir_v = get_shader_code_scan_add<T, P>();
+    shader_module = util::vk::create_scoped_shader_module(util::memory_view<const char>(spir_v.data(), spir_v.size()));
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
+    scan_add = util::vk::create_compute_pipeline(pipeline_info);
+    
+    spir_v = get_shader_code_scatter<T, P>();
+    shader_module = util::vk::create_scoped_shader_module(util::memory_view<const char>(spir_v.data(), spir_v.size()));
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
+    scan_scatter = util::vk::create_compute_pipeline(pipeline_info);
+
+    return {count, reduce, scan, scan_add, scatter};
 }
 
 
 // Create all of the sort data for the sample
-radix_sort::gpu::radix_pipeline::radix_pipeline()
+template<typename T, typename P>
+radix_sort::gpu::radix_pipeline<T, P>::radix_pipeline()
 {
     _MaxNumThreadgroups = 800;
 
@@ -80,28 +146,12 @@ radix_sort::gpu::radix_pipeline::radix_pipeline()
         
     //////////////////////////////////////////////////////////////////////////
     // Create pipelines for radix sort
-    {
-        // SetupIndirectParams (indirect only)
-        constexpr std::string_view shader_file_path = "shader/ParallelSortCS.hlsl";
-        robin_hood::unordered_map<std::string, std::string> defines{{"VK_Const", "1"}};
-        structures::c_file shader_file(shader_file_path, "rb");
-        std::string shader_code(std::filesystem::file_size(shader_file_path), 0);
-        shader_file.read(util::memory_view(shader_code.data(), shader_code.size()));
-
-        _FPSCountPipeline       = compile_radix_pipeline(shader_code, defines, "FPS_Count", _SortPipelineLayout);
-        _FPSCountReducePipeline = compile_radix_pipeline(shader_code, defines, "FPS_CountReduce", _SortPipelineLayout);
-        _FPSScanPipeline        = compile_radix_pipeline(shader_code, defines, "FPS_Scan", _SortPipelineLayout);
-        _FPSScanAddPipeline     = compile_radix_pipeline(shader_code, defines, "FPS_ScanAdd", _SortPipelineLayout);
-        _FPSScatterPipeline     = compile_radix_pipeline(shader_code, defines, "FPS_Scatter", _SortPipelineLayout);
-        
-        // Radix scatter with payload (key and payload redistribution)
-        defines["kRS_ValueCopy"] = "1";
-        _FPSScatterPayloadPipeline = compile_radix_pipeline(shader_code, defines, "FPS_Scatter", _SortPipelineLayout);
-    }
+    // SetupIndirectParams (indirect only)
+    std::tie(_FPSCountPipeline, _FPSCountReducePipeline, _FPSScanPipeline, _FPSScanAddPipeline, _FPSScatterPipeline) = create_radix_pipelines<T, P>(_SortPipelineLayout);
 }
 
 template<typename T, typename P>
-radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info(const sort_info<T, P>& info) const{
+radix_sort::gpu::radix_pipeline<T, P>::tmp_memory_info_t radix_sort::gpu::radix_pipeline<T, P>::calc_tmp_memory_info(const sort_info<T, P>& info) const{
     static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
     constexpr int sizeof_payload = sizeof(P);
     size_t size{};
@@ -114,7 +164,7 @@ radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeli
 }
 
 template<typename T, typename P>
-void radix_sort::gpu::radix_pipeline::record_sort(VkCommandBuffer command_buffer, const sort_info<T, P>& info) const{
+void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_buffer, const sort_info<T, P>& info) const{
     static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
     constexpr bool has_payload = sizeof(P);
 
@@ -202,40 +252,47 @@ void radix_sort::gpu::radix_pipeline::record_sort(VkCommandBuffer command_buffer
 }
 
 template<typename T, typename P>
-void radix_sort::gpu::radix_pipeline::sort(const sort_info<T, P>& info){
+void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info<T, P>& info){
     static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
 
 }
 
 template<typename T, typename P>
-void radix_sort::gpu::radix_pipeline::sort(const sort_info_cpu<T, P>& info){
+void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu<T, P>& info){
     static_assert(sizeof(T) <= 8 && sizeof(P) <= 8 && "Only at max 64 bit values are allowed for key and payload. If payload is larger, use index for payload and after sort map index to payload");
 
 }
 
-void radix_sort::gpu::radix_pipeline::wait_for_fence(uint64_t timeout){
+template<typename T, typename P>
+void radix_sort::gpu::radix_pipeline<T, P>::wait_for_fence(uint64_t timeout){
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_fence, VK_TRUE, timeout);
     util::check_vk_result(res);
 }
 
 
 // explicit instantiation of template functions
-template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<int>(const sort_info<int>& info) const;
-template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<uint32_t>(const sort_info<uint32_t>& info) const;
-template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<float>(const sort_info<float>& info) const;
-template radix_sort::gpu::radix_pipeline::tmp_memory_info_t radix_sort::gpu::radix_pipeline::calc_tmp_memory_info<float, int>(const sort_info<float, int>& info) const;
+template radix_sort::gpu::radix_pipeline<float>::radix_pipeline();
 
-template void radix_sort::gpu::radix_pipeline::record_sort<int>(VkCommandBuffer command_buffer, const sort_info<int>& info) const;
-template void radix_sort::gpu::radix_pipeline::record_sort<uint32_t>(VkCommandBuffer command_buffer, const sort_info<uint32_t>& info) const;
-template void radix_sort::gpu::radix_pipeline::record_sort<float>(VkCommandBuffer command_buffer, const sort_info<float>& info) const;
-template void radix_sort::gpu::radix_pipeline::record_sort<float, int>(VkCommandBuffer command_buffer, const sort_info<float, int>& info) const;
+template radix_sort::gpu::radix_pipeline<int>::tmp_memory_info_t radix_sort::gpu::radix_pipeline<int>::calc_tmp_memory_info(const sort_info<int>& info) const;
+template radix_sort::gpu::radix_pipeline<uint32_t>::tmp_memory_info_t radix_sort::gpu::radix_pipeline<uint32_t>::calc_tmp_memory_info(const sort_info<uint32_t>& info) const;
+template radix_sort::gpu::radix_pipeline<float>::tmp_memory_info_t radix_sort::gpu::radix_pipeline<float>::calc_tmp_memory_info(const sort_info<float>& info) const;
+template radix_sort::gpu::radix_pipeline<float, int>::tmp_memory_info_t radix_sort::gpu::radix_pipeline<float, int>::calc_tmp_memory_info(const sort_info<float, int>& info) const;
+template radix_sort::gpu::radix_pipeline<float, uint32_t>::tmp_memory_info_t radix_sort::gpu::radix_pipeline<float, uint32_t>::calc_tmp_memory_info(const sort_info<float, uint32_t>& info) const;
 
-template void radix_sort::gpu::radix_pipeline::sort<int>(const sort_info<int>& info);
-template void radix_sort::gpu::radix_pipeline::sort<uint32_t>(const sort_info<uint32_t>& info);
-template void radix_sort::gpu::radix_pipeline::sort<float>(const sort_info<float>& info);
-template void radix_sort::gpu::radix_pipeline::sort<float, int>(const sort_info<float, int>& info);
+template void radix_sort::gpu::radix_pipeline<int>::record_sort(VkCommandBuffer command_buffer, const sort_info<int>& info) const;
+template void radix_sort::gpu::radix_pipeline<uint32_t>::record_sort(VkCommandBuffer command_buffer, const sort_info<uint32_t>& info) const;
+template void radix_sort::gpu::radix_pipeline<float>::record_sort(VkCommandBuffer command_buffer, const sort_info<float>& info) const;
+template void radix_sort::gpu::radix_pipeline<float, int>::record_sort(VkCommandBuffer command_buffer, const sort_info<float, int>& info) const;
+template void radix_sort::gpu::radix_pipeline<float, uint32_t>::record_sort(VkCommandBuffer command_buffer, const sort_info<float, uint32_t>& info) const;
 
-template void radix_sort::gpu::radix_pipeline::sort<int>(const sort_info_cpu<int>& info);
-template void radix_sort::gpu::radix_pipeline::sort<uint32_t>(const sort_info_cpu<uint32_t>& info);
-template void radix_sort::gpu::radix_pipeline::sort<float>(const sort_info_cpu<float>& info);
-template void radix_sort::gpu::radix_pipeline::sort<float, int>(const sort_info_cpu<float, int>& info);
+template void radix_sort::gpu::radix_pipeline<int>::sort(const sort_info<int>& info);
+template void radix_sort::gpu::radix_pipeline<uint32_t>::sort(const sort_info<uint32_t>& info);
+template void radix_sort::gpu::radix_pipeline<float>::sort(const sort_info<float>& info);
+template void radix_sort::gpu::radix_pipeline<float, int>::sort(const sort_info<float, int>& info);
+template void radix_sort::gpu::radix_pipeline<float, uint32_t>::sort(const sort_info<float, uint32_t>& info);
+
+template void radix_sort::gpu::radix_pipeline<int>::sort(const sort_info_cpu<int>& info);
+template void radix_sort::gpu::radix_pipeline<uint32_t>::sort(const sort_info_cpu<uint32_t>& info);
+template void radix_sort::gpu::radix_pipeline<float>::sort(const sort_info_cpu<float>& info);
+template void radix_sort::gpu::radix_pipeline<float, int>::sort(const sort_info_cpu<float, int>& info);
+template void radix_sort::gpu::radix_pipeline<float, uint32_t>::sort(const sort_info_cpu<float, uint32_t>& info);

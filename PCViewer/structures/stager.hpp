@@ -32,8 +32,11 @@ public:
         task_base() = default;
         task_base(transfer_direction transfer_dir, util::memory_view<const uint8_t> data_upload): transfer_dir(transfer_dir), data_upload(data_upload){}
         task_base(transfer_direction transfer_dir, util::memory_view<uint8_t> data_download): transfer_dir(transfer_dir), data_download(data_download){}
-        virtual ~task_base(){if(!task_executed) ::logger << logging::warning_prefix << " A data transfer task was not executed. This might lead to missing data on cpu or gpu.";}
-
+        virtual ~task_base(){
+            if(!task_executed) 
+                ::logger << logging::warning_prefix << " A data transfer task was not executed. This might lead to missing data on cpu or gpu." << logging::endl;
+        }
+ 
     private:
         bool                                task_executed{};
     };
@@ -64,9 +67,9 @@ public:
     // interrupts current transfers and joins with the task_thread
     void cleanup();
     // add an upload task
-    void add_staging_task(const staging_buffer_info& stage_info);
+    void add_staging_task(staging_buffer_info& stage_info);
     // add an upload task
-    void add_staging_task(const staging_image_info& stage_info);
+    void add_staging_task(staging_image_info& stage_info);
     // set staging buffer size (defaults to 128 MB)
     void set_staging_buffer_size(size_t size);
     // waiting for completion of all upload tasks

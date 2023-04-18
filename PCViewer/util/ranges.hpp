@@ -283,7 +283,7 @@ public:
         std::vector<index_type>& operator*() {return _cur;}
         const iterator& operator++() {++_cur.back(); _carry_prop(); return *this;}
         iterator& operator++(int) {iterator copy(*this); ++_cur.back(); _carry_prop(); return copy;}
-        bool operator==(const iterator& o) const {if(o._cur.empty() && _cur.front() >= _sizes.front()) return true; if(_cur.size() != o._cur.size()) return false; for(int c = 0; c < _cur.size(); ++c) if(_cur[c] != o._cur[c]) return false;}
+        bool operator==(const iterator& o) const {if(o._cur.empty() && _cur.front() >= _sizes.front()) return true; if(_cur.size() != o._cur.size()) return false; for(int c = 0; c < _cur.size(); ++c) if(_cur[c] != o._cur[c]) return false; return false;}
         bool operator!=(const iterator& o) const {return !(*this == o);}
 
         constexpr iterator() = default;

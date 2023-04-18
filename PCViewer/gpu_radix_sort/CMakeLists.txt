@@ -10,6 +10,7 @@ file(GLOB shaders "shader/*.comp")
 file(GLOB headers "sahder/*.glsl")
 file(GLOB gpu_radix_headers "../gpu_radix_sort/FFX_ParallelSort.h" "../gpu_radix_sort/shader/*.hlsl")
 make_directory(${CMAKE_CURRENT_SOURCE_DIR}/shader/compiled_shaders)
+set(value)
 
 foreach(shader IN LISTS shaders)
     find_program(GLSLC glslc)
@@ -24,7 +25,7 @@ foreach(shader IN LISTS shaders)
     # custom command for compilation
     add_custom_command(
         OUTPUT ${current_shader_out_path}
-        COMMAND ${GLSLC} --target-spv=spv1.4 -o ${current_shader_out_path} ${current_shader_path}
+        COMMAND ${GLSLC} -O --target-env=vulkan1.2 -o ${current_shader_out_path} ${current_shader_path}
         DEPENDS ${current_shader_path} ${headers}
         IMPLICIT_DEPENDS CXX ${current_shader_path}
         VERBATIM)

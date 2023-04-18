@@ -312,7 +312,7 @@ void tsne_compute::calculate(const tsne_calculate_info& info){
     // TODO move nearest neighbour calculation to gpu
 
 
-    tsne_compute_info record_info{.dst_address = info.src_address, .src_address = info.dst_address, .tmp_address = info.tmp_address, .datapoint_count = info.tsne_options.num_points, .dimension_count = info.tsne_options.num_dims, .tmp_memory_infos = info.memory_info};
+    tsne_compute_info record_info{.dst_address = info.src_address, .src_address = info.dst_address, .tmp_address = info.tmp_address, .datapoint_count = as<uint32_t>(info.tsne_options.num_points), .dimension_count = as<uint32_t>(info.tsne_options.num_dims), .tmp_memory_infos = info.memory_info};
 
     // calculating
     auto res = vkWaitForFences(globals::vk_context.device, 1, &_fence, VK_TRUE, std::numeric_limits<uint64_t>::max()); util::check_vk_result(res);

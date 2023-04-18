@@ -5,7 +5,8 @@
 #include <vk_context.hpp>
 
 namespace radix_sort{namespace gpu{
-
+struct payload_none{};
+template<typename T, typename P = payload_none>
 class radix_pipeline{
     // instead of binding the buffers via descriptor set we use a
     // push constant with buffer device addresses, which allows us to avoid descriptor sets
@@ -46,7 +47,6 @@ class radix_pipeline{
 
     radix_pipeline();
 public:
-    struct payload_none{};
     struct tmp_memory_info_t{
         size_t
         back_buffer,
@@ -62,7 +62,6 @@ public:
         bool                    payload_src_buffer: 1;
         bool                    payload_back_buffer: 1;
     };
-    template<typename T, typename P = payload_none>
     struct sort_info{
         VkDeviceAddress                     src_buffer;
         VkDeviceAddress                     back_buffer;
@@ -73,7 +72,6 @@ public:
         util::memory_view<storage_flags>    storage_buffers;    // contains the vulkan buffer of src, dst and payload, buffer layout is ignored
         size_t                              element_count;
     };
-    template<typename T, typename P = payload_none>
     struct sort_info_cpu{
         util::memory_view<const T> src_data;
         util::memory_view<T>       dst_data;
@@ -85,28 +83,24 @@ public:
     radix_pipeline& operator=(const radix_pipeline&) = delete;
 
     static radix_pipeline& instance();
-
-    template<typename T, typename P = payload_none>
-    tmp_memory_info_t calc_tmp_memory_info(const sort_info<T,P>& info) const;
+ 
+    tmp_memory_info_t calc_tmp_memory_info(const sort_info& info) const;
 
     // Records all pipeline commands to command_buffer.
     // No execution is performed and all temporary buffers have to be allocated
     // The result will always be placed in the src buffers
-    template<typename T, typename P = payload_none>
-    void record_sort(VkCommandBuffer command_buffer, const sort_info<T, P>& info) const;
+    void record_sort(VkCommandBuffer command_buffer, const sort_info& info) const;
 
     // Creates a command buffer and executes the sorting immediately
     // All temporary buffers have to be allocated beforehand
     // Unordered array as well as sorted array are on the gpu
     // Does not block, however next call to sort will wait for previous sort to be finished
     // The result will always be placed in the src buffers
-    template<typename T, typename P = payload_none>
-    void sort(const sort_info<T, P>& info);
+    void sort(const sort_info& info);
 
     // Takes cpu data and performs the sorting on the gpu
     // blocks until sort is done
-    template<typename T, typename P = payload_none>
-    void sort(const sort_info_cpu<T, P>& info);
+    void sort(const sort_info_cpu& info);
 
     // waiting for the end of a sort task submitted via sort(const sort_info& info)
     void wait_for_fence(uint64_t timeout = std::numeric_limits<uint64_t>::max());

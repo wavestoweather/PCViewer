@@ -529,14 +529,16 @@ void stager::cleanup(){
     _task_thread.join();
     _task_thread = {};
 }
-void stager::add_staging_task(const staging_buffer_info& stage_info){
+void stager::add_staging_task(staging_buffer_info& stage_info){
     std::scoped_lock lock(_task_add_mutex);
     _staging_tasks.push_back(std::make_unique<staging_buffer_info>(stage_info));
+    stage_info.task_executed = true;
     _task_semaphore.release();
 }
-void stager::add_staging_task(const staging_image_info& stage_info){
+void stager::add_staging_task(staging_image_info& stage_info){
     std::scoped_lock lock(_task_add_mutex);
     _staging_tasks.push_back(std::make_unique<staging_image_info>(stage_info));
+    stage_info.task_executed = true;
     _task_semaphore.release();
 }
 void stager::set_staging_buffer_size(size_t size){
@@ -685,6 +687,7 @@ void stager::_task_thread_function(){
         {
             std::scoped_lock lock(_task_add_mutex);
             cur = std::move(_staging_tasks.front());
+            //_staging_tasks.front()->task_executed = true;
             _staging_tasks.erase(_staging_tasks.begin());
         }
         if(_thread_finish)
