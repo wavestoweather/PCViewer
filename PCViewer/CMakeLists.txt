@@ -197,6 +197,7 @@ if(DEFINED glslang_FOUND)
 endif()
 
 add_subdirectory(shader_new)
+add_subdirectory(gpu_radix_sort)
 
 add_subdirectory(test)
 

@@ -8,18 +8,20 @@
 // and then does the binning
 shared uint histogram[local_size * bin_count];
 void main(){
+    //SumTable.d[localID * NumThreadGroups + groupID] = 5;
     // clear local count
     for(int i = 0; i < bin_count; i++)
         histogram[i * local_size + gl_LocalInvocationID.x] = 0;
     barrier();
 
     // Figure out this thread group's index into the block data (taking into account thread groups that need to do extra reads)
-    uint thread_block_start = (block_size * num_blocks_per_threadgroup * gl_WorkgroupID.x);
+    uint block_size = ELEMENTS_PER_THREAD * local_size;
+    uint thread_block_start = (block_size * num_blocks_per_threadgroup * gl_WorkGroupID.x);
     uint NumBlocksToProcess = num_blocks_per_threadgroup;
 
-    if (groupID >= max_number_threadgroups - NumThreadGroupsWithAdditionalBlocks)
+    if (groupID >= num_thread_groups - NumThreadGroupsWithAdditionalBlocks)
     {
-        thread_block_start += (groupID - max_number_threadgroups - NumThreadGroupsWithAdditionalBlocks) * block_size;
+        thread_block_start += (groupID - num_thread_groups - NumThreadGroupsWithAdditionalBlocks) * block_size;
         NumBlocksToProcess++;
     }
 
@@ -32,15 +34,15 @@ void main(){
         uint DataIndex = BlockIndex;
 
         // Pre-load the key values in order to hide some of the read latency
-        uint srcKeys[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
-        srcKeys[0] = SrcBuffer[DataIndex];
-        srcKeys[1] = SrcBuffer[DataIndex + local_size];
-        srcKeys[2] = SrcBuffer[DataIndex + (local_size * 2)];
-        srcKeys[3] = SrcBuffer[DataIndex + (local_size * 3)];
+        SRC_T srcKeys[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
+        srcKeys[0] = SrcBuffer.d[DataIndex];
+        srcKeys[1] = SrcBuffer.d[DataIndex + local_size];
+        srcKeys[2] = SrcBuffer.d[DataIndex + (local_size * 2)];
+        srcKeys[3] = SrcBuffer.d[DataIndex + (local_size * 3)];
 
         for (uint i = 0; i < FFX_PARALLELSORT_ELEMENTS_PER_THREAD; i++)
         {
-            if (DataIndex < CBuffer.NumKeys)
+            if (DataIndex < NumKeys)
             {
                 uint localKey = get_local_key(srcKeys[i]);
                 atomicAdd(histogram[(localKey * local_size) + localID], 1);
@@ -60,6 +62,6 @@ void main(){
         {
             sum += histogram[localID * local_size + i];
         }
-        SumTable[localID * NumThreadGroups + groupID] = sum;
+        SumTable.d[localID * NumThreadGroups + groupID] = sum;
     }
 }
