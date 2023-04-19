@@ -7,6 +7,7 @@ create_test_sourcelist(Tests
     kd_tree_test.cpp
     shader_test.cpp
     gpu_tsne_test.cpp
+    gpu_radix_test.cpp
 )
 
 file(GLOB src
@@ -17,6 +18,7 @@ file(GLOB src
     "../structures/globals.cpp"
     "../pipelines/*.cpp"
     "../util/shader_compiler.cpp"
+    "../gpu_radix_sort/*.cpp"
 )
 
 add_executable(CommonCppTests ${Tests} ${src})
@@ -38,3 +40,5 @@ foreach(test ${TestsToRun})
     get_filename_component(TName ${test} NAME_WE)
     add_test(NAME ${TName} COMMAND CommonCppTests ${TName})
 endforeach()
+
+add_dependencies(CommonCppTests packed_shaders)

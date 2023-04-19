@@ -147,6 +147,7 @@ set(structures_INCLUDE_DIR
     "radix_sort"
     "radix"
     "colorbrewer"
+    "gpu_radix_sort"
 )
 
 file(GLOB structures_SRC

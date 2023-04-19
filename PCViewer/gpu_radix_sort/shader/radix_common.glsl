@@ -31,15 +31,17 @@
     #pragma diagnostic warning "Missing define SRC_TYPE, setting to default value float_vec"
     #define SRC_TYPE float_vec
     #define SRC_T float
-    #define SRC_MAX (1.f / 0.f)
 #endif
 #ifdef HAS_PAYLOAD
 #ifndef PAYLOAD_TYPE
     #pragma diagnostic warning "Missing define PAYLOAD_TYPE, setting to default value none_type"
     #define PAYLOAD_TYPE float_vec
-    #define PAYLOAD_T float_vec
+    #define PAYLOAD_T float
     #if SRC_TYPE != PAYLOAD_TYPE
         #define PAYLOAD_IS_DIFFERENT_TYPE
+        #pragma message "Payload type is different than value type"
+    #else
+        #pragma message "Payload type is the same as value type"
     #endif
 #endif
 #endif

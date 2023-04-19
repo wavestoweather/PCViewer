@@ -10,26 +10,43 @@ file(GLOB shaders "shader/*.comp")
 file(GLOB headers "sahder/*.glsl")
 file(GLOB gpu_radix_headers "../gpu_radix_sort/FFX_ParallelSort.h" "../gpu_radix_sort/shader/*.hlsl")
 make_directory(${CMAKE_CURRENT_SOURCE_DIR}/shader/compiled_shaders)
-set(value)
+set(preprocessor_defines "SRC_TYPE=float_vec SRC_T=float SRC_MAX=float(1.0/.0)"
+                         "SRC_TYPE=int_vec SRC_T=int SRC_MAX=int\(0x7FFFFFFF\)"
+                         "SRC_TYPE=uint_vec SRC_T=uint SRC_MAX=uint\(0xFFFFFFFF\)"
+                         "SRC_TYPE=float_vec SRC_T=float SRC_MAX=float(1.0/.0) HAS_PAYLOAD")
 
+set(data_type_names 
+        float    
+        int      
+        uint     
+        float_32)
+
+find_program(GLSLC glslc)
 foreach(shader IN LISTS shaders)
-    find_program(GLSLC glslc)
+    foreach(type defines IN ZIP_LISTS data_type_names preprocessor_defines)
+        set(macros)
+        string(REPLACE " " ";" define_list ${defines})
+        foreach(define IN LISTS define_list)
+            list(APPEND macros -D${define})
+        endforeach()
 
-    set(current_shader_path ${shader})
-    get_filename_component(shader_path ${current_shader_path} DIRECTORY)
-    get_filename_component(shader_name ${current_shader_path} NAME)
-    set(current_shader_out_path ${shader_path}/compiled_shaders/${shader_name}.spv)
+        set(current_shader_path ${shader})
+        get_filename_component(shader_path ${current_shader_path} DIRECTORY)
+        get_filename_component(shader_name ${current_shader_path} NAME_WE)
+        set(current_shader_out_path ${shader_path}/compiled_shaders/${shader_name}_${type}.comp.spv)
 
-    message("Adding compile shader command: ${current_shader_path} -> ${current_shader_out_path}")
+        message(${GLSLC} -O --target-env=vulkan1.2 ${macros} -o ${current_shader_out_path} ${current_shader_path})
+        #message("Adding compile shader command: ${current_shader_path} -> ${current_shader_out_path} with compile defines ${macros_string}")
 
-    # custom command for compilation
-    add_custom_command(
-        OUTPUT ${current_shader_out_path}
-        COMMAND ${GLSLC} -O --target-env=vulkan1.2 -o ${current_shader_out_path} ${current_shader_path}
-        DEPENDS ${current_shader_path} ${headers}
-        IMPLICIT_DEPENDS CXX ${current_shader_path}
-        VERBATIM)
-    list(APPEND spriv_binary_files ${current_shader_out_path})
+        # custom command for compilation
+        add_custom_command(
+            OUTPUT ${current_shader_out_path}
+            COMMAND ${GLSLC} -O --target-env=vulkan1.2 ${macros} -o ${current_shader_out_path} ${current_shader_path}
+            DEPENDS ${current_shader_path} ${headers}
+            IMPLICIT_DEPENDS CXX ${current_shader_path}
+            VERBATIM)
+        list(APPEND spriv_binary_files ${current_shader_out_path})
+    endforeach()
 endforeach()
 
 add_custom_target(compile_shaders_sort DEPENDS ${spriv_binary_files}) # custom target is needed to add the compile dpendency
@@ -52,4 +69,3 @@ add_custom_target(packed_shaders DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${output_he
 add_dependencies(delete_header compile_shaders_sort)
 add_dependencies(packed_shaders delete_header)
 add_dependencies(PCViewer_new packed_shaders)
-

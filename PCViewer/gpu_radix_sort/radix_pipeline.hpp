@@ -6,6 +6,8 @@
 
 namespace radix_sort{namespace gpu{
 struct payload_none{};
+struct payload_32bit{};
+struct payload_64bit{};
 template<typename T, typename P = payload_none>
 class radix_pipeline{
     // instead of binding the buffers via descriptor set we use a
