@@ -6,8 +6,8 @@
 
 namespace radix_sort{namespace gpu{
 struct payload_none{};
-struct payload_32bit{};
-struct payload_64bit{};
+struct payload_32bit{uint32_t v;};
+struct payload_64bit{uint64_t v;};
 template<typename T, typename P = payload_none>
 class radix_pipeline{
     // instead of binding the buffers via descriptor set we use a
@@ -17,11 +17,8 @@ class radix_pipeline{
     uint64_t dst_values;
     uint64_t src_payload;
     uint64_t dst_payload;
-    uint64_t sum_table;
-    uint64_t reduce_table;
-    uint64_t scan_src;
-    uint64_t scan_dst;
     uint64_t scan_scratch;
+    uint64_t scratch_reduced;
     
     uint32_t bit_shift;
     uint32_t num_keys;					
@@ -79,14 +76,20 @@ public:
         VkDeviceAddress                     payload_back_buffer;
         VkDeviceAddress                     scratch_buffer;
         VkDeviceAddress                     scratch_reduced_buffer;
-        util::memory_view<storage_flags>    storage_buffers;    // contains the vulkan buffer of src, dst and payload, buffer layout is ignored
         size_t                              element_count;
+        // buffer needed for pipeline barriers
+        VkBuffer                            src_vk_buffer;
+        VkBuffer                            back_vk_buffer;
+        VkBuffer                            payload_src_vk_buffer;
+        VkBuffer                            payload_back_vk_buffer;
+        VkBuffer                            scratch_vk_buffer;
+        VkBuffer                            scratch_reduced_vk_buffer;
     };
     struct sort_info_cpu{
-        util::memory_view<const T> src_data;
-        util::memory_view<T>       dst_data;
-        util::memory_view<const P> payload_src_data;
-        util::memory_view<P>       payload_dst_data;
+        util::memory_view<const T>      src_data;
+        mutable util::memory_view<T>    dst_data;
+        util::memory_view<const P>      payload_src_data;
+        mutable util::memory_view<P>    payload_dst_data;
     };
 
     radix_pipeline(const radix_pipeline&) = delete;

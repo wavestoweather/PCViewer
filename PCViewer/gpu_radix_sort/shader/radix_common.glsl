@@ -51,11 +51,8 @@ layout(push_constant) uniform push_constants{
     uint64_t dst_values;
     uint64_t src_payload;
     uint64_t dst_payload;
-    uint64_t sum_table;
-    uint64_t reduce_table;
-    uint64_t scan_src;
-    uint64_t scan_dst;
     uint64_t scan_scratch;
+    uint64_t scratch_reduced;
     uint     bit_shift;
     uint     num_keys;					
     int      num_blocks_per_threadgroup;
@@ -123,11 +120,11 @@ SRC_TYPE        DstBuffer   = SRC_TYPE(dst_values);
 PAYLOAD_TYPE    SrcPayload  = PAYLOAD_TYPE(src_payload);
 PAYLOAD_TYPE    DstPayload  = PAYLOAD_TYPE(dst_payload);
 #endif
-uint_vec        SumTable    = uint_vec(sum_table);
-uint_vec        ReduceTable = uint_vec(reduce_table);
-uint_vec        ScanSrc     = uint_vec(scan_src);
-uint_vec        ScanDst     = uint_vec(scan_dst);
-uint_vec        ScanScratch = uint_vec(scan_scratch);
+uint_vec        SumTable    = uint_vec(scratch_reduced);
+uint_vec        ReduceTable = uint_vec(scratch_reduced);
+uint_vec        ScanSrc     = uint_vec(scan_scratch);
+uint_vec        ScanDst     = uint_vec(scan_scratch);
+uint_vec        ScanScratch = uint_vec(scratch_reduced);
 
 // mapping values to uint for radix calculation
 uint get_local_key(uint8_t v){ return (uint(v) >> bit_shift) & bit_mask; }

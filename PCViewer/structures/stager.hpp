@@ -6,6 +6,7 @@
 #include <semaphore.hpp>
 #include <atomic>
 #include <functional>
+#include <logger.hpp>
 
 namespace structures{
 
