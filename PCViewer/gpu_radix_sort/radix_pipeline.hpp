@@ -13,15 +13,23 @@ class radix_pipeline{
     // instead of binding the buffers via descriptor set we use a
     // push constant with buffer device addresses, which allows us to avoid descriptor sets
     struct push_constants{
-        uint32_t        num_keys_index;
-        uint32_t        max_number_threadgroups;
-        uint32_t        bit_shift;
-        uint32_t        hello;
-        VkDeviceAddress scratch_buffer_address;
-        VkDeviceAddress src_values;
-        VkDeviceAddress dst_values;
-        VkDeviceAddress src_payload;
-        VkDeviceAddress dst_payload;
+    uint64_t src_values;
+    uint64_t dst_values;
+    uint64_t src_payload;
+    uint64_t dst_payload;
+    uint64_t sum_table;
+    uint64_t reduce_table;
+    uint64_t scan_src;
+    uint64_t scan_dst;
+    uint64_t scan_scratch;
+    
+    uint32_t bit_shift;
+    uint32_t num_keys;					
+    uint32_t num_blocks_per_threadgroup;
+    uint32_t num_thread_groups;
+    uint32_t num_thread_groups_with_additional_blocks;
+    uint32_t num_reduce_threadgroup_per_bin;
+    uint32_t num_scan_values;
     };
 
     // Sample resources

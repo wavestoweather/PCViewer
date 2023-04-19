@@ -131,16 +131,12 @@ inline std::tuple<VkPipeline, VkPipeline, VkPipeline, VkPipeline, VkPipeline> cr
 template<typename T, typename P>
 radix_sort::gpu::radix_pipeline<T, P>::radix_pipeline()
 {
-
-    _MaxNumThreadgroups = 800;
-
     // Create Pipeline layout for Sorting
     // Only single layout needed, as all only use the push constants
-    {
-        auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(push_constants), 0);
-        auto layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, push_constant_range);
-        _SortPipelineLayout = util::vk::create_pipeline_layout(layout_info);
-    }
+    
+    auto push_constant_range = util::vk::initializers::pushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(push_constants), 0);
+    auto layout_info = util::vk::initializers::pipelineLayoutCreateInfo({}, push_constant_range);
+    _SortPipelineLayout = util::vk::create_pipeline_layout(layout_info);
         
     //////////////////////////////////////////////////////////////////////////
     // Create pipelines for radix sort
@@ -179,9 +175,8 @@ void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_
 
     // setting up indirect constant buffer
     push_constants pc{};
-    pc.num_keys_index = info.element_count;
-    pc.max_number_threadgroups = 0;//TODO
-    pc.scratch_buffer_address = info.scratch_buffer;
+    pc.num_keys = info.element_count;
+    pc.scan_scratch = info.scratch_buffer;
 
     for(int shift: util::i_range(0, as<int>(sizeof(T)) * 8, FFX_PARALLELSORT_SORT_BITS_PER_PASS)){
         const bool even_iter = (shift / FFX_PARALLELSORT_SORT_BIN_COUNT) & 1 ^ 1;
