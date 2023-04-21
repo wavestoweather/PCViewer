@@ -2,6 +2,8 @@
 #include "vulkan_init.hpp"
 #include <radix_pipeline.hpp>
 #include <stager.hpp>
+#include <random>
+#include <algorithm>
 
 struct test_result{
     static const int success = 0;
@@ -45,7 +47,9 @@ int test_radix_sort(int num_values = 1e3){
         values[i] = as<T>(i);
     auto original_values = values;
 
-    std::random_shuffle(values.begin(), values.end());
+    std::random_device d;
+    std::mt19937 g(d());
+    std::shuffle(values.begin(), values.end(), g);
 
     typename radix_sort::gpu::radix_pipeline<T>::sort_info_cpu sort_info{};
     sort_info.src_data = util::memory_view<const T>(values);

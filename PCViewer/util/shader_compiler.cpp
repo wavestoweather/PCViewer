@@ -46,7 +46,7 @@ std::vector<uint32_t> compile_hlsl(const std::string& code, const robin_hood::un
     
     options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
-    shaderc::SpvCompilationResult module = compiler.CompileHlslToSpv(code, shaderc_compute_shader, "a.comp", options);
+    shaderc::SpvCompilationResult module;// = compiler.CompileHlslToSpv(code, shaderc_compute_shader, "a.comp", options);
 
     if (module.GetCompilationStatus() != shaderc_compilation_status_success)
         throw std::runtime_error{module.GetErrorMessage()};

@@ -235,13 +235,13 @@ void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_
     uint32_t num_thread_groups;
     uint32_t num_reduced_thread_groups;
     FFX_ParallelSortCB constant_buffer_data{};
-    FFX_ParallelSort_SetConstantAndDispatchData(info.element_count, _MaxNumThreadgroups, constant_buffer_data, num_thread_groups, num_reduced_thread_groups);
+    FFX_ParallelSort_SetConstantAndDispatchData(as<uint32_t>(info.element_count), _MaxNumThreadgroups, constant_buffer_data, num_thread_groups, num_reduced_thread_groups);
 
     // setting up indirect constant buffer
     push_constants pc{};
     pc.scan_scratch = info.scratch_buffer;
     pc.scratch_reduced = info.scratch_reduced_buffer;
-    pc.num_keys = info.element_count;
+    pc.num_keys = as<uint32_t>(info.element_count);
     pc.num_blocks_per_threadgroup = constant_buffer_data.NumBlocksPerThreadGroup;
     pc.num_thread_groups = constant_buffer_data.NumThreadGroups;
     pc.num_thread_groups_with_additional_blocks = constant_buffer_data.NumThreadGroupsWithAdditionalBlocks;
@@ -318,6 +318,8 @@ void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_
                 memory_barriers[barrier_count++] = buffer_transition(payload_buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_WHOLE_SIZE);
         }
         vkCmdPipelineBarrier(command_buffer,  VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, barrier_count, memory_barriers.data(), 0, nullptr);
+        //DEBUGGING
+        break;
     }
 }
 
@@ -342,10 +344,10 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
     }
     // creating the required additional resources
     uint32_t scratch_buffer_size, scratch_buffer_reduced_size;
-    FFX_ParallelSort_CalculateScratchResourceSize(info.src_data.size(), scratch_buffer_size, scratch_buffer_reduced_size);
+    FFX_ParallelSort_CalculateScratchResourceSize(as<uint32_t>(info.src_data.size()), scratch_buffer_size, scratch_buffer_reduced_size);
 
-    uint32_t data_size = 2 * info.src_data.byte_size(); // front and back buffer
-    data_size += 2 * info.payload_src_data.byte_size();
+    uint32_t data_size = 2 * as<uint32_t>(info.src_data.byte_size()); // front and back buffer
+    data_size += 2 * as<uint32_t>(info.payload_src_data.byte_size());
     auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data_size + scratch_buffer_size + scratch_buffer_reduced_size);
     auto memory_info = util::vma::initializers::allocationCreateInfo();
     auto gpu_buffer = util::vk::create_buffer(buffer_info, memory_info);
@@ -379,16 +381,19 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
     globals::stager.wait_for_completion();
     sort(s_info);
 
+    // DEBUG code
+    std::vector<int> test(gpu_buffer.size / sizeof(int));
+
     // downloading the sorted list
     wait_for_fence();
     staging_info.data_upload = {};
     staging_info.transfer_dir = structures::stager::transfer_direction::download;
-    staging_info.data_download = info.dst_data;
+    staging_info.data_download = util::memory_view<int>(test);//info.dst_data;
     staging_info.dst_buffer_offset = 0;
     globals::stager.add_staging_task(staging_info);
     if(info.payload_src_data.size()){
         staging_info.data_download = info.payload_dst_data;
-        staging_info.dst_buffer_offset = 2 * info.src_data.byte_size();
+        staging_info.dst_buffer_offset = 2 * info.src_data.byte_size() + info.payload_src_data.byte_size();
         globals::stager.add_staging_task(staging_info);
     }
     globals::stager.wait_for_completion();
