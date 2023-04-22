@@ -8,7 +8,6 @@
 // and then does the binning
 shared uint histogram[local_size * bin_count];
 void main(){
-    //SumTable.d[localID * NumThreadGroups + groupID] = 5;
     // clear local count
     for(int i = 0; i < bin_count; i++)
         histogram[i * local_size + gl_LocalInvocationID.x] = 0;
@@ -16,12 +15,12 @@ void main(){
 
     // Figure out this thread group's index into the block data (taking into account thread groups that need to do extra reads)
     uint block_size = ELEMENTS_PER_THREAD * local_size;
-    uint thread_block_start = (block_size * num_blocks_per_threadgroup * gl_WorkGroupID.x);
+    uint thread_block_start = (block_size * num_blocks_per_threadgroup * groupID.x);
     uint NumBlocksToProcess = num_blocks_per_threadgroup;
 
     if (groupID >= num_thread_groups - NumThreadGroupsWithAdditionalBlocks)
     {
-        thread_block_start += (groupID - num_thread_groups - NumThreadGroupsWithAdditionalBlocks) * block_size;
+        thread_block_start += (groupID - num_thread_groups + NumThreadGroupsWithAdditionalBlocks) * block_size;
         NumBlocksToProcess++;
     }
 

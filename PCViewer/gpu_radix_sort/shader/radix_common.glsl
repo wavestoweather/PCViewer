@@ -120,7 +120,7 @@ SRC_TYPE        DstBuffer   = SRC_TYPE(dst_values);
 PAYLOAD_TYPE    SrcPayload  = PAYLOAD_TYPE(src_payload);
 PAYLOAD_TYPE    DstPayload  = PAYLOAD_TYPE(dst_payload);
 #endif
-uint_vec        SumTable    = uint_vec(scratch_reduced);
+uint_vec        SumTable    = uint_vec(scan_scratch);
 uint_vec        ReduceTable = uint_vec(scratch_reduced);
 uint_vec        ScanSrc     = uint_vec(scan_scratch);
 uint_vec        ScanDst     = uint_vec(scan_scratch);
@@ -153,13 +153,13 @@ uint FFX_ParallelSort_ThreadgroupReduce(uint localSum, uint localID){
 	uint waveReduced = subgroupAdd(localSum);
 	// First lane in a wave writes out wave reduction to LDS (this accounts for num waves per group greater than HW wave size)
 	// Note that some hardware with very small HW wave sizes (i.e. <= 8) may exhibit issues with this algorithm, and have not been tested.
-	uint waveID = localID / gl_SubgroupSize;
+	uint waveID = gl_SubgroupID;//localID / gl_SubgroupSize;
 	if (subgroupElect())
 		gs_FFX_PARALLELSORT_LDSSums[waveID] = waveReduced;
 	// Wait for everyone to catch up
 	barrier();
 	// First wave worth of threads sum up wave reductions
-	if (!bool(waveID))
+	if (waveID == 0)
 		waveReduced = subgroupAdd( (localID < FFX_PARALLELSORT_THREADGROUP_SIZE / gl_SubgroupSize) ? gs_FFX_PARALLELSORT_LDSSums[localID] : 0);
 
     // Returned the reduced sum

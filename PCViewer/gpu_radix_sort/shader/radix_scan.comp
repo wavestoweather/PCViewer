@@ -10,5 +10,5 @@ void main()
 {
     const uint BaseIndex = FFX_PARALLELSORT_ELEMENTS_PER_THREAD * FFX_PARALLELSORT_THREADGROUP_SIZE * groupID;
     FFX_ParallelSort_ScanPrefix(NumScanValues, localID, groupID, 0, BaseIndex, false,
-							    ScanSrc, ScanDst, ScanScratch);
+							    ReduceTable, ScanScratch, ScanScratch);
 }

@@ -40,24 +40,23 @@ void main(){
     uint BlockIndex = ThreadgroupBlockStart + localID;
 
     // Count value occurences
-    uint newCount;
     for (int BlockCount = 0; BlockCount < NumBlocksToProcess; BlockCount++, BlockIndex += BlockSize)
     {
         uint DataIndex = BlockIndex;
         
         // Pre-load the key values in order to hide some of the read latency
         SRC_T srcKeys[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
-        srcKeys[0] = SrcBuffer.d[DataIndex];
-        srcKeys[1] = SrcBuffer.d[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
-        srcKeys[2] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
-        srcKeys[3] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
+		srcKeys[0] = SrcBuffer.d[DataIndex];
+		srcKeys[1] = SrcBuffer.d[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
+		srcKeys[2] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
+		srcKeys[3] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
 
 #ifdef kRS_ValueCopy
         PAYLOAD_T srcValues[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
         srcValues[0] = SrcPayload.d[DataIndex];
-        srcValues[1] = SrcPayload.d[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
-        srcValues[2] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
-        srcValues[3] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
+		srcValues[1] = SrcPayload.d[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
+		srcValues[2] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
+		srcValues[3] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
 #endif // kRS_ValueCopy
 
         for (int i = 0; i < FFX_PARALLELSORT_ELEMENTS_PER_THREAD; i++)
@@ -66,9 +65,9 @@ void main(){
             if (localID < FFX_PARALLELSORT_SORT_BIN_COUNT)
                 gs_FFX_PARALLELSORT_LocalHistogram[localID] = 0;
 
-            SRC_T localKey = (DataIndex < NumKeys ? srcKeys[i] : SRC_MAX);
+            SRC_T localKey = DataIndex < NumKeys ? srcKeys[i]: SRC_MAX;
 #ifdef kRS_ValueCopy
-            PAYLOAD_T localValue = (DataIndex < NumKeys ? srcValues[i] : 0);
+            PAYLOAD_T localValue = DataIndex < NumKeys ? srcValues[i] : 0;
 #endif // kRS_ValueCopy
 
             // Sort the keys locally in LDS

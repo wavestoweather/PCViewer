@@ -151,33 +151,37 @@ inline std::tuple<VkPipeline, VkPipeline, VkPipeline, VkPipeline, VkPipeline> cr
 {
     VkPipeline count, reduce, scan, scan_add, scatter;
 
+    uint local_size = FFX_PARALLELSORT_THREADGROUP_SIZE;
+    auto specialization_entry = util::vk::initializers::specializationMapEntry(0, 0, sizeof(local_size));
+    auto specialization_info = util::vk::initializers::specializationInfo(specialization_entry, util::memory_view(local_size));
+
     auto spir_v = get_shader_code_count<T, P>();
     auto shader_module = util::vk::create_scoped_shader_module(spir_v);
-    auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    auto shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module, &specialization_info);
     auto pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
     count = util::vk::create_compute_pipeline(pipeline_info);
 
     spir_v = get_shader_code_reduce<T, P>();
     shader_module = util::vk::create_scoped_shader_module(spir_v);
-    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module, &specialization_info);
     pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
     reduce = util::vk::create_compute_pipeline(pipeline_info);
     
     spir_v = get_shader_code_scan<T, P>();
     shader_module = util::vk::create_scoped_shader_module(spir_v);
-    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module, &specialization_info);
     pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
     scan = util::vk::create_compute_pipeline(pipeline_info);
     
     spir_v = get_shader_code_scan_add<T, P>();
     shader_module = util::vk::create_scoped_shader_module(spir_v);
-    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module, &specialization_info);
     pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
     scan_add = util::vk::create_compute_pipeline(pipeline_info);
     
     spir_v = get_shader_code_scatter<T, P>();
     shader_module = util::vk::create_scoped_shader_module(spir_v);
-    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module);
+    shader_stage_info = util::vk::initializers::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *shader_module, &specialization_info);
     pipeline_info = util::vk::initializers::computePipelineCreateInfo(pipeline_layout, shader_stage_info);
     scatter = util::vk::create_compute_pipeline(pipeline_info);
 
@@ -249,7 +253,7 @@ void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_
     pc.num_scan_values = constant_buffer_data.NumScanValues;
 
     for(int shift: util::i_range(0, as<int>(sizeof(T)) * 8, FFX_PARALLELSORT_SORT_BITS_PER_PASS)){
-        const bool even_iter = (shift / FFX_PARALLELSORT_SORT_BIN_COUNT) & 1 ^ 1;
+        const bool even_iter = ((shift / FFX_PARALLELSORT_SORT_BITS_PER_PASS) & 1) ^ 1;
         pc.bit_shift = shift;
         pc.src_values = even_iter ? info.src_buffer: info.back_buffer;
         pc.dst_values = even_iter ? info.back_buffer: info.src_buffer;
@@ -266,7 +270,7 @@ void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_
             auto barrier = buffer_transition(info.scratch_vk_buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_WHOLE_SIZE);
             vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
         }
-
+        
         // sort reduce
         {
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _FPSCountReducePipeline);
@@ -275,7 +279,7 @@ void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_
             auto barrier = buffer_transition(info.scratch_reduced_vk_buffer , VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_WHOLE_SIZE);
             vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
         }
-
+        
         // sort scan
         {
             // scan prefix of reduced values
@@ -318,8 +322,6 @@ void radix_sort::gpu::radix_pipeline<T, P>::record_sort(VkCommandBuffer command_
                 memory_barriers[barrier_count++] = buffer_transition(payload_buffer, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_WHOLE_SIZE);
         }
         vkCmdPipelineBarrier(command_buffer,  VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, barrier_count, memory_barriers.data(), 0, nullptr);
-        //DEBUGGING
-        break;
     }
 }
 
@@ -382,13 +384,14 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
     sort(s_info);
 
     // DEBUG code
-    std::vector<int> test(gpu_buffer.size / sizeof(int));
+    //std::vector<int> test(gpu_buffer.size / sizeof(int));
 
     // downloading the sorted list
     wait_for_fence();
     staging_info.data_upload = {};
     staging_info.transfer_dir = structures::stager::transfer_direction::download;
-    staging_info.data_download = util::memory_view<int>(test);//info.dst_data;
+    //staging_info.data_download = util::memory_view<int>(test);//info.dst_data;
+    staging_info.data_download = info.dst_data;
     staging_info.dst_buffer_offset = 0;
     globals::stager.add_staging_task(staging_info);
     if(info.payload_src_data.size()){
@@ -397,6 +400,10 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
         globals::stager.add_staging_task(staging_info);
     }
     globals::stager.wait_for_completion();
+
+    //std::vector<int> first_sort(test.begin() + info.src_data.size(), test.begin() + 2 * info.src_data.size());
+    //std::vector<int> scratch(test.begin() + 2 * info.src_data.size(), test.begin() + 2 * info.src_data.size() + scratch_buffer_size / 4);
+    //std::vector<int> scratch_reduce(test.begin() + 2 * info.src_data.size() + scratch_buffer_size / 4, test.begin() + 2 * info.src_data.size() + scratch_buffer_size / 4 + scratch_buffer_reduced_size / 4);
 
     // cleaning up resources
     util::vk::destroy_buffer(gpu_buffer);

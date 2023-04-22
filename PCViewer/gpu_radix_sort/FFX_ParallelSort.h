@@ -301,6 +301,7 @@
 			
 			// Pre-load the key values in order to hide some of the read latency
 			uint srcKeys[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
+			uint srcKeys[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
 			srcKeys[0] = SrcBuffer[DataIndex];
 			srcKeys[1] = SrcBuffer[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
 			srcKeys[2] = SrcBuffer[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];

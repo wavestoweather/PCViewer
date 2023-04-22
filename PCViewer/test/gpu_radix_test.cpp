@@ -54,7 +54,10 @@ int test_radix_sort(int num_values = 1e3){
     typename radix_sort::gpu::radix_pipeline<T>::sort_info_cpu sort_info{};
     sort_info.src_data = util::memory_view<const T>(values);
     sort_info.dst_data = util::memory_view<T>(values);
+    auto begin = std::chrono::system_clock::now();
     pipeline.sort(sort_info);
+    auto end = std::chrono::system_clock::now();
+    std::cout << "[info] sorting took " << std::chrono::duration<double>(end - begin).count() << " s." << std::endl;
 
     for(int i: util::i_range(num_values))
         if(original_values[i] != values[i])
@@ -71,7 +74,9 @@ int gpu_radix_test(int argc, char** const argv){
     check_res(test_radix_pipeline_creation<uint32_t>());
     check_res((test_radix_pipeline_creation<float,radix_sort::gpu::payload_32bit>()));
 
-    check_res(test_radix_sort<int>(100));
+    //check_res(test_radix_sort<int>(1e6));
+    //check_res(test_radix_sort<uint32_t>(1e6));
+    check_res(test_radix_sort<float>(100));
 
     std::cout << "[info] gpu_radix_test successful" << std::endl;
     globals::stager.cleanup();
