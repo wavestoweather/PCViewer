@@ -8,20 +8,63 @@
 # Step 1: Compiling all shaders
 file(GLOB shaders "shader/*.comp")
 file(GLOB headers "sahder/*.glsl")
+file(GLOB conversion_shader "shader/radix_convert.comp")
+list(REMOVE_ITEM shaders ${conversion_shader})
 file(GLOB gpu_radix_headers "../gpu_radix_sort/FFX_ParallelSort.h" "../gpu_radix_sort/shader/*.hlsl")
 make_directory(${CMAKE_CURRENT_SOURCE_DIR}/shader/compiled_shaders)
-set(preprocessor_defines "SRC_TYPE=float_vec SRC_T=float SRC_MAX=float(1.0/.0)"
-                         "SRC_TYPE=int_vec SRC_T=int SRC_MAX=int\(0x7FFFFFFF\)"
-                         "SRC_TYPE=uint_vec SRC_T=uint SRC_MAX=uint\(0xFFFFFFFF\)"
-                         "SRC_TYPE=float_vec SRC_T=float SRC_MAX=float(1.0/.0) HAS_PAYLOAD")
+set(preprocessor_defines 
+    "SRC_TYPE=ubyte_vec SRC_T=uint8_t SRC_MAX=ubyte_max"
+    "SRC_TYPE=ushort_vec SRC_T=uint16_t SRC_MAX=ushort_max"
+    "SRC_TYPE=uint_vec SRC_T=uint SRC_MAX=uint_max"
+    "SRC_TYPE=ulong_vec SRC_T=uint64_t SRC_MAX=ulong_max"
+    "SRC_TYPE=ubyte_vec SRC_T=uint8_t SRC_MAX=ubyte_max HAS_PAYLOAD"
+    "SRC_TYPE=ushort_vec SRC_T=uint16_t SRC_MAX=ushort_max HAS_PAYLOAD"
+    "SRC_TYPE=uint_vec SRC_T=uint SRC_MAX=uint_max HAS_PAYLOAD"
+    "SRC_TYPE=ulong_vec SRC_T=uint64_t SRC_MAX=ulong_max HAS_PAYLOAD"
+)
 
 set(data_type_names 
-        float    
-        int      
-        uint     
-        float_32)
+    ubyte    
+    ushort      
+    uint     
+    ulong
+    ubyte_pay   
+    ushort_pay
+    uint_pay
+    ulong_pay
+)
+
+set(convert_defines 
+    "SRC_TYPE=byte_vec DST_TYPE=ubyte_vec"
+    "SRC_TYPE=ubyte_vec DST_TYPE=byte_vec"
+    "SRC_TYPE=short_vec DST_TYPE=ushort_vec"
+    "SRC_TYPE=ushort_vec DST_TYPE=short_vec"
+    "SRC_TYPE=int_vec DST_TYPE=uint_vec"
+    "SRC_TYPE=uint_vec DST_TYPE=int_vec"
+    "SRC_TYPE=long_vec DST_TYPE=ulong_vec"
+    "SRC_TYPE=ulong_vec DST_TYPE=long_vec"
+    "SRC_TYPE=float_vec DST_TYPE=uint_vec"
+    "SRC_TYPE=uint_vec DST_TYPE=float_vec FLOATS"
+    "SRC_TYPE=double_vec DST_TYPE=ulong_vec"
+    "SRC_TYPE=ulong_vec DST_TYPE=double_vec FLOATS"
+)
+set(convert_type_names
+    byte_ubyte
+    ubyte_byte
+    short_ushort
+    ushort_short
+    int_uint
+    uint_int
+    long_ulong
+    ulong_long
+    float_uint
+    uint_float
+    double_ulong
+    ulong_double
+)
 
 find_program(GLSLC glslc)
+# sorting pipelines --------------------------------------------------------------
 foreach(shader IN LISTS shaders)
     foreach(type defines IN ZIP_LISTS data_type_names preprocessor_defines)
         set(macros)
@@ -37,6 +80,7 @@ foreach(shader IN LISTS shaders)
 
         message(${GLSLC} -O --target-env=vulkan1.2 ${macros} -o ${current_shader_out_path} ${current_shader_path})
         #message("Adding compile shader command: ${current_shader_path} -> ${current_shader_out_path} with compile defines ${macros_string}")
+        #message("${current_shader_out_path}")
 
         # custom command for compilation
         add_custom_command(
@@ -48,6 +92,33 @@ foreach(shader IN LISTS shaders)
         list(APPEND spriv_binary_files ${current_shader_out_path})
     endforeach()
 endforeach()
+# conversion pipeline -----------------------------------------------------------------
+foreach(type defines IN ZIP_LISTS convert_type_names convert_defines)
+    set(macros)
+    string(REPLACE " " ";" define_list ${defines})
+    foreach(define IN LISTS define_list)
+        list(APPEND macros -D${define})
+    endforeach()
+
+    set(current_shader_path ${conversion_shader})
+    get_filename_component(shader_path ${current_shader_path} DIRECTORY)
+    get_filename_component(shader_name ${current_shader_path} NAME_WE)
+    set(current_shader_out_path ${shader_path}/compiled_shaders/${shader_name}_${type}.comp.spv)
+
+    #message("${current_shader_out_path}")
+
+    # custom command for compilation
+    add_custom_command(
+        OUTPUT ${current_shader_out_path}
+        COMMAND ${GLSLC} -O --target-env=vulkan1.2 ${macros} -o ${current_shader_out_path} ${current_shader_path}
+        DEPENDS ${current_shader_path}
+        IMPLICIT_DEPENDS CXX ${current_shader_path}
+        VERBATIM)
+    list(APPEND spriv_binary_files ${current_shader_out_path})
+endforeach()
+
+list(LENGTH spriv_binary_files spirv_count)
+message("Compiling ${spirv_count} shader for radix sort (Should be 40 sorting + 12 conversion = 52)")
 
 add_custom_target(compile_shaders_sort DEPENDS ${spriv_binary_files}) # custom target is needed to add the compile dpendency
 

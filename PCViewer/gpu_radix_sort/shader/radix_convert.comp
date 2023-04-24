@@ -1,0 +1,82 @@
+#version 450
+
+// shader to convert from signed/floating data format to unsigned integer formats
+// requires SRC_TYPE and DST_TYPE to be set when compiling
+// these can be set by calling shaderc with: shaderc -DSRC_TYPE=type -DDST_TYPE=type ..
+
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_buffer_reference_uvec2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
+
+layout(buffer_reference, scalar) buffer ubyte_vec   { uint8_t d[]; };
+layout(buffer_reference, scalar) buffer byte_vec    { int8_t d[]; };
+layout(buffer_reference, scalar) buffer ushort_vec  { uint16_t d[]; };
+layout(buffer_reference, scalar) buffer short_vec   { int16_t d[]; };
+layout(buffer_reference, scalar) buffer uint_vec    { uint d[]; };
+layout(buffer_reference, scalar) buffer int_vec     { int d[]; };
+layout(buffer_reference, scalar) buffer ulong_vec   { uint64_t d[]; };
+layout(buffer_reference, scalar) buffer long_vec    { int64_t d[]; };
+layout(buffer_reference, scalar) buffer half_vec    { float16_t d[]; };
+layout(buffer_reference, scalar) buffer float_vec   { float d[]; };
+layout(buffer_reference, scalar) buffer double_vec  { double d[]; };
+
+layout(push_constant) uniform push_constants{
+    uint64_t src_values;
+    uint64_t dst_values;
+    uint64_t src_payload;
+    uint64_t dst_payload;
+    uint64_t scan_scratch;
+    uint64_t scratch_reduced;
+    uint     bit_shift;
+    uint     num_keys;					
+    int      num_blocks_per_threadgroup;
+    uint     num_thread_groups;
+    uint     num_thread_groups_with_additional_blocks;
+    uint     num_reduce_threadgroup_per_bin;
+    uint     num_scan_values;
+};
+
+// forward mappings ----------------------------------------------------------------
+uint8_t convert(int8_t v){ return uint8_t(v ^ 0x80); }
+uint16_t convert(int16_t v){ return uint16_t(v ^ 0x8000); }
+uint convert(int v){ return uint(v ^ 0x80000000); }
+uint64_t convert(int64_t v){ return uint64_t(v ^ 0x8000000000000000l); }
+uint convert(float v){ 
+    uint val = floatBitsToUint(v);
+	uint mask = uint(-int(val >> 31) | 0x80000000);
+	return uint(uint(val) ^ mask);
+}
+uint64_t convert(double v){ 
+    uint64_t val = doubleBitsToUint64(v);
+	uint64_t mask = uint64_t(-int64_t(val >> 63l) | 0x8000000000000000l);
+	return uint64_t(uint64_t(val) ^ mask);
+}
+// reverse mappings ----------------------------------------------------------------
+int8_t  convert(uint8_t v)  { return int8_t(v ^ 0x80); }
+int16_t convert(uint16_t v) { return int16_t(v ^ 0x8000);}
+#ifndef FLOATS
+    int     convert(uint v)     { return int(v ^ 0x80000000);}
+    int64_t convert(uint64_t v) { return int64_t(v ^ 0x8000000000000000ul);}
+#else
+    float   convert(uint v)     { uint mask = ((v >> 31) - 1) | 0x80000000;
+                                v ^= mask; return uintBitsToFloat(v);}
+    double  convert(uint64_t v) { uint64_t mask = ((v >> 63) - 1) | 0x8000000000000000ul;
+                              v ^= mask; return uint64BitsToDouble(v);}   
+#endif                      
+
+layout(local_size_x_id = 0) in;
+SRC_TYPE        SrcBuffer   = SRC_TYPE(src_values);
+DST_TYPE        DstBuffer   = DST_TYPE(dst_values);
+
+void main(){
+    if(gl_GlobalInvocationID.x >= num_keys)
+        return;
+    DstBuffer.d[gl_GlobalInvocationID.x] = convert(SrcBuffer.d[gl_GlobalInvocationID.x]);
+}

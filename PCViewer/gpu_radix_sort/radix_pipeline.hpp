@@ -29,28 +29,24 @@ class radix_pipeline{
     uint32_t num_scan_values;
     };
 
-    // Sample resources
-    structures::buffer_info _SrcKeyBuffers[3];     // 32 bit source key buffers (for 1080, 2K, 4K resolution)
-    structures::buffer_info _SrcPayloadBuffers;    // 32 bit source payload buffers
-    structures::buffer_info _DstKeyBuffers[2];     // 32 bit destination key buffers (when not doing in place writes)
-    structures::buffer_info _DstPayloadBuffers[2]; // 32 bit destination payload buffers (when not doing in place writes)
-    structures::buffer_info _FPSScratchBuffer;             // Sort scratch buffer
-    structures::buffer_info _FPSReducedScratchBuffer;      // Sort reduced scratch buffer
-
     VkPipelineLayout        _SortPipelineLayout;
 
+    static constexpr bool   _use_convert_pipeline = !std::is_unsigned_v<T>;
+    VkPipeline              _FPSConvertPipeline;
+    VkPipeline              _FPSInvConvertPipeline;
     VkPipeline              _FPSCountPipeline;
     VkPipeline              _FPSCountReducePipeline;
     VkPipeline              _FPSScanPipeline;
     VkPipeline              _FPSScanAddPipeline;
     VkPipeline              _FPSScatterPipeline;
-    VkPipeline              _FPSScatterPayloadPipeline;
     
     VkFence                 _fence{};
     VkCommandPool           _command_pool{};
     VkCommandBuffer         _command_buffer{};
 
     uint32_t                _MaxNumThreadgroups{800};
+
+    bool                    _print_pure_gpu_times{};
 
     radix_pipeline();
 public:
@@ -117,5 +113,8 @@ public:
 
     // waiting for the end of a sort task submitted via sort(const sort_info& info)
     void wait_for_fence(uint64_t timeout = std::numeric_limits<uint64_t>::max());
+
+    void enable_gpu_timing_info(){_print_pure_gpu_times = true;}
+    void disable_gpu_timing_info(){_print_pure_gpu_times = false;}
 };
 }}

@@ -35,16 +35,17 @@
 #ifdef HAS_PAYLOAD
 #ifndef PAYLOAD_TYPE
     #pragma diagnostic warning "Missing define PAYLOAD_TYPE, setting to default value none_type"
-    #define PAYLOAD_TYPE float_vec
-    #define PAYLOAD_T float
-    #if SRC_TYPE != PAYLOAD_TYPE
-        #define PAYLOAD_IS_DIFFERENT_TYPE
-        #pragma message "Payload type is different than value type"
-    #else
-        #pragma message "Payload type is the same as value type"
-    #endif
+    #define PAYLOAD_TYPE uint_vec
+    #define PAYLOAD_T uint
 #endif
 #endif
+//#if SRC_TYPE != PAYLOAD_TYPE
+//    #define PAYLOAD_IS_DIFFERENT_TYPE
+//    #pragma message "Payload type is different than value type"
+//#else
+//    #pragma message "Payload type is the same as value type"
+//#endif
+#define PAYLOAD_IS_DIFFERENT_TYPE
 
 layout(push_constant) uniform push_constants{
     uint64_t src_values;
@@ -62,19 +63,6 @@ layout(push_constant) uniform push_constants{
     uint     num_scan_values;
 };
 
-const uint none_type = 0;
-const uint ubyte_type = 1;
-const uint byte_type = 2;
-const uint ushort_type = 3;
-const uint short_type = 4;
-const uint uint_type = 5;
-const uint int_type = 6;
-const uint uint64_type = 7;
-const uint int64_type = 8;
-const uint half_type = 9;
-const uint float_type = 10;
-const uint double_type = 11;
-
 layout(buffer_reference, scalar) buffer ubyte_vec   { uint8_t d[]; };
 layout(buffer_reference, scalar) buffer byte_vec    { int8_t d[]; };
 layout(buffer_reference, scalar) buffer ushort_vec  { uint16_t d[]; };
@@ -89,12 +77,6 @@ layout(buffer_reference, scalar) buffer double_vec  { double d[]; };
 
 layout(constant_id = 0) const uint local_size       = 128;
 
-// all given over via defines
-//layout(constant_id = 1) const uint bits_per_pass    = 4;
-//                        const uint bin_count        = 1 << bits_per_pass;
-//layout(constant_id = 2) const uint elements_per_thread = 4;
-//layout(constant_id = 3) const uint data_type        = float_type; // data type has to be set via defines
-//                        const uint block_size       = elements_per_thread * local_size;
 layout(local_size_x_id = 0) in;
 
 // remapping to ffx variables
@@ -133,7 +115,7 @@ uint get_local_key(uint16_t v){ return (uint(v) >> bit_shift) & bit_mask; }
 uint get_local_key(int16_t v){ return (uint(v ^ 0x8000) >> bit_shift) & bit_mask; }
 uint get_local_key(uint v){ return (v >> bit_shift) & bit_mask; }
 uint get_local_key(int v){ return (uint(v ^ 0x80000000) >> bit_shift) & bit_mask; }
-uint get_local_key(uint64_t v){ return uint(v >> bit_shift) & bit_mask; }
+uint get_local_key(uint64_t v){ return uint(v >> uint64_t(bit_shift)) & bit_mask; }
 //uint get_local_key(int64_t v){ return uint((v ^ int64_t(0x8000000000000000)) >> bit_shift) & bit_mask; }
 
 uint get_local_key(float v){ 
@@ -141,6 +123,11 @@ uint get_local_key(float v){
 	uint mask = uint(-int(val >> 31) | 0x80000000);
 	return uint((val ^ mask) >> bit_shift) & bit_mask;
 }
+
+const uint8_t ubyte_max = uint8_t(0xff);
+const uint16_t ushort_max = uint16_t(0xffff);
+const uint uint_max = uint(0xffffffff);
+const uint64_t ulong_max = uint64_t(0xffffffffffffffffl);
 //uint get_local_key(double v){ 
 //    uint64_t val = doubleBitsToUint64(v);
 //	uint64_t mask = uint64_t(-int64_t(val >> 63) | int64_t(0x8000000000000000));

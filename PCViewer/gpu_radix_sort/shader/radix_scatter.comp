@@ -1,5 +1,6 @@
 #version 450
 #extension GL_GOOGLE_include_directive: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
 #include "radix_common.glsl"
 
@@ -11,8 +12,10 @@ shared uint gs_FFX_PARALLELSORT_LocalHistogram[FFX_PARALLELSORT_SORT_BIN_COUNT];
 shared uint gs_FFX_PARALLELSORT_LDSScratch[FFX_PARALLELSORT_THREADGROUP_SIZE];
 // Reordering area for algorithm
 shared SRC_T reorder_array[FFX_PARALLELSORT_THREADGROUP_SIZE];
+#ifdef HAS_PAYLOAD
 #ifdef PAYLOAD_IS_DIFFERENT_TYPE
 shared PAYLOAD_T reorder_payload_array[FFX_PARALLELSORT_THREADGROUP_SIZE];
+#endif
 #endif
 void main(){
     // Load the sort bin threadgroup offsets into LDS for faster referencing
@@ -51,13 +54,13 @@ void main(){
 		srcKeys[2] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
 		srcKeys[3] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
 
-#ifdef kRS_ValueCopy
+#ifdef HAS_PAYLOAD
         PAYLOAD_T srcValues[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
         srcValues[0] = SrcPayload.d[DataIndex];
 		srcValues[1] = SrcPayload.d[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
 		srcValues[2] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
 		srcValues[3] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
-#endif // kRS_ValueCopy
+#endif // HAS_PAYLOAD
 
         for (int i = 0; i < FFX_PARALLELSORT_ELEMENTS_PER_THREAD; i++)
         {
@@ -66,9 +69,9 @@ void main(){
                 gs_FFX_PARALLELSORT_LocalHistogram[localID] = 0;
 
             SRC_T localKey = DataIndex < NumKeys ? srcKeys[i]: SRC_MAX;
-#ifdef kRS_ValueCopy
+#ifdef HAS_PAYLOAD
             PAYLOAD_T localValue = DataIndex < NumKeys ? srcValues[i] : 0;
-#endif // kRS_ValueCopy
+#endif // HAS_PAYLOAD
 
             // Sort the keys locally in LDS
             for (uint bitShift = 0; bitShift < BITS_PER_PASS; bitShift += 2)
@@ -111,7 +114,7 @@ void main(){
                 // Wait for everyone to catch up
                 barrier();
 
-#ifdef kRS_ValueCopy
+#ifdef HAS_PAYLOAD
 #ifdef PAYLOAD_IS_DIFFERENT_TYPE
                 // Re-arrange the values if we have them (store, sync, load)
                 reorder_payload_array[keyOffset] = localValue;
@@ -124,7 +127,7 @@ void main(){
 #endif
                 // Wait for everyone to catch up
                 barrier();
-#endif // kRS_ValueCopy
+#endif // HAS_PAYLOAD
             }
 
             // Need to recalculate the keyIndex on this thread now that values have been copied around the thread group
@@ -159,9 +162,9 @@ void main(){
             {
                 DstBuffer.d[totalOffset] = localKey;
 
-#ifdef kRS_ValueCopy
-					DstPayload.s[totalOffset] = localValue;
-#endif // kRS_ValueCopy
+#ifdef HAS_PAYLOAD
+				DstPayload.d[totalOffset] = localValue;
+#endif // HAS_PAYLOAD
             }
 
             // Wait for everyone to catch up
