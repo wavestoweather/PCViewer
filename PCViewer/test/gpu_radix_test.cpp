@@ -137,7 +137,7 @@ int gpu_radix_test(int argc, char** const argv){
     //check_res(test_radix_sort<int8_t>(127));  // not yet working
     check_res(test_radix_sort<uint16_t>(1e4));
     check_res(test_radix_sort<int16_t>(1e4));
-    check_res(test_radix_sort<uint32_t>(1e6));
+    check_res(test_radix_sort<uint32_t>(1e8));
     check_res(test_radix_sort<int>(1e6));
     check_res(test_radix_sort<float>(1e6));
     // testing with negative numbers

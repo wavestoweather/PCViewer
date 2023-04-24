@@ -493,7 +493,7 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
         logger << logging::info_prefix << " Sorting on the gpu (without up/download) for " << info.src_data.size() << " elements took " << std::chrono::duration<double>(sort_end - sort_begin).count() << " s." << logging::endl;
 
     // DEBUG code
-    //std::vector<int> test(gpu_buffer.size / sizeof(int));
+    std::vector<uint32_t> test(gpu_buffer.size / sizeof(int));
 
     // downloading the sorted list
     staging_info.data_upload = {};
@@ -504,7 +504,7 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
     globals::stager.add_staging_task(staging_info);
     if(info.payload_src_data.size()){
         staging_info.data_download = info.payload_dst_data;
-        staging_info.dst_buffer_offset = 2 * info.src_data.byte_size() + info.payload_src_data.byte_size();
+        staging_info.dst_buffer_offset = 2 * info.src_data.byte_size();
         globals::stager.add_staging_task(staging_info);
     }
     globals::stager.wait_for_completion();

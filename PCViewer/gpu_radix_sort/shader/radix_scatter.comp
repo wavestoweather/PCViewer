@@ -107,9 +107,11 @@ void main(){
                 uint keyOffset = (localSum >> (bitKey * 8)) & 0xff;
 
                 // Re-arrange the keys (store, sync, load)
-                reorder_array[keyOffset] = localKey;
+                //reorder_array[keyOffset] = localKey;
+                gs_FFX_PARALLELSORT_LDSSums[keyOffset] = uint(localKey);
                 barrier();
-                localKey = reorder_array[localID];
+                //localKey = reorder_array[localID];
+                localKey = SRC_T(gs_FFX_PARALLELSORT_LDSSums[localID]);
 
                 // Wait for everyone to catch up
                 barrier();
@@ -117,9 +119,11 @@ void main(){
 #ifdef HAS_PAYLOAD
 #ifdef PAYLOAD_IS_DIFFERENT_TYPE
                 // Re-arrange the values if we have them (store, sync, load)
-                reorder_payload_array[keyOffset] = localValue;
+                //reorder_payload_array[keyOffset] = localValue;
+                gs_FFX_PARALLELSORT_LDSSums[keyOffset] = uint(localValue);
                 barrier();
-                localValue = reorder_payload_array[localID];
+                //localValue = reorder_payload_array[localID];
+                localValue = PAYLOAD_T(gs_FFX_PARALLELSORT_LDSSums[localID]);
 #else
                 reorder_array[keyOffset] = localValue;
                 barrier();
