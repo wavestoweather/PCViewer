@@ -91,7 +91,7 @@ private:
     structures::semaphore   _completion_sempahore{};
     VkCommandPool           _command_pool{};
     std::array<VkCommandBuffer, 2>_command_buffers{};
-    std::atomic_size_t      _staging_buffer_size{1u<<27}; // default size is 128 MB
+    std::atomic_size_t      _staging_buffer_size{1u<<26}; // default size is 128 MB
     buffer_info             _staging_buffer{};
     uint8_t*                _staging_buffer_mapped{};
 

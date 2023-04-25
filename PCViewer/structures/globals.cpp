@@ -666,7 +666,7 @@ void stager::_task_thread_function(){
             if(_staging_buffer)
                 util::vk::destroy_buffer(_staging_buffer);
             auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, buffer_size);
-            auto alloc_create_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT);
+            auto alloc_create_info = util::vma::initializers::allocationCreateInfo(VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
             VmaAllocationInfo alloc_info{};
             _staging_buffer = util::vk::create_buffer(buffer_info, alloc_create_info, &alloc_info);
             _staging_buffer_mapped = reinterpret_cast<uint8_t*>(alloc_info.pMappedData);

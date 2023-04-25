@@ -25,6 +25,7 @@
 #include <c_file.hpp>
 #include <filesystem>
 #include <stager.hpp>
+#include <util.hpp>
 
 #include <numeric>
 #include <random>
@@ -448,12 +449,13 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
         logger << logging::error_prefix << " Sizes for sorting do not align, nothing executed. Sizes are; src(" << info.src_data.size() << "), dst(" << info.dst_data.size() << "), payload_src(" << info.payload_src_data.size() << "), payload_dst(" << info.payload_dst_data.size() << ")" << logging::endl;
         return;
     }
+    const size_t padded_src_size = util::align<size_t>(info.src_data.byte_size(), 4) , padded_payload_size = util::align<size_t>(info.payload_src_data.byte_size(), 4);
     // creating the required additional resources
     uint32_t scratch_buffer_size, scratch_buffer_reduced_size;
     FFX_ParallelSort_CalculateScratchResourceSize(as<uint32_t>(info.src_data.size()), scratch_buffer_size, scratch_buffer_reduced_size);
 
-    uint32_t data_size = 2 * as<uint32_t>(info.src_data.byte_size()); // front and back buffer
-    data_size += 2 * as<uint32_t>(info.payload_src_data.byte_size());
+    uint32_t data_size = 2 * as<uint32_t>(padded_src_size); // front and back buffer
+    data_size += 2 * as<uint32_t>(padded_payload_size);
     auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data_size + scratch_buffer_size + scratch_buffer_reduced_size);
     auto memory_info = util::vma::initializers::allocationCreateInfo();
     auto gpu_buffer = util::vk::create_buffer(buffer_info, memory_info);
@@ -462,19 +464,20 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
     structures::stager::staging_buffer_info staging_info{};
     staging_info.data_upload = info.src_data;
     staging_info.dst_buffer = gpu_buffer.buffer;
+    auto staging_begin = std::chrono::system_clock::now();
     globals::stager.add_staging_task(staging_info);
     if(info.payload_src_data.size()){
         staging_info.data_upload = info.payload_src_data;
-        staging_info.dst_buffer_offset = 2 * info.src_data.byte_size();
+        staging_info.dst_buffer_offset = 2 * padded_src_size;
         globals::stager.add_staging_task(staging_info);
     }
 
     sort_info s_info{};
     s_info.src_buffer                = util::vk::get_buffer_address(gpu_buffer);
-    s_info.back_buffer               = s_info.src_buffer + info.src_data.byte_size();
-    s_info.payload_src_buffer        = s_info.back_buffer + info.src_data.byte_size();
-    s_info.payload_back_buffer       = s_info.payload_src_buffer + info.payload_src_data.byte_size();
-    s_info.scratch_buffer            = s_info.payload_back_buffer + info.payload_src_data.byte_size();
+    s_info.back_buffer               = s_info.src_buffer + padded_src_size;
+    s_info.payload_src_buffer        = s_info.back_buffer + padded_src_size;
+    s_info.payload_back_buffer       = s_info.payload_src_buffer + padded_payload_size;
+    s_info.scratch_buffer            = s_info.payload_back_buffer + padded_payload_size;
     s_info.scratch_reduced_buffer    = s_info.scratch_buffer + scratch_buffer_size;
     s_info.element_count             = info.src_data.size();
     s_info.src_vk_buffer             = gpu_buffer.buffer;  
@@ -485,6 +488,11 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
     s_info.scratch_reduced_vk_buffer = gpu_buffer.buffer;    
     
     globals::stager.wait_for_completion();
+    auto staging_end = std::chrono::system_clock::now();
+    auto staging_time = std::chrono::duration<double>(staging_end - staging_begin).count();
+    auto upload_size_mb = (padded_src_size + padded_payload_size) / float(1 << 20);
+    if(_print_pure_gpu_times)
+        logger << logging::info_prefix << " Uploading " << upload_size_mb << " MByte in " << staging_time <<" s [" << upload_size_mb / staging_time << " MBbyte/s]" << logging::endl;
     auto sort_begin = std::chrono::system_clock::now();
     sort(s_info);
     wait_for_fence();
@@ -504,7 +512,7 @@ void radix_sort::gpu::radix_pipeline<T, P>::sort(const sort_info_cpu& info){
     globals::stager.add_staging_task(staging_info);
     if(info.payload_src_data.size()){
         staging_info.data_download = info.payload_dst_data;
-        staging_info.dst_buffer_offset = 2 * info.src_data.byte_size();
+        staging_info.dst_buffer_offset = 2 * padded_src_size;
         globals::stager.add_staging_task(staging_info);
     }
     globals::stager.wait_for_completion();

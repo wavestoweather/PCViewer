@@ -9,6 +9,7 @@ struct test_result{
     static const int success = 0;
     static const int flag_wrong = 1;
     static const int sorting_order_wrong = 2;
+    static const int payload_wrong_element = 3;
 };
 
 template<typename T, typename P = radix_sort::gpu::payload_none>
@@ -124,7 +125,59 @@ int test_radix_sort_payload(int num_values = 1e3)
     return test_result::success;
 }
 
+template<typename T, typename P>
+int test_radix_sort_random_payload(int num_values = 1e3)
+{
+    std::vector<T> keys = get_randoms<T>(num_values);
+    std::vector<P> payloads(num_values);
+    for(int i: util::i_range(num_values))
+        payloads[i] = as<P>(i);
+    
+    auto original_keys = keys;
+    auto original_payloads = payloads;
+
+    auto begin = std::chrono::system_clock::now();
+    if constexpr(sizeof(P) == sizeof(radix_sort::gpu::payload_32bit)){
+        auto& pipeline = radix_sort::gpu::radix_pipeline<T, radix_sort::gpu::payload_32bit>::instance();
+        pipeline.enable_gpu_timing_info();
+
+        typename radix_sort::gpu::radix_pipeline<T, radix_sort::gpu::payload_32bit>::sort_info_cpu sort_info{};
+        sort_info.src_data = util::memory_view<const T>(keys);
+        sort_info.dst_data = util::memory_view<T>(keys);
+        sort_info.payload_src_data = util::memory_view<const P>(payloads);
+        sort_info.payload_dst_data = util::memory_view<P>(payloads);
+        pipeline.sort(sort_info);
+    }
+    else if constexpr(sizeof(P) == sizeof(radix_sort::gpu::payload_64bit)){
+        auto& pipeline = radix_sort::gpu::radix_pipeline<T, radix_sort::gpu::payload_64bit>::instance();
+        pipeline.enable_gpu_timing_info();
+
+        typename radix_sort::gpu::radix_pipeline<T, radix_sort::gpu::payload_64bit>::sort_info_cpu sort_info{};
+        sort_info.src_data = util::memory_view<const T>(keys);
+        sort_info.dst_data = util::memory_view<T>(keys);
+        sort_info.payload_src_data = util::memory_view<const P>(payloads);
+        sort_info.payload_dst_data = util::memory_view<P>(payloads);
+        pipeline.sort(sort_info);
+    }
+    else
+        assert(false && "unknown payload size");
+    auto end = std::chrono::system_clock::now();
+    std::cout << "[info] sorting took " << std::chrono::duration<double>(end - begin).count() << " s." << std::endl;
+
+
+    for(int i: util::i_range(num_values)){
+        if(i > 0 && keys[i] < keys[i - 1])
+            return test_result::sorting_order_wrong;
+        if(keys[i] != original_keys[as<uint32_t>(payloads[i])])
+            return test_result::payload_wrong_element;
+    }
+    
+    return test_result::success;
+}
+
 int gpu_radix_test(int argc, char** const argv){
+    constexpr uint32_t stress_size{1 << 20};
+    
     vulkan_default_init();
     globals::stager.init();
     check_res(test_radix_pipeline_creation<float>());
@@ -133,20 +186,27 @@ int gpu_radix_test(int argc, char** const argv){
     check_res((test_radix_pipeline_creation<float,radix_sort::gpu::payload_32bit>()));
 
     // standard positive numbers
-    //check_res(test_radix_sort<uint8_t>(255)); // not yet working
-    //check_res(test_radix_sort<int8_t>(127));  // not yet working
+    check_res(test_radix_sort<uint8_t>(255));
+    check_res(test_radix_sort<int8_t>(127)); 
     check_res(test_radix_sort<uint16_t>(1e4));
     check_res(test_radix_sort<int16_t>(1e4));
-    check_res(test_radix_sort<uint32_t>(1e8));
+    check_res(test_radix_sort<uint32_t>(stress_size));
     check_res(test_radix_sort<int>(1e6));
     check_res(test_radix_sort<float>(1e6));
+
     // testing with negative numbers
     check_res(test_radix_sort<int>(1e6, -40));
     check_res(test_radix_sort<float>(1e4, -1000.f));
 
     // testing with payload
     check_res((test_radix_sort_payload<uint32_t, uint32_t>(1e4)));
+    check_res((test_radix_sort_payload<int, uint32_t>(1e4)));
+    check_res((test_radix_sort_payload<int, float>(1e4)));
     check_res((test_radix_sort_payload<float, uint32_t>(1e4)));
+    check_res((test_radix_sort_payload<float, float>(1e4)));
+
+    // testing with random keys + payload
+    check_res((test_radix_sort_random_payload<uint32_t, uint32_t>(1e4)));
 
     std::cout << "[info] gpu_radix_test successful" << std::endl;
     globals::stager.cleanup();
