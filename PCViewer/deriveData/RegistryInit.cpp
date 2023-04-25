@@ -41,7 +41,7 @@ REGISTER(Floor);
 REGISTER(Sinh);
 REGISTER(Cosh);
 REGISTER(Tanh);
-REGISTER(Value_to_Index);
+REGISTER(Rank_Transform);
 //REGISTER(CreateVec2);
 //REGISTER(SplitVec2);
 //REGISTER(Vec2Norm);

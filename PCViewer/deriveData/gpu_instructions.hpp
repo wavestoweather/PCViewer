@@ -57,6 +57,7 @@ enum op_codes: uint32_t{
     mul_red,
     avg_red,
     stddev_red,
+    rank_transform,
 };
 static std::ostream& operator<<(std::ostream& s, op_codes o){
     return s << static_cast<uint32_t>(o);

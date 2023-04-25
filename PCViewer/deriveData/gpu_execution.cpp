@@ -509,7 +509,7 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
                 declared_locals.insert(std::get<uint32_t>(input));
             }
         }
-        // temp vector creation for reduction functions
+        // temp vector creation for reduction functions and complex transforms
         size_t reduction_vec{util::n_pos};
         size_t reduction_buffer_size{};
         uint32_t group_count = array_sizes.empty() ? 0 : as<uint32_t>(array_sizes.back());    // TODO parse from operation
@@ -534,6 +534,22 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
             reduction_vec = temp_buffers | util::index_of_if<structures::buffer_info>([&reduction_buffer_size](auto&& info){return info.size >= reduction_buffer_size;});
             if(reduction_vec == util::n_pos){
                 auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, reduction_buffer_size);
+                auto alloc_info = util::vma::initializers::allocationCreateInfo();
+                temp_buffers.emplace_back(util::vk::create_buffer(buffer_info, alloc_info));
+                reduction_vec = temp_buffers.size() - 1;
+            }
+            break;
+        }
+        case rank_transform:
+        {
+            // rank transform requires one additional buffer which will hold:
+            // payload_front, payload_back and src_back
+            // the input vector will also be the output vector with the sorted indices
+            size_t amt_elements = calc_thread_amt(data_state);
+            size_t tmp_byte_size = amt_elements * sizeof(float) * 3;
+            reduction_vec = temp_buffers | util::index_of_if<structures::buffer_info>([&tmp_byte_size](auto&& info){return info.size >= tmp_byte_size;});
+            if(reduction_vec == util::n_pos){
+                auto buffer_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, tmp_byte_size);
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
                 temp_buffers.emplace_back(util::vk::create_buffer(buffer_info, alloc_info));
                 reduction_vec = temp_buffers.size() - 1;
@@ -741,6 +757,12 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
                 body << "vec " << out_buffer.str() << " = vec(" << dst_buffer << "ul);\n";
                 body << "float stddev_el = storage" << std::get<uint32_t>(input_indices[1]) << "; stddev_el *= stddev_el;\n";
                 body << reduction_iterations_code("storage" + std::to_string(std::get<uint32_t>(input_indices[1])), "share", out_buffer.str(), operation, group_count, "stddev_el");
+            }
+            break;
+        case op_codes::rank_transform:
+            {
+                // first comes the iota fill of the index back buffer
+                
             }
             break;
         default:
