@@ -530,12 +530,14 @@ void stager::cleanup(){
     _task_thread = {};
 }
 void stager::add_staging_task(staging_buffer_info& stage_info){
+    assert(_task_thread.joinable() && "Stager has not been initalized. Missing call to globals::stager.init()");
     std::scoped_lock lock(_task_add_mutex);
     _staging_tasks.push_back(std::make_unique<staging_buffer_info>(stage_info));
     stage_info.task_executed = true;
     _task_semaphore.release();
 }
 void stager::add_staging_task(staging_image_info& stage_info){
+    assert(_task_thread.joinable() && "Stager has not been initalized. Missing call to globals::stager.init()");
     std::scoped_lock lock(_task_add_mutex);
     _staging_tasks.push_back(std::make_unique<staging_image_info>(stage_info));
     stage_info.task_executed = true;
@@ -545,6 +547,7 @@ void stager::set_staging_buffer_size(size_t size){
     _staging_buffer_size = util::align<size_t>(size, 512ul);
 }
 void stager::wait_for_completion(){
+    assert(_task_thread.joinable() && "Stager has not been initalized. Missing call to globals::stager.init()");
     ++_wait_completion;
     _task_semaphore.release();
     _completion_sempahore.acquire();    // waiting for execution thread to finish waiting
