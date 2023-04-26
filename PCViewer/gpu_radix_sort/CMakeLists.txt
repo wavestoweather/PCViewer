@@ -127,7 +127,7 @@ set(output_header shaders.h)
 set(output_variable_name spriv_binary_files)
 set(output_namespace_name ShaderBinaries)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake.in ${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake @ONLY)
-add_custom_target(delete_header COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_CURRENT_SOURCE_DIR}/${output_header})
+add_custom_target(delete_header COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_CURRENT_SOURCE_DIR}/${output_header} DEPENDS ${spriv_binary_files})
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${output_header}
                    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake
                    DEPENDS ${spriv_binary_files}

@@ -815,7 +815,7 @@ void data_derivation_workbench::_execute_graph(std::string_view id){
 
         // getting the pipelines and executing them
         code_list = deriveData::optimize_operations(code_list);
-        auto pipelines = deriveData::create_gpu_pipelines(code_list);
+        auto pipelines = deriveData::create_gpu_pipelines(code_list, _compute_command_pool);
         auto command_buffer = util::vk::create_begin_command_buffer(_compute_command_pool);
         // fill buffers with init values
         for(const auto& init_val: data.buffer_init_values){

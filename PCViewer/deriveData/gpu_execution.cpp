@@ -11,6 +11,7 @@
 #include <string_view_util.hpp>
 #include "gpu_instructions.hpp"
 #include "gpu_execution.hpp"
+#include <radix_pipeline.hpp>
 
 #define workgroup_size 1024
 #define STR_IND(s) STR(s)
@@ -405,7 +406,7 @@ inline std::vector<pipeline_info> create_reduction_pipeline(VkDeviceAddress tmp_
     return ret;
 };
 
-create_gpu_result create_gpu_pipelines(std::string_view instructions){
+create_gpu_result create_gpu_pipelines(std::string_view instructions, VkCommandPool command_pool){
     struct data_state_t{
         std::vector<uint32_t> cur_dimension_sizes;          // if the dimensionsizes are getting bigger -> store, barrier and reload, if the dimensionsize are getting smaller -> reduction store (atomic store) and reload,
         std::vector<uint32_t> cur_dimension_indices;        // dimension indices // hold information about the 
@@ -762,14 +763,18 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
         case op_codes::rank_transform:
             {
                 // first comes the iota fill of the index back buffer
-                
+                // this code is in place merged with previous code, the transformation code is then added
+                body << "vec rank_ind = vec(" << util::vk::get_buffer_address(temp_buffers[reduction_vec]) << ");";
+                body << "rank_ind.data[gl_GlobalInvocationID.x] = float(gl_GlobalInvocationID.x);\n";
+                any_stores = true;  // enforce compiling this shader by signaling that any outputs are written
             }
             break;
         default:
             throw std::runtime_error{"Unsupported op_code for operation line: " + std::string(line) + ". Use Cpu execution for this execution graph."};
         }
 
-        // adding temp reduction pipelines
+        // section for pipelines after pipeline barrier
+        // These pipelines will be added after the current kernel has been merged and compiled
         switch(operation){
         case op_codes::min_red:
         case op_codes::max_red:
@@ -781,6 +786,19 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
                 assert(reduction_vec != util::n_pos);
                 auto reduction_pipes = create_reduction_pipeline(util::vk::get_buffer_address(temp_buffers[reduction_vec]), std::get<size_t>(output_indices[0]), 0, group_count, reduction_buffer_size / sizeof(float) / size_mult, operation);
                 wait_for_barrier_pipes.insert(wait_for_barrier_pipes.end(), reduction_pipes.begin(), reduction_pipes.end());
+            }
+            break;
+        case op_codes::rank_transform:
+            {
+                auto& sort_pipeline = radix_sort::gpu::radix_pipeline<float, radix_sort::gpu::payload_32bit>::instance();
+                deriveData::pipeline_info p_info{};
+                p_info.recorded_commands = util::vk::create_begin_command_buffer(command_pool);
+                // if data is not sorted in place, first copy over the input float array to the output
+                // to avoid scrambling up the element order in the original array
+                if(std::get<uint32_t>(input_indices[0]) != std::get<uint32_t>(output_indices[0])){
+                    // TODO: pass in the vulkan buffers to be able to copy regions
+                    vkCmdCopyBuffer(p_info.recorded_commands, 0)
+                }
             }
             break;
         }

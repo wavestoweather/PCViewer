@@ -220,7 +220,7 @@ inline std::tuple<VkPipeline, VkPipeline, VkPipeline, VkPipeline, VkPipeline, Vk
 {
     VkPipeline count, reduce, scan, scan_add, scatter, convert, inv_convert;
 
-    uint local_size = FFX_PARALLELSORT_THREADGROUP_SIZE;
+    uint32_t local_size = FFX_PARALLELSORT_THREADGROUP_SIZE;
     auto specialization_entry = util::vk::initializers::specializationMapEntry(0, 0, sizeof(local_size));
     auto specialization_info = util::vk::initializers::specializationInfo(specialization_entry, util::memory_view(local_size));
 

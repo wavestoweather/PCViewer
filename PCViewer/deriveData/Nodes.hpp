@@ -1096,7 +1096,7 @@ public:
 
 class Rank_Transform: public Unary<FloatType, IndexType>, public Creatable<Rank_Transform>{
 public:
-    Rank_Transform(): Unary("", "Rank Transform") {}
+    Rank_Transform(): Unary("", "Rank Transform") {inplace_possible = true;}
 
     virtual void applyOperationCpu(const float_column_views& input ,float_column_views& output) const override{
         // sorting the input array
@@ -1111,12 +1111,13 @@ public:
         for(size_t i: util::size_range(input[0].cols[0]))
             output[0].cols[0][i] = static_cast<float>(val_to_index[input[0].cols[0][i]]);
         //TODO proper min max
-        output[0].cols_min_max = {min_max_t{0, float(input[0].cols[0].size())}};
+        output[0].cols_min_max = {min_max_t{0, float(input[0].cols[0].size() - 1)}};
     }
     void applyOperationGpu(std::stringstream& operations, const float_column_views& input, float_column_views& output, std::vector<init_value>& init_values) const override{
         add_operation(operations, op_codes::rank_transform, input, output);
-        
-        output[0].cols_min_max = {min_max_t{0, input[0].dimensionSizes}};
+        size_t full_size{1};
+        for(uint32_t d: input[0].dimensionSizes) full_size *= d;
+        output[0].cols_min_max = {min_max_t{0, as<float>(full_size - 1)}};
     }
 };
 

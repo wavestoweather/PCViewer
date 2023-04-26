@@ -661,7 +661,7 @@ void DeriveWorkbench::executeGraph()
     for(auto node: outputNodes)
         buildCacheRecursive(node, data);
 
-    // wiht the execution of all output nodes all changes are already applied
+    // with the execution of all output nodes all changes are already applied
     std::cout << "Amount of data allocations: " << data.dataStorage.size() << std::endl << std::endl;
 }
 
