@@ -25,5 +25,5 @@ struct create_gpu_result{
     std::vector<structures::buffer_info> temp_gpu_buffers;  // used to hold additional gpu buffers such as reduction buffers
     std::vector<pipeline_info>           pipelines;
 };
-create_gpu_result create_gpu_pipelines(std::string_view instructions);
+create_gpu_result create_gpu_pipelines(std::string_view instructions, VkCommandPool command_pool);
 }

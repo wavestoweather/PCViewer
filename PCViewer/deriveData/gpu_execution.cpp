@@ -790,14 +790,14 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions, VkCommandP
             break;
         case op_codes::rank_transform:
             {
-                auto& sort_pipeline = radix_sort::gpu::radix_pipeline<float, radix_sort::gpu::payload_32bit>::instance();
+                //auto& sort_pipeline = radix_sort::gpu::radix_pipeline<float, radix_sort::gpu::payload_32bit>::instance();
                 deriveData::pipeline_info p_info{};
                 p_info.recorded_commands = util::vk::create_begin_command_buffer(command_pool);
                 // if data is not sorted in place, first copy over the input float array to the output
                 // to avoid scrambling up the element order in the original array
                 if(std::get<uint32_t>(input_indices[0]) != std::get<uint32_t>(output_indices[0])){
                     // TODO: pass in the vulkan buffers to be able to copy regions
-                    vkCmdCopyBuffer(p_info.recorded_commands, 0)
+                    //vkCmdCopyBuffer(p_info.recorded_commands, 0)
                 }
             }
             break;

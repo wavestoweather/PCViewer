@@ -158,6 +158,8 @@ load_result<T> open_csv_impl(std::string_view filename, memory_view<structures::
     {
         std::string_view line; getline(input_view, line);
         for(std::string_view variable; getline(line, variable, ',');){
+            if(variable.empty())
+                throw std::runtime_error{"Encountered empty variable name in csv file"};
             if(variable[0] == '\"'){
                 if(variable.back() != '\"'){
                     auto start = variable.data();
