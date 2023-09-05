@@ -137,6 +137,7 @@ bool check_activations(uint index, uint64_t brush_address){
 
 // it is guaranteed that if the pipeline is executed there do exist brushes (so check for on brushes is useless)
 void main(){
+    vec2 m = min(vec2(1), vec2(0));
     if(gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 + gl_LocalInvocationID.x >= data_size)
         return;
 

@@ -762,7 +762,7 @@ create_gpu_result create_gpu_pipelines(std::string_view instructions){
         case op_codes::rank_transform:
             {
                 // first comes the iota fill of the index back buffer
-                
+                body << "storage" << s
             }
             break;
         default:
