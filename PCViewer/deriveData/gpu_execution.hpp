@@ -13,6 +13,9 @@ struct pipeline_info{
     // maybe additional info
     std::vector<size_t> amt_of_threads; // multiple sizes used to be able to the reductions
     std::vector<std::vector<uint8_t>> push_constants_data;  // multiple push constants given for each called pipeline one
+
+    // for more complex pipelines the prerecorded command buffer is put here
+    VkCommandBuffer     recorded_commands;
 };
 using data_storage = std::variant<uint32_t, size_t, float>;
 
