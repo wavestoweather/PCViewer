@@ -43,6 +43,13 @@ private:
     T _begin, _end;
     T _step;
 };
+template<typename T>
+class range_start{
+public:
+    T start;
+    i_range<T> operator ,(T end) const {return i_range(start, end);}
+};
+constexpr range_start<unsigned long long> operator"" _r(unsigned long long s) {return range_start<unsigned long long>{s};}
 
 class size_range{
 public:

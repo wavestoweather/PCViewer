@@ -30,9 +30,20 @@ int test_last_iterator(){
     return test_result::success;
 }
 
+int test_range_literal(int n = 100){
+    using namespace util;
+    int c = 0;
+    for(auto i: 0_r ,n) {
+        if(i != c++)
+            return test_result::flag_wrong;
+    }
+    return test_result::success;    
+}
+
 int iterator_test(int argc, char** const argv){
     check_res(test_first_iterator());
     check_res(test_last_iterator());
+    check_res(test_range_literal());
 
     std::cout << "[info] iterator_test successful" << std::endl;
     return test_result::success;
