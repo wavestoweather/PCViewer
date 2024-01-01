@@ -732,6 +732,9 @@ void ImGui_ImplSDL2_NewFrame()
     io.DisplaySize = ImVec2((float)w, (float)h);
     if (w > 0 && h > 0)
         io.DisplayFramebufferScale = ImVec2((float)display_w / w, (float)display_h / h);
+    
+    float dpi = ImGui::GetPlatformIO().Viewports.front()->DpiScale;
+    io.DisplaySize = ImVec2((float)w / dpi, (float)h / dpi);
 
     // Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
     static Uint64 frequency = SDL_GetPerformanceFrequency();
