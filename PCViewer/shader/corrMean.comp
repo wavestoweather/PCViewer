@@ -4,11 +4,11 @@
 #extension GL_KHR_shader_subgroup_arithmetic: enable
 
 layout (binding = 0) buffer Data{
-	float d[];
+    float d[];
 }data;
 
 layout(binding = 1) buffer IndexBuffer{
-	uint ind[];
+    uint ind[];
 };
 
 layout(binding = 2, r8 ) uniform imageBuffer act;

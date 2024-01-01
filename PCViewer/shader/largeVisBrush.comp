@@ -36,10 +36,11 @@ layout(push_constant) uniform constants{
     uint codingBlockSize;
 };
 
-layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
+const uint local_size = 256;
+layout (local_size_x = local_size,local_size_y=1,local_size_z=1) in;
 
 // same size as the local size
-shared uint act[256];
+shared uint act[local_size];
 
 void writeActivations(int iteration, bool a){
     // creating 32 bit words via subgroup ballot. Only works with 32 or 64 bit sized ballots

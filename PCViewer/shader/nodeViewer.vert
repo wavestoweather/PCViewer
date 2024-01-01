@@ -3,5 +3,5 @@
 layout(location = 0) out uint dataIndex;
 
 void main() {
-	dataIndex = gl_VertexIndex;
+    dataIndex = gl_VertexIndex;
 }

@@ -1504,3 +1504,7 @@ ImTextureID ImGui_ImplVulkan_AddTexture(VkSampler sampler, VkImageView image_vie
     
     return (ImTextureID)descriptor_set;
 }
+
+VkDescriptorSetLayout ImGui_ImplVulkan_GetDescriptorLayout(){
+    return g_DescriptorSetLayout;
+}

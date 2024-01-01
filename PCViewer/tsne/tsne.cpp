@@ -36,6 +36,8 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <exception>
+#include <ranges.hpp>
 #include "vptree.h"
 #include "sptree.h"
 #include "tsne.h"
@@ -46,6 +48,7 @@ using namespace std;
 static double sign(double x) { return (x == .0 ? .0 : (x < .0 ? -1.0 : 1.0)); }
 
 static void zeroMean(double* X, int N, int D);
+static double zeroMeanCols(const std::vector<util::memory_view<const float>>& cols, double* dst);
 static void computeGaussianPerplexity(double* X, int N, int D, double* P, double perplexity);
 static void computeGaussianPerplexity(double* X, int N, int D, vector<unsigned int>& _row_P, vector<unsigned int>& _col_P, vector<double>& _val_P, double perplexity, int K);
 static double randn();
@@ -219,6 +222,175 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
     //printf("Fitting performed in %4.2f seconds.\n", total_time);
 }
 
+void TSNE::run_cols(const std::vector<util::memory_view<const float>>& cols, std::vector<util::memory_view<float>>& dst_cols,
+            double perplexity, double theta, int rand_seed, bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter, std::atomic<float>& progress){
+
+    const size_t N = cols[0].size();
+    const size_t D = cols.size();
+    const uint32_t dst_D = dst_cols.size();
+    
+    // Set random seed
+    if (skip_random_init != true) {
+      if(rand_seed >= 0) {
+          //printf("Using random seed: %d\n", rand_seed);
+          srand((unsigned int) rand_seed);
+      } else {
+          //printf("Using current time as random seed...\n");
+          srand(time(NULL));
+      }
+    }
+
+    if(N - 1 < 3 * perplexity)
+        throw std::runtime_error{"TSNE::run() perplexity is too large for the amount of data points. Perplexity has to be < number_data_points / 3"};
+
+    bool exact = (theta == .0) ? true : false;
+
+    // Set learning parameters
+    float total_time = .0;
+    clock_t start, end;
+	double momentum = .5, final_momentum = .8;
+	double eta = 200.0;
+
+    vector<double>  dY(N * dst_D), 
+                    uY(N * dst_D, {}), 
+                    gains(N * dst_D, 1.),
+                    X(N * D),
+                    Y(N * dst_D);
+
+    // Normalize input data (to prevent numerical problems)
+    //printf("Computing input similarities...\n");
+    start = clock();
+
+    if(progress.load() < 0) return;
+
+    double max_X = zeroMeanCols(cols, X.data());
+
+    if(progress.load() < 0) return;
+
+    progress = .1f;
+
+    for(double& x: X)
+        x /= max_X;
+
+    // Compute input similarities for exact t-SNE
+    vector<double> P, val_P;
+    vector<unsigned int> row_P, col_P;
+    if(exact) {
+        // Compute similarities
+        //printf("Exact?");
+        P.resize(N * N);
+        computeGaussianPerplexity(X.data(), N, D, P.data(), perplexity);
+        if(progress.load() < 0) return;
+
+        // Symmetrize input similarities
+        //printf("Symmetrizing...\n");
+        int nN = 0;
+        for(int n = 0; n < N; n++) {
+            int mN = (n + 1) * N;
+            for(int m = n + 1; m < N; m++) {
+                P[nN + m] += P[mN + n];
+                P[mN + n]  = P[nN + m];
+                mN += N;
+            }
+            nN += N;
+        }
+        double sum_P = .0;
+        for(int i = 0; i < N * N; i++) sum_P += P[i];
+        for(int i = 0; i < N * N; i++) P[i] /= sum_P;
+    }
+
+    // Compute input similarities for approximate t-SNE
+    else {
+
+        // Compute asymmetric pairwise input similarities
+        computeGaussianPerplexity(X.data(), N, D, row_P, col_P, val_P, perplexity, (int) (3 * perplexity));
+        if(progress < 0) return;
+
+
+        // Symmetrize input similarities
+        symmetrizeMatrix(row_P, col_P, val_P, N);
+        if(progress < 0) return;
+        double sum_P = .0;
+        for(int i = 0; i < row_P[N]; i++) sum_P += val_P[i];
+        for(int i = 0; i < row_P[N]; i++) val_P[i] /= sum_P;
+    }
+    end = clock();
+    progress = .2f;
+
+    // Lie about the P-values
+    if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= 12.0; }
+    else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= 12.0; }
+
+	// Initialize solution (randomly)
+  if (skip_random_init != true) {
+  	for(int i = 0; i < N * dst_D; i++) Y[i] = randn() * .0001;
+    //for(auto& v: dst_cols)
+    //    for(float& f: v)
+    //        f = randn() * .0001;
+  }
+
+    progress = .3f;
+	// Perform main training loop
+    //if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC);
+    //else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC, (double) row_P[N] / ((double) N * (double) N));
+    start = clock();
+
+	for(int iter = 0; iter < max_iter; iter++) {
+        progress = .5f + .5f * float(iter) / max_iter;
+
+        // Compute (approximate) gradient
+        if(exact) computeExactGradient(P.data(), Y.data(), N, dst_D, dY.data());
+        else computeGradient(row_P.data(), col_P.data(), val_P.data(), Y.data(), N, dst_D, dY.data(), theta);
+
+        if(progress == -1) return;
+
+        // Update gains
+        for(int i = 0; i < N * dst_D; i++) gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8);
+        for(int i = 0; i < N * dst_D; i++) if(gains[i] < .01) gains[i] = .01;
+
+        if(progress == -1) return;
+
+        // Perform gradient update (with momentum and gains)
+        for(int i = 0; i < N * dst_D; i++) uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
+		for(int i = 0; i < N * dst_D; i++)  Y[i] = Y[i] + uY[i];
+
+        // Make solution zero-mean
+		zeroMean(Y.data(), N, dst_D);
+
+        // Stop lying about the P-values after a while, and switch momentum
+        if(iter == stop_lying_iter) {
+            if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= 12.0; }
+            else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= 12.0; }
+        }
+        if(iter == mom_switch_iter) momentum = final_momentum;
+
+        // Print out progress
+        if (iter > 0 && (iter % 50 == 0 || iter == max_iter - 1)) {
+            end = clock();
+            double C = .0;
+            if(exact) C = evaluateError(P.data(), Y.data(), N, dst_D);
+            else      C = evaluateError(row_P.data(), col_P.data(), val_P.data(), Y.data(), N, dst_D, theta);  // doing approximate computation here!
+            if(progress == -1) return;
+
+            if(iter == 0)
+                bool nothing = true;//printf("Iteration %d: error is %f\n", iter + 1, C);
+            else {
+                total_time += (float) (end - start) / CLOCKS_PER_SEC;
+                //printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, (float) (end - start) / CLOCKS_PER_SEC);
+            }
+			start = clock();
+        }
+        progress = .3f + iter / float(max_iter);
+    }
+    end = clock(); total_time += (float) (end - start) / CLOCKS_PER_SEC;
+    // copying to output
+    for(int d: util::size_range(dst_cols)){
+        for(int n: util::i_range(N))
+            dst_cols[d][n] = Y[n * dst_D + d];
+    }
+    progress = 1;
+}
+
 
 // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
 static void computeGradient(unsigned int* inp_row_P, unsigned int* inp_col_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta)
@@ -232,7 +404,7 @@ static void computeGradient(unsigned int* inp_row_P, unsigned int* inp_col_P, do
     vector<double> pos_fv(N * D), neg_fv(N * D);
     double* pos_f = pos_fv.data();
     double* neg_f = neg_fv.data();
-    if(pos_f == NULL || neg_f == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(pos_f == NULL || neg_f == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
     tree.computeEdgeForces(inp_row_P, inp_col_P, inp_val_P, N, pos_f);
     for(int n = 0; n < N; n++) tree.computeNonEdgeForces(n, theta, neg_f + n * D, &sum_Q);
 
@@ -251,13 +423,13 @@ static void computeExactGradient(double* P, double* Y, int N, int D, double* dC)
     // Compute the squared Euclidean distance matrix
     vector<double> DDv(N * N);
     double* DD = DDv.data();
-    if(DD == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(DD == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
     computeSquaredEuclideanDistance(Y, N, D, DD);
 
     // Compute Q-matrix and normalization sum
     vector<double> Qv(N * N);
     double* Q    = Qv.data();
-    if(Q == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(Q == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
     double sum_Q = .0;
     int nN = 0;
     for(int n = 0; n < N; n++) {
@@ -297,7 +469,7 @@ static double evaluateError(double* P, double* Y, int N, int D) {
     vector<double> DDv(N * N), Qv(N * N);
     double* DD = DDv.data();
     double* Q = Qv.data();
-    if(DD == NULL || Q == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return 0; }
+    if(DD == NULL || Q == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return 0; }
     computeSquaredEuclideanDistance(Y, N, D, DD);
 
     // Compute Q-matrix and normalization sum
@@ -360,7 +532,7 @@ static void computeGaussianPerplexity(double* X, int N, int D, double* P, double
 	// Compute the squared Euclidean distance matrix
     vector<double> DDv(N * N);
 	double* DD = DDv.data();
-    if(DD == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(DD == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
 	computeSquaredEuclideanDistance(X, N, D, DD);
 
 	// Compute the Gaussian kernel row by row
@@ -442,7 +614,7 @@ static void computeGaussianPerplexity(double* X, int N, int D, vector<unsigned i
     double* val_P = _val_P.data();
     vector<double> cur_Pv(N - 1);
     double* cur_P = cur_Pv.data();
-    if(cur_P == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(cur_P == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
     row_P[0] = 0;
     for(int n = 0; n < N; n++) row_P[n + 1] = row_P[n] + (unsigned int) K;
 
@@ -536,7 +708,7 @@ static void symmetrizeMatrix(vector<unsigned int>& _row_P, vector<unsigned int>&
     // Count number of elements and row counts of symmetric matrix
     vector<int> row_countersv(N);
     int* row_counts = row_countersv.data();
-    if(row_counts == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(row_counts == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
     for(int n = 0; n < N; n++) {
         for(int i = row_P[n]; i < row_P[n + 1]; i++) {
 
@@ -570,7 +742,7 @@ static void symmetrizeMatrix(vector<unsigned int>& _row_P, vector<unsigned int>&
     // Fill the result matrix
     vector<int> offsetv(N);
     int* offset = offsetv.data();
-    if(offset == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(offset == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
     for(int n = 0; n < N; n++) {
         for(unsigned int i = row_P[n]; i < row_P[n + 1]; i++) {                                  // considering element(n, col_P[i])
 
@@ -638,7 +810,7 @@ static void zeroMean(double* X, int N, int D) {
 	// Compute data mean
     vector<double> meanv(D);
 	double* mean = meanv.data();
-    if(mean == NULL) { printf("Memory allocation failed!\n"); *pr = -1; return; }
+    if(mean == NULL) { printf("Memory allocation failed!\n"); if(pr) *pr = -1; return; }
     int nD = 0;
 	for(int n = 0; n < N; n++) {
 		for(int d = 0; d < D; d++) {
@@ -658,6 +830,45 @@ static void zeroMean(double* X, int N, int D) {
 		}
         nD += D;
 	}
+}
+
+// same as zeroMean for column data with transforming the data to X (which is column major linear array)
+// returns max(fabs(dst))
+static double zeroMeanCols(const std::vector<util::memory_view<const float>>& cols, double* dst = {}){
+    // coompute data mean
+    const size_t N = cols[0].size();
+    vector<double> mean(cols.size(), {});
+    for(int d: util::size_range(cols)){
+        for(float f: cols[d])
+            mean[d] += f;
+    }
+    for(double& d: mean)
+        d /= N;
+
+    // substract data mean
+    double max{};
+    if(dst){
+        for(size_t n: util::i_range(N)){
+            for(int d: util::size_range(cols)){
+                double v = cols[d][n] - mean[d];
+                dst[n * cols.size() + d] = v;
+                if(v > max)
+                    max = v;
+            }
+        }
+    }
+    //else{
+    //    for(size_t n: util::i_range(N)){
+    //        for(int d: util::size_range(cols)){
+    //            double v = cols[d][n] - mean[d];
+    //            cols[d][n] = v;
+    //            if(v > max)
+    //                max = v;
+    //        }
+    //    }
+    //}
+    
+    return max;
 }
 
 

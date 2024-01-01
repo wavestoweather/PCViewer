@@ -1,0 +1,63 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/perplexity_search.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+#define FLT_MAX 3.40282346638528859811704183484516925e+38F
+
+layout(push_constant) uniform PC{
+    uint64_t betas_address;
+    uint64_t lower_bound_address;
+    uint64_t upper_bound_address;
+    uint64_t found_address;
+    uint64_t neg_entropy_address;
+    uint64_t row_sum_address;
+    float perplexity_target;
+    float epsilon;
+    uint points_count;
+};
+
+Vec betas           = Vec(betas_address);
+Vec lower_bound     = Vec(lower_bound_address);
+Vec upper_bound     = Vec(upper_bound_address);
+UVec found          = UVec(found_address);
+Vec neg_entropy     = Vec(neg_entropy_address);
+Vec row_sum         = Vec(row_sum_address);
+
+void main(){
+    uint TID, is_found;
+    float perplexity, neg_ent, sum_P, perplexity_diff, beta, min_beta, max_beta;
+    TID = gl_GlobalInvocationID.x;
+    if (TID >= points_count)
+        return;
+
+    neg_ent = neg_entropy.d[TID];
+    sum_P = row_sum.d[TID];
+    beta = betas.d[TID];
+
+    min_beta = lower_bound.d[TID];
+    max_beta = upper_bound.d[TID];
+
+    perplexity = (neg_ent / sum_P) + log(sum_P);
+    perplexity_diff = perplexity - log(perplexity_target);
+    is_found = uint((perplexity_diff < epsilon && -perplexity_diff < epsilon));
+    if (!bool(is_found))
+    {
+        if (perplexity_diff > 0)
+        {
+            min_beta = beta;
+            beta = (max_beta == FLT_MAX || max_beta == -FLT_MAX) ? beta * 2.0f : (beta + max_beta) / 2.0f;
+        }
+        else
+        {
+            max_beta = beta;
+            beta = (min_beta == -FLT_MAX || min_beta == FLT_MAX) ? beta / 2.0f : (beta + min_beta) / 2.0f;
+        }
+        lower_bound.d[TID] = min_beta;
+        upper_bound.d[TID] = max_beta;
+        betas.d[TID] = beta;
+    }
+    found.d[TID] = is_found;
+}

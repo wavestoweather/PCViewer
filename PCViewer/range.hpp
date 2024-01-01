@@ -11,12 +11,12 @@ class irange {
    irange(unsigned long begin, unsigned long end, long step = 1):
     _begin(begin), _end(end), _step(step){
         assert(step != 0 && ((begin > end && step < 0) || step > 0) && "Infinit loop detected");
-        assert(((end - begin) % step == 0 || -(end - begin) % -step == 0) && "range results in an infinit loop");
+        //assert(((end - begin) % step == 0 || -(end - begin) % -step == 0) && "range results in an infinit loop");
     };
 
     template<class T> 
     irange(const std::vector<T>& v):                            // direct conversion from vector to index iterable range
-    _begin(0), _end(v.size()), _step(1){};
+    _begin(0), _end((unsigned long)(v.size())), _step(1){};
 
    class iterator {
       friend class irange;

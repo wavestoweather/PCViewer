@@ -1,0 +1,15 @@
+#version 450
+#extension GL_GOOGLE_include_directive: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+#include "radix_common.glsl"
+#include "scan_common.glsl"
+
+// This is to transform uncoalesced loads into coalesced loads and 
+// then scattered loads from LDS
+void main()
+{
+    const uint BaseIndex = FFX_PARALLELSORT_ELEMENTS_PER_THREAD * FFX_PARALLELSORT_THREADGROUP_SIZE * groupID;
+    FFX_ParallelSort_ScanPrefix(NumScanValues, localID, groupID, 0, BaseIndex, false,
+							    ReduceTable, ScanScratch, ScanScratch);
+}

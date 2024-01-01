@@ -16,6 +16,15 @@ IF (UNIX AND CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_options(-D_GLIBCXX_DEBUG)
 ENDIF()
 
+IF (CMAKE_BUILD_TYPE MATCHES "Debug")
+    message("Enabling vulkan validation layers")
+    add_compile_definitions(USEVKVALIDATIONLAYER)
+ENDIF()
+
+IF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mavx512f -mavx512dq -mavx512bw -mavx512vbmi -mavx512vbmi2 -mavx512vl")
+ENDIF()
+
 # enable jpeg and png support for CImg library
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dcimg_use_png")
 
@@ -23,7 +32,35 @@ add_subdirectory("glm")
 
 # Fügen Sie der ausführbaren Datei dieses Projekts eine Quelle hinzu.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Vulkan REQUIRED)
+
+# check if libraries can be found, tries to search specific libraries in a specific libraries folder
+find_package(Vulkan QUIET)
+if(NOT DEFINED Vulkan_FOUND)
+    set(lib_path "usr/lib/x86_64-linux-gnu")
+    find_library(Vulkan_LIBRARY
+    NAMES vulkan
+    PATHS ${lib_path})
+
+    find_library(ZLIB_LIBRARY
+    NAMES z
+    PATHS ${lib_path})
+
+    find_library(PNG_LIBRARY
+    NAMES png
+    PATHS ${lib_path})
+
+    find_library(X11_X11_LIB
+    NAMES X11
+    PATHS ${lib_path})
+endif()
+
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined glslang)
+if (NOT DEFINED glslang_FOUND)
+    find_package(pcviewer_glslang CONFIG PATHS ${CMAKE_SOURCE_DIR}/PCViewer/cmake/)
+endif()
+#if(NOT DEFINED Vulkan_glslang_FOUND)
+#    find_package(glslang REQUIRED)
+#endif()
 find_package(SDL2 REQUIRED)
 find_package(netCDF CONFIG REQUIRED)
 find_package(PNG REQUIRED)
@@ -31,20 +68,18 @@ find_package(Threads REQUIRED)
 find_package(X11 REQUIRED)
 find_package(TBB REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-message("include dirs: ${netCDF_INCLUDE_DIR}")
 
 #include_directories(${Eigen3_DIR})
 
 file(GLOB pcviewer_SRC
-    "*.h"
     "*.cpp"
-    "*.hpp"
 )
+list(REMOVE_ITEM pcviewer_SRC ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
     
 file(GLOB imgui_SRC
     "imgui/*.h"
     "imgui/*.cpp"
-	"imgui/*.hpp"
+    "imgui/*.hpp"
 )
     
 file(GLOB cimg_SRC
@@ -97,20 +132,75 @@ file(GLOB imgui_file_dialog_SRC
     "imgui_file_dialog/*.cpp"
 )
 
-include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR})
-add_executable (PCViewer ${pcviewer_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC})
+set(structures_INCLUDE_DIR
+    "structures/"
+    "util/"
+    "half/"
+    "vulkanMemoryAllocator/include/"
+    "robin_hood_map"
+    "imgui"
+    "deriveData"
+    "pipelines"
+    "workbenches"
+    "fast_float"
+    "config"
+    "radix_sort"
+    "radix"
+    "colorbrewer"
+    "gpu_radix_sort"
+)
+
+file(GLOB structures_SRC
+    "structures/*.cpp"
+)
+
+file(GLOB workbenches_SRC
+    "workbenches/*.cpp"
+)
+
+file(GLOB pipelines_SRC
+    "pipelines/*.cpp"
+)
+
+file(GLOB util_SRC
+    "util/*.cpp"
+)
+
+file(GLOB addditional_vulkan_SRC
+    "vulkan/*.cpp"
+)
+
+file(GLOB gpu_radix_sort_SRC
+    "gpu_radix_sort/*.cpp"
+)
+
+include_directories( ${Vulkan_INCLUDE_DIR}; ${SDL2_INCLUDE_DIRS} ; ${THRUST_INCLUDE_DIR}; ${netCDF_INCLUDE_DIR}; ${PNG_INCLUDE_DIR}; ${roaring_HDR}; ${structures_INCLUDE_DIR})
+add_executable (PCViewer ${pcviewer_SRC} ${util_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${compress_SRC} ${largeVis_SRC} ${roaring_SRC} ${vkMemory_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC} ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC} ${addditional_vulkan_SRC})
+add_executable (PCViewer_new main.cpp ${util_SRC} ${structures_SRC} ${workbenches_SRC} ${pipelines_SRC} ${imgui_SRC} ${cimg_SRC} ${tsne_SRC} ${rtree_SRC} ${derive_SRC} ${imgui_nodes_SRC} ${imgui_file_dialog_SRC} ${addditional_vulkan_SRC} ${gpu_radix_sort_SRC})
 
 if(WIN32)
 set(netCDF_LIBRARIES netCDF::netcdf)
 endif()
 
 target_link_libraries(PCViewer PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+target_link_libraries(PCViewer_new PRIVATE Vulkan::Vulkan ${SDL2_LIBRARIES} glm ${netCDF_LIBRARIES} ${PNG_LIBRARIES} Threads::Threads ${X11_LIBRARIES} TBB::tbb)# Eigen3::Eigen
+if(DEFINED Vulkan_glslang_FOUND)
+    target_link_libraries(PCViewer PRIVATE Vulkan::glslang)
+    target_link_libraries(PCViewer_new PRIVATE Vulkan::glslang)
+endif()
+if(DEFINED Vulkan_shaderc_combined_FOUND)
+    target_link_libraries(PCViewer PRIVATE Vulkan::shaderc_combined)
+    target_link_libraries(PCViewer_new PRIVATE Vulkan::shaderc_combined)
+endif()
+if(DEFINED glslang_FOUND)
+    target_link_libraries(PCViewer PRIVATE glslang::glslang ${glslang_LIBRARIES})
+    target_link_libraries(PCViewer_new PRIVATE glslang::glslang  ${glslang_LIBRARIES})
+endif()
 
-message (" Copying shaders")
-file(GLOB MY_PUBLIC_HEADERS
-"${CMAKE_CURRENT_SOURCE_DIR}/shader/*.spv"
-)
-file(COPY ${MY_PUBLIC_HEADERS} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/shader)
+add_subdirectory(shader_new)
+add_subdirectory(gpu_radix_sort)
+
+add_subdirectory(test)
 
 message (" Copying fonts")
 file(GLOB FONTS

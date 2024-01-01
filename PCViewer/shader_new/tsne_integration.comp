@@ -1,0 +1,60 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/apply_forces.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t points_address;
+    uint64_t attr_forces_address;
+    uint64_t rep_foreces_address;
+    uint64_t gains_address;
+    uint64_t old_forces_address;
+    float eta;
+    float normalization;
+    float momentum;
+    float exaggeration;
+    uint  points_count;
+};
+
+Vec points      = Vec(points_address);
+Vec attr_forces = Vec(attr_forces_address);
+Vec rep_forces  = Vec(rep_foreces_address);
+Vec gains       = Vec(gains_address);
+Vec old_forces  = Vec(old_forces_address);
+
+void main(){
+    uint i, inc;
+    float dx, dy, ux, uy, gx, gy;
+
+    inc = gl_WorkGroupSize.x * gl_NumWorkGroups.x;
+    for(i = gl_GlobalInvocationID.x; i < points_count; i += inc){
+        ux = old_forces.d[i];
+        uy = old_forces.d[points_count + i];
+        gx = gains.d[i];
+        gy = gains.d[points_count + i];
+        dx = exaggeration * attr_forces.d[i] - (rep_forces.d[i] / normalization);
+        dy = exaggeration * attr_forces.d[i + points_count] - (rep_forces.d[i + points_count] / normalization);
+
+        gx = (sign(dx) != sign(ux)) ? gx + 0.2 : gx * 0.8;
+        gy = (sign(dy) != sign(uy)) ? gy + 0.2 : gy * 0.8;
+        gx = (gx < 0.01) ? 0.01 : gx;
+        gy = (gy < 0.01) ? 0.01 : gy;
+
+        ux = momentum * ux - eta * gx * dx;
+        uy = momentum * uy - eta * gy * dy;
+
+        points.d[i] += ux;
+        points.d[i + points_count] += uy;
+
+        attr_forces.d[i] = 0.0f;
+        attr_forces.d[points_count + i] = 0.0f;
+        rep_forces.d[i] = 0.0f;
+        rep_forces.d[points_count + i] = 0.0f;
+        old_forces.d[i] = ux;
+        old_forces.d[points_count + i] = uy;
+        gains.d[i] = gx;
+        gains.d[points_count + i] = gy;
+    }
+}

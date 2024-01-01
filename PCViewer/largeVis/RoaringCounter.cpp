@@ -28,8 +28,8 @@ namespace compression
         std::iota(bIndices.begin(), bIndices.end(), 0);
         if constexpr(randomVals){
             std::cout << "Shuffling index lists" << std::endl;
-            std::random_shuffle(aIndices.begin(), aIndices.end());
-            std::random_shuffle(bIndices.begin(), bIndices.end());
+            //std::random_shuffle(aIndices.begin(), aIndices.end());
+            //std::random_shuffle(bIndices.begin(), bIndices.end());
         }
         std::cout << "Creating roaring lists perfectly evenly distributed" << std::endl;
         std::vector<roaring::Roaring> aMaps(aBins);

@@ -67,6 +67,8 @@ public:
         int curWidth = 0, curHeight = 0;
         int id;
 
+        const std::list<DrawList>& drawlists;
+        const std::vector<int>& selected_drawlists;
         VkUtil::Context context;
         VkImage resultImage{};
         VkImageView resultImageView{};
@@ -88,7 +90,7 @@ public:
         VkPipeline pipeline;
         VkPipelineLayout pipelineLayout;
 
-        ScatterPlot(VkUtil::Context context, int width, int height, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout, VkPipeline pipeline, VkPipelineLayout pipelineLayout, std::vector<Attribute>& attributes);
+        ScatterPlot(VkUtil::Context context, int width, int height, VkRenderPass renderPass, VkDescriptorSetLayout descriptorSetLayout, VkPipeline pipeline, VkPipelineLayout pipelineLayout, std::vector<Attribute>& attributes, const std::vector<int>& selected_dls, const std::list<DrawList>& dls);
         ~ScatterPlot();
         void resizeImage(int width, int height);
 
@@ -97,15 +99,15 @@ public:
         void updatePlot();
 
         void updateRender(VkCommandBuffer commandBuffer);
-        void addDrawList(DrawList& dl, std::vector<Attribute>& attr);
+        void addDrawList(const DrawList& dl, std::vector<Attribute>& attr);
     };
 
-    ScatterplotWorkbench(VkUtil::Context context, std::vector<Attribute>& attributes): context(context), attributes(attributes){
+    ScatterplotWorkbench(VkUtil::Context context, std::vector<Attribute>& attributes, const std::vector<int>& selected_dl, const std::list<DrawList>& dls): context(context), attributes(attributes), selected_drawlists(selected_dl), drawlists(dls){
         createPipeline();
     }
 
     void addPlot(){
-        scatterPlots.emplace_back(context, defaultWidth, defaultHeight, renderPass, descriptorSetLayout, pipeline, pipelineLayout, attributes);
+        scatterPlots.emplace_back(context, defaultWidth, defaultHeight, renderPass, descriptorSetLayout, pipeline, pipelineLayout, attributes, selected_drawlists, drawlists);
     }
 
     ~ScatterplotWorkbench(){
@@ -160,6 +162,8 @@ protected:
 
     VkUtil::Context context;
     std::vector<Attribute>& attributes;
+    const std::list<DrawList>& drawlists;
+    const std::vector<int>& selected_drawlists;
 
     struct PushConstant{
         uint32_t posX;

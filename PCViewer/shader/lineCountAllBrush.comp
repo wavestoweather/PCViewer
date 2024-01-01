@@ -7,7 +7,7 @@
 layout(binding = 0) buffer vA{uint v[];}aVal[]; 
 
 layout(binding = 2) buffer Lines{
-	uint v[];
+    uint v[];
 }c[];
 
 layout(binding = 3) buffer BrushInfo{

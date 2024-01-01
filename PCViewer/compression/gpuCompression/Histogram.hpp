@@ -8,7 +8,7 @@
 
 namespace vkCompress {
 
-class GpuInstance;
+struct GpuInstance;
 
 
 size_t histogramGetRequiredMemory(const GpuInstance* pInstance);

@@ -113,6 +113,18 @@ bool value::contains(const string& key) const
     return false;
 }
 
+size_t value::size() const{
+    switch(m_Type)
+    {  
+    case type_t::object:    return get<object>().size();
+    case type_t::array:     return get<array>().size();
+    case type_t::string:    return get<string>().size();
+    case type_t::boolean: 
+    case type_t::number:    return 1;  
+    default:                return 0; 
+    }
+}
+
 void value::push_back(const value& value)
 {
     if (is_null())

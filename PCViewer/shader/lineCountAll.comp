@@ -8,7 +8,7 @@
 layout(binding = 0) buffer vA{uint v[];}a[]; 
 
 layout(binding = 2) buffer Lines{
-	uint v[];
+    uint v[];
 }c[];
 
 layout(binding = 3) buffer Activations{uint activations[];};

@@ -107,7 +107,14 @@ public:
 	 */
 	inline HalfFloat(const double);
 
-
+	inline HalfFloat(int other);
+	inline HalfFloat(uint32_t other);
+	inline HalfFloat(int64_t other);
+	inline HalfFloat(uint64_t other);
+#ifndef WIN32
+	inline HalfFloat(long long unsigned int other);
+	inline HalfFloat(long long int other);
+#endif
 
 	/** Conversion operator to convert from half to float
 	 */
@@ -140,10 +147,10 @@ public:
 	inline bool operator<= (HalfFloat other) const;
 	inline bool operator>= (HalfFloat other) const;
 
-	inline bool operator<  (float other) const;
-	inline bool operator>  (float other) const;
-	inline bool operator<= (float other) const;
-	inline bool operator>= (float other) const;
+	inline bool operator<  (float other) const {return *this < HalfFloat(other);}
+	inline bool operator>  (float other) const {return *this > HalfFloat(other);}
+	inline bool operator<= (float other) const {return *this <= HalfFloat(other);}
+	inline bool operator>= (float other) const {return *this >= HalfFloat(other);}
 
 
 	/** Combined assignment operators
@@ -266,6 +273,8 @@ class numeric_limits<HalfFloat> {
 		{return HalfFloat(0,1,0);}
     static HalfFloat max ()
 		{return HalfFloat(~0,HalfFloat::MAX_EXPONENT_VALUE-1,0);}
+	static HalfFloat lowest ()
+		{return -max();}
     static const int radix = 2;
     static const int digits = 10;   // conservative assumption
     static const int digits10 = 2;  // conservative assumption

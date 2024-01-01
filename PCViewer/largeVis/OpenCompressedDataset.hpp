@@ -36,7 +36,7 @@ namespace util{
         // --------------------------------------------------------------------------------
         std::vector<Attribute> attributes;
         std::ifstream attributeInfos(hierarchyFolder + "/attr.info", std::ios_base::binary);
-        uint binsMaxCenterAmt;
+        uint32_t binsMaxCenterAmt;
         attributeInfos >> binsMaxCenterAmt; // first line contains the maximum amt of centers/bins
         std::string a; float aMin, aMax;
         while(attributeInfos >> a >> aMin >> aMax){
@@ -221,14 +221,14 @@ namespace util{
         // creating the decompress manager if needed
         std::unique_ptr<DecompressManager> decompressManager;
         if(gpuInstance){
-	    	DecompressManager::GpuColumns gpuColumns(columnData.size());
-	    	DecompressManager::CpuColumns cpuColumns(gpuColumns.size());
-	    	for(int i : irange(gpuColumns)){
-	    		gpuColumns[i] = columnData[i].compressedRLHuffGpu.data();
-	    		cpuColumns[i] = columnData[i].compressedRLHuffCpu.data();
-	    	}
-	    	decompressManager = std::make_unique<DecompressManager>(dataBlockSize, *gpuInstance, cpuColumns, gpuColumns);
-	    }
+            DecompressManager::GpuColumns gpuColumns(columnData.size());
+            DecompressManager::CpuColumns cpuColumns(gpuColumns.size());
+            for(int i : irange(gpuColumns)){
+                gpuColumns[i] = columnData[i].compressedRLHuffGpu.data();
+                cpuColumns[i] = columnData[i].compressedRLHuffCpu.data();
+            }
+            decompressManager = std::make_unique<DecompressManager>(dataBlockSize, *gpuInstance, cpuColumns, gpuColumns);
+        }
 
         std::cout << "[import] Loaded " << dataSize << " datapoints" << std::endl;
 

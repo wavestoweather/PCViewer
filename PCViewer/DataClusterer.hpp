@@ -151,7 +151,7 @@ protected:
         std::mt19937 engine;
         engine.seed(static_cast<unsigned long>(time(nullptr)));
         std::uniform_int_distribution<uint32_t> intDistCluster(0, settings.kmeansClusters - 1);
-        std::uniform_int_distribution<uint32_t> intDist(0, points.rows());
+        std::uniform_int_distribution<uint32_t> intDist(0, static_cast<uint32_t>(points.rows()));
         std::uniform_real_distribution<float> realDist(0, 1);
         clusterMeans = std::vector<Eigen::VectorXf>(settings.kmeansClusters);
         clusters.resize(settings.kmeansClusters);

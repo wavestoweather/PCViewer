@@ -21,7 +21,7 @@ class ColorPaletteManager;
 
 class ColorPalette{
 public:
-	ColorPalette(ColorPaletteManager* parentColorPaletteManager = nullptr);
+    ColorPalette(ColorPaletteManager* parentColorPaletteManager = nullptr);
     ~ColorPalette();
 
     std::vector<CPalette> palettes;
@@ -54,11 +54,11 @@ public:
 
     CPalette *getPalletteWithNrs(unsigned int cat, unsigned int ipal);
 
-	std::vector< std::string>* getQualPaletteNames();
+    std::vector< std::string>* getQualPaletteNames();
 
     std::vector<ImVec4> getPallettAsImVec4(unsigned int categoryNr, unsigned int paletteNr, unsigned int nrColors, float alpha = 0.4, const std::string paletteName = std::string(""));
 
-	ColorPaletteManager *parentColorPaletteManager;
+    ColorPaletteManager *parentColorPaletteManager;
 
 
 protected:
@@ -74,7 +74,7 @@ public:
     ColorPaletteManager();
     ~ColorPaletteManager();
 
-	ColorPaletteManager(const ColorPaletteManager &obj);
+    ColorPaletteManager(const ColorPaletteManager &obj);
 
     ColorPalette *colorPalette;
 
@@ -84,8 +84,8 @@ public:
     unsigned int chosenPaletteNr;
     unsigned int chosenNrColorNr;
 
-	std::string chosenAutoColorPaletteLine;
-	std::string chosenAutoColorPaletteFill;
+    std::string chosenAutoColorPaletteLine;
+    std::string chosenAutoColorPaletteFill;
 
     unsigned int skipFirstAttributes;
 
@@ -100,7 +100,7 @@ public:
 
     bool bvaluesChanged;
 
-	bool bReverseColorOrder;
+    bool bReverseColorOrder;
 
     void backupColors(std::vector<ImVec4> lineColors, std::vector<ImVec4> fillColors);
 
@@ -112,9 +112,9 @@ public:
     void setApplyToFillColor(bool b);
     void setApplyToLineColor(bool b);
 
-	void setReverseColorOrder(bool b);
+    void setReverseColorOrder(bool b);
 
-	void checkPallette();
+    void checkPallette();
 
     bool getBValuesChanged();
 

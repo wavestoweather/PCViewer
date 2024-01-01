@@ -1,0 +1,51 @@
+#version 450
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_NV_shader_subgroup_partitioned : enable
+#extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_buffer_reference_uvec2: require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+
+layout(buffer_reference, scalar) buffer UintVec{
+    uint i[];
+};
+
+layout(buffer_reference, scalar) buffer PriorityValues{
+    uint8_t i[];
+};
+
+layout(push_constant) uniform PCs{
+    uint64_t data_header_address;
+    uint64_t index_buffer_address;
+    uint64_t priority_distance_address;
+    uint data_size;
+    uint priority_attribute;
+    float priority_center;
+    float priority_distance;
+};
+
+layout(local_size_x = 256) in;
+
+#include "data_access.glsl"
+
+void main(){
+    if(gl_GlobalInvocationID.x >= data_size)
+        return;
+
+    uint index = gl_GlobalInvocationID.x;
+
+    if(index_buffer_address != 0){
+        UintVec indices = UintVec(index_buffer_address);
+        index = indices.i[index];
+    }
+    
+    float priority_value = abs(get_packed_data(index, priority_attribute) - priority_center) / priority_distance;
+    PriorityValues priorities = PriorityValues(priority_distance_address);
+    priorities.i[gl_GlobalInvocationID.x] = ~uint8_t(priority_value * 255 + .5);
+}

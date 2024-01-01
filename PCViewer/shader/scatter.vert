@@ -2,7 +2,7 @@
 #extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Dat{
-	float d[];
+    float d[];
 } data;
 
 layout(binding = 1, r8) uniform imageBuffer act; 
@@ -68,7 +68,7 @@ void main() {
         if(lineActive) color = ubo.color;
         else color = ubo.inactiveColor;
     }
-	else{
+    else{
         gl_Position = vec4(-2,-2,-2,1);
         color = ubo.inactiveColor;
     }

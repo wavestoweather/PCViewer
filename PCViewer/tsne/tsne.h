@@ -34,12 +34,17 @@
 #ifndef TSNE_H
 #define TSNE_H
 
+#include <memory_view.hpp>
+#include <atomic>
+
 #ifdef __cplusplus
 extern "C" {
 namespace TSNE {
 #endif
     void run(double* X, int N, int D, double* Y, int no_dims, double perplexity, double theta, int rand_seed,
              bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter, float* progress);
+    void run_cols(const std::vector<util::memory_view<const float>>& cols, std::vector<util::memory_view<float>>& dst_cols,
+            double perplexity, double theta, int rand_seed, bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter, std::atomic<float>& progress);
     bool load_data(double** data, int* n, int* d, int* no_dims, double* theta, double* perplexity, int* rand_seed, int* max_iter);
     void save_data(double* data, int* landmarks, double* costs, int n, int d);
 #ifdef __cplusplus

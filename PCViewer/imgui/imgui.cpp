@@ -12781,7 +12781,7 @@ bool ImGui::SetDragDropPayload(const char* type, const void* data, size_t data_s
     return (g.DragDropAcceptFrameCount == g.FrameCount) || (g.DragDropAcceptFrameCount == g.FrameCount - 1);
 }
 
-bool ImGui::BeginDragDropTargetCustom(const ImRect& bb, ImGuiID id)
+bool ImGui::BeginDragDropTargetCustom(const ImRect& bb, ImGuiID id, bool ignore_docking)
 {
     ImGuiContext& g = *GImGui;
     if (!g.DragDropActive)
@@ -12789,11 +12789,13 @@ bool ImGui::BeginDragDropTargetCustom(const ImRect& bb, ImGuiID id)
 
     ImGuiWindow* window = g.CurrentWindow;
     ImGuiWindow* hovered_window = g.HoveredWindowUnderMovingWindow;
-    if (hovered_window == NULL || window->RootWindowDockTree != hovered_window->RootWindowDockTree)
+    if (hovered_window == NULL || (!ignore_docking && window->RootWindowDockTree != hovered_window->RootWindowDockTree))
         return false;
     IM_ASSERT(id != 0);
+    if (ignore_docking) g.CurrentWindow = hovered_window;   // if docking should be ignored make it possible to draw rect outside current window
     if (!IsMouseHoveringRect(bb.Min, bb.Max) || (id == g.DragDropPayload.SourceId))
         return false;
+    if (ignore_docking) g.CurrentWindow = window;
     if (window->SkipItems)
         return false;
 
@@ -12870,8 +12872,12 @@ const ImGuiPayload* ImGui::AcceptDragDropPayload(const char* type, ImGuiDragDrop
     // FIXME-DRAGDROP: Settle on a proper default visuals for drop target.
     payload.Preview = was_accepted_previously;
     flags |= (g.DragDropSourceFlags & ImGuiDragDropFlags_AcceptNoDrawDefaultRect); // Source can also inhibit the preview (useful for external sources that lives for 1 frame)
-    if (!(flags & ImGuiDragDropFlags_AcceptNoDrawDefaultRect) && payload.Preview)
-        window->DrawList->AddRect(r.Min - ImVec2(3.5f,3.5f), r.Max + ImVec2(3.5f, 3.5f), GetColorU32(ImGuiCol_DragDropTarget), 0.0f, 0, 2.0f);
+    if (!(flags & ImGuiDragDropFlags_AcceptNoDrawDefaultRect) && payload.Preview){
+        if(flags & ImGuiDragDropFlags_PreviewInForeground)
+            GetForegroundDrawList(g.HoveredWindowUnderMovingWindow)->AddRect(r.Min - ImVec2(3.5f,3.5f), r.Max + ImVec2(3.5f, 3.5f), GetColorU32(ImGuiCol_DragDropTarget), 0.0f, 0, 2.0f);
+        else
+            window->DrawList->AddRect(r.Min - ImVec2(3.5f,3.5f), r.Max + ImVec2(3.5f, 3.5f), GetColorU32(ImGuiCol_DragDropTarget), 0.0f, 0, 2.0f);
+    }
 
     g.DragDropAcceptFrameCount = g.FrameCount;
     payload.Delivery = was_accepted_previously && !IsMouseDown(g.DragDropMouseButton); // For extern drag sources affecting os window focus, it's easier to just test !IsMouseDown() instead of IsMouseReleased()

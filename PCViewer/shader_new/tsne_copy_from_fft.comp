@@ -1,0 +1,32 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/nbodyfft.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t fft_input_address;
+    uint64_t w_coeffs_addresss;
+    uint fft_coeffs_count;
+    uint fft_coeffs_half_count;
+    uint terms_count;
+};
+
+Vec fft_input   = Vec(fft_input_address);
+Vec w_coeffs    = Vec(w_coeffs_addresss);
+
+void main(){
+    uint i, j;
+    uint TID = gl_GlobalInvocationID.x;
+    if (TID >= terms_count * fft_coeffs_half_count * fft_coeffs_count)
+        return;
+
+    uint current_term = TID / (fft_coeffs_half_count * fft_coeffs_half_count);
+    uint current_loc = TID % (fft_coeffs_half_count * fft_coeffs_half_count);
+
+    i = current_loc / fft_coeffs_half_count;
+    j = current_loc % fft_coeffs_half_count;
+
+    fft_input.d[current_term * (fft_coeffs_count * fft_coeffs_count) + i * fft_coeffs_count + j] = w_coeffs.d[current_term + current_loc * terms_count];
+}

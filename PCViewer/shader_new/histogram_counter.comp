@@ -1,0 +1,88 @@
+#version 450
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_NV_shader_subgroup_partitioned : enable
+#extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_buffer_reference_uvec2: require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+
+layout(buffer_reference, scalar) buffer IndexBuffer{
+    uint i[];
+};
+
+layout(buffer_reference, scalar) buffer ActivationBitset{
+    uint i[];
+};
+
+layout(buffer_reference, scalar) buffer Histogram{
+    uint bins[];
+};
+
+layout(buffer_reference, scalar) buffer PriorityValues{
+    uint8_t i[];
+};
+
+layout(push_constant) uniform PCs{
+    uint64_t data_header_address;
+    uint64_t index_buffer_address;
+    uint64_t gpu_data_activations;
+    uint64_t histogram_buffer_address;
+    uint64_t priority_values_address;
+    uint a1, a2, a3, a4;
+    uint s1, s2, s3, s4;
+    float a1_min, a2_min, a3_min, a4_min;
+    float a1_max, a2_max, a3_max, a4_max;
+    uint data_size;
+};
+
+layout(local_size_x = 256) in;
+
+layout(constant_id = 1) const uint dim_count = 2;
+const uint reduction_sum = 0;
+const uint reduction_min = 1;
+const uint reduction_max = 2;
+layout(constant_id = 2) const uint reduction_type = reduction_sum;
+
+#include "data_access.glsl"
+
+void main(){
+    uint data_index = gl_GlobalInvocationID.x;
+    if(data_index >= data_size)
+        return;
+
+    ActivationBitset activation_bitset = ActivationBitset(gpu_data_activations);
+    bool act = (activation_bitset.i[data_index / 32] & (1 << (data_index % 32))) > 0;
+    if(!act){
+        return;
+    }
+
+    if(index_buffer_address != 0){
+        IndexBuffer index_buffer = IndexBuffer(index_buffer_address);
+        data_index = int(index_buffer.i[data_index]);
+    }
+
+    Histogram hist = Histogram(histogram_buffer_address);
+
+    uint pos = 0;
+    if(dim_count >= 1)
+        pos += uint(clamp((get_packed_data(data_index, a1) - a1_min) / (a1_max - a1_min) * s1, 0, s1 - 1));
+    if(dim_count >= 2)
+        pos += uint(clamp((get_packed_data(data_index, a2) - a2_min) / (a2_max - a2_min) * s2, 0, s2 - 1)) * s1;
+    if(dim_count >= 3)
+        pos += uint(clamp((get_packed_data(data_index, a3) - a3_min) / (a3_max - a3_min) * s3, 0, s3 - 1)) * s1 * s2;
+    if(dim_count >= 4)
+        pos += uint(clamp((get_packed_data(data_index, a4) - a4_min) / (a4_max - a4_min) * s4, 0, s4 - 1)) * s1 * s2 * s3;
+
+    PriorityValues priority_values = PriorityValues(priority_values_address);
+    switch(reduction_type){
+    case reduction_sum: atomicAdd(hist.bins[pos], 1); break;
+    case reduction_min: atomicMin(hist.bins[pos], priority_values.i[gl_GlobalInvocationID.x]); break;   // has to be invocatoin id as the values in the pirority values are stored packed(same as activations....)
+    case reduction_max: atomicMax(hist.bins[pos], priority_values.i[gl_GlobalInvocationID.x]); break;   // has to be invocatoin id as the values in the pirority values are stored packed(same as activations....)
+    }
+}

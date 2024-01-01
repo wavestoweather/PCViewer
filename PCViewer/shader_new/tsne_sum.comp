@@ -1,0 +1,38 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/attr_forces.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t attr_forces_address;
+    uint64_t workspace_x_address;
+    uint64_t workspace_y_address;
+    uint points_count;
+    uint neighbours_count;
+};
+
+Vec attr_forces = Vec(attr_forces_address);
+Vec workspace_x = Vec(workspace_x_address);
+Vec workspace_y = Vec(workspace_y_address);
+
+void main(){
+    uint TID, jend, j;
+    float acc_x, acc_y;
+    TID = gl_GlobalInvocationID.x; // This is the location in the pij matrix
+    if (TID >= points_count)
+        return;
+
+    acc_x = 0.0f;
+    acc_y = 0.0f;
+    jend = (TID + 1) * neighbours_count;
+    for (j = TID * neighbours_count; j < jend; j++)
+    {
+        acc_x += workspace_x.d[j];
+        acc_y += workspace_y.d[j];
+    }
+
+    attr_forces.d[TID] = acc_x;
+    attr_forces.d[points_count + TID] = acc_y;
+}

@@ -5,13 +5,13 @@
 
 class Shape {
 public:
-	struct Vertex {
-		glm::vec3 position;
-		glm::vec3 normal;
-	};
+    struct Vertex {
+        glm::vec3 position;
+        glm::vec3 normal;
+    };
 
-	Shape() {};
-	~Shape() {};
+    Shape() {};
+    ~Shape() {};
 };
 
 #endif

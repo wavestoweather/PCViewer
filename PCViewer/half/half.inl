@@ -173,6 +173,27 @@ inline HalfFloat::HalfFloat(const double p_Reference)
 		};
 	}; // else usual number
 } 
+
+inline HalfFloat::HalfFloat(int other){
+	HalfFloat(float(other));
+}
+inline HalfFloat::HalfFloat(uint32_t other){
+	HalfFloat(float(other));
+}
+inline HalfFloat::HalfFloat(int64_t other){
+	HalfFloat(double(other));
+}
+inline HalfFloat::HalfFloat(uint64_t other){
+	HalfFloat(double(other));
+}
+#ifndef WIN32
+inline HalfFloat::HalfFloat(long long unsigned int other){
+	HalfFloat(double(other));
+}
+inline HalfFloat::HalfFloat(long long int other){
+	HalfFloat(double(other));
+}
+#endif
 // ------------------------------------------------------------------------------------------------
 inline HalfFloat::HalfFloat(uint16_t _m,uint16_t _e,uint16_t _s)
 {

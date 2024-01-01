@@ -1,0 +1,181 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference2: require
+#extension GL_EXT_buffer_reference_uvec2: require
+#extension GL_EXT_shader_explicit_arithmetic_types: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_KHR_shader_subgroup_ballot: enable
+
+layout(buffer_reference, scalar) buffer ActivationBitset{
+    uint i[];
+};
+layout(buffer_reference, scalar) buffer IndexBuffer{
+    uint i[];
+};
+layout(buffer_reference, scalar) buffer Brushes{
+    uint range_brush_count;
+    uint lasso_brush_count;
+    uint lasso_brush_offset;
+    uint _;
+    float data[];           // for data layout see brush_util.hpp::create_gpu_brush_data(...)
+};
+
+layout(push_constant) uniform PCs{
+    uint64_t    local_brushes_address;
+    uint64_t    global_brushes_address;
+    uint64_t    activation_bitset_address;
+    uint64_t    data_header_address;
+    uint64_t    index_buffer_address;
+    uint        brush_combination;
+    uint        data_size;
+};
+
+const uint combine_and = 0;
+const uint combine_or = 1;
+const uint combine_xor = 2;
+
+const uint local_size = 256;
+layout(local_size_x = local_size) in;
+
+// contains maxAmtOfColumns variable (maybe should be changed to specialization constants)
+#include "data_access.glsl"
+
+shared uint act[local_size];
+void write_activations(uint iteration, bool a){
+    const uint base_index = iteration * gl_NumSubgroups + gl_SubgroupID;
+    // creating 32 bit words via subgroup ballot. Only works with 32 or 64 bit sized ballots
+    uvec4 ballot = subgroupBallot(a);
+    switch(gl_SubgroupSize){
+    case 16:   //intel
+        if(subgroupElect())
+            atomicOr(act[base_index / 2], (ballot[0] & 0xffff) << (16 * (base_index & 1)));
+        break;
+    case 32:    //nvidia
+        if(subgroupElect())
+            act[base_index] = ballot[0];
+        break;
+    case 64:    //amd
+        if(gl_SubgroupInvocationID < 2)
+            act[2 * base_index + gl_SubgroupInvocationID] = ballot[gl_SubgroupInvocationID];
+        break;
+    case 128:   //?
+        if(gl_SubgroupInvocationID < 4)
+            act[4 * base_index + gl_SubgroupInvocationID] = ballot[gl_SubgroupInvocationID];
+        break;
+    }
+}
+
+float cached_values[maxAmtOfColumns];
+bool check_activations(uint index, uint64_t brush_address){
+    Brushes brushes = Brushes(brush_address);
+    bool a = (brushes.range_brush_count == 0 && brushes.lasso_brush_count == 0) || brush_combination == combine_and;
+    for(int range_brush = 0; range_brush < brushes.range_brush_count; ++range_brush){
+        bool inside = true;
+        uint brush_offset = uint(brushes.data[range_brush]);
+        for(int axis_map = 0; axis_map < brushes.data[brush_offset]; ++axis_map){
+            uint axis_map_offset = uint(brushes.data[brush_offset + 1 + axis_map]);
+            uint axis = uint(brushes.data[axis_map_offset + 1]);
+            if(isinf(cached_values[axis]))
+                cached_values[axis] = get_packed_data(index, axis);
+            float data = cached_values[axis];
+            bool in_range = false;
+            for(int range = 0; range < brushes.data[axis_map_offset]; ++range){
+                float min = brushes.data[axis_map_offset + 2 + 2 * range];
+                float max = brushes.data[axis_map_offset + 2 + 2 * range + 1];
+                if(data >= min && data <= max){
+                    in_range = true;
+                    break;
+                }
+            }
+            inside = inside && in_range;
+            if(!inside)
+                break;
+        }
+        if(brush_combination == combine_and && !inside)
+            return false;
+        else if(brush_combination == combine_or && inside)
+            return true;
+    }
+
+    // lasso brushes (TODO)
+    for(int lasso = 0; lasso < brushes.lasso_brush_count; ++lasso){
+        int base_lasso = int(brushes.data[brushes.lasso_brush_offset + lasso]);
+        int polygon_count = int(brushes.data[base_lasso]);
+        for(int polygon = 0; polygon < polygon_count; ++polygon){
+            int polygon_base = int(brushes.data[base_lasso + polygon + 1]);
+            int attr1 = int(brushes.data[polygon_base]);
+            int attr2 = int(brushes.data[polygon_base + 1]);
+            int amtBorder = int(brushes.data[polygon_base + 2]);
+            int p_base = polygon_base + 3;
+            bool inLasso = amtBorder == 0;
+            if(isinf(cached_values[attr1]))
+                cached_values[attr1] = get_packed_data(index, attr1);
+            if(isinf(cached_values[attr2]))
+                cached_values[attr2] = get_packed_data(index, attr2);
+            vec2 d = vec2(cached_values[attr1], cached_values[attr2]);
+            for(int i = 0; i < amtBorder; ++i){
+                vec2 ap = vec2(brushes.data[p_base + i * 2], brushes.data[p_base + 1 + i * 2]);
+                int j = (i + 1) % amtBorder;
+                vec2 b = vec2(brushes.data[p_base + j * 2], brushes.data[p_base + 1 + j * 2]);
+                //calculate line intersection with horizontal line, code from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+                if( ((ap.y > d.y) != (b.y > d.y)) &&
+                    (d.x < (b.x - ap.x) * (d.y - ap.y) / (b.y - ap.y) + ap.x) )
+                    inLasso = !inLasso;
+            }
+            if(brush_combination == combine_and && !inLasso)
+                return false;
+            else if(brush_combination == combine_or && inLasso)
+                return true;
+        }
+    }
+
+    return true;
+}
+
+// it is guaranteed that if the pipeline is executed there do exist brushes (so check for on brushes is useless)
+void main(){
+    vec2 m = min(vec2(1), vec2(0));
+    if(gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 + gl_LocalInvocationID.x >= data_size)
+        return;
+
+    ActivationBitset activation_bitset = ActivationBitset(activation_bitset_address);
+    bool identity_index = index_buffer_address == 0;
+    IndexBuffer index_buffer;
+    if(!identity_index)
+        index_buffer = IndexBuffer(index_buffer_address);
+
+    uint iteration = 0;
+    for(uint i = gl_WorkGroupID.x * gl_WorkGroupSize.x * 32 + gl_LocalInvocationID.x; i < data_size && i < (gl_WorkGroupID.x + 1) * gl_WorkGroupSize.x * 32; i += gl_WorkGroupSize.x, ++iteration){
+        for(int j = 0; j < maxAmtOfColumns; ++j)
+            cached_values[j] = inf;
+        
+        uint index = i;
+        if(!identity_index)
+            index = index_buffer.i[index];
+
+        bool a = false;
+        // global range brushes
+        if(global_brushes_address != 0)
+            a = check_activations(index, global_brushes_address);
+        // local range brushes
+        if(global_brushes_address == 0)
+            a = check_activations(index, local_brushes_address);
+        else if(local_brushes_address != 0 && ((a == true && brush_combination == combine_and) || (a == false && brush_combination == combine_or))){
+            bool v = check_activations(index, local_brushes_address);
+            if(brush_combination == combine_and)
+                a = a && v;
+            else if(brush_combination == combine_or)
+                a = a || v;
+        }
+        
+        write_activations(iteration, a);
+    }
+    barrier();
+
+    // writeout of activation
+    if(gl_GlobalInvocationID.x * 32 < data_size)
+        activation_bitset.i[gl_GlobalInvocationID.x] = act[gl_LocalInvocationID.x];
+}

@@ -1,0 +1,184 @@
+#version 450
+#extension GL_GOOGLE_include_directive: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+#include "radix_common.glsl"
+
+// Offset cache to avoid loading the offsets all the time
+shared uint gs_FFX_PARALLELSORT_BinOffsetCache[FFX_PARALLELSORT_THREADGROUP_SIZE];
+// Local histogram for offset calculations
+shared uint gs_FFX_PARALLELSORT_LocalHistogram[FFX_PARALLELSORT_SORT_BIN_COUNT];
+// Scratch area for algorithm
+shared uint gs_FFX_PARALLELSORT_LDSScratch[FFX_PARALLELSORT_THREADGROUP_SIZE];
+// Reordering area for algorithm
+shared SRC_T reorder_array[FFX_PARALLELSORT_THREADGROUP_SIZE];
+#ifdef HAS_PAYLOAD
+#ifdef PAYLOAD_IS_DIFFERENT_TYPE
+shared PAYLOAD_T reorder_payload_array[FFX_PARALLELSORT_THREADGROUP_SIZE];
+#endif
+#endif
+void main(){
+    // Load the sort bin threadgroup offsets into LDS for faster referencing
+    if (localID < FFX_PARALLELSORT_SORT_BIN_COUNT)
+        gs_FFX_PARALLELSORT_BinOffsetCache[localID] = SumTable.d[localID * NumThreadGroups + groupID];
+
+    // Wait for everyone to catch up
+    barrier();
+
+    // Data is processed in blocks, and how many we process can changed based on how much data we are processing
+    // versus how many thread groups we are processing with
+    uint BlockSize = FFX_PARALLELSORT_ELEMENTS_PER_THREAD * FFX_PARALLELSORT_THREADGROUP_SIZE;
+
+    // Figure out this thread group's index into the block data (taking into account thread groups that need to do extra reads)
+    uint ThreadgroupBlockStart = (BlockSize * NumBlocksPerThreadGroup * groupID);
+    uint NumBlocksToProcess = NumBlocksPerThreadGroup;
+
+    if (groupID >= NumThreadGroups - NumThreadGroupsWithAdditionalBlocks)
+    {
+        ThreadgroupBlockStart += (groupID - (NumThreadGroups - NumThreadGroupsWithAdditionalBlocks)) * BlockSize;
+        NumBlocksToProcess++;
+    }
+
+    // Get the block start index for this thread
+    uint BlockIndex = ThreadgroupBlockStart + localID;
+
+    // Count value occurences
+    for (int BlockCount = 0; BlockCount < NumBlocksToProcess; BlockCount++, BlockIndex += BlockSize)
+    {
+        uint DataIndex = BlockIndex;
+        
+        // Pre-load the key values in order to hide some of the read latency
+        SRC_T srcKeys[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
+		srcKeys[0] = SrcBuffer.d[DataIndex];
+		srcKeys[1] = SrcBuffer.d[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
+		srcKeys[2] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
+		srcKeys[3] = SrcBuffer.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
+
+#ifdef HAS_PAYLOAD
+        PAYLOAD_T srcValues[FFX_PARALLELSORT_ELEMENTS_PER_THREAD];
+        srcValues[0] = SrcPayload.d[DataIndex];
+		srcValues[1] = SrcPayload.d[DataIndex + FFX_PARALLELSORT_THREADGROUP_SIZE];
+		srcValues[2] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 2)];
+		srcValues[3] = SrcPayload.d[DataIndex + (FFX_PARALLELSORT_THREADGROUP_SIZE * 3)];
+#endif // HAS_PAYLOAD
+
+        for (int i = 0; i < FFX_PARALLELSORT_ELEMENTS_PER_THREAD; i++)
+        {
+            // Clear the local histogram
+            if (localID < FFX_PARALLELSORT_SORT_BIN_COUNT)
+                gs_FFX_PARALLELSORT_LocalHistogram[localID] = 0;
+
+            SRC_T localKey = DataIndex < NumKeys ? srcKeys[i]: SRC_MAX;
+#ifdef HAS_PAYLOAD
+            PAYLOAD_T localValue = DataIndex < NumKeys ? srcValues[i] : 0;
+#endif // HAS_PAYLOAD
+
+            // Sort the keys locally in LDS
+            for (uint bitShift = 0; bitShift < BITS_PER_PASS; bitShift += 2)
+            {
+                // Figure out the keyIndex
+                uint keyIndex = get_local_key(localKey);//(localKey >> ShiftBit) & 0xf;
+                uint bitKey = (keyIndex >> bitShift) & 0x3;
+
+                // Create a packed histogram 
+                uint packedHistogram = 1U << (bitKey * 8);
+
+                // Sum up all the packed keys (generates counted offsets up to current thread group)
+                uint localSum = FFX_ParallelSort_BlockScanPrefix(packedHistogram, localID);
+
+                // Last thread stores the updated histogram counts for the thread group
+                // Scratch = 0xsum3|sum2|sum1|sum0 for thread group
+                if (localID == (FFX_PARALLELSORT_THREADGROUP_SIZE - 1))
+                    gs_FFX_PARALLELSORT_LDSScratch[0] = localSum + packedHistogram;
+
+                // Wait for everyone to catch up
+                barrier();
+
+                // Load the sums value for the thread group
+                packedHistogram = gs_FFX_PARALLELSORT_LDSScratch[0];
+
+                // Add prefix offsets for all 4 bit "keys" (packedHistogram = 0xsum2_1_0|sum1_0|sum0|0)
+                packedHistogram = (packedHistogram << 8) + (packedHistogram << 16) + (packedHistogram << 24);
+
+                // Calculate the proper offset for this thread's value
+                localSum += packedHistogram;
+
+                // Calculate target offset
+                uint keyOffset = (localSum >> (bitKey * 8)) & 0xff;
+
+                // Re-arrange the keys (store, sync, load)
+                //reorder_array[keyOffset] = localKey;
+                gs_FFX_PARALLELSORT_LDSSums[keyOffset] = uint(localKey);
+                barrier();
+                //localKey = reorder_array[localID];
+                localKey = SRC_T(gs_FFX_PARALLELSORT_LDSSums[localID]);
+
+                // Wait for everyone to catch up
+                barrier();
+
+#ifdef HAS_PAYLOAD
+#ifdef PAYLOAD_IS_DIFFERENT_TYPE
+                // Re-arrange the values if we have them (store, sync, load)
+                //reorder_payload_array[keyOffset] = localValue;
+                gs_FFX_PARALLELSORT_LDSSums[keyOffset] = uint(localValue);
+                barrier();
+                //localValue = reorder_payload_array[localID];
+                localValue = PAYLOAD_T(gs_FFX_PARALLELSORT_LDSSums[localID]);
+#else
+                reorder_array[keyOffset] = localValue;
+                barrier();
+                localValue = reorder_array[localID];
+#endif
+                // Wait for everyone to catch up
+                barrier();
+#endif // HAS_PAYLOAD
+            }
+
+            // Need to recalculate the keyIndex on this thread now that values have been copied around the thread group
+            uint keyIndex = get_local_key(localKey);
+
+            // Reconstruct histogram
+            atomicAdd(gs_FFX_PARALLELSORT_LocalHistogram[keyIndex], 1);
+
+            // Wait for everyone to catch up
+            barrier();
+
+            // Prefix histogram
+            uint histogramPrefixSum = subgroupExclusiveAdd(localID < FFX_PARALLELSORT_SORT_BIN_COUNT ? gs_FFX_PARALLELSORT_LocalHistogram[localID] : 0);
+
+            // Broadcast prefix-sum via LDS
+            if (localID < FFX_PARALLELSORT_SORT_BIN_COUNT)
+                gs_FFX_PARALLELSORT_LDSScratch[localID] = histogramPrefixSum;
+
+            // Get the global offset for this key out of the cache
+            uint globalOffset = gs_FFX_PARALLELSORT_BinOffsetCache[keyIndex];
+
+            // Wait for everyone to catch up
+            barrier();
+
+            // Get the local offset (at this point the keys are all in increasing order from 0 -> num bins in localID 0 -> thread group size)
+            uint localOffset = localID - gs_FFX_PARALLELSORT_LDSScratch[keyIndex];
+
+            // Write to destination
+            uint totalOffset = globalOffset + localOffset;
+
+            if (totalOffset < NumKeys)
+            {
+                DstBuffer.d[totalOffset] = localKey;
+
+#ifdef HAS_PAYLOAD
+				DstPayload.d[totalOffset] = localValue;
+#endif // HAS_PAYLOAD
+            }
+
+            // Wait for everyone to catch up
+            barrier();
+
+            // Update the cached histogram for the next set of entries
+            if (localID < FFX_PARALLELSORT_SORT_BIN_COUNT)
+                gs_FFX_PARALLELSORT_BinOffsetCache[localID] += gs_FFX_PARALLELSORT_LocalHistogram[localID];
+
+            DataIndex += FFX_PARALLELSORT_THREADGROUP_SIZE;	// Increase the data offset by thread group size
+        }
+    }
+}

@@ -47,6 +47,30 @@ For Windows using vcpkg do
 ```
     vcpkg install netcdf-c:x64-windows
 ```
+
+## Compilation on Windows with VSCode
+To compile on windows 64 bit with VSCode follow these steps:
+- Follow the installation process on the VSCode website to install VSCode
+- Install cmake
+- Install vcpkg
+- Install Vulkan from the [Vulkan website](https://vulkan.lunarg.com/sdk/home)
+- Open a terminal to install packages with vcpkg:
+```
+    vcpkg install sdl2[vulkan]:x64-windows
+    vcpkg install netcdf-c:x64-windows
+    vcpkg install libpng:x64-windows
+    vcpkg install tbb:x64-windows
+    vcpkg integrate install
+```
+- In the visual studio project folder create a folder .vscode with a file settings.json and add the following to this file (exchange Toolchain_path with the path printed by the last output of the vcpkg command)
+```
+{
+    "cmake.configureSettings": {
+      "CMAKE_TOOLCHAIN_FILE": "Toolchain_path"
+    }
+}
+```
+- Open VSCode and setup build environment, care to select x64 build. If x86 is selected Vulkan will not be found as it is only installed in x64 configuration.
 ### Small problems
 
 It might be necessary to set the variable "Eigen2_DIR" to the directory of the eigen library in the folder (currently eigen-3.3.7). Further, a link to the Vulkan-SDK has to be set.
@@ -87,4 +111,9 @@ cmake ..
 make -j4
 ```
 The final application now is located in build/PCViewer/PCViewer.
+<<<<<<< HEAD
 For a video with instructions for checking the replicability follow [this link](https://drive.google.com/file/d/1z2bmqoyFM5wo3hU4uH_Pnp9wxHxg5jy3/view?usp=sharing), with the synthetic data used in the video being located [here](https://mediatum.ub.tum.de/1690342).
+=======
+
+Instructions for replicating the runtime test in video format can be found in [this video](https://drive.google.com/file/d/1z2bmqoyFM5wo3hU4uH_Pnp9wxHxg5jy3/view?usp=sharing), the associated synthetic data is available via this [link](https://mediatum.ub.tum.de/1690342).
+>>>>>>> backend_rework

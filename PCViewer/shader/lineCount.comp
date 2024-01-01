@@ -10,7 +10,7 @@ layout(binding = 0) buffer vA{uint aVals[];};
 layout(binding = 1) buffer vB{uint bVals[];}; 
 
 layout(binding = 2) buffer Lines{
-	uint counts[];
+    uint counts[];
 };
 
 layout(binding = 3) buffer Activations{uint activations[];};

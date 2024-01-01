@@ -1,6 +1,10 @@
 #pragma once
 #include <vector>
 #include <type_traits>
+#include <array>
+#include <cstdint>
+#include <string_view>
+#include <as_cast.hpp>
 #include "../range.hpp"
 
 namespace deriveData{
@@ -30,23 +34,16 @@ public:
     const T* data() const {return _data;};
     size_t size() const {return _size;};
     bool empty() const {return _size == 0;};
-    T& operator[](size_t i){
-        assert(i < _size);   // debug assert for in bounds check
-        return _data[i];
-    }
-    const T& operator[](size_t i) const{
-        assert(i < _size);
-        return _data[i];
-    }
-    bool operator==(const memory_view& o) const{
-        return _data == o._data && _size == o._size;
-    }
+    T& operator[](size_t i){ assert(i < _size); return _data[i];}
+    const T& operator[](size_t i) const {assert(i < _size); return _data[i];}
+    bool operator==(const memory_view& o) const{ return _data == o._data && _size == o._size;}
+    bool operator!=(const memory_view& o) const{ return !(*this == o);}
     operator bool() const {return _data && _size;};
 
     bool equalData(const memory_view& o) const{
         if(_size != o._size)
             return false;
-        for(auto i: irange(_size)){
+        for(auto i: irange(static_cast<unsigned long>(_size))){
             if(_data[i] != o._data[i])
                 return false;
         }
@@ -59,26 +56,35 @@ public:
     const T* end() const {return _data + _size;};
 };
 
+struct min_max_t{
+    float min{}, max{};
+};
 template<class T>
 struct column_memory_view{ // holds one or more columns (done to also be able to hold vectors)
-    memory_view<uint32_t> dimensionSizes{};
-    memory_view<uint32_t> columnDimensionIndices{};
-    std::vector<memory_view<T>> cols{};
+    std::vector<std::string_view>   dimensionNames{};
+    memory_view<uint32_t>           dimensionSizes{};
+    memory_view<uint32_t>           columnDimensionIndices{};
+    std::vector<memory_view<T>>     cols{};
+    std::vector<min_max_t>          cols_min_max;   // mainly used for index group estimation for gpu reduction operations
 
     column_memory_view() = default;
+    column_memory_view(memory_view<uint32_t> sizes, memory_view<uint32_t> indices, std::vector<memory_view<T>> c): dimensionSizes(sizes), columnDimensionIndices(indices), cols(c){}
     column_memory_view(memory_view<T> data, memory_view<uint32_t> dimensionSizes = {}, memory_view<uint32_t> columnDimensionIndices = {}):
         dimensionSizes(dimensionSizes),
         columnDimensionIndices(columnDimensionIndices)
         {
             // checking for column or single row data in case of a constant
             if(dimensionSizes.empty()){  // row data
-                for(int i: irange(data.size()))
+                for(int i: irange(static_cast<unsigned long>(data.size())))
                     cols.push_back(memory_view(data.data() + i, 1));            
             }
             else{
                 cols = {data};
             }
         };
+    column_memory_view(memory_view<T> data, const min_max_t& min_max):
+        cols({data}),
+        cols_min_max({min_max}){}
     column_memory_view(std::vector<memory_view<T>> dataVec, memory_view<uint32_t> dimensionSizes = {}, memory_view<uint32_t> columnDimensionIndices = {}):
         dimensionSizes(dimensionSizes),
         columnDimensionIndices(columnDimensionIndices),
@@ -89,17 +95,20 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
     // Note: diemnsionSizes.empty() indicates a constant in which case the size = 1
     uint64_t size() const{
         uint64_t ret{1};
-        for(auto s: irange(dimensionSizes.size())) ret *= dimensionSizes[s];
+        for(auto s: irange(static_cast<unsigned long>(dimensionSizes.size()))) ret *= dimensionSizes[s];
         return ret;
     }
     uint64_t columnSize() const{
         uint64_t ret{1};
-        for(auto s: irange(columnDimensionIndices.size())) ret *= dimensionSizes[columnDimensionIndices[s]];
+        for(auto s: irange(static_cast<unsigned long>(columnDimensionIndices.size()))) ret *= dimensionSizes[columnDimensionIndices[s]];
         return ret;
     }
     // returns if the columns span all dimensions
     bool full() const{
         return size() == cols[0].size();
+    }
+    bool is_constant() const{
+        return dimensionSizes.size() == 0;
     }
 
     bool operator==(const column_memory_view& o) const{
@@ -132,6 +141,12 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
             return false;
         return true;
     }
+    // check less equal
+    bool dataLayoutLE(const column_memory_view& o) const{
+        if(size() < o.size())
+            return true;
+        return false;
+    }
 
     T& operator()(uint64_t index, uint32_t column){
         auto cI = columnIndex(index);
@@ -144,6 +159,24 @@ struct column_memory_view{ // holds one or more columns (done to also be able to
         return cols[column][cI];
     }
 
+    std::vector<uint64_t> columnIndexToDimensionIndices(uint64_t index) const{
+        std::vector<uint64_t> dimensionIndices(dimensionSizes.size());
+        for(int i = static_cast<int>(columnDimensionIndices.size()) - 1; i >= 0; --i){
+            uint32_t dim  = columnDimensionIndices[i];
+            dimensionIndices[dim] = index % dimensionSizes[dim];
+            index /= dimensionSizes[dim];
+        }
+        return dimensionIndices;
+    }
+
+    uint64_t dimensionIndicesToColumnIndex(const std::vector<uint64_t>& dimensionIndices) const{
+        return dimensionIndex(dimensionIndices);
+    }
+
+    float atDimensionIndices(const std::vector<uint64_t>& indices, int col = 0) const{
+        return cols[col][dimensionIndex(indices)];
+    }
+
     operator bool() const{ return cols.size();};
 private:
     uint64_t dimensionIndex(const std::vector<uint64_t>& dimensionIndices) const{
@@ -153,17 +186,25 @@ private:
             for(int i = d + 1; i < columnDimensionIndices.size(); ++i){
                 factor *= dimensionSizes[columnDimensionIndices[i]];
             }
-            columnIndex += factor * dimensionIndices[columnDimensionIndices[d]];
+            columnIndex += as<uint32_t>(factor * dimensionIndices[columnDimensionIndices[d]]);
         }
         return columnIndex;
     }
     uint64_t columnIndex(uint64_t index) const{
         std::vector<uint64_t> dimensionIndices(dimensionSizes.size());
-        for(int i = dimensionSizes.size() - 1; i >= 0; --i){
+        for(int i = static_cast<int>(dimensionSizes.size()) - 1; i >= 0; --i){
             dimensionIndices[i] = index % dimensionSizes[i];
             index /= dimensionSizes[i];
         }
         return dimensionIndex(dimensionIndices);
     }
-};  
+}; 
+
+template<typename T>
+inline bool equalDataLayouts(const std::vector<column_memory_view<float>>& input){
+    for(int i = 0; i < input.size() - 1; ++i)
+        if(!input[i].equalDataLayout(input[i + 1]))
+            return false;
+    return true;
+}
 }

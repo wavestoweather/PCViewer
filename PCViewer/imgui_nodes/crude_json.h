@@ -20,8 +20,11 @@
 # include <sstream>
 
 # ifndef CRUDE_ASSERT
-#     include <cassert>
-#     define CRUDE_ASSERT(expr) assert(expr)
+//#     include <cassert>
+//#     define CRUDE_ASSERT(expr) assert(expr)
+// custom throw assertion
+#   include <stdexcept>
+#   define CRUDE_ASSERT(expr) if(!(expr)) throw std::runtime_error{#expr}
 # endif
 
 namespace crude_json {
@@ -88,6 +91,7 @@ struct value
     const value& operator[](const string& key) const;
 
     bool contains(const string& key) const;
+    size_t size() const;
 
     void push_back(const value& value);
     void push_back(value&& value);

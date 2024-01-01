@@ -143,11 +143,11 @@ _maxLines(maxDrawLines), _hierarchyFolder(hierarchyFolder)
         }
     }
     // subdimensions
-    uint columnOffset = _attributes.size();
+    uint32_t columnOffset = _attributes.size();
     for(int i = 0; i < _dimensionCombinations.size(); ++i)
         _nextData.columns[columnOffset++] = std::vector<float>(_dimensionCombinations[i].begin(), _dimensionCombinations[i].end());
     // line information. Only use lines which are at consecutive axes for now
-    for(uint i = 0; i < _clusterData.columns[0].size(); ++i){
+    for(uint32_t i = 0; i < _clusterData.columns[0].size(); ++i){
         int dimensionComb = _clusterData.columns[0][i];
         if(_dimensionCombinations[0][dimensionComb] + 1 == _dimensionCombinations[1][dimensionComb]){
             for(int j = 0; j < _clusterData.columns.size(); j++)

@@ -1,0 +1,44 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/rep_forces.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t repulsive_forces_address;
+    uint64_t normalization_vec_address;
+    uint64_t xs_address;
+    uint64_t ys_address;
+    uint64_t potentialsQij_address;
+    uint points_count;
+    uint n_terms;
+};
+
+Vec repulsive_forces = Vec(repulsive_forces_address);
+Vec normalization_vec = Vec(normalization_vec_address);
+Vec xs              = Vec(xs_address);
+Vec ys              = Vec(ys_address);
+Vec potentialsQij   = Vec(potentialsQij_address);
+
+void main(){
+    uint TID = gl_GlobalInvocationID.x;
+    if (TID >= points_count)
+        return;
+
+    float phi1, phi2, phi3, phi4, x_pt, y_pt;
+
+    phi1 = potentialsQij.d[TID * n_terms + 0];
+    phi2 = potentialsQij.d[TID * n_terms + 1];
+    phi3 = potentialsQij.d[TID * n_terms + 2];
+    phi4 = potentialsQij.d[TID * n_terms + 3];
+
+    x_pt = xs.d[TID];
+    y_pt = ys.d[TID];
+
+    normalization_vec.d[TID] =
+        (1 + x_pt * x_pt + y_pt * y_pt) * phi1 - 2 * (x_pt * phi2 + y_pt * phi3) + phi4;
+
+    repulsive_forces.d[TID] = x_pt * phi1 - phi2;
+    repulsive_forces.d[TID + points_count] = y_pt * phi1 - phi3;
+}

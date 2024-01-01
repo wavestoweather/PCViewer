@@ -33,17 +33,17 @@ void main (void) {
   float t3 = getT(t2,b.xy,next_vtx.xy);
 
   for(float t = t1; t<t2+.00001f; t += (t2-t1)/res){
-	vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
-	vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
-	vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
-	
-	vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
-	vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
-	
-	gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
-	color = col[0];
+    vec2 A1 = (t1-t)/(t1-t0)*prev_vtx.xy + (t-t0)/(t1-t0)*a.xy;
+    vec2 A2 = (t2-t)/(t2-t1)*a.xy + (t-t1)/(t2-t1)*b.xy;
+    vec2 A3 = (t3-t)/(t3-t2)*b.xy + (t-t2)/(t3-t2)*next_vtx.xy;
+    
+    vec2 B1 = (t2-t)/(t2-t0)*A1 + (t-t0)/(t2-t0)*A2;
+    vec2 B2 = (t3-t)/(t3-t1)*A2 + (t-t1)/(t3-t1)*A3;
+    
+    gl_Position = vec4((t2-t)/(t2-t1)*B1 + (t-t1)/(t2-t1)*B2,0,1);
+    color = col[0];
 
-	EmitVertex();
+    EmitVertex();
   }
 
   //EndPrimitive();

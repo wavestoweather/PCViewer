@@ -1,0 +1,37 @@
+// code taken from https://github.com/CannyLab/tsne-cuda/blob/main/src/kernels/perplexity_search.cu and converted
+// to glsl code for vulkan
+
+#version 450
+
+#include "tsne_common.glsl"
+
+layout(push_constant) uniform PC{
+    uint64_t pij_address;
+    uint64_t squared_dist_address;
+    uint64_t betas_address;
+    uint points_count;
+    uint near_neighbours_count;
+};
+
+Vec pij             = Vec(pij_address);
+Vec squared_dist    = Vec(squared_dist_address);
+Vec betas           = Vec(betas_address);
+
+void main(){
+    uint TID, i, j;
+    float dist, beta;
+
+    TID = gl_GlobalInvocationID.x;
+    if (TID >= points_count * near_neighbours_count)
+        return;
+
+    i = TID / near_neighbours_count;
+    j = TID % near_neighbours_count;
+
+    beta = betas.d[i];
+    dist = squared_dist.d[TID];
+
+    // condition deals with evaluation of pii
+    // FAISS neighbor zero is i so ignore it
+    pij.d[TID] = (j == 0 && dist == 0.0f) ? 0.0f : exp(-beta * dist); //TODO: This probably never evaluates to true
+}

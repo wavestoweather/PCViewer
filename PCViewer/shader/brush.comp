@@ -4,27 +4,27 @@
 #extension GL_GOOGLE_include_directive : enable
 
 layout(std430, binding = 0) buffer Informations{
-	uint amtOfAttributes;
-	uint amtOfBrushAxes;
-	uint amtOfIndices;
-	uint lineCount;
-	int globalLineCount;
-	uint first;
-	uint and;
-	uint padding;
-	uvec4 indicesOffsets[];
+    uint amtOfAttributes;
+    uint amtOfBrushAxes;
+    uint amtOfIndices;
+    uint lineCount;
+    int globalLineCount;
+    uint first;
+    uint and;
+    uint padding;
+    uvec4 indicesOffsets[];
 } info;
 
 layout(std430, binding = 1) buffer Brushes{
-	vec4 minMax[];
+    vec4 minMax[];
 }brushes;
 
 layout(std430, binding = 2) buffer Data{
-	float d[];
+    float d[];
 }data;
 
 layout(std430, binding = 3) buffer Ind{
-	uint ind[];
+    uint ind[];
 }indices;
 
 layout( set = 0, binding = 4, r8 ) uniform imageBuffer act;
@@ -34,44 +34,44 @@ layout (local_size_x = 256,local_size_y=1,local_size_z=1) in;
 #include "dataAccess.glsl"
 
 void main(){
-	if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
-	bool lineKeep = true;
-	for(int axis = 0; axis<info.amtOfBrushAxes;axis++){
-		bool good = false;
-		for(int brush = 0; brush < info.indicesOffsets[axis].z;brush++){
-			vec2 minMax = brushes.minMax[info.indicesOffsets[axis].y + brush].xy;
-			uint index = indices.ind[gl_GlobalInvocationID.x];
-			uint column = info.indicesOffsets[axis].x;
-			float datum = getPackedData(index, column);
-			if(datum>=minMax.x&&datum<=minMax.y){
-				good = true;
-				break;
-			}
-		}
-		if(!good){
-			lineKeep = false;
-			break;
-		}
-	}
-	bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
-	if(bool(info.first)){
-		if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
-		if(info.first!=2)
-			imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
-	}
-	else{
-		if(bool(info.and)){
-			a = a && lineKeep;
-		}
-		else{
-			a = a || lineKeep;
-		}
-		if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
-		if(info.first!=2)
-			imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
-	}
-	
-	if(lineKeep){
-		atomicAdd(info.lineCount,1);
-	}
+    if(gl_GlobalInvocationID.x >= info.amtOfIndices) return;
+    bool lineKeep = true;
+    for(int axis = 0; axis<info.amtOfBrushAxes;axis++){
+        bool good = false;
+        for(int brush = 0; brush < info.indicesOffsets[axis].z;brush++){
+            vec2 minMax = brushes.minMax[info.indicesOffsets[axis].y + brush].xy;
+            uint index = indices.ind[gl_GlobalInvocationID.x];
+            uint column = info.indicesOffsets[axis].x;
+            float datum = getPackedData(index, column);
+            if(datum>=minMax.x&&datum<=minMax.y){
+                good = true;
+                break;
+            }
+        }
+        if(!good){
+            lineKeep = false;
+            break;
+        }
+    }
+    bool a = bool(imageLoad( act, int(indices.ind[gl_GlobalInvocationID.x])));
+    if(bool(info.first)){
+        if(info.globalLineCount>=0 && lineKeep) atomicAdd(info.globalLineCount,1);
+        if(info.first!=2)
+            imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(lineKeep)));
+    }
+    else{
+        if(bool(info.and)){
+            a = a && lineKeep;
+        }
+        else{
+            a = a || lineKeep;
+        }
+        if(info.globalLineCount>=0 && a) atomicAdd(info.globalLineCount,1);
+        if(info.first!=2)
+            imageStore(act, int(indices.ind[gl_GlobalInvocationID.x]),vec4(int(a)));
+    }
+    
+    if(lineKeep){
+        atomicAdd(info.lineCount,1);
+    }
 }

@@ -7,12 +7,12 @@
 
 namespace vkCompress
 {
-    using namespace cudaCompress;
+    //using namespace cudaCompress;
 
     const uint COMPACTIFY_ELEM_PER_THREAD = 8;
     auto getPrefixCount = [](uint symbolCount) { return (symbolCount + COMPACTIFY_ELEM_PER_THREAD - 1) / COMPACTIFY_ELEM_PER_THREAD; };
 
-    size_t huffmanGetRequiredMemory(const GpuInstance* pInstance)
+    size_t huffmanGetRequiredMemory(const vkCompress::GpuInstance* pInstance)
     {
         uint streamCountMax = pInstance->m_streamCountMax;
         uint symbolCountPerStreamMax = pInstance->m_elemCountPerStreamMax;
@@ -97,8 +97,8 @@ namespace vkCompress
         // launch decode kernel
         uint threadCountPerStream = (symbolCountPerStreamMax + codingBlockSize - 1) / codingBlockSize;
         uint blockSize = min(192u, threadCountPerStream);
-        blockSize = max(blockSize, HUFFMAN_LOOKUP_SIZE);
-        assert(blockSize >= HUFFMAN_LOOKUP_SIZE);
+        blockSize = max(blockSize, cudaCompress::HUFFMAN_LOOKUP_SIZE);
+        assert(blockSize >= cudaCompress::HUFFMAN_LOOKUP_SIZE);
         uint32_t dispatchX = (threadCountPerStream + blockSize - 1) / blockSize;
         uint32_t dispatchY = streamCount;
     
@@ -169,10 +169,10 @@ namespace vkCompress
         // launch decode kernel
         uint threadCountPerStream = (symbolCountPerStreamMax + codingBlockSize - 1) / codingBlockSize;
         uint blockSize = min(192u, threadCountPerStream);
-        blockSize = max(blockSize, HUFFMAN_LOOKUP_SIZE);
+        blockSize = max(blockSize, cudaCompress::HUFFMAN_LOOKUP_SIZE);
         // test if constant block size works
         blockSize = 192;
-        assert(blockSize >= HUFFMAN_LOOKUP_SIZE);
+        assert(blockSize >= cudaCompress::HUFFMAN_LOOKUP_SIZE);
         uint32_t dispatchX = (threadCountPerStream + blockSize - 1) / blockSize;
         uint32_t dispatchY = streamCount;
     
