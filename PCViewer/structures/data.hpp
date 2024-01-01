@@ -181,6 +181,7 @@ class data{
 
         //removing the dimension, updating column dimensions(indices might have to be decremented)
         dimension_sizes.erase(dimension_sizes.begin() + dimension);
+        dimension_names.erase(dimension_names.begin() + dimension);
         for(int c = 0; c < column_dimensions.size(); ++c){
             int dimIndex = -1;
             for(int d = 0; d < column_dimensions[c].size(); ++d){

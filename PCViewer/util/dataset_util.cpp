@@ -120,6 +120,15 @@ load_result<T> open_netcdf_t(std::string_view filename, memory_view<structures::
                 ret.attributes.back().bounds().max = f;
         }
     }
+    
+    // removing unused dimensions
+    for(const auto& d: netcdf.get_dimension_infos()){
+        auto queried_dim = queried_dimensions | util::try_find_if<structures::query_attribute>([&d](auto a){return a.id == d.name;});
+        if(!queried_dim || queried_dim->get().is_string_length_dimension || queried_dim->get().is_active)
+            continue;
+        int i = ret.data.dimension_names | util::index_of(d.name);
+        ret.data.removeDim(i, queried_dim->get().trim_indices.min);
+    }
 
     return ret;
 }
