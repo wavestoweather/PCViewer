@@ -1,6 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.h>
-#include <vulkan/vk_enum_string_helper.h>
+#include "../vulkan/vk_enum_string_helper.hpp"
 #include <vk_context.hpp>
 #include <vk_initializers.hpp>
 #include <file_util.hpp>

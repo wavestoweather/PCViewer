@@ -3,6 +3,7 @@
 #include <min_max.hpp>
 #include <variant>
 #include <vector>
+#include <cinttypes>
 
 namespace structures{
 struct templatelist_convert_data{

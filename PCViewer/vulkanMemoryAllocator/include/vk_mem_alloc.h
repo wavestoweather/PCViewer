@@ -288,7 +288,7 @@ extern "C" {
 #endif
 
 #ifndef VMA_STATS_STRING_ENABLED
-    #define VMA_STATS_STRING_ENABLED 1
+//    #define VMA_STATS_STRING_ENABLED 1
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
