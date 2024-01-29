@@ -130,7 +130,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake.in ${CMAKE_CU
 add_custom_target(delete_header COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_CURRENT_SOURCE_DIR}/${output_header} DEPENDS ${spriv_binary_files})
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${output_header}
                    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake
-                   DEPENDS ${spriv_binary_files}
+                   DEPENDS delete_header ${spriv_binary_files}
                    COMMENT "Packing binary files into header")
 
 add_custom_target(packed_shaders DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${output_header})

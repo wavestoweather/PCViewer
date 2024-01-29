@@ -733,8 +733,9 @@ void ImGui_ImplSDL2_NewFrame()
     if (w > 0 && h > 0)
         io.DisplayFramebufferScale = ImVec2((float)display_w / w, (float)display_h / h);
     
-    float dpi = ImGui::GetPlatformIO().Viewports.front()->DpiScale;
+    float dpi = std::max(ImGui::GetWindowDpiScale(), .5f);
     ImGui::GetStyle().ScaleAllSizes(dpi);
+    ImGui::GetIO().FontGlobalScale = dpi;
     // io.DisplaySize = ImVec2((float)w / dpi, (float)h / dpi);
 
     // Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
