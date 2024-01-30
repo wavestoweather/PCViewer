@@ -50,6 +50,10 @@ public:
             dst_buffer{dst_buffer},
             dst_buffer_offset{dst_buffer_offset},
             task_base{task_b}{}
+        staging_buffer_info(VkBuffer dst_buffer, size_t dst_buffer_offset, transfer_direction transfer_dir, util::memory_view<const uint8_t> data):
+            dst_buffer{dst_buffer},
+            dst_buffer_offset{dst_buffer_offset},
+            task_base{transfer_dir, data}{}
     };
     struct staging_image_info: public task_base{
         VkImage                             dst_image{};
