@@ -164,6 +164,13 @@ int main(int argc, char* argv[]){
         ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
     if(globals::commandline_parser.isSet("printfontinfo"))
         logger << "[info] Amount of fonts available: " << ImGui::GetIO().Fonts->Fonts.size() / font_sizes.size() << logging::endl;
+    
+    float dpi{1.f};
+    if (0 != SDL_GetDisplayDPI(0, &dpi, nullptr, nullptr))
+        logger << logging::warning_prefix << "DPI fetch was not possible, setting dpi to 1" << logging::endl;
+    ImGui::GetStyle().ScaleAllSizes(dpi / 92.f);
+    ImGui::GetIO().FontGlobalScale = dpi / 92.f;
+    logger << "[info] DPI for the monitor is " << dpi << logging::endl;
 
     ImGui_ImplSDL2_InitForVulkan(window);
 

@@ -127,16 +127,12 @@ set(output_header shaders.h)
 set(output_variable_name spriv_binary_files)
 set(output_namespace_name ShaderBinaries)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake.in ${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake @ONLY)
-add_custom_target(delete_header COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_CURRENT_SOURCE_DIR}/${output_header} DEPENDS ${spriv_binary_files})
-add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${output_header}
+# add_custom_target(delete_header COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_CURRENT_SOURCE_DIR}/${output_header} DEPENDS ${spriv_binary_files})
+add_custom_target(packed_shaders
                    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/pack_binary_files.cmake
-                   DEPENDS delete_header ${spriv_binary_files}
-                   COMMENT "Packing binary files into header")
+                   DEPENDS compile_shaders_sort)
 
-add_custom_target(packed_shaders DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${output_header})
 
 # Step 3: Setting up the dependencies to triger re-compilation on change
 #           and building shaders/converting them before building main application
-add_dependencies(delete_header compile_shaders_sort)
-add_dependencies(packed_shaders delete_header)
 add_dependencies(PCViewer_new packed_shaders)
