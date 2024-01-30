@@ -959,7 +959,7 @@ void histogram_counter::_task_thread_function(){
         }
 
         if(::logger.logging_level >= logging::level::l_5)
-            ::logger << logging::info_prefix << " histogram_counter::_task_thread_function() hsitogram counts done, needed " << stop_watch.lap() << " ms" << logging::endl;
+            ::logger << logging::info_prefix << " histogram_counter::_task_thread_function() histogram counts done, needed " << stop_watch.lap() << " ms" << logging::endl;
     }
 }
 
