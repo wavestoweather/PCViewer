@@ -319,9 +319,9 @@ void parallel_coordinates_workbench::show(){
 
     constexpr float tick_width = 10;
     const float padding_side = 10;
-    const ImVec2 button_size{70, 20};
-    const float gap = static_cast<float>((content_size.x - 2 * padding_side) / (labels_count - 1));
-    const float button_gap = static_cast<float>((content_size.x - 2 * padding_side - button_size.x) / (labels_count - 1));
+    const ImVec2 button_size{2.5f * ImGui::GetTextLineHeightWithSpacing(), ImGui::GetTextLineHeightWithSpacing()};
+    const float gap = static_cast<float>((content_size.x - padding_side) / (labels_count - 1));
+    const float button_gap = static_cast<float>((content_size.x - padding_side - button_size.x) / (labels_count - 1));
 
     float cur_offset{};
     ImGui::Dummy({1, 1});
