@@ -158,18 +158,18 @@ int main(int argc, char* argv[]){
     ImGui::GetStyle().WindowRounding = 8.f;
     ImGui::GetStyle().PopupRounding = 3.f;
     ImGui::GetIO().DisplaySize = {static_cast<float>(w), static_cast<float>(h)};
-    std::vector<float> font_sizes{10.f, 15.f, 25.f};
+    float dpi{1.f};
+    if (0 != SDL_GetDisplayDPI(0, &dpi, nullptr, nullptr))
+        logger << logging::warning_prefix << "DPI fetch was not possible, setting dpi to 1" << logging::endl;
+    dpi /= 92.f;
+    ImGui::GetStyle().ScaleAllSizes(dpi);
+    std::vector<float> font_sizes{10.f * dpi, 15.f * dpi, 25.f * dpi};
     util::imgui::load_fonts("fonts/", font_sizes);
     if(ImGui::GetIO().Fonts->Fonts.size() > 1)
         ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[1];
     if(globals::commandline_parser.isSet("printfontinfo"))
         logger << "[info] Amount of fonts available: " << ImGui::GetIO().Fonts->Fonts.size() / font_sizes.size() << logging::endl;
     
-    float dpi{1.f};
-    if (0 != SDL_GetDisplayDPI(0, &dpi, nullptr, nullptr))
-        logger << logging::warning_prefix << "DPI fetch was not possible, setting dpi to 1" << logging::endl;
-    ImGui::GetStyle().ScaleAllSizes(dpi / 92.f);
-    ImGui::GetIO().FontGlobalScale = dpi / 92.f;
     logger << "[info] DPI for the monitor is " << dpi << logging::endl;
 
     ImGui_ImplSDL2_InitForVulkan(window);
