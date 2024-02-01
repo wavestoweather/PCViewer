@@ -12,6 +12,7 @@ inline void menu_bar(){
             ImGui::EndMenu();
         }
         if(ImGui::BeginMenu("Edit")){
+            ImGui::ShowFontSelector("Select font");
             if(ImGui::BeginCombo("Logging level", logging::level_names[logger.logging_level].data())){
                 for(auto level: structures::enum_iteration<logging::level>{}){
                     if(ImGui::MenuItem(logging::level_names[level].data()))
