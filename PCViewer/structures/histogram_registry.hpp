@@ -102,6 +102,8 @@ struct histogram_registry{
 
     // the preferred way of registering and unregistering is by using a scoped_registrator_t object which can be retrieved via scoped_registrator(...)
     void unregister_histogram(std::string_view id, registrator_id_t registrator_id){
+        if(::logger.logging_level >= logging::level::l_5)
+            ::logger << logging::info_prefix << "Unregistering registrator " << id << logging::endl;
         assert(name_to_registry_key.contains(id) && "Registry does not hold id");
         const auto key = name_to_registry_key[id];
         assert(registry.contains(key) && "Registry/name_to_registry_key mismatch");

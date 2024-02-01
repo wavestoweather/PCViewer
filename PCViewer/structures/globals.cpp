@@ -879,7 +879,7 @@ void histogram_counter::_task_thread_function(){
         }
 
         // counting
-        VkSemaphore                            download_semaphore{};
+        std::vector<VkSemaphore>               download_semaphores{};
         std::unique_ptr<structures::semaphore> stager_semaphore{};
         constexpr uint32_t  download_wait_flag{VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
         int count{};
@@ -922,14 +922,15 @@ void histogram_counter::_task_thread_function(){
                 signal_semaphores.insert(signal_semaphores.end(), cur->signal_semaphores.begin(), cur->signal_semaphores.end());
             bool cpu_histogram_needed = dl.histogram_registry.const_access()->registry.at(key).cpu_histogram_needed;
             if(cpu_histogram_needed){
-                download_semaphore = util::vk::create_semaphore(util::vk::initializers::semaphoreCreateInfo());
-                signal_semaphores.emplace_back(download_semaphore);
+                download_semaphores.emplace_back(util::vk::create_semaphore(util::vk::initializers::semaphoreCreateInfo()));
+                signal_semaphores.emplace_back(download_semaphores.back());
             }
             count_info.gpu_sync_info.signal_semaphores = signal_semaphores;
             pipelines::histogram_counter::instance().count(count_info);
 
             if(cpu_histogram_needed){
-                stager_semaphore = std::make_unique<structures::semaphore>();
+                if (!stager_semaphore)
+                    stager_semaphore = std::make_unique<structures::semaphore>();
                 size_t full_size{1}; for(int i: key.bin_sizes) full_size *= i;
                 auto access =  dl.histogram_registry.access();
                 access->cpu_histograms[hist].resize(full_size);
@@ -937,7 +938,7 @@ void histogram_counter::_task_thread_function(){
                 staging_info.transfer_dir = stager::transfer_direction::download;
                 staging_info.data_download = util::memory_view(access->cpu_histograms[hist]);
                 staging_info.dst_buffer = access->gpu_buffers[hist].buffer;
-                staging_info.wait_semaphores = {download_semaphore};
+                staging_info.wait_semaphores = {download_semaphores.back()};
                 staging_info.wait_flags = {download_wait_flag};
                 staging_info.cpu_semaphore = stager_semaphore.get();
                 globals::stager.add_staging_task(staging_info);
@@ -950,9 +951,12 @@ void histogram_counter::_task_thread_function(){
         // waiting for counting completion before signaling render
         pipelines::histogram_counter::instance().wait_for_fence();
         if(stager_semaphore){
-            globals::stager.wait_for_completion();
-            stager_semaphore->acquire();
-            util::vk::destroy_semaphore(download_semaphore);
+            for (auto i: util::size_range(download_semaphores))
+                stager_semaphore->acquire();
+            // globals::stager.wait_for_completion();
+            // stager_semaphore->acquire();
+            for (auto s: download_semaphores)
+                util::vk::destroy_semaphore(s);
         }
             
         {
@@ -1028,6 +1032,7 @@ void priority_sorter::_task_thread_function(){
             std::vector<std::vector<uint32_t>> order_storage;
             std::vector<uint32_t> tmp_order;
             const auto& registry = dl.histogram_registry.const_access()->registry;
+            structures::semaphore sort_upload_done_semaphore{};
             for(const auto& [key, entry]: registry){
                 // downloading histograms (2d or 4d) and ordering each of them
                 if(!key.is_max_histogram && !key.is_min_histogram && key.attribute_indices.size() != 2 && key.attribute_indices.size() != 4)
@@ -1035,12 +1040,14 @@ void priority_sorter::_task_thread_function(){
                 size_t bins_amt{1};
                 for(int s: key.bin_sizes) bins_amt *= s;
                 std::vector<uint32_t> data(bins_amt);
+                structures::semaphore stager_semaphore{};
                 stager::staging_buffer_info buffer_info{};
                 buffer_info.transfer_dir = stager::transfer_direction::download;
                 buffer_info.dst_buffer = dl.histogram_registry.const_access()->gpu_buffers.at(std::string_view(entry.hist_id)).buffer;
                 buffer_info.data_download = util::memory_view(data);
+                buffer_info.cpu_semaphore = &stager_semaphore;
                 globals::stager.add_staging_task(buffer_info);
-                globals::stager.wait_for_completion();
+                stager_semaphore.acquire();
                 // sorting and uploading
                 order_storage.emplace_back(data.size());
                 std::vector<uint32_t>& ordered = order_storage.back();
@@ -1060,11 +1067,12 @@ void priority_sorter::_task_thread_function(){
                 if(key == *last_key){
                     buffer_info.cpu_signal_flags = std::move(cur->cpu_signal_flags);
                     buffer_info.cpu_unsignal_flags = std::move(cur->cpu_unsignal_flags);
+                    buffer_info.cpu_semaphore = &sort_upload_done_semaphore;
                 }
                 globals::stager.add_staging_task(buffer_info);
             }
             // waiting as order_storage has to be kept alive until everything was copied
-            globals::stager.wait_for_completion();
+            sort_upload_done_semaphore.acquire();
         }
         else{
             std::string standard_string(globals::priority_drawlist_standard_order);
@@ -1113,12 +1121,14 @@ void priority_sorter::_task_thread_function(){
                 auto alloc_info = util::vma::initializers::allocationCreateInfo();
                 globals::drawlists.ref_no_track()[cur->dl_id].ref_no_track().priority_indices[standard_string] = util::vk::create_buffer(buffer_info, alloc_info);
             }
+            structures::semaphore done_semaphore{};
             staging_info.dst_buffer = dl_read.priority_indices.at(standard_string).buffer;
             staging_info.data_upload = util::memory_view(order);
             staging_info.cpu_signal_flags = std::move(cur->cpu_signal_flags);
             staging_info.cpu_unsignal_flags = std::move(cur->cpu_unsignal_flags);
+            staging_info.cpu_semaphore = &done_semaphore;
             globals::stager.add_staging_task(staging_info);
-            globals::stager.wait_for_completion();
+            done_semaphore.acquire();
         }
         // the signal flags are set by the last uploadstaging task
         if(::logger.logging_level >= logging::level::l_5)

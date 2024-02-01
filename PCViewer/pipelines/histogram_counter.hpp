@@ -86,7 +86,7 @@ public:
         util::memory_view<const structures::min_max<float>> column_min_max{};
         reduction_type_t                    reduction_type{reduction_type_t::sum};                                
         structures::gpu_sync_info           gpu_sync_info{};
-        structures::gpu_timing_info*        gpu_timing_info{};
+        structures::gpu_timing_info         *gpu_timing_info{};
     };
 
     histogram_counter(const histogram_counter&) = delete;

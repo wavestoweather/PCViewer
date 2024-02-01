@@ -347,11 +347,13 @@ void tsne_compute::calculate(const tsne_calculate_direct_info& info){
 }
 
 void tsne_compute::calculate_cpu(const structures::tsne_options& info){
+    structures::semaphore upload_done_semaphore{};
     auto src_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, info.num_points * info.num_dims * sizeof(float));
     auto src_buffer = util::vk::create_buffer(src_info, util::vma::initializers::allocationCreateInfo());
     structures::stager::staging_buffer_info upload_info{};
     upload_info.data_upload = util::memory_view(info.points, info.num_points * info.num_dims);
     upload_info.dst_buffer = src_buffer.buffer;
+    upload_info.cpu_semaphore = &upload_done_semaphore;
     globals::stager.add_staging_task(upload_info);
     
     auto dst_info = util::vk::initializers::bufferCreateInfo(VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, info.num_points * structures::tsne_options::num_reduced_dims * sizeof(float));
@@ -361,7 +363,7 @@ void tsne_compute::calculate_cpu(const structures::tsne_options& info){
     c_info.dst_address = util::vk::get_buffer_address(dst_buffer);
     c_info.src_address = util::vk::get_buffer_address(src_buffer);
     c_info.tsne_options = info;
-    globals::stager.wait_for_completion();
+    upload_done_semaphore.acquire();
     
     calculate(c_info);
 

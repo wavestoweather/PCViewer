@@ -112,6 +112,8 @@ inline structures::dynamic_struct<gpu_brush, float> create_gpu_brush_data(const 
 
 // uploads changed local and global brushes
 inline void upload_changed_brushes(){
+    std::optional<structures::semaphore> global_brushes_semaphore;
+    std::optional<structures::semaphore> local_brushes_semaphore;
     // global brushes
     std::vector<structures::dynamic_struct<gpu_brush, float>> brush_datas;
     if(globals::global_brushes.changed){
@@ -139,10 +141,12 @@ inline void upload_changed_brushes(){
             globals::global_brushes.brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);
         }
         for(const auto& [brush_data, i]: util::enumerate(brush_datas)){
+            global_brushes_semaphore.emplace();
             structures::stager::staging_buffer_info staging_info{};
             staging_info.dst_buffer = globals::global_brushes.brushes_gpu.buffer;
             staging_info.dst_buffer_offset = globals::global_brushes.dataset_brush_info_offsets[ds_order[i]];
             staging_info.data_upload = brush_data.data();
+            staging_info.cpu_semaphore = &global_brushes_semaphore.value();
             globals::stager.add_staging_task(staging_info);
         }
     }
@@ -164,15 +168,19 @@ inline void upload_changed_brushes(){
                 globals::drawlists()[id]().local_brushes_gpu = util::vk::create_buffer(buffer_info, alloc_info);
             }
 
+            local_brushes_semaphore.emplace();
             structures::stager::staging_buffer_info staging_info{};
             staging_info.dst_buffer = dl.read().local_brushes_gpu.buffer;
             staging_info.data_upload = brush_data.data();
+            staging_info.cpu_semaphore = &local_brushes_semaphore.value();
             globals::stager.add_staging_task(staging_info);
         }
     }
 
-    if(brush_datas.size())
-        globals::stager.wait_for_completion();
+    if(global_brushes_semaphore)
+        global_brushes_semaphore.value().acquire();
+    if(local_brushes_semaphore)
+        local_brushes_semaphore.value().acquire();
 }
 
 inline void update_drawlist_active_indices(){
