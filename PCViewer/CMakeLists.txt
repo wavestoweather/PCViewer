@@ -66,12 +66,17 @@ endif()
 #    find_package(glslang REQUIRED)
 #endif()
 find_package(SDL2 REQUIRED)
-find_package(netCDF CONFIG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(X11 REQUIRED)
 find_package(TBB REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+
+find_package(netCDF CONFIG)
+if (NOT DEFINED netCDF_FOUND AND UNIX)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(netCDF netcdf)
+endif()
 
 #include_directories(${Eigen3_DIR})
 
