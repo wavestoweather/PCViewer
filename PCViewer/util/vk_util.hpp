@@ -63,6 +63,9 @@ inline feature_wrapper<VkPhysicalDeviceFeatures2> copy_features(const VkPhysical
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
                 internal::fill_next<VkPhysicalDevice16BitStorageFeatures>(curNext, curStorage);
                 break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
+                internal::fill_next<VkPhysicalDeviceTimelineSemaphoreFeatures>(curNext, curStorage);
+                break;
             default:
             throw std::runtime_error(std::string("util::copy_features() Unhandled feature type in pNext chain: ") + string_VkStructureType(nextType));
         }
@@ -273,6 +276,7 @@ inline VkSemaphore create_semaphore(const VkSemaphoreCreateInfo& info){
 }
 
 inline void destroy_semaphore(VkSemaphore& semaphore){
+    assert(globals::vk_context.registered_semaphores.contains(semaphore));
     vkDestroySemaphore(globals::vk_context.device, semaphore, globals::vk_context.allocation_callbacks);
     globals::vk_context.registered_semaphores.erase(semaphore);
     semaphore = {};

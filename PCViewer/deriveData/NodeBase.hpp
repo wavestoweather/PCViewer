@@ -43,6 +43,8 @@ public:
     virtual ImVec4 color() const = 0;
     virtual column_memory_view<float> data() = 0;
     ax::Widgets::IconType iconType() const{return ax::Widgets::IconType::Circle;};
+    
+    virtual ~Type() {};
 };
 
 class FloatType: public Type, public Creatable<FloatType, Type>{
@@ -139,6 +141,7 @@ public:
         middleText(mt),
         inplace_possible(inplace_possible),
         input_elements(crude_json::type_t::object){}
+    virtual ~Node() {};
 
     virtual int outputChannels() const { int count{}; for(const auto& t: outputTypes) count += static_cast<int>(t->data().cols.size()); return count;};
     virtual void applyOperationCpu(const float_column_views& input, float_column_views& output) const = 0;

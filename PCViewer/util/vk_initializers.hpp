@@ -177,11 +177,29 @@ inline VkFramebufferCreateInfo framebufferCreateInfo(VkRenderPass renderPass = {
     return framebufferCreateInfo;
 }
 
-inline VkSemaphoreCreateInfo semaphoreCreateInfo()
-{
+inline VkSemaphoreTypeCreateInfo semaphoreTypeCreateInfo(VkSemaphoreType type = VK_SEMAPHORE_TYPE_BINARY, uint64_t initialValue = 0) {
+    VkSemaphoreTypeCreateInfo info {};
+    info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    info.semaphoreType = type;
+    info.initialValue = initialValue;
+    return info;
+}
+
+inline VkSemaphoreCreateInfo semaphoreCreateInfo(void *pNext = {}) {
     VkSemaphoreCreateInfo semaphoreCreateInfo {};
     semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    semaphoreCreateInfo.pNext = pNext;
     return semaphoreCreateInfo;
+}
+
+inline VkSemaphoreWaitInfo semaphoreWaitInfo(util::memory_view<const VkSemaphore> semaphores, util::memory_view<const uint64_t> counts, VkSemaphoreWaitFlags flags = 0) {
+    assert(counts.size() == semaphores.size());
+    VkSemaphoreWaitInfo semaphoreWaitInfo {};
+    semaphoreWaitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+    semaphoreWaitInfo.semaphoreCount = semaphores.size();
+    semaphoreWaitInfo.pSemaphores = semaphores.data();
+    semaphoreWaitInfo.pValues = counts.data();
+    return semaphoreWaitInfo;
 }
 
 inline VkFenceCreateInfo fenceCreateInfo(VkFenceCreateFlags flags = 0)
@@ -719,6 +737,12 @@ inline VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features(){
     VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features{};
     physicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     return physicalDeviceVulkan13Features;
+}
+
+inline VkPhysicalDeviceTimelineSemaphoreFeatures physicalDeviceTimelineSemaphoreFeatures() {
+    VkPhysicalDeviceTimelineSemaphoreFeatures features {};
+    features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    return features;
 }
 
 inline VkDebugUtilsObjectNameInfoEXT debugUtilsObjectNameInfoEXT(VkObjectType objectType, uint64_t objectHandle, std::string_view objectName){

@@ -190,6 +190,11 @@ VkContextInitReturnInfo vk_context::init(const VkContextInitInfo& info){
                 cur_available = static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_available)->pNext;
                 cur_required = static_cast<VkPhysicalDevice16BitStorageFeatures*>(cur_required)->pNext;
             break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
+                all_features_avail &= util::vk::all_features_available<VkPhysicalDeviceTimelineSemaphoreFeatures>(*static_cast<VkPhysicalDeviceTimelineSemaphoreFeatures*>(cur_available), *static_cast<VkPhysicalDeviceTimelineSemaphoreFeatures*>(cur_required));
+                cur_available = static_cast<VkPhysicalDeviceTimelineSemaphoreFeatures*>(cur_available)->pNext;
+                cur_required = static_cast<VkPhysicalDeviceTimelineSemaphoreFeatures*>(cur_required)->pNext;
+            break;
             default:
                 throw std::runtime_error(std::string("structures::vk_context::init(...) Unhandled feature type in pNext chain: ") + string_VkStructureType(*static_cast<VkStructureType*>(cur_available)));
             }
@@ -562,9 +567,10 @@ void stager::_task_thread_function(){
             vkResetFences(globals::vk_context.device, 1, &_task_fences[_fence_index]);
 
             size_t copy_size = std::min<size_t>(cur_span.max - cur_span.min, data_size - cur_span.min);
-            if(cur.transfer_dir == transfer_direction::upload)
+            if(cur.transfer_dir == transfer_direction::upload) {
+                assert(cur.data_upload.size() >= copy_size + cur_span.min);
                 std::memcpy(_staging_buffer_mapped + _fence_index * buffer_size / 2, cur.data_upload.data() + cur_span.min, copy_size);
-
+            }
 
             if(_command_buffers[_fence_index])
                 vkFreeCommandBuffers(globals::vk_context.device, _command_pool, 1, &_command_buffers[_fence_index]);
@@ -873,8 +879,9 @@ void histogram_counter::_task_thread_function(){
         }
 
         // counting
-        std::vector<VkSemaphore>    download_semaphores;
-        constexpr uint32_t          download_wait_flag{VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
+        VkSemaphore                            download_semaphore{};
+        std::unique_ptr<structures::semaphore> stager_semaphore{};
+        constexpr uint32_t  download_wait_flag{VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
         int count{};
         for(auto hist: histograms){
             if(_thread_finish)
@@ -915,13 +922,14 @@ void histogram_counter::_task_thread_function(){
                 signal_semaphores.insert(signal_semaphores.end(), cur->signal_semaphores.begin(), cur->signal_semaphores.end());
             bool cpu_histogram_needed = dl.histogram_registry.const_access()->registry.at(key).cpu_histogram_needed;
             if(cpu_histogram_needed){
-                download_semaphores.emplace_back(util::vk::create_semaphore(util::vk::initializers::semaphoreCreateInfo()));
-                signal_semaphores.emplace_back(download_semaphores.back());
+                download_semaphore = util::vk::create_semaphore(util::vk::initializers::semaphoreCreateInfo());
+                signal_semaphores.emplace_back(download_semaphore);
             }
             count_info.gpu_sync_info.signal_semaphores = signal_semaphores;
             pipelines::histogram_counter::instance().count(count_info);
 
             if(cpu_histogram_needed){
+                stager_semaphore = std::make_unique<structures::semaphore>();
                 size_t full_size{1}; for(int i: key.bin_sizes) full_size *= i;
                 auto access =  dl.histogram_registry.access();
                 access->cpu_histograms[hist].resize(full_size);
@@ -929,8 +937,9 @@ void histogram_counter::_task_thread_function(){
                 staging_info.transfer_dir = stager::transfer_direction::download;
                 staging_info.data_download = util::memory_view(access->cpu_histograms[hist]);
                 staging_info.dst_buffer = access->gpu_buffers[hist].buffer;
-                staging_info.wait_semaphores = {download_semaphores.back()};
+                staging_info.wait_semaphores = {download_semaphore};
                 staging_info.wait_flags = {download_wait_flag};
+                staging_info.cpu_semaphore = stager_semaphore.get();
                 globals::stager.add_staging_task(staging_info);
             }
         }
@@ -940,11 +949,10 @@ void histogram_counter::_task_thread_function(){
 
         // waiting for counting completion before signaling render
         pipelines::histogram_counter::instance().wait_for_fence();
-        if(download_semaphores.size()){
+        if(stager_semaphore){
             globals::stager.wait_for_completion();
-            for(VkSemaphore sem: download_semaphores)
-                util::vk::destroy_semaphore(sem);
-            download_semaphores.clear();
+            stager_semaphore->acquire();
+            util::vk::destroy_semaphore(download_semaphore);
         }
             
         {

@@ -18,6 +18,7 @@ struct workbench{
     const std::string   id;
 
     workbench(std::string_view id): id(id) {};
+    virtual ~workbench() {};
     // method to show the imgui window
     virtual void show() = 0;
     
@@ -37,12 +38,14 @@ struct dataset_dependency{
     virtual void add_datasets(const util::memory_view<std::string_view>& dataset_ids, const gpu_sync_info& sync_info = {}) = 0;
     virtual void remove_datasets(const util::memory_view<std::string_view>& dataset_ids, const gpu_sync_info& sync_info = {}) = 0;
     virtual void signal_dataset_update(const util::memory_view<std::string_view>& dataset_ids, update_flags flags, const gpu_sync_info& sync_info = {}) {};
+    virtual ~dataset_dependency() {}
 };
 
 struct drawlist_dataset_dependency: public dataset_dependency{
     virtual void add_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
     virtual void remove_drawlists(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) = 0;
     virtual void signal_drawlist_update(const util::memory_view<std::string_view>& drawlist_ids, const gpu_sync_info& sync_info = {}) {};
+    virtual ~drawlist_dataset_dependency() {}
 };
 }
 

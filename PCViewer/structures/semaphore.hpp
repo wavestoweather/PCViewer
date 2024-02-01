@@ -10,8 +10,9 @@ class semaphore{
     unsigned long _count = 0;
 public:
     void release(int n = 1){
-        std::lock_guard<decltype(_mutex)> lock(_mutex);
+        std::unique_lock<decltype(_mutex)> lock(_mutex);
         _count += n;
+        lock.unlock();
         for(int i = 0; i < n; ++i)
             _cv.notify_one();
     }
