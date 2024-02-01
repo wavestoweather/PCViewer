@@ -152,6 +152,7 @@ int main(int argc, char* argv[]){
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
+    ImGui::GetIO().BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
     ImGui::GetIO().ConfigViewportsNoDecoration = false;
     ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
     ImGui::GetStyle().FrameRounding = 3.f;
