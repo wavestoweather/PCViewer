@@ -48,6 +48,21 @@ value::value(const value& other)
     }
 }
 
+bool value::operator==(const value& other) const {
+    if (m_Type != other.m_Type)
+        return false;
+    switch(m_Type) {
+    case type_t::object:    return this->get<object>() == other.get<object>();
+    case type_t::array:     return this->get<array>() == other.get<array>();
+    case type_t::string:    return this->get<string>() == other.get<string>();
+    case type_t::boolean:   return this->get<bool>() == other.get<bool>();
+    case type_t::number:    return this->get<number>() == other.get<number>();
+    case type_t::null:      return true;
+    case type_t::discarded: return false;
+    }
+    return false;
+}
+
 value& value::operator[](size_t index)
 {
     if (is_null())

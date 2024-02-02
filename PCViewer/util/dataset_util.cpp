@@ -1091,6 +1091,7 @@ void check_datasets_to_open(){
             ImGui::Checkbox(globals::paths_to_open[i].c_str(), reinterpret_cast<bool*>(activations.data()));
 
         if(ImGui::Button("Open") || ImGui::IsKeyPressed(ImGuiKey_Enter)){
+            std::vector<crude_json::value> loaded_paths;
             for(std::string_view path: globals::paths_to_open){
                 try{
                     auto dataset = open_dataset(path, globals::attribute_query);
@@ -1105,10 +1106,27 @@ void check_datasets_to_open(){
                     check_dataset_attributes();
 
                     execute_laod_behaviour(ds->second);
+                    loaded_paths.emplace_back(crude_json::string(path));
                 }
                 catch(const std::runtime_error& e){
                     logger << "[error] " << e.what() << logging::endl;
                 }
+            }
+            // adding the dataset to previously opened datasets
+            auto &prev_files = globals::settings_manager.get_setting("recent_data_files");
+            if (!prev_files.is_object()) {
+                globals::settings_manager.add_setting(crude_json::object{{"id", "recent_data_files"}, {"type", "file_infos"}, {"max_files", crude_json::number{20}}, {"files", loaded_paths}});
+            }
+            else {
+                auto &files = prev_files["files"].get<crude_json::array>();
+                for (int i: util::rev_size_range(loaded_paths)) {
+                    if (files | util::contains(loaded_paths[i]))
+                        loaded_paths.erase(loaded_paths.begin() + i);
+                }
+                int too_much = int(prev_files["max_files"].get<crude_json::number>()) - int(files.size()) - int(loaded_paths.size());
+                if (too_much < 0)
+                    files.erase(files.begin(), files.begin() - too_much);
+                files.insert(files.begin(), loaded_paths.begin(), loaded_paths.end());
             }
             ImGui::CloseCurrentPopup();
             globals::paths_to_open.clear();

@@ -80,6 +80,8 @@ struct value
     value& operator=(const char*    v) { auto other = value(          v);  swap(other); return *this; }
     value& operator=(      boolean  v) { auto other = value(          v);  swap(other); return *this; }
     value& operator=(      number   v) { auto other = value(          v);  swap(other); return *this; }
+    
+    bool operator==(const value& other) const;
 
     type_t type() const { return m_Type; }
 
