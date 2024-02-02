@@ -73,7 +73,7 @@ find_package(TBB REQUIRED)
 #find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 find_package(netCDF CONFIG)
-if (NOT DEFINED netCDF_FOUND AND UNIX)
+if (NOT netCDF_FOUND AND UNIX)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(netCDF netcdf)
 endif()
