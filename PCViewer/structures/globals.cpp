@@ -79,6 +79,7 @@ robin_hood::unordered_map<std::string_view, structures::unique_descriptor_info> 
 structures::load_behaviour load_behaviour{};
 structures::drawlist_creation_behaviour drawlist_creation_behaviour{};
 
+std::thread file_dialog_thread;
 std::vector<std::string> paths_to_open{};
 std::vector<structures::query_attribute> attribute_query{};
 

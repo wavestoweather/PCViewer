@@ -405,6 +405,8 @@ int main(int argc, char* argv[]){
     ImGui::DestroyContext();
 
     ImGui_ImplVulkanH_DestroyWindow(globals::vk_context.instance, globals::vk_context.device, &imgui_window_data, globals::vk_context.allocation_callbacks);
+    if (globals::file_dialog_thread.joinable())
+        globals::file_dialog_thread.join();
     globals::histogram_counter.cleanup();
     globals::stager.cleanup();
     globals::vk_context.cleanup();
