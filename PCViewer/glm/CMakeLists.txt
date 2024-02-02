@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
-cmake_policy(VERSION 3.2)
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+cmake_policy(VERSION 3.5)
 
 set(GLM_VERSION "0.9.9")
 project(glm VERSION ${GLM_VERSION} LANGUAGES CXX)
@@ -12,8 +12,8 @@ include(CMakePackageConfigHelpers)
 enable_testing()
 
 option(GLM_QUIET "No CMake Message" OFF)
-option(BUILD_SHARED_LIBS "Build shared library" ON)
-option(BUILD_STATIC_LIBS "Build static library" ON)
+option(BUILD_SHARED_LIBS "Build shared library" OFF)
+option(BUILD_STATIC_LIBS "Build static library" OFF)
 option(GLM_TEST_ENABLE_CXX_98 "Enable C++ 98" OFF)
 option(GLM_TEST_ENABLE_CXX_11 "Enable C++ 11" OFF)
 option(GLM_TEST_ENABLE_CXX_14 "Enable C++ 14" OFF)

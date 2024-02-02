@@ -88,11 +88,15 @@ struct histogram_registry{
         else{
             entry.cpu_histogram_needed = cpu_hist_needed;
         }
+        if(::logger.logging_level >= logging::level::l_5)
+            ::logger << logging::info_prefix << "Registering registrator " << entry.hist_id << logging::endl;
         return entry.hist_id;
     }
 
     // copy registration
     std::string_view register_histogram(std::string_view id, registrator_id_t registrator_id){
+        if(::logger.logging_level >= logging::level::l_5)
+            ::logger << logging::info_prefix << "Registering registrator " << id << logging::endl;
         assert(name_to_registry_key.contains(id) && "Registry does not hold id");
         const auto& key = name_to_registry_key[id];
         auto& entry = registry[key];

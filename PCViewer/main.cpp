@@ -395,7 +395,9 @@ int main(int argc, char* argv[]){
     }
     auto res = vkDeviceWaitIdle(globals::vk_context.device); util::check_vk_result(res);
 
-    // making shure to first clear the drawlists to avoid nullptr issues
+    // have to be destroyed to deregister all registrators which need an in track global drawlists thing
+    globals::workbenches.clear();
+    // making sure to first clear the drawlists to avoid nullptr issues
     globals::drawlists().clear();
    
     ImGui_ImplVulkan_Shutdown();
