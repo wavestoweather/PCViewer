@@ -2,13 +2,28 @@
 #include <imgui.h>
 #include <workbench_base.hpp>
 #include <logger.hpp>
+#include <tinyfiledialogs.h>
+#include <thread>
 
 namespace util{
 namespace main_window{
 inline void menu_bar(){
     if(ImGui::BeginMenuBar()){
+        constexpr const char* file_patterns[2]{"*.csv", "*.nc"};
         if(ImGui::BeginMenu("File")){
-            ImGui::MenuItem("Nothing here yet");
+            if(ImGui::MenuItem("Load File")) {
+                static std::thread open_thread{};
+                if (open_thread.joinable())
+                    open_thread.join();     // wait for previous opening call
+                open_thread = std::thread([&]{
+                    auto path = tinyfd_openFileDialog(NULL, NULL, 2, file_patterns, NULL, 1);
+                    if (path) {
+                        std::string_view p(path);
+                        for (std::string_view c; getline(p, c, '|');)
+                            globals::paths_to_open.push_back(std::string(c));
+                    }
+                });
+            }
             ImGui::EndMenu();
         }
         if(ImGui::BeginMenu("Edit")){

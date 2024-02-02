@@ -139,6 +139,7 @@ file(GLOB imgui_nodes_SRC
 
 file(GLOB imgui_file_dialog_SRC
     "imgui_file_dialog/*.cpp"
+    "tinyfiledialogs/tinyfiledialogs.c"
 )
 
 set(structures_INCLUDE_DIR
@@ -157,6 +158,7 @@ set(structures_INCLUDE_DIR
     "radix"
     "colorbrewer"
     "gpu_radix_sort"
+    "tinyfiledialogs"
 )
 
 file(GLOB structures_SRC
